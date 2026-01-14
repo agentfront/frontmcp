@@ -25,6 +25,9 @@
   "bin": {
     "frontmcp": "./dist/src/cli.js"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",

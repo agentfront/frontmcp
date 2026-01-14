@@ -23,6 +23,9 @@
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
   "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/utils/README.md",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@noble/ciphers": "^2.1.1",

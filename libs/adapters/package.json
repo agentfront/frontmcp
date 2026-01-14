@@ -52,6 +52,9 @@
     },
     "./esm": null
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@frontmcp/utils": "0.7.2",
     "@frontmcp/sdk": "0.7.2",

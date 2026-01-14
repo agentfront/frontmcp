@@ -6,7 +6,7 @@ FrontMCP takes security seriously. We appreciate your efforts to responsibly dis
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to: **david@frontegg.com**
+Instead, please report them via email to: **[david@frontegg.com](mailto:david@frontegg.com)**
 
 When reporting a vulnerability, please include:
 
@@ -31,7 +31,7 @@ When reporting a vulnerability, please include:
 | @frontmcp/utils    | 0.7.x   | Yes       |
 | @frontmcp/adapters | 0.7.x   | Yes       |
 | @frontmcp/plugins  | 0.7.x   | Yes       |
-| @frontmcp/cli      | 0.7.x   | Yes       |
+| frontmcp           | 0.7.x   | Yes       |
 | @frontmcp/di       | 0.7.x   | Yes       |
 | @frontmcp/testing  | 0.7.x   | Yes       |
 | @frontmcp/ui       | 0.7.x   | Yes       |
