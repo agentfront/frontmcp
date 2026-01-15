@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { WidgetsApp } from './apps/widgets';
 
-const port = parseInt(process.env['PORT'] ?? '3017', 10);
+const port = parseInt(process.env['PORT'] ?? '3107', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E UI', version: '0.1.0' },

@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { NotifyApp } from './apps/notify';
 
-const port = parseInt(process.env['PORT'] ?? '3020', 10);
+const port = parseInt(process.env['PORT'] ?? '3113', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Notifications', version: '0.1.0' },

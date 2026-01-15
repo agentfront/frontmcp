@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { EcommerceApp } from './apps/ecommerce';
 
-const port = parseInt(process.env['PORT'] ?? '3012', 10);
+const port = parseInt(process.env['PORT'] ?? '3114', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E OpenAPI', version: '0.1.0' },
