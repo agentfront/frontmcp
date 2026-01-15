@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { AgentsApp } from './apps/agents';
 
-const port = parseInt(process.env['PORT'] ?? '3020', 10);
+const port = parseInt(process.env['PORT'] ?? '3101', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Agents', version: '0.1.0' },

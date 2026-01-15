@@ -3,7 +3,7 @@ import { SessionsApp } from './apps/sessions';
 import { VaultApp } from './apps/vault';
 import { TransportApp } from './apps/transport';
 
-const port = parseInt(process.env['PORT'] ?? '3014', 10);
+const port = parseInt(process.env['PORT'] ?? '3111', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Redis', version: '0.1.0' },

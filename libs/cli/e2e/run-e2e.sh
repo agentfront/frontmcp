@@ -109,7 +109,7 @@ for pkg in "${LIBS_PACKAGES[@]}"; do
   echo "  Publishing libs/$pkg..."
   if [ -d "libs/$pkg/dist" ]; then
     cd "libs/$pkg/dist"
-    if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
+    if npm publish --registry "$VERDACCIO_URL" --access public --tag next 2>&1; then
       echo "    ✅ Published successfully"
     else
       echo "    ⚠️  Publish failed (may already exist or missing dependency)"
@@ -125,7 +125,7 @@ for pkg in "${PLUGIN_PACKAGES[@]}"; do
   echo "  Publishing plugins/$pkg..."
   if [ -d "plugins/$pkg/dist" ]; then
     cd "plugins/$pkg/dist"
-    if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
+    if npm publish --registry "$VERDACCIO_URL" --access public --tag next 2>&1; then
       echo "    ✅ Published successfully"
     else
       echo "    ⚠️  Publish failed (may already exist or missing dependency)"
@@ -140,7 +140,7 @@ done
 echo "  Publishing libs/plugins..."
 if [ -d "libs/plugins/dist" ]; then
   cd "libs/plugins/dist"
-  if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
+  if npm publish --registry "$VERDACCIO_URL" --access public --tag next 2>&1; then
     echo "    ✅ Published successfully"
   else
     echo "    ⚠️  Publish failed (may already exist or missing dependency)"

@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { TransportTestApp } from './apps/transport-test';
 
-const portEnv = process.env['PORT'] ?? '3020';
+const portEnv = process.env['PORT'] ?? '3102';
 const port = parseInt(portEnv, 10);
 if (isNaN(port) || port < 1 || port > 65535) {
   throw new Error(`Invalid PORT environment variable: "${portEnv}". Must be a number between 1 and 65535.`);

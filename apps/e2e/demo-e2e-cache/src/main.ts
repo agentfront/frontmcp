@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { ComputeApp } from './apps/compute';
 
-const port = parseInt(process.env['PORT'] ?? '3016', 10);
+const port = parseInt(process.env['PORT'] ?? '3106', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Cache', version: '0.1.0' },

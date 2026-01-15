@@ -1,8 +1,8 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { CachePlugin } from '@frontmcp/plugins';
 
-const port = parseInt(process.env['PORT'] ?? '3098', 10);
-const localMcpPort = parseInt(process.env['LOCAL_MCP_PORT'] ?? '3099', 10);
+const port = parseInt(process.env['PORT'] ?? '3112', 10);
+const localMcpPort = parseInt(process.env['LOCAL_MCP_PORT'] ?? '3108', 10);
 
 @FrontMcp({
   info: { name: 'Remote Gateway E2E', version: '0.1.0' },

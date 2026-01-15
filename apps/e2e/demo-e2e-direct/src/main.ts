@@ -9,9 +9,9 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { NotesApp } from './apps/notes';
 
-// Validate port - fallback to 3015 if invalid
-const rawPort = parseInt(process.env['PORT'] ?? '3015', 10);
-const port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 3015;
+// Validate port - fallback to 3117 if invalid
+const rawPort = parseInt(process.env['PORT'] ?? '3117', 10);
+const port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 3117;
 
 /**
  * Base configuration shared between HTTP server and direct usage.
