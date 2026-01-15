@@ -105,7 +105,7 @@ jobs:
 
       - name: Retry build without cache
         if: steps.build.outcome == 'failure'
-        run: npx nx affected -t build
+        run: npx nx run-many -t build --parallel 5
 
       - name: Save Nx cache
         if: always()
