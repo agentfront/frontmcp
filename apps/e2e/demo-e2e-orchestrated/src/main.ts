@@ -2,8 +2,8 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { NotesApp } from './apps/notes';
 import { TasksApp } from './apps/tasks';
 
-// Get port from env variable (set by test runner) or default to 3005
-const port = parseInt(process.env['PORT'] ?? '3005', 10);
+// Get port from env variable (set by test runner) or default to 3121
+const port = parseInt(process.env['PORT'] ?? '3121', 10);
 
 @FrontMcp({
   info: { name: 'Demo Orchestrated Auth', version: '0.1.0' },

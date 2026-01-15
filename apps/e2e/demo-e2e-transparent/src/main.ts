@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { TasksApp } from './apps/tasks';
 
-const port = parseInt(process.env['PORT'] ?? '3011', 10);
+const port = parseInt(process.env['PORT'] ?? '3109', 10);
 
 // The IdP provider URL is set via environment variable
 // For E2E testing, this points to a MockOAuthServer instance
