@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { MemoryApp } from './apps/memory';
 
-const port = parseInt(process.env['PORT'] ?? '3020', 10);
+const port = parseInt(process.env['PORT'] ?? '3116', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Remember', version: '0.1.0' },

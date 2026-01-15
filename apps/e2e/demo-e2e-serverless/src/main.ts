@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { ServerlessApp } from './apps/serverless';
 
-const port = parseInt(process.env['PORT'] ?? '3021', 10);
+const port = parseInt(process.env['PORT'] ?? '3110', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Serverless', version: '0.1.0' },

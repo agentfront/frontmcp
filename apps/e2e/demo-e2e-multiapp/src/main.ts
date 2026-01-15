@@ -3,7 +3,7 @@ import { NotesApp } from './apps/notes';
 import { TasksApp } from './apps/tasks';
 import { CalendarApp } from './apps/calendar';
 
-const port = parseInt(process.env['PORT'] ?? '3022', 10);
+const port = parseInt(process.env['PORT'] ?? '3104', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E MultiApp', version: '0.1.0' },

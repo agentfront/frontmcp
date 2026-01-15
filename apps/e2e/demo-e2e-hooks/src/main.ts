@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { AuditApp } from './apps/audit';
 
-const port = parseInt(process.env['PORT'] ?? '3018', 10);
+const port = parseInt(process.env['PORT'] ?? '3120', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Hooks', version: '0.1.0' },
