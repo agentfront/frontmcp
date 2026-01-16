@@ -58,6 +58,7 @@ test.describe('Remote MCP Server Orchestration E2E', () => {
     port: 3098,
     logLevel: 'debug',
     startupTimeout: 60000, // Give gateway more time to connect to local server
+    env: { LOCAL_MCP_PORT: '3099' }, // Match the port where local MCP server is started
   });
 
   test('basic connectivity test', async ({ mcp }) => {
