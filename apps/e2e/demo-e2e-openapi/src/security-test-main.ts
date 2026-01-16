@@ -7,7 +7,7 @@
 import { FrontMcp, App, LogLevel } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
 
-const port = parseInt(process.env['PORT'] ?? '3015', 10);
+const port = parseInt(process.env['PORT'] ?? '3122', 10);
 const apiBaseUrl = process.env['OPENAPI_BASE_URL'] || 'http://localhost:3000';
 const openapiUrl = process.env['OPENAPI_SPEC_URL'] || `${apiBaseUrl}/openapi.json`;
 const staticJwt = process.env['STATIC_AUTH_JWT'];
