@@ -28,6 +28,7 @@ export {
 } from './front-mcp/serverless-handler';
 export * from './common';
 export * from './errors';
+export * from './elicitation';
 export * from './remote-mcp';
 
 // Re-export MCP types commonly needed

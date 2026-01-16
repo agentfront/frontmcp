@@ -17,6 +17,8 @@ import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
 import type { SessionIdPayload } from '../common/types';
 import { InvalidInputError } from '../errors/mcp.error';
+import { ElicitResult, ElicitOptions } from '../elicitation';
+import { ZodType } from 'zod';
 
 /**
  * Request metadata extracted from HTTP headers.
@@ -83,15 +85,30 @@ export interface TransportAccessor {
    *
    * @param message - Message to display to the user
    * @param requestedSchema - Zod schema for validating the response
-   * @returns Typed elicit result with action and validated content
+   * @param options - Elicit options (mode, ttl, elicitationId)
+   * @returns Typed elicit result with status and validated content
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation
+   * @throws ElicitationTimeoutError if request times out
    */
-  elicit<T>(message: string, requestedSchema: T): Promise<{ action: string; content: unknown }>;
+  elicit<S extends ZodType>(
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>;
 }
 
 // Forward declaration for type reference (avoid circular imports)
 type FlowBaseRef = { readonly name: string };
 type ScopeRef = { readonly id: string; readonly logger: FrontMcpLogger };
-type TransportRef = { sendElicitRequest: TransportAccessor['elicit']; readonly type: string };
+type TransportRef = {
+  sendElicitRequest: <S extends ZodType>(
+    relatedRequestId: number,
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ) => Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>;
+  readonly type: string;
+};
 
 /**
  * Session ID validation constants.
@@ -287,7 +304,11 @@ export class FrontMcpContext {
     const transportRef = this._transport;
     return {
       supportsElicit: true,
-      elicit: (message, schema) => transportRef.sendElicitRequest(message, schema),
+      elicit: (message, schema, options) => {
+        // relatedRequestId is used for request correlation, we use 0 as default
+        // since the actual requestId will be set internally by the transport
+        return transportRef.sendElicitRequest(0, message, schema, options);
+      },
     };
   }
 

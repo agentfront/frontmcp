@@ -51,6 +51,8 @@ export default function initializeRequestHandler({
             sampling: request.params.capabilities.sampling as ClientCapabilities['sampling'],
             // Include experimental capabilities for MCP Apps extension detection
             experimental: request.params.capabilities.experimental as ClientCapabilities['experimental'],
+            // Include elicitation capability for interactive user input support
+            elicitation: request.params.capabilities.elicitation as ClientCapabilities['elicitation'],
           };
           scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
 

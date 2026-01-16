@@ -1,7 +1,7 @@
 import { AuthenticatedServerRequest } from '../../server/server.types';
-import { TransportKey, TypedElicitResult } from '../transport.types';
+import { TransportKey } from '../transport.types';
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { EmptyResultSchema, ElicitResult, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InMemoryEventStore } from '../transport.event-store';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -12,6 +12,8 @@ import { ZodType } from 'zod';
 import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
 import { Scope } from '../../scope';
 import { createMcpHandlers } from '../mcp-handlers';
+import { ElicitResult, ElicitOptions, PendingElicit } from '../../elicitation';
+import { ElicitationNotSupportedError } from '../../errors';
 
 /**
  * Base transport type that includes all supported transports.
@@ -29,8 +31,13 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   protected logger: FrontMcpLogger;
   protected transport: T;
   protected eventStore = new InMemoryEventStore();
-  protected elicitHandler: { resolve: (result: ElicitResult) => void; reject: (err: unknown) => void } | undefined =
-    undefined;
+
+  /**
+   * Pending elicitation request. Only one elicit per session is allowed.
+   * New elicit requests will cancel any pending one.
+   */
+  protected pendingElicit?: PendingElicit;
+
   #requestId = 1;
   ready: Promise<void>;
   server: McpServer;
@@ -50,11 +57,21 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
   abstract initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
 
-  abstract sendElicitRequest<T extends ZodType>(
+  /**
+   * Send an elicitation request to the client.
+   *
+   * @param relatedRequestId - The request ID that triggered this elicit
+   * @param message - Message to display to the user
+   * @param requestedSchema - Zod schema for the expected response
+   * @param options - Elicit options (mode, ttl, elicitationId)
+   * @returns ElicitResult with status and typed content
+   */
+  abstract sendElicitRequest<S extends ZodType>(
     relatedRequestId: RequestId,
     message: string,
-    requestedSchema: T,
-  ): Promise<TypedElicitResult<T>>;
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>;
 
   abstract handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
 
@@ -193,24 +210,57 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     return req.auth;
   }
 
+  /**
+   * Cancel any pending elicitation request.
+   * Called before sending a new elicit to enforce single-elicit-per-session.
+   */
+  protected cancelPendingElicit(): void {
+    if (this.pendingElicit) {
+      clearTimeout(this.pendingElicit.timeoutHandle);
+      this.pendingElicit.resolve({ status: 'cancel' });
+      this.pendingElicit = undefined;
+      this.logger.info('Cancelled previous pending elicit');
+    }
+  }
+
+  /**
+   * Handle an incoming elicitation result from the client.
+   * Returns true if the request was an elicit result and was handled.
+   */
   handleIfElicitResult(req: AuthenticatedServerRequest): boolean {
-    if (!this.elicitHandler) {
+    if (!this.pendingElicit) {
       return false;
     }
+
+    // Check for error response (client doesn't support elicitation)
     if (req.body.error) {
       const { code, message } = req.body.error;
       if (code === -32600 && message === 'Elicitation not supported') {
-        this.elicitHandler.reject(req.body.error);
+        clearTimeout(this.pendingElicit.timeoutHandle);
+        this.pendingElicit.reject(new ElicitationNotSupportedError());
+        this.pendingElicit = undefined;
         return true;
       }
       return false;
     }
 
+    // Parse the elicit result from the client
     const parsed = ElicitResultSchema.safeParse(req.body?.result);
     if (parsed.success) {
-      this.elicitHandler.resolve(parsed.data);
+      clearTimeout(this.pendingElicit.timeoutHandle);
+
+      // Map MCP action directly to our status type (they use the same names)
+      const action = parsed.data.action;
+      const result: ElicitResult = {
+        status: action,
+        ...(action === 'accept' && parsed.data.content !== undefined && { content: parsed.data.content }),
+      };
+
+      this.pendingElicit.resolve(result);
+      this.pendingElicit = undefined;
       return true;
     }
+
     return false;
   }
 

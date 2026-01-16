@@ -53,6 +53,16 @@ export interface ClientCapabilities {
     };
     [key: string]: unknown;
   };
+  /**
+   * Elicitation capability - indicates the client supports interactive user input.
+   * Per MCP 2025-11-25 specification.
+   */
+  elicitation?: {
+    /** Whether the client supports form-based elicitation */
+    form?: Record<string, unknown>;
+    /** Whether the client supports URL-based elicitation */
+    url?: Record<string, unknown>;
+  };
 }
 
 /**
@@ -95,6 +105,30 @@ export function detectPlatformFromCapabilities(capabilities?: ClientCapabilities
     return 'ext-apps';
   }
   return undefined;
+}
+
+/**
+ * Check if client supports elicitation.
+ *
+ * @param capabilities - Client capabilities from initialize request
+ * @param mode - Optional mode to check ('form' or 'url'). If not provided, checks for any elicitation support.
+ * @returns true if elicitation is supported for the given mode
+ */
+export function supportsElicitation(capabilities?: ClientCapabilities, mode?: 'form' | 'url'): boolean {
+  if (!capabilities?.elicitation) {
+    return false;
+  }
+
+  if (mode === 'form') {
+    return capabilities.elicitation.form !== undefined;
+  }
+
+  if (mode === 'url') {
+    return capabilities.elicitation.url !== undefined;
+  }
+
+  // If no mode specified, check for any elicitation support
+  return capabilities.elicitation.form !== undefined || capabilities.elicitation.url !== undefined;
 }
 
 /**

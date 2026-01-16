@@ -1,4 +1,4 @@
-import { TransportType, TypedElicitResult } from '../transport.types';
+import { TransportType } from '../transport.types';
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { LocalTransportAdapter } from './transport.local.adapter';
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
@@ -7,6 +7,8 @@ import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
+import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
+import { ElicitationTimeoutError } from '../../errors';
 
 /**
  * Stateless HTTP requests must be able to send multiple initialize calls without
@@ -104,28 +106,68 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     }
   }
 
-  async sendElicitRequest<T extends ZodType>(
+  /**
+   * Send an elicitation request to the client.
+   *
+   * Only one elicit per session is allowed. A new elicit will cancel any pending one.
+   * On timeout, an ElicitationTimeoutError is thrown to kill tool execution.
+   *
+   * @param relatedRequestId - The request ID that triggered this elicit
+   * @param message - Message to display to the user
+   * @param requestedSchema - Zod schema for the expected response
+   * @param options - Elicit options (mode, ttl, elicitationId)
+   * @returns ElicitResult with status and typed content
+   */
+  async sendElicitRequest<S extends ZodType>(
     relatedRequestId: RequestId,
     message: string,
-    requestedSchema: T,
-  ): Promise<TypedElicitResult<T>> {
-    await this.transport.send(
-      rpcRequest(this.newRequestId, 'elicitation/create', {
-        message,
-        requestedSchema: toJSONSchema(requestedSchema as any),
-      }),
-      { relatedRequestId },
-    );
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+    const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
 
-    return new Promise<TypedElicitResult<T>>((resolve, reject) => {
-      this.elicitHandler = {
+    // Cancel any previous pending elicit (only one per session)
+    this.cancelPendingElicit();
+
+    // Generate elicit ID
+    const elicitId = elicitationId ?? `elicit-${this.newRequestId}`;
+
+    // Build request params based on mode
+    const params: Record<string, unknown> = {
+      mode,
+      message,
+      requestedSchema: toJSONSchema(requestedSchema as ZodType),
+    };
+
+    // Add elicitationId for URL mode (required for out-of-band tracking)
+    if (mode === 'url' && elicitationId) {
+      params['elicitationId'] = elicitationId;
+    }
+
+    // Send the elicitation/create request
+    await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', params), { relatedRequestId });
+
+    // Create promise with timeout
+    return new Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>((resolve, reject) => {
+      // Set timeout to throw ElicitationTimeoutError (kills execution)
+      const timeoutHandle = setTimeout(() => {
+        this.pendingElicit = undefined;
+        reject(new ElicitationTimeoutError(elicitId, ttl));
+      }, ttl);
+
+      // Store pending elicit
+      this.pendingElicit = {
+        elicitId,
+        timeoutHandle,
         resolve: (result) => {
-          resolve(result as TypedElicitResult<T>);
-          this.elicitHandler = undefined;
+          clearTimeout(timeoutHandle);
+          this.pendingElicit = undefined;
+          resolve(result as ElicitResult<S extends ZodType<infer O> ? O : unknown>);
         },
         reject: (err) => {
+          clearTimeout(timeoutHandle);
+          this.pendingElicit = undefined;
           reject(err);
-          this.elicitHandler = undefined;
         },
       };
     });

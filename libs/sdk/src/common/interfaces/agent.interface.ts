@@ -3,6 +3,7 @@ import { ToolInputType, ToolOutputType, AgentMetadata, AgentType } from '../meta
 import { FlowControl } from './flow.interface';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
+import { supportsElicitation } from '../../notification';
 import {
   AgentLlmAdapter,
   AgentPrompt,
@@ -14,6 +15,9 @@ import {
 } from './llm-adapter.interface';
 import { AgentInputOf, AgentOutputOf } from '../decorators';
 import { AgentExecutionLoop, ToolExecutor } from '../../agent/agent-execution-loop';
+import { ElicitResult, ElicitOptions } from '../../elicitation';
+import { ElicitationNotSupportedError } from '../../errors';
+import { ZodType } from 'zod';
 
 // Re-export AgentType for convenience (defined in agent.metadata.ts)
 export { AgentType };
@@ -516,18 +520,70 @@ export class AgentContext<
   }
 
   /**
-   * Elicit user input during agent execution.
+   * Request interactive input from the user during agent execution.
    *
-   * This allows the agent to ask the user for input when needed.
+   * Sends an elicitation request to the client for user input. The client
+   * presents the message and a form (or URL) to collect user response.
    *
-   * @param message - The prompt to show the user
-   * @param schema - Zod schema for validating user response
-   * @returns The user's response, or undefined if cancelled
+   * Only one elicit per session is allowed. A new elicit will cancel any pending one.
+   * On timeout, an ElicitationTimeoutError is thrown to kill agent execution.
+   *
+   * @param message - Prompt message to display to user
+   * @param requestedSchema - Zod schema defining expected input structure
+   * @param options - Mode ('form'|'url'), ttl (default 5min), elicitationId (for URL mode)
+   * @returns ElicitResult with status and typed content
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation
+   * @throws ElicitationTimeoutError if request times out (kills execution)
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const result = await this.elicit('Confirm action?', z.object({
+   *     confirmed: z.boolean(),
+   *     reason: z.string().optional()
+   *   }));
+   *
+   *   if (result.status !== 'accept') {
+   *     return { cancelled: true };
+   *   }
+   *   // result.content is typed { confirmed: boolean, reason?: string }
+   *   return { confirmed: result.content!.confirmed };
+   * }
+   * ```
    */
-  protected async elicit<T>(message: string, schema?: unknown): Promise<T | undefined> {
-    // TODO: Integrate with elicit service
-    this.logger.warn(`Elicit not yet implemented. Message: ${message}`);
-    return undefined;
+  protected async elicit<S extends ZodType>(
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      throw new ElicitationNotSupportedError('No session available for elicitation');
+    }
+
+    // Check client capabilities
+    const capabilities = this.scope.notifications.getClientCapabilities(sessionId);
+    const mode = options?.mode ?? 'form';
+
+    if (!supportsElicitation(capabilities, mode)) {
+      throw new ElicitationNotSupportedError(
+        mode === 'form'
+          ? 'Client does not support form-based elicitation'
+          : mode === 'url'
+            ? 'Client does not support URL-based elicitation'
+            : 'Client does not support elicitation',
+      );
+    }
+
+    // Get transport from context
+    const ctx = this.tryGetContext();
+    const transport = ctx?.transport;
+    if (!transport) {
+      throw new ElicitationNotSupportedError('Transport not available for elicitation');
+    }
+
+    // Send elicit request (timeout throws ElicitationTimeoutError)
+    return transport.elicit(message, requestedSchema, options);
   }
 
   /**

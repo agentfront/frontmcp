@@ -246,6 +246,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     const { ctx } = this.input;
     const { agent, input } = this.state.required;
     const progressToken = this.state.progressToken;
+    const authInfo = this.state.authInfo;
 
     try {
       const context = agent.create(input.arguments, { ...ctx, progressToken });
@@ -268,6 +269,18 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
       this.appendContextHooks(agentHooks);
       context.mark('createAgentContext');
+
+      // Wire transport to FrontMcpContext for elicitation support
+      // The transport is stored in authInfo.transport by the local adapter
+      const frontmcpContext = context.tryGetContext();
+      if (frontmcpContext && authInfo?.transport?.sendElicitRequest) {
+        const transport = authInfo.transport;
+        frontmcpContext.setTransport({
+          sendElicitRequest: transport.sendElicitRequest.bind(transport),
+          type: (transport as { type?: string }).type ?? 'unknown',
+        });
+      }
+
       this.state.set('agentContext', context);
       this.logger.verbose('createAgentContext:done');
     } catch (error) {

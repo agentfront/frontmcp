@@ -6,7 +6,11 @@ import { FlowControl } from './flow.interface';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
-import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
+import type { AIPlatformType, ClientInfo, McpLoggingLevel, ClientCapabilities } from '../../notification';
+import { supportsElicitation } from '../../notification';
+import { ElicitResult, ElicitOptions } from '../../elicitation';
+import { ElicitationNotSupportedError } from '../../errors';
+import { ZodType } from 'zod';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -173,6 +177,77 @@ export abstract class ToolContext<
     }
 
     return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
+  }
+
+  // ============================================
+  // Elicitation API
+  // ============================================
+
+  /**
+   * Request interactive input from the user during tool execution.
+   *
+   * Sends an elicitation request to the client for user input. The client
+   * presents the message and a form (or URL) to collect user response.
+   *
+   * Only one elicit per session is allowed. A new elicit will cancel any pending one.
+   * On timeout, an ElicitationTimeoutError is thrown to kill tool execution.
+   *
+   * @param message - Prompt message to display to user
+   * @param requestedSchema - Zod schema defining expected input structure
+   * @param options - Mode ('form'|'url'), ttl (default 5min), elicitationId (for URL mode)
+   * @returns ElicitResult with status and typed content
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation
+   * @throws ElicitationTimeoutError if request times out (kills execution)
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const result = await this.elicit('Confirm action?', z.object({
+   *     confirmed: z.boolean(),
+   *     reason: z.string().optional()
+   *   }));
+   *
+   *   if (result.status !== 'accept') {
+   *     return { cancelled: true };
+   *   }
+   *   // result.content is typed { confirmed: boolean, reason?: string }
+   *   return { confirmed: result.content!.confirmed };
+   * }
+   * ```
+   */
+  protected async elicit<S extends ZodType>(
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      throw new ElicitationNotSupportedError('No session available for elicitation');
+    }
+
+    // Check client capabilities
+    const capabilities = this.scope.notifications.getClientCapabilities(sessionId);
+    const mode = options?.mode ?? 'form';
+
+    if (!supportsElicitation(capabilities, mode)) {
+      throw new ElicitationNotSupportedError(
+        mode === 'form'
+          ? 'Client does not support form-based elicitation'
+          : mode === 'url'
+            ? 'Client does not support URL-based elicitation'
+            : 'Client does not support elicitation',
+      );
+    }
+
+    // Get transport from context
+    const ctx = this.tryGetContext();
+    const transport = ctx?.transport;
+    if (!transport) {
+      throw new ElicitationNotSupportedError('Transport not available for elicitation');
+    }
+
+    // Send elicit request (timeout throws ElicitationTimeoutError)
+    return transport.elicit(message, requestedSchema, options);
   }
 
   // ============================================

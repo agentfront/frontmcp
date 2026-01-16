@@ -361,6 +361,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       this.appendContextHooks(toolHooks);
       context.mark('createToolCallContext');
+
+      // Wire transport to FrontMcpContext for elicitation support
+      // The transport is stored in authInfo.transport by the local adapter
+      const frontmcpContext = context.tryGetContext();
+      if (frontmcpContext && authInfo?.transport?.sendElicitRequest) {
+        const transport = authInfo.transport;
+        frontmcpContext.setTransport({
+          sendElicitRequest: transport.sendElicitRequest.bind(transport),
+          type: (transport as { type?: string }).type ?? 'unknown',
+        });
+      }
+
       this.state.set('toolContext', context);
       this.logger.verbose('createToolCallContext:done');
     } catch (error) {
@@ -627,10 +639,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           ? typeof uiConfig.template === 'function'
             ? 'react-component'
             : typeof uiConfig.template === 'string'
-            ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
-              ? 'react-file'
-              : 'html-file'
-            : 'unknown'
+              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+                ? 'react-file'
+                : 'html-file'
+              : 'unknown'
           : 'none',
       });
 

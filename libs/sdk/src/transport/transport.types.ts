@@ -1,7 +1,4 @@
 import { AuthenticatedServerRequest } from '../server/server.types';
-import { ElicitResult } from '@modelcontextprotocol/sdk/types.js';
-import { ZodType } from 'zod';
-import { Infer } from '../types/zod.types';
 import { ServerResponse } from '../common';
 
 export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http' | 'in-memory' | 'stdio';
@@ -77,5 +74,3 @@ export interface TransportRegistryOptions {
 export type TransportTokenBucket = Map<string, Transporter>; // sessionHash -> Transporter
 export type TransportTypeBucket = Map<string, TransportTokenBucket>; // tokenHash   -> TokenBucket
 export type TransportRegistryBucket = Map<TransportType, TransportTypeBucket>; // tokenHash   -> TokenBucket
-
-export type TypedElicitResult<T extends ZodType> = { action: ElicitResult['action']; content: Infer<T> };
