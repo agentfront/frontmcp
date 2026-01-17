@@ -1,0 +1,730 @@
+---
+title: Elicitation
+slug: servers/elicitation
+icon: message-question
+---
+
+Elicitation allows tools and agents to **request interactive user input** during execution. This enables approval workflows, multi-step confirmations, OAuth flows, and any scenario where a tool needs user input before continuing.
+
+<Info>
+This feature implements the [MCP Elicitation specification](https://modelcontextprotocol.io/specification/2025-11-25/server/elicitation). FrontMCP handles all protocol details automatically.
+</Info>
+
+## Why Elicitation?
+
+In the Model Context Protocol, elicitation fills a critical gap:
+
+| Aspect           | Tool                              | Elicitation                           |
+| ---------------- | --------------------------------- | ------------------------------------- |
+| **Direction**    | Model triggers, server executes   | Server requests, user responds        |
+| **Interaction**  | One-way (model -> server)         | Two-way (server <-> user)             |
+| **Use case**     | Actions, calculations             | Confirmations, approvals, OAuth       |
+| **Blocking**     | No                                | Yes (waits for user response)         |
+
+Elicitation is ideal for:
+
+- **Approval workflows** — confirm destructive operations before execution
+- **Multi-step forms** — collect additional information during tool execution
+- **OAuth flows** — redirect users to external authentication (URL mode)
+- **Human-in-the-loop** — require explicit user consent for sensitive actions
+- **Disambiguation** — ask users to clarify ambiguous requests
+
+---
+
+## Basic Usage
+
+### Class Style (ToolContext)
+
+Use `this.elicit()` within any tool that extends `ToolContext`:
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'delete-account',
+  description: 'Permanently delete a user account',
+  inputSchema: {
+    userId: z.string(),
+  },
+})
+class DeleteAccountTool extends ToolContext {
+  async execute({ userId }: { userId: string }) {
+    // Request user confirmation before proceeding
+    const result = await this.elicit(
+      `Are you sure you want to permanently delete account ${userId}? This cannot be undone.`,
+      z.object({
+        confirmed: z.boolean().describe('Confirm deletion'),
+        reason: z.string().optional().describe('Reason for deletion'),
+      })
+    );
+
+    // Handle user response
+    if (result.status !== 'accept') {
+      return { cancelled: true, reason: `User ${result.status}d the request` };
+    }
+
+    if (!result.content?.confirmed) {
+      return { cancelled: true, reason: 'User did not confirm deletion' };
+    }
+
+    // Proceed with deletion
+    await this.deleteUser(userId, result.content.reason);
+    return { deleted: true, userId };
+  }
+}
+```
+
+### Class Style (AgentContext)
+
+Agents can also use elicitation:
+
+```ts
+import { Agent, AgentContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Agent({
+  name: 'expense-approver',
+  description: 'Processes expense reports with manager approval',
+})
+class ExpenseApproverAgent extends AgentContext {
+  async execute() {
+    const expense = this.input.expense;
+
+    // Request manager approval for large expenses
+    if (expense.amount > 1000) {
+      const approval = await this.elicit(
+        `Expense of $${expense.amount} requires manager approval.`,
+        z.object({
+          approved: z.boolean(),
+          notes: z.string().optional(),
+        })
+      );
+
+      if (approval.status !== 'accept' || !approval.content?.approved) {
+        return { status: 'rejected', expense };
+      }
+    }
+
+    return { status: 'approved', expense };
+  }
+}
+```
+
+---
+
+## Elicitation Modes
+
+FrontMCP supports two elicitation modes per the MCP specification:
+
+### Form Mode (Default)
+
+Displays a form to collect structured input directly in the client:
+
+```ts
+const result = await this.elicit(
+  'Please provide your shipping preferences',
+  z.object({
+    address: z.string(),
+    priority: z.enum(['standard', 'express', 'overnight']),
+    signature: z.boolean().default(false),
+  }),
+  { mode: 'form' } // Default, can be omitted
+);
+```
+
+### URL Mode
+
+Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.):
+
+```ts
+const result = await this.elicit(
+  'Please authorize access to your GitHub account',
+  z.object({
+    authorized: z.boolean(),
+    scope: z.array(z.string()),
+  }),
+  {
+    mode: 'url',
+    elicitationId: `oauth-${this.authInfo.sessionId}`, // Required for URL mode
+  }
+);
+```
+
+<Warning>
+URL mode requires an `elicitationId` to correlate the external callback with the pending request. The external service should call back to your server with this ID when complete.
+</Warning>
+
+---
+
+## Elicitation Result
+
+The `elicit()` method returns an `ElicitResult` with the following structure:
+
+```ts
+interface ElicitResult<T> {
+  status: 'accept' | 'cancel' | 'decline';
+  content?: T;  // Only present when status is 'accept'
+}
+```
+
+### Status Values
+
+| Status    | Description                                      | Content Present |
+| --------- | ------------------------------------------------ | --------------- |
+| `accept`  | User submitted the form / completed the action   | Yes             |
+| `cancel`  | User cancelled the elicitation                   | No              |
+| `decline` | User declined to provide the requested input     | No              |
+
+### Handling Responses
+
+```ts
+const result = await this.elicit('Confirm action?', schema);
+
+switch (result.status) {
+  case 'accept':
+    // User submitted - content is typed according to your schema
+    console.log(result.content); // { confirmed: boolean, ... }
+    break;
+
+  case 'cancel':
+    // User cancelled - no content
+    return { cancelled: true };
+
+  case 'decline':
+    // User declined - no content
+    return { declined: true };
+}
+```
+
+---
+
+## Timeout Handling
+
+Elicitation requests have a configurable timeout. When the timeout expires, an `ElicitationTimeoutError` is thrown to **kill the tool execution** and release resources.
+
+### Default Timeout
+
+The default timeout is **5 minutes** (300,000ms):
+
+```ts
+// Uses default 5 minute timeout
+const result = await this.elicit('Confirm?', schema);
+```
+
+### Custom Timeout
+
+Specify a custom timeout with the `ttl` option:
+
+```ts
+// 1 minute timeout
+const result = await this.elicit('Quick confirmation needed', schema, {
+  ttl: 60000,
+});
+
+// 10 minute timeout for complex forms
+const result = await this.elicit('Complete the following form', complexSchema, {
+  ttl: 600000,
+});
+```
+
+### Handling Timeouts
+
+Timeouts throw an exception to ensure the tool execution is terminated:
+
+```ts
+import { ElicitationTimeoutError } from '@frontmcp/sdk';
+
+@Tool({
+  name: 'approval-tool',
+  inputSchema: { action: z.string() },
+})
+class ApprovalTool extends ToolContext {
+  async execute({ action }) {
+    try {
+      const result = await this.elicit(`Approve ${action}?`, schema, {
+        ttl: 60000,
+      });
+      // Handle response...
+    } catch (error) {
+      if (error instanceof ElicitationTimeoutError) {
+        // Timeout occurred - tool execution will be terminated
+        // You can log or perform cleanup before the error propagates
+        this.logger.warn(`Elicitation timed out after ${error.ttl}ms`);
+      }
+      throw error; // Re-throw to terminate execution
+    }
+  }
+}
+```
+
+<Warning>
+Timeouts are designed to **throw exceptions** to kill tool execution. Do not catch and suppress timeout errors—this defeats the purpose of resource cleanup.
+</Warning>
+
+---
+
+## Single Elicit Per Session
+
+Only **one elicitation can be pending per session** at a time. If a new elicitation is requested while one is pending, the previous one is automatically cancelled with `status: 'cancel'`.
+
+```ts
+// First elicit starts
+const result1Promise = this.elicit('First question?', schema1);
+
+// Second elicit cancels the first one
+const result2Promise = this.elicit('Second question?', schema2);
+
+// result1Promise resolves with { status: 'cancel' }
+const result1 = await result1Promise;
+console.log(result1.status); // 'cancel'
+
+// result2Promise waits for user response
+const result2 = await result2Promise;
+```
+
+This design ensures predictable behavior and prevents conflicting elicitation UI states.
+
+---
+
+## Client Capability Detection
+
+Not all MCP clients support elicitation. FrontMCP automatically checks client capabilities before sending elicitation requests.
+
+### Automatic Validation
+
+When you call `this.elicit()`, FrontMCP:
+
+1. Checks if the client declared `elicitation` capability during initialization
+2. Verifies the client supports the requested mode (`form` or `url`)
+3. Throws `ElicitationNotSupportedError` if elicitation is not supported
+
+### Manual Capability Check
+
+You can check elicitation support before calling `elicit()`:
+
+```ts
+import { supportsElicitation } from '@frontmcp/sdk';
+
+@Tool({
+  name: 'conditional-elicit',
+  inputSchema: { action: z.string() },
+})
+class ConditionalElicitTool extends ToolContext {
+  async execute({ action }) {
+    const capabilities = this.scope.notifications.getClientCapabilities(
+      this.authInfo.sessionId
+    );
+
+    if (supportsElicitation(capabilities, 'form')) {
+      // Client supports form elicitation
+      const result = await this.elicit('Confirm?', schema);
+      // ...
+    } else {
+      // Fallback for clients without elicitation support
+      return { warning: 'This action requires user confirmation which is not supported by your client' };
+    }
+  }
+}
+```
+
+### Capability Helper
+
+The `supportsElicitation` helper function:
+
+```ts
+import { supportsElicitation, ClientCapabilities } from '@frontmcp/sdk';
+
+// Check for any elicitation support
+supportsElicitation(capabilities); // true/false
+
+// Check for specific mode
+supportsElicitation(capabilities, 'form'); // true/false
+supportsElicitation(capabilities, 'url');  // true/false
+```
+
+---
+
+## Error Handling
+
+### ElicitationNotSupportedError
+
+Thrown when:
+- Client doesn't support elicitation
+- Client doesn't support the requested mode (form/url)
+- No session is available
+- Transport is not available
+
+```ts
+import { ElicitationNotSupportedError } from '@frontmcp/sdk';
+
+try {
+  const result = await this.elicit('Question?', schema);
+} catch (error) {
+  if (error instanceof ElicitationNotSupportedError) {
+    // Handle gracefully - perhaps skip the confirmation
+    return { skippedConfirmation: true, reason: error.message };
+  }
+  throw error;
+}
+```
+
+### ElicitationTimeoutError
+
+Thrown when the user doesn't respond within the TTL:
+
+```ts
+import { ElicitationTimeoutError } from '@frontmcp/sdk';
+
+try {
+  const result = await this.elicit('Question?', schema, { ttl: 30000 });
+} catch (error) {
+  if (error instanceof ElicitationTimeoutError) {
+    console.log(`Timed out after ${error.ttl}ms`);
+    console.log(`Elicit ID: ${error.elicitId}`);
+  }
+  throw error;
+}
+```
+
+---
+
+## Configuration Options
+
+The `elicit()` method accepts an options object:
+
+```ts
+interface ElicitOptions {
+  mode?: 'form' | 'url';    // Default: 'form'
+  ttl?: number;              // Default: 300000 (5 minutes)
+  elicitationId?: string;    // Required for URL mode
+}
+```
+
+| Option          | Description                                          | Default  |
+| --------------- | ---------------------------------------------------- | -------- |
+| `mode`          | Elicitation mode (`'form'` or `'url'`)               | `'form'` |
+| `ttl`           | Timeout in milliseconds before throwing              | 300000   |
+| `elicitationId` | Unique ID for URL mode correlation (required for URL)| Auto-generated |
+
+---
+
+## Real-World Examples
+
+### Approval Workflow
+
+```ts
+@Tool({
+  name: 'approve-expense',
+  description: 'Process an expense report with manager approval',
+  inputSchema: {
+    expenseId: z.string(),
+    amount: z.number(),
+    description: z.string(),
+  },
+  annotations: {
+    destructiveHint: true,
+  },
+})
+class ApproveExpenseTool extends ToolContext {
+  async execute({ expenseId, amount, description }) {
+    // Large expenses require approval
+    if (amount > 500) {
+      const approval = await this.elicit(
+        `Expense #${expenseId} for $${amount.toFixed(2)}: "${description}"`,
+        z.object({
+          approved: z.boolean().describe('Approve this expense'),
+          notes: z.string().optional().describe('Optional approval notes'),
+        }),
+        { ttl: 300000 } // 5 minute timeout
+      );
+
+      if (approval.status !== 'accept') {
+        return {
+          status: 'cancelled',
+          expenseId,
+          reason: `Manager ${approval.status}d the approval request`
+        };
+      }
+
+      if (!approval.content?.approved) {
+        return {
+          status: 'rejected',
+          expenseId,
+          notes: approval.content?.notes,
+        };
+      }
+    }
+
+    // Process the expense
+    await this.processExpense(expenseId);
+    return { status: 'approved', expenseId };
+  }
+}
+```
+
+### Multi-Step Confirmation
+
+```ts
+@Tool({
+  name: 'transfer-funds',
+  description: 'Transfer funds between accounts',
+  inputSchema: {
+    fromAccount: z.string(),
+    toAccount: z.string(),
+    amount: z.number(),
+  },
+})
+class TransferFundsTool extends ToolContext {
+  async execute({ fromAccount, toAccount, amount }) {
+    // Step 1: Confirm transfer details
+    const confirm = await this.elicit(
+      `Transfer $${amount} from ${fromAccount} to ${toAccount}?`,
+      z.object({
+        confirmed: z.boolean(),
+      })
+    );
+
+    if (confirm.status !== 'accept' || !confirm.content?.confirmed) {
+      return { cancelled: true };
+    }
+
+    // Step 2: Verify with additional security
+    const verification = await this.elicit(
+      'Please verify this transfer',
+      z.object({
+        verificationCode: z.string().min(6).max(6).describe('Enter the 6-digit code sent to your phone'),
+      }),
+      { ttl: 120000 } // 2 minute timeout for verification
+    );
+
+    if (verification.status !== 'accept') {
+      return { cancelled: true, reason: 'Verification not completed' };
+    }
+
+    // Validate code and process transfer
+    if (!this.validateCode(verification.content?.verificationCode)) {
+      return { error: 'Invalid verification code' };
+    }
+
+    await this.executeTransfer(fromAccount, toAccount, amount);
+    return { success: true, transactionId: this.generateTxId() };
+  }
+}
+```
+
+### OAuth Authorization (URL Mode)
+
+```ts
+@Tool({
+  name: 'connect-github',
+  description: 'Connect your GitHub account',
+  inputSchema: {},
+})
+class ConnectGitHubTool extends ToolContext {
+  async execute() {
+    const elicitationId = `github-oauth-${this.authInfo.sessionId}-${Date.now()}`;
+
+    // Store the elicitation ID for callback handling
+    await this.get(OAuthStateStore).set(elicitationId, {
+      sessionId: this.authInfo.sessionId,
+      startedAt: Date.now(),
+    });
+
+    const result = await this.elicit(
+      'Click the link to authorize FrontMCP to access your GitHub account',
+      z.object({
+        accessToken: z.string(),
+        scope: z.array(z.string()),
+        username: z.string(),
+      }),
+      {
+        mode: 'url',
+        elicitationId,
+        ttl: 300000, // 5 minute timeout for OAuth
+      }
+    );
+
+    if (result.status !== 'accept') {
+      return { connected: false, reason: `Authorization ${result.status}d` };
+    }
+
+    // Store the token and return success
+    await this.get(TokenStore).save(
+      this.authInfo.sessionId,
+      'github',
+      result.content!.accessToken
+    );
+
+    return {
+      connected: true,
+      username: result.content!.username,
+      scope: result.content!.scope,
+    };
+  }
+}
+```
+
+### Graceful Fallback
+
+```ts
+@Tool({
+  name: 'delete-file',
+  description: 'Delete a file with optional confirmation',
+  inputSchema: {
+    path: z.string(),
+    skipConfirmation: z.boolean().optional(),
+  },
+})
+class DeleteFileTool extends ToolContext {
+  async execute({ path, skipConfirmation }) {
+    // Check if we should/can request confirmation
+    const shouldConfirm = !skipConfirmation;
+    const capabilities = this.scope.notifications.getClientCapabilities(
+      this.authInfo.sessionId
+    );
+    const canElicit = supportsElicitation(capabilities, 'form');
+
+    if (shouldConfirm && canElicit) {
+      const result = await this.elicit(
+        `Delete "${path}"? This cannot be undone.`,
+        z.object({ confirmed: z.boolean() })
+      );
+
+      if (result.status !== 'accept' || !result.content?.confirmed) {
+        return { deleted: false, reason: 'User did not confirm' };
+      }
+    } else if (shouldConfirm && !canElicit) {
+      // Client doesn't support elicitation - return warning
+      return {
+        deleted: false,
+        reason: 'Confirmation required but client does not support elicitation. Use skipConfirmation: true to proceed.',
+      };
+    }
+
+    // Proceed with deletion
+    await this.deleteFile(path);
+    return { deleted: true, path };
+  }
+}
+```
+
+---
+
+## MCP Protocol Integration
+
+Elicitation integrates with the MCP protocol via:
+
+| Flow                   | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| `elicitation/create`   | Server sends elicitation request to client    |
+| Result callback        | Client sends result with action and content   |
+
+### Client Capabilities
+
+Clients advertise elicitation support during MCP initialization:
+
+```json
+{
+  "capabilities": {
+    "elicitation": {
+      "form": {},
+      "url": {}
+    }
+  }
+}
+```
+
+FrontMCP automatically reads these capabilities and validates them before sending elicitation requests.
+
+### Protocol Flow
+
+1. Tool calls `this.elicit(message, schema, options)`
+2. FrontMCP validates client capabilities
+3. FrontMCP sends `elicitation/create` request to client
+4. Client displays form/redirects user based on mode
+5. User interacts with the elicitation UI
+6. Client sends result back with `action` ('accept', 'cancel', 'decline') and optional `content`
+7. FrontMCP resolves the promise with typed `ElicitResult`
+
+<Tip>
+For the full protocol specification, see [MCP Elicitation](https://modelcontextprotocol.io/specification/2025-11-25/server/elicitation).
+</Tip>
+
+---
+
+## Best Practices
+
+**Do:**
+
+- Use descriptive messages that clearly explain what information is needed
+- Define clear Zod schemas with `.describe()` on each field
+- Set appropriate timeouts based on the complexity of the request
+- Handle all three status values (`accept`, `cancel`, `decline`)
+- Provide graceful fallbacks for clients without elicitation support
+- Use form mode for simple confirmations and structured data collection
+- Use URL mode only for external authentication flows
+
+**Don't:**
+
+- Suppress timeout errors—let them propagate to terminate execution
+- Request elicitation for every tool—only when user input is truly needed
+- Set extremely long timeouts that could leave resources hanging
+- Assume all clients support elicitation—always check or handle errors
+- Chain multiple dependent elicitations without clear user guidance
+- Use elicitation for data that should be provided upfront in tool input
+
+---
+
+## API Reference
+
+### Types
+
+```ts
+// Status of an elicitation result
+type ElicitStatus = 'accept' | 'cancel' | 'decline';
+
+// Result returned by elicit()
+interface ElicitResult<T = unknown> {
+  status: ElicitStatus;
+  content?: T;  // Only present when status is 'accept'
+}
+
+// Options for elicit()
+interface ElicitOptions {
+  mode?: 'form' | 'url';
+  ttl?: number;
+  elicitationId?: string;
+}
+
+// Default timeout constant
+const DEFAULT_ELICIT_TTL = 300000; // 5 minutes
+```
+
+### Errors
+
+```ts
+// Thrown when client doesn't support elicitation
+class ElicitationNotSupportedError extends PublicMcpError {
+  // code: 'ELICITATION_NOT_SUPPORTED'
+  // statusCode: 400
+}
+
+// Thrown when elicitation times out
+class ElicitationTimeoutError extends PublicMcpError {
+  readonly elicitId: string;
+  readonly ttl: number;
+  // code: 'ELICITATION_TIMEOUT'
+  // statusCode: 408
+}
+```
+
+### Helpers
+
+```ts
+// Check if client supports elicitation
+function supportsElicitation(
+  capabilities?: ClientCapabilities,
+  mode?: 'form' | 'url'
+): boolean;
+```
