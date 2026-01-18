@@ -106,6 +106,15 @@ export class Scope extends ScopeEntry {
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
 
+    // Initialize elicitation store for distributed elicitation support
+    const { store: elicitStore } = await createElicitationStore({
+      redis: this.metadata.redis,
+      keyPrefix: this.metadata.redis?.keyPrefix ?? 'mcp:elicit:',
+      logger: this.logger,
+      isEdgeRuntime: this.isEdgeRuntime(),
+    });
+    this._elicitationStore = elicitStore;
+
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     await this.scopeAuth.ready;
 
@@ -382,21 +391,10 @@ export class Scope extends ScopeEntry {
    * @see createElicitationStore for factory implementation details
    */
   get elicitationStore(): ElicitationStore {
-    // Return cached store if available
-    if (this._elicitationStore) {
-      return this._elicitationStore;
+    if (!this._elicitationStore) {
+      throw new Error('ElicitationStore not initialized. Ensure scope.ready has resolved before accessing.');
     }
-
-    // Use factory to create the appropriate store based on configuration
-    const { store } = createElicitationStore({
-      redis: this.metadata.redis,
-      keyPrefix: this.metadata.redis?.keyPrefix ?? 'mcp:elicit:',
-      logger: this.logger,
-      isEdgeRuntime: this.isEdgeRuntime(),
-    });
-
-    this._elicitationStore = store;
-    return store;
+    return this._elicitationStore;
   }
 
   /**

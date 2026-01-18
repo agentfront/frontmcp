@@ -13,6 +13,9 @@
 import type { ElicitationStore } from './elicitation.store';
 import { type FrontMcpLogger, type RedisOptionsInput, type RedisProviderOptions } from '../common';
 import { ElicitationNotSupportedError } from '../errors/elicitation.error';
+import type { RedisElicitationStore as RedisElicitationStoreClass } from './redis-elicitation.store';
+import type { InMemoryElicitationStore as InMemoryElicitationStoreClass } from './memory-elicitation.store';
+import type RedisClient from 'ioredis';
 
 /**
  * Options for creating an elicitation store.
@@ -66,7 +69,7 @@ export interface ElicitationStoreResult {
  *
  * @example Redis (distributed mode)
  * ```typescript
- * const { store, type } = createElicitationStore({
+ * const { store, type } = await createElicitationStore({
  *   redis: {
  *     provider: 'redis',
  *     host: 'localhost',
@@ -79,7 +82,7 @@ export interface ElicitationStoreResult {
  *
  * @example Memory (single-node mode)
  * ```typescript
- * const { store, type } = createElicitationStore({
+ * const { store, type } = await createElicitationStore({
  *   logger,
  * });
  * // type === 'memory'
@@ -88,7 +91,7 @@ export interface ElicitationStoreResult {
  * @throws {Error} If Vercel KV is configured (pub/sub not supported)
  * @throws {Error} If running on Edge runtime without Redis configuration
  */
-export function createElicitationStore(options: ElicitationStoreOptions = {}): ElicitationStoreResult {
+export async function createElicitationStore(options: ElicitationStoreOptions = {}): Promise<ElicitationStoreResult> {
   const { redis, keyPrefix = 'mcp:elicit:', logger, isEdgeRuntime = false } = options;
 
   // Check for Vercel KV - not supported for elicitation (no pub/sub)
@@ -123,7 +126,7 @@ export function createElicitationStore(options: ElicitationStoreOptions = {}): E
           defaultTtlMs: (redis as { defaultTtlMs?: number }).defaultTtlMs ?? 3600000,
         }
       : (redis as RedisProviderOptions);
-    return createRedisElicitationStore(redisConfig, keyPrefix, logger);
+    return await createRedisElicitationStore(redisConfig, keyPrefix, logger);
   }
 
   // Edge runtime requires Redis - cannot use in-memory store
@@ -136,21 +139,26 @@ export function createElicitationStore(options: ElicitationStoreOptions = {}): E
   }
 
   // Fall back to in-memory store for single-node/dev
-  return createMemoryElicitationStore(logger);
+  return await createMemoryElicitationStore(logger);
 }
 
 /**
  * Create a Redis-backed elicitation store.
  * @internal
  */
-function createRedisElicitationStore(
+async function createRedisElicitationStore(
   options: RedisProviderOptions,
   keyPrefix: string,
   logger?: FrontMcpLogger,
-): ElicitationStoreResult {
+): Promise<ElicitationStoreResult> {
   // Lazy require to avoid bundling ioredis when not used
-  const { RedisElicitationStore } = require('./redis-elicitation.store');
-  const Redis = require('ioredis').default;
+  // Type-only imports above provide type safety, require provides lazy loading
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { RedisElicitationStore } = require('./redis-elicitation.store') as {
+    RedisElicitationStore: typeof RedisElicitationStoreClass;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Redis = require('ioredis').default as typeof RedisClient;
 
   // Create Redis client with configuration
   const redisClient = new Redis({
@@ -178,9 +186,12 @@ function createRedisElicitationStore(
  * Create an in-memory elicitation store.
  * @internal
  */
-function createMemoryElicitationStore(logger?: FrontMcpLogger): ElicitationStoreResult {
+async function createMemoryElicitationStore(logger?: FrontMcpLogger): Promise<ElicitationStoreResult> {
   // Lazy require to avoid circular imports
-  const { InMemoryElicitationStore } = require('./memory-elicitation.store');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { InMemoryElicitationStore } = require('./memory-elicitation.store') as {
+    InMemoryElicitationStore: typeof InMemoryElicitationStoreClass;
+  };
 
   const store = new InMemoryElicitationStore();
 
@@ -199,8 +210,11 @@ function createMemoryElicitationStore(logger?: FrontMcpLogger): ElicitationStore
  * @param logger - Optional logger instance
  * @returns An in-memory elicitation store
  */
-export function createMemoryElicitationStoreExplicit(logger?: FrontMcpLogger): ElicitationStore {
-  const { InMemoryElicitationStore } = require('./memory-elicitation.store');
+export async function createMemoryElicitationStoreExplicit(logger?: FrontMcpLogger): Promise<ElicitationStore> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { InMemoryElicitationStore } = require('./memory-elicitation.store') as {
+    InMemoryElicitationStore: typeof InMemoryElicitationStoreClass;
+  };
   logger?.verbose('[ElicitationStoreFactory] Created explicit in-memory elicitation store');
   return new InMemoryElicitationStore();
 }
