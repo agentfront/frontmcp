@@ -10,7 +10,7 @@
 
 import type { Redis } from 'ioredis';
 import { ElicitationStore, PendingElicitRecord, ElicitResultCallback, ElicitUnsubscribe } from './elicitation.store';
-import { ElicitResult } from './elicitation.types';
+import { ElicitResult, PendingElicitFallback, ResolvedElicitResult } from './elicitation.types';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 
 /**
@@ -22,6 +22,16 @@ const PENDING_KEY_PREFIX = 'mcp:elicit:session:';
  * Channel prefix for elicitation result pub/sub.
  */
 const RESULT_CHANNEL_PREFIX = 'mcp:elicit:result:';
+
+/**
+ * Key prefix for pending fallback elicitation records (keyed by elicitId).
+ */
+const FALLBACK_KEY_PREFIX = 'mcp:elicit:fallback:';
+
+/**
+ * Key prefix for resolved elicit results (keyed by elicitId).
+ */
+const RESOLVED_KEY_PREFIX = 'mcp:elicit:resolved:';
 
 /**
  * Redis-backed elicitation store for distributed deployments.
@@ -290,5 +300,136 @@ export class RedisElicitationStore implements ElicitationStore {
     }
 
     this.logger?.verbose('[RedisElicitationStore] Destroyed');
+  }
+
+  // ============================================
+  // Fallback Elicitation Methods
+  // ============================================
+
+  /**
+   * Store a pending elicitation fallback context.
+   * Keyed by elicitId. The record automatically expires based on `expiresAt`.
+   */
+  async setPendingFallback(record: PendingElicitFallback): Promise<void> {
+    const key = FALLBACK_KEY_PREFIX + record.elicitId;
+    const ttlMs = Math.max(0, record.expiresAt - Date.now());
+    const ttlSeconds = Math.ceil(ttlMs / 1000);
+
+    // If TTL is already expired or invalid, delete any existing key and return early
+    if (ttlSeconds <= 0) {
+      await this.redis.del(key);
+      this.logger?.warn('[RedisElicitationStore] Pending fallback already expired, deleted key', {
+        elicitId: record.elicitId,
+        ttlSeconds,
+      });
+      return;
+    }
+
+    await this.redis.set(key, JSON.stringify(record), 'EX', ttlSeconds);
+
+    this.logger?.verbose('[RedisElicitationStore] Stored pending fallback', {
+      elicitId: record.elicitId,
+      toolName: record.toolName,
+      ttlSeconds,
+    });
+  }
+
+  /**
+   * Get a pending elicitation fallback by elicit ID.
+   */
+  async getPendingFallback(elicitId: string): Promise<PendingElicitFallback | null> {
+    const key = FALLBACK_KEY_PREFIX + elicitId;
+    const raw = await this.redis.get(key);
+
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const record = JSON.parse(raw) as PendingElicitFallback;
+
+      // Double-check expiration
+      if (Date.now() > record.expiresAt) {
+        await this.deletePendingFallback(elicitId);
+        return null;
+      }
+
+      return record;
+    } catch (error) {
+      this.logger?.warn('[RedisElicitationStore] Failed to parse pending fallback', {
+        elicitId,
+        error: (error as Error).message,
+      });
+      await this.deletePendingFallback(elicitId);
+      return null;
+    }
+  }
+
+  /**
+   * Delete a pending elicitation fallback by elicit ID.
+   */
+  async deletePendingFallback(elicitId: string): Promise<void> {
+    const key = FALLBACK_KEY_PREFIX + elicitId;
+    await this.redis.del(key);
+
+    this.logger?.verbose('[RedisElicitationStore] Deleted pending fallback', {
+      elicitId,
+    });
+  }
+
+  /**
+   * Store a resolved elicit result for re-invocation.
+   * Uses a short TTL (5 minutes) since this is only needed during the re-invocation window.
+   */
+  async setResolvedResult(elicitId: string, result: ElicitResult<unknown>): Promise<void> {
+    const key = RESOLVED_KEY_PREFIX + elicitId;
+    const resolved: ResolvedElicitResult = {
+      elicitId,
+      result,
+      resolvedAt: Date.now(),
+    };
+
+    // Store with 5-minute TTL (300 seconds)
+    await this.redis.set(key, JSON.stringify(resolved), 'EX', 300);
+
+    this.logger?.verbose('[RedisElicitationStore] Stored resolved result', {
+      elicitId,
+      status: result.status,
+    });
+  }
+
+  /**
+   * Get a resolved elicit result by elicit ID.
+   */
+  async getResolvedResult(elicitId: string): Promise<ResolvedElicitResult | null> {
+    const key = RESOLVED_KEY_PREFIX + elicitId;
+    const raw = await this.redis.get(key);
+
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(raw) as ResolvedElicitResult;
+    } catch (error) {
+      this.logger?.warn('[RedisElicitationStore] Failed to parse resolved result', {
+        elicitId,
+        error: (error as Error).message,
+      });
+      await this.deleteResolvedResult(elicitId);
+      return null;
+    }
+  }
+
+  /**
+   * Delete a resolved elicit result by elicit ID.
+   */
+  async deleteResolvedResult(elicitId: string): Promise<void> {
+    const key = RESOLVED_KEY_PREFIX + elicitId;
+    await this.redis.del(key);
+
+    this.logger?.verbose('[RedisElicitationStore] Deleted resolved result', {
+      elicitId,
+    });
   }
 }

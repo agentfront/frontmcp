@@ -21,6 +21,7 @@ import {
   InvalidOutputError,
   ToolExecutionError,
   AuthorizationRequiredError,
+  ElicitationFallbackRequired,
 } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
@@ -373,6 +374,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.appendContextHooks(toolHooks);
       context.mark('createToolCallContext');
 
+      // Set tool name and input for fallback elicitation support
+      // These are used by the elicit() method when throwing ElicitationFallbackRequired
+      context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
+      context._toolInputInternal = input.arguments;
+
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
       const frontmcpContext = context.tryGetContext();
@@ -448,6 +454,59 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       toolContext.output = await toolContext.execute(toolContext.input);
       this.logger.verbose('execute:done');
     } catch (error) {
+      // Handle elicitation fallback for clients that don't support elicitation
+      if (error instanceof ElicitationFallbackRequired) {
+        this.logger.info('execute: elicitation fallback required', {
+          elicitId: error.elicitId,
+          toolName: error.toolName,
+        });
+
+        // Store pending fallback context in the elicitation store
+        const authInfo = this.state.authInfo;
+        const sessionId = authInfo?.sessionId ?? 'anonymous';
+        const scope = this.scope as Scope;
+
+        await scope.elicitationStore.setPendingFallback({
+          elicitId: error.elicitId,
+          sessionId,
+          toolName: error.toolName,
+          toolInput: error.toolInput,
+          elicitMessage: error.elicitMessage,
+          elicitSchema: error.schema,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + error.ttl,
+        });
+
+        // Set output to fallback response (not an error)
+        // This structured response tells the LLM how to continue
+        toolContext.output = {
+          content: [
+            {
+              type: 'text',
+              text:
+                `This tool requires user input to continue.\n\n` +
+                `**Question:** ${error.elicitMessage}\n\n` +
+                `After collecting the user's response, call the \`sendElicitationResult\` tool with:\n` +
+                `- elicitId: "${error.elicitId}"\n` +
+                `- action: "accept", "cancel", or "decline"\n` +
+                `- content: (the user's response matching the schema below)\n\n` +
+                `**Expected Response Schema:**\n\`\`\`json\n${JSON.stringify(error.schema, null, 2)}\n\`\`\``,
+            },
+          ],
+          _meta: {
+            elicitationPending: {
+              elicitId: error.elicitId,
+              message: error.elicitMessage,
+              schema: error.schema,
+              instructions: 'Call sendElicitationResult tool after collecting user input',
+            },
+          },
+        } as unknown;
+
+        this.logger.verbose('execute:done (elicitation fallback)');
+        return;
+      }
+
       this.logger.error('execute: tool execution failed', error);
       throw new ToolExecutionError(
         this.state.tool?.metadata.name || 'unknown',

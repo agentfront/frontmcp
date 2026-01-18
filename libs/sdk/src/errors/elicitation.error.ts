@@ -19,6 +19,40 @@ export class ElicitationNotSupportedError extends PublicMcpError {
 }
 
 /**
+ * Elicitation fallback required.
+ *
+ * Thrown when elicitation is requested but the client doesn't support the
+ * standard elicitation protocol. This is NOT a failure error - it triggers
+ * the fallback flow where the tool returns instructions to the LLM, and
+ * the LLM uses the sendElicitationResult tool to continue.
+ *
+ * This error carries all context needed to re-invoke the tool when
+ * the result arrives via sendElicitationResult.
+ */
+export class ElicitationFallbackRequired extends PublicMcpError {
+  constructor(
+    /** Unique identifier for this elicitation request */
+    public readonly elicitId: string,
+    /** Message to display to the user */
+    public readonly elicitMessage: string,
+    /** JSON Schema for the expected response */
+    public readonly schema: Record<string, unknown>,
+    /** Name of the tool that requested elicitation */
+    public readonly toolName: string,
+    /** Original input arguments passed to the tool */
+    public readonly toolInput: unknown,
+    /** Time-to-live in milliseconds */
+    public readonly ttl: number,
+  ) {
+    super('Elicitation fallback required', 'ELICITATION_FALLBACK', 200);
+  }
+
+  override getPublicMessage(): string {
+    return this.elicitMessage;
+  }
+}
+
+/**
  * Elicitation timeout error.
  *
  * Thrown when an elicitation request times out waiting for user response.

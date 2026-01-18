@@ -13,6 +13,8 @@ import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { ToolPaginationOptions } from '../../common/types/options/pagination';
 import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination';
+import { supportsElicitation } from '../../notification';
+import { isSendElicitationResultTool } from '../../elicitation/send-elicitation-result.tool';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -26,6 +28,8 @@ const stateSchema = z.object({
   // z.any() used because AuthInfo is an external type from @modelcontextprotocol/sdk that varies by SDK version
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   platformType: z.string().optional() as z.ZodType<AIPlatformType | undefined>,
+  // Whether the client supports standard MCP elicitation protocol
+  clientSupportsElicitation: z.boolean().optional(),
   tools: z.array(
     z.object({
       appName: z.string(),
@@ -182,9 +186,16 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
     this.logger.verbose(`parseInput: detected platform=${platformType}`);
 
+    // Check if client supports standard MCP elicitation protocol
+    // If not, we'll add the sendElicitationResult fallback tool
+    const capabilities = sessionId ? scope.notifications?.getClientCapabilities(sessionId) : undefined;
+    const clientSupportsElicitation = supportsElicitation(capabilities);
+
+    this.logger.verbose(`parseInput: clientSupportsElicitation=${clientSupportsElicitation}`);
+
     const cursor = params?.cursor;
     if (cursor) this.logger.verbose(`parseInput: cursor=${cursor}`);
-    this.state.set({ cursor, authInfo, platformType });
+    this.state.set({ cursor, authInfo, platformType, clientSupportsElicitation });
     this.logger.verbose('parseInput:done');
   }
 
@@ -247,10 +258,23 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
       const seenToolIds = new Set<string>();
 
-      const scopeTools = this.scope.tools.getTools();
-      this.logger.verbose(`findTools: scope tools=${scopeTools.length}`);
+      // Check if client supports standard MCP elicitation protocol
+      const clientSupportsElicitation = this.state.clientSupportsElicitation ?? false;
+
+      // Get tools - include hidden tools (like sendElicitationResult) for non-supporting clients
+      // The sendElicitationResult system tool is registered with hideFromDiscovery: true
+      const includeHidden = !clientSupportsElicitation;
+      const scopeTools = this.scope.tools.getTools(includeHidden);
+      this.logger.verbose(`findTools: scope tools=${scopeTools.length} (includeHidden=${includeHidden})`);
 
       for (const tool of scopeTools) {
+        const toolName = tool.metadata?.name ?? '';
+
+        // Skip sendElicitationResult for clients that support standard elicitation
+        if (clientSupportsElicitation && isSendElicitationResultTool(toolName)) {
+          continue;
+        }
+
         // Deduplicate tools by owner + name combination
         // This prevents the same tool from being registered twice while allowing
         // different owners to have tools with the same name (for conflict resolution)
@@ -259,6 +283,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           seenToolIds.add(toolId);
           tools.push({ appName: tool.owner.id, tool });
         }
+      }
+
+      if (!clientSupportsElicitation) {
+        this.logger.verbose(
+          'findTools: including sendElicitationResult system tool (client does not support elicitation)',
+        );
       }
 
       this.logger.info(`findTools: total tools collected=${tools.length} (deduped from ${scopeTools.length})`);

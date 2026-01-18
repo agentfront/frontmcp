@@ -35,6 +35,9 @@ import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
 import { ElicitationStore, InMemoryElicitationStore } from '../elicitation';
 import { ElicitationNotSupportedError } from '../errors';
+import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import { normalizeTool } from '../tool/tool.utils';
+import { ToolInstance } from '../tool/tool.instance';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -126,6 +129,10 @@ export class Scope extends ScopeEntry {
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
+
+    // Register sendElicitationResult system tool (hidden by default)
+    // This tool is used for fallback elicitation with non-supporting clients
+    this.registerSendElicitationResultTool(scopeRef);
 
     this.toolUIRegistry = new ToolUIRegistry();
 
@@ -422,6 +429,28 @@ export class Scope extends ScopeEntry {
 
     this._elicitationStore = store;
     return store;
+  }
+
+  /**
+   * Register the sendElicitationResult system tool.
+   * This tool is hidden by default and only shown to clients that don't support elicitation.
+   */
+  private registerSendElicitationResultTool(scopeRef: EntryOwnerRef): void {
+    try {
+      const toolRecord = normalizeTool(SendElicitationResultTool);
+      const systemToolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
+        kind: 'scope',
+        id: '_system',
+        ref: SendElicitationResultTool,
+      });
+      this.scopeTools.registerToolInstance(systemToolEntry);
+      this.logger.verbose('Registered sendElicitationResult system tool');
+    } catch (error) {
+      // Log error but don't fail scope initialization
+      this.logger.warn(
+        `Failed to register sendElicitationResult tool: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**

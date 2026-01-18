@@ -75,7 +75,11 @@ export {
 } from './agent.errors';
 
 // Export elicitation errors
-export { ElicitationNotSupportedError, ElicitationTimeoutError } from './elicitation.error';
+export {
+  ElicitationNotSupportedError,
+  ElicitationTimeoutError,
+  ElicitationFallbackRequired,
+} from './elicitation.error';
 
 // Export remote MCP errors
 export {

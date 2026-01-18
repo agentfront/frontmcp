@@ -11,7 +11,7 @@
  * - This separation allows form mode (lookup by session) and URL mode (direct elicitId)
  */
 
-import { ElicitResult, ElicitMode } from './elicitation.types';
+import { ElicitResult, ElicitMode, PendingElicitFallback, ResolvedElicitResult } from './elicitation.types';
 
 /**
  * Record stored for each pending elicitation.
@@ -133,4 +133,58 @@ export interface ElicitationStore {
    * Called during server shutdown.
    */
   destroy?(): Promise<void>;
+
+  // ============================================
+  // Fallback Elicitation Methods
+  // ============================================
+  // Used for clients that don't support the standard elicitation protocol.
+  // These methods store context for re-invoking tools via sendElicitationResult.
+
+  /**
+   * Store a pending elicitation fallback context.
+   * Keyed by elicitId since we need to look up by elicitId when
+   * sendElicitationResult is called.
+   *
+   * @param record - The pending fallback record to store
+   */
+  setPendingFallback(record: PendingElicitFallback): Promise<void>;
+
+  /**
+   * Get a pending elicitation fallback by elicit ID.
+   *
+   * @param elicitId - The elicitation ID to look up
+   * @returns The pending fallback record, or null if not found or expired
+   */
+  getPendingFallback(elicitId: string): Promise<PendingElicitFallback | null>;
+
+  /**
+   * Delete a pending elicitation fallback by elicit ID.
+   *
+   * @param elicitId - The elicitation ID to delete
+   */
+  deletePendingFallback(elicitId: string): Promise<void>;
+
+  /**
+   * Store a resolved elicit result for re-invocation.
+   * Used to pass the result to the tool when it's re-invoked.
+   *
+   * @param elicitId - The elicitation ID
+   * @param result - The elicitation result from the user
+   */
+  setResolvedResult(elicitId: string, result: ElicitResult<unknown>): Promise<void>;
+
+  /**
+   * Get a resolved elicit result by elicit ID.
+   *
+   * @param elicitId - The elicitation ID to look up
+   * @returns The resolved result, or null if not found
+   */
+  getResolvedResult(elicitId: string): Promise<ResolvedElicitResult | null>;
+
+  /**
+   * Delete a resolved elicit result by elicit ID.
+   *
+   * @param elicitId - The elicitation ID to delete
+   */
+  deleteResolvedResult(elicitId: string): Promise<void>;
 }

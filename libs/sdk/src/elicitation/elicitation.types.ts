@@ -97,3 +97,53 @@ export interface PendingElicit<T = unknown> {
   /** Reject function to fail the elicit promise */
   reject: (err: unknown) => void;
 }
+
+/**
+ * Pending elicitation fallback record.
+ *
+ * Stores context needed to re-invoke the tool when the result arrives
+ * via the sendElicitationResult tool. Used for clients that don't support
+ * the standard MCP elicitation protocol.
+ */
+export interface PendingElicitFallback {
+  /** Unique identifier for this elicit request */
+  elicitId: string;
+
+  /** Session ID that initiated the elicitation */
+  sessionId: string;
+
+  /** Name of the tool that requested elicitation */
+  toolName: string;
+
+  /** Original input arguments passed to the tool */
+  toolInput: unknown;
+
+  /** Message displayed to the user */
+  elicitMessage: string;
+
+  /** JSON Schema for the expected response */
+  elicitSchema: Record<string, unknown>;
+
+  /** Timestamp when the elicitation was created */
+  createdAt: number;
+
+  /** Absolute timestamp when the elicitation expires */
+  expiresAt: number;
+}
+
+/**
+ * Pre-resolved elicit result for fallback continuation.
+ *
+ * Stored when sendElicitationResult is called, and retrieved when
+ * the tool is re-invoked to provide the elicit result immediately.
+ */
+export interface ResolvedElicitResult {
+  /** Unique identifier for this elicit request */
+  elicitId: string;
+
+  /** The elicitation result from the user */
+  result: ElicitResult<unknown>;
+
+  /** Timestamp when the result was resolved */
+  resolvedAt: number;
+}

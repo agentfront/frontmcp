@@ -15,9 +15,10 @@ import {
 } from './llm-adapter.interface';
 import { AgentInputOf, AgentOutputOf } from '../decorators';
 import { AgentExecutionLoop, ToolExecutor } from '../../agent/agent-execution-loop';
-import { ElicitResult, ElicitOptions } from '../../elicitation';
-import { ElicitationNotSupportedError } from '../../errors';
-import { ZodType } from 'zod';
+import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
+import { ElicitationNotSupportedError, ElicitationFallbackRequired } from '../../errors';
+import { ZodType, z } from 'zod';
+import { toJSONSchema } from 'zod/v4';
 
 // Re-export AgentType for convenience (defined in agent.metadata.ts)
 export { AgentType };
@@ -115,6 +116,12 @@ export class AgentContext<
 
   /** Function to execute tools - provided by AgentInstance */
   protected readonly toolExecutor?: ToolExecutor;
+
+  // ---- Internal fields for fallback elicitation support
+  /** @internal Agent name for fallback elicitation - set by CallAgentFlow */
+  _agentNameInternal?: string;
+  /** @internal Agent input for fallback elicitation - set by CallAgentFlow */
+  _agentInputInternal?: unknown;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -528,11 +535,15 @@ export class AgentContext<
    * Only one elicit per session is allowed. A new elicit will cancel any pending one.
    * On timeout, an ElicitationTimeoutError is thrown to kill agent execution.
    *
+   * For clients that don't support elicitation, the framework automatically handles
+   * the fallback flow using the sendElicitationResult tool.
+   *
    * @param message - Prompt message to display to user
    * @param requestedSchema - Zod schema defining expected input structure
    * @param options - Mode ('form'|'url'), ttl (default 5min), elicitationId (for URL mode)
    * @returns ElicitResult with status and typed content
-   * @throws ElicitationNotSupportedError if client doesn't support elicitation
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation and no fallback available
+   * @throws ElicitationFallbackRequired (internal) triggers fallback flow for non-supporting clients
    * @throws ElicitationTimeoutError if request times out (kills execution)
    *
    * @example
@@ -561,22 +572,41 @@ export class AgentContext<
       throw new ElicitationNotSupportedError('No session available for elicitation');
     }
 
+    // Check for pre-resolved result (fallback re-invocation case)
+    const ctx = this.tryGetContext();
+    const preResolved = ctx?.getPreResolvedElicitResult?.();
+    if (preResolved) {
+      // Clear the pre-resolved result to prevent reuse
+      ctx?.clearPreResolvedElicitResult?.();
+      return preResolved as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    }
+
     // Check client capabilities
     const capabilities = this.scope.notifications.getClientCapabilities(sessionId);
     const mode = options?.mode ?? 'form';
 
     if (!supportsElicitation(capabilities, mode)) {
-      throw new ElicitationNotSupportedError(
-        mode === 'form'
-          ? 'Client does not support form-based elicitation'
-          : mode === 'url'
-            ? 'Client does not support URL-based elicitation'
-            : 'Client does not support elicitation',
+      // Fallback: throw error with context for re-invocation
+      // This triggers the fallback flow handled by CallAgentFlow
+      const elicitId = options?.elicitationId ?? `elicit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ttl = options?.ttl ?? DEFAULT_ELICIT_TTL;
+
+      // Convert Zod schema to JSON Schema for the fallback response
+      // Wrap in z.object if it's a raw shape (plain object), otherwise use as-is
+      const zodSchema = requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as any);
+      const jsonSchema = toJSONSchema(zodSchema) as Record<string, unknown>;
+
+      throw new ElicitationFallbackRequired(
+        elicitId,
+        message,
+        jsonSchema,
+        this._agentNameInternal ?? this.agentName,
+        this._agentInputInternal ?? this.input,
+        ttl,
       );
     }
 
     // Get transport from context
-    const ctx = this.tryGetContext();
     const transport = ctx?.transport;
     if (!transport) {
       throw new ElicitationNotSupportedError('Transport not available for elicitation');

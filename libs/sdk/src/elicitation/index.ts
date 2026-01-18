@@ -13,3 +13,7 @@ export * from './elicitation.types';
 export * from './elicitation.store';
 export { InMemoryElicitationStore } from './memory-elicitation.store';
 export { RedisElicitationStore } from './redis-elicitation.store';
+
+// Note: SendElicitationResultTool is NOT exported here to avoid circular dependencies.
+// It's imported directly where needed (e.g., tools-list.flow.ts).
+// export { SendElicitationResultTool, isSendElicitationResultTool } from './send-elicitation-result.tool';

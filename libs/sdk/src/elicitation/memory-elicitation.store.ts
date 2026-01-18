@@ -9,7 +9,7 @@
  */
 
 import { ElicitationStore, PendingElicitRecord, ElicitResultCallback, ElicitUnsubscribe } from './elicitation.store';
-import { ElicitResult } from './elicitation.types';
+import { ElicitResult, PendingElicitFallback, ResolvedElicitResult } from './elicitation.types';
 
 /**
  * In-memory elicitation store for single-node deployments.
@@ -33,6 +33,19 @@ export class InMemoryElicitationStore implements ElicitationStore {
 
   /** Expiration timers by sessionId */
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // ============================================
+  // Fallback Elicitation Storage
+  // ============================================
+
+  /** Pending fallback elicitations by elicitId */
+  private pendingFallback = new Map<string, PendingElicitFallback>();
+
+  /** Resolved elicit results by elicitId */
+  private resolvedResults = new Map<string, ResolvedElicitResult>();
+
+  /** Expiration timers for fallback records by elicitId */
+  private fallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   /**
    * Store a pending elicitation with TTL.
@@ -155,9 +168,102 @@ export class InMemoryElicitationStore implements ElicitationStore {
     for (const timer of this.timers.values()) {
       clearTimeout(timer);
     }
+    for (const timer of this.fallbackTimers.values()) {
+      clearTimeout(timer);
+    }
 
     this.pending.clear();
     this.listeners.clear();
     this.timers.clear();
+    this.pendingFallback.clear();
+    this.resolvedResults.clear();
+    this.fallbackTimers.clear();
+  }
+
+  // ============================================
+  // Fallback Elicitation Methods
+  // ============================================
+
+  /**
+   * Store a pending elicitation fallback context.
+   * Keyed by elicitId. Sets up automatic expiration based on `expiresAt`.
+   */
+  async setPendingFallback(record: PendingElicitFallback): Promise<void> {
+    const { elicitId } = record;
+
+    // Clear any existing timer for this elicitId
+    const existingTimer = this.fallbackTimers.get(elicitId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    this.pendingFallback.set(elicitId, record);
+
+    // Set up expiration timer
+    const ttlMs = Math.max(0, record.expiresAt - Date.now());
+    const timer = setTimeout(() => {
+      this.pendingFallback.delete(elicitId);
+      this.fallbackTimers.delete(elicitId);
+      this.resolvedResults.delete(elicitId);
+    }, ttlMs);
+
+    this.fallbackTimers.set(elicitId, timer);
+  }
+
+  /**
+   * Get a pending elicitation fallback by elicit ID.
+   * Returns null if not found or expired.
+   */
+  async getPendingFallback(elicitId: string): Promise<PendingElicitFallback | null> {
+    const record = this.pendingFallback.get(elicitId);
+    if (!record) {
+      return null;
+    }
+
+    // Check if expired
+    if (Date.now() > record.expiresAt) {
+      await this.deletePendingFallback(elicitId);
+      return null;
+    }
+
+    return record;
+  }
+
+  /**
+   * Delete a pending elicitation fallback by elicit ID.
+   */
+  async deletePendingFallback(elicitId: string): Promise<void> {
+    this.pendingFallback.delete(elicitId);
+
+    const timer = this.fallbackTimers.get(elicitId);
+    if (timer) {
+      clearTimeout(timer);
+      this.fallbackTimers.delete(elicitId);
+    }
+  }
+
+  /**
+   * Store a resolved elicit result for re-invocation.
+   */
+  async setResolvedResult(elicitId: string, result: ElicitResult<unknown>): Promise<void> {
+    this.resolvedResults.set(elicitId, {
+      elicitId,
+      result,
+      resolvedAt: Date.now(),
+    });
+  }
+
+  /**
+   * Get a resolved elicit result by elicit ID.
+   */
+  async getResolvedResult(elicitId: string): Promise<ResolvedElicitResult | null> {
+    return this.resolvedResults.get(elicitId) ?? null;
+  }
+
+  /**
+   * Delete a resolved elicit result by elicit ID.
+   */
+  async deleteResolvedResult(elicitId: string): Promise<void> {
+    this.resolvedResults.delete(elicitId);
   }
 }
