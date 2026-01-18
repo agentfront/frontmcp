@@ -18,11 +18,16 @@ import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
 import type { Scope } from '../scope/scope.instance';
 
-const inputSchema = {
-  elicitId: z.string().describe('The elicitation ID from the pending request'),
-  action: z.enum(['accept', 'cancel', 'decline']).describe('User action: accept (submit), cancel, or decline'),
-  content: z.unknown().optional().describe('User response content (required for accept action)'),
-};
+const inputSchema = z
+  .object({
+    elicitId: z.string().describe('The elicitation ID from the pending request'),
+    action: z.enum(['accept', 'cancel', 'decline']).describe('User action: accept (submit), cancel, or decline'),
+    content: z.unknown().optional().describe('User response content (required for accept action)'),
+  })
+  .refine((data) => data.action !== 'accept' || (data.content !== undefined && data.content !== null), {
+    message: 'content is required when action is "accept"',
+    path: ['content'],
+  });
 
 /**
  * System tool for submitting elicitation results.
@@ -56,6 +61,20 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
 
     // Cast scope to Scope type to access elicitationStore
     const scope = this.scope as unknown as Scope;
+
+    // Guard: ensure scope and elicitationStore exist
+    if (!scope?.elicitationStore) {
+      this.logger.error('sendElicitationResult: scope or elicitationStore not available');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: Elicitation store not available. Server may not be properly configured.',
+          },
+        ],
+        isError: true,
+      };
+    }
 
     // Get pending fallback context
     const pending = await scope.elicitationStore.getPendingFallback(elicitId);

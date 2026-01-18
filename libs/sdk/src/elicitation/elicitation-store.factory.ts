@@ -12,6 +12,7 @@
 
 import type { ElicitationStore } from './elicitation.store';
 import { type FrontMcpLogger, type RedisOptionsInput, type RedisProviderOptions } from '../common';
+import { ElicitationNotSupportedError } from '../errors/elicitation.error';
 
 /**
  * Options for creating an elicitation store.
@@ -93,7 +94,7 @@ export function createElicitationStore(options: ElicitationStoreOptions = {}): E
   // Check for Vercel KV - not supported for elicitation (no pub/sub)
   // Type assertion needed as RedisOptionsInput may not have provider
   if (redis && 'provider' in redis && redis.provider === 'vercel-kv') {
-    throw new Error(
+    throw new ElicitationNotSupportedError(
       'Vercel KV is not supported for elicitation stores. ' +
         'Elicitation requires pub/sub for cross-node result routing, which Vercel KV does not support. ' +
         'Use Redis provider instead: { provider: "redis", host: "...", port: ... }',
@@ -127,7 +128,6 @@ export function createElicitationStore(options: ElicitationStoreOptions = {}): E
 
   // Edge runtime requires Redis - cannot use in-memory store
   if (isEdgeRuntime) {
-    const { ElicitationNotSupportedError } = require('../errors/elicitation.error');
     throw new ElicitationNotSupportedError(
       'Elicitation requires Redis configuration when running on Edge runtime. ' +
         'Edge functions are stateless and cannot use in-memory elicitation. ' +

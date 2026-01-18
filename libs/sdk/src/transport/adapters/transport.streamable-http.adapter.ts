@@ -196,6 +196,13 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
       this.logger.info('[StreamableHttpAdapter] sendElicitRequest: transport.send() completed');
     } catch (error) {
       this.logger.error('[StreamableHttpAdapter] sendElicitRequest: transport.send() failed', error);
+      // Clean up pending record to avoid stale state
+      try {
+        await this.elicitStore.deletePending(sessionId);
+        this.logger.verbose('[StreamableHttpAdapter] sendElicitRequest: cleaned up pending record after send failure');
+      } catch (cleanupError) {
+        this.logger.warn('[StreamableHttpAdapter] sendElicitRequest: failed to clean up pending record', cleanupError);
+      }
       throw error;
     }
 

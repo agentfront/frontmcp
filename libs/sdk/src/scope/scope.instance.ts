@@ -434,8 +434,13 @@ export class Scope extends ScopeEntry {
     if (typeof globalThis !== 'undefined' && 'caches' in globalThis && !('window' in globalThis)) {
       return true;
     }
-    // Check for common environment variables
-    if (process.env['VERCEL_ENV'] !== undefined && process.env['EDGE_RUNTIME'] !== undefined) {
+    // Check for common environment variables (guarded for Edge runtimes where process may not exist)
+    if (
+      typeof process !== 'undefined' &&
+      typeof process.env !== 'undefined' &&
+      process.env['VERCEL_ENV'] !== undefined &&
+      process.env['EDGE_RUNTIME'] !== undefined
+    ) {
       return true;
     }
     return false;
