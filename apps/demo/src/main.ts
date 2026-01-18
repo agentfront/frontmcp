@@ -10,13 +10,17 @@ import CrmMcpApp from './apps/crm';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
+  apps: [WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
   logging: { level: LogLevel.Verbose },
   http: {
     port: 3003,
   },
   transport: {
     protocol: 'legacy',
+  },
+  redis: {
+    port: 6379,
+    host: 'localhost',
   },
   auth: {
     mode: 'transparent',
