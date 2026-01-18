@@ -345,6 +345,105 @@ supportsElicitation(capabilities, 'url');  // true/false
 
 ---
 
+## Universal LLM Support
+
+FrontMCP elicitation works with **all LLMs**, not just those that support the MCP elicitation protocol. For clients that don't support elicitation (like OpenAI, Google Gemini, Cursor, etc.), FrontMCP automatically falls back to an LLM-mediated approach.
+
+<Info>
+**Zero code changes required!** Your tools use the same `this.elicit()` API regardless of client capabilities. FrontMCP handles detection and routing automatically.
+</Info>
+
+### How It Works
+
+**Standard Elicitation (Claude, supporting clients):**
+
+```
+Tool ─► elicit() ─► Transport ─► Client UI ─► User responds ─► Result
+```
+
+**Fallback Elicitation (OpenAI, Gemini, etc.):**
+
+```
+Tool ─► elicit() ─► Framework detects no support ─► Returns instructions to LLM
+                                                              │
+LLM asks user ─► User responds ─► LLM calls sendElicitationResult tool
+                                                              │
+                                       Tool re-invoked with result ─► Completes
+```
+
+### Client Compatibility
+
+| Client | Elicitation Support | Mechanism |
+|--------|---------------------|-----------|
+| Claude Desktop | ✅ Native | Standard MCP protocol |
+| Claude.ai | ✅ Native | Standard MCP protocol |
+| OpenAI ChatGPT | ✅ Automatic | Fallback via `sendElicitationResult` |
+| Google Gemini | ✅ Automatic | Fallback via `sendElicitationResult` |
+| Cursor | ✅ Automatic | Fallback via `sendElicitationResult` |
+| Custom Clients | Depends | Check `experimental.elicitation` capability |
+
+### Fallback Response Format
+
+When a tool calls `elicit()` and the client doesn't support elicitation, FrontMCP returns a structured response:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "This tool requires user input to continue.\n\n**Question:** Are you sure?\n\n..."
+    }
+  ],
+  "_meta": {
+    "elicitationPending": {
+      "elicitId": "elicit-1234-abc",
+      "message": "Are you sure?",
+      "schema": { "type": "object", "properties": { "confirmed": { "type": "boolean" } } },
+      "instructions": "Call sendElicitationResult tool after collecting user input"
+    }
+  }
+}
+```
+
+The LLM reads these instructions, asks the user, then calls the `sendElicitationResult` tool:
+
+```json
+{
+  "name": "sendElicitationResult",
+  "arguments": {
+    "elicitId": "elicit-1234-abc",
+    "action": "accept",
+    "content": { "confirmed": true }
+  }
+}
+```
+
+### The sendElicitationResult Tool
+
+This system tool is **automatically registered** for clients that don't support elicitation. It:
+
+- Is hidden from clients that support standard elicitation
+- Accepts the `elicitId`, user `action`, and `content`
+- Re-invokes the original tool with the result pre-injected
+- Returns the original tool's final result
+
+**Input Schema:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `elicitId` | `string` | The elicitation ID from the pending request |
+| `action` | `'accept' \| 'cancel' \| 'decline'` | User's action |
+| `content` | `unknown` | User's response (required when action is `'accept'`) |
+
+### Key Benefits
+
+1. **Transparent to developers** — Same `this.elicit()` API for all clients
+2. **Automatic detection** — Framework checks client capabilities at runtime
+3. **Works with Redis** — Fallback state is stored in Redis for distributed deployments
+4. **Type-safe** — Schema is converted to JSON Schema for LLM understanding
+
+---
+
 ## Error Handling
 
 ### ElicitationNotSupportedError
