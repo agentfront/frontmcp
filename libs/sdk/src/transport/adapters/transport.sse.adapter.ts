@@ -7,7 +7,7 @@ import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
-import { ElicitationTimeoutError } from '../../errors';
+import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
 
 export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSEServerTransport> {
   sessionId: string;
@@ -98,6 +98,11 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
   ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
     const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
 
+    // URL mode requires elicitationId for out-of-band tracking
+    if (mode === 'url' && !elicitationId) {
+      throw new InvalidInputError('elicitationId is required when mode is "url"');
+    }
+
     // Cancel any previous pending elicit (only one per session)
     await this.cancelPendingElicit();
 
@@ -155,6 +160,14 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
         })
         .then((unsub) => {
           unsubscribe = unsub;
+        })
+        .catch(async (err) => {
+          // Fail fast on subscription error instead of waiting for timeout
+          clearTimeout(timeoutHandle);
+          this.pendingElicit = undefined;
+          await unsubscribe?.();
+          await this.elicitStore.deletePending(sessionId);
+          reject(err);
         });
 
       // Also store local pending elicit (for single-node mode and error handling)

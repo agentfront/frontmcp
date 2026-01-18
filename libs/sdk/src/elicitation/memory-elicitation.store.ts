@@ -108,11 +108,12 @@ export class InMemoryElicitationStore implements ElicitationStore {
    * In-memory implementation uses local callback registry.
    */
   async subscribeResult<T = unknown>(elicitId: string, callback: ElicitResultCallback<T>): Promise<ElicitUnsubscribe> {
-    if (!this.listeners.has(elicitId)) {
-      this.listeners.set(elicitId, new Set());
+    let listeners = this.listeners.get(elicitId);
+    if (!listeners) {
+      listeners = new Set();
+      this.listeners.set(elicitId, listeners);
     }
 
-    const listeners = this.listeners.get(elicitId)!;
     listeners.add(callback as ElicitResultCallback);
 
     // Return unsubscribe function

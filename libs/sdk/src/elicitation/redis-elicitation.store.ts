@@ -91,6 +91,18 @@ export class RedisElicitationStore implements ElicitationStore {
     const ttlMs = Math.max(0, record.expiresAt - Date.now());
     const ttlSeconds = Math.ceil(ttlMs / 1000);
 
+    // If TTL is already expired or invalid, delete any existing key and return early
+    // Redis SET EX 0 would fail, so we handle this edge case explicitly
+    if (ttlSeconds <= 0) {
+      await this.redis.del(key);
+      this.logger?.warn('[RedisElicitationStore] Pending elicitation already expired, deleted key', {
+        elicitId: record.elicitId,
+        sessionId: record.sessionId.slice(0, 20),
+        ttlSeconds,
+      });
+      return;
+    }
+
     await this.redis.set(key, JSON.stringify(record), 'EX', ttlSeconds);
 
     this.logger?.verbose('[RedisElicitationStore] Stored pending elicitation', {
@@ -149,15 +161,16 @@ export class RedisElicitationStore implements ElicitationStore {
    */
   async subscribeResult<T = unknown>(elicitId: string, callback: ElicitResultCallback<T>): Promise<ElicitUnsubscribe> {
     const channel = RESULT_CHANNEL_PREFIX + elicitId;
+    const subscriber = this.subscriber;
 
     // Wait for subscriber to be ready
-    if (!this.subscriberReady && this.subscriber) {
+    if (!this.subscriberReady && subscriber) {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Subscriber connection timeout'));
         }, 5000);
 
-        this.subscriber!.once('ready', () => {
+        subscriber.once('ready', () => {
           clearTimeout(timeout);
           resolve();
         });
@@ -171,11 +184,13 @@ export class RedisElicitationStore implements ElicitationStore {
     }
 
     // Track callback locally
-    if (!this.subscriptions.has(channel)) {
-      this.subscriptions.set(channel, new Set());
+    let callbacks = this.subscriptions.get(channel);
+    if (!callbacks) {
+      callbacks = new Set();
+      this.subscriptions.set(channel, callbacks);
 
       // Subscribe to Redis channel
-      await this.subscriber?.subscribe(channel);
+      await subscriber?.subscribe(channel);
 
       this.logger?.verbose('[RedisElicitationStore] Subscribed to result channel', {
         elicitId,
@@ -183,7 +198,7 @@ export class RedisElicitationStore implements ElicitationStore {
       });
     }
 
-    this.subscriptions.get(channel)!.add(callback as ElicitResultCallback);
+    callbacks.add(callback as ElicitResultCallback);
 
     // Return unsubscribe function
     return async () => {

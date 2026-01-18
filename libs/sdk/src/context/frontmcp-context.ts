@@ -100,7 +100,7 @@ export interface TransportAccessor {
 // Forward declaration for type reference (avoid circular imports)
 type FlowBaseRef = { readonly name: string };
 type ScopeRef = { readonly id: string; readonly logger: FrontMcpLogger };
-type TransportRef = {
+interface TransportRef {
   sendElicitRequest: <S extends ZodType>(
     relatedRequestId: number | string,
     message: string,
@@ -110,7 +110,7 @@ type TransportRef = {
   readonly type: string;
   /** JSON-RPC request ID for this request - used for elicitation routing */
   readonly jsonRpcRequestId?: number | string;
-};
+}
 
 /**
  * Session ID validation constants.
@@ -305,6 +305,8 @@ export class FrontMcpContext {
     if (!this._transport) return undefined;
     const transportRef = this._transport;
     return {
+      // TODO: Consider deriving supportsElicit from transport capabilities
+      // instead of hardcoding true when transport is available
       supportsElicit: true,
       elicit: (message, schema, options) => {
         // Use the JSON-RPC request ID from the transport for proper stream routing

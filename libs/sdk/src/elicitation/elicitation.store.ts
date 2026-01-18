@@ -76,7 +76,7 @@ export type ElicitUnsubscribe = () => Promise<void>;
  * // On any node: lookup by sessionId, then publish result by elicitId
  * const pending = await store.getPending('session-abc');
  * if (pending) {
- *   await store.publishResult(pending.elicitId, { status: 'accept', content: { confirmed: true } });
+ *   await store.publishResult(pending.elicitId, pending.sessionId, { status: 'accept', content: { confirmed: true } });
  * }
  * ```
  */

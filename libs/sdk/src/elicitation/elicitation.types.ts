@@ -25,17 +25,18 @@ export type ElicitStatus = 'accept' | 'cancel' | 'decline';
 /**
  * Result of an elicitation request.
  *
- * @template T - The type of the content when status is 'submit'
+ * @template T - The type of the content when status is 'accept'
  */
 export interface ElicitResult<T = unknown> {
   /**
    * The user's action in response to the elicitation.
+   * Valid values: 'accept' | 'cancel' | 'decline' (see ElicitStatus)
    */
   status: ElicitStatus;
 
   /**
    * The validated content from the user's response.
-   * Only present when status is 'submit'.
+   * Only present when status is 'accept'.
    */
   content?: T;
 }

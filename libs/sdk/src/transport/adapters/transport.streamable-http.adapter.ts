@@ -8,7 +8,7 @@ import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
-import { ElicitationTimeoutError } from '../../errors';
+import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
 
 /**
  * Stateless HTTP requests must be able to send multiple initialize calls without
@@ -96,10 +96,10 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
       if (chunk) {
         responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
       }
-      adapter.logger.info('[StreamableHttpAdapter] initialize response', {
+      adapter.logger.verbose('[StreamableHttpAdapter] initialize response', {
         statusCode: res.statusCode,
         headers: res.getHeaders?.() ?? {},
-        bodyPreview: responseBody.slice(0, 1000),
+        bodyLength: responseBody.length,
       });
       return originalEnd.call(this, chunk, encodingOrCb, cb);
     } as typeof res.end;
@@ -148,6 +148,11 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     options?: ElicitOptions,
   ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
     const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
+
+    // URL mode requires elicitationId for out-of-band tracking
+    if (mode === 'url' && !elicitationId) {
+      throw new InvalidInputError('elicitationId is required when mode is "url"');
+    }
 
     // Cancel any previous pending elicit (only one per session)
     await this.cancelPendingElicit();
@@ -216,6 +221,14 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
         })
         .then((unsub) => {
           unsubscribe = unsub;
+        })
+        .catch(async (err) => {
+          // Fail fast on subscription error instead of waiting for timeout
+          clearTimeout(timeoutHandle);
+          this.pendingElicit = undefined;
+          await unsubscribe?.();
+          await this.elicitStore.deletePending(sessionId);
+          reject(err);
         });
 
       // Also store local pending elicit (for single-node mode and error handling)

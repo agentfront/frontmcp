@@ -204,6 +204,14 @@ describe('Elicitation Types', () => {
   });
 
   describe('PendingElicit', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should create a pending elicit with all required fields', () => {
       const resolveFn = jest.fn();
       const rejectFn = jest.fn();
@@ -220,8 +228,6 @@ describe('Elicitation Types', () => {
       expect(pending.timeoutHandle).toBeDefined();
       expect(pending.resolve).toBe(resolveFn);
       expect(pending.reject).toBe(rejectFn);
-
-      clearTimeout(timeoutHandle);
     });
 
     it('should be callable with resolve function', () => {
@@ -242,8 +248,6 @@ describe('Elicitation Types', () => {
         status: 'accept',
         content: { value: 'test-value' },
       });
-
-      clearTimeout(timeoutHandle);
     });
 
     it('should be callable with reject function', () => {
@@ -262,8 +266,6 @@ describe('Elicitation Types', () => {
       pending.reject(error);
 
       expect(rejectFn).toHaveBeenCalledWith(error);
-
-      clearTimeout(timeoutHandle);
     });
   });
 });

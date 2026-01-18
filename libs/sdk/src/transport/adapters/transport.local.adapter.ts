@@ -254,7 +254,6 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       hasPendingElicit: !!this.pendingElicit,
       bodyKeys: req.body ? Object.keys(req.body) : [],
       hasResult: !!req.body?.result,
-      resultPreview: JSON.stringify(req.body?.result)?.slice(0, 100),
     });
     // First, check for error response (client doesn't support elicitation)
     // This still needs the local pendingElicit for backwards compatibility

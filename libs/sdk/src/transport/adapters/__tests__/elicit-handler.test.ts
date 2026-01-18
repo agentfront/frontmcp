@@ -260,6 +260,7 @@ describe('LocalTransportAdapter Elicit Handler', () => {
       jest.advanceTimersByTime(ttl + 100);
 
       await expect(promise).rejects.toThrow(ElicitationTimeoutError);
+      await expect(promise).rejects.toBeInstanceOf(ElicitationTimeoutError);
       await expect(promise).rejects.toMatchObject({
         elicitId,
         ttl,
