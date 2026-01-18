@@ -16,7 +16,7 @@ import CrmMcpApp from './apps/crm';
     port: 3003,
   },
   transport: {
-    protocol: 'full',
+    protocol: 'legacy',
   },
   auth: {
     mode: 'transparent',

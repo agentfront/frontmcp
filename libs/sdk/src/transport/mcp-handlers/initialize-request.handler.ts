@@ -63,10 +63,12 @@ export default function initializeRequestHandler({
         // Store client info (name/version) for platform detection
         // and update the session payload with the detected platform type
         if (request.params.clientInfo) {
+          const { name: clientName, version: clientVersion } = request.params.clientInfo;
+
           // Try to store in notification service (may fail for HTTP transports without registered server)
           scope.notifications.setClientInfo(sessionId, {
-            name: request.params.clientInfo.name,
-            version: request.params.clientInfo.version,
+            name: clientName,
+            version: clientVersion,
           });
 
           // Detect platform directly from client info (don't rely on setClientInfo return)
@@ -77,14 +79,22 @@ export default function initializeRequestHandler({
           // Prefer capability-based detection (ext-apps) over client info detection
           const finalPlatform = detectedPlatform ?? clientInfoPlatform;
 
-          // Update the session payload with the detected platform type
-          // This makes platformType available via ctx.authInfo.sessionIdPayload.platformType
-          if (finalPlatform && ctx.authInfo?.sessionIdPayload) {
-            ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
+          // Update the session payload with client name, version, and detected platform type
+          // This makes them available via ctx.authInfo.sessionIdPayload for logging, stateless access, and persistence
+          if (ctx.authInfo?.sessionIdPayload) {
+            ctx.authInfo.sessionIdPayload.clientName = clientName;
+            ctx.authInfo.sessionIdPayload.clientVersion = clientVersion;
+            if (finalPlatform) {
+              ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
+            }
 
-            // Persist the platformType to the session cache so subsequent requests can access it
+            // Persist to session cache so subsequent requests can access client info
             // This is critical for HTTP transports where sessions are parsed from encrypted headers
-            updateSessionPayload(sessionId, { platformType: finalPlatform });
+            updateSessionPayload(sessionId, {
+              clientName,
+              clientVersion,
+              ...(finalPlatform && { platformType: finalPlatform }),
+            });
           }
         } else if (detectedPlatform && ctx.authInfo?.sessionIdPayload) {
           // Update platform even without client info if detected from capabilities
