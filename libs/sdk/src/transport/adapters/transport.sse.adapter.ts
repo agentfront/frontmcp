@@ -63,6 +63,9 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
   }
 
   async handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
+    // Wait for server connection to complete before handling request
+    await this.ready;
+
     const authInfo = this.ensureAuthInfo(req, this);
 
     if (this.handleIfElicitResult(req)) {
@@ -83,6 +86,9 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
    *
    * Only one elicit per session is allowed. A new elicit will cancel any pending one.
    * On timeout, an ElicitationTimeoutError is thrown to kill tool execution.
+   *
+   * In distributed mode, the pending elicitation is stored in Redis and results
+   * are routed via pub/sub, allowing the response to be received by any node.
    */
   async sendElicitRequest<S extends ZodType>(
     relatedRequestId: RequestId,
@@ -93,10 +99,22 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
 
     // Cancel any previous pending elicit (only one per session)
-    this.cancelPendingElicit();
+    await this.cancelPendingElicit();
 
     // Generate elicit ID
     const elicitId = elicitationId ?? `elicit-${this.newRequestId}`;
+    const sessionId = this.key.sessionId;
+    const expiresAt = Date.now() + ttl;
+
+    // Store pending elicitation in the store (for distributed mode)
+    await this.elicitStore.setPending({
+      elicitId,
+      sessionId,
+      createdAt: Date.now(),
+      expiresAt,
+      message,
+      mode,
+    });
 
     // Build request params based on mode
     const params: Record<string, unknown> = {
@@ -115,26 +133,44 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     // Send the elicitation/create request
     await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', params));
 
-    // Create promise with timeout
+    // Create promise with timeout and store subscription
     return new Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>((resolve, reject) => {
+      let unsubscribe: (() => Promise<void>) | undefined;
+
       // Set timeout to throw ElicitationTimeoutError (kills execution)
-      const timeoutHandle = setTimeout(() => {
+      const timeoutHandle = setTimeout(async () => {
         this.pendingElicit = undefined;
+        await unsubscribe?.();
+        await this.elicitStore.deletePending(sessionId);
         reject(new ElicitationTimeoutError(elicitId, ttl));
       }, ttl);
 
-      // Store pending elicit
+      // Subscribe to results via the store (for distributed mode)
+      this.elicitStore
+        .subscribeResult<S extends ZodType<infer O> ? O : unknown>(elicitId, (result) => {
+          clearTimeout(timeoutHandle);
+          this.pendingElicit = undefined;
+          unsubscribe?.();
+          resolve(result);
+        })
+        .then((unsub) => {
+          unsubscribe = unsub;
+        });
+
+      // Also store local pending elicit (for single-node mode and error handling)
       this.pendingElicit = {
         elicitId,
         timeoutHandle,
         resolve: (result) => {
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
+          unsubscribe?.();
           resolve(result as ElicitResult<S extends ZodType<infer O> ? O : unknown>);
         },
         reject: (err) => {
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
+          unsubscribe?.();
           reject(err);
         },
       };

@@ -409,6 +409,171 @@ interface ElicitOptions {
 
 ---
 
+## Distributed Deployments
+
+By default, elicitation state is stored in-memory on the server that initiated the elicit request. This works for single-node deployments but fails in distributed environments where different nodes may handle the initial request and the user's response.
+
+### The Problem
+
+In a distributed deployment:
+
+```
+┌─────────────┐     elicit/create      ┌────────────┐
+│   Node A    │ ─────────────────────► │   Client   │
+│  (Promise)  │                        └────────────┘
+│      │      │                              │
+│      │      │                              │ user response
+│      │      │                              ▼
+│      │      │    ┌─────────────────────────────────┐
+│      │      │    │         Load Balancer           │
+│      │      │    └─────────────────────────────────┘
+│      │      │                    │
+│      │      │                    ▼
+│      │      │              ┌─────────────┐
+│      │      │              │   Node B    │
+│      │      │              │  (no state) │
+│      │      │              └─────────────┘
+└──────┴──────┘
+     ⚠️ Promise hangs - response lost!
+```
+
+### Redis Mode (Recommended for Production)
+
+When Redis is configured, FrontMCP automatically uses Redis for elicitation state storage and pub/sub for cross-node result routing:
+
+```ts
+@FrontMcp({
+  // Configure Redis for distributed elicitation
+  redis: {
+    provider: 'redis',
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379'),
+    password: process.env.REDIS_PASSWORD,
+  },
+})
+class MyApp {}
+```
+
+With Redis configured, elicitation works seamlessly across nodes:
+
+```
+┌─────────────┐     elicit/create      ┌────────────┐
+│   Node A    │ ─────────────────────► │   Client   │
+│  (Promise)  │                        └────────────┘
+│      │      │                              │
+│      │      │  1. Store pending in Redis   │ user response
+│      │      │  2. Subscribe to pub/sub     ▼
+│      │      │    ┌─────────────────────────────────┐
+│      │      │    │         Load Balancer           │
+│      │      │    └─────────────────────────────────┘
+│      │      │                    │
+│      │      │                    ▼
+│      │      │              ┌─────────────┐
+│      │      │              │   Node B    │
+│      │      │              │  3. Lookup  │
+│      │      │              │  4. Publish │
+│      │      │              └──────┬──────┘
+│      │      │                     │
+│      │      │    ┌────────────────┴────────────────┐
+│      │      │    │          Redis Pub/Sub          │
+│      │      │    │  channel: mcp:elicit:result:*   │
+│      │      │    └────────────────┬────────────────┘
+│      │      │                     │
+│      ▼      │◄────────────────────┘
+│  5. Resolve │
+└─────────────┘
+     ✅ Promise resolves correctly!
+```
+
+### Single-Node Mode (Development)
+
+Without Redis, FrontMCP uses in-memory storage with a warning:
+
+```
+[FrontMCP] Elicitation: using in-memory store (single-node mode).
+Configure Redis for distributed deployments.
+```
+
+This is appropriate for:
+- Local development
+- Single-node deployments
+- Testing environments
+
+### Sticky Sessions (Alternative)
+
+If you cannot use Redis, configure your load balancer for session affinity to ensure requests from the same client always reach the same server:
+
+**Nginx:**
+```nginx
+upstream backend {
+  ip_hash;  # Sticky sessions by client IP
+  server node1:3000;
+  server node2:3000;
+}
+```
+
+**AWS ALB:**
+- Enable "Stickiness" in target group settings
+- Use application-based cookie (recommended) or duration-based stickiness
+- Set appropriate stickiness duration (longer than your elicitation TTL)
+
+**Kubernetes (Ingress):**
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "mcp-session"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+```
+
+<Warning>
+Sticky sessions are less reliable than Redis because they depend on load balancer behavior and can fail during node restarts or scaling events. Use Redis for production deployments.
+</Warning>
+
+### Vercel Edge Functions
+
+Edge functions are stateless and **require Redis** for elicitation. An error is thrown if elicitation is attempted without Redis on Edge:
+
+```
+Error: Elicitation requires Redis configuration when running on Edge runtime.
+Edge functions are stateless and cannot use in-memory elicitation.
+Configure redis in @FrontMcp({ redis: { provider: "redis", host: "...", port: ... } })
+```
+
+Configure Redis when deploying to Vercel Edge:
+
+```ts
+@FrontMcp({
+  redis: {
+    provider: 'redis',
+    host: process.env.UPSTASH_REDIS_HOST!,
+    port: parseInt(process.env.UPSTASH_REDIS_PORT ?? '6379'),
+    password: process.env.UPSTASH_REDIS_PASSWORD,
+    tls: true,  // Required for Upstash
+  },
+})
+class MyApp {}
+```
+
+<Tip>
+[Upstash](https://upstash.com) provides serverless Redis that works well with Vercel Edge functions.
+</Tip>
+
+### Deployment Mode Summary
+
+| Environment | Storage | Notes |
+|-------------|---------|-------|
+| Local development | In-memory | Automatic, no configuration needed |
+| Single-node production | In-memory | Works but shows warning |
+| Multi-node production | Redis | Configure `redis` in `@FrontMcp` |
+| Vercel Edge | Redis (required) | Use Upstash or similar |
+| Kubernetes | Redis | Use Redis cluster for HA |
+| Load balanced (no Redis) | Sticky sessions | Configure session affinity |
+
+---
+
 ## Real-World Examples
 
 ### Approval Workflow

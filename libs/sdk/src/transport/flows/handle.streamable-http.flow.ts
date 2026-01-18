@@ -153,7 +153,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
-    } else if (ElicitResultSchema.safeParse(request.body).success) {
+    } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
       this.state.set('requestType', 'elicitResult');
     } else if (method && RequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'message');
@@ -201,7 +201,38 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'elicitResult',
   })
   async onElicitResult() {
-    this.fail(new Error('Not implemented'));
+    const transportService = (this.scope as Scope).transportService;
+    const logger = this.scopeLogger.child('handle:streamable-http:onElicitResult');
+
+    const { request, response } = this.rawInput;
+    const { token, session } = this.state.required;
+
+    logger.info('onElicitResult: starting', {
+      sessionId: session.id?.slice(0, 20),
+      hasToken: !!token,
+    });
+
+    // Get existing transport - elicit results require an active session
+    const transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    if (!transport) {
+      logger.warn('onElicitResult: transport not found', {
+        sessionId: session.id?.slice(0, 20),
+      });
+      this.respond(httpRespond.sessionExpired('session not found'));
+      return;
+    }
+
+    // Pass to transport's handleRequest which calls handleIfElicitResult
+    await transport.handleRequest(request, response);
+
+    // If handleIfElicitResult returned true, the elicit result was processed
+    // but no response was sent. Send 202 Accepted to acknowledge receipt.
+    if (!response.writableEnded) {
+      response.status(202).json({ jsonrpc: '2.0', result: {} });
+    }
+
+    this.handled();
   }
 
   @Stage('onMessage', {

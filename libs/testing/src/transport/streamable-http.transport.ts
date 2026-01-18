@@ -11,7 +11,7 @@ import type {
   JsonRpcResponse,
 } from './transport.interface';
 import type { InterceptorChain } from '../interceptor';
-import type { ClientInfo } from '../client/mcp-test-client.types';
+import type { ClientInfo, ElicitationHandler, ElicitationCreateRequest } from '../client/mcp-test-client.types';
 
 const DEFAULT_TIMEOUT = 30000;
 
@@ -22,7 +22,7 @@ const DEFAULT_TIMEOUT = 30000;
  * following the MCP StreamableHTTP specification.
  */
 export class StreamableHttpTransport implements McpTransport {
-  private readonly config: Required<Omit<TransportConfig, 'interceptors' | 'clientInfo'>> & {
+  private readonly config: Required<Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler'>> & {
     interceptors?: InterceptorChain;
     clientInfo?: ClientInfo;
   };
@@ -34,6 +34,7 @@ export class StreamableHttpTransport implements McpTransport {
   private lastRequestHeaders: Record<string, string> = {};
   private interceptors?: InterceptorChain;
   private readonly publicMode: boolean;
+  private elicitationHandler?: ElicitationHandler;
 
   constructor(config: TransportConfig) {
     this.config = {
@@ -49,6 +50,7 @@ export class StreamableHttpTransport implements McpTransport {
     this.authToken = config.auth?.token;
     this.interceptors = config.interceptors;
     this.publicMode = config.publicMode ?? false;
+    this.elicitationHandler = config.elicitationHandler;
   }
 
   async connect(): Promise<void> {
@@ -197,27 +199,24 @@ export class StreamableHttpTransport implements McpTransport {
       } else {
         // Parse response - may be JSON or SSE
         const contentType = response.headers.get('content-type') ?? '';
-        const text = await response.text();
-        this.log('Response:', text);
 
         // Handle empty response (for notifications)
-        if (!text.trim()) {
-          jsonResponse = {
-            jsonrpc: '2.0',
-            id: message.id ?? null,
-            result: undefined,
-          };
-        } else if (contentType.includes('text/event-stream')) {
-          // Parse SSE response - extract data and session ID from event stream
-          const { response: sseResponse, sseSessionId } = this.parseSSEResponseWithSession(text, message.id);
-          jsonResponse = sseResponse;
-          // Store session ID from SSE id field (format: sessionId:messageId)
-          if (sseSessionId && !this.sessionId) {
-            this.sessionId = sseSessionId;
-            this.log('Session ID from SSE:', this.sessionId);
-          }
+        if (contentType.includes('text/event-stream')) {
+          // Handle SSE response with elicitation support
+          jsonResponse = await this.handleSSEResponseWithElicitation(response, message);
         } else {
-          jsonResponse = JSON.parse(text) as JsonRpcResponse;
+          const text = await response.text();
+          this.log('Response:', text);
+
+          if (!text.trim()) {
+            jsonResponse = {
+              jsonrpc: '2.0',
+              id: message.id ?? null,
+              result: undefined,
+            };
+          } else {
+            jsonResponse = JSON.parse(text) as JsonRpcResponse;
+          }
         }
       }
 
@@ -371,6 +370,10 @@ export class StreamableHttpTransport implements McpTransport {
     return this.interceptors;
   }
 
+  setElicitationHandler(handler: ElicitationHandler | undefined): void {
+    this.elicitationHandler = handler;
+  }
+
   getConnectionCount(): number {
     return this.connectionCount;
   }
@@ -408,6 +411,268 @@ export class StreamableHttpTransport implements McpTransport {
   // ═══════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Handle SSE response with elicitation support.
+   *
+   * Streams the SSE response, detects elicitation/create requests, and handles them
+   * by calling the registered handler and sending the response back to the server.
+   */
+  private async handleSSEResponseWithElicitation(
+    response: Response,
+    originalRequest: JsonRpcRequest,
+  ): Promise<JsonRpcResponse> {
+    this.log('handleSSEResponseWithElicitation: starting', { requestId: originalRequest.id });
+    const reader = response.body?.getReader();
+    if (!reader) {
+      this.log('handleSSEResponseWithElicitation: no response body');
+      return {
+        jsonrpc: '2.0',
+        id: originalRequest.id ?? null,
+        error: { code: -32000, message: 'No response body' },
+      };
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResponse: JsonRpcResponse | null = null;
+    let sseSessionId: string | undefined;
+
+    try {
+      let readCount = 0;
+      while (true) {
+        readCount++;
+        this.log(`handleSSEResponseWithElicitation: reading chunk ${readCount}`);
+        const { done, value } = await reader.read();
+        this.log(`handleSSEResponseWithElicitation: read result`, { done, valueLength: value?.length });
+
+        if (done) {
+          // Process any remaining buffer
+          if (buffer.trim()) {
+            const parsed = this.parseSSEEvents(buffer, originalRequest.id);
+            for (const event of parsed.events) {
+              const handled = await this.handleSSEEvent(event);
+              if (handled.isFinal) {
+                finalResponse = handled.response;
+              }
+            }
+            if (parsed.sessionId && !sseSessionId) {
+              sseSessionId = parsed.sessionId;
+            }
+          }
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events from buffer
+        const eventEndPattern = /\n\n/g;
+        let lastEventEnd = 0;
+        let match;
+
+        while ((match = eventEndPattern.exec(buffer)) !== null) {
+          const eventText = buffer.slice(lastEventEnd, match.index);
+          lastEventEnd = match.index + 2; // Skip the \n\n
+
+          if (eventText.trim()) {
+            const parsed = this.parseSSEEvents(eventText, originalRequest.id);
+            for (const event of parsed.events) {
+              const handled = await this.handleSSEEvent(event);
+              if (handled.isFinal) {
+                finalResponse = handled.response;
+              }
+            }
+            if (parsed.sessionId && !sseSessionId) {
+              sseSessionId = parsed.sessionId;
+            }
+          }
+        }
+
+        // Keep unprocessed data in buffer
+        buffer = buffer.slice(lastEventEnd);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Store session ID
+    if (sseSessionId && !this.sessionId) {
+      this.sessionId = sseSessionId;
+      this.log('Session ID from SSE:', this.sessionId);
+    }
+
+    // Return final response or error
+    if (finalResponse) {
+      return finalResponse;
+    }
+
+    return {
+      jsonrpc: '2.0',
+      id: originalRequest.id ?? null,
+      error: { code: -32000, message: 'No final response received in SSE stream' },
+    };
+  }
+
+  /**
+   * Parse SSE event text into structured events
+   */
+  private parseSSEEvents(
+    text: string,
+    requestId: string | number | undefined,
+  ): { events: Array<{ type: string; data: string; id?: string }>; sessionId?: string } {
+    const lines = text.split('\n');
+    const events: Array<{ type: string; data: string; id?: string }> = [];
+    let currentEvent: { type: string; data: string[]; id?: string } = { type: 'message', data: [] };
+    let sessionId: string | undefined;
+
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent.type = line.slice(7);
+      } else if (line.startsWith('data: ')) {
+        currentEvent.data.push(line.slice(6));
+      } else if (line === 'data:') {
+        currentEvent.data.push('');
+      } else if (line.startsWith('id: ')) {
+        const idValue = line.slice(4);
+        currentEvent.id = idValue;
+        // Extract session ID (format: sessionId:messageId)
+        const colonIndex = idValue.lastIndexOf(':');
+        if (colonIndex > 0) {
+          sessionId = idValue.substring(0, colonIndex);
+        } else {
+          sessionId = idValue;
+        }
+      } else if (line === '' && currentEvent.data.length > 0) {
+        // Empty line marks end of event
+        events.push({
+          type: currentEvent.type,
+          data: currentEvent.data.join('\n'),
+          id: currentEvent.id,
+        });
+        currentEvent = { type: 'message', data: [] };
+      }
+    }
+
+    // Handle event without trailing newline
+    if (currentEvent.data.length > 0) {
+      events.push({
+        type: currentEvent.type,
+        data: currentEvent.data.join('\n'),
+        id: currentEvent.id,
+      });
+    }
+
+    return { events, sessionId };
+  }
+
+  /**
+   * Handle a single SSE event, including elicitation requests
+   */
+  private async handleSSEEvent(event: {
+    type: string;
+    data: string;
+    id?: string;
+  }): Promise<{ isFinal: boolean; response: JsonRpcResponse }> {
+    this.log('SSE Event:', { type: event.type, data: event.data.slice(0, 200) });
+
+    try {
+      const parsed = JSON.parse(event.data) as JsonRpcResponse | JsonRpcRequest;
+
+      // Check if this is an elicitation/create request (server→client)
+      if ('method' in parsed && parsed.method === 'elicitation/create') {
+        await this.handleElicitationRequest(parsed as JsonRpcRequest);
+        // This is not the final response - continue reading
+        return {
+          isFinal: false,
+          response: { jsonrpc: '2.0', id: null, result: undefined },
+        };
+      }
+
+      // This is a regular response - check if it's the final one
+      if ('result' in parsed || 'error' in parsed) {
+        return { isFinal: true, response: parsed as JsonRpcResponse };
+      }
+
+      // Unknown message type - not final
+      return {
+        isFinal: false,
+        response: { jsonrpc: '2.0', id: null, result: undefined },
+      };
+    } catch {
+      this.log('Failed to parse SSE event data:', event.data);
+      return {
+        isFinal: false,
+        response: { jsonrpc: '2.0', id: null, result: undefined },
+      };
+    }
+  }
+
+  /**
+   * Handle an elicitation/create request from the server
+   */
+  private async handleElicitationRequest(request: JsonRpcRequest): Promise<void> {
+    const params = request.params as unknown as ElicitationCreateRequest;
+    this.log('Elicitation request received:', {
+      mode: params?.mode,
+      message: params?.message?.slice(0, 100),
+    });
+
+    if (!this.elicitationHandler) {
+      // No handler registered - send error response
+      this.log('No elicitation handler registered, sending error');
+      await this.sendElicitationResponse(request.id!, {
+        action: 'decline',
+      });
+      return;
+    }
+
+    try {
+      // Call the handler
+      const response = await this.elicitationHandler(params);
+      this.log('Elicitation handler response:', response);
+
+      // Send the response back to the server
+      await this.sendElicitationResponse(request.id!, response);
+    } catch (error) {
+      this.log('Elicitation handler error:', error);
+      await this.sendElicitationResponse(request.id!, {
+        action: 'cancel',
+      });
+    }
+  }
+
+  /**
+   * Send an elicitation response back to the server
+   */
+  private async sendElicitationResponse(
+    requestId: string | number,
+    response: { action: 'accept' | 'cancel' | 'decline'; content?: Record<string, unknown> },
+  ): Promise<void> {
+    const headers = this.buildHeaders();
+    const url = `${this.config.baseUrl}/`;
+
+    const rpcResponse: JsonRpcResponse = {
+      jsonrpc: '2.0',
+      id: requestId,
+      result: response,
+    };
+
+    this.log('Sending elicitation response:', rpcResponse);
+
+    try {
+      const fetchResponse = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(rpcResponse),
+      });
+
+      if (!fetchResponse.ok) {
+        this.log(`Elicitation response HTTP error: ${fetchResponse.status}`);
+      }
+    } catch (error) {
+      this.log('Failed to send elicitation response:', error);
+    }
+  }
 
   private buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = {

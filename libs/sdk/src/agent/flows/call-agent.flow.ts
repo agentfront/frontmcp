@@ -40,6 +40,8 @@ const stateSchema = z.object({
   _agentOwnerId: z.string().optional(),
   // Progress token from request's _meta (for progress notifications)
   progressToken: z.union([z.string(), z.number()]).optional(),
+  // JSON-RPC request ID (for elicitation routing)
+  jsonRpcRequestId: z.union([z.string(), z.number()]).optional(),
   // Execution metadata
   executionMeta: z
     .object({
@@ -143,7 +145,16 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     // Extract progressToken from request's _meta (for progress notifications)
     const progressToken = params._meta?.progressToken;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo, _agentOwnerId: agentOwnerId, progressToken });
+    // Extract JSON-RPC request ID for elicitation routing
+    const jsonRpcRequestId = ctx.requestId;
+
+    this.state.set({
+      input: params,
+      authInfo: ctx.authInfo,
+      _agentOwnerId: agentOwnerId,
+      progressToken,
+      jsonRpcRequestId,
+    });
     this.logger.verbose('parseInput:done');
   }
 
@@ -275,9 +286,13 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       const frontmcpContext = context.tryGetContext();
       if (frontmcpContext && authInfo?.transport?.sendElicitRequest) {
         const transport = authInfo.transport;
+        // Pass the JSON-RPC request ID for proper elicitation routing
+        // The MCP SDK uses this to route messages through the correct SSE stream
+        const jsonRpcRequestId = this.state.jsonRpcRequestId;
         frontmcpContext.setTransport({
           sendElicitRequest: transport.sendElicitRequest.bind(transport),
           type: (transport as { type?: string }).type ?? 'unknown',
+          jsonRpcRequestId,
         });
       }
 

@@ -47,13 +47,33 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     });
   }
 
-  initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
+  async initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
     this.ensureAuthInfo(req, this);
 
     this.logger.info('[StreamableHttpAdapter] initialize() called', {
       method: req.method,
       sessionId: this.key.sessionId.slice(0, 30),
       bodyMethod: (req.body as { method?: string })?.method,
+      bodyJsonrpc: (req.body as { jsonrpc?: string })?.jsonrpc,
+      bodyId: (req.body as { id?: number })?.id,
+      bodyType: typeof req.body,
+      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
+    });
+
+    // Wait for server connection to complete before handling request
+    await this.ready;
+
+    // Debug: log transport state
+    this.logger.info('[StreamableHttpAdapter] transport state before handleRequest', {
+      isRecreatable: this.transport instanceof RecreateableStreamableHTTPServerTransport,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hasWebTransport: !!(this.transport as any)._webStandardTransport,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      webTransportInitialized: (this.transport as any)._webStandardTransport?._initialized,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      webTransportStarted: (this.transport as any)._webStandardTransport?._started,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hasSessionIdGenerator: (this.transport as any)._webStandardTransport?.sessionIdGenerator !== undefined,
     });
 
     // Intercept response to log what gets sent back to client
@@ -112,6 +132,9 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
    * Only one elicit per session is allowed. A new elicit will cancel any pending one.
    * On timeout, an ElicitationTimeoutError is thrown to kill tool execution.
    *
+   * In distributed mode, the pending elicitation is stored in Redis and results
+   * are routed via pub/sub, allowing the response to be received by any node.
+   *
    * @param relatedRequestId - The request ID that triggered this elicit
    * @param message - Message to display to the user
    * @param requestedSchema - Zod schema for the expected response
@@ -127,10 +150,22 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
 
     // Cancel any previous pending elicit (only one per session)
-    this.cancelPendingElicit();
+    await this.cancelPendingElicit();
 
     // Generate elicit ID
     const elicitId = elicitationId ?? `elicit-${this.newRequestId}`;
+    const sessionId = this.key.sessionId;
+    const expiresAt = Date.now() + ttl;
+
+    // Store pending elicitation in the store (for distributed mode)
+    await this.elicitStore.setPending({
+      elicitId,
+      sessionId,
+      createdAt: Date.now(),
+      expiresAt,
+      message,
+      mode,
+    });
 
     // Build request params based on mode
     const params: Record<string, unknown> = {
@@ -145,28 +180,58 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     }
 
     // Send the elicitation/create request
-    await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', params), { relatedRequestId });
+    this.logger.info('[StreamableHttpAdapter] sendElicitRequest: sending elicitation/create', {
+      relatedRequestId,
+      elicitId,
+      mode,
+      message: message.slice(0, 100),
+    });
+    try {
+      await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', params), { relatedRequestId });
+      this.logger.info('[StreamableHttpAdapter] sendElicitRequest: transport.send() completed');
+    } catch (error) {
+      this.logger.error('[StreamableHttpAdapter] sendElicitRequest: transport.send() failed', error);
+      throw error;
+    }
 
-    // Create promise with timeout
+    // Create promise with timeout and store subscription
     return new Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>((resolve, reject) => {
+      let unsubscribe: (() => Promise<void>) | undefined;
+
       // Set timeout to throw ElicitationTimeoutError (kills execution)
-      const timeoutHandle = setTimeout(() => {
+      const timeoutHandle = setTimeout(async () => {
         this.pendingElicit = undefined;
+        await unsubscribe?.();
+        await this.elicitStore.deletePending(sessionId);
         reject(new ElicitationTimeoutError(elicitId, ttl));
       }, ttl);
 
-      // Store pending elicit
+      // Subscribe to results via the store (for distributed mode)
+      this.elicitStore
+        .subscribeResult<S extends ZodType<infer O> ? O : unknown>(elicitId, (result) => {
+          clearTimeout(timeoutHandle);
+          this.pendingElicit = undefined;
+          unsubscribe?.();
+          resolve(result);
+        })
+        .then((unsub) => {
+          unsubscribe = unsub;
+        });
+
+      // Also store local pending elicit (for single-node mode and error handling)
       this.pendingElicit = {
         elicitId,
         timeoutHandle,
         resolve: (result) => {
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
+          unsubscribe?.();
           resolve(result as ElicitResult<S extends ZodType<infer O> ? O : unknown>);
         },
         reject: (err) => {
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
+          unsubscribe?.();
           reject(err);
         },
       };

@@ -102,12 +102,14 @@ type FlowBaseRef = { readonly name: string };
 type ScopeRef = { readonly id: string; readonly logger: FrontMcpLogger };
 type TransportRef = {
   sendElicitRequest: <S extends ZodType>(
-    relatedRequestId: number,
+    relatedRequestId: number | string,
     message: string,
     requestedSchema: S,
     options?: ElicitOptions,
   ) => Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>;
   readonly type: string;
+  /** JSON-RPC request ID for this request - used for elicitation routing */
+  readonly jsonRpcRequestId?: number | string;
 };
 
 /**
@@ -305,9 +307,10 @@ export class FrontMcpContext {
     return {
       supportsElicit: true,
       elicit: (message, schema, options) => {
-        // relatedRequestId is used for request correlation, we use 0 as default
-        // since the actual requestId will be set internally by the transport
-        return transportRef.sendElicitRequest(0, message, schema, options);
+        // Use the JSON-RPC request ID from the transport for proper stream routing
+        // The MCP SDK uses this to route elicitation requests through the correct SSE stream
+        const relatedRequestId = transportRef.jsonRpcRequestId ?? 0;
+        return transportRef.sendElicitRequest(relatedRequestId, message, schema, options);
       },
     };
   }

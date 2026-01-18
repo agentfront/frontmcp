@@ -12,7 +12,7 @@ import { ZodType } from 'zod';
 import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
 import { Scope } from '../../scope';
 import { createMcpHandlers } from '../mcp-handlers';
-import { ElicitResult, ElicitOptions, PendingElicit } from '../../elicitation';
+import { ElicitResult, ElicitOptions, PendingElicit, ElicitationStore } from '../../elicitation';
 import { ElicitationNotSupportedError } from '../../errors';
 
 /**
@@ -211,13 +211,32 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   }
 
   /**
+   * Get the elicitation store for distributed elicitation support.
+   * Uses Redis in distributed mode, in-memory for single-node.
+   */
+  protected get elicitStore(): ElicitationStore {
+    return this.scope.elicitationStore;
+  }
+
+  /**
    * Cancel any pending elicitation request.
    * Called before sending a new elicit to enforce single-elicit-per-session.
+   *
+   * This cancels both the local pending elicit (for timeout handling)
+   * and publishes cancel to the store (for distributed mode).
    */
-  protected cancelPendingElicit(): void {
+  protected async cancelPendingElicit(): Promise<void> {
     if (this.pendingElicit) {
       clearTimeout(this.pendingElicit.timeoutHandle);
       this.pendingElicit.resolve({ status: 'cancel' });
+
+      // Also publish cancel to the store for distributed mode
+      const sessionId = this.key.sessionId;
+      const pending = await this.elicitStore.getPending(sessionId);
+      if (pending) {
+        await this.elicitStore.publishResult(pending.elicitId, sessionId, { status: 'cancel' });
+      }
+
       this.pendingElicit = undefined;
       this.logger.info('Cancelled previous pending elicit');
     }
@@ -226,14 +245,20 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   /**
    * Handle an incoming elicitation result from the client.
    * Returns true if the request was an elicit result and was handled.
+   *
+   * In distributed mode, this publishes the result via the elicitation store,
+   * which routes it to the correct node that's waiting for it.
    */
   handleIfElicitResult(req: AuthenticatedServerRequest): boolean {
-    if (!this.pendingElicit) {
-      return false;
-    }
-
-    // Check for error response (client doesn't support elicitation)
-    if (req.body.error) {
+    this.logger.info('[handleIfElicitResult] checking request', {
+      hasPendingElicit: !!this.pendingElicit,
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      hasResult: !!req.body?.result,
+      resultPreview: JSON.stringify(req.body?.result)?.slice(0, 100),
+    });
+    // First, check for error response (client doesn't support elicitation)
+    // This still needs the local pendingElicit for backwards compatibility
+    if (this.pendingElicit && req.body.error) {
       const { code, message } = req.body.error;
       if (code === -32600 && message === 'Elicitation not supported') {
         clearTimeout(this.pendingElicit.timeoutHandle);
@@ -241,27 +266,57 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
         this.pendingElicit = undefined;
         return true;
       }
-      return false;
     }
 
     // Parse the elicit result from the client
     const parsed = ElicitResultSchema.safeParse(req.body?.result);
-    if (parsed.success) {
-      clearTimeout(this.pendingElicit.timeoutHandle);
-
-      // Map MCP action directly to our status type (they use the same names)
-      const action = parsed.data.action;
-      const result: ElicitResult = {
-        status: action,
-        ...(action === 'accept' && parsed.data.content !== undefined && { content: parsed.data.content }),
-      };
-
-      this.pendingElicit.resolve(result);
-      this.pendingElicit = undefined;
-      return true;
+    if (!parsed.success) {
+      return false;
     }
 
-    return false;
+    // Map MCP action directly to our status type (they use the same names)
+    const action = parsed.data.action;
+    const result: ElicitResult = {
+      status: action,
+      ...(action === 'accept' && parsed.data.content !== undefined && { content: parsed.data.content }),
+    };
+
+    // In distributed mode, lookup pending by sessionId and publish result
+    // This routes the result to the correct node via pub/sub
+    const sessionId = this.key.sessionId;
+    this.handleElicitResultAsync(sessionId, result);
+
+    // Also handle local pending elicit (for single-node mode and error handling)
+    if (this.pendingElicit) {
+      clearTimeout(this.pendingElicit.timeoutHandle);
+      this.pendingElicit.resolve(result);
+      this.pendingElicit = undefined;
+    }
+
+    return true;
+  }
+
+  /**
+   * Async handler for elicit result - publishes to store for distributed routing.
+   * Called from handleIfElicitResult without awaiting to avoid blocking the response.
+   */
+  private async handleElicitResultAsync(sessionId: string, result: ElicitResult): Promise<void> {
+    try {
+      const pending = await this.elicitStore.getPending(sessionId);
+      if (pending) {
+        await this.elicitStore.publishResult(pending.elicitId, sessionId, result);
+        this.logger.verbose('Published elicit result to store', {
+          elicitId: pending.elicitId,
+          sessionId: sessionId.slice(0, 20),
+          status: result.status,
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Failed to publish elicit result to store', {
+        sessionId: sessionId.slice(0, 20),
+        error: (error as Error).message,
+      });
+    }
   }
 
   /**
