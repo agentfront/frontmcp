@@ -350,6 +350,54 @@ Benefits:
 - Consistent API across the codebase
 - Centralized error handling and logging
 
+### Storage Factory Pattern
+
+**IMPORTANT**: When creating stores (session stores, elicitation stores, etc.), always use the factory pattern. Never construct stores directly with raw Redis clients.
+
+```typescript
+// ✅ Good - Use factory function
+import { createSessionStore } from '@frontmcp/sdk/auth/session';
+import { createElicitationStore } from '@frontmcp/sdk/elicitation';
+
+const sessionStore = await createSessionStore({
+  provider: 'redis',
+  host: 'localhost',
+  port: 6379,
+  keyPrefix: 'mcp:session:',
+});
+
+const { store, type } = createElicitationStore({
+  redis: { provider: 'redis', host: 'localhost', port: 6379 },
+  keyPrefix: 'mcp:elicit:',
+  logger,
+});
+
+// ❌ Bad - Direct construction with raw Redis client
+const Redis = require('ioredis');
+const client = new Redis({ host: 'localhost' });
+const store = new RedisElicitationStore(client, logger); // DON'T DO THIS
+```
+
+**Factory Pattern Benefits:**
+
+- Automatic provider detection (Redis, Vercel KV, etc.)
+- Consistent key prefix handling
+- Lazy-loading of dependencies (avoids bundling ioredis when not used)
+- Built-in error handling and logging
+- Support for fallback to memory store in development
+- Edge runtime detection and appropriate error messages
+
+**Creating New Store Factories:**
+
+1. Create a factory file (e.g., `my-store.factory.ts`)
+2. Use `RedisOptions` type for configuration
+3. Use type guards (`isRedisProvider()`, `isVercelKvProvider()`) for provider detection
+4. Lazy-require implementations: `const { MyStore } = require('./my.store')`
+5. Return store type information: `{ store, type: 'redis' | 'memory' }`
+6. Handle Edge runtime restrictions (throw if memory not supported)
+
+See `libs/sdk/src/elicitation/elicitation-store.factory.ts` for a complete example.
+
 ### RememberPlugin Usage
 
 When `RememberPlugin` is installed, tools can use `this.remember` and `this.approval`:

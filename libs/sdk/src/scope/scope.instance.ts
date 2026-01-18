@@ -33,8 +33,7 @@ import CompleteFlow from '../completion/flows/complete.flow';
 import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
-import { ElicitationStore, InMemoryElicitationStore } from '../elicitation';
-import { ElicitationNotSupportedError } from '../errors';
+import { ElicitationStore, createElicitationStore } from '../elicitation';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { normalizeTool } from '../tool/tool.utils';
 import { ToolInstance } from '../tool/tool.instance';
@@ -375,10 +374,12 @@ export class Scope extends ScopeEntry {
   /**
    * Get the elicitation store for distributed elicitation support.
    *
-   * Lazily initializes the store based on configuration:
+   * Lazily initializes the store using the elicitation store factory:
    * - Redis: Uses RedisElicitationStore for distributed deployments
    * - In-memory: Uses InMemoryElicitationStore for single-node/dev
    * - Edge runtime without Redis: Throws error (Edge functions are stateless)
+   *
+   * @see createElicitationStore for factory implementation details
    */
   get elicitationStore(): ElicitationStore {
     // Return cached store if available
@@ -386,46 +387,13 @@ export class Scope extends ScopeEntry {
       return this._elicitationStore;
     }
 
-    const redis = this.metadata.redis;
-    const isEdge = this.isEdgeRuntime();
-
-    // Check if Redis is configured (has host property for Redis provider)
-    // Note: Vercel KV doesn't support pub/sub, so we only support Redis provider
-    const hasRedisConfig = redis && 'host' in redis && typeof redis.host === 'string';
-
-    let store: ElicitationStore;
-
-    if (hasRedisConfig) {
-      // Use Redis store for distributed deployments
-      // Lazy require to avoid bundling ioredis when not used
-      const { RedisElicitationStore } = require('../elicitation/redis-elicitation.store');
-      const Redis = require('ioredis').default;
-
-      const redisConfig = redis as { host: string; port?: number; password?: string; db?: number; tls?: boolean };
-      const redisClient = new Redis({
-        host: redisConfig.host,
-        port: redisConfig.port ?? 6379,
-        password: redisConfig.password,
-        db: redisConfig.db ?? 0,
-        ...(redisConfig.tls && { tls: {} }),
-      });
-
-      store = new RedisElicitationStore(redisClient, this.logger);
-      this.logger.info('Elicitation: using Redis store (distributed mode)');
-    } else if (isEdge) {
-      // Edge runtime requires Redis - throw typed MCP error
-      throw new ElicitationNotSupportedError(
-        'Elicitation requires Redis configuration when running on Edge runtime. ' +
-          'Edge functions are stateless and cannot use in-memory elicitation. ' +
-          'Configure redis in @FrontMcp({ redis: { provider: "redis", host: "...", port: ... } })',
-      );
-    } else {
-      // Fall back to in-memory store for single-node/dev
-      store = new InMemoryElicitationStore();
-      this.logger.warn(
-        'Elicitation: using in-memory store (single-node mode). ' + 'Configure Redis for distributed deployments.',
-      );
-    }
+    // Use factory to create the appropriate store based on configuration
+    const { store } = createElicitationStore({
+      redis: this.metadata.redis,
+      keyPrefix: this.metadata.redis?.keyPrefix ?? 'mcp:elicit:',
+      logger: this.logger,
+      isEdgeRuntime: this.isEdgeRuntime(),
+    });
 
     this._elicitationStore = store;
     return store;

@@ -139,11 +139,35 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', params));
 
     // Create promise with timeout and store subscription
+    // Uses settlement guard to prevent double resolution from concurrent paths
     return new Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>((resolve, reject) => {
+      let settled = false;
       let unsubscribe: (() => Promise<void>) | undefined;
+
+      const cleanup = () => {
+        clearTimeout(timeoutHandle);
+        this.pendingElicit = undefined;
+        void unsubscribe?.();
+      };
+
+      const safeResolve = (result: ElicitResult<unknown>) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result as ElicitResult<S extends ZodType<infer O> ? O : unknown>);
+      };
+
+      const safeReject = (err: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      };
 
       // Set timeout to throw ElicitationTimeoutError (kills execution)
       const timeoutHandle = setTimeout(async () => {
+        if (settled) return;
+        settled = true;
         this.pendingElicit = undefined;
         await unsubscribe?.();
         await this.elicitStore.deletePending(sessionId);
@@ -153,16 +177,15 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
       // Subscribe to results via the store (for distributed mode)
       this.elicitStore
         .subscribeResult<S extends ZodType<infer O> ? O : unknown>(elicitId, (result) => {
-          clearTimeout(timeoutHandle);
-          this.pendingElicit = undefined;
-          unsubscribe?.();
-          resolve(result);
+          safeResolve(result);
         })
         .then((unsub) => {
           unsubscribe = unsub;
         })
         .catch(async (err) => {
           // Fail fast on subscription error instead of waiting for timeout
+          if (settled) return;
+          settled = true;
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
           await unsubscribe?.();
@@ -174,18 +197,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
       this.pendingElicit = {
         elicitId,
         timeoutHandle,
-        resolve: (result) => {
-          clearTimeout(timeoutHandle);
-          this.pendingElicit = undefined;
-          unsubscribe?.();
-          resolve(result as ElicitResult<S extends ZodType<infer O> ? O : unknown>);
-        },
-        reject: (err) => {
-          clearTimeout(timeoutHandle);
-          this.pendingElicit = undefined;
-          unsubscribe?.();
-          reject(err);
-        },
+        resolve: safeResolve,
+        reject: safeReject,
       };
     });
   }

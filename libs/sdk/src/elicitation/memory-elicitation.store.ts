@@ -47,6 +47,9 @@ export class InMemoryElicitationStore implements ElicitationStore {
   /** Expiration timers for fallback records by elicitId */
   private fallbackTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  /** Expiration timers for resolved results by elicitId */
+  private resolvedTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   /**
    * Store a pending elicitation with TTL.
    * Keyed by sessionId. Sets up automatic expiration based on `expiresAt`.
@@ -171,6 +174,9 @@ export class InMemoryElicitationStore implements ElicitationStore {
     for (const timer of this.fallbackTimers.values()) {
       clearTimeout(timer);
     }
+    for (const timer of this.resolvedTimers.values()) {
+      clearTimeout(timer);
+    }
 
     this.pending.clear();
     this.listeners.clear();
@@ -178,6 +184,7 @@ export class InMemoryElicitationStore implements ElicitationStore {
     this.pendingFallback.clear();
     this.resolvedResults.clear();
     this.fallbackTimers.clear();
+    this.resolvedTimers.clear();
   }
 
   // ============================================
@@ -244,13 +251,28 @@ export class InMemoryElicitationStore implements ElicitationStore {
 
   /**
    * Store a resolved elicit result for re-invocation.
+   * Results are stored with a 300-second TTL to match Redis store behavior.
    */
   async setResolvedResult(elicitId: string, result: ElicitResult<unknown>): Promise<void> {
+    // Clear any existing timer for this elicitId
+    const existingTimer = this.resolvedTimers.get(elicitId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
     this.resolvedResults.set(elicitId, {
       elicitId,
       result,
       resolvedAt: Date.now(),
     });
+
+    // Set up expiration timer (300 seconds = 5 minutes, matching Redis store)
+    const timer = setTimeout(() => {
+      this.resolvedResults.delete(elicitId);
+      this.resolvedTimers.delete(elicitId);
+    }, 300_000);
+
+    this.resolvedTimers.set(elicitId, timer);
   }
 
   /**
@@ -265,5 +287,11 @@ export class InMemoryElicitationStore implements ElicitationStore {
    */
   async deleteResolvedResult(elicitId: string): Promise<void> {
     this.resolvedResults.delete(elicitId);
+
+    const timer = this.resolvedTimers.get(elicitId);
+    if (timer) {
+      clearTimeout(timer);
+      this.resolvedTimers.delete(elicitId);
+    }
   }
 }

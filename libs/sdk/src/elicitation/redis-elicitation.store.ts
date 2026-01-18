@@ -173,22 +173,33 @@ export class RedisElicitationStore implements ElicitationStore {
     const channel = RESULT_CHANNEL_PREFIX + elicitId;
     const subscriber = this.subscriber;
 
-    // Wait for subscriber to be ready
+    // Wait for subscriber to be ready with proper race condition handling
     if (!this.subscriberReady && subscriber) {
       await new Promise<void>((resolve, reject) => {
+        let settled = false;
+
+        const settle = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          subscriber.off('ready', onReady);
+          fn();
+        };
+
         const timeout = setTimeout(() => {
-          reject(new Error('Subscriber connection timeout'));
+          settle(() => reject(new Error('Subscriber connection timeout')));
         }, 5000);
 
-        subscriber.once('ready', () => {
-          clearTimeout(timeout);
-          resolve();
-        });
+        const onReady = () => {
+          settle(() => resolve());
+        };
 
-        // If already ready, resolve immediately
+        subscriber.once('ready', onReady);
+
+        // Re-check after attaching listener to eliminate race condition
+        // The flag may have become true between the outer if-check and now
         if (this.subscriberReady) {
-          clearTimeout(timeout);
-          resolve();
+          settle(() => resolve());
         }
       });
     }

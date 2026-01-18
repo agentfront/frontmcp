@@ -224,13 +224,20 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
    *
    * This cancels both the local pending elicit (for timeout handling)
    * and publishes cancel to the store (for distributed mode).
+   *
+   * Note: The local promise is resolved immediately for responsiveness,
+   * then distributed state cleanup follows asynchronously. This non-atomic
+   * sequence is intentional - the worst case is publishing a cancel for
+   * an already-processed elicitation, which is harmless.
    */
   protected async cancelPendingElicit(): Promise<void> {
     if (this.pendingElicit) {
       clearTimeout(this.pendingElicit.timeoutHandle);
+      // Resolve local promise immediately for responsiveness
       this.pendingElicit.resolve({ status: 'cancel' });
 
-      // Also publish cancel to the store for distributed mode
+      // Publish cancel to store for distributed mode (non-atomic, intentional)
+      // In distributed mode, another node may have already processed this elicitation
       const sessionId = this.key.sessionId;
       const pending = await this.elicitStore.getPending(sessionId);
       if (pending) {

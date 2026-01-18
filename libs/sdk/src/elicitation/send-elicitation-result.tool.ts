@@ -13,6 +13,7 @@
  */
 
 import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
 import type { Scope } from '../scope/scope.instance';
@@ -48,7 +49,7 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
     elicitId: string;
     action: 'accept' | 'cancel' | 'decline';
     content?: unknown;
-  }): Promise<unknown> {
+  }): Promise<CallToolResult> {
     const { elicitId, action, content } = input;
 
     this.logger.info('sendElicitationResult: processing', { elicitId, action });

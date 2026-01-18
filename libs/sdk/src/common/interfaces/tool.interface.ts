@@ -257,7 +257,8 @@ export abstract class ToolContext<
 
       // Convert Zod schema to JSON Schema for the fallback response
       // Wrap in z.object if it's a raw shape (plain object), otherwise use as-is
-      const zodSchema = requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as any);
+      const zodSchema =
+        requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);
       const jsonSchema = toJSONSchema(zodSchema) as Record<string, unknown>;
 
       throw new ElicitationFallbackRequired(

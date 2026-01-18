@@ -9,6 +9,8 @@ import {
   type ElicitOptions,
   type TypedElicitResult,
   type PendingElicit,
+  type PendingElicitFallback,
+  type ResolvedElicitResult,
 } from '../elicitation.types';
 import { z } from 'zod';
 
@@ -266,6 +268,150 @@ describe('Elicitation Types', () => {
       pending.reject(error);
 
       expect(rejectFn).toHaveBeenCalledWith(error);
+    });
+  });
+
+  describe('PendingElicitFallback', () => {
+    it('should create a fallback record with all required fields', () => {
+      const now = Date.now();
+      const fallback: PendingElicitFallback = {
+        elicitId: 'elicit-123',
+        sessionId: 'session-456',
+        toolName: 'myTool',
+        toolInput: { key: 'value' },
+        elicitMessage: 'Please confirm your action',
+        elicitSchema: {
+          type: 'object',
+          properties: {
+            confirmed: { type: 'boolean' },
+          },
+        },
+        createdAt: now,
+        expiresAt: now + 300000, // 5 minutes
+      };
+
+      expect(fallback.elicitId).toBe('elicit-123');
+      expect(fallback.sessionId).toBe('session-456');
+      expect(fallback.toolName).toBe('myTool');
+      expect(fallback.toolInput).toEqual({ key: 'value' });
+      expect(fallback.elicitMessage).toBe('Please confirm your action');
+      expect(fallback.elicitSchema).toBeDefined();
+      expect(fallback.expiresAt).toBeGreaterThan(fallback.createdAt);
+    });
+
+    it('should allow complex tool input', () => {
+      const now = Date.now();
+      const fallback: PendingElicitFallback = {
+        elicitId: 'elicit-complex',
+        sessionId: 'session-complex',
+        toolName: 'complexTool',
+        toolInput: {
+          nested: { deep: { value: 123 } },
+          array: [1, 2, 3],
+          nullValue: null,
+        },
+        elicitMessage: 'Complex input test',
+        elicitSchema: {},
+        createdAt: now,
+        expiresAt: now + 60000,
+      };
+
+      expect(fallback.toolInput).toEqual({
+        nested: { deep: { value: 123 } },
+        array: [1, 2, 3],
+        nullValue: null,
+      });
+    });
+
+    it('should allow empty elicit schema', () => {
+      const now = Date.now();
+      const fallback: PendingElicitFallback = {
+        elicitId: 'elicit-empty',
+        sessionId: 'session-empty',
+        toolName: 'simpleTool',
+        toolInput: undefined,
+        elicitMessage: 'Simple message',
+        elicitSchema: {},
+        createdAt: now,
+        expiresAt: now + 30000,
+      };
+
+      expect(fallback.elicitSchema).toEqual({});
+      expect(fallback.toolInput).toBeUndefined();
+    });
+  });
+
+  describe('ResolvedElicitResult', () => {
+    it('should create a resolved result with accept status and content', () => {
+      const now = Date.now();
+      const resolved: ResolvedElicitResult = {
+        elicitId: 'elicit-123',
+        result: {
+          status: 'accept',
+          content: { confirmed: true },
+        },
+        resolvedAt: now,
+      };
+
+      expect(resolved.elicitId).toBe('elicit-123');
+      expect(resolved.result.status).toBe('accept');
+      expect(resolved.result.content).toEqual({ confirmed: true });
+      expect(resolved.resolvedAt).toBe(now);
+    });
+
+    it('should create a resolved result with cancel status', () => {
+      const now = Date.now();
+      const resolved: ResolvedElicitResult = {
+        elicitId: 'elicit-cancel',
+        result: {
+          status: 'cancel',
+        },
+        resolvedAt: now,
+      };
+
+      expect(resolved.elicitId).toBe('elicit-cancel');
+      expect(resolved.result.status).toBe('cancel');
+      expect(resolved.result.content).toBeUndefined();
+    });
+
+    it('should create a resolved result with decline status', () => {
+      const now = Date.now();
+      const resolved: ResolvedElicitResult = {
+        elicitId: 'elicit-decline',
+        result: {
+          status: 'decline',
+        },
+        resolvedAt: now,
+      };
+
+      expect(resolved.elicitId).toBe('elicit-decline');
+      expect(resolved.result.status).toBe('decline');
+      expect(resolved.result.content).toBeUndefined();
+    });
+
+    it('should allow complex content in accepted result', () => {
+      const now = Date.now();
+      const resolved: ResolvedElicitResult = {
+        elicitId: 'elicit-complex',
+        result: {
+          status: 'accept',
+          content: {
+            user: { name: 'John', email: 'john@example.com' },
+            permissions: ['read', 'write'],
+            metadata: { timestamp: now },
+          },
+        },
+        resolvedAt: now,
+      };
+
+      expect(resolved.result.status).toBe('accept');
+      const content = resolved.result.content as {
+        user: { name: string; email: string };
+        permissions: string[];
+        metadata: { timestamp: number };
+      };
+      expect(content.user.name).toBe('John');
+      expect(content.permissions).toEqual(['read', 'write']);
     });
   });
 });
