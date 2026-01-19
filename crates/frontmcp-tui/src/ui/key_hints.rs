@@ -12,10 +12,17 @@ pub fn render(frame: &mut Frame, area: Rect, state: &DashboardState) {
         FocusArea::TabBar => vec![
             ("←/→", "Switch Tab"),
             ("↓/Enter", "Enter"),
-            ("1-6", "Jump Tab"),
+            ("1-7", "Jump Tab"),
+            ("o", "Overview"),
             ("?", "Help"),
             ("q", "Quit"),
             ("Ctrl+C", "Kill"),
+        ],
+        FocusArea::Overview => vec![
+            ("↑/↓", "Scroll"),
+            ("Esc/→", "Back"),
+            ("PgUp/Dn", "Page"),
+            ("?", "Help"),
         ],
         FocusArea::List => vec![
             ("↑/↓", "Navigate"),

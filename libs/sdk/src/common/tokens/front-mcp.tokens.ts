@@ -26,4 +26,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   plugins: tokenFactory.meta('plugins'),
   // pagination configuration
   pagination: tokenFactory.meta('pagination'),
+  // manager service configuration
+  manager: tokenFactory.meta('manager'),
 };

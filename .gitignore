@@ -2044,3 +2044,4 @@ apps/*/src/**/*.d.ts.map
 /crates/target/release/frontmcp-tui.d
 /crates/target/.rustc_info.json
 /crates/target/CACHEDIR.TAG
+/crates/target/

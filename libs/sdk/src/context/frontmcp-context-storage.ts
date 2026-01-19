@@ -154,3 +154,13 @@ export class FrontMcpContextStorage {
  * @deprecated Use FrontMcpContextStorage instead
  */
 export { FrontMcpContextStorage as ContextStorage };
+
+/**
+ * Get the raw AsyncLocalStorage instance.
+ *
+ * @internal This is intended ONLY for low-level infrastructure (log transports)
+ * that need synchronous access to context. All other code should use DI.
+ */
+export function getRawContextStorage(): AsyncLocalStorage<FrontMcpContext> {
+  return frontmcpContextStorage;
+}

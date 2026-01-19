@@ -6,6 +6,8 @@ import {
   LogLevel,
   LogLevelName,
   LogRecord,
+  TraceEventType,
+  TraceLogRecord,
 } from '../../common';
 import { ConsoleLogTransportInstance } from './instance.console-logger';
 
@@ -20,7 +22,10 @@ export class LoggerInstance extends FrontMcpLogger {
   private readonly transports: LogTransportInterface[];
   private readonly consoleTransport?: ConsoleLogTransportInstance;
 
-  constructor(private readonly config: LoggingConfigType, private getTransports: GetTransports) {
+  constructor(
+    private readonly config: LoggingConfigType,
+    private getTransports: GetTransports,
+  ) {
     super();
     this.level = config.level;
     this.prefix = config.prefix ?? '';
@@ -32,6 +37,35 @@ export class LoggerInstance extends FrontMcpLogger {
 
   child(prefix: string): FrontMcpLogger {
     return new LoggerInstance({ ...this.config, prefix }, this.getTransports);
+  }
+
+  /**
+   * Emit a structured trace event for TUI state construction.
+   * Trace events bypass normal log level filtering - they are always sent to transports.
+   */
+  trace(eventType: TraceEventType, data?: Record<string, unknown>): void {
+    // Trace events are always emitted (bypass level filtering)
+    // Only skip if logging is completely off
+    if (this.level === LogLevel.Off) return;
+
+    const rec: TraceLogRecord = {
+      level: LogLevel.Trace,
+      levelName: LogLevelName[LogLevel.Trace],
+      message: eventType, // Use eventType as message for compatibility
+      args: [],
+      timestamp: new Date(),
+      prefix: this.prefix,
+      eventType,
+      data: data ?? {},
+    };
+
+    for (const t of this.transports) {
+      try {
+        void t.log(rec);
+      } catch (err) {
+        console.error('[Logger] Transport error:', err instanceof Error ? err.message : 'Unknown error');
+      }
+    }
   }
 
   /** Internal: fan out to transports if level passes a threshold. */

@@ -15,7 +15,7 @@ import SummaryAgent from './agents/summary.agent';
   name: 'Weather MCP App',
   description: 'Demo app showing Tool UI templates for rich weather displays',
   providers: [],
-  agents: [SummaryAgent],
+  // agents: [SummaryAgent],
   tools: [GetWeatherTool],
 })
 export default class WeatherMcpApp {}

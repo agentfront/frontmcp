@@ -21,6 +21,9 @@ import {
   HttpOptionsInput,
   LoggingOptionsInput,
 } from '../types';
+// Import directly from manager.options to avoid circular dependency
+// (manager.service imports context which uses @Provider decorator which imports this file)
+import { managerOptionsSchema, type ManagerOptionsInput } from '../../manager/manager.options';
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
@@ -88,6 +91,13 @@ export interface FrontMcpBaseMetadata {
    * Currently only tool list pagination is supported (tools/list endpoint).
    */
   pagination?: PaginationOptions;
+
+  /**
+   * Manager service configuration for remote observation and control.
+   * When enabled, exposes socket-based interface for TUI, orchestrators, and dashboards.
+   * @see ManagerOptionsInput for available options
+   */
+  manager?: ManagerOptionsInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -104,6 +114,7 @@ export const frontMcpBaseSchema = z.object({
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
+  manager: managerOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

@@ -8,12 +8,14 @@ import { loggerDiscoveryDeps, normalizeLogger } from './logger.utils';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import { ConsoleLogTransportInstance } from './instances/instance.console-logger';
 import { GetTransports, LoggerInstance } from './instances/instance.logger';
+import { ManagerLogTransport, isManagerEnabled, getManagerLogTransport } from '../manager';
 
 export default class LoggerRegistry extends RegistryAbstract<LogTransportInterface, LoggerRecord, LogTransportType[]> {
   config: LoggingConfigType;
 
   constructor(globalProviders: ProviderRegistry) {
-    const { logging } = globalProviders.get(FrontMcpConfig);
+    const fullConfig = globalProviders.get(FrontMcpConfig);
+    const { logging, manager } = fullConfig as { logging?: (typeof fullConfig)['logging']; manager?: unknown };
     const loggingConfig = logging ?? {
       level: LogLevel.Info,
       enableConsole: true,
@@ -23,6 +25,12 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
     const list: LogTransportType[] = [...(transports ?? [])];
     if (config.enableConsole) {
       list.push(ConsoleLogTransportInstance);
+    }
+
+    // Add ManagerLogTransport when manager is enabled (for TUI/dashboard integration)
+    // Check both the config option and the environment variable
+    if (isManagerEnabled(manager as Parameters<typeof isManagerEnabled>[0])) {
+      list.push(ManagerLogTransport);
     }
 
     super('LoggerRegistry', globalProviders, list);
@@ -74,7 +82,12 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
       let app: LogTransportInterface;
       if (rec.kind === LoggerKind.CLASS_TOKEN) {
         const LocalAppClass = rec.provide;
-        app = new LocalAppClass(this.config, ...depsInstances);
+        // Use global singleton for ManagerLogTransport so FrontMcpInstance can connect it to ManagerService
+        if (LocalAppClass === ManagerLogTransport) {
+          app = getManagerLogTransport();
+        } else {
+          app = new LocalAppClass(this.config, ...depsInstances);
+        }
       } else {
         throw Error('Invalid logger kind');
       }

@@ -19,25 +19,37 @@ pub fn render(frame: &mut Frame, area: Rect, state: &DashboardState) {
 
     for log in logs.iter() {
         let (level_style, level_prefix) = match log.level {
-            LogLevel::Error => (Style::default().fg(Color::Red).bold(), "ERROR"),
-            LogLevel::Warn => (Style::default().fg(Color::Yellow), "WARN "),
-            LogLevel::Info => (Style::default().fg(Color::White), "INFO "),
-            LogLevel::Debug => (Style::default().fg(Color::DarkGray), "DEBUG"),
+            LogLevel::Error => (Style::default().fg(Color::Red).bold(), "ERR"),
+            LogLevel::Warn => (Style::default().fg(Color::Yellow), "WRN"),
+            LogLevel::Info => (Style::default().fg(Color::White), "INF"),
+            LogLevel::Debug => (Style::default().fg(Color::DarkGray), "DBG"),
         };
 
-        // Build the log line - just level prefix and message (no source for cleaner look)
-        let line = Line::from(vec![
-            Span::styled(format!("[{}]", level_prefix), level_style),
-            Span::raw(" "),
-            Span::styled(&log.message, Style::default().fg(match log.level {
-                LogLevel::Error => Color::Red,
-                LogLevel::Warn => Color::Yellow,
-                LogLevel::Info => Color::White,
-                LogLevel::Debug => Color::DarkGray,
-            })),
-        ]);
+        let message_style = Style::default().fg(match log.level {
+            LogLevel::Error => Color::Red,
+            LogLevel::Warn => Color::Yellow,
+            LogLevel::Info => Color::White,
+            LogLevel::Debug => Color::DarkGray,
+        });
 
-        lines.push(line);
+        // Handle single-line and multi-line messages
+        let mut msg_lines = log.message.lines();
+
+        // First line with prefix
+        if let Some(first_line) = msg_lines.next() {
+            lines.push(Line::from(vec![
+                Span::styled(format!("[{}]", level_prefix), level_style),
+                Span::raw(" "),
+                Span::styled(format!("[{}]", log.source), Style::default().fg(Color::Cyan)),
+                Span::raw(" "),
+                Span::styled(first_line, message_style),
+            ]));
+
+            // Continuation lines - preserve original indentation
+            for extra_line in msg_lines {
+                lines.push(Line::from(Span::styled(extra_line, message_style)));
+            }
+        }
     }
 
     if lines.is_empty() {

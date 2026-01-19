@@ -123,6 +123,15 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     // 'no-session' is a logging fallback only, not used for SESSION providers
     const sessionId = ctx?.sessionId ?? (headers['mcp-session-id'] as string) ?? 'no-session';
 
+    // Emit request:start trace event for TUI metrics
+    this.logger.trace('request:start', {
+      flowName: 'http:request',
+      requestId: this.requestId,
+      sessionId,
+      method: request.method,
+      entryName: request.path,
+    });
+
     this.logger.info(`[${this.requestId}] ▶ ${request.method} ${request.path}`, {
       requestId: this.requestId,
       traceId: ctx?.traceContext.traceId?.slice(0, 16),
@@ -489,6 +498,18 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     const duration = Date.now() - this.requestStartTime;
     const intent = this.state.get('intent') ?? 'unknown';
 
+    // Emit request:complete trace event for TUI metrics
+    const ctx = this.tryGetContext();
+    const sessionId = ctx?.sessionId ?? (request.headers?.['mcp-session-id'] as string);
+    this.logger.trace('request:complete', {
+      flowName: 'http:request',
+      requestId: this.requestId,
+      sessionId,
+      durationMs: duration,
+      method: request.method,
+      entryName: intent,
+    });
+
     this.logger.info(`[${this.requestId}] ◀ ${request.method} ${request.path} completed in ${duration}ms`, {
       requestId: this.requestId,
       method: request.method,
@@ -515,6 +536,22 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     // For errors with empty messages, try to extract more info
     const errorCode = (error as { code?: string | number })?.code;
     const errorCause = (error as { cause?: unknown })?.cause;
+
+    // Emit request:error trace event for TUI metrics
+    const ctx = this.tryGetContext();
+    const sessionId = ctx?.sessionId ?? (request.headers?.['mcp-session-id'] as string);
+    this.logger.trace('request:error', {
+      flowName: 'http:request',
+      requestId: this.requestId,
+      sessionId,
+      durationMs: duration,
+      method: request.method,
+      error: {
+        name: errorName,
+        message: errorMessage || '(no message)',
+        code: errorCode as number | undefined,
+      },
+    });
 
     // Log comprehensive error info including stack trace
     this.logger.error(

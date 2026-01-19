@@ -427,14 +427,14 @@ export default class ResourceRegistry
 
         // Children
         for (const c of children) {
-          const pre = cfg.prefixSource === 'provider' ? c.provider ?? c.ownerPath : c.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (c.provider ?? c.ownerPath) : c.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), c.row.instance);
         }
       } else {
         // Prefix everyone by source
         for (const r of group) {
-          const pre = cfg.prefixSource === 'provider' ? r.provider ?? r.ownerPath : r.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (r.provider ?? r.ownerPath) : r.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), r.row.instance);
         }
@@ -480,9 +480,29 @@ export default class ResourceRegistry
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
   }
 
-  private bump(kind: ResourceChangeEvent['kind']) {
+  private bump(kind: ResourceChangeEvent['kind'], entries?: ResourceEntry[]) {
     const version = ++this.version;
-    this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
+    const snapshot = this.listAllInstances();
+
+    // Emit trace event with full entry data for TUI
+    try {
+      const scope = this.providers.getActiveScope();
+      const entryNames = entries?.map((e) => e.name) ?? snapshot.map((e) => e.name);
+      scope.logger.trace(`registry:resource:${kind}`, {
+        registryType: 'resource',
+        changeKind: kind,
+        changeScope: 'global',
+        entryNames,
+        owner: this.owner ? { kind: this.owner.kind, id: this.owner.id } : undefined,
+        snapshotCount: snapshot.length,
+        version,
+      });
+    } catch {
+      // Ignore trace errors - don't break registry operations
+    }
+
+    // Continue with existing emitter for SDK internal use
+    this.emitter.emit({ kind, changeScope: 'global', version, snapshot });
   }
 
   /* -------------------- Helpers -------------------- */

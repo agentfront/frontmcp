@@ -5,8 +5,12 @@ import { LogTransportType } from '../../../interfaces';
 
 /**
  * Log level enumeration.
+ *
+ * Note: Trace is a special level for structured TUI/dashboard events.
+ * It's always emitted to ManagerLogTransport regardless of configured level.
  */
 export enum LogLevel {
+  Trace = -1, // Special: structured events for TUI (always emitted to ManagerLogTransport)
   Debug = 0,
   Verbose = 1,
   Info = 2,
@@ -19,6 +23,7 @@ export enum LogLevel {
  * Log level display names.
  */
 export const LogLevelName: Record<LogLevel, string> = {
+  [LogLevel.Trace]: 'trace',
   [LogLevel.Debug]: 'debug',
   [LogLevel.Verbose]: 'verbose',
   [LogLevel.Info]: 'info',

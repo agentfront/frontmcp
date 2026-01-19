@@ -14,6 +14,7 @@ import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError } from '../errors';
+import { ManagerService, isManagerEnabled, getManagerLogTransport, type ManagerOptionsInput } from '../manager';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -22,6 +23,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   private logger: LoggerRegistry;
   private providers: ProviderRegistry;
   private scopes: ScopeRegistry;
+  private manager: ManagerService | null = null;
 
   constructor(config: FrontMcpConfigType) {
     this.config = config;
@@ -37,14 +39,71 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     this.scopes = new ScopeRegistry(this.providers);
     await this.scopes.ready;
+
+    // Initialize manager service if enabled
+    const managerOptions = (this.config as { manager?: unknown }).manager;
+    const managerEnabled = isManagerEnabled(managerOptions as Parameters<typeof isManagerEnabled>[0]);
+    console.log(
+      `[ManagerService] Checking if enabled: ${managerEnabled} (env: ${process.env['FRONTMCP_MANAGER_ENABLED']})`,
+    );
+
+    if (managerEnabled) {
+      console.log(`[ManagerService] Initializing manager service...`);
+      this.manager = new ManagerService(managerOptions as ManagerOptionsInput);
+
+      // Connect log transport to manager
+      const logTransport = getManagerLogTransport();
+      logTransport.connect(this.manager);
+      console.log(`[ManagerService] Connected log transport to manager`);
+
+      // Register all scopes with the manager
+      for (const scopeEntry of this.scopes.getScopes()) {
+        const scope = scopeEntry as Scope;
+        this.manager.registerScope(scope);
+      }
+      console.log(`[ManagerService] Registered ${this.scopes.getScopes().length} scope(s)`);
+    }
   }
 
-  start() {
+  async start() {
     const server = this.providers.get(FrontMcpServer);
     if (!server) {
       throw new Error('Server not found');
     }
+
+    // Start the manager service if enabled
+    if (this.manager) {
+      await this.manager.start();
+      const addresses = this.manager.getAddresses();
+      console.log(`[ManagerService] Started. Socket addresses:`, addresses);
+    }
+
     server.start();
+  }
+
+  /**
+   * Stop the FrontMCP instance gracefully.
+   */
+  async stop(): Promise<void> {
+    // Stop the manager service if running
+    if (this.manager) {
+      await this.manager.stop();
+    }
+  }
+
+  /**
+   * Get the manager service instance.
+   * Returns null if manager is not enabled.
+   */
+  getManager(): ManagerService | null {
+    return this.manager;
+  }
+
+  /**
+   * Get the manager socket addresses if manager is enabled.
+   */
+  getManagerAddresses(): Record<string, string> | null {
+    return this.manager?.getAddresses() ?? null;
   }
 
   /**

@@ -16,9 +16,10 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
   }
 
   private levelTags: Record<LogLevel, LogLevelMeta> = {
+    [LogLevel.Trace]: { label: 'TRACE', ansi: '\x1b[35m' }, // magenta - structured TUI events
     [LogLevel.Off]: { label: '', ansi: '' },
-    [LogLevel.Debug]: { label: 'DEBUG', ansi: '\x1b[34m' }, // gray
-    [LogLevel.Verbose]: { label: 'VERBOSE', ansi: '\x1b[90m' }, // blue
+    [LogLevel.Debug]: { label: 'DEBUG', ansi: '\x1b[34m' }, // blue
+    [LogLevel.Verbose]: { label: 'VERBOSE', ansi: '\x1b[90m' }, // gray
     [LogLevel.Info]: { label: 'INFO', ansi: '\x1b[32m' }, // green
     [LogLevel.Warn]: { label: 'WARN', ansi: '\x1b[33m' }, // yellow
     [LogLevel.Error]: { label: 'ERROR', ansi: '\x1b[31m' }, // red
@@ -46,6 +47,8 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
 
   private pickMethod(level: LogLevel): LogFn {
     switch (level) {
+      case LogLevel.Trace:
+        return console.debug.bind(console); // Trace events use debug
       case LogLevel.Debug:
         return console.debug.bind(console);
       case LogLevel.Verbose:

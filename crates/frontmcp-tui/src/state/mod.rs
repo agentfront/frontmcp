@@ -4,4 +4,4 @@
 
 mod store;
 
-pub use store::{ActivitySubTab, DashboardState, FocusArea, LogLevel, QuitMode, Tab};
+pub use store::{ActivitySubTab, DashboardState, FocusArea, LogLevel, QuitDialogSelection, QuitMode, Tab, ToolInfo};

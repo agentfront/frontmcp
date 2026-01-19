@@ -279,5 +279,38 @@ export default class PluginRegistry
       }
       this.instances.set(token, pluginInstance);
     }
+
+    // Emit trace event for TUI after all plugins are initialized
+    this.emitPluginTraceEvent('reset');
+  }
+
+  /**
+   * Emit a trace event for plugin registry changes (for TUI display)
+   */
+  private emitPluginTraceEvent(kind: 'reset' | 'added' | 'removed') {
+    try {
+      // Build plugin entries with name and owner
+      const pluginEntries: Array<{ name: string }> = [];
+
+      for (const token of this.tokens) {
+        const rec = this.defs.get(token);
+        if (rec) {
+          pluginEntries.push({
+            name: rec.metadata.name,
+          });
+        }
+      }
+
+      this.scope.logger.trace(`registry:plugin:${kind}`, {
+        registryType: 'plugin',
+        changeKind: kind,
+        changeScope: 'global',
+        entries: pluginEntries,
+        owner: this.owner ? { kind: this.owner.kind, id: this.owner.id } : undefined,
+        snapshotCount: pluginEntries.length,
+      });
+    } catch {
+      // Ignore trace errors - don't break registry operations
+    }
   }
 }

@@ -24,6 +24,12 @@ pub fn render(frame: &mut Frame, area: Rect, state: &DashboardState) {
             "Server Ready",
             Style::default().fg(Color::Green).bold(),
         )
+    } else if state.connection_error.is_some() {
+        (
+            "●",
+            "Connection Error",
+            Style::default().fg(Color::Red).bold(),
+        )
     } else if state.server.error.is_some() {
         ("●", "Server Error", Style::default().fg(Color::Red).bold())
     } else {

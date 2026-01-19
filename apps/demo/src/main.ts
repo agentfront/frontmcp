@@ -12,11 +12,12 @@ import CrmMcpApp from './apps/crm';
   info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
   logging: { level: LogLevel.Verbose },
+  manager: { enabled: true },
   http: {
     port: 3003,
   },
   transport: {
-    protocol: 'full',
+    protocol: 'legacy',
   },
   auth: {
     mode: 'transparent',
@@ -27,7 +28,7 @@ import CrmMcpApp from './apps/crm';
     },
     expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://sample-app.frontegg.com',
     requiredScopes: [],
-    allowAnonymous: true, // Allow anonymous access for demo
+    allowAnonymous: false, // Allow anonymous access for demo
     anonymousScopes: ['anonymous'],
   },
 })

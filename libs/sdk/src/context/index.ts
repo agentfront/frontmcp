@@ -30,7 +30,7 @@ export {
 // =====================
 // FrontMcpContextStorage - AsyncLocalStorage wrapper
 // =====================
-export { FrontMcpContextStorage, ContextStorage } from './frontmcp-context-storage';
+export { FrontMcpContextStorage, ContextStorage, getRawContextStorage } from './frontmcp-context-storage';
 
 // =====================
 // DI Token and Provider

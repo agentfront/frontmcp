@@ -95,6 +95,7 @@ const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 })
 export default class CallToolFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('CallToolFlow');
+  private callStartTime = 0;
 
   @Stage('parseInput')
   async parseInput() {
@@ -231,6 +232,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger = this.logger.child(`CallToolFlow(${name})`);
     this.state.set('tool', tool);
     this.logger.info(`findTool: tool "${name}" found`);
+
+    // Start timing for metrics and emit tool:execute trace event
+    this.callStartTime = Date.now();
+    const ctx = this.tryGetContext();
+    this.logger.trace('tool:execute', {
+      flowName: 'tools:call-tool',
+      requestId: ctx?.requestId,
+      sessionId: ctx?.sessionId,
+      entryName: name,
+      entryOwner: tool.owner ? { kind: tool.owner.kind, id: tool.owner.id } : undefined,
+    });
+
     this.logger.verbose('findTool:done');
   }
 
@@ -627,10 +640,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           ? typeof uiConfig.template === 'function'
             ? 'react-component'
             : typeof uiConfig.template === 'string'
-            ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
-              ? 'react-file'
-              : 'html-file'
-            : 'unknown'
+              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+                ? 'react-file'
+                : 'html-file'
+              : 'unknown'
           : 'none',
       });
 
@@ -725,6 +738,19 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     // Respond with the properly formatted MCP result
     this.respond(result);
+
+    // Emit tool:complete trace event for metrics
+    const callDuration = Date.now() - this.callStartTime;
+    const ctx = this.tryGetContext();
+    this.logger.trace('tool:complete', {
+      flowName: 'tools:call-tool',
+      requestId: ctx?.requestId,
+      sessionId: ctx?.sessionId,
+      durationMs: callDuration,
+      entryName: tool.metadata.name,
+      entryOwner: tool.owner ? { kind: tool.owner.kind, id: tool.owner.id } : undefined,
+    });
+
     this.logger.verbose('finalize:done');
   }
 }

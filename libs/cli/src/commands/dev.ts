@@ -101,7 +101,8 @@ async function runDevSimple(entry: string, cwd: string): Promise<void> {
 }
 
 /**
- * Run dev command with Rust TUI dashboard.
+ * Run dev command with Rust TUI dashboard using socket-based communication.
+ * The FrontMCP server starts a Unix socket for the TUI to connect to.
  * Returns true if successful, false if TUI binary not available.
  */
 async function runDevRustTui(entry: string, cwd: string): Promise<boolean> {
@@ -113,27 +114,27 @@ async function runDevRustTui(entry: string, cwd: string): Promise<boolean> {
 
   console.log(`${c('cyan', '[dev]')} starting Rust TUI dashboard...`);
 
-  // Create a temp file for event communication
-  // This avoids piping stdin which breaks crossterm's keyboard input
   const os = await import('os');
-  const fs = await import('fs');
-  const eventPipePath = path.join(os.tmpdir(), `frontmcp-events-${process.pid}.pipe`);
 
-  // Create the pipe file
-  fs.writeFileSync(eventPipePath, '');
-
-  // Get the preload script path
-  const preloadPath = path.join(__dirname, '../dashboard/preload/dev-preload.js');
+  // The socket path is deterministic based on server PID
+  // The server will create this socket when it starts
+  const socketPath = path.join(os.tmpdir(), `frontmcp-${process.pid}.sock`);
 
   // Find tsconfig for type checking
   const tsconfig = findTsConfig(entry);
 
-  // Spawn server process with IPC channel
-  const server = spawn('npx', ['-y', 'tsx', '--import', preloadPath, '--watch', entry], {
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  // Spawn server process with manager enabled (socket-based communication)
+  // Use --conditions node to ensure proper Node.js module resolution
+  const server = spawn('npx', ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
+    stdio: ['pipe', 'pipe', 'pipe'],
     shell: true,
     env: {
       ...process.env,
+      // Enable the manager service for socket-based TUI communication
+      FRONTMCP_MANAGER_ENABLED: 'true',
+      // Pass the socket path so server and TUI use the same path
+      FRONTMCP_MANAGER_UNIX_PATH: socketPath,
+      // Optionally keep dev mode for backwards compatibility
       FRONTMCP_DEV_MODE: 'true',
     },
   });
@@ -146,41 +147,42 @@ async function runDevRustTui(entry: string, cwd: string): Promise<boolean> {
       })
     : undefined;
 
-  // Open the event pipe for writing
-  const eventPipeStream = fs.createWriteStream(eventPipePath, { flags: 'a' });
+  // Wait a bit for the server to start and create the socket
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   // Spawn the Rust TUI with stdin inherited (for keyboard input)
+  // Pass the socket path for the TUI to connect to
   const tui = spawn(tuiBinary, [], {
     stdio: ['inherit', 'inherit', 'inherit'],
     env: {
       ...process.env,
       FRONTMCP_ENTRY: path.relative(cwd, entry),
-      FRONTMCP_EVENT_PIPE: eventPipePath,
+      FRONTMCP_SOCKET_PATH: socketPath,
     },
   });
 
-  // Write server stderr to event pipe (events come via stderr)
-  if (server.stderr) {
-    server.stderr.on('data', (data: Buffer) => {
-      eventPipeStream.write(data);
+  // Log server output to console (for debugging)
+  if (server.stdout) {
+    server.stdout.on('data', (data: Buffer) => {
+      // In socket mode, we could optionally show server logs
+      // For now, they're suppressed since the TUI handles display
     });
   }
 
-  // Forward IPC messages to event pipe
-  server.on('message', (msg) => {
-    eventPipeStream.write(JSON.stringify(msg) + '\n');
-  });
+  if (server.stderr) {
+    server.stderr.on('data', (data: Buffer) => {
+      // Log errors to stderr
+      const str = data.toString();
+      if (str.includes('Error') || str.includes('error')) {
+        process.stderr.write(data);
+      }
+    });
+  }
 
   const cleanup = () => {
     killQuiet(checker);
     killQuiet(server);
     killQuiet(tui);
-    eventPipeStream.end();
-    try {
-      fs.unlinkSync(eventPipePath);
-    } catch {
-      // Ignore cleanup errors
-    }
   };
 
   // Handle SIGINT
@@ -215,7 +217,7 @@ async function runDevRustTui(entry: string, cwd: string): Promise<boolean> {
 }
 
 /**
- * Run dev command with Ink dashboard.
+ * Run dev command with Ink dashboard using socket-based communication.
  */
 async function runDevDashboard(entry: string, cwd: string): Promise<void> {
   // Dynamic import to avoid loading React/Ink when not needed
@@ -223,17 +225,22 @@ async function runDevDashboard(entry: string, cwd: string): Promise<void> {
   const React = await import('react');
   const { App } = await import('../dashboard/components/App.js');
 
-  // Get the preload script path
-  const preloadPath = path.join(__dirname, '../dashboard/preload/dev-preload.js');
+  const os = await import('os');
+
+  // The socket path is deterministic based on server PID
+  const socketPath = path.join(os.tmpdir(), `frontmcp-${process.pid}.sock`);
 
   console.log(`${c('cyan', '[dev]')} starting dashboard mode...`);
 
-  // Spawn server process with IPC channel
-  const app = spawn('npx', ['-y', 'tsx', '--import', preloadPath, '--watch', entry], {
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  // Spawn server process with manager enabled (socket-based communication)
+  // Use --conditions node to ensure proper Node.js module resolution
+  const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
+    stdio: ['pipe', 'pipe', 'pipe'],
     shell: true,
     env: {
       ...process.env,
+      FRONTMCP_MANAGER_ENABLED: 'true',
+      FRONTMCP_MANAGER_UNIX_PATH: socketPath,
       FRONTMCP_DEV_MODE: 'true',
     },
   });
@@ -259,6 +266,8 @@ async function runDevDashboard(entry: string, cwd: string): Promise<void> {
   });
 
   // Render Ink dashboard
+  // Note: The Ink dashboard reads events from serverProcess stdout/stderr
+  // The socketPath is used by the Rust TUI (frontmcp-tui) via FRONTMCP_SOCKET_PATH env var
   const { waitUntilExit, unmount } = render(
     React.createElement(App, {
       serverProcess: app,

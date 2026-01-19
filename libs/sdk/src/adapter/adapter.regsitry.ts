@@ -1,17 +1,23 @@
 import 'reflect-metadata';
 import { Token, tokenName } from '@frontmcp/di';
-import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType } from '../common';
+import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType, EntryOwnerRef } from '../common';
 import { adapterDiscoveryDeps, normalizeAdapter } from './adapter.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AdapterInstance } from './adapter.instance';
+import type { Scope } from '../scope';
 
 export default class AdapterRegistry
   extends RegistryAbstract<AdapterInstance, AdapterRecord, AdapterType[]>
   implements AdapterRegistryInterface
 {
-  constructor(providers: ProviderRegistry, list: AdapterType[]) {
+  private readonly scope: Scope;
+  private readonly owner?: EntryOwnerRef;
+
+  constructor(providers: ProviderRegistry, list: AdapterType[], owner?: EntryOwnerRef) {
     super('AdapterRegistry', providers, list);
+    this.scope = providers.getActiveScope();
+    this.owner = owner;
   }
 
   protected override buildMap(list: AdapterType[]): RegistryBuildMapResult<AdapterRecord> {
@@ -57,6 +63,38 @@ export default class AdapterRegistry
       readyArr.push(instance.ready);
     }
     await Promise.all(readyArr);
+    this.emitAdapterTraceEvent('reset');
+  }
+
+  /**
+   * Emit a trace event for adapter registry changes (for TUI display)
+   */
+  private emitAdapterTraceEvent(kind: 'reset' | 'added' | 'removed') {
+    try {
+      // Build adapter entries with name and owner
+      const adapterEntries: Array<{ name: string; description?: string }> = [];
+
+      for (const token of this.tokens) {
+        const rec = this.defs.get(token);
+        if (rec) {
+          adapterEntries.push({
+            name: rec.metadata.name,
+            description: rec.metadata.description,
+          });
+        }
+      }
+
+      this.scope.logger.trace(`registry:adapter:${kind}`, {
+        registryType: 'adapter',
+        changeKind: kind,
+        changeScope: 'global',
+        entries: adapterEntries,
+        owner: this.owner ? { kind: this.owner.kind, id: this.owner.id } : undefined,
+        snapshotCount: adapterEntries.length,
+      });
+    } catch {
+      // Ignore trace errors - don't break registry operations
+    }
   }
 
   getAdapters(): AdapterEntry[] {

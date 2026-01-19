@@ -57,6 +57,27 @@ pub struct SessionEventData {
     pub reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+    /// Auth mode (public, transparent, orchestrated)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_mode: Option<String>,
+    /// Authenticated user info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_user: Option<AuthUser>,
+    /// Whether the session is anonymous
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_anonymous: Option<bool>,
+    /// Token expiration timestamp
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_expires_at: Option<u64>,
+}
+
+/// Authenticated user info
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthUser {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -176,6 +197,42 @@ pub enum RegistryEventType {
     AgentUpdated,
     #[serde(rename = "registry:agent:reset")]
     AgentReset,
+    #[serde(rename = "registry:plugin:added")]
+    PluginAdded,
+    #[serde(rename = "registry:plugin:removed")]
+    PluginRemoved,
+    #[serde(rename = "registry:plugin:updated")]
+    PluginUpdated,
+    #[serde(rename = "registry:plugin:reset")]
+    PluginReset,
+    #[serde(rename = "registry:adapter:added")]
+    AdapterAdded,
+    #[serde(rename = "registry:adapter:removed")]
+    AdapterRemoved,
+    #[serde(rename = "registry:adapter:updated")]
+    AdapterUpdated,
+    #[serde(rename = "registry:adapter:reset")]
+    AdapterReset,
+}
+
+/// Entry details for enhanced registry events
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryEntryInfo {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<EntryOwner>,
+    /// Tool-specific: input schema
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<serde_json::Value>,
+    /// Resource-specific: URI or URI template
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    /// Plugin-specific: version
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -190,6 +247,9 @@ pub struct RegistryEventData {
     pub owner: Option<EntryOwner>,
     pub snapshot_count: u32,
     pub version: u32,
+    /// Full entry details (for added/updated/reset events)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entries: Option<Vec<RegistryEntryInfo>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -324,10 +384,64 @@ pub struct ScopeGraphEvent {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DevBus Log Transport Events (New Format)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Trace context from AsyncLocalStorage
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TraceContext {
+    pub trace_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+}
+
+/// New log transport event format
+/// Sent by DevBusLogTransport for both trace events and regular logs
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevBusLogEvent {
+    pub id: String,
+    pub timestamp: u64,
+    /// Category: "trace" for TUI state events, "log" for regular logs
+    pub category: String,
+    /// Event type (e.g., "session:connect", "request:start", "tool:execute")
+    /// For logs, this is the level name (e.g., "info", "debug", "error")
+    #[serde(rename = "type")]
+    pub event_type: String,
+    /// Logger prefix for hierarchy/grouping
+    pub prefix: String,
+    /// Scope ID from context
+    pub scope_id: String,
+    /// Session ID from context
+    pub session_id: String,
+    /// Request ID from context
+    pub request_id: String,
+    /// Trace context from AsyncLocalStorage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_context: Option<TraceContext>,
+    /// For trace events: structured data
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+    /// For log events: log message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// For log events: log arguments
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<serde_json::Value>>,
+    /// For log events: log level number
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<i32>,
+    /// For log events: log level name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level_name: Option<String>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Union Type
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// All possible dev events
+/// All possible dev events (legacy format with category discriminator)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "category", rename_all = "snake_case")]
 pub enum DevEvent {
@@ -336,6 +450,17 @@ pub enum DevEvent {
     Registry(RegistryEvent),
     Server(ServerEvent),
     Config(ConfigEvent),
+}
+
+/// Unified event enum that handles both legacy and new formats
+#[derive(Debug, Clone)]
+pub enum UnifiedEvent {
+    /// Legacy DevEventBus format
+    Legacy(DevEvent),
+    /// New DevBusLogTransport format
+    LogTransport(DevBusLogEvent),
+    /// Error event for displaying parse/connection errors
+    Error(String),
 }
 
 /// IPC Message wrapper
@@ -353,19 +478,38 @@ impl DevEventMessage {
     }
 }
 
-/// Parse a line that may contain a dev event
+/// Parse a line that may contain a dev event (legacy format)
 pub fn parse_event_line(line: &str) -> Option<DevEvent> {
+    match parse_unified_event_line(line) {
+        Some(UnifiedEvent::Legacy(event)) => Some(event),
+        _ => None,
+    }
+}
+
+/// Parse a line that may contain a dev event (unified format)
+/// Returns UnifiedEvent which can be either legacy DevEvent or new DevBusLogEvent
+pub fn parse_unified_event_line(line: &str) -> Option<UnifiedEvent> {
     // Format 1: Stderr format with magic prefix
     // __FRONTMCP_DEV_EVENT__{"id":"...","category":"...","type":"...",...}
     if let Some(json_str) = line.strip_prefix(DEV_EVENT_MAGIC) {
-        // Try parsing as DevEventMessage wrapper first
+        // Try parsing as DevEventMessage wrapper first (legacy IPC)
         if let Ok(msg) = serde_json::from_str::<DevEventMessage>(json_str) {
-            return Some(msg.event);
+            return Some(UnifiedEvent::Legacy(msg.event));
         }
-        // Try parsing event directly
+
+        // Try parsing as new DevBusLogEvent format
+        // Check if it has "category": "trace" or "category": "log"
+        if let Ok(log_event) = serde_json::from_str::<DevBusLogEvent>(json_str) {
+            if log_event.category == "trace" || log_event.category == "log" {
+                return Some(UnifiedEvent::LogTransport(log_event));
+            }
+        }
+
+        // Try parsing as legacy DevEvent directly
         if let Ok(event) = serde_json::from_str::<DevEvent>(json_str) {
-            return Some(event);
+            return Some(UnifiedEvent::Legacy(event));
         }
+
         // Log error for lines that have the prefix but fail to parse
         log_parse_error(line, "Has prefix but JSON parse failed");
         return None;
@@ -378,7 +522,7 @@ pub fn parse_event_line(line: &str) -> Option<DevEvent> {
         match serde_json::from_str::<DevEventMessage>(line) {
             Ok(msg) => {
                 if msg.is_valid() {
-                    return Some(msg.event);
+                    return Some(UnifiedEvent::Legacy(msg.event));
                 }
             }
             Err(e) => {

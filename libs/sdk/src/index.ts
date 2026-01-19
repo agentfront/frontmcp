@@ -161,31 +161,37 @@ export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transp
 export type { TransportType, TransportKey } from './transport';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dev Event Bus (Development Dashboard)
+// Manager Service (Remote Observation & Control)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Dev event bus for CLI dashboard integration
+// Manager service for socket-based TUI/dashboard integration
 export {
-  DevEventBus,
-  isDevBusEnabled,
-  DEV_EVENT_MAGIC,
-  isDevEventMessage,
-  parseDevEventBusOptions,
-  devEventBusOptionsSchema,
-} from './dev-bus';
+  ManagerService,
+  isManagerEnabled,
+  parseManagerOptions,
+  managerOptionsSchema,
+  getManagerLogTransport,
+  ManagerLogTransport,
+  MANAGER_PROTOCOL_VERSION,
+} from './manager';
 export type {
-  DevEvent,
-  DevEventBase,
-  DevEventCategory,
-  DevEventListener,
-  DevEventBusOptions,
-  DevEventBusOptionsInput,
+  ManagerEvent,
+  ManagerEventBase,
+  ManagerEventCategory,
+  ManagerOptions,
+  ManagerOptionsInput,
   SessionEvent,
   RequestEvent,
   RegistryEvent,
-  ConfigEvent,
+  LogEvent,
   ServerEvent,
   ScopeGraphEvent,
   ScopeGraphNode,
-  DevEventMessage,
-} from './dev-bus';
+  ManagerEventMessage,
+  ManagerStateMessage,
+  ManagerStateSnapshot,
+  ManagerCommand,
+  ManagerCommandMessage,
+  ManagerResponseMessage,
+  ManagerClientInfo,
+} from './manager';

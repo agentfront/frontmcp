@@ -313,7 +313,7 @@ export class TransportService {
 
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
-    const devBus = this.scope.devBus;
+    const logger = this.scope.logger;
 
     // Create new transport
     const transporter = new LocalTransporter(this.scope, key, res, () => {
@@ -326,10 +326,11 @@ export class TransportService {
       if (sessionStore) {
         sessionStore.delete(sessionId).catch(() => void 0);
       }
-      // Emit session disconnect event
-      if (devBus) {
-        devBus.emitSessionEvent('session:disconnect', { sessionId }, sessionId);
-      }
+      // Emit session:disconnect trace event
+      logger.trace('session:disconnect', {
+        sessionId,
+        transportType: key.type,
+      });
     });
 
     await transporter.ready();
@@ -343,17 +344,11 @@ export class TransportService {
 
     this.insertLocal(key, transporter);
 
-    // Emit session connect event for recreated session
-    if (devBus) {
-      devBus.emitSessionEvent(
-        'session:connect',
-        {
-          sessionId,
-          transportType: key.type,
-        },
-        sessionId,
-      );
-    }
+    // Emit session:connect trace event for recreated session
+    logger.trace('session:connect', {
+      sessionId,
+      transportType: key.type,
+    });
 
     // Update session access time in Redis
     if (sessionStore) {
@@ -423,7 +418,7 @@ export class TransportService {
 
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
-    const devBus = this.scope.devBus;
+    const logger = this.scope.logger;
 
     const transporter = new LocalTransporter(this.scope, key, res, () => {
       key.sessionId = sessionId;
@@ -435,27 +430,22 @@ export class TransportService {
       if (sessionStore) {
         sessionStore.delete(sessionId).catch(() => void 0);
       }
-      // Emit session disconnect event
-      if (devBus) {
-        devBus.emitSessionEvent('session:disconnect', { sessionId }, sessionId);
-      }
+      // Emit session:disconnect trace event
+      logger.trace('session:disconnect', {
+        sessionId,
+        transportType: key.type,
+      });
     });
 
     await transporter.ready();
 
     this.insertLocal(key, transporter);
 
-    // Emit session connect event
-    if (devBus) {
-      devBus.emitSessionEvent(
-        'session:connect',
-        {
-          sessionId,
-          transportType: type,
-        },
-        sessionId,
-      );
-    }
+    // Emit session:connect trace event
+    logger.trace('session:connect', {
+      sessionId,
+      transportType: type,
+    });
 
     // Persist session to Redis (streamable-http only for now)
     if (sessionStore && type === 'streamable-http') {

@@ -4,6 +4,7 @@
 
 pub mod activity;
 pub mod ai_insight;
+pub mod graph;
 pub mod logs;
 pub mod metrics;
 pub mod playground;

@@ -52,9 +52,27 @@ fn render_session_list(frame: &mut Frame, area: Rect, state: &DashboardState) {
                 Style::default().fg(Color::DarkGray)
             };
 
-            let client = s.client_name.as_deref().unwrap_or("unknown");
+            // Priority: auth_user_name > client_name > user_agent > "Anonymous"
+            let client = s.auth_user_name.as_deref()
+                .or(s.client_name.as_deref())
+                .or(s.user_agent.as_deref())
+                .unwrap_or("Anonymous");
             let transport = s.transport_type.as_deref().unwrap_or("?");
             let id_short = &s.id[..8.min(s.id.len())];
+
+            // Auth badge
+            let (auth_badge, auth_color) = match s.auth_mode.as_deref() {
+                Some("public") => ("[P]", Color::DarkGray),
+                Some("transparent") => ("[T]", Color::Blue),
+                Some("orchestrated") => ("[O]", Color::Magenta),
+                _ => {
+                    if s.is_anonymous == Some(true) {
+                        ("[A]", Color::DarkGray)
+                    } else {
+                        ("", Color::DarkGray)
+                    }
+                }
+            };
 
             let is_selected = idx == state.list_selected && state.focus == FocusArea::List;
             let style = if is_selected {
@@ -63,16 +81,21 @@ fn render_session_list(frame: &mut Frame, area: Rect, state: &DashboardState) {
                 Style::default()
             };
 
-            ListItem::new(Line::from(vec![
+            let mut spans = vec![
                 Span::styled(status, status_style),
                 Span::raw(" "),
-                Span::styled(client, Style::default().fg(Color::White)),
-                Span::raw(" "),
-                Span::styled(format!("({transport})"), Style::default().fg(Color::DarkGray)),
-                Span::raw(" "),
-                Span::styled(id_short, Style::default().fg(Color::DarkGray)),
-            ]))
-            .style(style)
+            ];
+            if !auth_badge.is_empty() {
+                spans.push(Span::styled(auth_badge, Style::default().fg(auth_color)));
+                spans.push(Span::raw(" "));
+            }
+            spans.push(Span::styled(client, Style::default().fg(Color::White)));
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(format!("({transport})"), Style::default().fg(Color::DarkGray)));
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(id_short, Style::default().fg(Color::DarkGray)));
+
+            ListItem::new(Line::from(spans)).style(style)
         })
         .collect();
 
@@ -137,10 +160,14 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
                 ),
             ]));
 
+            // Client info with user agent fallback
+            let client_name = session.client_name.as_deref()
+                .or(session.user_agent.as_deref())
+                .unwrap_or("Anonymous");
             lines.push(Line::from(vec![
                 Span::styled("Client: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    session.client_name.as_deref().unwrap_or("unknown"),
+                    client_name,
                     Style::default().fg(Color::White),
                 ),
                 Span::raw(" v"),
@@ -149,6 +176,16 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
                     Style::default().fg(Color::White),
                 ),
             ]));
+
+            // Show user agent separately if different from client name
+            if let Some(ua) = &session.user_agent {
+                if session.client_name.as_deref() != Some(ua.as_str()) {
+                    lines.push(Line::from(vec![
+                        Span::styled("User Agent: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(ua.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
 
             let status = if session.is_active { "Active" } else { "Disconnected" };
             let status_style = if session.is_active {
@@ -161,6 +198,51 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
                 Span::styled(status, status_style),
             ]));
 
+            // Auth information
+            if session.auth_mode.is_some() || session.auth_user_name.is_some() || session.is_anonymous.is_some() {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
+                    "─ Authentication ─",
+                    Style::default().fg(Color::Magenta),
+                )));
+
+                // Auth mode
+                if let Some(mode) = &session.auth_mode {
+                    let (mode_display, mode_color) = match mode.as_str() {
+                        "public" => ("Public", Color::DarkGray),
+                        "transparent" => ("Transparent", Color::Blue),
+                        "orchestrated" => ("Orchestrated", Color::Magenta),
+                        _ => (mode.as_str(), Color::White),
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled("Mode: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(mode_display, Style::default().fg(mode_color)),
+                    ]));
+                }
+
+                // User info
+                if let Some(name) = &session.auth_user_name {
+                    lines.push(Line::from(vec![
+                        Span::styled("User: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(name, Style::default().fg(Color::White)),
+                    ]));
+                }
+                if let Some(email) = &session.auth_user_email {
+                    lines.push(Line::from(vec![
+                        Span::styled("Email: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(email, Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+
+                // Anonymous status
+                if session.is_anonymous == Some(true) {
+                    lines.push(Line::from(vec![
+                        Span::styled("Anonymous: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("Yes", Style::default().fg(Color::Yellow)),
+                    ]));
+                }
+            }
+
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 "─ Session Logs ─",
@@ -168,7 +250,7 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
             )));
             lines.push(Line::from(""));
 
-            // Session-specific logs
+            // Session-specific logs (show all, not just 20)
             let session_logs = state.selected_session_logs();
             if session_logs.is_empty() {
                 lines.push(Line::from(Span::styled(
@@ -176,7 +258,7 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
                     Style::default().fg(Color::DarkGray),
                 )));
             } else {
-                for log in session_logs.iter().rev().take(20) {
+                for log in session_logs.iter().rev() {
                     let level_style = match log.level {
                         LogLevel::Error => Style::default().fg(Color::Red),
                         LogLevel::Warn => Style::default().fg(Color::Yellow),
@@ -196,6 +278,11 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
                 }
             }
 
+            let content_height = lines.len();
+            let visible_height = area.height.saturating_sub(2) as usize;
+            let max_scroll = content_height.saturating_sub(visible_height);
+            let scroll_offset = state.detail_scroll.min(max_scroll);
+
             let detail = Paragraph::new(lines)
                 .block(
                     Block::default()
@@ -203,9 +290,23 @@ fn render_session_detail(frame: &mut Frame, area: Rect, state: &DashboardState) 
                         .borders(Borders::ALL)
                         .border_style(border_style),
                 )
-                .wrap(Wrap { trim: true });
+                .wrap(Wrap { trim: false })
+                .scroll((scroll_offset as u16, 0));
 
             frame.render_widget(detail, area);
+
+            // Render scrollbar if content exceeds visible area
+            if content_height > visible_height {
+                let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(Some("▲"))
+                    .end_symbol(Some("▼"));
+                let mut scrollbar_state = ScrollbarState::new(content_height).position(scroll_offset);
+                frame.render_stateful_widget(
+                    scrollbar,
+                    area.inner(Margin { vertical: 1, horizontal: 0 }),
+                    &mut scrollbar_state,
+                );
+            }
             return;
         }
     }

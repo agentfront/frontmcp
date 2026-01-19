@@ -65,10 +65,11 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, state: &DashboardState) {
 fn render_tab_content(frame: &mut Frame, area: Rect, state: &DashboardState) {
     match state.active_tab {
         Tab::Sessions => tabs::sessions::render(frame, area, state),
-        Tab::Activity => tabs::activity::render(frame, area, state),
+        Tab::Capabilities => tabs::activity::render(frame, area, state),
         Tab::Logs => tabs::logs::render(frame, area, state),
         Tab::Metrics => tabs::metrics::render(frame, area, state),
         Tab::Playground => tabs::playground::render(frame, area, state),
         Tab::AiInsight => tabs::ai_insight::render(frame, area, state),
+        Tab::Graph => tabs::graph::render(frame, area, state),
     }
 }
