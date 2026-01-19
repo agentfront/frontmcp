@@ -517,6 +517,7 @@ export class ToolSearchService implements ToolSearch {
    * Determines if a tool should be indexed in the search database.
    * Filters based on:
    * - Excludes codecall:* meta-tools (they should not be searchable)
+   * - Excludes tools with hideFromDiscovery: true (system tools like sendElicitationResult)
    * - Mode-based filtering (codecall_only, codecall_opt_in, metadata_driven)
    * - Per-tool metadata.codecall.enabledInCodeCall
    * - Custom includeTools filter function
@@ -526,6 +527,11 @@ export class ToolSearchService implements ToolSearch {
 
     // Never index codecall:* meta-tools - they are for orchestration, not for search
     if (toolName.startsWith('codecall:')) {
+      return false;
+    }
+
+    // Never index tools hidden from discovery (e.g., sendElicitationResult system tool)
+    if (tool.metadata.hideFromDiscovery === true) {
       return false;
     }
 

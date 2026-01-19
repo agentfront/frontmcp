@@ -87,6 +87,8 @@ export type SessionIdPayload = {
   clientName?: string;
   /* The MCP client version (from initialize clientInfo) */
   clientVersion?: string;
+  /* Whether the client supports MCP elicitation (from initialize capabilities) */
+  supportsElicitation?: boolean;
 };
 export const sessionIdPayloadSchema = z.object({
   nodeId: z.string(),
@@ -98,6 +100,7 @@ export const sessionIdPayloadSchema = z.object({
   platformType: aiPlatformTypeSchema.optional(),
   clientName: z.string().optional(),
   clientVersion: z.string().optional(),
+  supportsElicitation: z.boolean().optional(),
 } satisfies RawZodShape<SessionIdPayload>);
 
 export interface Authorization {

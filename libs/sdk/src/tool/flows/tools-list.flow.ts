@@ -4,7 +4,7 @@ import 'reflect-metadata';
 import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
 import { isUIType } from '@frontmcp/uipack/types';
@@ -13,8 +13,6 @@ import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { ToolPaginationOptions } from '../../common/types/options/pagination';
 import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination';
-import { supportsElicitation } from '../../notification';
-import { isSendElicitationResultTool } from '../../elicitation/send-elicitation-result.tool';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -26,10 +24,9 @@ const outputSchema = ListToolsResultSchema;
 const stateSchema = z.object({
   cursor: z.string().optional(),
   // z.any() used because AuthInfo is an external type from @modelcontextprotocol/sdk that varies by SDK version
-  authInfo: z.any().optional() as z.ZodType<AuthInfo>,
+  // Non-optional for 'authorized' flows - transport layer ensures authInfo is always present
+  authInfo: z.any() as z.ZodType<AuthInfo>,
   platformType: z.string().optional() as z.ZodType<AIPlatformType | undefined>,
-  // Whether the client supports standard MCP elicitation protocol
-  clientSupportsElicitation: z.boolean().optional(),
   tools: z.array(
     z.object({
       appName: z.string(),
@@ -169,9 +166,16 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'tools/list');
     }
 
-    // Extract authInfo and detect platform type
+    // Extract authInfo - required for 'authorized' flows (transport layer ensures it's present)
     const authInfo = ctx?.authInfo;
-    const sessionId = authInfo?.sessionId;
+    if (!authInfo) {
+      throw new InternalMcpError(
+        'AuthInfo missing in tools/list for authorized flow - this should never happen',
+        'AUTH_INFO_MISSING',
+      );
+    }
+
+    const sessionId = authInfo.sessionId;
 
     // Cast scope to access notifications service for platform detection
     const scope = this.scope as Scope;
@@ -180,22 +184,15 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     // then fall back to notification service (detected from MCP clientInfo),
     // finally default to 'unknown'
     const platformType: AIPlatformType =
-      authInfo?.sessionIdPayload?.platformType ??
+      authInfo.sessionIdPayload?.platformType ??
       (sessionId ? scope.notifications?.getPlatformType(sessionId) : undefined) ??
       'unknown';
 
     this.logger.verbose(`parseInput: detected platform=${platformType}`);
 
-    // Check if client supports standard MCP elicitation protocol
-    // If not, we'll add the sendElicitationResult fallback tool
-    const capabilities = sessionId ? scope.notifications?.getClientCapabilities(sessionId) : undefined;
-    const clientSupportsElicitation = supportsElicitation(capabilities);
-
-    this.logger.verbose(`parseInput: clientSupportsElicitation=${clientSupportsElicitation}`);
-
     const cursor = params?.cursor;
     if (cursor) this.logger.verbose(`parseInput: cursor=${cursor}`);
-    this.state.set({ cursor, authInfo, platformType, clientSupportsElicitation });
+    this.state.set({ cursor, authInfo, platformType });
     this.logger.verbose('parseInput:done');
   }
 
@@ -258,23 +255,16 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
       const seenToolIds = new Set<string>();
 
-      // Check if client supports standard MCP elicitation protocol
-      const clientSupportsElicitation = this.state.clientSupportsElicitation ?? false;
+      // Get elicitation support from session payload (set during MCP initialize)
+      // authInfo is guaranteed by parseInput (throws if missing for authorized flow)
+      const { authInfo } = this.state.required;
+      const supportsElicitation = authInfo.sessionIdPayload?.supportsElicitation;
 
-      // Get tools - include hidden tools (like sendElicitationResult) for non-supporting clients
-      // The sendElicitationResult system tool is registered with hideFromDiscovery: true
-      const includeHidden = !clientSupportsElicitation;
-      const scopeTools = this.scope.tools.getTools(includeHidden);
-      this.logger.verbose(`findTools: scope tools=${scopeTools.length} (includeHidden=${includeHidden})`);
+      // Get tools appropriate for this client's elicitation support
+      const scopeTools = this.scope.tools.getToolsForListing(supportsElicitation);
+      this.logger.verbose(`findTools: scope tools=${scopeTools.length}`);
 
       for (const tool of scopeTools) {
-        const toolName = tool.metadata?.name ?? '';
-
-        // Skip sendElicitationResult for clients that support standard elicitation
-        if (clientSupportsElicitation && isSendElicitationResultTool(toolName)) {
-          continue;
-        }
-
         // Deduplicate tools by owner + name combination
         // This prevents the same tool from being registered twice while allowing
         // different owners to have tools with the same name (for conflict resolution)
@@ -285,13 +275,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         }
       }
 
-      if (!clientSupportsElicitation) {
-        this.logger.verbose(
-          'findTools: including sendElicitationResult system tool (client does not support elicitation)',
-        );
-      }
-
-      this.logger.info(`findTools: total tools collected=${tools.length} (deduped from ${scopeTools.length})`);
+      this.logger.info(`findTools: total tools collected=${tools.length}`);
       if (tools.length === 0) {
         this.logger.warn('findTools: no tools found across apps');
       }
