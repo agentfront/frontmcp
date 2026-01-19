@@ -4,7 +4,7 @@
  * Errors related to MCP elicitation requests.
  */
 
-import { PublicMcpError } from './mcp.error';
+import { PublicMcpError, InternalMcpError } from './mcp.error';
 
 /**
  * Elicitation not supported error.
@@ -74,5 +74,20 @@ export class ElicitationTimeoutError extends PublicMcpError {
 
   override getPublicMessage(): string {
     return `Elicitation request timed out. The user did not respond within the allowed time (${Math.round(this.ttl / 1000)} seconds).`;
+  }
+}
+
+/**
+ * Elicitation store not initialized error.
+ *
+ * Thrown when attempting to access the elicitation store before scope initialization
+ * has completed. Callers should await scope.ready before accessing elicitationStore.
+ */
+export class ElicitationStoreNotInitializedError extends InternalMcpError {
+  constructor() {
+    super(
+      'ElicitationStore not initialized. Ensure scope.ready has resolved before accessing.',
+      'ELICITATION_STORE_NOT_INITIALIZED',
+    );
   }
 }

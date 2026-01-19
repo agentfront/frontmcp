@@ -34,6 +34,7 @@ import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../to
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
 import { ElicitationStore, createElicitationStore } from '../elicitation';
+import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { normalizeTool } from '../tool/tool.utils';
 import { ToolInstance } from '../tool/tool.instance';
@@ -392,7 +393,7 @@ export class Scope extends ScopeEntry {
    */
   get elicitationStore(): ElicitationStore {
     if (!this._elicitationStore) {
-      throw new Error('ElicitationStore not initialized. Ensure scope.ready has resolved before accessing.');
+      throw new ElicitationStoreNotInitializedError();
     }
     return this._elicitationStore;
   }
