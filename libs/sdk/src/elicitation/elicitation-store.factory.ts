@@ -15,7 +15,7 @@ import { type FrontMcpLogger, type RedisOptionsInput, type RedisProviderOptions 
 import { ElicitationNotSupportedError } from '../errors/elicitation.error';
 import type { RedisElicitationStore as RedisElicitationStoreClass } from './redis-elicitation.store';
 import type { InMemoryElicitationStore as InMemoryElicitationStoreClass } from './memory-elicitation.store';
-import type RedisClient from 'ioredis';
+import type Redis from 'ioredis';
 
 /**
  * Options for creating an elicitation store.
@@ -151,17 +151,16 @@ async function createRedisElicitationStore(
   keyPrefix: string,
   logger?: FrontMcpLogger,
 ): Promise<ElicitationStoreResult> {
-  // Lazy require to avoid bundling ioredis when not used
-  // Type-only imports above provide type safety, require provides lazy loading
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { RedisElicitationStore } = require('./redis-elicitation.store') as {
+  // Dynamic import to avoid bundling ioredis when not used
+  // Type-only imports above provide type safety, dynamic import provides lazy loading
+  const { RedisElicitationStore } = (await import('./redis-elicitation.store.js')) as {
     RedisElicitationStore: typeof RedisElicitationStoreClass;
   };
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Redis = require('ioredis').default as typeof RedisClient;
+
+  const { default: RedisConstructor } = (await import('ioredis')) as unknown as { default: typeof Redis };
 
   // Create Redis client with configuration
-  const redisClient = new Redis({
+  const redisClient = new RedisConstructor({
     host: options.host,
     port: options.port ?? 6379,
     password: options.password,
@@ -187,9 +186,8 @@ async function createRedisElicitationStore(
  * @internal
  */
 async function createMemoryElicitationStore(logger?: FrontMcpLogger): Promise<ElicitationStoreResult> {
-  // Lazy require to avoid circular imports
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { InMemoryElicitationStore } = require('./memory-elicitation.store') as {
+  // Dynamic import to avoid circular imports
+  const { InMemoryElicitationStore } = (await import('./memory-elicitation.store.js')) as {
     InMemoryElicitationStore: typeof InMemoryElicitationStoreClass;
   };
 
@@ -211,8 +209,7 @@ async function createMemoryElicitationStore(logger?: FrontMcpLogger): Promise<El
  * @returns An in-memory elicitation store
  */
 export async function createMemoryElicitationStoreExplicit(logger?: FrontMcpLogger): Promise<ElicitationStore> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { InMemoryElicitationStore } = require('./memory-elicitation.store') as {
+  const { InMemoryElicitationStore } = (await import('./memory-elicitation.store.js')) as {
     InMemoryElicitationStore: typeof InMemoryElicitationStoreClass;
   };
   logger?.verbose('[ElicitationStoreFactory] Created explicit in-memory elicitation store');

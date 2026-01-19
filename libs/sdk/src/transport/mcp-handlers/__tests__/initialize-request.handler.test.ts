@@ -7,6 +7,7 @@
 import { InitializeRequest, InitializeResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandlerOptions } from '../mcp-handlers.types';
 import { SessionIdPayload } from '../../../common';
+import { UnsupportedClientVersionError } from '../../../errors';
 
 // Mock dependencies before importing the handler
 const mockUpdateSessionPayload = jest.fn();
@@ -443,7 +444,7 @@ describe('initializeRequestHandler', () => {
       } as any);
       const ctx = createContext();
 
-      await expect(handler.handler(request, ctx as any)).rejects.toThrow();
+      await expect(handler.handler(request, ctx as any)).rejects.toThrow(UnsupportedClientVersionError);
     });
 
     it('should accept valid date-formatted protocol versions', async () => {

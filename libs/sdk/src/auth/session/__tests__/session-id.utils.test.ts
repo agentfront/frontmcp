@@ -165,10 +165,10 @@ describe('session-id.utils', () => {
     });
 
     it('should not call platform detection without user-agent', () => {
-      createSessionId('streamable-http', TEST_TOKEN);
+      const result = createSessionId('streamable-http', TEST_TOKEN);
 
       expect(mockDetectPlatformFromUserAgent).not.toHaveBeenCalled();
-      expect((result) => result.payload.platformType).toBeUndefined;
+      expect(result.payload.platformType).toBeUndefined();
     });
 
     it('should encrypt the payload and return encrypted ID', () => {

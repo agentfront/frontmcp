@@ -16,7 +16,7 @@ import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
-import type { Scope } from '../scope/scope.instance';
+import type { Scope } from '../scope';
 
 const inputSchema = z
   .object({
