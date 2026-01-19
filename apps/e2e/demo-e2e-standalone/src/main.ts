@@ -2,7 +2,7 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { IsolatedApp } from './apps/isolated';
 import { ParentApp } from './apps/parent';
 
-const port = parseInt(process.env['PORT'] ?? '3030', 10);
+const port = parseInt(process.env['PORT'] ?? '3103', 10);
 
 /**
  * E2E Test Server for Standalone Apps

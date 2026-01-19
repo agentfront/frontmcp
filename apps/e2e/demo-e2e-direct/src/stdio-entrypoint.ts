@@ -7,9 +7,12 @@
  * Usage:
  *   npx ts-node --esm src/stdio-entrypoint.ts
  *   node dist/stdio-entrypoint.js
+ *
+ * NOTE: This imports from config.js (not main.js) to avoid triggering
+ * auto-bootstrap of the HTTP server via the @FrontMcp decorator.
  */
 import { FrontMcpInstance } from '@frontmcp/sdk';
-import { serverConfig } from './main.js';
+import { serverConfig } from './config.js';
 
 // Run the server in stdio mode
 FrontMcpInstance.runStdio(serverConfig).catch((err) => {

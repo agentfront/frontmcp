@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { ErrorsApp } from './apps/errors';
 
-const port = parseInt(process.env['PORT'] ?? '3019', 10);
+const port = parseInt(process.env['PORT'] ?? '3115', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Errors', version: '0.1.0' },
