@@ -1,12 +1,9 @@
 import { FuncType, Type } from '@frontmcp/di';
-import { ProviderRegistryInterface } from './internal';
 import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
-import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
-import type { AIPlatformType, ClientInfo, McpLoggingLevel, ClientCapabilities } from '../../notification';
+import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
 import { ZodType } from 'zod';
 

@@ -17,7 +17,7 @@ import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
 import type { SessionIdPayload } from '../common/types';
 import { InvalidInputError } from '../errors/mcp.error';
-import { ElicitResult, ElicitOptions, ResolvedElicitResult } from '../elicitation';
+import { ElicitResult, ElicitOptions } from '../elicitation';
 import { ZodType } from 'zod';
 
 /** Symbol key for storing pre-resolved elicit result in context store */

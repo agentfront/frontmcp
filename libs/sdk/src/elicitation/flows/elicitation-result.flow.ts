@@ -10,7 +10,7 @@
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
-import type { ElicitationStore, PendingElicitRecord } from '../store';
+import type { PendingElicitRecord } from '../store';
 import type { Scope } from '../../scope';
 
 const inputSchema = z.object({

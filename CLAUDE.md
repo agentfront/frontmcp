@@ -262,6 +262,21 @@ Never:
 - `git commit --amend`
 - Any command that modifies git history
 
+## Task Completion Checklist
+
+**Before completing a task**, run the following cleanup:
+
+```bash
+# Remove unused imports from changed files
+node scripts/fix-unused-imports.mjs
+```
+
+This script automatically:
+
+- Finds all files changed in the current branch (compared to main)
+- Removes unused imports using ESLint
+- Supports custom base branch: `node scripts/fix-unused-imports.mjs <branch-name>`
+
 ## Plugin Development
 
 ### Creating Plugins with Context Extensions

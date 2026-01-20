@@ -1,5 +1,4 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
-import { DashboardApp } from '@frontmcp/plugins';
 
 // Other demo apps available but not active:
 import WeatherMcpApp from './apps/weather';

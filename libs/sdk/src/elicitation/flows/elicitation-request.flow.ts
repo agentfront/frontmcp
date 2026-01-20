@@ -9,12 +9,10 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
-import { toJSONSchema } from 'zod/v4';
-import type { ZodType } from 'zod';
 import { InvalidInputError } from '../../errors';
-import type { ElicitResult, ElicitMode, ElicitOptions } from '../elicitation.types';
+import type { ElicitMode } from '../elicitation.types';
 import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
-import type { ElicitationStore, PendingElicitRecord } from '../store';
+import type { PendingElicitRecord } from '../store';
 import type { Scope } from '../../scope';
 
 const inputSchema = z.object({

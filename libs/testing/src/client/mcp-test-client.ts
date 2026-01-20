@@ -7,7 +7,6 @@ import type {
   McpTestClientConfig,
   McpResponse,
   TestTransportType,
-  TestAuthConfig,
   TestClientCapabilities,
   ToolResultWrapper,
   ResourceContentWrapper,

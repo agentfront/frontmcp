@@ -10,7 +10,7 @@
  * @module elicitation/store/elicitation-store.factory
  */
 
-import type { StorageConfig, RootStorage, RedisAdapterOptions } from '@frontmcp/utils';
+import type { StorageConfig, RootStorage } from '@frontmcp/utils';
 import { createStorage, createMemoryStorage } from '@frontmcp/utils';
 import type { FrontMcpLogger, RedisOptionsInput } from '../../common';
 import type { ElicitationStore } from './elicitation.store';
