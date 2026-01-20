@@ -80,7 +80,7 @@ export { AuthHeaders } from './auth/auth-headers';
 export { TestUsers, createTestUser } from './auth/user-fixtures';
 export type { TestUserFixture } from './auth/user-fixtures';
 export { MockOAuthServer } from './auth/mock-oauth-server';
-export type { MockOAuthServerOptions, MockOAuthServerInfo } from './auth/mock-oauth-server';
+export type { MockOAuthServerOptions, MockOAuthServerInfo, MockTestUser } from './auth/mock-oauth-server';
 export { MockAPIServer } from './auth/mock-api-server';
 export type {
   MockAPIServerOptions,

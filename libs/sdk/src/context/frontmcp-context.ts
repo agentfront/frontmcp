@@ -204,6 +204,16 @@ export class FrontMcpContext {
   private readonly marks: Map<string, number> = new Map();
   private readonly store: Map<string | symbol, unknown> = new Map();
 
+  // =====================
+  // DI Token Storage (for context extensions)
+  // =====================
+
+  /**
+   * Tokens that should be injected into the provider context.
+   * These are registered by auth flows and made available to tools via context extensions.
+   */
+  private readonly _contextTokens: Map<unknown, unknown> = new Map();
+
   constructor(args: FrontMcpContextArgs) {
     // Validate session ID
     validateSessionId(args.sessionId);
@@ -371,6 +381,32 @@ export class FrontMcpContext {
    */
   delete(key: string | symbol): boolean {
     return this.store.delete(key);
+  }
+
+  // =====================
+  // Context Token Operations
+  // =====================
+
+  /**
+   * Set a token-based provider to be injected into the DI context.
+   * Used by auth flows to make providers available to tools via context extensions.
+   *
+   * @param token - DI token (e.g., ORCHESTRATED_AUTH_ACCESSOR)
+   * @param instance - Provider instance to inject
+   * @internal
+   */
+  setContextToken<T>(token: unknown, instance: T): void {
+    this._contextTokens.set(token, instance);
+  }
+
+  /**
+   * Get all context tokens for injection into provider views.
+   *
+   * @returns Map of token to instance
+   * @internal
+   */
+  getContextTokens(): ReadonlyMap<unknown, unknown> {
+    return this._contextTokens;
   }
 
   // =====================

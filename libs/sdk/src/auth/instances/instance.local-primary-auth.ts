@@ -1,6 +1,6 @@
 import { SignJWT } from 'jose';
 import { URL } from 'url';
-import { randomBytes, randomUUID } from '@frontmcp/utils';
+import { randomBytes, randomUUID, sha256Hex } from '@frontmcp/utils';
 import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest, JWK } from '../../common';
 import {
   PublicAuthOptions,
@@ -27,6 +27,13 @@ import {
   verifyPkce,
 } from '@frontmcp/auth';
 import { CimdService, CimdServiceToken } from '../cimd';
+import {
+  InMemoryOrchestratedTokenStore,
+  InMemoryFederatedAuthSessionStore,
+  type FederatedAuthSessionStore,
+} from '../session';
+import { TokenStore } from '../authorization/orchestrated.authorization';
+import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
@@ -68,6 +75,44 @@ export interface ConsentMetadata {
   federatedLoginUsed?: boolean;
 }
 
+/**
+ * Extended token response from upstream providers (includes id_token)
+ */
+export interface UpstreamTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in?: number;
+  refresh_token?: string;
+  scope?: string;
+  id_token?: string;
+}
+
+/**
+ * Provider configuration for upstream OAuth providers
+ */
+export interface UpstreamProviderConfig {
+  /** Provider ID */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Authorization endpoint */
+  authorizationEndpoint: string;
+  /** Token endpoint */
+  tokenEndpoint: string;
+  /** User info endpoint (optional) */
+  userInfoEndpoint?: string;
+  /** JWKS URI for ID token validation (optional) */
+  jwksUri?: string;
+  /** Client ID */
+  clientId: string;
+  /** Client secret (for confidential clients) */
+  clientSecret?: string;
+  /** Default scopes to request */
+  scopes: string[];
+  /** Callback URL for this provider */
+  callbackUrl: string;
+}
+
 export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly host: string;
   readonly port: number;
@@ -78,6 +123,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly authorizationStore: AuthorizationStore;
   private jwks = new JwksService();
   private cimdService: CimdService | undefined;
+
+  /** Federated auth session store for multi-provider flows */
+  readonly federatedSessionStore: FederatedAuthSessionStore;
+
+  /** Token store for upstream provider tokens */
+  readonly orchestratedTokenStore: TokenStore;
+
+  /** Provider configurations (indexed by provider ID) */
+  private readonly providerConfigs = new Map<string, UpstreamProviderConfig>();
 
   /** Default access token TTL (1 hour) */
   private readonly accessTokenTtlSeconds = 3600;
@@ -115,6 +169,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     // Initialize authorization store (in-memory for now, Redis later)
     this.authorizationStore = new InMemoryAuthorizationStore();
+
+    // Initialize federated auth stores
+    this.federatedSessionStore = new InMemoryFederatedAuthSessionStore();
+    this.orchestratedTokenStore = new InMemoryOrchestratedTokenStore({
+      encryptionKey: this.secret, // Reuse JWT secret for token encryption
+    });
 
     // Initialize CIMD service if orchestrated mode
     if (isOrchestratedMode(options)) {
@@ -289,6 +349,23 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     const accessToken = await this.signAccessToken(user, codeRecord.scopes, codeRecord.resource, consentMetadata);
 
+    // Migrate tokens from pending to real authorization ID (for federated auth)
+    if (codeRecord.pendingAuthId && codeRecord.federatedLoginUsed) {
+      try {
+        const pendingAuthId = `pending:${codeRecord.pendingAuthId}`;
+        // Compute the new authorization ID from the JWT signature (same as OrchestratedAuthorization.generateAuthorizationId)
+        const parts = accessToken.split('.');
+        const signature = parts[2] || accessToken;
+        const newAuthId = sha256Hex(signature).substring(0, 16);
+
+        await this.orchestratedTokenStore.migrateTokens(pendingAuthId, newAuthId);
+        this.logger.info(`Migrated tokens from ${pendingAuthId} to ${newAuthId}`);
+      } catch (err) {
+        // Log but don't fail the token exchange
+        this.logger.warn(`Failed to migrate tokens: ${err}`);
+      }
+    }
+
     // Create refresh token
     const refreshTokenRecord = this.getInMemoryStore().createRefreshTokenRecord({
       clientId,
@@ -377,6 +454,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     skippedProviderIds?: string[];
     consentEnabled?: boolean;
     federatedLoginUsed?: boolean;
+    // Token migration ID (for federated auth)
+    pendingAuthId?: string;
   }): Promise<string> {
     const store = this.getInMemoryStore();
     const codeRecord = store.createCodeRecord({
@@ -395,6 +474,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       skippedProviderIds: params.skippedProviderIds,
       consentEnabled: params.consentEnabled,
       federatedLoginUsed: params.federatedLoginUsed,
+      // Token migration ID (for federated auth)
+      pendingAuthId: params.pendingAuthId,
     });
 
     await this.authorizationStore.storeAuthorizationCode(codeRecord);
@@ -452,6 +533,243 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       OauthTokenFlow /** POST /oauth/token */,
       OauthCallbackFlow /** GET /oauth/callback - login callback */,
       OauthRegisterFlow /** POST /oauth/register */,
+      OauthProviderCallbackFlow /** GET /oauth/provider/:providerId/callback */,
     );
+  }
+
+  // ============================================
+  // Upstream Provider OAuth Methods
+  // ============================================
+
+  /**
+   * Register an upstream OAuth provider configuration
+   */
+  registerProvider(config: UpstreamProviderConfig): void {
+    this.providerConfigs.set(config.id, config);
+    this.logger.info(`Registered upstream provider: ${config.id}`);
+  }
+
+  /**
+   * Get provider configuration
+   */
+  getProviderConfig(providerId: string): UpstreamProviderConfig | undefined {
+    return this.providerConfigs.get(providerId);
+  }
+
+  /**
+   * Build OAuth authorize URL for an upstream provider
+   */
+  async buildProviderAuthorizeUrl(
+    providerId: string,
+    params: {
+      state: string;
+      codeChallenge: string;
+      codeChallengeMethod: 'S256';
+      scopes?: string[];
+    },
+  ): Promise<string | null> {
+    const config = this.providerConfigs.get(providerId);
+
+    if (!config) {
+      this.logger.error(`Provider not found: ${providerId}`);
+      return null;
+    }
+
+    const url = new URL(config.authorizationEndpoint);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('client_id', config.clientId);
+    url.searchParams.set('redirect_uri', config.callbackUrl);
+    url.searchParams.set('state', params.state);
+    url.searchParams.set('code_challenge', params.codeChallenge);
+    url.searchParams.set('code_challenge_method', params.codeChallengeMethod);
+
+    const scopes = params.scopes ?? config.scopes;
+    if (scopes.length > 0) {
+      url.searchParams.set('scope', scopes.join(' '));
+    }
+
+    return url.toString();
+  }
+
+  /**
+   * Exchange authorization code with upstream provider for tokens
+   */
+  async exchangeProviderCode(
+    providerId: string,
+    code: string,
+    codeVerifier?: string,
+  ): Promise<UpstreamTokenResponse | { error: string; error_description: string }> {
+    const config = this.providerConfigs.get(providerId);
+
+    if (!config) {
+      return {
+        error: 'invalid_provider',
+        error_description: `Provider not configured: ${providerId}`,
+      };
+    }
+
+    try {
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: config.callbackUrl,
+        client_id: config.clientId,
+      });
+
+      // Add client secret for confidential clients
+      if (config.clientSecret) {
+        body.set('client_secret', config.clientSecret);
+      }
+
+      // Add PKCE verifier if provided
+      if (codeVerifier) {
+        body.set('code_verifier', codeVerifier);
+      }
+
+      this.logger.debug(`Exchanging code with provider: ${providerId}`);
+
+      const response = await fetch(config.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: body.toString(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        this.logger.error(`Provider token exchange failed: ${response.status}`, errorData);
+        return {
+          error: errorData.error || 'provider_error',
+          error_description: errorData.error_description || `Provider returned ${response.status}`,
+        };
+      }
+
+      const tokenData = (await response.json()) as UpstreamTokenResponse;
+      this.logger.info(`Successfully exchanged code with provider: ${providerId}`);
+
+      return tokenData;
+    } catch (err) {
+      this.logger.error(`Provider token exchange error for ${providerId}:`, err);
+      return {
+        error: 'provider_error',
+        error_description: `Failed to exchange code with provider: ${err}`,
+      };
+    }
+  }
+
+  /**
+   * Get user info from upstream provider
+   */
+  async getProviderUserInfo(
+    providerId: string,
+    accessToken: string,
+    idToken?: string,
+  ): Promise<{ sub: string; email?: string; name?: string; picture?: string; claims?: Record<string, unknown> }> {
+    const config = this.providerConfigs.get(providerId);
+
+    // If ID token is provided, extract user info from it
+    if (idToken) {
+      try {
+        // Decode ID token (without verification - verification should happen separately)
+        const [, payloadB64] = idToken.split('.');
+        const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as Record<string, unknown>;
+
+        return {
+          sub: payload['sub'] as string,
+          email: payload['email'] as string | undefined,
+          name: payload['name'] as string | undefined,
+          picture: payload['picture'] as string | undefined,
+          claims: payload,
+        };
+      } catch (err) {
+        this.logger.warn(`Failed to parse ID token for ${providerId}: ${err}`);
+        // Fall through to userinfo endpoint
+      }
+    }
+
+    // Try userinfo endpoint if available
+    if (config?.userInfoEndpoint) {
+      try {
+        const response = await fetch(config.userInfoEndpoint, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const userInfo = (await response.json()) as Record<string, unknown>;
+          return {
+            sub: userInfo['sub'] as string,
+            email: userInfo['email'] as string | undefined,
+            name: userInfo['name'] as string | undefined,
+            picture: userInfo['picture'] as string | undefined,
+            claims: userInfo,
+          };
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get userinfo from ${providerId}: ${err}`);
+      }
+    }
+
+    // Return minimal user info
+    return {
+      sub: `${providerId}:unknown`,
+    };
+  }
+
+  /**
+   * Refresh tokens from upstream provider
+   */
+  async refreshProviderToken(
+    providerId: string,
+    refreshToken: string,
+  ): Promise<UpstreamTokenResponse | { error: string; error_description: string }> {
+    const config = this.providerConfigs.get(providerId);
+
+    if (!config) {
+      return {
+        error: 'invalid_provider',
+        error_description: `Provider not configured: ${providerId}`,
+      };
+    }
+
+    try {
+      const body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: config.clientId,
+      });
+
+      if (config.clientSecret) {
+        body.set('client_secret', config.clientSecret);
+      }
+
+      const response = await fetch(config.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: body.toString(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          error: errorData.error || 'provider_error',
+          error_description: errorData.error_description || `Provider returned ${response.status}`,
+        };
+      }
+
+      return (await response.json()) as UpstreamTokenResponse;
+    } catch (err) {
+      return {
+        error: 'provider_error',
+        error_description: `Failed to refresh token with provider: ${err}`,
+      };
+    }
   }
 }

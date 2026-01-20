@@ -44,6 +44,16 @@ export interface TokenStore {
    * Check if tokens exist for a provider
    */
   hasTokens(authorizationId: string, providerId: string): Promise<boolean>;
+
+  /**
+   * Migrate tokens from one authorization ID to another.
+   * Used when tokens are stored with a pending ID during federated auth
+   * and need to be accessible under the real authorization ID.
+   *
+   * @param fromAuthId - Source authorization ID (e.g., "pending:abc123")
+   * @param toAuthId - Target authorization ID (e.g., "def456")
+   */
+  migrateTokens(fromAuthId: string, toAuthId: string): Promise<void>;
 }
 
 /**
@@ -135,6 +145,8 @@ export interface OrchestratedAuthorizationCreateCtx {
   authorizedApps?: AuthorizationCreateCtx['authorizedApps'];
   authorizedAppIds?: string[];
   authorizedResources?: string[];
+  /** Authorized provider IDs from federated login */
+  authorizedProviderIds?: string[];
 }
 
 /**
@@ -227,11 +239,11 @@ export class OrchestratedAuthorization extends AuthorizationBase {
     // Build provider states map
     const providerStates = new Map<string, OrchestratedProviderState>();
     const authorizedProviders: Record<string, ProviderSnapshot> = {};
-    const authorizedProviderIds: string[] = [];
+    const providerIdsFromState: string[] = [];
 
     for (const [providerId, state] of Object.entries(providers)) {
       providerStates.set(providerId, state);
-      authorizedProviderIds.push(providerId);
+      providerIdsFromState.push(providerId);
 
       // Create snapshot without exposing tokens
       authorizedProviders[providerId] = {
@@ -242,6 +254,10 @@ export class OrchestratedAuthorization extends AuthorizationBase {
         refreshRefId: state.refreshRefId,
       };
     }
+
+    // Use explicitly provided authorizedProviderIds, or derive from provider states
+    const finalAuthorizedProviderIds =
+      projections.authorizedProviderIds ?? (providerIdsFromState.length > 0 ? providerIdsFromState : undefined);
 
     return new OrchestratedAuthorization({
       id,
@@ -256,7 +272,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
       onTokenRefresh,
       providerStates,
       authorizedProviders,
-      authorizedProviderIds,
+      authorizedProviderIds: finalAuthorizedProviderIds,
       ...projections,
     });
   }

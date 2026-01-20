@@ -33,8 +33,10 @@ import {
   OrchestratedAuthorization,
   Authorization,
   TransparentVerifiedPayload,
+  TokenStore,
 } from '../authorization';
 import { authUserSchema, llmSafeAuthContextSchema } from '../authorization';
+import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 // Input schema
 const inputSchema = httpRequestInputSchema;
@@ -396,7 +398,18 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       });
     } else if (authMode === 'orchestrated') {
       // Orchestrated mode: local auth server
-      // TODO: Retrieve token store from scope configuration
+      // Get the token store from LocalPrimaryAuth for secure token retrieval
+      let tokenStore: TokenStore | undefined;
+      if (this.scope.auth instanceof LocalPrimaryAuth) {
+        tokenStore = this.scope.auth.orchestratedTokenStore;
+      }
+
+      // Extract provider authorization from JWT claims (federated login)
+      const federatedClaims = jwtPayload?.['federated'] as
+        | { selectedProviders?: string[]; skippedProviders?: string[] }
+        | undefined;
+      const consentClaims = jwtPayload?.['consent'] as { selectedTools?: string[] } | undefined;
+
       authorization = OrchestratedAuthorization.create({
         token,
         user: {
@@ -409,7 +422,11 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         claims: jwtPayload,
         expiresAt: jwtPayload?.['exp'] ? (jwtPayload['exp'] as number) * 1000 : undefined,
         primaryProviderId: this.scope.auth?.id ?? 'default',
-        // tokenStore will be injected by scope
+        tokenStore,
+        // Populate authorized tools from consent claims if available
+        authorizedToolIds: consentClaims?.selectedTools,
+        // Populate authorized providers from federated claims if available
+        authorizedProviderIds: federatedClaims?.selectedProviders,
       });
     } else {
       // Public mode with token (authenticated public)

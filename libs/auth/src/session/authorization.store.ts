@@ -61,6 +61,8 @@ export interface AuthorizationCodeRecord {
   consentEnabled?: boolean;
   /** Whether federated login was used */
   federatedLoginUsed?: boolean;
+  /** Pending auth ID for token migration (federated login) */
+  pendingAuthId?: string;
 }
 
 /**
@@ -382,6 +384,8 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
     skippedProviderIds?: string[];
     consentEnabled?: boolean;
     federatedLoginUsed?: boolean;
+    // Token migration ID (for federated auth)
+    pendingAuthId?: string;
   }): AuthorizationCodeRecord {
     const now = Date.now();
     return {
@@ -404,6 +408,8 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
       skippedProviderIds: params.skippedProviderIds,
       consentEnabled: params.consentEnabled,
       federatedLoginUsed: params.federatedLoginUsed,
+      // Token migration ID (for federated auth)
+      pendingAuthId: params.pendingAuthId,
     };
   }
 

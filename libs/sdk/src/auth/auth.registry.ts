@@ -29,6 +29,8 @@ import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
 import { detectAuthProviders, AuthProviderDetectionResult, AppAuthInfo } from './detection';
 import { DependencyNotFoundError, AuthConfigurationError } from '../errors';
+import { installContextExtensions } from '../context/context-extension';
+import { orchestratedAuthContextExtension } from './authorization/orchestrated.context-extension';
 
 /**
  * Default auth options when none provided - public mode with all tools open
@@ -86,6 +88,12 @@ export class AuthRegistry
 
     // Create the appropriate primary auth provider based on mode
     this.primary = this.createPrimaryAuth(scope, providers, this.parsedOptions);
+
+    // Install orchestrated auth context extension for orchestrated mode
+    // This adds `this.orchestration` to ExecutionContextBase.prototype
+    if (isOrchestratedMode(this.parsedOptions)) {
+      installContextExtensions('orchestrated-auth', [orchestratedAuthContextExtension]);
+    }
 
     const primaryRecord: PrimaryAuthRecord = {
       kind: AuthProviderKind.PRIMARY,
