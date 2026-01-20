@@ -76,6 +76,12 @@ export * from './errors';
 - **Purpose**: Plugin system and extensions
 - **Scope**: Extensibility framework
 
+#### @frontmcp/auth
+
+- **Purpose**: Authentication, session management, credential vault, CIMD, and OAuth extensions
+- **Scope**: Standalone auth library used by SDK and other packages
+- **Note**: All authentication-related code should be placed in this library, not in SDK
+
 ### Demo Applications
 
 #### demo (`apps/demo`)
@@ -382,6 +388,7 @@ class MyTool extends ToolContext {
 ❌ **Don't**: Mutate rawInput in flows - use state.set() for flow state
 ❌ **Don't**: Hardcode capabilities in adapters - use registry.getCapabilities()
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
+❌ **Don't**: Put auth-related code in libs/sdk/src/auth (use libs/auth instead)
 
 ✅ **Do**: Use clean, descriptive names for everything
 ✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations
@@ -394,3 +401,4 @@ class MyTool extends ToolContext {
 ✅ **Do**: Use `unknown` instead of `any` for generic type defaults
 ✅ **Do**: Validate hooks match their entry type (fail fast)
 ✅ **Do**: Use specific MCP error classes with JSON-RPC codes
+✅ **Do**: Place authentication logic in `libs/auth`, import via `@frontmcp/auth`

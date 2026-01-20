@@ -308,5 +308,21 @@ export const incrementalAuthConfigSchema = z.object({
 export type IncrementalAuthConfig = z.infer<typeof incrementalAuthConfigSchema>;
 export type IncrementalAuthConfigInput = z.input<typeof incrementalAuthConfigSchema>;
 
+// ============================================
+// CIMD (Client ID Metadata Documents) CONFIG
+// Re-exported from @frontmcp/auth
+// ============================================
+export {
+  cimdCacheConfigSchema,
+  cimdSecurityConfigSchema,
+  cimdNetworkConfigSchema,
+  cimdConfigSchema,
+  type CimdCacheConfig,
+  type CimdSecurityConfig,
+  type CimdNetworkConfig,
+  type CimdConfig,
+  type CimdConfigInput,
+} from '@frontmcp/auth';
+
 // Re-export types used from external modules
 export type { RedisConfig };

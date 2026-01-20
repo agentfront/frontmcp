@@ -91,6 +91,8 @@ export type {
   MockResponseHelper,
   MockRouteHandler,
 } from './auth/mock-api-server';
+export { MockCimdServer } from './auth/mock-cimd-server';
+export type { MockCimdServerOptions, MockCimdServerInfo, MockCimdClientOptions } from './auth/mock-cimd-server';
 
 // ═══════════════════════════════════════════════════════════════════
 // SERVER

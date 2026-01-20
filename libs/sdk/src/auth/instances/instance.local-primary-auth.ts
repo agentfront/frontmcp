@@ -26,6 +26,7 @@ import {
   AuthorizationCodeRecord,
   verifyPkce,
 } from '@frontmcp/auth';
+import { CimdService, CimdServiceToken } from '../cimd';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
@@ -76,6 +77,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly logger: FrontMcpLogger;
   readonly authorizationStore: AuthorizationStore;
   private jwks = new JwksService();
+  private cimdService: CimdService | undefined;
 
   /** Default access token TTL (1 hour) */
   private readonly accessTokenTtlSeconds = 3600;
@@ -113,6 +115,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     // Initialize authorization store (in-memory for now, Redis later)
     this.authorizationStore = new InMemoryAuthorizationStore();
+
+    // Initialize CIMD service if orchestrated mode
+    if (isOrchestratedMode(options)) {
+      const cimdConfig = options.cimd;
+      this.cimdService = new CimdService(this.logger, cimdConfig);
+    }
 
     this.ready = this.initialize();
   }
@@ -405,6 +413,19 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       },
       provide: JwksService,
     });
+
+    // Register CIMD service if initialized
+    if (this.cimdService) {
+      this.providers.injectProvider({
+        value: this.cimdService,
+        metadata: {
+          scope: ProviderScope.GLOBAL,
+          name: 'auth:cimd-service',
+        },
+        provide: CimdService,
+      });
+      this.logger.debug('CIMD service registered');
+    }
 
     await this.registerAuthFlows();
 

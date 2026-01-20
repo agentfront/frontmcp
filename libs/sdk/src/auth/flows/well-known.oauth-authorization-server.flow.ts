@@ -15,6 +15,7 @@ import {
   FlowPlan,
   getRequestBaseUrl,
   makeWellKnownPaths,
+  isOrchestratedMode,
 } from '../../common';
 
 const inputSchema = httpInputSchema;
@@ -55,6 +56,8 @@ export const wellKnownAsStateSchema = z.object({
     .default(['client_secret_basic', 'client_secret_post']),
   dcrEnabled: z.boolean().default(true),
   isOrchestrated: z.boolean(),
+  // CIMD support
+  cimdEnabled: z.boolean().default(true),
 });
 
 const wellKnownAsPlan = {
@@ -100,21 +103,31 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
     const { request } = this.rawInput;
     if (!request) throw new Error('Request is undefined');
 
+    const { metadata } = this.scope;
     const baseUrl = getRequestBaseUrl(request, this.scope.entryPath);
+
+    // Check if CIMD is enabled (default true if auth is orchestrated)
+    let cimdEnabled = true;
+    if (metadata.auth && isOrchestratedMode(metadata.auth)) {
+      cimdEnabled = metadata.auth.cimd?.enabled ?? true;
+    }
+
     this.state.set(
       wellKnownAsStateSchema.parse({
         baseUrl,
         scopesSupported: [],
         tokenEndpointAuthMethods: [],
         dcrEnabled: false, //scope.oauth.dcrEnabled,
-        isOrchestrated: !this.scope.metadata.auth, // scope.orchestrated,
+        isOrchestrated: !metadata.auth, // scope.orchestrated,
+        cimdEnabled,
       }),
     );
   }
 
   @Stage('collectData')
   async collectData() {
-    const { baseUrl, scopesSupported, tokenEndpointAuthMethods, dcrEnabled, isOrchestrated } = this.state.required;
+    const { baseUrl, scopesSupported, tokenEndpointAuthMethods, dcrEnabled, isOrchestrated, cimdEnabled } =
+      this.state.required;
     // Orchestrated => gateway is the AS
     if (isOrchestrated) {
       const baseIssuer = `${baseUrl}`;
@@ -134,6 +147,8 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
           grant_types_supported: ['authorization_code', 'refresh_token'],
           scopes_supported: scopesSupported,
           code_challenge_methods_supported: ['S256'],
+          // CIMD support advertisement per draft-ietf-oauth-client-id-metadata-document-00
+          client_id_metadata_document_supported: cimdEnabled,
         },
       });
       return;

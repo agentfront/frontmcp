@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import {
+  cimdConfigSchema,
   consentConfigSchema,
   incrementalAuthConfigSchema,
   localSigningConfigSchema,
@@ -77,6 +78,13 @@ const orchestratedSharedFields = {
    * @default { enabled: true, skippedAppBehavior: 'anonymous' }
    */
   incrementalAuth: incrementalAuthConfigSchema.optional(),
+
+  /**
+   * CIMD (Client ID Metadata Documents) configuration.
+   * Enables OAuth clients to use HTTPS URLs as client identifiers.
+   * @default { enabled: true }
+   */
+  cimd: cimdConfigSchema.optional(),
 };
 
 // ============================================
