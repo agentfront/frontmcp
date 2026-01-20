@@ -11,7 +11,14 @@
  * - This separation allows form mode (lookup by session) and URL mode (direct elicitId)
  */
 
-import { ElicitResult, ElicitMode, PendingElicitFallback, ResolvedElicitResult } from '../elicitation.types';
+import {
+  ElicitResult,
+  ElicitMode,
+  PendingElicitFallback,
+  ResolvedElicitResult,
+  FallbackExecutionResult,
+  FallbackResultCallback,
+} from '../elicitation.types';
 
 /**
  * Record stored for each pending elicitation.
@@ -35,6 +42,9 @@ export interface PendingElicitRecord {
 
   /** Elicitation mode (form or url) */
   mode: ElicitMode;
+
+  /** JSON Schema for validating result content (optional for backward compat) */
+  requestedSchema?: Record<string, unknown>;
 }
 
 /**
@@ -112,9 +122,14 @@ export interface ElicitationStore {
    *
    * @param elicitId - The elicitation ID to subscribe to
    * @param callback - Called when a result is published for this elicit ID
+   * @param sessionId - Optional session ID for encrypted stores (required for decryption)
    * @returns Unsubscribe function to clean up the subscription
    */
-  subscribeResult<T = unknown>(elicitId: string, callback: ElicitResultCallback<T>): Promise<ElicitUnsubscribe>;
+  subscribeResult<T = unknown>(
+    elicitId: string,
+    callback: ElicitResultCallback<T>,
+    sessionId?: string,
+  ): Promise<ElicitUnsubscribe>;
 
   /**
    * Publish an elicitation result.
@@ -153,9 +168,10 @@ export interface ElicitationStore {
    * Get a pending elicitation fallback by elicit ID.
    *
    * @param elicitId - The elicitation ID to look up
+   * @param sessionId - Optional session ID for encrypted stores (required for decryption)
    * @returns The pending fallback record, or null if not found or expired
    */
-  getPendingFallback(elicitId: string): Promise<PendingElicitFallback | null>;
+  getPendingFallback(elicitId: string, sessionId?: string): Promise<PendingElicitFallback | null>;
 
   /**
    * Delete a pending elicitation fallback by elicit ID.
@@ -170,16 +186,18 @@ export interface ElicitationStore {
    *
    * @param elicitId - The elicitation ID
    * @param result - The elicitation result from the user
+   * @param sessionId - Optional session ID for encrypted stores (required for encryption)
    */
-  setResolvedResult(elicitId: string, result: ElicitResult<unknown>): Promise<void>;
+  setResolvedResult(elicitId: string, result: ElicitResult<unknown>, sessionId?: string): Promise<void>;
 
   /**
    * Get a resolved elicit result by elicit ID.
    *
    * @param elicitId - The elicitation ID to look up
+   * @param sessionId - Optional session ID for encrypted stores (required for decryption)
    * @returns The resolved result, or null if not found
    */
-  getResolvedResult(elicitId: string): Promise<ResolvedElicitResult | null>;
+  getResolvedResult(elicitId: string, sessionId?: string): Promise<ResolvedElicitResult | null>;
 
   /**
    * Delete a resolved elicit result by elicit ID.
@@ -187,4 +205,39 @@ export interface ElicitationStore {
    * @param elicitId - The elicitation ID to delete
    */
   deleteResolvedResult(elicitId: string): Promise<void>;
+
+  // ============================================
+  // Waiting Fallback Pub/Sub Methods
+  // ============================================
+  // Used for distributed routing of fallback results.
+  // When the original tool call waits for the result, and
+  // sendElicitationResult arrives on a different node,
+  // pub/sub routes the result back to the waiting request.
+
+  /**
+   * Subscribe to fallback execution results for a specific elicit ID.
+   * In distributed mode, this creates a Redis pub/sub subscription
+   * for the channel `fallback-result:{elicitId}`.
+   *
+   * @param elicitId - The elicitation ID to subscribe to
+   * @param callback - Called when a fallback result is published for this elicit ID
+   * @param sessionId - Optional session ID for encrypted stores (required for decryption)
+   * @returns Unsubscribe function to clean up the subscription
+   */
+  subscribeFallbackResult(
+    elicitId: string,
+    callback: FallbackResultCallback,
+    sessionId?: string,
+  ): Promise<ElicitUnsubscribe>;
+
+  /**
+   * Publish a fallback execution result.
+   * In distributed mode, this publishes via Redis pub/sub to reach the
+   * waiting node that originated the elicitation request.
+   *
+   * @param elicitId - The elicitation ID
+   * @param sessionId - The session ID (for encryption)
+   * @param result - The fallback execution result to publish
+   */
+  publishFallbackResult(elicitId: string, sessionId: string, result: FallbackExecutionResult): Promise<void>;
 }

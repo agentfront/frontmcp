@@ -8,3 +8,4 @@
 
 export { performElicit, generateElicitationId, type ElicitHelperDeps, type ElicitTransport } from './elicit.helper';
 export { extendOutputSchemaForElicitation } from './extend-output-schema';
+export { validateElicitationContent, type ElicitationValidationResult } from './validate-elicitation-content';

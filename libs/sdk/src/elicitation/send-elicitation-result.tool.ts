@@ -111,8 +111,8 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
       ...(action === 'accept' && content !== undefined && { content }),
     };
 
-    // Store resolved result for re-invocation
-    await scope.elicitationStore.setResolvedResult(elicitId, elicitResult);
+    // Store resolved result for re-invocation (pass sessionId for encryption support)
+    await scope.elicitationStore.setResolvedResult(elicitId, elicitResult, pending.sessionId);
 
     // Clean up pending fallback
     await scope.elicitationStore.deletePendingFallback(elicitId);
@@ -149,25 +149,40 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
         toolName: pending.toolName,
       });
 
+      // Publish the result to notify any waiting requests (distributed mode)
+      // This allows the original request on a different node to receive the result
+      await scope.elicitationStore.publishFallbackResult(elicitId, pending.sessionId, {
+        success: true,
+        result: toolResult,
+      });
+
       // Clean up resolved result
       await scope.elicitationStore.deleteResolvedResult(elicitId);
 
       return toolResult;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Publish the error to notify any waiting requests (distributed mode)
+      await scope.elicitationStore.publishFallbackResult(elicitId, pending.sessionId, {
+        success: false,
+        error: errorMessage,
+      });
+
       // Clean up resolved result on error
       await scope.elicitationStore.deleteResolvedResult(elicitId);
 
       this.logger.error('sendElicitationResult: original tool failed', {
         elicitId,
         toolName: pending.toolName,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       });
 
       return {
         content: [
           {
             type: 'text',
-            text: `Error re-invoking ${pending.toolName}: ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error re-invoking ${pending.toolName}: ${errorMessage}`,
           },
         ],
         isError: true,

@@ -14,24 +14,53 @@
  *   node scripts/fix-unused-imports.mjs release/1.0  # Compare against release/1.0
  */
 
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { existsSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
-// Get the base branch to compare against
+/** Valid branch name pattern (alphanumeric, hyphens, underscores, slashes, dots) */
+const VALID_BRANCH_PATTERN = /^[A-Za-z0-9._\/-]+$/;
+
+/**
+ * Validate a branch name to prevent injection attacks.
+ * @param {string} branch - The branch name to validate
+ * @returns {boolean} True if the branch name is valid
+ */
+function isValidBranchName(branch) {
+  if (!branch || typeof branch !== 'string') {
+    return false;
+  }
+  if (branch.length > 255) {
+    return false;
+  }
+  // Prevent path traversal and other injection patterns
+  if (branch.includes('..') || branch.startsWith('-')) {
+    return false;
+  }
+  return VALID_BRANCH_PATTERN.test(branch);
+}
+
+/**
+ * Get the base branch to compare against.
+ * Uses execFileSync with array arguments to prevent command injection.
+ */
 function getBaseBranch() {
   const arg = process.argv[2];
   if (arg) {
+    if (!isValidBranchName(arg)) {
+      console.error(`Error: Invalid branch name "${arg}". Branch names must contain only alphanumeric characters, hyphens, underscores, slashes, and dots.`);
+      process.exit(1);
+    }
     return arg;
   }
 
   // Auto-detect: try main, then master
   try {
-    execSync('git rev-parse --verify main', { stdio: 'ignore' });
+    execFileSync('git', ['rev-parse', '--verify', 'main'], { stdio: 'ignore' });
     return 'main';
   } catch {
     try {
-      execSync('git rev-parse --verify master', { stdio: 'ignore' });
+      execFileSync('git', ['rev-parse', '--verify', 'master'], { stdio: 'ignore' });
       return 'master';
     } catch {
       console.error('Error: Could not find main or master branch. Please specify a base branch.');
@@ -40,12 +69,21 @@ function getBaseBranch() {
   }
 }
 
-// Get files changed between current branch and base branch
+/**
+ * Get files changed between current branch and base branch.
+ * Uses execFileSync with array arguments to prevent command injection.
+ * @param {string} baseBranch - The base branch to compare against
+ */
 function getChangedFiles(baseBranch) {
   console.log(`Comparing against: ${baseBranch}`);
 
   // Get files that differ between base branch and current HEAD
-  const diffOutput = execSync(`git diff ${baseBranch}...HEAD --name-only --diff-filter=ACM`, { encoding: 'utf-8' });
+  // Using execFileSync with array arguments for safety
+  const diffOutput = execFileSync(
+    'git',
+    ['diff', `${baseBranch}...HEAD`, '--name-only', '--diff-filter=ACM'],
+    { encoding: 'utf-8' }
+  );
 
   const files = diffOutput
     .split('\n')
@@ -56,7 +94,10 @@ function getChangedFiles(baseBranch) {
   return files;
 }
 
-// Run ESLint with unused-imports fix on specific files
+/**
+ * Run ESLint with unused-imports fix on specific files.
+ * @param {string[]} files - Array of file paths to process
+ */
 function fixUnusedImports(files) {
   if (files.length === 0) {
     console.log('No changed TypeScript/JavaScript files to process.');
@@ -66,7 +107,8 @@ function fixUnusedImports(files) {
   console.log(`Processing ${files.length} file(s)...`);
 
   // Create a temporary ESLint flat config file for unused imports
-  const tempConfigPath = join(process.cwd(), 'eslint.fix-imports.config.mjs');
+  // Use process.pid to create unique filename and avoid parallel run collisions
+  const tempConfigPath = join(process.cwd(), `eslint.fix-imports.${process.pid}.config.mjs`);
   const configContent = `
 import unusedImports from 'eslint-plugin-unused-imports';
 import tsParser from '@typescript-eslint/parser';
@@ -99,10 +141,17 @@ export default [
   try {
     writeFileSync(tempConfigPath, configContent);
 
-    execSync(`npx eslint --config ${tempConfigPath} --fix ${files.join(' ')}`, { stdio: 'inherit' });
+    // Quote file paths to handle spaces and special characters
+    const quotedFiles = files.map((f) => `"${f}"`).join(' ');
+    execSync(`npx eslint --config "${tempConfigPath}" --fix ${quotedFiles}`, { stdio: 'inherit' });
     console.log('Done! Unused imports removed.');
   } catch (error) {
-    // ESLint exits with code 1 if it fixes files, which is expected
+    // ESLint exits with code 1 if it finds (and fixes) issues, which is expected
+    // Only log and rethrow for other errors (exit code > 1 indicates actual failure)
+    if (error.status !== undefined && error.status > 1) {
+      console.error('ESLint encountered an error:', error.message || 'Unknown error');
+      throw error;
+    }
     console.log('Done processing files.');
   } finally {
     // Clean up temp config

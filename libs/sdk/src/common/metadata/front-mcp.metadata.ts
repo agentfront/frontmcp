@@ -93,7 +93,7 @@ export interface FrontMcpBaseMetadata {
    * Elicitation configuration.
    * Controls whether tools can request interactive user input during execution.
    * When enabled, tool output schemas are extended to include elicitation fallback response type.
-   * @default { enabled: true }
+   * @default { enabled: false }
    */
   elicitation?: ElicitationOptionsInput;
 }

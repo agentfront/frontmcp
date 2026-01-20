@@ -34,11 +34,12 @@ export function extendOutputSchemaForElicitation(
   originalSchema: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   // If no original schema, the elicitation fallback becomes the only typed option
-  // In this case, we return a oneOf with an empty object schema (allows any object)
-  // and the elicitation fallback schema
+  // In this case, we return an anyOf with an empty object schema (allows any object)
+  // and the elicitation fallback schema. Using anyOf instead of oneOf because both
+  // schemas can match objects, and oneOf requires exactly one match.
   if (!originalSchema) {
     return {
-      oneOf: [{ type: 'object', additionalProperties: true }, ELICITATION_FALLBACK_JSON_SCHEMA],
+      anyOf: [{ type: 'object', additionalProperties: true }, ELICITATION_FALLBACK_JSON_SCHEMA],
     };
   }
 

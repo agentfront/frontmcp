@@ -17,7 +17,7 @@ In the Model Context Protocol, elicitation fills a critical gap:
 | Aspect           | Tool                              | Elicitation                           |
 | ---------------- | --------------------------------- | ------------------------------------- |
 | **Direction**    | Model triggers, server executes   | Server requests, user responds        |
-| **Interaction**  | One-way (model -> server)         | Two-way (server <-> user)             |
+| **Interaction**  | One-way (model → server)          | Two-way (server ↔ user)               |
 | **Use case**     | Actions, calculations             | Confirmations, approvals, OAuth       |
 | **Blocking**     | No                                | Yes (waits for user response)         |
 
@@ -77,39 +77,61 @@ class DeleteAccountTool extends ToolContext {
 
 ### Class Style (AgentContext)
 
-Agents can also use elicitation:
+Agents are LLM-powered autonomous units that can also use elicitation. Override `execute()` to add custom logic like approval workflows:
 
 ```ts
 import { Agent, AgentContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 @Agent({
-  name: 'expense-approver',
-  description: 'Processes expense reports with manager approval',
+  name: 'expense-processor',
+  description: 'Processes expense reports with AI categorization and manager approval',
+  systemInstructions: `You are an expense processing assistant. Analyze expense reports,
+    categorize them, and prepare summaries. Always verify large expenses with the user.`,
+  llm: {
+    adapter: 'openai',
+    model: 'gpt-4o',
+    apiKey: { env: 'OPENAI_API_KEY' },
+  },
+  inputSchema: {
+    description: z.string().describe('Expense description'),
+    amount: z.number().describe('Expense amount in USD'),
+    category: z.string().optional().describe('Optional category hint'),
+  },
+  tools: [ExpenseCategoryTool, ReceiptAnalyzerTool],
 })
-class ExpenseApproverAgent extends AgentContext {
-  async execute() {
-    const expense = this.input.expense;
-
-    // Request manager approval for large expenses
-    if (expense.amount > 1000) {
+class ExpenseProcessorAgent extends AgentContext {
+  async execute(input: { description: string; amount: number; category?: string }) {
+    // Large expenses require manager approval before AI processing
+    if (input.amount > 1000) {
       const approval = await this.elicit(
-        `Expense of $${expense.amount} requires manager approval.`,
+        `Expense of $${input.amount} for "${input.description}" requires manager approval.`,
         z.object({
-          approved: z.boolean(),
-          notes: z.string().optional(),
+          approved: z.boolean().describe('Approve this expense'),
+          notes: z.string().optional().describe('Optional approval notes'),
         })
       );
 
       if (approval.status !== 'accept' || !approval.content?.approved) {
-        return { status: 'rejected', expense };
+        return {
+          status: 'rejected',
+          reason: approval.status === 'accept' ? 'Not approved' : `User ${approval.status}d`,
+        };
       }
+
+      // Notify that approval was received
+      await this.notify(`Expense approved by manager`, 'info');
     }
 
-    return { status: 'approved', expense };
+    // Run the default agent loop (LLM + tools) to process the expense
+    return super.execute(input);
   }
 }
 ```
+
+<Tip>
+Most agents don't need to override `execute()`. The default implementation runs the LLM loop automatically. Override only when you need custom pre/post processing like approval workflows.
+</Tip>
 
 ---
 
@@ -138,6 +160,13 @@ const result = await this.elicit(
 Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.):
 
 ```ts
+import { generateElicitationToken } from '@frontmcp/sdk';
+
+// Generate a secure token (never expose raw sessionId!)
+const token = await generateElicitationToken(this.authInfo.sessionId, {
+  ttl: 300000, // 5 minutes (matches elicitation timeout)
+});
+
 const result = await this.elicit(
   'Please authorize access to your GitHub account',
   z.object({
@@ -146,14 +175,19 @@ const result = await this.elicit(
   }),
   {
     mode: 'url',
-    elicitationId: `oauth-${this.authInfo.sessionId}`, // Required for URL mode
+    elicitationId: token, // Secure opaque token
   }
 );
 ```
 
 <Warning>
-URL mode requires an `elicitationId` to correlate the external callback with the pending request. The external service should call back to your server with this ID when complete.
+**Security:** Never expose raw session IDs in elicitation URLs. Use `generateElicitationToken()` to create a secure, time-limited token that encrypts the session ID. When the callback returns, the token is validated and decrypted server-side.
 </Warning>
+
+The token includes:
+- Encrypted session ID (AES-256-GCM)
+- Expiration timestamp (defaults to elicitation TTL)
+- HMAC signature for tamper detection
 
 ---
 
@@ -196,6 +230,71 @@ switch (result.status) {
     return { declined: true };
 }
 ```
+
+---
+
+## Schema Validation
+
+When the client returns an elicitation result with `action: 'accept'`, FrontMCP automatically validates the content against the original schema you provided. This ensures type safety and data integrity.
+
+### How It Works
+
+1. When you call `this.elicit(message, schema)`, FrontMCP stores the schema alongside the pending elicitation record
+2. When the user responds, FrontMCP validates the content against the stored schema
+3. Invalid content is rejected with an `InvalidInputError` (same as tool input validation)
+
+### Validation Behavior
+
+| Scenario | Validation | Result |
+|----------|------------|--------|
+| `accept` with valid content | ✅ Validated | Success |
+| `accept` with invalid content | ✅ Validated | `InvalidInputError` thrown |
+| `cancel` or `decline` | ⏭️ Skipped | Success (no content expected) |
+| No schema stored (backward compat) | ⏭️ Skipped | Success |
+
+### Error Handling
+
+Invalid elicitation content throws the same `InvalidInputError` used for tool input validation. This allows LLMs (especially in fallback mode) to recognize the error format and retry with corrected data:
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Invalid elicitation result content\nDetails: [{\"path\":[\"age\"],\"message\":\"Expected number, received string\"}]"
+  }],
+  "isError": true,
+  "_meta": {
+    "errorId": "err_a1b2c3d4e5f6g7h8",
+    "code": "INVALID_INPUT"
+  }
+}
+```
+
+The error includes:
+- **path**: The JSON path to the invalid field (e.g., `["user", "age"]`)
+- **message**: Human-readable validation error message
+
+### Example: Schema Mismatch
+
+```ts
+// Tool defines a schema
+const result = await this.elicit(
+  'Enter your details',
+  z.object({
+    name: z.string(),
+    age: z.number(),      // Expects number
+  })
+);
+
+// If client sends { name: "John", age: "thirty" }
+// FrontMCP throws InvalidInputError:
+// "Invalid elicitation result content"
+// Details: [{ path: ["age"], message: "Expected number, received string" }]
+```
+
+<Tip>
+Schema validation uses the same `InvalidInputError` as tool input validation (HTTP 400, code `INVALID_INPUT`). This consistency helps LLMs understand and recover from validation errors.
+</Tip>
 
 ---
 
@@ -287,6 +386,165 @@ This design ensures predictable behavior and prevents conflicting elicitation UI
 
 ---
 
+## Elicitation Hooks
+
+FrontMCP provides flow hooks to intercept elicitation requests and results. Hooks are **methods inside plugin classes** that run before, after, or around specific flow stages.
+
+### Hook Types
+
+| Decorator | Description |
+|-----------|-------------|
+| `.Will('stage')` | Runs **before** the stage executes |
+| `.Did('stage')` | Runs **after** the stage completes |
+| `.Stage('stage')` | Runs **as** the stage (replaces default) |
+| `.Around('stage')` | Wraps stage execution (call `next()` to continue) |
+
+### ElicitationRequestHook
+
+Intercepts the elicitation request flow before sending to the client.
+
+**Stages:**
+
+| Stage | Description |
+|-------|-------------|
+| `parseInput` | Parse and validate the elicitation parameters |
+| `validateRequest` | Validate mode requirements (URL mode needs elicitationId) |
+| `generateElicitId` | Generate unique elicitation ID |
+| `storePendingRecord` | Store pending elicitation in the store |
+| `buildRequestParams` | Build the MCP elicitation request parameters |
+| `finalize` | Final processing before sending |
+
+### ElicitationResultHook
+
+Intercepts the elicitation result flow when the user responds.
+
+**Stages:**
+
+| Stage | Description |
+|-------|-------------|
+| `parseInput` | Parse the result payload |
+| `lookupPending` | Lookup the pending elicitation record by session ID |
+| `validateContent` | Validate content against stored schema (skipped for cancel/decline) |
+| `buildResult` | Build the typed result object |
+| `publishResult` | Publish result via pub/sub (for distributed deployments) |
+| `finalize` | Final processing and cleanup |
+
+### Example: Plugin with Elicitation Hooks
+
+```ts
+import { FrontMcpPlugin, PluginInterface } from '@frontmcp/sdk';
+import { ElicitationRequestHook, ElicitationResultHook } from '@frontmcp/sdk/elicitation';
+import type { FlowCtxOf } from '@frontmcp/sdk';
+
+@FrontMcpPlugin({
+  name: 'elicitation-audit',
+  scope: 'app',
+})
+export class ElicitationAuditPlugin implements PluginInterface {
+  private auditLog: AuditLog;
+
+  constructor(auditLog: AuditLog) {
+    this.auditLog = auditLog;
+  }
+
+  // Runs AFTER storePendingRecord stage
+  @ElicitationRequestHook.Did('storePendingRecord')
+  async logElicitationStarted(ctx: FlowCtxOf<'elicitation:request'>) {
+    const { elicitId, sessionId, message } = ctx.state;
+    await this.auditLog.record({
+      type: 'elicitation_started',
+      elicitId,
+      sessionId,
+      message,
+      timestamp: Date.now(),
+    });
+  }
+
+  // Runs AFTER buildResult stage
+  @ElicitationResultHook.Did('buildResult')
+  async logElicitationResult(ctx: FlowCtxOf<'elicitation:result'>) {
+    const { sessionId, elicitResult, pendingRecord } = ctx.state;
+    if (pendingRecord && elicitResult) {
+      const duration = Date.now() - pendingRecord.createdAt;
+      await this.auditLog.record({
+        type: 'elicitation_completed',
+        elicitId: pendingRecord.elicitId,
+        sessionId,
+        status: elicitResult.status,
+        duration,
+        timestamp: Date.now(),
+      });
+    }
+  }
+}
+```
+
+### Registering the Plugin
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+import { ElicitationAuditPlugin } from './plugins/elicitation-audit';
+
+@FrontMcp({
+  name: 'my-app',
+  plugins: [ElicitationAuditPlugin],
+})
+class MyApp {}
+```
+
+### Use Cases
+
+**Input Sanitization (BEFORE buildResult):**
+
+```ts
+@FrontMcpPlugin({ name: 'elicitation-sanitizer' })
+class SanitizerPlugin implements PluginInterface {
+  @ElicitationResultHook.Will('buildResult')
+  async sanitizeInput(ctx: FlowCtxOf<'elicitation:result'>) {
+    // Sanitize content before it's built into result
+    if (ctx.state.content) {
+      ctx.state.content = this.sanitize(ctx.state.content);
+    }
+  }
+}
+```
+
+**Analytics (AFTER finalize):**
+
+```ts
+@FrontMcpPlugin({ name: 'elicitation-analytics' })
+class AnalyticsPlugin implements PluginInterface {
+  @ElicitationResultHook.Did('finalize')
+  async trackCompletion(ctx: FlowCtxOf<'elicitation:result'>) {
+    const { pendingRecord, elicitResult } = ctx.state;
+    if (pendingRecord) {
+      await analytics.track('elicitation_completed', {
+        elicitId: pendingRecord.elicitId,
+        duration: Date.now() - pendingRecord.createdAt,
+        status: elicitResult?.status,
+      });
+    }
+  }
+}
+```
+
+**Conditional Hooks (with filter):**
+
+```ts
+@FrontMcpPlugin({ name: 'admin-audit' })
+class AdminAuditPlugin implements PluginInterface {
+  @ElicitationRequestHook.Did('finalize', {
+    filter: (ctx) => ctx.authInfo?.role === 'admin',
+  })
+  async auditAdminElicitation(ctx: FlowCtxOf<'elicitation:request'>) {
+    // Only runs for admin users
+    await this.auditLog.recordAdminAction(ctx.state);
+  }
+}
+```
+
+---
+
 ## Client Capability Detection
 
 Not all MCP clients support elicitation. FrontMCP automatically checks client capabilities before sending elicitation requests.
@@ -357,18 +615,27 @@ FrontMCP elicitation works with **all LLMs**, not just those that support the MC
 
 **Standard Elicitation (Claude, supporting clients):**
 
-```
-Tool ─► elicit() ─► Transport ─► Client UI ─► User responds ─► Result
+```mermaid
+flowchart LR
+    A[Tool] --> B[elicit]
+    B --> C[Transport]
+    C --> D[Client UI]
+    D --> E[User responds]
+    E --> F[Result]
 ```
 
 **Fallback Elicitation (OpenAI, Gemini, etc.):**
 
-```
-Tool ─► elicit() ─► Framework detects no support ─► Returns instructions to LLM
-                                                              │
-LLM asks user ─► User responds ─► LLM calls sendElicitationResult tool
-                                                              │
-                                       Tool re-invoked with result ─► Completes
+```mermaid
+flowchart TB
+    A[Tool] --> B[elicit]
+    B --> C[Framework detects no support]
+    C --> D[Returns instructions to LLM]
+    D --> E[LLM asks user]
+    E --> F[User responds]
+    F --> G[LLM calls sendElicitationResult tool]
+    G --> H[Tool re-invoked with result]
+    H --> I[Completes]
 ```
 
 ### Client Compatibility
@@ -516,24 +783,19 @@ By default, elicitation state is stored in-memory on the server that initiated t
 
 In a distributed deployment:
 
-```
-┌─────────────┐     elicit/create      ┌────────────┐
-│   Node A    │ ─────────────────────► │   Client   │
-│  (Promise)  │                        └────────────┘
-│      │      │                              │
-│      │      │                              │ user response
-│      │      │                              ▼
-│      │      │    ┌─────────────────────────────────┐
-│      │      │    │         Load Balancer           │
-│      │      │    └─────────────────────────────────┘
-│      │      │                    │
-│      │      │                    ▼
-│      │      │              ┌─────────────┐
-│      │      │              │   Node B    │
-│      │      │              │  (no state) │
-│      │      │              └─────────────┘
-└──────┴──────┘
-     ⚠️ Promise hangs - response lost!
+```mermaid
+sequenceDiagram
+    participant A as Node A<br/>(Promise)
+    participant C as Client
+    participant LB as Load Balancer
+    participant B as Node B<br/>(no state)
+
+    A->>C: elicit/create
+    Note over A: Waiting for response...
+    C->>LB: user response
+    LB->>B: routes to different node
+    Note over B: ❌ No pending state!
+    Note over A: ⚠️ Promise hangs<br/>response lost!
 ```
 
 ### Redis Mode (Recommended for Production)
@@ -555,33 +817,24 @@ class MyApp {}
 
 With Redis configured, elicitation works seamlessly across nodes:
 
-```
-┌─────────────┐     elicit/create      ┌────────────┐
-│   Node A    │ ─────────────────────► │   Client   │
-│  (Promise)  │                        └────────────┘
-│      │      │                              │
-│      │      │  1. Store pending in Redis   │ user response
-│      │      │  2. Subscribe to pub/sub     ▼
-│      │      │    ┌─────────────────────────────────┐
-│      │      │    │         Load Balancer           │
-│      │      │    └─────────────────────────────────┘
-│      │      │                    │
-│      │      │                    ▼
-│      │      │              ┌─────────────┐
-│      │      │              │   Node B    │
-│      │      │              │  3. Lookup  │
-│      │      │              │  4. Publish │
-│      │      │              └──────┬──────┘
-│      │      │                     │
-│      │      │    ┌────────────────┴────────────────┐
-│      │      │    │          Redis Pub/Sub          │
-│      │      │    │  channel: mcp:elicit:result:*   │
-│      │      │    └────────────────┬────────────────┘
-│      │      │                     │
-│      ▼      │◄────────────────────┘
-│  5. Resolve │
-└─────────────┘
-     ✅ Promise resolves correctly!
+```mermaid
+sequenceDiagram
+    participant A as Node A<br/>(Promise)
+    participant R as Redis
+    participant C as Client
+    participant LB as Load Balancer
+    participant B as Node B
+
+    A->>C: elicit/create
+    A->>R: 1. Store pending record
+    A->>R: 2. Subscribe to pub/sub
+    Note over A: Waiting...
+    C->>LB: user response
+    LB->>B: routes to Node B
+    B->>R: 3. Lookup pending
+    B->>R: 4. Publish result
+    R-->>A: Result via pub/sub
+    Note over A: 5. Resolve ✅
 ```
 
 ### Single-Node Mode (Development)
@@ -670,6 +923,92 @@ class MyApp {}
 | Vercel Edge | Redis (required) | Use Upstash or similar |
 | Kubernetes | Redis | Use Redis cluster for HA |
 | Load balanced (no Redis) | Sticky sessions | Configure session affinity |
+
+---
+
+## Encrypted Elicitation
+
+When collecting sensitive user data (passwords, PII, payment information), FrontMCP can encrypt all elicitation data at rest using session-derived keys.
+
+### Why Encrypt?
+
+Elicitation often collects sensitive data:
+
+- Account credentials and API keys
+- Personal information (SSN, address, phone)
+- Financial data (card numbers, bank accounts)
+- Health information (HIPAA-protected data)
+
+Without encryption, this data is stored in plaintext in Redis or memory, accessible to anyone with database access.
+
+### Security Model
+
+Encrypted elicitation provides **zero-knowledge storage**:
+
+1. **Session-Derived Keys**: Each session gets a unique encryption key derived from `HKDF-SHA256(serverSecret + sessionId)`
+2. **AES-256-GCM**: Authenticated encryption prevents tampering
+3. **Cross-Session Isolation**: Session B cannot decrypt Session A's data, even with database access
+4. **Fail-Safe Decryption**: Decryption fails silently for tampered or corrupted data
+
+### Configuration
+
+Set one of these environment variables to enable encryption:
+
+```bash
+# Recommended - dedicated secret for elicitation
+MCP_ELICITATION_SECRET=your-secure-random-secret-at-least-32-chars
+
+# Fallback options (checked in order)
+MCP_SESSION_SECRET=your-session-secret
+MCP_SERVER_SECRET=your-server-secret
+```
+
+Encryption is **automatic** when a secret is available. No code changes required.
+
+### How It Works
+
+```mermaid
+flowchart TB
+    A[Tool calls elicit] --> B[1. Derive session key via HKDF]
+    B --> C[2. Encrypt with AES-256-GCM]
+    C --> D[3. Store encrypted blob in Redis]
+    D --> E[User responds - may hit different node]
+    E --> F[4. Derive key → 5. Decrypt → 6. Return result]
+```
+
+### Cross-Session Isolation
+
+Even if an attacker gains database access, they cannot decrypt elicitation data without:
+
+1. The server secret (`MCP_ELICITATION_SECRET`)
+2. The specific sessionId used to encrypt the data
+
+```ts
+// Session A encrypts sensitive data
+const resultA = await this.elicit('Enter your API key', z.object({
+  apiKey: z.string(),
+}));
+// Stored as encrypted blob with Session A's derived key
+
+// Session B cannot decrypt Session A's data
+// Even with database access, decryption returns null
+```
+
+### Best Practices
+
+**Do:**
+
+- Use a strong random secret (32+ characters)
+- Rotate secrets periodically (with care for in-flight elicitations)
+- Set secrets via environment variables, not code
+- Use `MCP_ELICITATION_SECRET` for dedicated elicitation security
+
+**Don't:**
+
+- Store secrets in version control
+- Use weak or predictable secrets
+- Share secrets across environments (dev/staging/prod)
+- Log or expose encrypted data for debugging
 
 ---
 
@@ -780,6 +1119,8 @@ class TransferFundsTool extends ToolContext {
 ### OAuth Authorization (URL Mode)
 
 ```ts
+import { generateElicitationToken } from '@frontmcp/sdk';
+
 @Tool({
   name: 'connect-github',
   description: 'Connect your GitHub account',
@@ -787,11 +1128,15 @@ class TransferFundsTool extends ToolContext {
 })
 class ConnectGitHubTool extends ToolContext {
   async execute() {
-    const elicitationId = `github-oauth-${this.authInfo.sessionId}-${Date.now()}`;
+    // Generate secure token - sessionId is encrypted inside
+    const elicitationToken = await generateElicitationToken(
+      this.authInfo.sessionId,
+      { ttl: 300000 } // 5 minute timeout
+    );
 
-    // Store the elicitation ID for callback handling
-    await this.get(OAuthStateStore).set(elicitationId, {
-      sessionId: this.authInfo.sessionId,
+    // Store OAuth state (token already contains encrypted sessionId)
+    await this.get(OAuthStateStore).set(elicitationToken, {
+      provider: 'github',
       startedAt: Date.now(),
     });
 
@@ -804,8 +1149,8 @@ class ConnectGitHubTool extends ToolContext {
       }),
       {
         mode: 'url',
-        elicitationId,
-        ttl: 300000, // 5 minute timeout for OAuth
+        elicitationId: elicitationToken,
+        ttl: 300000,
       }
     );
 
@@ -828,6 +1173,10 @@ class ConnectGitHubTool extends ToolContext {
   }
 }
 ```
+
+<Info>
+The `generateElicitationToken()` creates an opaque token containing the encrypted session ID. When the OAuth callback returns, the token is automatically validated and decrypted—you never need to expose raw session IDs in URLs.
+</Info>
 
 ### Graceful Fallback
 

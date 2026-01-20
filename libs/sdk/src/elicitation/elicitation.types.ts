@@ -161,3 +161,35 @@ export interface ResolvedElicitResult {
   /** Timestamp when the result was resolved */
   resolvedAt: number;
 }
+
+// ============================================
+// Waiting Fallback Types
+// ============================================
+
+/**
+ * Result of fallback execution from sendElicitationResult.
+ *
+ * Published via pub/sub to notify the original waiting request
+ * when the tool re-invocation completes.
+ */
+export interface FallbackExecutionResult {
+  /** Whether the tool execution succeeded */
+  success: boolean;
+
+  /** The tool result when success is true (MCP CallToolResult) */
+  result?: unknown;
+
+  /** Error message when success is false */
+  error?: string;
+}
+
+/**
+ * Callback type for fallback result subscriptions.
+ */
+export type FallbackResultCallback = (result: FallbackExecutionResult) => void;
+
+/**
+ * Default timeout for waiting fallback requests (5 minutes).
+ * Should match DEFAULT_ELICIT_TTL.
+ */
+export const DEFAULT_FALLBACK_WAIT_TTL = 300000;

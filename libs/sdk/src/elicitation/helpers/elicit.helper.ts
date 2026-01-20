@@ -9,6 +9,7 @@
 
 import { ZodType, z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
+import { randomUUID } from '@frontmcp/utils';
 import type { ClientCapabilities } from '../../notification';
 import { supportsElicitation } from '../../notification';
 import type { ElicitResult, ElicitOptions } from '../elicitation.types';
@@ -48,9 +49,9 @@ export interface ElicitHelperDeps {
   entryInput: unknown;
 
   /**
-   * Whether elicitation is enabled in server configuration.
+   * Whether elicitation is enabled in a server configuration.
    * When false, calls to elicit() will throw ElicitationDisabledError.
-   * @default true
+   * @default false
    */
   elicitationEnabled?: boolean;
 }
@@ -81,7 +82,7 @@ export async function performElicit<S extends ZodType>(
   const { sessionId, getClientCapabilities, tryGetContext, entryName, entryInput, elicitationEnabled } = deps;
 
   // 0. Check if elicitation is enabled in server configuration
-  // elicitationEnabled defaults to false if not specified
+  // elicitationEnabled must be explicitly set to true (default is false)
   if (elicitationEnabled !== true) {
     throw new ElicitationDisabledError();
   }
@@ -107,7 +108,7 @@ export async function performElicit<S extends ZodType>(
   if (!supportsElicitation(capabilities, mode)) {
     // 4. Fallback: throw error with context for re-invocation
     // This triggers the fallback flow handled by CallToolFlow/CallAgentFlow
-    const elicitId = options?.elicitationId ?? `elicit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const elicitId = options?.elicitationId ?? generateElicitationId();
     const ttl = options?.ttl ?? DEFAULT_ELICIT_TTL;
 
     // Convert Zod schema to JSON Schema for the fallback response
@@ -130,10 +131,10 @@ export async function performElicit<S extends ZodType>(
 }
 
 /**
- * Generate a unique elicitation ID.
+ * Generate a unique elicitation ID using cryptographically strong UUID.
  *
  * @returns A unique elicitation ID
  */
 export function generateElicitationId(): string {
-  return `elicit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `elicit-${randomUUID()}`;
 }

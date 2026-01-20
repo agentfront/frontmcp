@@ -15,8 +15,26 @@ export type {
   ElicitUnsubscribe,
 } from './elicitation.store';
 
-// Store implementation
+// Store implementations
 export { StorageElicitationStore } from './storage-elicitation.store';
+export { EncryptedElicitationStore, type EncryptedElicitationStoreOptions } from './encrypted-elicitation.store';
+
+// Encryption utilities
+export {
+  deriveElicitationKey,
+  encryptElicitationData,
+  decryptElicitationData,
+  isEncryptedBlob,
+  serializeElicitationBlob,
+  deserializeElicitationBlob,
+  encryptAndSerialize,
+  deserializeAndDecrypt,
+  tryDecryptStoredValue,
+  getElicitationSecret,
+  isElicitationEncryptionAvailable,
+  type ElicitationEncryptedBlob,
+  type ElicitationEncryptionConfig,
+} from './elicitation-encryption';
 
 // Factory functions
 export {

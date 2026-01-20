@@ -15,6 +15,8 @@ import { createStorage, createMemoryStorage } from '@frontmcp/utils';
 import type { FrontMcpLogger, RedisOptionsInput } from '../../common';
 import type { ElicitationStore } from './elicitation.store';
 import { StorageElicitationStore } from './storage-elicitation.store';
+import { EncryptedElicitationStore } from './encrypted-elicitation.store';
+import { isElicitationEncryptionAvailable } from './elicitation-encryption';
 import { ElicitationNotSupportedError } from '../../errors/elicitation.error';
 
 /**
@@ -78,6 +80,39 @@ export interface ElicitationStoreOptions {
    * @default true
    */
   requiresPubSub?: boolean;
+
+  /**
+   * Encryption configuration for elicitation data.
+   *
+   * When enabled, all elicitation data is encrypted using session-derived keys.
+   * This ensures that only requests with the actual sessionId can decrypt the data.
+   *
+   * @example Enable encryption (auto-detect secret from env)
+   * ```typescript
+   * { encryption: { enabled: true } }
+   * ```
+   *
+   * @example Explicit secret
+   * ```typescript
+   * { encryption: { enabled: true, secret: 'my-secret-key' } }
+   * ```
+   */
+  encryption?: {
+    /**
+     * Whether encryption is enabled.
+     * - true: Always encrypt (throws if no secret available)
+     * - false: Never encrypt
+     * - 'auto': Encrypt if secret is available (default)
+     * @default 'auto'
+     */
+    enabled?: boolean | 'auto';
+
+    /**
+     * Server secret for key derivation.
+     * Falls back to MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET env vars.
+     */
+    secret?: string;
+  };
 }
 
 /**
@@ -99,6 +134,11 @@ export interface ElicitationStoreResult {
    * Available for advanced use cases.
    */
   storage: RootStorage;
+
+  /**
+   * Whether encryption is enabled for the store.
+   */
+  encrypted: boolean;
 }
 
 /**
@@ -162,6 +202,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
     logger,
     isEdgeRuntime = false,
     requiresPubSub = true,
+    encryption,
   } = options;
 
   // Build final storage config, merging redis option if provided
@@ -183,11 +224,20 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
     const isLegacyRedisFormat = !('provider' in redis) && 'host' in redis && typeof redis.host === 'string';
 
     if (isNewRedisFormat || isLegacyRedisFormat) {
-      const redisHost = (redis as { host: string }).host;
-      const redisPort = (redis as { port?: number }).port ?? 6379;
-      const redisPassword = (redis as { password?: string }).password;
-      const redisDb = (redis as { db?: number }).db ?? 0;
-      const redisTls = (redis as { tls?: boolean }).tls ?? false;
+      // Safely extract Redis config with type validation
+      const redisConfig = redis as Record<string, unknown>;
+      const redisHost = typeof redisConfig['host'] === 'string' ? redisConfig['host'] : undefined;
+      const redisPort = typeof redisConfig['port'] === 'number' ? redisConfig['port'] : 6379;
+      const redisPassword = typeof redisConfig['password'] === 'string' ? redisConfig['password'] : undefined;
+      const redisDb = typeof redisConfig['db'] === 'number' ? redisConfig['db'] : 0;
+      const redisTls = typeof redisConfig['tls'] === 'boolean' ? redisConfig['tls'] : false;
+
+      // Validate that host is present (required for Redis connection)
+      if (!redisHost) {
+        throw new ElicitationNotSupportedError(
+          'Invalid Redis configuration: host is required. ' + 'Provide a valid Redis host in the redis configuration.',
+        );
+      }
 
       finalStorageConfig = {
         type: 'redis',
@@ -243,17 +293,43 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
     );
   }
 
-  // Create the store
-  const store = new StorageElicitationStore(storage, logger);
+  // Create the base store
+  let store: ElicitationStore = new StorageElicitationStore(storage, logger);
   const type = detectStorageType(storage);
+
+  // Determine if encryption should be enabled
+  const encryptionEnabled = encryption?.enabled ?? 'auto';
+  const encryptionSecret = encryption?.secret;
+  const hasSecret = encryptionSecret || isElicitationEncryptionAvailable();
+
+  let encrypted = false;
+
+  if (encryptionEnabled === true) {
+    // Explicitly enabled - require encryption
+    if (!hasSecret) {
+      throw new ElicitationNotSupportedError(
+        'Elicitation encryption is enabled but no secret is available. ' +
+          'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
+          'or provide a secret in the encryption configuration.',
+      );
+    }
+    store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
+    encrypted = true;
+  } else if (encryptionEnabled === 'auto' && hasSecret) {
+    // Auto mode with secret available - enable encryption
+    store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
+    encrypted = true;
+  }
+  // encryptionEnabled === false or 'auto' without secret - no encryption
 
   logger?.info('[ElicitationStoreFactory] Created elicitation store', {
     type,
     keyPrefix,
     supportsPubSub: storage.supportsPubSub(),
+    encrypted,
   });
 
-  return { store, type, storage };
+  return { store, type, storage, encrypted };
 }
 
 /**
@@ -267,16 +343,35 @@ export function createMemoryElicitationStore(
   options: {
     keyPrefix?: string;
     logger?: FrontMcpLogger;
+    encryption?: {
+      enabled?: boolean | 'auto';
+      secret?: string;
+    };
   } = {},
 ): ElicitationStoreResult {
-  const { keyPrefix = 'mcp:elicit:', logger } = options;
+  const { keyPrefix = 'mcp:elicit:', logger, encryption } = options;
 
   const storage = createMemoryStorage({ prefix: keyPrefix });
-  const store = new StorageElicitationStore(storage, logger);
+  let store: ElicitationStore = new StorageElicitationStore(storage, logger);
 
-  logger?.debug('[ElicitationStoreFactory] Created explicit in-memory elicitation store');
+  // Determine if encryption should be enabled
+  const encryptionEnabled = encryption?.enabled ?? 'auto';
+  const encryptionSecret = encryption?.secret;
+  const hasSecret = encryptionSecret || isElicitationEncryptionAvailable();
 
-  return { store, type: 'memory', storage };
+  let encrypted = false;
+
+  if (encryptionEnabled === true && hasSecret) {
+    store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
+    encrypted = true;
+  } else if (encryptionEnabled === 'auto' && hasSecret) {
+    store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
+    encrypted = true;
+  }
+
+  logger?.debug('[ElicitationStoreFactory] Created explicit in-memory elicitation store', { encrypted });
+
+  return { store, type: 'memory', storage, encrypted };
 }
 
 /**
@@ -293,9 +388,13 @@ export function createElicitationStoreFromStorage(
     keyPrefix?: string;
     logger?: FrontMcpLogger;
     requiresPubSub?: boolean;
+    encryption?: {
+      enabled?: boolean | 'auto';
+      secret?: string;
+    };
   } = {},
 ): ElicitationStoreResult {
-  const { keyPrefix = 'mcp:elicit:', logger, requiresPubSub = true } = options;
+  const { keyPrefix = 'mcp:elicit:', logger, requiresPubSub = true, encryption } = options;
 
   // Verify pub/sub support if required
   if (requiresPubSub && !storage.supportsPubSub()) {
@@ -307,10 +406,29 @@ export function createElicitationStoreFromStorage(
 
   // Create namespaced storage with prefix
   const namespacedStorage = storage.namespace(keyPrefix.replace(/:$/, ''));
-  const store = new StorageElicitationStore(namespacedStorage, logger);
+  let store: ElicitationStore = new StorageElicitationStore(namespacedStorage, logger);
   const type = detectStorageType(storage);
 
-  logger?.debug('[ElicitationStoreFactory] Created elicitation store from existing storage', { type, keyPrefix });
+  // Determine if encryption should be enabled
+  const encryptionEnabled = encryption?.enabled ?? 'auto';
+  const encryptionSecret = encryption?.secret;
+  const hasSecret = encryptionSecret || isElicitationEncryptionAvailable();
 
-  return { store, type, storage };
+  let encrypted = false;
+
+  if (encryptionEnabled === true && hasSecret) {
+    store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
+    encrypted = true;
+  } else if (encryptionEnabled === 'auto' && hasSecret) {
+    store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
+    encrypted = true;
+  }
+
+  logger?.debug('[ElicitationStoreFactory] Created elicitation store from existing storage', {
+    type,
+    keyPrefix,
+    encrypted,
+  });
+
+  return { store, type, storage, encrypted };
 }

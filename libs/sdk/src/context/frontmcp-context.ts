@@ -316,9 +316,14 @@ export class FrontMcpContext {
         // The MCP SDK uses this to route elicitation requests through the correct SSE stream
         const relatedRequestId = transportRef.jsonRpcRequestId;
         if (relatedRequestId === undefined) {
-          this._scope?.logger.warn('[FrontMcpContext] Elicit called without jsonRpcRequestId, using fallback ID 0');
+          // Fail fast: missing jsonRpcRequestId indicates a programming error or
+          // improper context setup. Using a fallback ID can cause routing collisions.
+          throw new InvalidInputError(
+            'Missing jsonRpcRequestId for elicitation request. ' +
+              'Ensure the transport context is properly initialized before calling elicit().',
+          );
         }
-        return transportRef.sendElicitRequest(relatedRequestId ?? 0, message, schema, options);
+        return transportRef.sendElicitRequest(relatedRequestId, message, schema, options);
       },
     };
   }

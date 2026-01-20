@@ -9,6 +9,7 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
+import { randomUUID } from '@frontmcp/utils';
 import { InvalidInputError } from '../../errors';
 import type { ElicitMode } from '../elicitation.types';
 import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
@@ -148,8 +149,8 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
 
     const { elicitationId, ttl } = this.state;
 
-    // Generate elicit ID if not provided
-    const elicitId = elicitationId ?? `elicit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // Generate elicit ID if not provided (using cryptographically strong UUID)
+    const elicitId = elicitationId ?? `elicit-${randomUUID()}`;
     const expiresAt = Date.now() + (ttl ?? DEFAULT_ELICIT_TTL);
 
     this.state.set({ elicitId, expiresAt });
@@ -161,7 +162,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
   async storePendingRecord() {
     this.logger.verbose('storePendingRecord:start');
 
-    const { elicitId, sessionId, message, mode, expiresAt } = this.state.required;
+    const { elicitId, sessionId, message, mode, expiresAt, requestedSchema } = this.state.required;
     const scope = this.scope as Scope;
 
     const pendingRecord: PendingElicitRecord = {
@@ -171,6 +172,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       expiresAt,
       message,
       mode,
+      requestedSchema,
     };
 
     await scope.elicitationStore.setPending(pendingRecord);
@@ -208,7 +210,13 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
   async finalize() {
     this.logger.verbose('finalize:start');
 
-    const { elicitId, sessionId, expiresAt, mode, requestParams, pendingRecord } = this.state.required;
+    const { elicitId, sessionId, expiresAt, mode } = this.state.required;
+    const { requestParams, pendingRecord } = this.state;
+
+    // Ensure required values from prior stages are present
+    if (!requestParams || !pendingRecord) {
+      throw new InvalidInputError('finalize: missing requestParams or pendingRecord from prior stages');
+    }
 
     // Set the output using respond() so runFlowForOutput can return it
     this.respond({
@@ -216,8 +224,8 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       sessionId,
       expiresAt,
       mode,
-      requestParams: requestParams!,
-      pendingRecord: pendingRecord!,
+      requestParams,
+      pendingRecord,
     });
 
     this.logger.verbose('finalize:done');

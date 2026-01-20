@@ -12,6 +12,8 @@ import { z } from 'zod';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
 import type { Scope } from '../../scope';
+import { InvalidInputError } from '../../errors';
+import { validateElicitationContent } from '../helpers';
 
 const inputSchema = z.object({
   /** Session ID for the elicitation */
@@ -44,7 +46,7 @@ const stateSchema = z.object({
 
 const plan = {
   pre: ['parseInput'],
-  execute: ['lookupPending', 'buildResult', 'publishResult'],
+  execute: ['lookupPending', 'validateContent', 'buildResult', 'publishResult'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
@@ -123,6 +125,47 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     }
   }
 
+  @Stage('validateContent')
+  async validateContent() {
+    this.logger.verbose('validateContent:start');
+
+    const { action, content, pendingRecord } = this.state;
+
+    // Skip validation for cancel/decline actions (no content expected)
+    if (action !== 'accept') {
+      this.logger.verbose('validateContent:skip (non-accept action)', { action });
+      return;
+    }
+
+    // Skip if no pending record found (will be handled as "not found" later)
+    if (!pendingRecord) {
+      this.logger.verbose('validateContent:skip (no pending record)');
+      return;
+    }
+
+    // Skip if no schema stored (backward compatibility with older records)
+    if (!pendingRecord.requestedSchema) {
+      this.logger.verbose('validateContent:skip (no schema stored)');
+      return;
+    }
+
+    // Validate content against stored schema
+    const validationResult = validateElicitationContent(content, pendingRecord.requestedSchema);
+
+    if (!validationResult.success) {
+      this.logger.warn('validateContent:failed', {
+        sessionId: pendingRecord.sessionId,
+        elicitId: pendingRecord.elicitId,
+        errors: validationResult.errors,
+      });
+
+      // Throw same error as tool input validation so LLM can recognize and retry
+      throw new InvalidInputError('Invalid elicitation result content', validationResult.errors);
+    }
+
+    this.logger.verbose('validateContent:done');
+  }
+
   @Stage('buildResult')
   async buildResult() {
     this.logger.verbose('buildResult:start');
@@ -144,7 +187,9 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
   async publishResult() {
     this.logger.verbose('publishResult:start');
 
-    const { sessionId, pendingRecord, elicitResult } = this.state;
+    const { pendingRecord, elicitResult } = this.state;
+    // sessionId is set in parseInput and is required by stateSchema
+    const { sessionId } = this.state.required;
     const scope = this.scope as Scope;
 
     if (!pendingRecord || !elicitResult) {
@@ -154,11 +199,11 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     }
 
     try {
-      await scope.elicitationStore.publishResult(pendingRecord.elicitId, sessionId!, elicitResult);
+      await scope.elicitationStore.publishResult(pendingRecord.elicitId, sessionId, elicitResult);
       this.state.set('handled', true);
       this.logger.verbose('publishResult:done', {
         elicitId: pendingRecord.elicitId,
-        sessionId: sessionId!.slice(0, 20),
+        sessionId: sessionId.slice(0, 20),
       });
     } catch (error) {
       this.logger.warn('publishResult:failed', {

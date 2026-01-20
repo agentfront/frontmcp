@@ -115,7 +115,7 @@ export class ToolInstance<
    * automatically wrapped in a oneOf union to allow either the original output
    * OR an elicitation pending response. This is transparent to consumers.
    */
-  override getRawOutputSchema(): any | undefined {
+  override getRawOutputSchema(): unknown {
     const baseSchema = this.rawOutputSchema;
 
     // Check if elicitation is enabled in scope (default: false)

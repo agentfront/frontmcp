@@ -1,5 +1,5 @@
 import { AuthenticatedServerRequest } from '../../server/server.types';
-import { TransportKey } from '../transport.types';
+import { TransportKey, TransportType } from '../transport.types';
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InMemoryEventStore } from '../transport.event-store';
@@ -146,6 +146,14 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
   get newRequestId(): RequestId {
     return this.#requestId++;
+  }
+
+  /**
+   * Get the transport type (sse, streamable-http, etc.).
+   * Used for transport-specific behavior detection.
+   */
+  get type(): TransportType {
+    return this.key.type;
   }
 
   async destroy(reason?: string): Promise<void> {

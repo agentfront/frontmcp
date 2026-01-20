@@ -179,10 +179,15 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
       }, ttl);
 
       // Subscribe to results via the store (for distributed mode)
+      // Pass sessionId for encrypted stores to enable decryption
       this.elicitStore
-        .subscribeResult<S extends ZodType<infer O> ? O : unknown>(elicitId, (result) => {
-          safeResolve(result);
-        })
+        .subscribeResult<S extends ZodType<infer O> ? O : unknown>(
+          elicitId,
+          (result) => {
+            safeResolve(result);
+          },
+          sessionId,
+        )
         .then((unsub) => {
           unsubscribe = unsub;
         })

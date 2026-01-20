@@ -77,18 +77,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async parseInput() {
     const { request } = this.rawInput;
 
-    console.log('[DEBUG] parseInput: starting');
     const authorization = request[ServerRequestTokens.auth] as Authorization;
-    console.log(
-      '[DEBUG] parseInput: authorization =',
-      authorization
-        ? {
-            hasToken: !!authorization.token,
-            hasSession: !!authorization.session,
-            sessionId: authorization.session?.id?.slice(0, 30),
-          }
-        : 'undefined',
-    );
     const { token } = authorization;
 
     // CRITICAL: The mcp-session-id header is the client's reference to their session.
@@ -211,8 +200,39 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       hasToken: !!token,
     });
 
-    // Get existing transport - elicit results require an active session
-    const transport = await transportService.getTransporter('streamable-http', token, session.id);
+    // 1. Try to get existing transport from memory
+    let transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    // 2. If not in memory, check if session exists in Redis and recreate
+    // This mirrors the onMessage flow to support distributed mode where the
+    // elicitation result may arrive on a different node than the original request.
+    if (!transport) {
+      try {
+        logger.info('onElicitResult: transport not in memory, checking stored session', {
+          sessionId: session.id?.slice(0, 20),
+        });
+        const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+        if (storedSession) {
+          logger.info('onElicitResult: recreating transport from stored session', {
+            sessionId: session.id?.slice(0, 20),
+            createdAt: storedSession.createdAt,
+            initialized: storedSession.initialized,
+          });
+          transport = await transportService.recreateTransporter(
+            'streamable-http',
+            token,
+            session.id,
+            storedSession,
+            response,
+          );
+        }
+      } catch (error) {
+        logger.warn('onElicitResult: failed to recreate transport from stored session', {
+          sessionId: session.id?.slice(0, 20),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     if (!transport) {
       logger.warn('onElicitResult: transport not found', {
