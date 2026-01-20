@@ -637,7 +637,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         .then((unsub) => {
           if (resolved) {
             // Already resolved (e.g., timeout occurred while subscribing)
-            unsub().catch(() => {});
+            // Ignore unsubscribe errors since we're cleaning up
+            unsub().catch(() => {
+              /* noop */
+            });
             return;
           }
           unsubscribe = unsub;
