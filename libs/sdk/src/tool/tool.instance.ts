@@ -25,6 +25,7 @@ import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import { buildParsedToolResult } from './tool.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
+import { extendOutputSchemaForElicitation } from '../elicitation/helpers';
 
 /**
  * Concrete implementation of a tool that can be executed.
@@ -58,7 +59,7 @@ export class ToolInstance<
 
     const schema: any = record.metadata.inputSchema;
     // Support both Zod objects and raw ZodRawShape
-    this.inputSchema = schema instanceof z.ZodObject ? schema.shape : schema ?? {};
+    this.inputSchema = schema instanceof z.ZodObject ? schema.shape : (schema ?? {});
 
     // Whatever JSON schema representation you're storing for inputs
     this.rawInputSchema = record.metadata.rawInputSchema;
@@ -105,6 +106,27 @@ export class ToolInstance<
 
   override getOutputSchema() {
     return this.outputSchema;
+  }
+
+  /**
+   * Get the raw JSON Schema for output, optionally extended with elicitation fallback type.
+   *
+   * When elicitation is enabled in scope configuration, the output schema is
+   * automatically wrapped in a oneOf union to allow either the original output
+   * OR an elicitation pending response. This is transparent to consumers.
+   */
+  override getRawOutputSchema(): any | undefined {
+    const baseSchema = this.rawOutputSchema;
+
+    // Check if elicitation is enabled in scope (default: false)
+    const elicitationEnabled = this.scope.metadata.elicitation?.enabled === true;
+
+    if (elicitationEnabled && baseSchema !== undefined) {
+      // Extend schema to include elicitation fallback response type
+      return extendOutputSchemaForElicitation(baseSchema);
+    }
+
+    return baseSchema;
   }
 
   /**
@@ -192,7 +214,10 @@ class FunctionToolContext<
   In = ToolInputOf<{ inputSchema: InSchema }>,
   Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends ToolContext<InSchema, OutSchema, In, Out> {
-  constructor(private readonly record: ToolFunctionTokenRecord, args: ToolCtorArgs<In>) {
+  constructor(
+    private readonly record: ToolFunctionTokenRecord,
+    args: ToolCtorArgs<In>,
+  ) {
     super(args);
   }
 

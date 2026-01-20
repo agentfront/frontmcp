@@ -9,3 +9,4 @@ export * from './logging';
 export * from './redis';
 export * from './transport';
 export * from './pagination';
+export * from './elicitation';

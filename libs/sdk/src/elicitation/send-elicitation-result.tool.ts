@@ -29,6 +29,9 @@ const inputSchema = z
     path: ['content'],
   });
 
+/** Input type for sendElicitationResult tool */
+type SendElicitationResultInput = z.infer<typeof inputSchema>;
+
 /**
  * System tool for submitting elicitation results.
  *
@@ -50,11 +53,7 @@ const inputSchema = z
   hideFromDiscovery: true,
 })
 export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
-  async execute(input: {
-    elicitId: string;
-    action: 'accept' | 'cancel' | 'decline';
-    content?: unknown;
-  }): Promise<CallToolResult> {
+  async execute(input: SendElicitationResultInput): Promise<CallToolResult> {
     const { elicitId, action, content } = input;
 
     this.logger.info('sendElicitationResult: processing', { elicitId, action });
@@ -141,11 +140,8 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
             arguments: pending.toolInput as Record<string, unknown> | undefined,
           },
         },
-        ctx: {
-          authInfo: this.authInfo,
-          // Pass transport if available for any nested elicitation
-          transport: this.authInfo.transport,
-        },
+        // Pass the context for auth info and request ID (used for elicitation routing)
+        ctx: this.tryGetContext() ?? { authInfo: this.getAuthInfo() },
       });
 
       this.logger.info('sendElicitationResult: original tool completed', {

@@ -81,6 +81,20 @@ export interface ElicitOptions {
 export type TypedElicitResult<T extends ZodType> = ElicitResult<Infer<T>>;
 
 /**
+ * MCP SDK elicitation result format.
+ *
+ * This represents the raw format from MCP SDK where `action` is used instead of `status`.
+ * Used in transport layer when handling responses from the client.
+ */
+export interface McpElicitResult {
+  /** The user's action (MCP SDK uses 'action' instead of 'status') */
+  action: ElicitStatus;
+
+  /** The content from the user's response (only present when action is 'accept') */
+  content?: unknown;
+}
+
+/**
  * Internal pending elicit tracking structure.
  * Used by transport adapters to manage pending elicitation requests.
  */

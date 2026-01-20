@@ -91,3 +91,23 @@ export class ElicitationStoreNotInitializedError extends InternalMcpError {
     );
   }
 }
+
+/**
+ * Elicitation disabled error.
+ *
+ * Thrown when attempting to use elicitation when it is disabled in server configuration.
+ * To enable elicitation, set `elicitation: { enabled: true }` in @FrontMcp metadata.
+ */
+export class ElicitationDisabledError extends PublicMcpError {
+  constructor() {
+    super(
+      'Elicitation is disabled in server configuration. Enable it via @FrontMcp({ elicitation: { enabled: true } })',
+      'ELICITATION_DISABLED',
+      400,
+    );
+  }
+
+  override getPublicMessage(): string {
+    return 'Elicitation is disabled on this server.';
+  }
+}

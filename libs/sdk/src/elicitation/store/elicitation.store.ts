@@ -2,7 +2,7 @@
  * Elicitation Store Interface
  *
  * Abstraction for storing and routing elicitation state across distributed systems.
- * Supports Redis pub/sub for multi-node deployments and in-memory fallback for
+ * Supports storage backends with pub/sub for multi-node deployments and in-memory fallback for
  * single-node/development environments.
  *
  * Key design decisions:
@@ -11,7 +11,7 @@
  * - This separation allows form mode (lookup by session) and URL mode (direct elicitId)
  */
 
-import { ElicitResult, ElicitMode, PendingElicitFallback, ResolvedElicitResult } from './elicitation.types';
+import { ElicitResult, ElicitMode, PendingElicitFallback, ResolvedElicitResult } from '../elicitation.types';
 
 /**
  * Record stored for each pending elicitation.

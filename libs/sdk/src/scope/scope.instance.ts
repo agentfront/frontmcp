@@ -34,6 +34,7 @@ import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../to
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
 import { ElicitationStore, createElicitationStore } from '../elicitation';
+import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
 import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { normalizeTool } from '../tool/tool.utils';
@@ -108,13 +109,19 @@ export class Scope extends ScopeEntry {
     this.transportService = new TransportService(this, transportConfig?.persistence);
 
     // Initialize elicitation store for distributed elicitation support
-    const { store: elicitStore } = await createElicitationStore({
-      redis: this.metadata.redis,
-      keyPrefix: this.metadata.redis?.keyPrefix ?? 'mcp:elicit:',
-      logger: this.logger,
-      isEdgeRuntime: this.isEdgeRuntime(),
-    });
-    this._elicitationStore = elicitStore;
+    // Only initialize if elicitation is explicitly enabled (default: false)
+    const elicitationEnabled = this.metadata.elicitation?.enabled === true;
+    if (elicitationEnabled) {
+      // Use elicitation-specific redis config, or fall back to global redis
+      const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
+      const { store: elicitStore } = await createElicitationStore({
+        redis: elicitationRedis,
+        keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
+        logger: this.logger,
+        isEdgeRuntime: this.isEdgeRuntime(),
+      });
+      this._elicitationStore = elicitStore;
+    }
 
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     await this.scopeAuth.ready;
@@ -141,7 +148,10 @@ export class Scope extends ScopeEntry {
 
     // Register sendElicitationResult system tool (hidden by default)
     // This tool is used for fallback elicitation with non-supporting clients
-    this.registerSendElicitationResultTool(scopeRef);
+    // Only register if elicitation is enabled
+    if (elicitationEnabled) {
+      this.registerSendElicitationResultTool(scopeRef);
+    }
 
     this.toolUIRegistry = new ToolUIRegistry();
 
@@ -287,8 +297,14 @@ export class Scope extends ScopeEntry {
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
 
-    // Register logging, completion, and agent flows
-    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow, CallAgentFlow]);
+    // Register logging, completion, agent, and elicitation flows
+    await this.scopeFlows.registryFlows([
+      SetLevelFlow,
+      CompleteFlow,
+      CallAgentFlow,
+      ElicitationRequestFlow,
+      ElicitationResultFlow,
+    ]);
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);

@@ -69,7 +69,11 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     const authInfo = this.ensureAuthInfo(req, this);
 
     if (this.handleIfElicitResult(req)) {
-      this.logger.verbose(`[${this.sessionId}] handle get request`);
+      this.logger.verbose(`[${this.sessionId}] handled elicitation result`);
+      // Send HTTP 202 Accepted response for elicitation results
+      // The elicitation result is processed asynchronously, so we acknowledge receipt
+      res.writeHead(202, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: null, result: {} }));
       return;
     }
     if (req.method === 'GET') {

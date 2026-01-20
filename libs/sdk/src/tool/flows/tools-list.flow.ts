@@ -411,9 +411,11 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         };
 
         // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
-        const outputSchemaRaw = tool.getRawOutputSchema();
-        if (outputSchemaRaw) {
-          item.outputSchema = outputSchemaRaw;
+        // Note: When elicitation is enabled, getRawOutputSchema() transparently extends
+        // the schema to include the elicitation fallback response type
+        const outputSchema = tool.getRawOutputSchema();
+        if (outputSchema) {
+          item.outputSchema = outputSchema as typeof item.outputSchema;
         }
 
         // Add _meta for tools with UI configuration

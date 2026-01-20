@@ -7,11 +7,8 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel, ClientCapabilities } from '../../notification';
-import { supportsElicitation } from '../../notification';
-import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
-import { ElicitationNotSupportedError, ElicitationFallbackRequired } from '../../errors';
-import { ZodType, z } from 'zod';
-import { toJSONSchema } from 'zod/v4';
+import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
+import { ZodType } from 'zod';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -231,54 +228,19 @@ export abstract class ToolContext<
     requestedSchema: S,
     options?: ElicitOptions,
   ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
-    const sessionId = this.authInfo.sessionId;
-    if (!sessionId) {
-      throw new ElicitationNotSupportedError('No session available for elicitation');
-    }
-
-    // Check for pre-resolved result (fallback re-invocation case)
-    const ctx = this.tryGetContext();
-    const preResolved = ctx?.getPreResolvedElicitResult?.();
-    if (preResolved) {
-      // Clear the pre-resolved result to prevent reuse
-      ctx?.clearPreResolvedElicitResult?.();
-      return preResolved as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
-    }
-
-    // Check client capabilities
-    const capabilities = this.scope.notifications.getClientCapabilities(sessionId);
-    const mode = options?.mode ?? 'form';
-
-    if (!supportsElicitation(capabilities, mode)) {
-      // Fallback: throw error with context for re-invocation
-      // This triggers the fallback flow handled by CallToolFlow
-      const elicitId = options?.elicitationId ?? `elicit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const ttl = options?.ttl ?? DEFAULT_ELICIT_TTL;
-
-      // Convert Zod schema to JSON Schema for the fallback response
-      // Wrap in z.object if it's a raw shape (plain object), otherwise use as-is
-      const zodSchema =
-        requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);
-      const jsonSchema = toJSONSchema(zodSchema) as Record<string, unknown>;
-
-      throw new ElicitationFallbackRequired(
-        elicitId,
-        message,
-        jsonSchema,
-        this._toolNameInternal ?? this.toolName,
-        this._toolInputInternal ?? this.input,
-        ttl,
-      );
-    }
-
-    // Get transport from context
-    const transport = ctx?.transport;
-    if (!transport) {
-      throw new ElicitationNotSupportedError('Transport not available for elicitation');
-    }
-
-    // Send elicit request (timeout throws ElicitationTimeoutError)
-    return transport.elicit(message, requestedSchema, options);
+    return performElicit(
+      {
+        sessionId: this.context.sessionId,
+        getClientCapabilities: (sid) => this.scope.notifications.getClientCapabilities(sid),
+        tryGetContext: () => this.tryGetContext(),
+        entryName: this._toolNameInternal ?? this.toolName,
+        entryInput: this._toolInputInternal ?? this.input,
+        elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+      },
+      message,
+      requestedSchema,
+      options,
+    );
   }
 
   // ============================================

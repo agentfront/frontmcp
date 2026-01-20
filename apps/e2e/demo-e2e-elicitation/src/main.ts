@@ -11,5 +11,8 @@ const port = parseInt(process.env['PORT'] ?? '3122', 10);
   auth: {
     mode: 'public',
   },
+  elicitation: {
+    enabled: true,
+  },
 })
 export default class Server {}

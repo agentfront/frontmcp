@@ -12,7 +12,7 @@ import { ZodType } from 'zod';
 import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
 import { Scope } from '../../scope';
 import { createMcpHandlers } from '../mcp-handlers';
-import { ElicitResult, ElicitOptions, PendingElicit, ElicitationStore } from '../../elicitation';
+import { ElicitResult, ElicitOptions, PendingElicit, ElicitationStore, McpElicitResult } from '../../elicitation';
 import { ElicitationNotSupportedError } from '../../errors';
 
 /**
@@ -253,6 +253,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
    * Handle an incoming elicitation result from the client.
    * Returns true if the request was an elicit result and was handled.
    *
+   * Uses ElicitationResultFlow for processing (with hook support).
    * In distributed mode, this publishes the result via the elicitation store,
    * which routes it to the correct node that's waiting for it.
    */
@@ -280,17 +281,18 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       return false;
     }
 
-    // Map MCP action directly to our status type (they use the same names)
+    // Run ElicitationResultFlow for distributed routing (with hook support)
+    // Flow handles: lookup pending, publish via pub/sub
+    // Note: Using void to explicitly mark as fire-and-forget; errors are caught inside the method
+    const sessionId = this.key.sessionId;
+    void this.handleElicitResultAsync(sessionId, parsed.data);
+
+    // Map MCP action to our result type for local handling
     const action = parsed.data.action;
     const result: ElicitResult = {
       status: action,
       ...(action === 'accept' && parsed.data.content !== undefined && { content: parsed.data.content }),
     };
-
-    // In distributed mode, lookup pending by sessionId and publish result
-    // This routes the result to the correct node via pub/sub
-    const sessionId = this.key.sessionId;
-    this.handleElicitResultAsync(sessionId, result);
 
     // Also handle local pending elicit (for single-node mode and error handling)
     if (this.pendingElicit) {
@@ -303,22 +305,26 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   }
 
   /**
-   * Async handler for elicit result - publishes to store for distributed routing.
+   * Async handler for elicit result - uses ElicitationResultFlow for processing.
    * Called from handleIfElicitResult without awaiting to avoid blocking the response.
    */
-  private async handleElicitResultAsync(sessionId: string, result: ElicitResult): Promise<void> {
+  private async handleElicitResultAsync(sessionId: string, mcpResult: McpElicitResult): Promise<void> {
     try {
-      const pending = await this.elicitStore.getPending(sessionId);
-      if (pending) {
-        await this.elicitStore.publishResult(pending.elicitId, sessionId, result);
-        this.logger.verbose('Published elicit result to store', {
-          elicitId: pending.elicitId,
+      // Run the flow for hook support and distributed routing
+      const output = await this.scope.runFlow('elicitation:result', {
+        sessionId,
+        result: mcpResult,
+      });
+
+      if (output?.handled) {
+        this.logger.verbose('ElicitationResultFlow handled result', {
+          elicitId: output.elicitId,
           sessionId: sessionId.slice(0, 20),
-          status: result.status,
+          status: output.result?.status,
         });
       }
     } catch (error) {
-      this.logger.warn('Failed to publish elicit result to store', {
+      this.logger.warn('Failed to run ElicitationResultFlow', {
         sessionId: sessionId.slice(0, 20),
         error: (error as Error).message,
       });

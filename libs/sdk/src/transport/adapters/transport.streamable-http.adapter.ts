@@ -7,8 +7,8 @@ import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
-import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
-import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
+import { ElicitResult, ElicitOptions } from '../../elicitation';
+import { ElicitationTimeoutError } from '../../errors';
 
 /**
  * Stateless HTTP requests must be able to send multiple initialize calls without
@@ -119,6 +119,8 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     if (req.method === 'GET') {
       return this.transport.handleRequest(req, res);
     } else {
+      // Check for elicitation result and handle it
+      // Note: The HTTP response is handled by the caller (onElicitResult flow stage)
       if (this.handleIfElicitResult(req)) {
         return;
       }
@@ -131,6 +133,9 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
    *
    * Only one elicit per session is allowed. A new elicit will cancel any pending one.
    * On timeout, an ElicitationTimeoutError is thrown to kill tool execution.
+   *
+   * Uses the ElicitationRequestFlow for preparation (validation, ID generation,
+   * storing pending record, building params) with hook support for middleware.
    *
    * In distributed mode, the pending elicitation is stored in Redis and results
    * are routed via pub/sub, allowing the response to be received by any node.
@@ -147,52 +152,35 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     requestedSchema: S,
     options?: ElicitOptions,
   ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
-    const { mode = 'form', ttl = DEFAULT_ELICIT_TTL, elicitationId } = options ?? {};
-
-    // URL mode requires elicitationId for out-of-band tracking
-    if (mode === 'url' && !elicitationId) {
-      throw new InvalidInputError('elicitationId is required when mode is "url"');
-    }
-
     // Cancel any previous pending elicit (only one per session)
     await this.cancelPendingElicit();
 
-    // Generate elicit ID
-    const elicitId = elicitationId ?? `elicit-${this.newRequestId}`;
     const sessionId = this.key.sessionId;
-    const expiresAt = Date.now() + ttl;
 
-    // Store pending elicitation in the store (for distributed mode)
-    await this.elicitStore.setPending({
-      elicitId,
+    // Run ElicitationRequestFlow for preparation (with hook support)
+    // Flow handles: input validation, elicit ID generation, storing pending record, building params
+    const flowOutput = await this.scope.runFlowForOutput('elicitation:request', {
+      relatedRequestId,
       sessionId,
-      createdAt: Date.now(),
-      expiresAt,
-      message,
-      mode,
-    });
-
-    // Build request params based on mode
-    const params: Record<string, unknown> = {
-      mode,
       message,
       requestedSchema: toJSONSchema(requestedSchema as ZodType),
-    };
+      options,
+    });
 
-    // Add elicitationId for URL mode (required for out-of-band tracking)
-    if (mode === 'url' && elicitationId) {
-      params['elicitationId'] = elicitationId;
-    }
+    const { elicitId, expiresAt, requestParams, pendingRecord } = flowOutput;
+    const ttl = expiresAt - Date.now();
 
     // Send the elicitation/create request
     this.logger.info('[StreamableHttpAdapter] sendElicitRequest: sending elicitation/create', {
       relatedRequestId,
       elicitId,
-      mode,
+      mode: pendingRecord.mode,
       message: message.slice(0, 100),
     });
     try {
-      await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', params), { relatedRequestId });
+      await this.transport.send(rpcRequest(this.newRequestId, 'elicitation/create', requestParams), {
+        relatedRequestId,
+      });
       this.logger.info('[StreamableHttpAdapter] sendElicitRequest: transport.send() completed');
     } catch (error) {
       this.logger.error('[StreamableHttpAdapter] sendElicitRequest: transport.send() failed', error);
