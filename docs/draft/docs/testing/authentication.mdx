@@ -376,3 +376,149 @@ test('admin can perform privileged operations', async ({ server, auth }) => {
 - Skip expiration testing
 - Assume scopes are enforced without testing
 - Forget to test anonymous access for public endpoints
+
+---
+
+## MockOAuthServer
+
+For integration testing of OAuth flows, use `MockOAuthServer` from `@frontmcp/testing`. It provides a fully functional OAuth 2.1 server with PKCE support.
+
+### Basic Usage
+
+```typescript
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+// Create a token factory (shares signing keys with server)
+const tokenFactory = new TestTokenFactory();
+const oauthServer = new MockOAuthServer(tokenFactory, {
+  autoApprove: true,
+  testUser: { sub: 'user-123', email: 'test@example.com' },
+  clientId: 'my-client',
+  validRedirectUris: ['http://localhost:3000/callback'],
+});
+
+// Start the server
+const serverInfo = await oauthServer.start();
+console.log(`OAuth server running at ${serverInfo.baseUrl}`);
+
+// Use serverInfo.issuer for your MCP server configuration
+
+// Stop when done
+await oauthServer.stop();
+```
+
+### MockOAuthServerOptions
+
+| Option                   | Type           | Default      | Description                                   |
+| ------------------------ | -------------- | ------------ | --------------------------------------------- |
+| `port`                   | `number`       | Random       | Port to listen on                             |
+| `issuer`                 | `string`       | Auto         | Issuer URL for tokens                         |
+| `debug`                  | `boolean`      | `false`      | Enable debug logging                          |
+| `autoApprove`            | `boolean`      | `false`      | Auto-approve authorization requests           |
+| `testUser`               | `MockTestUser` | -            | User to return on authorization               |
+| `clientId`               | `string`       | -            | Expected client ID for validation             |
+| `clientSecret`           | `string`       | -            | Client secret (for confidential clients)      |
+| `validRedirectUris`      | `string[]`     | -            | Allowed redirect URIs (supports wildcards)    |
+| `accessTokenTtlSeconds`  | `number`       | `3600`       | Access token lifetime                         |
+| `refreshTokenTtlSeconds` | `number`       | `2592000`    | Refresh token lifetime (30 days)              |
+
+### MockTestUser Interface
+
+```typescript
+interface MockTestUser {
+  sub: string;                       // Subject identifier (required)
+  email?: string;                    // User email
+  name?: string;                     // Display name
+  picture?: string;                  // Profile picture URL
+  claims?: Record<string, unknown>;  // Additional token claims
+}
+```
+
+### MockOAuthServerInfo Interface
+
+```typescript
+interface MockOAuthServerInfo {
+  baseUrl: string;   // e.g., http://localhost:54321
+  port: number;      // e.g., 54321
+  issuer: string;    // e.g., http://localhost:54321
+  jwksUrl: string;   // e.g., http://localhost:54321/.well-known/jwks.json
+}
+```
+
+### Available Endpoints
+
+| Endpoint                                  | Method | Description                            |
+| ----------------------------------------- | ------ | -------------------------------------- |
+| `/.well-known/jwks.json`                  | GET    | Public signing keys                    |
+| `/.well-known/openid-configuration`       | GET    | OIDC discovery document                |
+| `/.well-known/oauth-authorization-server` | GET    | OAuth metadata                         |
+| `/oauth/authorize`                        | GET    | Authorization endpoint                 |
+| `/oauth/authorize/submit`                 | POST   | Authorization form submission          |
+| `/oauth/token`                            | POST   | Token endpoint                         |
+| `/userinfo`                               | GET    | User info endpoint                     |
+
+### Supported Grant Types
+
+- `authorization_code` - Standard OAuth flow with PKCE
+- `refresh_token` - Refresh token rotation
+- `anonymous` - Issue anonymous tokens for testing
+
+### Example: Full OAuth Flow Test
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+test('complete OAuth authorization flow', async ({ page }) => {
+  const tokenFactory = new TestTokenFactory();
+  const oauthServer = new MockOAuthServer(tokenFactory, {
+    autoApprove: true,
+    testUser: {
+      sub: 'test-user-123',
+      email: 'test@example.com',
+      name: 'Test User',
+    },
+    clientId: 'test-client',
+    validRedirectUris: ['http://localhost:3000/*'],
+  });
+
+  const { baseUrl } = await oauthServer.start();
+
+  try {
+    // Configure your app to use this OAuth server
+    // Then navigate to your app's login
+    await page.goto('http://localhost:3000/login');
+
+    // With autoApprove=true, the server automatically redirects
+    // back with an authorization code
+
+    // Verify the callback was successful
+    await expect(page).toHaveURL(/callback.*code=/);
+  } finally {
+    await oauthServer.stop();
+  }
+});
+```
+
+### Configuration Methods
+
+```typescript
+// Change auto-approve mode at runtime
+oauthServer.setAutoApprove(true);
+
+// Update test user
+oauthServer.setTestUser({ sub: 'new-user', email: 'new@example.com' });
+
+// Add valid redirect URI
+oauthServer.addValidRedirectUri('http://localhost:4000/callback');
+
+// Clear stored tokens (for test isolation)
+oauthServer.clearStoredTokens();
+
+// Access the token factory
+const factory = oauthServer.getTokenFactory();
+```
+
+<Warning>
+  MockOAuthServer is intended for testing only. It accepts any valid-looking credentials in non-autoApprove mode. Never use it in production.
+</Warning>

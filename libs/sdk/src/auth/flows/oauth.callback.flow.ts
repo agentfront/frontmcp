@@ -191,6 +191,15 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     if (isFederated && pendingAuth.federatedLogin) {
       const allProviders = pendingAuth.federatedLogin.providerIds;
       const selected = selectedProviders || [];
+
+      // Validate selectedProviders against allowed providerIds
+      const invalidProviders = selected.filter((id) => !allProviders.includes(id));
+      if (invalidProviders.length > 0) {
+        this.logger.warn(`Invalid provider IDs: ${invalidProviders.join(', ')}`);
+        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid provider selection'), 400));
+        return;
+      }
+
       skippedProviders = allProviders.filter((id) => !selected.includes(id));
     }
 
@@ -355,8 +364,9 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // Build redirect URL to first provider
     const providerConfig = localAuth.getProviderConfig(firstProviderId);
     if (!providerConfig) {
-      // Provider not configured yet - for now, fall back to normal auth
+      // Provider not configured yet - clean up session and fall back to normal auth
       this.logger.warn(`Provider ${firstProviderId} not configured, falling back to normal auth`);
+      await sessionStore.delete(federatedSession.id);
       return;
     }
 
@@ -368,6 +378,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     if (!redirectUrl) {
       this.logger.error(`Failed to build authorize URL for provider: ${firstProviderId}`);
+      await sessionStore.delete(federatedSession.id);
       this.respond(
         httpRespond.html(
           this.renderErrorPage('server_error', `Failed to initiate auth with provider: ${firstProviderId}`),

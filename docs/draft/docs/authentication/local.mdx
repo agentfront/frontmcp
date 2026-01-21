@@ -78,6 +78,53 @@ grant_type=authorization_code
 &code_verifier=original-verifier
 ```
 
+### OAuth Callback Flow (`/oauth/callback`)
+
+The callback endpoint processes the user's response from the authorization page and creates an authorization code. It executes through the following stages:
+
+| Stage                   | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `parseInput`            | Extract query parameters (email, pending_auth_id, etc) |
+| `validatePendingAuth`   | Verify pending auth record and validate providers      |
+| `handleIncrementalAuth` | Process progressive authorization for apps             |
+| `handleFederatedAuth`   | Chain through federated identity providers             |
+| `createAuthorizationCode` | Generate authorization code with consent data        |
+| `redirectToClient`      | Redirect user back to client with code                 |
+
+#### Callback Query Parameters
+
+| Parameter         | Description                                |
+| ----------------- | ------------------------------------------ |
+| `pending_auth_id` | Reference to pending authorization record  |
+| `email`           | User's email address                       |
+| `name`            | User's display name (optional)             |
+| `incremental`     | Set to `true` for progressive auth         |
+| `app_id`          | Target app for incremental authorization   |
+| `federated`       | Set to `true` for federated login          |
+| `providers`       | Selected provider IDs (array or string)    |
+| `tools`           | Selected tool IDs for consent (array)      |
+
+#### Federated Provider Chaining
+
+When `federated=true` and providers are selected:
+
+1. A federated session is created to track progress
+2. PKCE is generated for the first provider
+3. User is redirected to the first provider's authorization URL
+4. After each provider completes, the chain continues to the next
+5. Once all providers complete, an authorization code is created
+
+<Warning>
+  Selected provider IDs are validated against the pending authorization's allowed providers. Invalid provider IDs are rejected with a 400 error.
+</Warning>
+
+#### Error Handling
+
+- Missing `pending_auth_id`: Returns 400 with error page
+- Expired authorization: Returns 400 with "request expired" message
+- Invalid provider selection: Returns 400 with "invalid provider selection" message
+- Missing required fields: Returns 500 with error page
+
 ---
 
 ## Key Management

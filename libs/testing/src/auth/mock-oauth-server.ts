@@ -46,7 +46,7 @@
  */
 
 import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes, sha256Base64url, base64urlEncode } from '@frontmcp/utils';
 import type { TestTokenFactory } from './token-factory';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -435,13 +435,7 @@ export class MockOAuthServer {
       return;
     }
 
-    // Validate client_id if configured
-    if (this.options.clientId && clientId !== this.options.clientId) {
-      this.redirectWithError(res, redirectUri, 'unauthorized_client', 'Invalid client_id', state);
-      return;
-    }
-
-    // Validate redirect_uri
+    // Validate redirect_uri FIRST (before any redirects to prevent open redirect)
     if (!this.isValidRedirectUri(redirectUri)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
@@ -450,6 +444,12 @@ export class MockOAuthServer {
           error_description: 'Invalid redirect_uri',
         }),
       );
+      return;
+    }
+
+    // Validate client_id if configured (safe to redirect now that redirect_uri is validated)
+    if (this.options.clientId && clientId !== this.options.clientId) {
+      this.redirectWithError(res, redirectUri, 'unauthorized_client', 'Invalid client_id', state);
       return;
     }
 
@@ -850,13 +850,7 @@ export class MockOAuthServer {
       return;
     }
 
-    // Handle deny action
-    if (action === 'deny') {
-      this.redirectWithError(res, redirectUri, 'access_denied', 'User denied the authorization request', state);
-      return;
-    }
-
-    // Validate redirect_uri
+    // Validate redirect_uri FIRST (before any redirects to prevent open redirect)
     if (!this.isValidRedirectUri(redirectUri)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
@@ -865,6 +859,12 @@ export class MockOAuthServer {
           error_description: 'Invalid redirect_uri',
         }),
       );
+      return;
+    }
+
+    // Handle deny action (safe to redirect now that redirect_uri is validated)
+    if (action === 'deny') {
+      this.redirectWithError(res, redirectUri, 'access_denied', 'User denied the authorization request', state);
       return;
     }
 
@@ -1026,7 +1026,7 @@ export class MockOAuthServer {
    * Generate a random authorization code
    */
   private generateCode(): string {
-    return randomBytes(32).toString('base64url');
+    return base64urlEncode(randomBytes(32));
   }
 
   /**
@@ -1034,7 +1034,7 @@ export class MockOAuthServer {
    */
   private computeCodeChallenge(verifier: string, method?: string): string {
     if (method === 'S256') {
-      return createHash('sha256').update(verifier).digest('base64url');
+      return sha256Base64url(verifier);
     }
     // Plain method (not recommended but supported)
     return verifier;
