@@ -288,10 +288,10 @@ describe('CimdService', () => {
       });
 
       await service.resolveClientMetadata('https://example.com/oauth/client-metadata.json');
-      expect(service.getCacheStats().size).toBe(1);
+      expect((await service.getCacheStats()).size).toBe(1);
 
-      service.clearCache('https://example.com/oauth/client-metadata.json');
-      expect(service.getCacheStats().size).toBe(0);
+      await service.clearCache('https://example.com/oauth/client-metadata.json');
+      expect((await service.getCacheStats()).size).toBe(0);
     });
 
     it('should clear all cache', async () => {
@@ -316,14 +316,14 @@ describe('CimdService', () => {
 
       await service.resolveClientMetadata('https://example.com/oauth/client-metadata.json');
 
-      service.clearCache();
-      expect(service.getCacheStats().size).toBe(0);
+      await service.clearCache();
+      expect((await service.getCacheStats()).size).toBe(0);
     });
   });
 
   describe('getCacheStats', () => {
-    it('should return cache statistics', () => {
-      const stats = service.getCacheStats();
+    it('should return cache statistics', async () => {
+      const stats = await service.getCacheStats();
       expect(stats).toHaveProperty('size');
       expect(typeof stats.size).toBe('number');
     });

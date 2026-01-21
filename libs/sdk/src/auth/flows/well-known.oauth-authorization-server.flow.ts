@@ -118,7 +118,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
         scopesSupported: [],
         tokenEndpointAuthMethods: [],
         dcrEnabled: false, //scope.oauth.dcrEnabled,
-        isOrchestrated: !metadata.auth, // scope.orchestrated,
+        isOrchestrated: metadata.auth ? isOrchestratedMode(metadata.auth) : false,
         cimdEnabled,
       }),
     );

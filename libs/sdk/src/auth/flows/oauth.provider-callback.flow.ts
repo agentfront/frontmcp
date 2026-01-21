@@ -43,7 +43,7 @@ import {
   getNextProvider,
   type ProviderPkce,
 } from '../session/federated-auth.session';
-import { randomUUID, sha256Base64url } from '@frontmcp/utils';
+import { randomUUID, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
 
 const inputSchema = httpInputSchema;
 
@@ -371,7 +371,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Generate PKCE for next provider
-    const verifier = this.generatePkceVerifier();
+    const verifier = generateCodeVerifier();
     const challenge = sha256Base64url(verifier);
     const pkce: ProviderPkce = {
       verifier,
@@ -471,20 +471,6 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     }
     const hash = sha256Base64url(email.toLowerCase());
     return `user:${hash.substring(0, 16)}`;
-  }
-
-  /**
-   * Generate PKCE code verifier
-   */
-  private generatePkceVerifier(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    let verifier = '';
-    const randomValues = new Uint8Array(64);
-    crypto.getRandomValues(randomValues);
-    for (const value of randomValues) {
-      verifier += chars[value % chars.length];
-    }
-    return verifier;
   }
 
   /**

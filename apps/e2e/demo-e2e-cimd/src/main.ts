@@ -2,7 +2,8 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { NotesApp } from './apps/notes';
 
 // Get port from env variable (set by test runner) or default to 3150
-const port = parseInt(process.env['PORT'] ?? '3150', 10);
+const parsedPort = parseInt(process.env['PORT'] ?? '3150', 10);
+const port = Number.isNaN(parsedPort) ? 3150 : parsedPort;
 
 /**
  * Demo server for CIMD (Client ID Metadata Documents) E2E testing.

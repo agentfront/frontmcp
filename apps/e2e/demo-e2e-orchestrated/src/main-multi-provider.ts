@@ -11,7 +11,8 @@ import { TasksApp } from './apps/tasks';
 import { GitHubApp } from './apps/github';
 
 // Get port from env variable (set by test runner) or default to 3122
-const port = parseInt(process.env['PORT'] ?? '3122', 10);
+const parsedPort = parseInt(process.env['PORT'] ?? '3122', 10);
+const port = Number.isNaN(parsedPort) ? 3122 : parsedPort;
 
 // Build upstream providers from environment variables
 function buildUpstreamProviders() {

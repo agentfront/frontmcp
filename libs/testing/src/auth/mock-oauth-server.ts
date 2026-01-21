@@ -850,6 +850,11 @@ export class MockOAuthServer {
       return true;
     }
 
+    // Input length guard to prevent DoS
+    if (redirectUri.length > 2048) {
+      return false;
+    }
+
     for (const pattern of validUris) {
       // Exact match
       if (pattern === redirectUri) {
@@ -857,18 +862,50 @@ export class MockOAuthServer {
       }
 
       // Wildcard pattern (e.g., http://localhost:*/callback)
+      // Uses safe string-based matching (O(n) complexity) instead of regex
       if (pattern.includes('*')) {
-        const regexPattern = pattern
-          .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars except *
-          .replace(/\*/g, '.*'); // Replace * with .*
-        const regex = new RegExp(`^${regexPattern}$`);
-        if (regex.test(redirectUri)) {
+        if (this.matchWildcardPattern(pattern, redirectUri)) {
           return true;
         }
       }
     }
 
     return false;
+  }
+
+  /**
+   * Safe string-based wildcard matching (O(n) complexity)
+   * Avoids regex to prevent ReDoS vulnerabilities
+   */
+  private matchWildcardPattern(pattern: string, input: string): boolean {
+    const parts = pattern.split('*');
+    let remaining = input;
+
+    // First part must be prefix
+    if (!remaining.startsWith(parts[0])) {
+      return false;
+    }
+    remaining = remaining.slice(parts[0].length);
+
+    // Check middle and last parts
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i];
+      if (i === parts.length - 1) {
+        // Last part must be suffix
+        if (!remaining.endsWith(part)) {
+          return false;
+        }
+      } else {
+        // Middle parts must exist somewhere in remaining
+        const idx = remaining.indexOf(part);
+        if (idx === -1) {
+          return false;
+        }
+        remaining = remaining.slice(idx + part.length);
+      }
+    }
+
+    return true;
   }
 
   /**

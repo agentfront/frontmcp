@@ -326,6 +326,47 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
 }
 
 /**
+ * Create a new federated auth session object
+ *
+ * This is a standalone factory function that creates a FederatedAuthSession
+ * without requiring a store instance. Use this for type-safe session creation.
+ *
+ * @param params Session parameters
+ * @param ttlMs Session TTL in milliseconds (default: 15 minutes)
+ */
+export function createFederatedAuthSession(
+  params: {
+    pendingAuthId: string;
+    clientId: string;
+    redirectUri: string;
+    scopes: string[];
+    state?: string;
+    resource?: string;
+    userInfo: { email?: string; name?: string; sub?: string };
+    frontmcpPkce: { challenge: string; method: 'S256' };
+    providerIds: string[];
+  },
+  ttlMs = 15 * 60 * 1000,
+): FederatedAuthSession {
+  const now = Date.now();
+  return {
+    id: randomUUID(),
+    pendingAuthId: params.pendingAuthId,
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    scopes: params.scopes,
+    state: params.state,
+    resource: params.resource,
+    userInfo: params.userInfo,
+    frontmcpPkce: params.frontmcpPkce,
+    providerQueue: [...params.providerIds],
+    completedProviders: new Map(),
+    createdAt: now,
+    expiresAt: now + ttlMs,
+  };
+}
+
+/**
  * Helper to check if all providers have been authenticated
  */
 export function isSessionComplete(session: FederatedAuthSession): boolean {

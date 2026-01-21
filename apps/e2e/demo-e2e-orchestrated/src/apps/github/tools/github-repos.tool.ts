@@ -53,14 +53,17 @@ export class GitHubReposTool extends ToolContext {
     }
 
     // In E2E test context without full OAuth flow, return success with mock data
+    const allRepos = [
+      { name: 'mock-repo-1', description: 'Mock repository for testing' },
+      { name: 'mock-repo-2', description: 'Another mock repository' },
+      { name: 'mock-repo-3', description: 'Third mock repository' },
+    ];
+
     return {
       success: true,
       tokenReceived: false, // No actual token without full OAuth flow
       providerId: 'github',
-      repos: [
-        { name: 'mock-repo-1', description: 'Mock repository for testing' },
-        { name: 'mock-repo-2', description: 'Another mock repository' },
-      ],
+      repos: allRepos.slice(0, input.limit),
     };
   }
 }

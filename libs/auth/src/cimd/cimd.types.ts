@@ -127,9 +127,64 @@ export type ClientMetadataDocumentInput = z.input<typeof clientMetadataDocumentS
 // ============================================
 
 /**
+ * Redis configuration for CIMD cache.
+ */
+export const cimdRedisCacheConfigSchema = z.object({
+  /**
+   * Redis connection URL.
+   * e.g., "redis://user:pass@host:6379/0"
+   */
+  url: z.string().optional(),
+
+  /**
+   * Redis host.
+   */
+  host: z.string().optional(),
+
+  /**
+   * Redis port.
+   * @default 6379
+   */
+  port: z.number().optional(),
+
+  /**
+   * Redis password.
+   */
+  password: z.string().optional(),
+
+  /**
+   * Redis database number.
+   * @default 0
+   */
+  db: z.number().optional(),
+
+  /**
+   * Enable TLS for Redis connection.
+   * @default false
+   */
+  tls: z.boolean().optional(),
+
+  /**
+   * Key prefix for CIMD cache entries.
+   * @default 'cimd:'
+   */
+  keyPrefix: z.string().default('cimd:'),
+});
+
+export type CimdRedisCacheConfig = z.infer<typeof cimdRedisCacheConfigSchema>;
+
+/**
  * Cache configuration for CIMD service.
  */
 export const cimdCacheConfigSchema = z.object({
+  /**
+   * Cache storage type.
+   * - 'memory': In-memory cache (default, suitable for dev/single-instance)
+   * - 'redis': Redis-backed cache (for production/distributed deployments)
+   * @default 'memory'
+   */
+  type: z.enum(['memory', 'redis']).default('memory'),
+
   /**
    * Default TTL for cached metadata documents.
    * @default 3600000 (1 hour)
@@ -147,6 +202,11 @@ export const cimdCacheConfigSchema = z.object({
    * @default 60000 (1 minute)
    */
   minTtlMs: z.number().min(0).default(60_000),
+
+  /**
+   * Redis configuration (required when type is 'redis').
+   */
+  redis: cimdRedisCacheConfigSchema.optional(),
 });
 
 export type CimdCacheConfig = z.infer<typeof cimdCacheConfigSchema>;

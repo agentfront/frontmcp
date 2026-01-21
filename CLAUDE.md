@@ -304,22 +304,49 @@ See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete e
 
 ### Crypto Utilities
 
-**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly.
+**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly or implement custom crypto functions.
 
 ```typescript
 import {
+  // PKCE (RFC 7636)
+  generateCodeVerifier, // PKCE code verifier (43-128 chars)
+  generateCodeChallenge, // PKCE code challenge (S256)
+  generatePkcePair, // Generate both verifier and challenge
+
+  // Hashing
+  sha256, // SHA-256 hash (Uint8Array)
+  sha256Hex, // SHA-256 hash (hex string)
+  sha256Base64url, // SHA-256 hash (base64url string)
+
+  // Encryption
   hkdfSha256, // HKDF-SHA256 key derivation (RFC 5869)
   encryptAesGcm, // AES-256-GCM encryption
   decryptAesGcm, // AES-256-GCM decryption
+
+  // Random generation
   randomBytes, // Cryptographic random bytes
-  sha256,
-  sha256Hex, // SHA-256 hashing
+  randomUUID, // UUID v4 generation
+
+  // Encoding
   base64urlEncode, // Base64url encoding
   base64urlDecode, // Base64url decoding
 } from '@frontmcp/utils';
 ```
 
 This ensures cross-platform support (Node.js and browser) with consistent behavior.
+
+```typescript
+// ✅ Good - use utils for PKCE
+import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
+const verifier = generateCodeVerifier();
+const challenge = sha256Base64url(verifier);
+
+// ❌ Bad - custom implementation
+private generatePkceVerifier(): string {
+  const chars = 'ABC...';
+  // Don't do this - use generateCodeVerifier() instead
+}
+```
 
 ### File System Utilities
 

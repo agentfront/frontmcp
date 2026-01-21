@@ -7,7 +7,7 @@
  */
 import type { CimdLogger } from './cimd.logger';
 import { noopLogger } from './cimd.logger';
-import { CimdCache } from './cimd.cache';
+import { CimdCache, type CimdCacheBackend } from './cimd.cache';
 import {
   CimdFetchError,
   CimdValidationError,
@@ -41,7 +41,7 @@ export class CimdService {
   private readonly cacheConfig: CimdCacheConfig;
   private readonly securityConfig: CimdSecurityConfig;
   private readonly networkConfig: CimdNetworkConfig;
-  private readonly cache: CimdCache;
+  private readonly cache: CimdCacheBackend;
   private readonly logger: CimdLogger;
 
   /**
@@ -117,7 +117,7 @@ export class CimdService {
     validateClientIdUrl(clientId, this.securityConfig);
 
     // Check cache first
-    const cached = this.cache.get(clientId);
+    const cached = await this.cache.get(clientId);
     if (cached) {
       this.logger.debug(`Cache hit for CIMD client: ${clientId}`);
       return {
@@ -143,8 +143,8 @@ export class CimdService {
     }
 
     // Cache the result
-    this.cache.set(clientId, document, headers);
-    const entry = this.cache.get(clientId);
+    await this.cache.set(clientId, document, headers);
+    const entry = await this.cache.get(clientId);
 
     return {
       isCimdClient: true,
@@ -178,12 +178,12 @@ export class CimdService {
    *
    * @param clientId - Optional client_id to clear; clears all if not provided
    */
-  clearCache(clientId?: string): void {
+  async clearCache(clientId?: string): Promise<void> {
     if (clientId) {
-      this.cache.delete(clientId);
+      await this.cache.delete(clientId);
       this.logger.debug(`Cache cleared for: ${clientId}`);
     } else {
-      this.cache.clear();
+      await this.cache.clear();
       this.logger.debug('Cache cleared');
     }
   }
@@ -191,9 +191,9 @@ export class CimdService {
   /**
    * Get cache statistics.
    */
-  getCacheStats(): { size: number } {
+  async getCacheStats(): Promise<{ size: number }> {
     return {
-      size: this.cache.size(),
+      size: await this.cache.size(),
     };
   }
 
@@ -208,7 +208,7 @@ export class CimdService {
 
     try {
       // Check for conditional request headers
-      const conditionalHeaders = this.cache.getConditionalHeaders(clientId);
+      const conditionalHeaders = await this.cache.getConditionalHeaders(clientId);
 
       const response = await fetch(clientId, {
         method: 'GET',
@@ -221,9 +221,9 @@ export class CimdService {
 
       // Handle 304 Not Modified
       if (response.status === 304) {
-        const staleEntry = this.cache.getStale(clientId);
+        const staleEntry = await this.cache.getStale(clientId);
         if (staleEntry) {
-          this.cache.revalidate(clientId, response.headers);
+          await this.cache.revalidate(clientId, response.headers);
           this.logger.debug(`CIMD document not modified: ${clientId}`);
           return {
             document: staleEntry.document,
@@ -291,7 +291,12 @@ export class CimdService {
   private async readResponseWithLimit(response: Response, maxBytes: number, clientId: string): Promise<string> {
     const reader = response.body?.getReader();
     if (!reader) {
-      return response.text();
+      // Fallback: use arrayBuffer to check size
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > maxBytes) {
+        throw new CimdResponseTooLargeError(clientId, maxBytes, buffer.byteLength);
+      }
+      return new TextDecoder().decode(buffer);
     }
 
     const chunks: Uint8Array[] = [];

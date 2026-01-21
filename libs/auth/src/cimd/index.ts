@@ -19,6 +19,7 @@ export {
   // Schemas
   clientMetadataDocumentSchema,
   cimdCacheConfigSchema,
+  cimdRedisCacheConfigSchema,
   cimdSecurityConfigSchema,
   cimdNetworkConfigSchema,
   cimdConfigSchema,
@@ -26,6 +27,7 @@ export {
   type ClientMetadataDocument,
   type ClientMetadataDocumentInput,
   type CimdCacheConfig,
+  type CimdRedisCacheConfig,
   type CimdSecurityConfig,
   type CimdNetworkConfig,
   type CimdConfig,
@@ -62,12 +64,23 @@ export {
 // Cache
 // ============================================
 export {
-  CimdCache,
+  // Classes
+  InMemoryCimdCache,
+  CimdCache, // Backwards compatibility alias
+  // Factory
+  createCimdCache,
+  // Functions
   extractCacheHeaders,
   parseCacheHeaders,
+  // Types
+  type CimdCacheBackend,
   type CimdCacheEntry,
+  type CimdCacheTtlConfig,
   type CacheableHeaders,
 } from './cimd.cache';
+
+// Redis cache (separate export for lazy loading)
+export { RedisCimdCache } from './cimd-redis.cache';
 
 // ============================================
 // Service

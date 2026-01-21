@@ -3,6 +3,8 @@
  *
  * Implements caching for CIMD documents that respects HTTP cache headers
  * like Cache-Control, Expires, ETag, and Last-Modified.
+ *
+ * Supports both in-memory and Redis backends.
  */
 import type { ClientMetadataDocument, CimdCacheConfig } from './cimd.types';
 
@@ -48,6 +50,76 @@ export interface CacheableHeaders {
 }
 
 /**
+ * TTL configuration for cache operations.
+ * This is the minimal config needed for cache TTL calculations.
+ */
+export interface CimdCacheTtlConfig {
+  defaultTtlMs: number;
+  maxTtlMs: number;
+  minTtlMs: number;
+}
+
+/**
+ * CIMD Cache Backend Interface.
+ *
+ * All cache operations are async to support both in-memory and Redis backends.
+ */
+export interface CimdCacheBackend {
+  /**
+   * Get a cached entry by client_id.
+   * Returns undefined if not cached or expired.
+   */
+  get(clientId: string): Promise<CimdCacheEntry | undefined>;
+
+  /**
+   * Get a stale entry for conditional revalidation.
+   * Returns the entry even if expired.
+   */
+  getStale(clientId: string): Promise<CimdCacheEntry | undefined>;
+
+  /**
+   * Store a document in the cache with headers for TTL computation.
+   */
+  set(clientId: string, document: ClientMetadataDocument, headers: Headers): Promise<void>;
+
+  /**
+   * Update an existing cache entry after 304 Not Modified.
+   */
+  revalidate(clientId: string, headers: Headers): Promise<boolean>;
+
+  /**
+   * Delete a cache entry.
+   */
+  delete(clientId: string): Promise<boolean>;
+
+  /**
+   * Get conditional request headers for a cached entry.
+   */
+  getConditionalHeaders(clientId: string): Promise<Record<string, string> | undefined>;
+
+  /**
+   * Clear all cached entries.
+   */
+  clear(): Promise<void>;
+
+  /**
+   * Get the number of cached entries.
+   */
+  size(): Promise<number>;
+
+  /**
+   * Remove expired entries.
+   * Returns the number of entries removed.
+   */
+  cleanup(): Promise<number>;
+
+  /**
+   * Close the cache backend (for Redis connections).
+   */
+  close?(): Promise<void>;
+}
+
+/**
  * Parse cache-relevant headers from a Response or Headers object.
  */
 export function extractCacheHeaders(headers: Headers): CacheableHeaders {
@@ -69,7 +141,7 @@ export function extractCacheHeaders(headers: Headers): CacheableHeaders {
  */
 export function parseCacheHeaders(
   headers: CacheableHeaders,
-  config: CimdCacheConfig,
+  config: CimdCacheTtlConfig,
 ): {
   ttlMs: number;
   etag?: string;
@@ -101,7 +173,17 @@ export function parseCacheHeaders(
     }
     // s-maxage takes precedence for shared caches
     if (typeof cacheControl['s-maxage'] === 'number') {
-      ttlMs = cacheControl['s-maxage'] * 1000;
+      let sMaxAgeSecs = cacheControl['s-maxage'];
+
+      // Subtract Age header if present (same as max-age)
+      if (headers.age) {
+        const ageSeconds = parseInt(headers.age, 10);
+        if (!isNaN(ageSeconds)) {
+          sMaxAgeSecs = Math.max(0, sMaxAgeSecs - ageSeconds);
+        }
+      }
+
+      ttlMs = sMaxAgeSecs * 1000;
     }
   }
   // Fall back to Expires header
@@ -150,13 +232,14 @@ function parseCacheControlHeader(value: string): Record<string, number | boolean
 }
 
 /**
- * CIMD document cache.
+ * In-Memory CIMD document cache.
  *
  * Stores cached CIMD documents with HTTP cache-aware TTLs.
+ * Suitable for development and single-instance deployments.
  */
-export class CimdCache {
+export class InMemoryCimdCache implements CimdCacheBackend {
   private cache = new Map<string, CimdCacheEntry>();
-  private config: CimdCacheConfig;
+  protected readonly config: CimdCacheTtlConfig;
 
   constructor(config?: Partial<CimdCacheConfig>) {
     this.config = {
@@ -172,7 +255,7 @@ export class CimdCache {
    * @param clientId - The client_id URL
    * @returns The cached entry if valid, or undefined
    */
-  get(clientId: string): CimdCacheEntry | undefined {
+  async get(clientId: string): Promise<CimdCacheEntry | undefined> {
     const entry = this.cache.get(clientId);
 
     if (!entry) {
@@ -195,7 +278,7 @@ export class CimdCache {
    * @param clientId - The client_id URL
    * @returns The stale entry (even if expired), or undefined if not cached
    */
-  getStale(clientId: string): CimdCacheEntry | undefined {
+  async getStale(clientId: string): Promise<CimdCacheEntry | undefined> {
     return this.cache.get(clientId);
   }
 
@@ -206,7 +289,7 @@ export class CimdCache {
    * @param document - The metadata document
    * @param headers - HTTP response headers
    */
-  set(clientId: string, document: ClientMetadataDocument, headers: Headers): void {
+  async set(clientId: string, document: ClientMetadataDocument, headers: Headers): Promise<void> {
     const cacheHeaders = extractCacheHeaders(headers);
     const { ttlMs, etag, lastModified } = parseCacheHeaders(cacheHeaders, this.config);
 
@@ -228,7 +311,7 @@ export class CimdCache {
    * @param clientId - The client_id URL
    * @param headers - New HTTP headers with updated cache directives
    */
-  revalidate(clientId: string, headers: Headers): boolean {
+  async revalidate(clientId: string, headers: Headers): Promise<boolean> {
     const existing = this.cache.get(clientId);
     if (!existing) {
       return false;
@@ -251,7 +334,7 @@ export class CimdCache {
    * @param clientId - The client_id URL
    * @returns true if an entry was deleted
    */
-  delete(clientId: string): boolean {
+  async delete(clientId: string): Promise<boolean> {
     return this.cache.delete(clientId);
   }
 
@@ -261,7 +344,7 @@ export class CimdCache {
    * @param clientId - The client_id URL
    * @returns Headers for conditional request, or undefined if not cached
    */
-  getConditionalHeaders(clientId: string): Record<string, string> | undefined {
+  async getConditionalHeaders(clientId: string): Promise<Record<string, string> | undefined> {
     const entry = this.cache.get(clientId);
     if (!entry) {
       return undefined;
@@ -283,14 +366,14 @@ export class CimdCache {
   /**
    * Clear all cached entries.
    */
-  clear(): void {
+  async clear(): Promise<void> {
     this.cache.clear();
   }
 
   /**
    * Get the number of cached entries.
    */
-  size(): number {
+  async size(): Promise<number> {
     return this.cache.size;
   }
 
@@ -299,7 +382,7 @@ export class CimdCache {
    *
    * @returns Number of entries removed
    */
-  cleanup(): number {
+  async cleanup(): Promise<number> {
     const now = Date.now();
     let removed = 0;
 
@@ -313,4 +396,33 @@ export class CimdCache {
 
     return removed;
   }
+}
+
+/**
+ * Backwards compatibility alias for CimdCache.
+ * @deprecated Use InMemoryCimdCache directly or createCimdCache factory.
+ */
+export const CimdCache = InMemoryCimdCache;
+
+/**
+ * Factory function to create a CIMD cache backend.
+ *
+ * @param config - Cache configuration
+ * @returns A cache backend instance (InMemoryCimdCache or RedisCimdCache)
+ */
+export async function createCimdCache(config?: CimdCacheConfig): Promise<CimdCacheBackend> {
+  const cacheType = config?.type ?? 'memory';
+
+  if (cacheType === 'redis') {
+    if (!config?.redis) {
+      throw new Error('Redis configuration is required when cache type is "redis"');
+    }
+    // Lazy load Redis implementation to avoid bundling ioredis when not needed
+    const { RedisCimdCache } = await import('./cimd-redis.cache.js');
+    const cache = new RedisCimdCache(config);
+    await cache.connect();
+    return cache;
+  }
+
+  return new InMemoryCimdCache(config);
 }

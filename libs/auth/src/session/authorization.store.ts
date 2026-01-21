@@ -185,6 +185,13 @@ export const authorizationCodeRecordSchema = z.object({
   expiresAt: z.number(),
   used: z.boolean(),
   resource: z.string().url().optional(),
+  // Consent and federated login fields
+  selectedToolIds: z.array(z.string()).optional(),
+  selectedProviderIds: z.array(z.string()).optional(),
+  skippedProviderIds: z.array(z.string()).optional(),
+  consentEnabled: z.boolean().optional(),
+  federatedLoginUsed: z.boolean().optional(),
+  pendingAuthId: z.string().optional(),
 });
 
 /**

@@ -24,9 +24,9 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { randomUUID, sha256Hex, sha256Base64url } from '@frontmcp/utils';
+import { randomUUID, sha256Hex, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
 import { escapeHtml } from '../ui';
-import { startNextProvider, type ProviderPkce } from '../session/federated-auth.session';
+import { startNextProvider, createFederatedAuthSession, type ProviderPkce } from '../session/federated-auth.session';
 
 const inputSchema = httpInputSchema;
 
@@ -307,8 +307,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Create federated session
-    const federatedSession = (sessionStore as any).createSession({
+    // Create federated session using type-safe factory function
+    const federatedSession = createFederatedAuthSession({
       pendingAuthId: this.state.required.pendingAuthId || randomUUID(),
       clientId,
       redirectUri,
@@ -322,7 +322,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       },
       frontmcpPkce: {
         challenge: codeChallenge,
-        method: 'S256' as const,
+        method: 'S256',
       },
       providerIds: selectedProviders,
     });
@@ -335,7 +335,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const firstProviderId = selectedProviders[0];
 
     // Generate PKCE for the provider
-    const verifier = this.generatePkceVerifier();
+    const verifier = generateCodeVerifier();
     const challenge = sha256Base64url(verifier);
     const pkce: ProviderPkce = {
       verifier,
@@ -379,20 +379,6 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     this.logger.info(`Redirecting to first provider: ${firstProviderId}`);
     this.respond(httpRespond.redirect(redirectUrl));
-  }
-
-  /**
-   * Generate PKCE code verifier
-   */
-  private generatePkceVerifier(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    let verifier = '';
-    const randomValues = new Uint8Array(64);
-    crypto.getRandomValues(randomValues);
-    for (const value of randomValues) {
-      verifier += chars[value % chars.length];
-    }
-    return verifier;
   }
 
   @Stage('createAuthorizationCode')
