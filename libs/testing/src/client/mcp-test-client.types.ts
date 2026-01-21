@@ -105,12 +105,34 @@ export interface ExperimentalCapabilities {
 }
 
 /**
+ * Form elicitation capability options.
+ */
+export interface FormElicitationCapability {
+  /** Whether to apply default values from the schema */
+  applyDefaults?: boolean;
+}
+
+/**
+ * Elicitation capabilities for interactive user input.
+ * Enables servers to request user input during tool execution.
+ * Note: MCP SDK expects form/url to be objects, not booleans.
+ */
+export interface ElicitationCapabilities {
+  /** Support for form-based elicitation (inline forms) - use empty object {} to enable */
+  form?: FormElicitationCapability | Record<string, unknown>;
+  /** Support for URL-based elicitation (external forms) - use empty object {} to enable */
+  url?: Record<string, unknown>;
+}
+
+/**
  * Client capabilities sent during MCP initialization.
  * These capabilities enable platform-specific detection and features.
  */
 export interface TestClientCapabilities {
   /** Sampling capabilities */
   sampling?: Record<string, unknown>;
+  /** Elicitation capabilities for interactive user input */
+  elicitation?: ElicitationCapabilities;
   /** Experimental capabilities including MCP Apps extension */
   experimental?: ExperimentalCapabilities;
 }
@@ -364,6 +386,43 @@ export interface AuthState {
     name?: string;
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ELICITATION TYPES
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Elicitation request from server to client.
+ * Sent when a tool needs interactive user input during execution.
+ */
+export interface ElicitationCreateRequest {
+  /** Mode of elicitation: 'form' for structured input, 'url' for redirect */
+  mode: 'form' | 'url';
+  /** Message to display to the user */
+  message: string;
+  /** JSON Schema for the expected response (form mode) */
+  requestedSchema?: Record<string, unknown>;
+  /** URL for out-of-band interaction (url mode) */
+  url?: string;
+  /** Unique identifier for tracking (url mode) */
+  elicitationId?: string;
+}
+
+/**
+ * Response from client to elicitation request.
+ */
+export interface ElicitResponse {
+  /** User's action: 'accept' (submitted), 'cancel', or 'decline' */
+  action: 'accept' | 'cancel' | 'decline';
+  /** Content submitted by user (only when action is 'accept') */
+  content?: Record<string, unknown>;
+}
+
+/**
+ * Handler function for elicitation requests.
+ * Called when the server requests interactive input during tool execution.
+ */
+export type ElicitationHandler = (request: ElicitationCreateRequest) => Promise<ElicitResponse> | ElicitResponse;
 
 // ═══════════════════════════════════════════════════════════════════
 // RE-EXPORTS FROM MCP SDK

@@ -15,4 +15,5 @@ export {
   detectPlatformFromCapabilities,
   hasMcpAppsExtension,
   MCP_APPS_EXTENSION_KEY,
+  supportsElicitation,
 } from './notification.service';

@@ -14,6 +14,7 @@ import CallToolFlow from './flows/call-tool.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../scope';
 import { AppEntry } from '../common';
+import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -262,6 +263,32 @@ export default class ToolRegistry
     return [...local, ...adopted].filter((t) => t.metadata.hideFromDiscovery !== true || includeHidden);
   }
 
+  /**
+   * Get tools appropriate for MCP listing based on client elicitation support.
+   *
+   * This method handles capability-based tool filtering:
+   * - Always returns non-hidden tools
+   * - If client doesn't support elicitation, includes the sendElicitationResult fallback tool
+   *
+   * @param supportsElicitation - Whether the client supports MCP elicitation (from session payload)
+   * @returns Tools appropriate for this client
+   */
+  // NOTE: `any` is intentional - see getTools comment above
+  getToolsForListing(supportsElicitation?: boolean): ToolEntry<any, any>[] {
+    const tools = this.getTools(false); // Non-hidden tools only
+
+    // If client doesn't support standard elicitation, add the fallback tool
+    if (!supportsElicitation) {
+      const allTools = this.getTools(true); // Include hidden to find elicitation tool
+      const elicitTool = allTools.find((t) => isSendElicitationResultTool(t.metadata?.name ?? ''));
+      if (elicitTool && !tools.includes(elicitTool)) {
+        return [...tools, elicitTool];
+      }
+    }
+
+    return tools;
+  }
+
   // NOTE: `any` is intentional - see getTools comment above
   getInlineTools(): ToolEntry<any, any>[] {
     return [...this.instances.values()];
@@ -370,14 +397,14 @@ export default class ToolRegistry
 
         // Children
         for (const c of children) {
-          const pre = cfg.prefixSource === 'provider' ? c.provider ?? c.ownerPath : c.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (c.provider ?? c.ownerPath) : c.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), c.row.instance);
         }
       } else {
         // Prefix everyone by source
         for (const r of group) {
-          const pre = cfg.prefixSource === 'provider' ? r.provider ?? r.ownerPath : r.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (r.provider ?? r.ownerPath) : r.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), r.row.instance);
         }

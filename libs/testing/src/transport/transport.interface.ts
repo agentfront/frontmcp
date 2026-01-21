@@ -3,7 +3,7 @@
  * @description Interface for MCP transport implementations
  */
 
-import type { ClientInfo } from '../client/mcp-test-client.types';
+import type { ClientInfo, ElicitationHandler } from '../client/mcp-test-client.types';
 
 // Simplified JSON-RPC types for transport layer
 export interface JsonRpcRequest {
@@ -121,6 +121,13 @@ export interface McpTransport {
    * Get the current interceptor chain
    */
   getInterceptors?(): import('../interceptor').InterceptorChain | undefined;
+
+  /**
+   * Set the elicitation handler for server→client elicit requests.
+   * When the server sends an elicitation/create request during tool execution,
+   * this handler is called to provide the user's response.
+   */
+  setElicitationHandler?(handler: ElicitationHandler | undefined): void;
 }
 
 /**
@@ -148,4 +155,6 @@ export interface TransportConfig {
   interceptors?: import('../interceptor').InterceptorChain;
   /** Client info for User-Agent header (enables platform detection on server) */
   clientInfo?: ClientInfo;
+  /** Handler for server→client elicitation requests during tool execution */
+  elicitationHandler?: ElicitationHandler;
 }

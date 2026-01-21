@@ -3,7 +3,7 @@ import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcont
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { UnsupportedClientVersionError } from '../../errors';
 import type { ClientCapabilities } from '../../notification';
-import { detectPlatformFromCapabilities, detectAIPlatform } from '../../notification';
+import { detectPlatformFromCapabilities, detectAIPlatform, supportsElicitation } from '../../notification';
 import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
 
 /**
@@ -42,6 +42,13 @@ export default function initializeRequestHandler({
       const sessionId = ctx.authInfo?.sessionId;
       let detectedPlatform: ReturnType<typeof detectPlatformFromCapabilities> = undefined;
 
+      // Determine if client supports elicitation from capabilities
+      const clientSupportsElicitation = supportsElicitation(
+        request.params.capabilities?.elicitation
+          ? ({ elicitation: request.params.capabilities.elicitation } as ClientCapabilities)
+          : undefined,
+      );
+
       if (sessionId) {
         // Store client capabilities if provided
         if (request.params.capabilities) {
@@ -51,6 +58,8 @@ export default function initializeRequestHandler({
             sampling: request.params.capabilities.sampling as ClientCapabilities['sampling'],
             // Include experimental capabilities for MCP Apps extension detection
             experimental: request.params.capabilities.experimental as ClientCapabilities['experimental'],
+            // Include elicitation capability for interactive user input support
+            elicitation: request.params.capabilities.elicitation as ClientCapabilities['elicitation'],
           };
           scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
 
@@ -61,10 +70,12 @@ export default function initializeRequestHandler({
         // Store client info (name/version) for platform detection
         // and update the session payload with the detected platform type
         if (request.params.clientInfo) {
+          const { name: clientName, version: clientVersion } = request.params.clientInfo;
+
           // Try to store in notification service (may fail for HTTP transports without registered server)
           scope.notifications.setClientInfo(sessionId, {
-            name: request.params.clientInfo.name,
-            version: request.params.clientInfo.version,
+            name: clientName,
+            version: clientVersion,
           });
 
           // Detect platform directly from client info (don't rely on setClientInfo return)
@@ -75,21 +86,37 @@ export default function initializeRequestHandler({
           // Prefer capability-based detection (ext-apps) over client info detection
           const finalPlatform = detectedPlatform ?? clientInfoPlatform;
 
-          // Update the session payload with the detected platform type
-          // This makes platformType available via ctx.authInfo.sessionIdPayload.platformType
-          if (finalPlatform && ctx.authInfo?.sessionIdPayload) {
-            ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
+          // Update the session payload with client name, version, detected platform type, and elicitation support
+          // This makes them available via ctx.authInfo.sessionIdPayload for logging, stateless access, and persistence
+          if (ctx.authInfo?.sessionIdPayload) {
+            ctx.authInfo.sessionIdPayload.clientName = clientName;
+            ctx.authInfo.sessionIdPayload.clientVersion = clientVersion;
+            ctx.authInfo.sessionIdPayload.supportsElicitation = clientSupportsElicitation;
+            if (finalPlatform) {
+              ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
+            }
 
-            // Persist the platformType to the session cache so subsequent requests can access it
+            // Persist to session cache so subsequent requests can access client info
             // This is critical for HTTP transports where sessions are parsed from encrypted headers
-            updateSessionPayload(sessionId, { platformType: finalPlatform });
+            updateSessionPayload(sessionId, {
+              clientName,
+              clientVersion,
+              supportsElicitation: clientSupportsElicitation,
+              ...(finalPlatform && { platformType: finalPlatform }),
+            });
           }
-        } else if (detectedPlatform && ctx.authInfo?.sessionIdPayload) {
-          // Update platform even without client info if detected from capabilities
-          ctx.authInfo.sessionIdPayload.platformType = detectedPlatform;
+        } else if (ctx.authInfo?.sessionIdPayload) {
+          // Update platform and elicitation support even without client info
+          ctx.authInfo.sessionIdPayload.supportsElicitation = clientSupportsElicitation;
+          if (detectedPlatform) {
+            ctx.authInfo.sessionIdPayload.platformType = detectedPlatform;
+          }
 
           // Persist to session cache
-          updateSessionPayload(sessionId, { platformType: detectedPlatform });
+          updateSessionPayload(sessionId, {
+            supportsElicitation: clientSupportsElicitation,
+            ...(detectedPlatform && { platformType: detectedPlatform }),
+          });
         }
       }
 

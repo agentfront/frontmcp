@@ -7,7 +7,6 @@ import type {
   McpTestClientConfig,
   McpResponse,
   TestTransportType,
-  TestAuthConfig,
   TestClientCapabilities,
   ToolResultWrapper,
   ResourceContentWrapper,
@@ -32,6 +31,7 @@ import type {
   ResourceTemplate,
   Prompt,
   JSONRPCResponse,
+  ElicitationHandler,
 } from './mcp-test-client.types';
 import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type { McpTransport } from '../transport/transport.interface';
@@ -80,6 +80,9 @@ export class McpTestClient {
 
   // Interceptor chain
   private _interceptors: InterceptorChain;
+
+  // Elicitation handler for server→client elicit requests
+  private _elicitationHandler?: ElicitationHandler;
 
   // ═══════════════════════════════════════════════════════════════════
   // CONSTRUCTOR & FACTORY
@@ -489,6 +492,67 @@ export class McpTestClient {
   };
 
   // ═══════════════════════════════════════════════════════════════════
+  // ELICITATION
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Register a handler for elicitation requests from the server.
+   *
+   * When a tool calls `this.elicit()` during execution, the server sends an
+   * `elicitation/create` request to the client. This handler is called to
+   * provide the response that would normally come from user interaction.
+   *
+   * @param handler - Function that receives the elicitation request and returns a response
+   *
+   * @example
+   * ```typescript
+   * // Simple acceptance
+   * mcp.onElicitation(async () => ({
+   *   action: 'accept',
+   *   content: { confirmed: true }
+   * }));
+   *
+   * // Conditional response based on request
+   * mcp.onElicitation(async (request) => {
+   *   if (request.message.includes('delete')) {
+   *     return { action: 'decline' };
+   *   }
+   *   return { action: 'accept', content: { approved: true } };
+   * });
+   *
+   * // Multi-step wizard
+   * let step = 0;
+   * mcp.onElicitation(async () => {
+   *   step++;
+   *   if (step === 1) return { action: 'accept', content: { name: 'Alice' } };
+   *   return { action: 'accept', content: { color: 'blue' } };
+   * });
+   * ```
+   */
+  onElicitation(handler: ElicitationHandler): void {
+    this._elicitationHandler = handler;
+    // Pass handler to transport if already connected
+    if (this.transport?.setElicitationHandler) {
+      this.transport.setElicitationHandler(handler);
+    }
+    this.log('debug', 'Elicitation handler registered');
+  }
+
+  /**
+   * Clear the elicitation handler.
+   *
+   * After calling this, elicitation requests from the server will not be
+   * handled automatically. This can be used to test timeout scenarios.
+   */
+  clearElicitationHandler(): void {
+    this._elicitationHandler = undefined;
+    if (this.transport?.setElicitationHandler) {
+      this.transport.setElicitationHandler(undefined);
+    }
+    this.log('debug', 'Elicitation handler cleared');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // LOGGING & DEBUGGING
   // ═══════════════════════════════════════════════════════════════════
 
@@ -751,8 +815,13 @@ export class McpTestClient {
 
   private async initialize(): Promise<McpResponse<InitializeResult>> {
     // Use configured capabilities or default to base capabilities
+    // Default includes elicitation.form for testing elicitation workflows
+    // Note: MCP SDK expects form to be an object, not boolean
     const capabilities: TestClientCapabilities = this.config.capabilities ?? {
       sampling: {},
+      elicitation: {
+        form: {},
+      },
     };
 
     return this.request<InitializeResult>('initialize', {
@@ -811,6 +880,7 @@ export class McpTestClient {
           debug: this.config.debug,
           interceptors: this._interceptors,
           clientInfo: this.config.clientInfo,
+          elicitationHandler: this._elicitationHandler,
         });
       case 'sse':
         // TODO: Implement SSE transport

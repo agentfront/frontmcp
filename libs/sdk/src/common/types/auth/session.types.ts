@@ -83,6 +83,12 @@ export type SessionIdPayload = {
   isPublic?: boolean;
   /* The detected AI platform type from MCP initialize clientInfo */
   platformType?: AIPlatformType;
+  /* The MCP client application name (from initialize clientInfo) */
+  clientName?: string;
+  /* The MCP client version (from initialize clientInfo) */
+  clientVersion?: string;
+  /* Whether the client supports MCP elicitation (from initialize capabilities) */
+  supportsElicitation?: boolean;
 };
 export const sessionIdPayloadSchema = z.object({
   nodeId: z.string(),
@@ -92,6 +98,9 @@ export const sessionIdPayloadSchema = z.object({
   protocol: z.enum(['legacy-sse', 'sse', 'streamable-http', 'stateful-http', 'stateless-http']).optional(),
   isPublic: z.boolean().optional(),
   platformType: aiPlatformTypeSchema.optional(),
+  clientName: z.string().optional(),
+  clientVersion: z.string().optional(),
+  supportsElicitation: z.boolean().optional(),
 } satisfies RawZodShape<SessionIdPayload>);
 
 export interface Authorization {

@@ -1,12 +1,11 @@
 import { FuncType, Type } from '@frontmcp/di';
-import { ProviderRegistryInterface } from './internal';
 import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
-import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
+import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
+import { ZodType } from 'zod';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -33,6 +32,12 @@ export abstract class ToolContext<
   protected readonly toolId: string;
   protected readonly toolName: string;
   readonly metadata: ToolMetadata;
+
+  // ---- Internal fields for fallback elicitation support
+  /** @internal Tool name for fallback elicitation - set by CallToolFlow */
+  _toolNameInternal?: string;
+  /** @internal Tool input for fallback elicitation - set by CallToolFlow */
+  _toolInputInternal?: unknown;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -173,6 +178,66 @@ export abstract class ToolContext<
     }
 
     return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
+  }
+
+  // ============================================
+  // Elicitation API
+  // ============================================
+
+  /**
+   * Request interactive input from the user during tool execution.
+   *
+   * Sends an elicitation request to the client for user input. The client
+   * presents the message and a form (or URL) to collect user response.
+   *
+   * Only one elicit per session is allowed. A new elicit will cancel any pending one.
+   * On timeout, an ElicitationTimeoutError is thrown to kill tool execution.
+   *
+   * For clients that don't support elicitation, the framework automatically handles
+   * the fallback flow using the sendElicitationResult tool.
+   *
+   * @param message - Prompt message to display to user
+   * @param requestedSchema - Zod schema defining expected input structure
+   * @param options - Mode ('form'|'url'), ttl (default 5min), elicitationId (for URL mode)
+   * @returns ElicitResult with status and typed content
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation and no fallback available
+   * @throws ElicitationFallbackRequired (internal) triggers fallback flow for non-supporting clients
+   * @throws ElicitationTimeoutError if request times out (kills execution)
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const result = await this.elicit('Confirm action?', z.object({
+   *     confirmed: z.boolean(),
+   *     reason: z.string().optional()
+   *   }));
+   *
+   *   if (result.status !== 'accept') {
+   *     return { cancelled: true };
+   *   }
+   *   // result.content is typed { confirmed: boolean, reason?: string }
+   *   return { confirmed: result.content!.confirmed };
+   * }
+   * ```
+   */
+  protected async elicit<S extends ZodType>(
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+    return performElicit(
+      {
+        sessionId: this.context.sessionId,
+        getClientCapabilities: (sid) => this.scope.notifications.getClientCapabilities(sid),
+        tryGetContext: () => this.tryGetContext(),
+        entryName: this._toolNameInternal ?? this.toolName,
+        entryInput: this._toolInputInternal ?? this.input,
+        elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+      },
+      message,
+      requestedSchema,
+      options,
+    );
   }
 
   // ============================================

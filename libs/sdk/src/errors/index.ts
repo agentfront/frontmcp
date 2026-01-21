@@ -74,6 +74,16 @@ export {
   AgentToolNotFoundError,
 } from './agent.errors';
 
+// Export elicitation errors
+export {
+  ElicitationNotSupportedError,
+  ElicitationTimeoutError,
+  ElicitationFallbackRequired,
+  ElicitationStoreNotInitializedError,
+  ElicitationDisabledError,
+  ElicitationEncryptionError,
+} from './elicitation.error';
+
 // Export remote MCP errors
 export {
   // Connection errors

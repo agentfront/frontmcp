@@ -4,9 +4,7 @@ import {
   authOptionsSchema,
   ServerInfoOptions,
   serverInfoOptionsSchema,
-  HttpOptions,
   httpOptionsSchema,
-  LoggingOptions,
   loggingOptionsSchema,
   RawZodShape,
   AuthOptionsInput,
@@ -20,6 +18,8 @@ import {
   paginationOptionsSchema,
   HttpOptionsInput,
   LoggingOptionsInput,
+  ElicitationOptionsInput,
+  elicitationOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -88,6 +88,14 @@ export interface FrontMcpBaseMetadata {
    * Currently only tool list pagination is supported (tools/list endpoint).
    */
   pagination?: PaginationOptions;
+
+  /**
+   * Elicitation configuration.
+   * Controls whether tools can request interactive user input during execution.
+   * When enabled, tool output schemas are extended to include elicitation fallback response type.
+   * @default { enabled: false }
+   */
+  elicitation?: ElicitationOptionsInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -104,6 +112,7 @@ export const frontMcpBaseSchema = z.object({
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
+  elicitation: elicitationOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
