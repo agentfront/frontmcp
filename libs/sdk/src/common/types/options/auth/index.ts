@@ -15,6 +15,7 @@ export type {
   TokenRefreshConfig,
   SkippedAppBehavior,
   ConsentConfig,
+  FederatedAuthConfig,
   IncrementalAuthConfig,
   // Auth mode interfaces
   PublicAuthOptionsInterface,
@@ -39,6 +40,7 @@ export {
   tokenRefreshConfigSchema,
   skippedAppBehaviorSchema,
   consentConfigSchema,
+  federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
 } from './shared.schemas';
 
@@ -57,6 +59,8 @@ export type {
   SkippedAppBehavior as SkippedAppBehaviorZod,
   ConsentConfig as ConsentConfigZod,
   ConsentConfigInput,
+  FederatedAuthConfig as FederatedAuthConfigZod,
+  FederatedAuthConfigInput,
   IncrementalAuthConfig as IncrementalAuthConfigZod,
   IncrementalAuthConfigInput,
   RedisConfig,

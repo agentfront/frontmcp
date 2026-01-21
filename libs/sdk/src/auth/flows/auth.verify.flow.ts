@@ -27,10 +27,12 @@ import {
   deriveExpectedAudience,
 } from '@frontmcp/auth';
 import type { JSONWebKeySet } from 'jose';
+import { sha256Hex } from '@frontmcp/utils';
 import {
   PublicAuthorization,
   TransparentAuthorization,
   OrchestratedAuthorization,
+  OrchestratedProviderState,
   Authorization,
   TransparentVerifiedPayload,
   TokenStore,
@@ -409,6 +411,25 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         | { selectedProviders?: string[]; skippedProviders?: string[] }
         | undefined;
       const consentClaims = jwtPayload?.['consent'] as { selectedTools?: string[] } | undefined;
+      let providerStates: Record<string, OrchestratedProviderState> | undefined;
+      let providerIdsFromStore: string[] | undefined;
+
+      if (tokenStore) {
+        try {
+          const authorizationId = this.deriveAuthorizationId(token);
+          providerIdsFromStore = await tokenStore.getProviderIds(authorizationId);
+          providerStates = Object.fromEntries(
+            providerIdsFromStore.map((providerId) => [
+              providerId,
+              {
+                id: providerId,
+              },
+            ]),
+          );
+        } catch (error) {
+          this.logger.warn(`Failed to load provider tokens from store: ${error}`);
+        }
+      }
 
       authorization = OrchestratedAuthorization.create({
         token,
@@ -426,7 +447,8 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         // Populate authorized tools from consent claims if available
         authorizedToolIds: consentClaims?.selectedTools,
         // Populate authorized providers from federated claims if available
-        authorizedProviderIds: federatedClaims?.selectedProviders,
+        authorizedProviderIds: tokenStore ? (providerIdsFromStore ?? []) : federatedClaims?.selectedProviders,
+        providers: providerStates,
       });
     } else {
       // Public mode with token (authenticated public)
@@ -482,5 +504,10 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     if (Array.isArray(scope)) return scope.map(String);
     if (typeof scope === 'string') return scope.split(/\s+/).filter(Boolean);
     return [];
+  }
+
+  private deriveAuthorizationId(token: string): string {
+    const signature = token.split('.')[2] || token;
+    return sha256Hex(signature).substring(0, 16);
   }
 }

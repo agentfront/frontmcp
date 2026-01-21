@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   cimdConfigSchema,
   consentConfigSchema,
+  federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
   localSigningConfigSchema,
   publicAccessConfigSchema,
@@ -61,6 +62,12 @@ const orchestratedSharedFields = {
    * @default { enabled: false }
    */
   consent: consentConfigSchema.optional(),
+
+  /**
+   * Federated authentication configuration
+   * Controls validation behavior for multi-provider callbacks
+   */
+  federatedAuth: federatedAuthConfigSchema.optional(),
 
   /**
    * Token refresh settings

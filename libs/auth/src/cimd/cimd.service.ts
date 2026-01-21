@@ -209,62 +209,126 @@ export class CimdService {
     try {
       // Check for conditional request headers
       const conditionalHeaders = await this.cache.getConditionalHeaders(clientId);
+      const originalOrigin = new URL(clientId).origin;
+      const maxRedirects = this.networkConfig.maxRedirects;
 
-      const response = await fetch(clientId, {
-        method: 'GET',
-        headers: {
+      let currentUrl = clientId;
+      let redirectCount = 0;
+      let isFirstRequest = true;
+
+      while (true) {
+        const headers: Record<string, string> = {
           Accept: 'application/json',
-          ...conditionalHeaders,
-        },
-        signal: controller.signal,
-      });
-
-      // Handle 304 Not Modified
-      if (response.status === 304) {
-        const staleEntry = await this.cache.getStale(clientId);
-        if (staleEntry) {
-          await this.cache.revalidate(clientId, response.headers);
-          this.logger.debug(`CIMD document not modified: ${clientId}`);
-          return {
-            document: staleEntry.document,
-            headers: response.headers,
-          };
+        };
+        if (isFirstRequest && conditionalHeaders) {
+          Object.assign(headers, conditionalHeaders);
         }
-        // No cached entry to revalidate, treat as error
-        throw new CimdFetchError(clientId, '304 Not Modified but no cached entry', {
-          httpStatus: 304,
-        });
-      }
 
-      if (!response.ok) {
-        throw new CimdFetchError(clientId, `HTTP ${response.status} ${response.statusText}`, {
-          httpStatus: response.status,
+        const response = await fetch(currentUrl, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+          redirect: 'manual',
         });
-      }
 
-      // Check Content-Length header
-      const contentLength = response.headers.get('content-length');
-      if (contentLength) {
-        const length = parseInt(contentLength, 10);
-        if (!isNaN(length) && length > this.networkConfig.maxResponseSizeBytes) {
-          throw new CimdResponseTooLargeError(clientId, this.networkConfig.maxResponseSizeBytes, length);
+        // Handle 304 Not Modified
+        if (response.status === 304) {
+          const staleEntry = await this.cache.getStale(clientId);
+          if (staleEntry) {
+            await this.cache.revalidate(clientId, response.headers);
+            this.logger.debug(`CIMD document not modified: ${clientId}`);
+            return {
+              document: staleEntry.document,
+              headers: response.headers,
+            };
+          }
+          // No cached entry to revalidate, treat as error
+          throw new CimdFetchError(clientId, '304 Not Modified but no cached entry', {
+            httpStatus: 304,
+          });
         }
+
+        // Handle redirects based on policy
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (!location) {
+            throw new CimdFetchError(clientId, 'Redirect response missing Location header', {
+              httpStatus: response.status,
+            });
+          }
+
+          const nextUrl = new URL(location, currentUrl).toString();
+          const redirectPolicy = this.networkConfig.redirectPolicy;
+
+          if (redirectPolicy === 'deny') {
+            throw new CimdFetchError(
+              clientId,
+              `CIMD fetch redirected to "${nextUrl}" but redirects are disabled. ` +
+                'Host the metadata at the client_id URL or set auth.cimd.network.redirectPolicy to "same-origin" or "allow".',
+              { httpStatus: response.status },
+            );
+          }
+
+          if (redirectPolicy === 'same-origin') {
+            const nextOrigin = new URL(nextUrl).origin;
+            if (nextOrigin !== originalOrigin) {
+              throw new CimdFetchError(
+                clientId,
+                `CIMD fetch redirected to "${nextUrl}" which is not the same origin as "${originalOrigin}". ` +
+                  'Host the metadata at the client_id URL or set auth.cimd.network.redirectPolicy to "allow".',
+                { httpStatus: response.status },
+              );
+            }
+          }
+
+          // Validate redirect target against security policy
+          validateClientIdUrl(nextUrl, this.securityConfig);
+
+          redirectCount += 1;
+          if (redirectCount > maxRedirects) {
+            throw new CimdFetchError(
+              clientId,
+              `CIMD fetch exceeded max redirects (${maxRedirects}). ` +
+                'Host the metadata at the client_id URL or increase auth.cimd.network.maxRedirects.',
+            );
+          }
+
+          this.logger.warn(`CIMD redirect ${redirectCount}/${maxRedirects}: ${currentUrl} -> ${nextUrl}`);
+          currentUrl = nextUrl;
+          isFirstRequest = false;
+          continue;
+        }
+
+        if (!response.ok) {
+          throw new CimdFetchError(clientId, `HTTP ${response.status} ${response.statusText}`, {
+            httpStatus: response.status,
+          });
+        }
+
+        // Check Content-Length header
+        const contentLength = response.headers.get('content-length');
+        if (contentLength) {
+          const length = parseInt(contentLength, 10);
+          if (!isNaN(length) && length > this.networkConfig.maxResponseSizeBytes) {
+            throw new CimdResponseTooLargeError(clientId, this.networkConfig.maxResponseSizeBytes, length);
+          }
+        }
+
+        // Read response with size limit
+        const text = await this.readResponseWithLimit(response, this.networkConfig.maxResponseSizeBytes, clientId);
+
+        // Parse JSON
+        let document: unknown;
+        try {
+          document = JSON.parse(text);
+        } catch (e) {
+          throw new CimdFetchError(clientId, 'Invalid JSON response', {
+            originalError: e instanceof Error ? e : new Error(String(e)),
+          });
+        }
+
+        return { document, headers: response.headers };
       }
-
-      // Read response with size limit
-      const text = await this.readResponseWithLimit(response, this.networkConfig.maxResponseSizeBytes, clientId);
-
-      // Parse JSON
-      let document: unknown;
-      try {
-        document = JSON.parse(text);
-      } catch (e) {
-        throw new CimdFetchError(clientId, 'Invalid JSON response', {
-          originalError: e instanceof Error ? e : new Error(String(e)),
-        });
-      }
-
-      return { document, headers: response.headers };
     } catch (error) {
       if (error instanceof CimdFetchError || error instanceof CimdResponseTooLargeError) {
         throw error;

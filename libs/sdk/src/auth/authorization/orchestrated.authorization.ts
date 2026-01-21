@@ -46,6 +46,11 @@ export interface TokenStore {
   hasTokens(authorizationId: string, providerId: string): Promise<boolean>;
 
   /**
+   * Get all provider IDs that have tokens stored for this authorization.
+   */
+  getProviderIds(authorizationId: string): Promise<string[]>;
+
+  /**
    * Migrate tokens from one authorization ID to another.
    * Used when tokens are stored with a pending ID during federated auth
    * and need to be accessible under the real authorization ID.

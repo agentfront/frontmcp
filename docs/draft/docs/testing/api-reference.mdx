@@ -534,7 +534,7 @@ interface MockOAuthServerOptions {
   clientSecret?: string;                      // Expected client_secret (optional)
   validRedirectUris?: string[];               // Allowed redirect URIs (supports wildcards)
   accessTokenTtlSeconds?: number;             // Access token lifetime (default: 3600)
-  refreshTokenTtlSeconds?: number;            // Refresh token lifetime (default: 86400)
+  refreshTokenTtlSeconds?: number;            // Refresh token lifetime (default: 2592000)
   debug?: boolean;                            // Enable debug logging
 }
 ```
@@ -547,7 +547,7 @@ interface MockTestUser {
   email?: string;                             // Email claim
   name?: string;                              // Name claim
   picture?: string;                           // Picture URL claim
-  [key: string]: unknown;                     // Additional claims
+  claims?: Record<string, unknown>;           // Additional claims
 }
 ```
 
@@ -621,9 +621,6 @@ interface MockOAuthServerInfo {
   port: number;                               // Listening port
   issuer: string;                             // Token issuer URL
   jwksUrl: string;                            // JWKS endpoint URL
-  authorizationEndpoint: string;              // Authorization endpoint URL
-  tokenEndpoint: string;                      // Token endpoint URL
-  userinfoEndpoint: string;                   // UserInfo endpoint URL
 }
 ```
 

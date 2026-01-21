@@ -28,6 +28,7 @@ import {
   httpRespond,
   HttpHtmlSchema,
   StageHookOf,
+  isOrchestratedMode,
 } from '../../common';
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
@@ -170,6 +171,21 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         ),
       );
       return;
+    }
+
+    const stateValidation = this.getStateValidation();
+    if (stateValidation === 'strict') {
+      const expectedState = session.currentProviderState;
+      if (!expectedState || expectedState !== providerState) {
+        this.logger.warn(`State mismatch for provider callback: expected ${expectedState}, got ${providerState}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage('invalid_request', 'Invalid state parameter. Please restart authentication.'),
+            400,
+          ),
+        );
+        return;
+      }
     }
 
     this.state.set('federatedSession', session);
@@ -527,5 +543,13 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   </div>
 </body>
 </html>`;
+  }
+
+  private getStateValidation(): 'strict' | 'format' {
+    const authOptions = this.scope.auth?.options;
+    if (authOptions && isOrchestratedMode(authOptions)) {
+      return authOptions.federatedAuth?.stateValidation ?? 'strict';
+    }
+    return 'strict';
   }
 }

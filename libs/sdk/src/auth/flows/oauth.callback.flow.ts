@@ -219,8 +219,27 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     // Get consent state
     const consentEnabled = pendingAuth.consent?.enabled ?? false;
+    const availableToolIds = pendingAuth.consent?.availableToolIds ?? [];
+
+    if (consentEnabled && selectedTools) {
+      const invalidToolIds = selectedTools.filter((toolId) => !availableToolIds.includes(toolId));
+      if (invalidToolIds.length > 0) {
+        this.logger.warn(`Invalid consent tool selection: ${invalidToolIds.join(', ')}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage(
+              'invalid_request',
+              'Invalid tool selection. Please restart authorization and choose from the available tools.',
+            ),
+            400,
+          ),
+        );
+        return;
+      }
+    }
+
     // If consent was enabled and user submitted selection, use it; otherwise use all available
-    const finalSelectedTools = consentEnabled && selectedTools ? selectedTools : pendingAuth.consent?.availableToolIds;
+    const finalSelectedTools = consentEnabled && selectedTools ? selectedTools : availableToolIds;
 
     this.state.set({
       clientId: pendingAuth.clientId,

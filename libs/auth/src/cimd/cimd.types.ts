@@ -269,6 +269,21 @@ export const cimdNetworkConfigSchema = z.object({
    * @default 65536 (64KB)
    */
   maxResponseSizeBytes: z.number().min(1024).default(65536),
+
+  /**
+   * Redirect handling policy for CIMD fetches.
+   * - 'deny': reject redirects (default, safest)
+   * - 'same-origin': allow redirects only to the same origin
+   * - 'allow': allow redirects to any origin
+   * @default 'deny'
+   */
+  redirectPolicy: z.enum(['deny', 'same-origin', 'allow']).default('deny'),
+
+  /**
+   * Maximum number of redirects to follow when redirects are allowed.
+   * @default 5
+   */
+  maxRedirects: z.number().int().min(0).default(5),
 });
 
 export type CimdNetworkConfig = z.infer<typeof cimdNetworkConfigSchema>;

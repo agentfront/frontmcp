@@ -359,13 +359,13 @@ export class MockOAuthServer {
       authorization_endpoint: `${issuer}/oauth/authorize`,
       token_endpoint: `${issuer}/oauth/token`,
       jwks_uri: `${issuer}/.well-known/jwks.json`,
-      response_types_supported: ['code', 'token'],
+      response_types_supported: ['code'],
       subject_types_supported: ['public'],
       id_token_signing_alg_values_supported: ['RS256'],
       scopes_supported: ['openid', 'profile', 'email'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
       claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'email', 'name'],
-      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials', 'anonymous'],
+      grant_types_supported: ['authorization_code', 'refresh_token', 'anonymous'],
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -380,8 +380,8 @@ export class MockOAuthServer {
       authorization_endpoint: `${issuer}/oauth/authorize`,
       token_endpoint: `${issuer}/oauth/token`,
       jwks_uri: `${issuer}/.well-known/jwks.json`,
-      response_types_supported: ['code', 'token'],
-      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials', 'anonymous'],
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token', 'anonymous'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
       scopes_supported: ['openid', 'profile', 'email', 'anonymous'],
     };
@@ -652,7 +652,20 @@ export class MockOAuthServer {
         return;
       }
 
-      const expectedChallenge = this.computeCodeChallenge(codeVerifier, codeRecord.codeChallengeMethod);
+      // Validate code_challenge_method is supported
+      const method = codeRecord.codeChallengeMethod ?? 'plain';
+      if (method !== 'S256' && method !== 'plain') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: 'invalid_grant',
+            error_description: `Unsupported code_challenge_method: ${method}`,
+          }),
+        );
+        return;
+      }
+
+      const expectedChallenge = this.computeCodeChallenge(codeVerifier, method);
       if (expectedChallenge !== codeRecord.codeChallenge) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(

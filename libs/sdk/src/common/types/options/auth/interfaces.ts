@@ -210,6 +210,17 @@ export interface ConsentConfig {
 }
 
 /**
+ * Federated authentication configuration
+ */
+export interface FederatedAuthConfig {
+  /**
+   * How strictly to validate the OAuth state parameter on provider callbacks.
+   * @default 'strict'
+   */
+  stateValidation?: 'strict' | 'format';
+}
+
+/**
  * Progressive/Incremental authorization configuration
  */
 export interface IncrementalAuthConfig {
@@ -386,6 +397,9 @@ export interface OrchestratedLocalOptionsInterface {
   /** Consent flow configuration */
   consent?: ConsentConfig;
 
+  /** Federated auth configuration */
+  federatedAuth?: FederatedAuthConfig;
+
   /** Token refresh settings */
   refresh?: TokenRefreshConfig;
 
@@ -447,6 +461,9 @@ export interface OrchestratedRemoteOptionsInterface {
 
   /** Consent flow configuration */
   consent?: ConsentConfig;
+
+  /** Federated auth configuration */
+  federatedAuth?: FederatedAuthConfig;
 
   /** Token refresh settings */
   refresh?: TokenRefreshConfig;

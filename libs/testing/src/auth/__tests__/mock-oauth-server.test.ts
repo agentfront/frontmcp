@@ -353,6 +353,40 @@ describe('MockOAuthServer', () => {
       expect(error.error).toBe('invalid_grant');
       expect(error.error_description).toContain('code_verifier');
     });
+
+    it('should reject unsupported code_challenge_method', async () => {
+      const codeVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+      const codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+
+      const authorizeUrl = new URL(`${server.info.baseUrl}/oauth/authorize`);
+      authorizeUrl.searchParams.set('client_id', 'pkce-client');
+      authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
+      authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      // Use wrong case - should be 'S256', not 'SHA256'
+      authorizeUrl.searchParams.set('code_challenge_method', 'SHA256');
+
+      const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
+      const code = new URL(authResponse.headers.get('location')!).searchParams.get('code')!;
+
+      // Exchange should fail due to unsupported method
+      const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:3000/callback',
+          client_id: 'pkce-client',
+          code_verifier: codeVerifier,
+        }).toString(),
+      });
+
+      expect(tokenResponse.ok).toBe(false);
+      const error = await tokenResponse.json();
+      expect(error.error).toBe('invalid_grant');
+      expect(error.error_description).toContain('Unsupported code_challenge_method');
+    });
   });
 
   describe('refresh token flow', () => {
