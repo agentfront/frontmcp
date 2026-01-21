@@ -100,6 +100,18 @@ const Stage = StageHookOf(name);
 export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('OauthProviderCallbackFlow');
 
+  /**
+   * Get LocalPrimaryAuth instance with type safety
+   * @throws Error if auth is not LocalPrimaryAuth
+   */
+  private getLocalAuth(): LocalPrimaryAuth {
+    const auth = this.scope.auth;
+    if (!(auth instanceof LocalPrimaryAuth)) {
+      throw new Error('OauthProviderCallbackFlow requires LocalPrimaryAuth');
+    }
+    return auth;
+  }
+
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
@@ -149,7 +161,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     this.state.set('federatedSessionId', federatedSessionId);
 
     // Load federated session from store
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const localAuth = this.getLocalAuth();
     const sessionStore = localAuth.federatedSessionStore;
 
     if (!sessionStore) {
@@ -177,7 +189,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (stateValidation === 'strict') {
       const expectedState = session.currentProviderState;
       if (!expectedState || expectedState !== providerState) {
-        this.logger.warn(`State mismatch for provider callback: expected ${expectedState}, got ${providerState}`);
+        this.logger.warn('State mismatch for provider callback');
         this.respond(
           httpRespond.html(
             this.renderErrorPage('invalid_request', 'Invalid state parameter. Please restart authentication.'),
@@ -263,7 +275,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const localAuth = this.getLocalAuth();
 
     try {
       // Exchange authorization code for tokens with upstream provider
@@ -300,14 +312,16 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
           const userInfo = await localAuth.getProviderUserInfo(providerId, result.access_token, result.id_token);
           this.state.set('providerUserInfo', userInfo);
         } catch (err) {
-          this.logger.warn(`Failed to get user info from provider ${providerId}: ${err}`);
+          const errMsg = err instanceof Error ? err.message : 'Unknown error';
+          this.logger.warn(`Failed to get user info from provider ${providerId}: ${errMsg}`);
           // Continue without user info
         }
       }
 
       this.logger.info(`Successfully exchanged code for tokens with provider: ${providerId}`);
     } catch (err) {
-      this.logger.error(`Provider token exchange error: ${err}`);
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error(`Provider token exchange error: ${errMsg}`);
       this.respond(
         httpRespond.html(this.renderErrorPage('server_error', 'Failed to complete authentication with provider'), 500),
       );
@@ -325,7 +339,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const localAuth = this.getLocalAuth();
     const tokenStore = localAuth.orchestratedTokenStore;
 
     // Store tokens if we have them (user didn't decline)
@@ -371,7 +385,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const localAuth = this.getLocalAuth();
 
     // Check if all providers are done
     if (isSessionComplete(session)) {
@@ -433,7 +447,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    * Complete the federated auth flow and issue FrontMCP JWT
    */
   private async completeFederatedAuth(session: FederatedAuthSession): Promise<void> {
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const localAuth = this.getLocalAuth();
 
     // Build selected provider IDs from completed providers
     const selectedProviderIds = Array.from(session.completedProviders.keys());

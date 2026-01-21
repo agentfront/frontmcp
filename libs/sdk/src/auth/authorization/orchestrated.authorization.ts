@@ -1,11 +1,11 @@
 // auth/authorization/orchestrated.authorization.ts
 
-import { sha256Hex } from '@frontmcp/utils';
 import { AuthorizationBase } from './authorization.class';
 import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
 import { ProviderSnapshot } from '../session/session.types';
 import { EncryptedBlob } from '../session';
 import { AuthMode } from '../../common';
+import { deriveAuthorizationId } from '../utils';
 
 /**
  * Token store interface for orchestrated mode
@@ -150,7 +150,11 @@ export interface OrchestratedAuthorizationCreateCtx {
   authorizedApps?: AuthorizationCreateCtx['authorizedApps'];
   authorizedAppIds?: string[];
   authorizedResources?: string[];
-  /** Authorized provider IDs from federated login */
+  /**
+   * Provider IDs that the user has explicitly authorized during federated login.
+   * Populated from JWT claims (`federated.selectedProviders`) or token store.
+   * Controls which providers the authorization has access to for progressive auth.
+   */
   authorizedProviderIds?: string[];
 }
 
@@ -235,11 +239,12 @@ export class OrchestratedAuthorization extends AuthorizationBase {
       tokenStore,
       onTokenRefresh,
       providers = {},
+      authorizedProviderIds,
       ...projections
     } = ctx;
 
     // Generate authorization ID from token
-    const id = OrchestratedAuthorization.generateAuthorizationId(token);
+    const id = deriveAuthorizationId(token);
 
     // Build provider states map
     const providerStates = new Map<string, OrchestratedProviderState>();
@@ -262,7 +267,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
 
     // Use explicitly provided authorizedProviderIds, or derive from provider states
     const finalAuthorizedProviderIds =
-      projections.authorizedProviderIds ?? (providerIdsFromState.length > 0 ? providerIdsFromState : undefined);
+      authorizedProviderIds ?? (providerIdsFromState.length > 0 ? providerIdsFromState : undefined);
 
     return new OrchestratedAuthorization({
       id,
@@ -277,8 +282,8 @@ export class OrchestratedAuthorization extends AuthorizationBase {
       onTokenRefresh,
       providerStates,
       authorizedProviders,
-      authorizedProviderIds: finalAuthorizedProviderIds,
       ...projections,
+      authorizedProviderIds: finalAuthorizedProviderIds,
     });
   }
 
@@ -360,15 +365,6 @@ export class OrchestratedAuthorization extends AuthorizationBase {
     }
 
     return result.accessToken;
-  }
-
-  /**
-   * Generate authorization ID from token
-   */
-  private static generateAuthorizationId(token: string): string {
-    const parts = token.split('.');
-    const signature = parts[2] || token;
-    return sha256Hex(signature).substring(0, 16);
   }
 
   /**

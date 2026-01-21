@@ -17,6 +17,11 @@ describe('MockOAuthServer', () => {
       }
     });
 
+    it('should throw when accessing info before start', () => {
+      const uninitializedServer = new MockOAuthServer(tokenFactory);
+      expect(() => uninitializedServer.info).toThrow('Mock OAuth server is not running');
+    });
+
     it('should start and stop cleanly', async () => {
       server = new MockOAuthServer(tokenFactory);
       const info = await server.start();
@@ -132,7 +137,7 @@ describe('MockOAuthServer', () => {
       const location = response.headers.get('location');
       expect(location).toBeDefined();
 
-      const redirectUrl = new URL(location!);
+      const redirectUrl = new URL(location as string);
       expect(redirectUrl.origin).toBe('http://localhost:3000');
       expect(redirectUrl.pathname).toBe('/callback');
       expect(redirectUrl.searchParams.get('code')).toBeDefined();
@@ -149,7 +154,8 @@ describe('MockOAuthServer', () => {
 
       expect(response.status).toBe(302);
       const location = response.headers.get('location');
-      const redirectUrl = new URL(location!);
+      expect(location).toBeDefined();
+      const redirectUrl = new URL(location as string);
       expect(redirectUrl.searchParams.get('error')).toBe('unauthorized_client');
     });
 
@@ -174,8 +180,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('response_type', 'code');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const location = authResponse.headers.get('location')!;
-      const code = new URL(location).searchParams.get('code')!;
+      const location = authResponse.headers.get('location');
+      expect(location).toBeDefined();
+      const code = new URL(location as string).searchParams.get('code');
+      expect(code).toBeDefined();
 
       // Exchange code for tokens
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -183,7 +191,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'test-client',
         }).toString(),
@@ -206,8 +214,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('response_type', 'code');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const location = authResponse.headers.get('location')!;
-      const code = new URL(location).searchParams.get('code')!;
+      const location = authResponse.headers.get('location');
+      expect(location).toBeDefined();
+      const code = new URL(location as string).searchParams.get('code');
+      expect(code).toBeDefined();
 
       // First exchange should succeed
       const firstExchange = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -215,7 +225,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'test-client',
         }).toString(),
@@ -228,7 +238,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'test-client',
         }).toString(),
@@ -273,7 +283,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const code = new URL(authResponse.headers.get('location')!).searchParams.get('code')!;
+      const pkceLocation = authResponse.headers.get('location');
+      expect(pkceLocation).toBeDefined();
+      const code = new URL(pkceLocation as string).searchParams.get('code');
+      expect(code).toBeDefined();
 
       // Exchange with correct code_verifier should succeed
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -281,7 +294,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'pkce-client',
           code_verifier: codeVerifier,
@@ -302,7 +315,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const code = new URL(authResponse.headers.get('location')!).searchParams.get('code')!;
+      const invalidVerifierLocation = authResponse.headers.get('location');
+      expect(invalidVerifierLocation).toBeDefined();
+      const invalidVerifierCode = new URL(invalidVerifierLocation as string).searchParams.get('code');
+      expect(invalidVerifierCode).toBeDefined();
 
       // Exchange with wrong code_verifier should fail
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -310,7 +326,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: invalidVerifierCode as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'pkce-client',
           code_verifier: 'wrong-verifier',
@@ -334,7 +350,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const code = new URL(authResponse.headers.get('location')!).searchParams.get('code')!;
+      const noVerifierLocation = authResponse.headers.get('location');
+      expect(noVerifierLocation).toBeDefined();
+      const noVerifierCode = new URL(noVerifierLocation as string).searchParams.get('code');
+      expect(noVerifierCode).toBeDefined();
 
       // Exchange without code_verifier should fail
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -342,7 +361,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: noVerifierCode as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'pkce-client',
         }).toString(),
@@ -367,7 +386,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('code_challenge_method', 'SHA256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const code = new URL(authResponse.headers.get('location')!).searchParams.get('code')!;
+      const badMethodLocation = authResponse.headers.get('location');
+      expect(badMethodLocation).toBeDefined();
+      const badMethodCode = new URL(badMethodLocation as string).searchParams.get('code');
+      expect(badMethodCode).toBeDefined();
 
       // Exchange should fail due to unsupported method
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -375,7 +397,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: badMethodCode as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'pkce-client',
           code_verifier: codeVerifier,
@@ -415,7 +437,10 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('response_type', 'code');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
-      const code = new URL(authResponse.headers.get('location')!).searchParams.get('code')!;
+      const refreshLocation = authResponse.headers.get('location');
+      expect(refreshLocation).toBeDefined();
+      const refreshCode = new URL(refreshLocation as string).searchParams.get('code');
+      expect(refreshCode).toBeDefined();
 
       // Exchange for tokens
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -423,7 +448,7 @@ describe('MockOAuthServer', () => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'authorization_code',
-          code,
+          code: refreshCode as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'refresh-client',
         }).toString(),
@@ -450,6 +475,22 @@ describe('MockOAuthServer', () => {
       expect(newTokens.refresh_token).toBeDefined();
       // Refresh token should be rotated
       expect(newTokens.refresh_token).not.toBe(refreshToken);
+    });
+
+    it('should reject invalid refresh token with invalid_grant', async () => {
+      const response = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: 'invalid-token',
+          client_id: 'refresh-client',
+        }).toString(),
+      });
+
+      expect(response.ok).toBe(false);
+      const error = await response.json();
+      expect(error.error).toBe('invalid_grant');
     });
   });
 

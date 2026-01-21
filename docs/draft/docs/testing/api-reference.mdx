@@ -666,7 +666,9 @@ test.describe('OAuth integration', () => {
   });
 
   test('should complete OAuth flow', async () => {
-    // Use oauthServer.info.authorizationEndpoint, etc.
+    // Construct endpoints from baseUrl:
+    // `${oauthServer.info.baseUrl}/oauth/authorize`
+    // `${oauthServer.info.baseUrl}/oauth/token`
   });
 });
 ```

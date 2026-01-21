@@ -215,9 +215,10 @@ export interface ConsentConfig {
 export interface FederatedAuthConfig {
   /**
    * How strictly to validate the OAuth state parameter on provider callbacks.
-   * @default 'strict'
+   * - 'strict': Validates the full state parameter matches the session (recommended)
+   * - 'format': Only validates the state format is correct
    */
-  stateValidation?: 'strict' | 'format';
+  stateValidation: 'strict' | 'format';
 }
 
 /**

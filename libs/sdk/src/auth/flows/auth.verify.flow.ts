@@ -27,7 +27,7 @@ import {
   deriveExpectedAudience,
 } from '@frontmcp/auth';
 import type { JSONWebKeySet } from 'jose';
-import { sha256Hex } from '@frontmcp/utils';
+import { deriveAuthorizationId } from '../utils';
 import {
   PublicAuthorization,
   TransparentAuthorization,
@@ -416,7 +416,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
 
       if (tokenStore) {
         try {
-          const authorizationId = this.deriveAuthorizationId(token);
+          const authorizationId = deriveAuthorizationId(token);
           providerIdsFromStore = await tokenStore.getProviderIds(authorizationId);
           providerStates = Object.fromEntries(
             providerIdsFromStore.map((providerId) => [
@@ -447,7 +447,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         // Populate authorized tools from consent claims if available
         authorizedToolIds: consentClaims?.selectedTools,
         // Populate authorized providers from federated claims if available
-        authorizedProviderIds: tokenStore ? (providerIdsFromStore ?? []) : federatedClaims?.selectedProviders,
+        authorizedProviderIds: providerIdsFromStore?.length ? providerIdsFromStore : federatedClaims?.selectedProviders,
         providers: providerStates,
       });
     } else {
@@ -504,10 +504,5 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     if (Array.isArray(scope)) return scope.map(String);
     if (typeof scope === 'string') return scope.split(/\s+/).filter(Boolean);
     return [];
-  }
-
-  private deriveAuthorizationId(token: string): string {
-    const signature = token.split('.')[2] || token;
-    return sha256Hex(signature).substring(0, 16);
   }
 }
