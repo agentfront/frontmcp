@@ -509,6 +509,21 @@ export class MockOAuthServer {
     // Parse request body
     const body = await this.readBody(req);
     const params = new URLSearchParams(body);
+
+    // Validate client secret if configured (supports both POST body and Basic auth)
+    const authHeader = req.headers['authorization'];
+    let clientSecret = params.get('client_secret') ?? undefined;
+    if (!clientSecret && authHeader?.startsWith('Basic ')) {
+      const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
+      const [, secret] = decoded.split(':', 2);
+      clientSecret = secret;
+    }
+    if (this.options.clientSecret && clientSecret !== this.options.clientSecret) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_client', error_description: 'Invalid client_secret' }));
+      return;
+    }
+
     const grantType = params.get('grant_type');
 
     if (grantType === 'anonymous') {

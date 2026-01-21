@@ -386,6 +386,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       // Provider not configured yet - clean up session and fall back to normal auth
       this.logger.warn(`Provider ${firstProviderId} not configured, falling back to normal auth`);
       await sessionStore.delete(federatedSession.id);
+      this.state.set({
+        isFederated: false,
+        selectedProviders: undefined,
+        skippedProviders: undefined,
+      });
       return;
     }
 
