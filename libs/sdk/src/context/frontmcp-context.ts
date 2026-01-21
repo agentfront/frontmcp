@@ -484,7 +484,7 @@ export class FrontMcpContext {
    * @internal
    */
   getContextTokens(): ReadonlyMap<unknown, unknown> {
-    return this._contextTokens;
+    return new Map(this._contextTokens);
   }
 
   // =====================
