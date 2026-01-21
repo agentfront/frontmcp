@@ -31,6 +31,46 @@ import { resolveServingMode, buildToolResponseContent, type ToolResponseContent 
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
+/**
+ * Type for transport extension on AuthInfo.
+ *
+ * The MCP SDK's AuthInfo type doesn't include transport natively.
+ * The LocalTransportAdapter adds a `transport` property with:
+ * - sendElicitRequest: method to send elicitation requests to the client
+ * - type: transport type string (e.g., 'sse', 'streamable-http')
+ *
+ * We use a separate type instead of extending AuthInfo because the MCP SDK's
+ * AuthInfo type has strict constraints that conflict with interface extension.
+ */
+type TransportExtension = {
+  transport?: {
+    sendElicitRequest: <S extends z.ZodType>(
+      relatedRequestId: number | string,
+      message: string,
+      requestedSchema: S,
+      options?: import('../../elicitation').ElicitOptions,
+    ) => Promise<import('../../elicitation').ElicitResult<S extends z.ZodType<infer O> ? O : unknown>>;
+    type: string;
+  };
+};
+
+/**
+ * Fallback response structure for elicitation.
+ * Returned when elicitation is not supported by the client and requires
+ * the LLM to collect user input via sendElicitationResult tool.
+ */
+interface ElicitationFallbackResponse {
+  content: Array<{ type: 'text'; text: string }>;
+  _meta: {
+    elicitationPending: {
+      elicitId: string;
+      message: string;
+      schema: Record<string, unknown>;
+      instructions: string;
+    };
+  };
+}
+
 const inputSchema = z.object({
   request: CallToolRequestSchema,
   // z.any() used because ctx is the MCP SDK's ToolCallExtra type which varies by SDK version
@@ -383,9 +423,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
+      // Cast with TransportExtension since MCP SDK's AuthInfo doesn't include transport
       const frontmcpContext = context.tryGetContext();
-      if (frontmcpContext && authInfo?.transport?.sendElicitRequest) {
-        const transport = authInfo.transport;
+      const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
+      if (frontmcpContext && authInfoWithTransport?.transport?.sendElicitRequest) {
+        const transport = authInfoWithTransport.transport;
         // Pass the JSON-RPC request ID for proper elicitation routing
         // The MCP SDK uses this to route messages through the correct SSE stream
         const jsonRpcRequestId = this.state.jsonRpcRequestId;
@@ -482,7 +524,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // Check transport type to determine fallback strategy
         // Streamable HTTP: Wait for result via pub/sub (request must stay open)
         // SSE: Fire-and-forget (SSE handles routing, can use notifications)
-        const transportType = authInfo?.transport?.type;
+        const transportType = (authInfo as (AuthInfo & TransportExtension) | undefined)?.transport?.type;
 
         if (transportType === 'streamable-http') {
           // Streamable HTTP: Wait for the result via pub/sub
@@ -499,7 +541,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // SSE and other transports: Fire-and-forget pattern
         // Set output to fallback response (not an error)
         // This structured response tells the LLM how to continue
-        toolContext.output = {
+        const fallbackResponse: ElicitationFallbackResponse = {
           content: [
             {
               type: 'text',
@@ -521,7 +563,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
               instructions: 'Call sendElicitationResult tool after collecting user input',
             },
           },
-        } as unknown;
+        };
+        toolContext.output = fallbackResponse;
 
         this.logger.verbose('execute:done (elicitation fallback)');
         return;

@@ -10,6 +10,20 @@ import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
 import type { PendingElicitRecord } from '../elicitation.store';
 import type { PendingElicitFallback, ElicitResult, FallbackExecutionResult } from '../../elicitation.types';
 
+/**
+ * Creates a deferred promise that can be resolved externally.
+ * Used for promise-based waiting in tests instead of fixed timeouts.
+ */
+function createDeferredPromise<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('EncryptedElicitationStore', () => {
   const testSecret = 'test-server-secret-for-encryption';
   const testSessionId1 = 'session-abc-123';
@@ -174,13 +188,13 @@ describe('EncryptedElicitationStore', () => {
         content: { data: 'test-value' },
       };
 
-      let receivedResult: ElicitResult<unknown> | null = null;
+      const { promise: receivedPromise, resolve: resolveReceived } = createDeferredPromise<ElicitResult<unknown>>();
 
       // Subscribe first
       const unsubscribe = await encryptedStore.subscribeResult(
         elicitId,
         (result) => {
-          receivedResult = result;
+          resolveReceived(result);
         },
         testSessionId1,
       );
@@ -188,8 +202,8 @@ describe('EncryptedElicitationStore', () => {
       // Publish result
       await encryptedStore.publishResult(elicitId, testSessionId1, expectedResult);
 
-      // Wait a bit for pub/sub
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for pub/sub using promise
+      const receivedResult = await receivedPromise;
 
       // Check received
       expect(receivedResult).toEqual(expectedResult);
@@ -324,13 +338,13 @@ describe('EncryptedElicitationStore', () => {
         },
       };
 
-      let receivedResult: FallbackExecutionResult | null = null;
+      const { promise: receivedPromise, resolve: resolveReceived } = createDeferredPromise<FallbackExecutionResult>();
 
       // Subscribe first
       const unsubscribe = await encryptedStore.subscribeFallbackResult(
         elicitId,
         (result) => {
-          receivedResult = result;
+          resolveReceived(result);
         },
         testSessionId1,
       );
@@ -338,8 +352,8 @@ describe('EncryptedElicitationStore', () => {
       // Publish result
       await encryptedStore.publishFallbackResult(elicitId, testSessionId1, expectedResult);
 
-      // Wait a bit for pub/sub
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for pub/sub using promise
+      const receivedResult = await receivedPromise;
 
       // Check received
       expect(receivedResult).toEqual(expectedResult);
@@ -354,19 +368,19 @@ describe('EncryptedElicitationStore', () => {
         error: 'Tool execution failed',
       };
 
-      let receivedResult: FallbackExecutionResult | null = null;
+      const { promise: receivedPromise, resolve: resolveReceived } = createDeferredPromise<FallbackExecutionResult>();
 
       const unsubscribe = await encryptedStore.subscribeFallbackResult(
         elicitId,
         (result) => {
-          receivedResult = result;
+          resolveReceived(result);
         },
         testSessionId1,
       );
 
       await encryptedStore.publishFallbackResult(elicitId, testSessionId1, expectedResult);
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      const receivedResult = await receivedPromise;
 
       expect(receivedResult).toEqual(expectedResult);
 
@@ -380,13 +394,14 @@ describe('EncryptedElicitationStore', () => {
         result: { content: [] },
       };
 
-      let receivedResult1: FallbackExecutionResult | null = null;
-      let receivedResult2: FallbackExecutionResult | null = null;
+      // For multiple subscribers, use two deferred promises
+      const { promise: receivedPromise1, resolve: resolveReceived1 } = createDeferredPromise<FallbackExecutionResult>();
+      const { promise: receivedPromise2, resolve: resolveReceived2 } = createDeferredPromise<FallbackExecutionResult>();
 
       const unsubscribe1 = await encryptedStore.subscribeFallbackResult(
         elicitId,
         (result) => {
-          receivedResult1 = result;
+          resolveReceived1(result);
         },
         testSessionId1,
       );
@@ -394,14 +409,15 @@ describe('EncryptedElicitationStore', () => {
       const unsubscribe2 = await encryptedStore.subscribeFallbackResult(
         elicitId,
         (result) => {
-          receivedResult2 = result;
+          resolveReceived2(result);
         },
         testSessionId1,
       );
 
       await encryptedStore.publishFallbackResult(elicitId, testSessionId1, expectedResult);
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for both subscribers to receive the result
+      const [receivedResult1, receivedResult2] = await Promise.all([receivedPromise1, receivedPromise2]);
 
       expect(receivedResult1).toEqual(expectedResult);
       expect(receivedResult2).toEqual(expectedResult);

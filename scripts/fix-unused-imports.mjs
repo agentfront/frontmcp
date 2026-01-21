@@ -151,10 +151,11 @@ export default [
       );
       console.log('Done! Unused imports removed.');
     } catch (error) {
-      // ESLint exit code 1 = found (and fixed) issues - this is success
+      // ESLint exit code 1 = linting errors remain after --fix (some issues couldn't be auto-fixed)
+      // This still means fixes were applied for what was auto-fixable
       // ESLint exit code 2 = configuration or fatal error - this is failure
       if (error.status === 1) {
-        console.log('Done! Unused imports removed.');
+        console.log('Done processing. Some linting issues may remain (check output above).');
       } else {
         console.error('ESLint encountered an error:', error.message || 'Unknown error');
         throw error;

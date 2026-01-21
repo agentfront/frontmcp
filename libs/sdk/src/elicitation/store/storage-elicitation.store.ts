@@ -215,15 +215,25 @@ export class StorageElicitationStore implements ElicitationStore {
       // Wait for subscription to complete
       try {
         await subscribePromise;
-      } catch {
-        // Error already logged in the catch handler above
+      } catch (error) {
+        // Remove callback on subscription failure and rethrow
+        callbacks.delete(callback as ElicitResultCallback);
+        if (callbacks.size === 0) {
+          this.localCallbacks.delete(elicitId);
+        }
+        throw error;
       }
     } else if (this.pendingSubscriptions.has(elicitId)) {
       // If there's a pending subscription, wait for it to complete
       try {
         await this.pendingSubscriptions.get(elicitId);
-      } catch {
-        // Error already logged
+      } catch (error) {
+        // Remove callback on pending subscription failure and rethrow
+        callbacks.delete(callback as ElicitResultCallback);
+        if (callbacks.size === 0) {
+          this.localCallbacks.delete(elicitId);
+        }
+        throw error;
       }
     }
 
@@ -461,15 +471,25 @@ export class StorageElicitationStore implements ElicitationStore {
       // Wait for subscription to complete
       try {
         await subscribePromise;
-      } catch {
-        // Error already logged in the catch handler above
+      } catch (error) {
+        // Remove callback on subscription failure and rethrow
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          this.fallbackResultCallbacks.delete(elicitId);
+        }
+        throw error;
       }
     } else if (this.pendingFallbackSubscriptions.has(elicitId)) {
       // If there's a pending subscription, wait for it to complete
       try {
         await this.pendingFallbackSubscriptions.get(elicitId);
-      } catch {
-        // Error already logged
+      } catch (error) {
+        // Remove callback on pending subscription failure and rethrow
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          this.fallbackResultCallbacks.delete(elicitId);
+        }
+        throw error;
       }
     }
 

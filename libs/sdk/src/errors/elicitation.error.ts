@@ -111,3 +111,25 @@ export class ElicitationDisabledError extends PublicMcpError {
     return 'Elicitation is disabled on this server.';
   }
 }
+
+/**
+ * Elicitation encryption error.
+ *
+ * Thrown when encryption/decryption fails for elicitation data,
+ * typically when sessionId is missing or key derivation fails.
+ */
+export class ElicitationEncryptionError extends InternalMcpError {
+  readonly originalError?: Error;
+
+  constructor(message: string, originalError?: Error) {
+    super(message, 'ELICITATION_ENCRYPTION_ERROR');
+    this.originalError = originalError;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
+  }
+}

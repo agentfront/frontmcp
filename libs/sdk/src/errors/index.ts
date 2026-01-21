@@ -81,6 +81,7 @@ export {
   ElicitationFallbackRequired,
   ElicitationStoreNotInitializedError,
   ElicitationDisabledError,
+  ElicitationEncryptionError,
 } from './elicitation.error';
 
 // Export remote MCP errors

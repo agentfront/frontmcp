@@ -38,6 +38,7 @@ import {
   isEncryptedBlob,
   type ElicitationEncryptedBlob,
 } from './elicitation-encryption';
+import { ElicitationEncryptionError } from '../../errors';
 
 /**
  * Options for creating an encrypted elicitation store.
@@ -148,21 +149,29 @@ export class EncryptedElicitationStore implements ElicitationStore {
   ): Promise<ElicitUnsubscribe> {
     // Wrap the callback to decrypt messages
     const decryptingCallback: ElicitResultCallback<unknown> = async (rawResult) => {
-      let result = rawResult;
-
-      // Try to decrypt if we have sessionId and result looks encrypted
+      // If sessionId provided and message is encrypted, must decrypt successfully
       if (sessionId && isEncryptedBlob(rawResult)) {
         try {
           const decrypted = await decryptElicitationData<ElicitResult<T>>(rawResult, sessionId, this.secret);
           if (decrypted) {
-            result = decrypted;
+            callback(decrypted);
+            return;
           }
-        } catch {
-          this.logger?.warn('[EncryptedElicitationStore] Failed to decrypt pub/sub message', { elicitId });
+          // Decryption returned null - drop message
+          this.logger?.warn('[EncryptedElicitationStore] Failed to decrypt pub/sub message (null result)', {
+            elicitId,
+          });
+          return;
+        } catch (error) {
+          this.logger?.warn('[EncryptedElicitationStore] Failed to decrypt pub/sub message', {
+            elicitId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return; // Drop message on decryption failure
         }
       }
-
-      callback(result as ElicitResult<T>);
+      // No sessionId or not encrypted - pass through
+      callback(rawResult as ElicitResult<T>);
     };
 
     return this.store.subscribeResult(elicitId, decryptingCallback);
@@ -259,9 +268,9 @@ export class EncryptedElicitationStore implements ElicitationStore {
    */
   async setResolvedResult(elicitId: string, result: ElicitResult<unknown>, sessionId?: string): Promise<void> {
     if (!sessionId) {
-      // Fall back to unencrypted storage if no sessionId
-      await this.store.setResolvedResult(elicitId, result);
-      return;
+      throw new ElicitationEncryptionError(
+        `Cannot store encrypted resolved result without sessionId (elicitId: ${elicitId})`,
+      );
     }
 
     try {
@@ -289,11 +298,12 @@ export class EncryptedElicitationStore implements ElicitationStore {
         sessionId: sessionId.slice(0, 8) + '...',
       });
     } catch (error) {
-      this.logger?.error('[EncryptedElicitationStore] Failed to encrypt resolved result', {
-        elicitId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
+      // Re-throw ElicitationEncryptionError as-is (already includes context)
+      if (error instanceof ElicitationEncryptionError) {
+        throw error;
+      }
+      const originalError = error instanceof Error ? error : undefined;
+      throw new ElicitationEncryptionError(`Failed to encrypt resolved result (elicitId: ${elicitId})`, originalError);
     }
   }
 
@@ -331,21 +341,29 @@ export class EncryptedElicitationStore implements ElicitationStore {
   ): Promise<ElicitUnsubscribe> {
     // Wrap the callback to decrypt messages
     const decryptingCallback: FallbackResultCallback = async (rawResult) => {
-      let result = rawResult;
-
-      // Try to decrypt if we have sessionId and result looks encrypted
+      // If sessionId provided and message is encrypted, must decrypt successfully
       if (sessionId && isEncryptedBlob(rawResult)) {
         try {
           const decrypted = await decryptElicitationData<FallbackExecutionResult>(rawResult, sessionId, this.secret);
           if (decrypted) {
-            result = decrypted;
+            callback(decrypted);
+            return;
           }
-        } catch {
-          this.logger?.warn('[EncryptedElicitationStore] Failed to decrypt fallback pub/sub message', { elicitId });
+          // Decryption returned null - drop message
+          this.logger?.warn('[EncryptedElicitationStore] Failed to decrypt fallback pub/sub message (null result)', {
+            elicitId,
+          });
+          return;
+        } catch (error) {
+          this.logger?.warn('[EncryptedElicitationStore] Failed to decrypt fallback pub/sub message', {
+            elicitId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return; // Drop message on decryption failure
         }
       }
-
-      callback(result);
+      // No sessionId or not encrypted - pass through
+      callback(rawResult);
     };
 
     return this.store.subscribeFallbackResult(elicitId, decryptingCallback, sessionId);
