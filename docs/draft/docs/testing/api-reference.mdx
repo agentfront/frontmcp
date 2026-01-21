@@ -510,6 +510,315 @@ server.clearLogs(): void
 
 ---
 
+## MockOAuthServer
+
+A fully-functional mock OAuth 2.0 / OpenID Connect server for testing authentication flows.
+
+### Constructor
+
+```ts
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+const tokenFactory = new TestTokenFactory();
+const server = new MockOAuthServer(tokenFactory, options?: MockOAuthServerOptions);
+```
+
+### MockOAuthServerOptions
+
+```ts
+interface MockOAuthServerOptions {
+  port?: number;                              // Port to listen on (default: auto)
+  autoApprove?: boolean;                      // Auto-approve authorization requests
+  testUser?: MockTestUser;                    // User info for authorized sessions
+  clientId?: string;                          // Expected client_id
+  clientSecret?: string;                      // Expected client_secret (optional)
+  validRedirectUris?: string[];               // Allowed redirect URIs (supports wildcards)
+  accessTokenTtlSeconds?: number;             // Access token lifetime (default: 3600)
+  refreshTokenTtlSeconds?: number;            // Refresh token lifetime (default: 86400)
+  debug?: boolean;                            // Enable debug logging
+}
+```
+
+### MockTestUser
+
+```ts
+interface MockTestUser {
+  sub: string;                                // Subject identifier (required)
+  email?: string;                             // Email claim
+  name?: string;                              // Name claim
+  picture?: string;                           // Picture URL claim
+  [key: string]: unknown;                     // Additional claims
+}
+```
+
+### Methods
+
+#### start
+
+Start the OAuth server.
+
+```ts
+server.start(): Promise<MockOAuthServerInfo>
+```
+
+#### stop
+
+Stop the OAuth server.
+
+```ts
+server.stop(): Promise<void>
+```
+
+#### setAutoApprove
+
+Enable or disable auto-approval of authorization requests.
+
+```ts
+server.setAutoApprove(enabled: boolean): void
+```
+
+#### setTestUser
+
+Set the test user for authorized sessions.
+
+```ts
+server.setTestUser(user: MockTestUser): void
+```
+
+#### addValidRedirectUri
+
+Add a valid redirect URI pattern.
+
+```ts
+server.addValidRedirectUri(uri: string): void
+```
+
+#### clearStoredTokens
+
+Clear all stored authorization codes and refresh tokens.
+
+```ts
+server.clearStoredTokens(): void
+```
+
+#### getTokenFactory
+
+Get the token factory used by this server.
+
+```ts
+server.getTokenFactory(): TestTokenFactory
+```
+
+### Properties
+
+#### info
+
+Server information (available after `start()`).
+
+```ts
+interface MockOAuthServerInfo {
+  baseUrl: string;                            // Base URL (e.g., http://localhost:8080)
+  port: number;                               // Listening port
+  issuer: string;                             // Token issuer URL
+  jwksUrl: string;                            // JWKS endpoint URL
+  authorizationEndpoint: string;              // Authorization endpoint URL
+  tokenEndpoint: string;                      // Token endpoint URL
+  userinfoEndpoint: string;                   // UserInfo endpoint URL
+}
+```
+
+### Supported Endpoints
+
+| Endpoint | Description |
+| -------- | ----------- |
+| `/.well-known/openid-configuration` | OpenID Connect discovery |
+| `/.well-known/oauth-authorization-server` | OAuth 2.0 metadata |
+| `/.well-known/jwks.json` | JSON Web Key Set |
+| `/oauth/authorize` | Authorization endpoint |
+| `/oauth/token` | Token endpoint |
+| `/userinfo` | UserInfo endpoint |
+
+### Supported Grant Types
+
+- `authorization_code` - Standard OAuth 2.0 authorization code flow
+- `refresh_token` - Token refresh
+- `anonymous` - Issue anonymous tokens (for testing)
+
+### Example
+
+```ts
+import { test } from '@frontmcp/testing';
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+test.describe('OAuth integration', () => {
+  let oauthServer: MockOAuthServer;
+
+  test.beforeAll(async () => {
+    const tokenFactory = new TestTokenFactory();
+    oauthServer = new MockOAuthServer(tokenFactory, {
+      autoApprove: true,
+      testUser: { sub: 'user-123', email: 'test@example.com' },
+      clientId: 'my-client',
+      validRedirectUris: ['http://localhost:*/callback'],
+    });
+    await oauthServer.start();
+  });
+
+  test.afterAll(async () => {
+    await oauthServer.stop();
+  });
+
+  test('should complete OAuth flow', async () => {
+    // Use oauthServer.info.authorizationEndpoint, etc.
+  });
+});
+```
+
+---
+
+## TestTokenFactory
+
+Factory for creating JWT tokens for testing authentication.
+
+### Constructor
+
+```ts
+import { TestTokenFactory } from '@frontmcp/testing';
+
+const factory = new TestTokenFactory(options?: TokenFactoryOptions);
+```
+
+### TokenFactoryOptions
+
+```ts
+interface TokenFactoryOptions {
+  issuer?: string;                            // Token issuer (default: 'https://test-issuer.local')
+  audience?: string;                          // Token audience (default: 'test-audience')
+  expiresInSeconds?: number;                  // Default token lifetime (default: 3600)
+}
+```
+
+### Methods
+
+#### createTestToken
+
+Create a token with custom claims.
+
+```ts
+factory.createTestToken(options: CreateTokenOptions): Promise<string>
+```
+
+```ts
+interface CreateTokenOptions {
+  sub: string;                                // Subject (required)
+  scopes?: string[];                          // OAuth scopes
+  email?: string;                             // Email claim
+  name?: string;                              // Name claim
+  claims?: Record<string, unknown>;           // Custom claims
+  expiresIn?: number;                         // Lifetime in seconds
+}
+```
+
+#### createAdminToken
+
+Create a token with admin privileges.
+
+```ts
+factory.createAdminToken(): Promise<string>
+```
+
+Returns a token with `sub: 'test-admin'` and `scopes: ['*']`.
+
+#### createUserToken
+
+Create a token with standard user privileges.
+
+```ts
+factory.createUserToken(): Promise<string>
+```
+
+Returns a token with `sub: 'test-user'` and `scopes: ['read', 'write']`.
+
+#### createAnonymousToken
+
+Create an anonymous token.
+
+```ts
+factory.createAnonymousToken(): Promise<string>
+```
+
+Returns a token with `sub: 'anonymous'` and no scopes.
+
+#### createExpiredToken
+
+Create an already-expired token for testing expiration handling.
+
+```ts
+factory.createExpiredToken(options: Omit<CreateTokenOptions, 'expiresIn'>): Promise<string>
+```
+
+#### createTokenWithInvalidSignature
+
+Create a token with an invalid signature for testing signature verification.
+
+```ts
+factory.createTokenWithInvalidSignature(options: CreateTokenOptions): string
+```
+
+#### getPublicJwks
+
+Get the public JWKS for token verification.
+
+```ts
+factory.getPublicJwks(): JsonWebKeySet
+```
+
+#### getIssuer
+
+Get the token issuer.
+
+```ts
+factory.getIssuer(): string
+```
+
+#### getAudience
+
+Get the token audience.
+
+```ts
+factory.getAudience(): string
+```
+
+### Example
+
+```ts
+import { TestTokenFactory } from '@frontmcp/testing';
+
+const factory = new TestTokenFactory({
+  issuer: 'https://auth.example.com',
+  audience: 'my-api',
+});
+
+// Create various token types
+const adminToken = await factory.createAdminToken();
+const userToken = await factory.createUserToken();
+const customToken = await factory.createTestToken({
+  sub: 'custom-user',
+  scopes: ['read', 'write', 'delete'],
+  email: 'custom@example.com',
+  claims: { tenant_id: 'tenant-123' },
+});
+
+// For testing error cases
+const expiredToken = await factory.createExpiredToken({ sub: 'user' });
+const invalidToken = factory.createTokenWithInvalidSignature({ sub: 'user' });
+
+// Get JWKS for server configuration
+const jwks = factory.getPublicJwks();
+```
+
+---
+
 ## Mock Registry
 
 The `mcp.mock` API for mocking MCP responses.
@@ -902,6 +1211,17 @@ import type {
   // Server types
   ServerFixture,
   ClientOptions,
+
+  // OAuth server types
+  MockOAuthServer,
+  MockOAuthServerOptions,
+  MockOAuthServerInfo,
+  MockTestUser,
+
+  // Token factory types
+  TestTokenFactory,
+  TokenFactoryOptions,
+  CreateTokenOptions,
 
   // Mock types
   MockOptions,

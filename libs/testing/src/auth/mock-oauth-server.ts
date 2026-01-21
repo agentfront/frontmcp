@@ -515,8 +515,10 @@ export class MockOAuthServer {
     let clientSecret = params.get('client_secret') ?? undefined;
     if (!clientSecret && authHeader?.startsWith('Basic ')) {
       const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
-      const [, secret] = decoded.split(':', 2);
-      clientSecret = secret;
+      const colonIndex = decoded.indexOf(':');
+      if (colonIndex >= 0) {
+        clientSecret = decoded.slice(colonIndex + 1);
+      }
     }
     if (this.options.clientSecret && clientSecret !== this.options.clientSecret) {
       res.writeHead(401, { 'Content-Type': 'application/json' });

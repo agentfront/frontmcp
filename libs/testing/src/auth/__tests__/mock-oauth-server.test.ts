@@ -462,6 +462,120 @@ describe('MockOAuthServer', () => {
     });
   });
 
+  describe('client secret validation', () => {
+    let server: MockOAuthServer;
+
+    afterEach(async () => {
+      if (server) {
+        await server.stop();
+      }
+    });
+
+    it('should accept client secret with colons via Basic auth', async () => {
+      const clientSecret = 'my:secret:with:colons';
+      server = new MockOAuthServer(tokenFactory, {
+        clientSecret,
+      });
+      await server.start();
+
+      // Basic auth: base64(client_id:client_secret)
+      const credentials = Buffer.from(`test-client:${clientSecret}`).toString('base64');
+
+      const response = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${credentials}`,
+        },
+        body: 'grant_type=anonymous',
+      });
+
+      expect(response.ok).toBe(true);
+      const tokenResponse = await response.json();
+      expect(tokenResponse.access_token).toBeDefined();
+    });
+
+    it('should accept client secret via POST body parameter', async () => {
+      const clientSecret = 'my-secret-123';
+      server = new MockOAuthServer(tokenFactory, {
+        clientSecret,
+      });
+      await server.start();
+
+      const response = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=anonymous&client_secret=${clientSecret}`,
+      });
+
+      expect(response.ok).toBe(true);
+      const tokenResponse = await response.json();
+      expect(tokenResponse.access_token).toBeDefined();
+    });
+
+    it('should reject invalid client secret with 401', async () => {
+      server = new MockOAuthServer(tokenFactory, {
+        clientSecret: 'correct-secret',
+      });
+      await server.start();
+
+      const response = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=anonymous&client_secret=wrong-secret',
+      });
+
+      expect(response.status).toBe(401);
+      const errorResponse = await response.json();
+      expect(errorResponse.error).toBe('invalid_client');
+    });
+
+    it('should handle empty password in Basic auth', async () => {
+      const clientSecret = '';
+      server = new MockOAuthServer(tokenFactory, {
+        clientSecret,
+      });
+      await server.start();
+
+      // Basic auth with empty password: base64("client:")
+      const credentials = Buffer.from('test-client:').toString('base64');
+
+      const response = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${credentials}`,
+        },
+        body: 'grant_type=anonymous',
+      });
+
+      expect(response.ok).toBe(true);
+    });
+
+    it('should handle password with special characters via Basic auth', async () => {
+      const clientSecret = 'secret+with=special/chars&more';
+      server = new MockOAuthServer(tokenFactory, {
+        clientSecret,
+      });
+      await server.start();
+
+      const credentials = Buffer.from(`test-client:${clientSecret}`).toString('base64');
+
+      const response = await fetch(`${server.info.baseUrl}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${credentials}`,
+        },
+        body: 'grant_type=anonymous',
+      });
+
+      expect(response.ok).toBe(true);
+      const tokenResponse = await response.json();
+      expect(tokenResponse.access_token).toBeDefined();
+    });
+  });
+
   describe('redirect URI wildcards', () => {
     let server: MockOAuthServer;
 
