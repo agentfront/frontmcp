@@ -176,6 +176,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           // Build AuthInfo from the authorization object
           // AuthInfo is the MCP SDK's auth type with token, clientId, scopes, etc.
           const { token, user, session } = result.authorization;
+
           ctx.updateAuthInfo({
             token,
             clientId: user.sub,

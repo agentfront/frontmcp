@@ -102,6 +102,7 @@
                   "docs/authentication/local",
                   "docs/authentication/remote",
                   "docs/authentication/remote-proxy",
+                  "docs/authentication/cimd",
                   "docs/authentication/progressive",
                   "docs/authentication/token",
                   "docs/authentication/production",

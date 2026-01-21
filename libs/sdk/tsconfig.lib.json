@@ -6,6 +6,7 @@
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
+    "stripInternal": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "types": ["node"],

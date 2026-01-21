@@ -4,6 +4,10 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
+import { ServerStartError } from '../errors';
+
+// Environment variable to enable debug output for all test servers
+const DEBUG_SERVER = process.env['DEBUG_SERVER'] === '1' || process.env['DEBUG'] === '1';
 
 // ═══════════════════════════════════════════════════════════════════
 // TYPES
@@ -75,7 +79,7 @@ export class TestServer {
       env: options.env ?? {},
       startupTimeout: options.startupTimeout ?? 30000,
       healthCheckPath: options.healthCheckPath ?? '/health',
-      debug: options.debug ?? false,
+      debug: options.debug ?? DEBUG_SERVER,
     };
 
     this._info = {
@@ -318,19 +322,50 @@ export class TestServer {
     });
 
     // Wait for server to be ready, but detect early process exit
-    await this.waitForReadyWithExitDetection(() => {
-      if (exitError) {
-        return { exited: true, error: exitError };
-      }
-      if (processExited) {
-        const recentLogs = this.logs.slice(-10).join('\n');
-        return {
-          exited: true,
-          error: new Error(`Server process exited unexpectedly with code ${exitCode}.\n\nRecent logs:\n${recentLogs}`),
-        };
-      }
-      return { exited: false };
-    });
+    try {
+      await this.waitForReadyWithExitDetection(() => {
+        if (exitError) {
+          return { exited: true, error: exitError };
+        }
+        if (processExited) {
+          const allLogs = this.logs.join('\n');
+          const errorLogs = this.logs
+            .filter((l) => l.includes('[ERROR]') || l.toLowerCase().includes('error'))
+            .join('\n');
+          return {
+            exited: true,
+            error: new ServerStartError(
+              `Server process exited unexpectedly with code ${exitCode}.\n\n` +
+                `Command: ${this.options.command}\n` +
+                `CWD: ${this.options.cwd}\n` +
+                `Port: ${this.options.port}\n\n` +
+                `=== Error Logs ===\n${errorLogs || 'No error logs captured'}\n\n` +
+                `=== Full Logs ===\n${allLogs || 'No logs captured'}`,
+            ),
+          };
+        }
+        return { exited: false };
+      });
+    } catch (error) {
+      // Always print logs on startup failure for debugging
+      this.printLogsOnFailure('Server startup failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Print server logs on failure for debugging
+   */
+  private printLogsOnFailure(context: string): void {
+    const allLogs = this.logs.join('\n');
+    if (allLogs) {
+      console.error(`\n[TestServer] ${context}`);
+      console.error(`[TestServer] Command: ${this.options.command}`);
+      console.error(`[TestServer] Port: ${this.options.port}`);
+      console.error(`[TestServer] CWD: ${this.options.cwd}`);
+      console.error(`[TestServer] === Server Logs ===\n${allLogs}`);
+      console.error(`[TestServer] === End Logs ===\n`);
+    }
   }
 
   /**
@@ -340,27 +375,43 @@ export class TestServer {
     const timeoutMs = this.options.startupTimeout;
     const deadline = Date.now() + timeoutMs;
     const checkInterval = 100;
+    let lastHealthCheckError: string | null = null;
+    let healthCheckAttempts = 0;
+
+    this.log(`Waiting for server to be ready (timeout: ${timeoutMs}ms)...`);
 
     while (Date.now() < deadline) {
       // Check if process has exited before continuing to poll
       const exitStatus = checkExit();
       if (exitStatus.exited) {
-        throw exitStatus.error ?? new Error('Server process exited unexpectedly');
+        throw exitStatus.error ?? new ServerStartError('Server process exited unexpectedly');
       }
 
+      healthCheckAttempts++;
       try {
-        const response = await fetch(`${this._info.baseUrl}${this.options.healthCheckPath}`, {
+        const healthUrl = `${this._info.baseUrl}${this.options.healthCheckPath}`;
+        const response = await fetch(healthUrl, {
           method: 'GET',
           signal: AbortSignal.timeout(1000),
         });
 
         if (response.ok || response.status === 404) {
           // 404 is okay - it means the server is running but might not have a health endpoint
-          this.log('Server is ready');
+          this.log(`Server is ready after ${healthCheckAttempts} health check attempts`);
           return;
         }
-      } catch {
-        // Server not ready yet
+        lastHealthCheckError = `HTTP ${response.status}: ${response.statusText}`;
+      } catch (err) {
+        // Server not ready yet - capture error for debugging
+        lastHealthCheckError = err instanceof Error ? err.message : String(err);
+      }
+
+      // Log progress every 5 seconds
+      const elapsed = Date.now() - (deadline - timeoutMs);
+      if (elapsed > 0 && elapsed % 5000 < checkInterval) {
+        this.log(
+          `Still waiting for server... (${Math.round(elapsed / 1000)}s elapsed, last error: ${lastHealthCheckError})`,
+        );
       }
 
       await sleep(checkInterval);
@@ -369,10 +420,22 @@ export class TestServer {
     // Final check before throwing timeout error
     const finalExitStatus = checkExit();
     if (finalExitStatus.exited) {
-      throw finalExitStatus.error ?? new Error('Server process exited unexpectedly');
+      throw finalExitStatus.error ?? new ServerStartError('Server process exited unexpectedly');
     }
 
-    throw new Error(`Server did not become ready within ${timeoutMs}ms`);
+    // Build detailed timeout error
+    const allLogs = this.logs.join('\n');
+    throw new ServerStartError(
+      `Server did not become ready within ${timeoutMs}ms.\n\n` +
+        `Command: ${this.options.command}\n` +
+        `CWD: ${this.options.cwd}\n` +
+        `Port: ${this.options.port}\n` +
+        `Health check URL: ${this._info.baseUrl}${this.options.healthCheckPath}\n` +
+        `Health check attempts: ${healthCheckAttempts}\n` +
+        `Last health check error: ${lastHealthCheckError ?? 'none'}\n\n` +
+        `=== Server Logs ===\n${allLogs || 'No logs captured'}\n\n` +
+        `TIP: Set DEBUG_SERVER=1 or DEBUG=1 environment variable for verbose output`,
+    );
   }
 
   private log(message: string): void {

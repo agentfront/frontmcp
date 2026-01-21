@@ -283,6 +283,7 @@ sequenceDiagram
 | `sessionMode`        | `'stateful' \| 'stateless'` | `'stateful'`         | Token storage strategy           |
 | `tokenStorage.type`  | `'memory' \| 'redis'`       | `'memory'`           | Storage backend                  |
 | `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated requests   |
+| `federatedAuth`      | `FederatedAuthConfig`       | -                    | Federated auth state validation  |
 | `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization        |
 
 ### Consent Configuration
@@ -309,6 +310,20 @@ incrementalAuth: {
   skippedAppBehavior: 'require-auth', // 'anonymous' or 'require-auth'
 }
 ```
+
+### Federated Authentication Configuration
+
+Configure how state parameters are validated during federated (multi-provider) authentication flows.
+
+```typescript
+federatedAuth: {
+  stateValidation: 'strict',  // 'strict' (recommended) or 'format'
+}
+```
+
+| Option            | Values               | Description                                          |
+| ----------------- | -------------------- | ---------------------------------------------------- |
+| `stateValidation` | `'strict' \| 'format'` | `'strict'`: Full state match (recommended). `'format'`: Only validates state format |
 
 ### OAuth Endpoints
 

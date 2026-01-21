@@ -116,7 +116,8 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.25.2",
+    "@frontmcp/utils": "0.7.2",
+    "@modelcontextprotocol/sdk": "1.25.3",
     "jose": "^6.0.11",
     "tslib": "^2.3.0"
   },

@@ -41,6 +41,7 @@ import {
   type AppAuthCard,
   type ProviderCard,
 } from '../ui';
+import { CimdService, CimdServiceToken, clientMetadataDocumentSchema, type ClientMetadataDocument } from '../cimd';
 
 /**
  * Quick checklist (security & correctness)
@@ -136,6 +137,9 @@ const stateSchema = z.object({
   requiresFederatedLogin: z.boolean().default(false).describe('Whether this auth requires federated login UI'),
   // Consent Flow
   requiresConsent: z.boolean().default(false).describe('Whether consent flow is enabled'),
+  // CIMD (Client ID Metadata Documents)
+  isCimdClient: z.boolean().default(false).describe('Whether client_id is a CIMD URL'),
+  cimdMetadata: clientMetadataDocumentSchema.optional().describe('CIMD metadata document for the client'),
 });
 
 const outputSchema = z.union([
@@ -298,6 +302,37 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     // Store validated request
     this.state.set('validatedRequest', result.data);
+
+    // CIMD validation: Check if client_id is a CIMD URL
+    const { client_id, redirect_uri } = result.data;
+    const cimdService = this.get(CimdService);
+
+    if (cimdService?.enabled && cimdService.isCimdClientId(client_id)) {
+      try {
+        this.logger.debug(`Processing CIMD client_id: ${client_id}`);
+        const resolution = await cimdService.resolveClientMetadata(client_id);
+
+        if (resolution.isCimdClient && resolution.metadata) {
+          // Validate redirect_uri against CIMD document
+          cimdService.validateRedirectUri(redirect_uri, resolution.metadata);
+
+          // Store CIMD metadata for later use (e.g., consent page client_name)
+          this.state.set('isCimdClient', true);
+          this.state.set('cimdMetadata', resolution.metadata);
+
+          this.logger.info(
+            `CIMD client validated: ${resolution.metadata.client_name} (${client_id})`,
+            resolution.fromCache ? ' [from cache]' : '',
+          );
+        }
+      } catch (error) {
+        // CIMD validation failed - respond with error
+        const errorMessage = error instanceof Error ? error.message : 'CIMD validation failed';
+        this.logger.warn(`CIMD validation failed for ${client_id}: ${errorMessage}`);
+        this.respondWithError([errorMessage], rawRedirectUri, rawState);
+        return;
+      }
+    }
   }
 
   @Stage('checkIfAuthorized')
@@ -408,12 +443,23 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
   @Stage('buildAuthorizeOutput')
   async buildAuthorizeOutput() {
-    const { pendingAuthId, validatedRequest, isIncrementalAuth, targetAppId, targetToolId, requiresFederatedLogin } =
-      this.state;
+    const {
+      pendingAuthId,
+      validatedRequest,
+      isIncrementalAuth,
+      targetAppId,
+      targetToolId,
+      requiresFederatedLogin,
+      isCimdClient,
+      cimdMetadata,
+    } = this.state;
 
     if (!validatedRequest || !pendingAuthId) {
       return;
     }
+
+    // Use CIMD client_name if available, otherwise fall back to client_id
+    const clientDisplayName = cimdMetadata?.client_name ?? validatedRequest.client_id;
 
     // For incremental auth, render a single-app authorization page
     if (isIncrementalAuth && targetAppId) {
@@ -492,8 +538,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const loginHtml = this.renderLoginPage({
       pendingAuthId,
       clientId: validatedRequest.client_id,
+      clientName: clientDisplayName, // Use CIMD client_name if available
       scope: validatedRequest.scope ?? '',
       redirectUri: validatedRequest.redirect_uri,
+      logoUri: cimdMetadata?.logo_uri, // Use CIMD logo_uri if available
     });
 
     this.respond(httpRespond.html(loginHtml));
@@ -545,14 +593,16 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private renderLoginPage(params: {
     pendingAuthId: string;
     clientId: string;
+    clientName?: string;
     scope: string;
     redirectUri: string;
+    logoUri?: string; // TODO: Add logo support to buildLoginPage template
   }): string {
-    const { pendingAuthId, clientId, scope } = params;
+    const { pendingAuthId, clientId, clientName, scope } = params;
     const callbackPath = `${this.scope.fullPath}/oauth/callback`;
 
     return buildLoginPage({
-      clientName: clientId,
+      clientName: clientName ?? clientId,
       scope,
       pendingAuthId,
       callbackPath,
@@ -632,13 +682,16 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const callbackPath = `${this.scope.fullPath}/oauth/consent`;
 
     // Group tools by app
-    const toolsByApp = tools.reduce((acc, tool) => {
-      if (!acc[tool.appId]) {
-        acc[tool.appId] = { appName: tool.appName, tools: [] };
-      }
-      acc[tool.appId].tools.push(tool);
-      return acc;
-    }, {} as Record<string, { appName: string; tools: typeof tools }>);
+    const toolsByApp = tools.reduce(
+      (acc, tool) => {
+        if (!acc[tool.appId]) {
+          acc[tool.appId] = { appName: tool.appName, tools: [] };
+        }
+        acc[tool.appId].tools.push(tool);
+        return acc;
+      },
+      {} as Record<string, { appName: string; tools: typeof tools }>,
+    );
 
     // Build tool cards HTML grouped by app
     const appGroupsHtml = Object.entries(toolsByApp)
@@ -836,8 +889,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
           Select all tools
         </label>
         <span style="color: #999; font-size: 12px;" id="selection-count">${tools.length} of ${
-      tools.length
-    } selected</span>
+          tools.length
+        } selected</span>
       </div>
 
       ${appGroupsHtml}

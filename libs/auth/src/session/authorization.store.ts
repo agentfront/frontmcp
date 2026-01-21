@@ -61,6 +61,8 @@ export interface AuthorizationCodeRecord {
   consentEnabled?: boolean;
   /** Whether federated login was used */
   federatedLoginUsed?: boolean;
+  /** Pending auth ID for token migration (federated login) */
+  pendingAuthId?: string;
 }
 
 /**
@@ -183,6 +185,13 @@ export const authorizationCodeRecordSchema = z.object({
   expiresAt: z.number(),
   used: z.boolean(),
   resource: z.string().url().optional(),
+  // Consent and federated login fields
+  selectedToolIds: z.array(z.string()).optional(),
+  selectedProviderIds: z.array(z.string()).optional(),
+  skippedProviderIds: z.array(z.string()).optional(),
+  consentEnabled: z.boolean().optional(),
+  federatedLoginUsed: z.boolean().optional(),
+  pendingAuthId: z.string().optional(),
 });
 
 /**
@@ -382,6 +391,8 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
     skippedProviderIds?: string[];
     consentEnabled?: boolean;
     federatedLoginUsed?: boolean;
+    // Token migration ID (for federated auth)
+    pendingAuthId?: string;
   }): AuthorizationCodeRecord {
     const now = Date.now();
     return {
@@ -404,6 +415,8 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
       skippedProviderIds: params.skippedProviderIds,
       consentEnabled: params.consentEnabled,
       federatedLoginUsed: params.federatedLoginUsed,
+      // Token migration ID (for federated auth)
+      pendingAuthId: params.pendingAuthId,
     };
   }
 

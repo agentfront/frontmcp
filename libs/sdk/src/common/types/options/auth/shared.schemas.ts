@@ -268,6 +268,26 @@ export type ConsentConfig = z.infer<typeof consentConfigSchema>;
 export type ConsentConfigInput = z.input<typeof consentConfigSchema>;
 
 // ============================================
+// FEDERATED AUTH CONFIG
+// ============================================
+
+/**
+ * Federated authentication configuration
+ */
+export const federatedAuthConfigSchema = z.object({
+  /**
+   * How strictly to validate the OAuth state parameter on provider callbacks.
+   * - 'strict': require exact match to stored state (default, safest)
+   * - 'format': validate only "federated:{sessionId}:{nonce}" format
+   * @default 'strict'
+   */
+  stateValidation: z.enum(['strict', 'format']).default('strict'),
+});
+
+export type FederatedAuthConfig = z.infer<typeof federatedAuthConfigSchema>;
+export type FederatedAuthConfigInput = z.input<typeof federatedAuthConfigSchema>;
+
+// ============================================
 // INCREMENTAL AUTH CONFIG
 // ============================================
 
@@ -307,6 +327,22 @@ export const incrementalAuthConfigSchema = z.object({
 
 export type IncrementalAuthConfig = z.infer<typeof incrementalAuthConfigSchema>;
 export type IncrementalAuthConfigInput = z.input<typeof incrementalAuthConfigSchema>;
+
+// ============================================
+// CIMD (Client ID Metadata Documents) CONFIG
+// Re-exported from @frontmcp/auth
+// ============================================
+export {
+  cimdCacheConfigSchema,
+  cimdSecurityConfigSchema,
+  cimdNetworkConfigSchema,
+  cimdConfigSchema,
+  type CimdCacheConfig,
+  type CimdSecurityConfig,
+  type CimdNetworkConfig,
+  type CimdConfig,
+  type CimdConfigInput,
+} from '@frontmcp/auth';
 
 // Re-export types used from external modules
 export type { RedisConfig };

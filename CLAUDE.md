@@ -76,6 +76,12 @@ export * from './errors';
 - **Purpose**: Plugin system and extensions
 - **Scope**: Extensibility framework
 
+#### @frontmcp/auth
+
+- **Purpose**: Authentication, session management, credential vault, CIMD, and OAuth extensions
+- **Scope**: Standalone auth library used by SDK and other packages
+- **Note**: All authentication-related code should be placed in this library, not in SDK
+
 ### Demo Applications
 
 #### demo (`apps/demo`)
@@ -313,22 +319,49 @@ See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete e
 
 ### Crypto Utilities
 
-**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly.
+**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly or implement custom crypto functions.
 
 ```typescript
 import {
+  // PKCE (RFC 7636)
+  generateCodeVerifier, // PKCE code verifier (43-128 chars)
+  generateCodeChallenge, // PKCE code challenge (S256)
+  generatePkcePair, // Generate both verifier and challenge
+
+  // Hashing
+  sha256, // SHA-256 hash (Uint8Array)
+  sha256Hex, // SHA-256 hash (hex string)
+  sha256Base64url, // SHA-256 hash (base64url string)
+
+  // Encryption
   hkdfSha256, // HKDF-SHA256 key derivation (RFC 5869)
   encryptAesGcm, // AES-256-GCM encryption
   decryptAesGcm, // AES-256-GCM decryption
+
+  // Random generation
   randomBytes, // Cryptographic random bytes
-  sha256,
-  sha256Hex, // SHA-256 hashing
+  randomUUID, // UUID v4 generation
+
+  // Encoding
   base64urlEncode, // Base64url encoding
   base64urlDecode, // Base64url decoding
 } from '@frontmcp/utils';
 ```
 
 This ensures cross-platform support (Node.js and browser) with consistent behavior.
+
+```typescript
+// ✅ Good - use utils for PKCE
+import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
+const verifier = generateCodeVerifier();
+const challenge = sha256Base64url(verifier);
+
+// ❌ Bad - custom implementation
+private generatePkceVerifier(): string {
+  const chars = 'ABC...';
+  // Don't do this - use generateCodeVerifier() instead
+}
+```
 
 ### File System Utilities
 
@@ -445,6 +478,7 @@ class MyTool extends ToolContext {
 ❌ **Don't**: Mutate rawInput in flows - use state.set() for flow state
 ❌ **Don't**: Hardcode capabilities in adapters - use registry.getCapabilities()
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
+❌ **Don't**: Put auth-related code in libs/sdk/src/auth (use libs/auth instead)
 
 ✅ **Do**: Use clean, descriptive names for everything
 ✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations
@@ -457,3 +491,4 @@ class MyTool extends ToolContext {
 ✅ **Do**: Use `unknown` instead of `any` for generic type defaults
 ✅ **Do**: Validate hooks match their entry type (fail fast)
 ✅ **Do**: Use specific MCP error classes with JSON-RPC codes
+✅ **Do**: Place authentication logic in `libs/auth`, import via `@frontmcp/auth`

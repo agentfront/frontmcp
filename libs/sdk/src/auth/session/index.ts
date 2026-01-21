@@ -45,3 +45,27 @@ export type {
   ConsentStateRecord,
   FederatedLoginStateRecord,
 } from '@frontmcp/auth';
+
+// Orchestrated token store for upstream provider tokens
+export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from './orchestrated-token.store';
+
+// Federated auth session for multi-provider OAuth flows
+export {
+  InMemoryFederatedAuthSessionStore,
+  toSessionRecord,
+  fromSessionRecord,
+  isSessionComplete,
+  getNextProvider,
+  completeCurrentProvider,
+  startNextProvider,
+} from './federated-auth.session';
+export type {
+  FederatedAuthSession,
+  FederatedAuthSessionRecord,
+  FederatedAuthSessionStore,
+  FederatedAuthSessionCreateParams,
+  ProviderPkce,
+  ProviderTokens,
+  ProviderUserInfo,
+  CompletedProvider,
+} from './federated-auth.session';

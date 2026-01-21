@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "demo-e2e-cimd",
+  "sourceRoot": "apps/e2e/demo-e2e-cimd/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:cimd"],
+  "implicitDependencies": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-cimd",
+        "main": "apps/e2e/demo-e2e-cimd/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-cimd/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-cimd/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-cimd/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cimd"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-cimd/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      },
+      "dependsOn": ["^build"]
+    }
+  }
+}
