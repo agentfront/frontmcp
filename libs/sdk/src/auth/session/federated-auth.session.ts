@@ -120,6 +120,9 @@ export interface FederatedAuthSession {
   /** Map of completed providers with their tokens */
   completedProviders: Map<string, CompletedProvider>;
 
+  /** Providers that user declined/skipped */
+  skippedProviders: string[];
+
   /** Currently active provider (being authenticated) */
   currentProviderId?: string;
 
@@ -158,6 +161,7 @@ export interface FederatedAuthSessionRecord {
   };
   providerQueue: string[];
   completedProviders: Array<[string, CompletedProvider]>;
+  skippedProviders: string[];
   currentProviderId?: string;
   currentProviderPkce?: ProviderPkce;
   currentProviderState?: string;
@@ -305,6 +309,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
       frontmcpPkce: params.frontmcpPkce,
       providerQueue: [...params.providerIds],
       completedProviders: new Map(),
+      skippedProviders: [],
       createdAt: now,
       expiresAt: now + this.sessionTtlMs,
     };
@@ -361,6 +366,7 @@ export function createFederatedAuthSession(
     frontmcpPkce: params.frontmcpPkce,
     providerQueue: [...params.providerIds],
     completedProviders: new Map(),
+    skippedProviders: [],
     createdAt: now,
     expiresAt: now + ttlMs,
   };

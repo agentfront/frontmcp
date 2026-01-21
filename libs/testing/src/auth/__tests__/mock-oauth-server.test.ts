@@ -29,8 +29,6 @@ describe('MockOAuthServer', () => {
       expect(info.port).toBeGreaterThan(0);
       expect(info.baseUrl).toBe(`http://localhost:${info.port}`);
       expect(info.jwksUrl).toBe(`http://localhost:${info.port}/.well-known/jwks.json`);
-
-      await server.stop();
     });
 
     it('should serve JWKS endpoint', async () => {

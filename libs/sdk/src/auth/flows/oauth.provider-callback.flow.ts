@@ -45,6 +45,7 @@ import {
   type ProviderPkce,
 } from '../session/federated-auth.session';
 import { randomUUID, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
+import { InternalMcpError } from '../../errors';
 
 const inputSchema = httpInputSchema;
 
@@ -107,7 +108,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
   private getLocalAuth(): LocalPrimaryAuth {
     const auth = this.scope.auth;
     if (!(auth instanceof LocalPrimaryAuth)) {
-      throw new Error('OauthProviderCallbackFlow requires LocalPrimaryAuth');
+      throw new InternalMcpError('OauthProviderCallbackFlow requires LocalPrimaryAuth', 'AUTH_CONFIG_ERROR');
     }
     return auth;
   }
@@ -175,7 +176,8 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     const session = await sessionStore.get(federatedSessionId);
 
     if (!session) {
-      this.logger.warn(`Federated session not found or expired: ${federatedSessionId}`);
+      const maskedId = federatedSessionId ? `${federatedSessionId.slice(0, 6)}...` : 'unknown';
+      this.logger.warn(`Federated session not found or expired: ${maskedId}`);
       this.respond(
         httpRespond.html(
           this.renderErrorPage('invalid_request', 'Authentication session expired. Please try again.'),
@@ -360,8 +362,10 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     if (tokens) {
       completeCurrentProvider(session, tokens, userInfo);
     } else {
-      // Provider was skipped/declined - mark as completed without tokens
-      // Remove from completed providers (it was declined)
+      // Provider was skipped/declined - track it
+      if (session.currentProviderId) {
+        session.skippedProviders.push(session.currentProviderId);
+      }
       session.currentProviderId = undefined;
       session.currentProviderPkce = undefined;
       session.currentProviderState = undefined;
@@ -451,7 +455,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
     // Build selected provider IDs from completed providers
     const selectedProviderIds = Array.from(session.completedProviders.keys());
-    const skippedProviderIds: string[] = []; // TODO: Track skipped providers properly
+    const skippedProviderIds = session.skippedProviders;
 
     // Create authorization code with consent/federated data
     // Include pendingAuthId for token migration in token exchange flow
