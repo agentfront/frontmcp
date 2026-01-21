@@ -159,3 +159,10 @@ export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transp
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth Session Stores
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Orchestrated token store for upstream provider tokens
+export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from './auth/session';

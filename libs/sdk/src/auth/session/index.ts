@@ -63,6 +63,7 @@ export type {
   FederatedAuthSession,
   FederatedAuthSessionRecord,
   FederatedAuthSessionStore,
+  FederatedAuthSessionCreateParams,
   ProviderPkce,
   ProviderTokens,
   ProviderUserInfo,

@@ -1,4 +1,4 @@
-import { MockOAuthServer, MockOAuthServerOptions } from '../mock-oauth-server';
+import { MockOAuthServer } from '../mock-oauth-server';
 import { TestTokenFactory } from '../token-factory';
 
 describe('MockOAuthServer', () => {

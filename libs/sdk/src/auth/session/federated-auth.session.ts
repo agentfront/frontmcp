@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from '@frontmcp/utils';
+import { InternalMcpError } from '../../errors';
 
 /**
  * PKCE data for upstream provider OAuth flow
@@ -207,6 +208,21 @@ export function fromSessionRecord(record: FederatedAuthSessionRecord): Federated
 }
 
 /**
+ * Parameters for creating a federated auth session
+ */
+export interface FederatedAuthSessionCreateParams {
+  pendingAuthId: string;
+  clientId: string;
+  redirectUri: string;
+  scopes: string[];
+  state?: string;
+  resource?: string;
+  userInfo: { email?: string; name?: string; sub?: string };
+  frontmcpPkce: { challenge: string; method: 'S256' };
+  providerIds: string[];
+}
+
+/**
  * In-Memory Federated Auth Session Store
  *
  * Development/testing implementation for federated auth session storage.
@@ -285,17 +301,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
   /**
    * Create a new federated auth session
    */
-  createSession(params: {
-    pendingAuthId: string;
-    clientId: string;
-    redirectUri: string;
-    scopes: string[];
-    state?: string;
-    resource?: string;
-    userInfo: { email?: string; name?: string; sub?: string };
-    frontmcpPkce: { challenge: string; method: 'S256' };
-    providerIds: string[];
-  }): FederatedAuthSession {
+  createSession(params: FederatedAuthSessionCreateParams): FederatedAuthSession {
     const now = Date.now();
     return {
       id: randomUUID(),
@@ -340,17 +346,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
  * @param ttlMs Session TTL in milliseconds (default: 15 minutes)
  */
 export function createFederatedAuthSession(
-  params: {
-    pendingAuthId: string;
-    clientId: string;
-    redirectUri: string;
-    scopes: string[];
-    state?: string;
-    resource?: string;
-    userInfo: { email?: string; name?: string; sub?: string };
-    frontmcpPkce: { challenge: string; method: 'S256' };
-    providerIds: string[];
-  },
+  params: FederatedAuthSessionCreateParams,
   ttlMs = 15 * 60 * 1000,
 ): FederatedAuthSession {
   const now = Date.now();
@@ -398,7 +394,7 @@ export function completeCurrentProvider(
   userInfo?: ProviderUserInfo,
 ): void {
   if (!session.currentProviderId) {
-    throw new Error('No current provider to complete');
+    throw new InternalMcpError('No current provider to complete', 'AUTH_FLOW_ERROR');
   }
 
   // Store completed provider
@@ -420,15 +416,18 @@ export function completeCurrentProvider(
  */
 export function startNextProvider(session: FederatedAuthSession, pkce: ProviderPkce, state: string): string {
   if (session.currentProviderId) {
-    throw new Error('Cannot start next provider while current is in progress');
+    throw new InternalMcpError('Cannot start next provider while current is in progress', 'AUTH_FLOW_ERROR');
   }
 
   if (session.providerQueue.length === 0) {
-    throw new Error('No more providers in queue');
+    throw new InternalMcpError('No more providers in queue', 'AUTH_FLOW_ERROR');
   }
 
   // Pop from queue and set as current
-  const providerId = session.providerQueue.shift()!;
+  const providerId = session.providerQueue.shift();
+  if (!providerId) {
+    throw new InternalMcpError('No more providers in queue', 'AUTH_FLOW_ERROR');
+  }
   session.currentProviderId = providerId;
   session.currentProviderPkce = pkce;
   session.currentProviderState = state;
