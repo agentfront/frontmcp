@@ -14,6 +14,8 @@ import {
 } from './llm-adapter.interface';
 import { AgentInputOf, AgentOutputOf } from '../decorators';
 import { AgentExecutionLoop, ToolExecutor } from '../../agent/agent-execution-loop';
+import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
+import { ZodType } from 'zod';
 
 // Re-export AgentType for convenience (defined in agent.metadata.ts)
 export { AgentType };
@@ -111,6 +113,12 @@ export class AgentContext<
 
   /** Function to execute tools - provided by AgentInstance */
   protected readonly toolExecutor?: ToolExecutor;
+
+  // ---- Internal fields for fallback elicitation support
+  /** @internal Agent name for fallback elicitation - set by CallAgentFlow */
+  _agentNameInternal?: string;
+  /** @internal Agent input for fallback elicitation - set by CallAgentFlow */
+  _agentInputInternal?: unknown;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -516,18 +524,59 @@ export class AgentContext<
   }
 
   /**
-   * Elicit user input during agent execution.
+   * Request interactive input from the user during agent execution.
    *
-   * This allows the agent to ask the user for input when needed.
+   * Sends an elicitation request to the client for user input. The client
+   * presents the message and a form (or URL) to collect user response.
    *
-   * @param message - The prompt to show the user
-   * @param schema - Zod schema for validating user response
-   * @returns The user's response, or undefined if cancelled
+   * Only one elicit per session is allowed. A new elicit will cancel any pending one.
+   * On timeout, an ElicitationTimeoutError is thrown to kill agent execution.
+   *
+   * For clients that don't support elicitation, the framework automatically handles
+   * the fallback flow using the sendElicitationResult tool.
+   *
+   * @param message - Prompt message to display to user
+   * @param requestedSchema - Zod schema defining expected input structure
+   * @param options - Mode ('form'|'url'), ttl (default 5min), elicitationId (for URL mode)
+   * @returns ElicitResult with status and typed content
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation and no fallback available
+   * @throws ElicitationFallbackRequired (internal) triggers fallback flow for non-supporting clients
+   * @throws ElicitationTimeoutError if request times out (kills execution)
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const result = await this.elicit('Confirm action?', z.object({
+   *     confirmed: z.boolean(),
+   *     reason: z.string().optional()
+   *   }));
+   *
+   *   if (result.status !== 'accept') {
+   *     return { cancelled: true };
+   *   }
+   *   // result.content is typed { confirmed: boolean, reason?: string }
+   *   return { confirmed: result.content!.confirmed };
+   * }
+   * ```
    */
-  protected async elicit<T>(message: string, schema?: unknown): Promise<T | undefined> {
-    // TODO: Integrate with elicit service
-    this.logger.warn(`Elicit not yet implemented. Message: ${message}`);
-    return undefined;
+  protected async elicit<S extends ZodType>(
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+    return performElicit(
+      {
+        sessionId: this.authInfo.sessionId,
+        getClientCapabilities: (sid) => this.scope.notifications.getClientCapabilities(sid),
+        tryGetContext: () => this.tryGetContext(),
+        entryName: this._agentNameInternal ?? this.agentName,
+        entryInput: this._agentInputInternal ?? this.input,
+        elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+      },
+      message,
+      requestedSchema,
+      options,
+    );
   }
 
   /**

@@ -89,6 +89,7 @@
                   "docs/servers/resources",
                   "docs/servers/prompts",
                   "docs/servers/agents",
+                  "docs/servers/elicitation",
                   "docs/servers/discovery"
                 ]
               },

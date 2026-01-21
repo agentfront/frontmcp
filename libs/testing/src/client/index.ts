@@ -25,6 +25,10 @@ export type {
   // JSON-RPC types
   JSONRPCRequest,
   JSONRPCResponse,
+  // Elicitation types
+  ElicitationCreateRequest,
+  ElicitResponse,
+  ElicitationHandler,
   // Re-exports from MCP SDK
   InitializeResult,
   ListToolsResult,

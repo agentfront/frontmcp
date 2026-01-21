@@ -6,7 +6,6 @@ import {
   FlowPlan,
   FlowBase,
   FlowHooksOf,
-  sessionIdSchema,
   httpRespond,
   ServerRequestTokens,
   Authorization,
@@ -78,18 +77,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async parseInput() {
     const { request } = this.rawInput;
 
-    console.log('[DEBUG] parseInput: starting');
     const authorization = request[ServerRequestTokens.auth] as Authorization;
-    console.log(
-      '[DEBUG] parseInput: authorization =',
-      authorization
-        ? {
-            hasToken: !!authorization.token,
-            hasSession: !!authorization.session,
-            sessionId: authorization.session?.id?.slice(0, 30),
-          }
-        : 'undefined',
-    );
     const { token } = authorization;
 
     // CRITICAL: The mcp-session-id header is the client's reference to their session.
@@ -153,7 +141,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
-    } else if (ElicitResultSchema.safeParse(request.body).success) {
+    } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
       this.state.set('requestType', 'elicitResult');
     } else if (method && RequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'message');
@@ -201,7 +189,69 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'elicitResult',
   })
   async onElicitResult() {
-    this.fail(new Error('Not implemented'));
+    const transportService = (this.scope as Scope).transportService;
+    const logger = this.scopeLogger.child('handle:streamable-http:onElicitResult');
+
+    const { request, response } = this.rawInput;
+    const { token, session } = this.state.required;
+
+    logger.info('onElicitResult: starting', {
+      sessionId: session.id?.slice(0, 20),
+      hasToken: !!token,
+    });
+
+    // 1. Try to get existing transport from memory
+    let transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    // 2. If not in memory, check if session exists in Redis and recreate
+    // This mirrors the onMessage flow to support distributed mode where the
+    // elicitation result may arrive on a different node than the original request.
+    if (!transport) {
+      try {
+        logger.info('onElicitResult: transport not in memory, checking stored session', {
+          sessionId: session.id?.slice(0, 20),
+        });
+        const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+        if (storedSession) {
+          logger.info('onElicitResult: recreating transport from stored session', {
+            sessionId: session.id?.slice(0, 20),
+            createdAt: storedSession.createdAt,
+            initialized: storedSession.initialized,
+          });
+          transport = await transportService.recreateTransporter(
+            'streamable-http',
+            token,
+            session.id,
+            storedSession,
+            response,
+          );
+        }
+      } catch (error) {
+        logger.warn('onElicitResult: failed to recreate transport from stored session', {
+          sessionId: session.id?.slice(0, 20),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!transport) {
+      logger.warn('onElicitResult: transport not found', {
+        sessionId: session.id?.slice(0, 20),
+      });
+      this.respond(httpRespond.sessionExpired('session not found'));
+      return;
+    }
+
+    // Pass to transport's handleRequest which calls handleIfElicitResult
+    await transport.handleRequest(request, response);
+
+    // If handleIfElicitResult returned true, the elicit result was processed
+    // but no response was sent. Send 202 Accepted to acknowledge receipt.
+    if (!response.writableEnded) {
+      response.status(202).json({ jsonrpc: '2.0', result: {} });
+    }
+
+    this.handled();
   }
 
   @Stage('onMessage', {

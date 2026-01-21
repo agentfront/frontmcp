@@ -33,6 +33,12 @@ import CompleteFlow from '../completion/flows/complete.flow';
 import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
+import { ElicitationStore, createElicitationStore } from '../elicitation';
+import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
+import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error';
+import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import { normalizeTool } from '../tool/tool.utils';
+import { ToolInstance } from '../tool/tool.instance';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -58,6 +64,9 @@ export class Scope extends ScopeEntry {
   readonly orchestrated: boolean = false;
 
   readonly server: FrontMcpServer;
+
+  /** Lazy-initialized elicitation store for distributed elicitation support */
+  private _elicitationStore?: ElicitationStore;
 
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
@@ -99,6 +108,21 @@ export class Scope extends ScopeEntry {
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
 
+    // Initialize elicitation store for distributed elicitation support
+    // Only initialize if elicitation is explicitly enabled (default: false)
+    const elicitationEnabled = this.metadata.elicitation?.enabled === true;
+    if (elicitationEnabled) {
+      // Use elicitation-specific redis config, or fall back to global redis
+      const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
+      const { store: elicitStore } = await createElicitationStore({
+        redis: elicitationRedis,
+        keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
+        logger: this.logger,
+        isEdgeRuntime: this.isEdgeRuntime(),
+      });
+      this._elicitationStore = elicitStore;
+    }
+
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     await this.scopeAuth.ready;
 
@@ -121,6 +145,13 @@ export class Scope extends ScopeEntry {
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
+
+    // Register sendElicitationResult system tool (hidden by default)
+    // This tool is used for fallback elicitation with non-supporting clients
+    // Only register if elicitation is enabled
+    if (elicitationEnabled) {
+      this.registerSendElicitationResultTool(scopeRef);
+    }
 
     this.toolUIRegistry = new ToolUIRegistry();
 
@@ -266,8 +297,14 @@ export class Scope extends ScopeEntry {
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
 
-    // Register logging, completion, and agent flows
-    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow, CallAgentFlow]);
+    // Register logging, completion, agent, and elicitation flows
+    await this.scopeFlows.registryFlows([
+      SetLevelFlow,
+      CompleteFlow,
+      CallAgentFlow,
+      ElicitationRequestFlow,
+      ElicitationResultFlow,
+    ]);
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
@@ -358,6 +395,70 @@ export class Scope extends ScopeEntry {
 
   get notifications(): NotificationService {
     return this.notificationService;
+  }
+
+  /**
+   * Get the elicitation store for distributed elicitation support.
+   *
+   * Lazily initializes the store using the elicitation store factory:
+   * - Redis: Uses RedisElicitationStore for distributed deployments
+   * - In-memory: Uses InMemoryElicitationStore for single-node/dev
+   * - Edge runtime without Redis: Throws error (Edge functions are stateless)
+   *
+   * @see createElicitationStore for factory implementation details
+   */
+  get elicitationStore(): ElicitationStore {
+    if (!this._elicitationStore) {
+      throw new ElicitationStoreNotInitializedError();
+    }
+    return this._elicitationStore;
+  }
+
+  /**
+   * Register the sendElicitationResult system tool.
+   * This tool is hidden by default and only shown to clients that don't support elicitation.
+   */
+  private registerSendElicitationResultTool(scopeRef: EntryOwnerRef): void {
+    try {
+      const toolRecord = normalizeTool(SendElicitationResultTool);
+      const systemToolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
+        kind: 'scope',
+        id: '_system',
+        ref: SendElicitationResultTool,
+      });
+      this.scopeTools.registerToolInstance(systemToolEntry);
+      this.logger.verbose('Registered sendElicitationResult system tool');
+    } catch (error) {
+      // Log error but don't fail scope initialization
+      this.logger.warn(
+        `Failed to register sendElicitationResult tool: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Detect if running on Edge runtime (Vercel Edge, Cloudflare Workers).
+   * Edge functions are stateless and require external storage for elicitation.
+   */
+  private isEdgeRuntime(): boolean {
+    // Check for Vercel Edge Runtime
+    if (typeof globalThis !== 'undefined' && 'EdgeRuntime' in globalThis) {
+      return true;
+    }
+    // Check for Cloudflare Workers
+    if (typeof globalThis !== 'undefined' && 'caches' in globalThis && !('window' in globalThis)) {
+      return true;
+    }
+    // Check for common environment variables (guarded for Edge runtimes where process may not exist)
+    if (
+      typeof process !== 'undefined' &&
+      typeof process.env !== 'undefined' &&
+      process.env['VERCEL_ENV'] !== undefined &&
+      process.env['EDGE_RUNTIME'] !== undefined
+    ) {
+      return true;
+    }
+    return false;
   }
 
   /**

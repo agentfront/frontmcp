@@ -118,6 +118,9 @@ export interface ToolRegistryInterface {
   // inline tools plus discovered by nested tool registries
   getTools(includeHidden?: boolean): ToolEntry[];
 
+  // tools appropriate for MCP listing based on client elicitation support
+  getToolsForListing(supportsElicitation?: boolean): ToolEntry[];
+
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];
 

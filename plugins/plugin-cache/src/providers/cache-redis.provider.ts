@@ -25,6 +25,7 @@ export default class CacheRedisProvider implements CacheStoreInterface {
       ...options.config,
     });
 
+    // TODO: migrate to the storage utils
     this.client.on('connect', () => console.log('[Redis] Connected'));
     this.client.on('error', (err) => console.error('[Redis] Error:', err));
   }

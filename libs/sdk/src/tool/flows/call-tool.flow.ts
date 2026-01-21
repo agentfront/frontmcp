@@ -7,7 +7,6 @@ import {
   FlowPlan,
   FlowRunOptions,
   ToolContext,
-  ToolCtorArgs,
   ToolEntry,
   isOrchestratedMode,
 } from '../../common';
@@ -21,12 +20,56 @@ import {
   InvalidOutputError,
   ToolExecutionError,
   AuthorizationRequiredError,
+  ElicitationFallbackRequired,
+  ElicitationTimeoutError,
 } from '../../errors';
+import type { FallbackExecutionResult } from '../../elicitation/elicitation.types';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+
+/**
+ * Type for transport extension on AuthInfo.
+ *
+ * The MCP SDK's AuthInfo type doesn't include transport natively.
+ * The LocalTransportAdapter adds a `transport` property with:
+ * - sendElicitRequest: method to send elicitation requests to the client
+ * - type: transport type string (e.g., 'sse', 'streamable-http')
+ *
+ * We use a separate type instead of extending AuthInfo because the MCP SDK's
+ * AuthInfo type has strict constraints that conflict with interface extension.
+ */
+type TransportExtension = {
+  transport?: {
+    sendElicitRequest: <S extends z.ZodType>(
+      relatedRequestId: number | string,
+      message: string,
+      requestedSchema: S,
+      options?: import('../../elicitation').ElicitOptions,
+    ) => Promise<import('../../elicitation').ElicitResult<S extends z.ZodType<infer O> ? O : unknown>>;
+    type: string;
+  };
+};
+
+/**
+ * Fallback response structure for elicitation.
+ * Returned when elicitation is not supported by the client and requires
+ * the LLM to collect user input via sendElicitationResult tool.
+ */
+interface ElicitationFallbackResponse {
+  content: Array<{ type: 'text'; text: string }>;
+  _meta: {
+    elicitationPending: {
+      elicitId: string;
+      message: string;
+      schema: Record<string, unknown>;
+      instructions: string;
+    };
+  };
+}
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -55,6 +98,8 @@ const stateSchema = z.object({
   uiMeta: z.record(z.string(), z.unknown()).optional(),
   // Progress token from request's _meta (for progress notifications)
   progressToken: z.union([z.string(), z.number()]).optional(),
+  // JSON-RPC request ID (for elicitation routing)
+  jsonRpcRequestId: z.union([z.string(), z.number()]).optional(),
 });
 
 const plan = {
@@ -132,7 +177,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Extract progressToken from request's _meta (for progress notifications)
     const progressToken = params._meta?.progressToken;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo, _toolOwnerId: toolOwnerId, progressToken });
+    // Extract JSON-RPC request ID for elicitation routing
+    const jsonRpcRequestId = ctx.requestId;
+
+    this.state.set({
+      input: params,
+      authInfo: ctx.authInfo,
+      _toolOwnerId: toolOwnerId,
+      progressToken,
+      jsonRpcRequestId,
+    });
     this.logger.verbose('parseInput:done');
   }
 
@@ -361,6 +415,29 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       this.appendContextHooks(toolHooks);
       context.mark('createToolCallContext');
+
+      // Set tool name and input for fallback elicitation support
+      // These are used by the elicit() method when throwing ElicitationFallbackRequired
+      context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
+      context._toolInputInternal = input.arguments;
+
+      // Wire transport to FrontMcpContext for elicitation support
+      // The transport is stored in authInfo.transport by the local adapter
+      // Cast with TransportExtension since MCP SDK's AuthInfo doesn't include transport
+      const frontmcpContext = context.tryGetContext();
+      const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
+      if (frontmcpContext && authInfoWithTransport?.transport?.sendElicitRequest) {
+        const transport = authInfoWithTransport.transport;
+        // Pass the JSON-RPC request ID for proper elicitation routing
+        // The MCP SDK uses this to route messages through the correct SSE stream
+        const jsonRpcRequestId = this.state.jsonRpcRequestId;
+        frontmcpContext.setTransport({
+          sendElicitRequest: transport.sendElicitRequest.bind(transport),
+          type: transport.type,
+          jsonRpcRequestId,
+        });
+      }
+
       this.state.set('toolContext', context);
       this.logger.verbose('createToolCallContext:done');
     } catch (error) {
@@ -421,12 +498,231 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       toolContext.output = await toolContext.execute(toolContext.input);
       this.logger.verbose('execute:done');
     } catch (error) {
+      // Handle elicitation fallback for clients that don't support elicitation
+      if (error instanceof ElicitationFallbackRequired) {
+        this.logger.info('execute: elicitation fallback required', {
+          elicitId: error.elicitId,
+          toolName: error.toolName,
+        });
+
+        // Store pending fallback context in the elicitation store
+        const authInfo = this.state.authInfo;
+        const sessionId = authInfo?.sessionId ?? 'anonymous';
+        const scope = this.scope as Scope;
+
+        await scope.elicitationStore.setPendingFallback({
+          elicitId: error.elicitId,
+          sessionId,
+          toolName: error.toolName,
+          toolInput: error.toolInput,
+          elicitMessage: error.elicitMessage,
+          elicitSchema: error.schema,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + error.ttl,
+        });
+
+        // Check transport type to determine fallback strategy
+        // Streamable HTTP: Wait for result via pub/sub (request must stay open)
+        // SSE: Fire-and-forget (SSE handles routing, can use notifications)
+        const transportType = (authInfo as (AuthInfo & TransportExtension) | undefined)?.transport?.type;
+
+        if (transportType === 'streamable-http') {
+          // Streamable HTTP: Wait for the result via pub/sub
+          this.logger.info('execute: using waiting fallback for streamable-http', {
+            elicitId: error.elicitId,
+          });
+
+          const result = await this.handleWaitingFallback(error, sessionId, scope);
+          toolContext.output = result;
+          this.logger.verbose('execute:done (waiting fallback completed)');
+          return;
+        }
+
+        // SSE and other transports: Fire-and-forget pattern
+        // Set output to fallback response (not an error)
+        // This structured response tells the LLM how to continue
+        const fallbackResponse: ElicitationFallbackResponse = {
+          content: [
+            {
+              type: 'text',
+              text:
+                `This tool requires user input to continue.\n\n` +
+                `**Question:** ${error.elicitMessage}\n\n` +
+                `After collecting the user's response, call the \`sendElicitationResult\` tool with:\n` +
+                `- elicitId: "${error.elicitId}"\n` +
+                `- action: "accept", "cancel", or "decline"\n` +
+                `- content: (the user's response matching the schema below)\n\n` +
+                `**Expected Response Schema:**\n\`\`\`json\n${JSON.stringify(error.schema, null, 2)}\n\`\`\``,
+            },
+          ],
+          _meta: {
+            elicitationPending: {
+              elicitId: error.elicitId,
+              message: error.elicitMessage,
+              schema: error.schema,
+              instructions: 'Call sendElicitationResult tool after collecting user input',
+            },
+          },
+        };
+        toolContext.output = fallbackResponse;
+
+        this.logger.verbose('execute:done (elicitation fallback)');
+        return;
+      }
+
       this.logger.error('execute: tool execution failed', error);
       throw new ToolExecutionError(
         this.state.tool?.metadata.name || 'unknown',
         error instanceof Error ? error : undefined,
       );
     }
+  }
+
+  /**
+   * Handle waiting fallback for streamable-http transport.
+   *
+   * This method:
+   * 1. Subscribes to the fallback-result pub/sub channel
+   * 2. Waits for the result with timeout (same as elicitation TTL)
+   * 3. Returns the actual tool result from pub/sub
+   *
+   * Used when the transport type is streamable-http, which requires
+   * the original HTTP request to stay open and return the final result.
+   */
+  private async handleWaitingFallback(
+    error: ElicitationFallbackRequired,
+    sessionId: string,
+    scope: Scope,
+  ): Promise<CallToolResult> {
+    const { elicitId, ttl } = error;
+
+    return new Promise<CallToolResult>((resolve, reject) => {
+      let unsubscribe: (() => Promise<void>) | undefined;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let resolved = false;
+
+      // Clean up function to prevent memory leaks
+      const cleanup = async () => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = undefined;
+        }
+        if (unsubscribe) {
+          try {
+            await unsubscribe();
+          } catch (err) {
+            this.logger.warn('handleWaitingFallback: failed to unsubscribe', {
+              elicitId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+          unsubscribe = undefined;
+        }
+      };
+
+      // Handle the callback from pub/sub
+      const handleResult = async (result: FallbackExecutionResult) => {
+        if (resolved) return; // Prevent duplicate handling
+        resolved = true;
+
+        this.logger.info('handleWaitingFallback: received result', {
+          elicitId,
+          success: result.success,
+        });
+
+        await cleanup();
+
+        if (result.success && result.result) {
+          resolve(result.result as CallToolResult);
+        } else {
+          // Convert error to a tool result (not a thrown error)
+          // This allows the LLM to see the error message and potentially retry
+          resolve({
+            content: [
+              {
+                type: 'text',
+                text: `Error: ${result.error || 'Tool execution failed'}`,
+              },
+            ],
+            isError: true,
+          });
+        }
+      };
+
+      // Set up timeout
+      timeoutHandle = setTimeout(async () => {
+        if (resolved) return;
+        resolved = true;
+
+        this.logger.warn('handleWaitingFallback: timeout waiting for result', {
+          elicitId,
+          ttl,
+        });
+
+        await cleanup();
+
+        // Clean up the pending fallback record
+        try {
+          await scope.elicitationStore.deletePendingFallback(elicitId);
+        } catch (err) {
+          this.logger.warn('handleWaitingFallback: failed to cleanup pending fallback', {
+            elicitId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        reject(new ElicitationTimeoutError(elicitId, ttl));
+      }, ttl);
+
+      // Subscribe to the fallback result channel
+      scope.elicitationStore
+        .subscribeFallbackResult(elicitId, handleResult, sessionId)
+        .then((unsub) => {
+          if (resolved) {
+            // Already resolved (e.g., timeout occurred while subscribing)
+            // Ignore unsubscribe errors since we're cleaning up
+            unsub().catch(() => {
+              /* noop */
+            });
+            return;
+          }
+          unsubscribe = unsub;
+
+          this.logger.debug('handleWaitingFallback: subscribed to fallback result', {
+            elicitId,
+          });
+        })
+        .catch((err) => {
+          if (resolved) return;
+          resolved = true;
+
+          this.logger.error('handleWaitingFallback: failed to subscribe', {
+            elicitId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+
+          cleanup().then(async () => {
+            // Clean up the pending fallback record (consistent with timeout handler)
+            try {
+              await scope.elicitationStore.deletePendingFallback(elicitId);
+            } catch (cleanupErr) {
+              this.logger.warn('handleWaitingFallback: failed to cleanup pending fallback on subscribe error', {
+                elicitId,
+                error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+              });
+            }
+
+            reject(
+              new ToolExecutionError(
+                error.toolName,
+                new Error(
+                  `Failed to subscribe to fallback result: ${err instanceof Error ? err.message : String(err)}`,
+                ),
+              ),
+            );
+          });
+        });
+    });
   }
 
   @Stage('validateOutput')
@@ -627,10 +923,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           ? typeof uiConfig.template === 'function'
             ? 'react-component'
             : typeof uiConfig.template === 'string'
-            ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
-              ? 'react-file'
-              : 'html-file'
-            : 'unknown'
+              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+                ? 'react-file'
+                : 'html-file'
+              : 'unknown'
           : 'none',
       });
 
