@@ -48,7 +48,7 @@ describe('EncryptedElicitationStore', () => {
       expect(retrieved).toEqual(record);
     });
 
-    it('should encrypt data in storage', async () => {
+    it('should encrypt data in storage (only minimal metadata stored in plaintext)', async () => {
       const record: PendingElicitRecord = {
         elicitId: 'elicit-123',
         sessionId: testSessionId1,
@@ -68,9 +68,15 @@ describe('EncryptedElicitationStore', () => {
       const rawWithEncrypted = rawRecord as unknown as { __encrypted?: unknown };
       expect(rawWithEncrypted.__encrypted).toBeTruthy();
 
-      // The message should still be present in the raw record (not encrypted in the outer layer)
-      // but the actual secure data is in __encrypted
-      expect(rawRecord?.message).toBe(record.message);
+      // Only minimal metadata should be stored in plaintext (for storage key and TTL)
+      expect(rawRecord?.sessionId).toBe(record.sessionId);
+      expect(rawRecord?.elicitId).toBe(record.elicitId);
+      expect(rawRecord?.createdAt).toBe(record.createdAt);
+      expect(rawRecord?.expiresAt).toBe(record.expiresAt);
+
+      // Sensitive fields should NOT be stored in plaintext (they're inside the encrypted blob)
+      expect(rawRecord?.message).toBeUndefined();
+      expect(rawRecord?.mode).toBeUndefined();
     });
 
     it('should not decrypt with wrong session', async () => {
@@ -252,9 +258,9 @@ describe('EncryptedElicitationStore', () => {
     });
   });
 
-  describe('unencrypted data handling', () => {
-    it('should return null for unencrypted pending records', async () => {
-      // Write unencrypted record directly to base store
+  describe('migration support (unencrypted data handling)', () => {
+    it('should return plaintext pending records for migration', async () => {
+      // Write unencrypted record directly to base store (simulating pre-encryption data)
       const record: PendingElicitRecord = {
         elicitId: 'elicit-unencrypted',
         sessionId: testSessionId1,
@@ -266,12 +272,12 @@ describe('EncryptedElicitationStore', () => {
 
       await baseStore.setPending(record);
 
-      // Read through encrypted store - should return null (no migration)
+      // Read through encrypted store - should return plaintext record for migration
       const retrieved = await encryptedStore.getPending(testSessionId1);
-      expect(retrieved).toBeNull();
+      expect(retrieved).toEqual(record);
     });
 
-    it('should return null for unencrypted fallback records', async () => {
+    it('should return plaintext fallback records for migration', async () => {
       const record: PendingElicitFallback = {
         elicitId: 'elicit-unencrypted-fallback',
         sessionId: testSessionId1,
@@ -285,9 +291,26 @@ describe('EncryptedElicitationStore', () => {
 
       await baseStore.setPendingFallback(record);
 
-      // Read through encrypted store - should return null (no migration)
+      // Read through encrypted store - should return plaintext record for migration
       const retrieved = await encryptedStore.getPendingFallback(record.elicitId, testSessionId1);
-      expect(retrieved).toBeNull();
+      expect(retrieved).toEqual(record);
+    });
+
+    it('should return plaintext resolved results for migration', async () => {
+      const elicitId = 'elicit-unencrypted-resolved';
+      const result: ElicitResult<unknown> = {
+        status: 'accept',
+        content: { data: 'unencrypted' },
+      };
+
+      // Store unencrypted result directly in base store
+      await baseStore.setResolvedResult(elicitId, result);
+
+      // Read through encrypted store - should return plaintext for migration
+      const retrieved = await encryptedStore.getResolvedResult(elicitId, testSessionId1);
+      expect(retrieved).toBeTruthy();
+      expect(retrieved?.elicitId).toBe(elicitId);
+      expect(retrieved?.result).toEqual(result);
     });
   });
 

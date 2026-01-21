@@ -90,11 +90,14 @@ export class EncryptedElicitationStore implements ElicitationStore {
       // Encrypt the record using its sessionId
       const encrypted = await encryptElicitationData(record, sessionId, this.secret);
 
-      // Store as encrypted blob (the underlying store serializes as JSON)
+      // Store only minimal metadata + encrypted blob (sensitive fields are inside the blob)
       await this.store.setPending({
-        ...record,
-        // Replace the record fields with encrypted blob marker
-        // The actual data is in the encrypted blob
+        // Only store fields needed for storage key and TTL
+        sessionId: record.sessionId,
+        elicitId: record.elicitId,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+        // All other fields (message, mode, requestedSchema, etc.) are encrypted inside the blob
         __encrypted: encrypted,
       } as unknown as PendingElicitRecord);
 
@@ -203,9 +206,14 @@ export class EncryptedElicitationStore implements ElicitationStore {
       // Encrypt the record
       const encrypted = await encryptElicitationData(record, sessionId, this.secret);
 
-      // Store with modified record containing encrypted blob
+      // Store only minimal metadata + encrypted blob (sensitive fields are inside the blob)
       await this.store.setPendingFallback({
-        ...record,
+        // Only store fields needed for storage key and TTL
+        sessionId: record.sessionId,
+        elicitId: record.elicitId,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+        // All other fields (toolName, toolInput, elicitMessage, elicitSchema) are encrypted inside the blob
         __encrypted: encrypted,
       } as unknown as PendingElicitFallback);
 
@@ -390,10 +398,13 @@ export class EncryptedElicitationStore implements ElicitationStore {
     const encryptedBlob = (stored as unknown as { __encrypted?: ElicitationEncryptedBlob }).__encrypted;
 
     if (!encryptedBlob || !isEncryptedBlob(encryptedBlob)) {
-      this.logger?.warn('[EncryptedElicitationStore] Pending record is not encrypted', {
+      // Migration support: return plaintext record during transition period
+      // Old records without encryption will be served as-is until they expire via TTL
+      this.logger?.debug('[EncryptedElicitationStore] Plaintext fallback for pending record (migration)', {
         sessionId: sessionId.slice(0, 8) + '...',
+        elicitId: stored.elicitId,
       });
-      return null;
+      return stored;
     }
 
     try {
@@ -429,10 +440,12 @@ export class EncryptedElicitationStore implements ElicitationStore {
     const encryptedBlob = (stored as unknown as { __encrypted?: ElicitationEncryptedBlob }).__encrypted;
 
     if (!encryptedBlob || !isEncryptedBlob(encryptedBlob)) {
-      this.logger?.warn('[EncryptedElicitationStore] Fallback record is not encrypted', {
+      // Migration support: return plaintext record during transition period
+      // Old records without encryption will be served as-is until they expire via TTL
+      this.logger?.debug('[EncryptedElicitationStore] Plaintext fallback for fallback record (migration)', {
         elicitId: stored.elicitId,
       });
-      return null;
+      return stored;
     }
 
     // Need sessionId to decrypt - try to get from stored record if not provided
@@ -480,10 +493,12 @@ export class EncryptedElicitationStore implements ElicitationStore {
     const encryptedBlob = encryptedResult?.__encrypted;
 
     if (!encryptedBlob || !isEncryptedBlob(encryptedBlob)) {
-      this.logger?.warn('[EncryptedElicitationStore] Resolved result is not encrypted', {
+      // Migration support: return plaintext record during transition period
+      // Old records without encryption will be served as-is until they expire via TTL
+      this.logger?.debug('[EncryptedElicitationStore] Plaintext fallback for resolved result (migration)', {
         elicitId: stored.elicitId,
       });
-      return null;
+      return stored;
     }
 
     if (!sessionId) {

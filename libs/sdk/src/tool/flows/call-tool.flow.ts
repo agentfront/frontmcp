@@ -658,7 +658,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             error: err instanceof Error ? err.message : String(err),
           });
 
-          cleanup().then(() => {
+          cleanup().then(async () => {
+            // Clean up the pending fallback record (consistent with timeout handler)
+            try {
+              await scope.elicitationStore.deletePendingFallback(elicitId);
+            } catch (cleanupErr) {
+              this.logger.warn('handleWaitingFallback: failed to cleanup pending fallback on subscribe error', {
+                elicitId,
+                error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+              });
+            }
+
             reject(
               new ToolExecutionError(
                 error.toolName,

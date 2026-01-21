@@ -14,7 +14,7 @@
  *   node scripts/fix-unused-imports.mjs release/1.0  # Compare against release/1.0
  */
 
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { existsSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
@@ -141,18 +141,25 @@ export default [
   try {
     writeFileSync(tempConfigPath, configContent);
 
-    // Quote file paths to handle spaces and special characters
-    const quotedFiles = files.map((f) => `"${f}"`).join(' ');
-    execSync(`npx eslint --config "${tempConfigPath}" --fix ${quotedFiles}`, { stdio: 'inherit' });
-    console.log('Done! Unused imports removed.');
-  } catch (error) {
+    // Use execFileSync with array arguments to prevent shell injection
     // ESLint exits with code 1 if it finds (and fixes) issues, which is expected
-    // Only log and rethrow for other errors (exit code > 1 indicates actual failure)
-    if (error.status !== undefined && error.status > 1) {
-      console.error('ESLint encountered an error:', error.message || 'Unknown error');
-      throw error;
+    try {
+      execFileSync(
+        'npx',
+        ['eslint', '--config', tempConfigPath, '--fix', ...files],
+        { stdio: 'inherit' }
+      );
+      console.log('Done! Unused imports removed.');
+    } catch (error) {
+      // ESLint exit code 1 = found (and fixed) issues - this is success
+      // ESLint exit code 2 = configuration or fatal error - this is failure
+      if (error.status === 1) {
+        console.log('Done! Unused imports removed.');
+      } else {
+        console.error('ESLint encountered an error:', error.message || 'Unknown error');
+        throw error;
+      }
     }
-    console.log('Done processing files.');
   } finally {
     // Clean up temp config
     try {

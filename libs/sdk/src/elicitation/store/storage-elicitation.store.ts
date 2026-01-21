@@ -262,25 +262,16 @@ export class StorageElicitationStore implements ElicitationStore {
 
   /**
    * Publish an elicitation result.
+   *
+   * When pub/sub is supported, we rely entirely on the pub/sub mechanism
+   * to deliver messages (even locally). This avoids double-invocation for
+   * memory-based storage where pub/sub IS local.
+   *
+   * When pub/sub is not supported, we invoke local callbacks directly.
    */
   async publishResult<T = unknown>(elicitId: string, sessionId: string, result: ElicitResult<T>): Promise<void> {
-    // First, invoke local callbacks directly for same-node responses
-    const callbacks = this.localCallbacks.get(elicitId);
-    if (callbacks) {
-      for (const cb of callbacks) {
-        try {
-          cb(result);
-        } catch (err) {
-          this.logger?.error('[StorageElicitationStore] Callback error during publish', {
-            elicitId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    }
-
-    // Publish to channel for cross-node routing
     if (this.storage.supportsPubSub()) {
+      // Publish to channel - pub/sub handles both local and remote delivery
       const channel = RESULT_CHANNEL_PREFIX + elicitId;
       try {
         await this.storage.publish(channel, JSON.stringify(result));
@@ -289,6 +280,21 @@ export class StorageElicitationStore implements ElicitationStore {
           elicitId,
           error: err instanceof Error ? err.message : String(err),
         });
+      }
+    } else {
+      // No pub/sub - invoke local callbacks directly
+      const callbacks = this.localCallbacks.get(elicitId);
+      if (callbacks) {
+        for (const cb of callbacks) {
+          try {
+            cb(result);
+          } catch (err) {
+            this.logger?.error('[StorageElicitationStore] Callback error during publish', {
+              elicitId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
       }
     }
 
