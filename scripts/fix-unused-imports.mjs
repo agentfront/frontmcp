@@ -19,7 +19,7 @@ import { existsSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 /** Valid branch name pattern (alphanumeric, hyphens, underscores, slashes, dots) */
-const VALID_BRANCH_PATTERN = /^[A-Za-z0-9._\/-]+$/;
+const VALID_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 /**
  * Validate a branch name to prevent injection attacks.
