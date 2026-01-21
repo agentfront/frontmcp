@@ -43,8 +43,8 @@ This example shows the complete flow when an AI Agent wants to use protected MCP
 ### The Scenario
 
 - **AI Agent**: Claude wants to create a GitHub issue
-- **MCP Client**: "Claude MCP Client" publishes metadata at `https://mcpclient.ai/oauth/metadata.json`
-- **User**: John (john@example.com) must approve the access
+- **MCP Client**: "Claude MCP Client" publishes metadata at `https://frontegg.com/oauth/metadata.json`
+- **User**: John (<john@example.com>) must approve the access
 - **Protected Tool**: `create_issue` in the `github-app`
 
 ### Complete Authorization Flow
@@ -84,7 +84,7 @@ sequenceDiagram
 
 ### What Each Layer Contains
 
-**Layer 1 - CLIENT (CIMD at https://mcpclient.ai/oauth/metadata.json):**
+**Layer 1 - CLIENT (CIMD at <https://frontegg.com/oauth/metadata.json>):**
 
 ```json
 {
@@ -178,7 +178,7 @@ flowchart TB
 ### Key Insight: CIMD ≠ User Identity
 
 - **CIMD identifies the CLIENT APPLICATION** (e.g., "Claude MCP Client")
-- **OAuth token identifies the USER** (e.g., "john@example.com")
+- **OAuth token identifies the USER** (e.g., <john@example.com>)
 - **The token is bound to BOTH**: issued for a specific user via a specific client
 
 ## CIMD vs Standard OAuth

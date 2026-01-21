@@ -331,6 +331,8 @@ export class MockOAuthServer {
         await this.handleTokenEndpoint(req, res);
       } else if (urlPath === '/userinfo') {
         await this.handleUserInfoEndpoint(req, res);
+      } else if (urlPath === '/oauth/authorize/submit' && req.method === 'POST') {
+        await this.handleAuthorizeSubmit(req, res);
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'not_found', error_description: 'Endpoint not found' }));
@@ -811,6 +813,98 @@ export class MockOAuthServer {
         ...(testUser.claims ?? {}),
       }),
     );
+  }
+
+  /**
+   * Handle authorize form submission (POST /oauth/authorize/submit)
+   * Processes the manual login form for non-autoApprove testing
+   */
+  private async handleAuthorizeSubmit(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Parse form data from POST body
+    const body = await this.readBody(req);
+    const params = new URLSearchParams(body);
+
+    // Extract form fields
+    const clientId = params.get('client_id');
+    const redirectUri = params.get('redirect_uri');
+    const scope = params.get('scope') ?? 'openid';
+    const state = params.get('state') ?? undefined;
+    const codeChallenge = params.get('code_challenge') ?? undefined;
+    const codeChallengeMethod = params.get('code_challenge_method') ?? undefined;
+    const action = params.get('action');
+
+    // User fields
+    const sub = params.get('sub');
+    const email = params.get('email') ?? undefined;
+    const name = params.get('name') ?? undefined;
+
+    // Validate required fields
+    if (!clientId || !redirectUri || !sub) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: 'invalid_request',
+          error_description: 'Missing required fields',
+        }),
+      );
+      return;
+    }
+
+    // Handle deny action
+    if (action === 'deny') {
+      this.redirectWithError(res, redirectUri, 'access_denied', 'User denied the authorization request', state);
+      return;
+    }
+
+    // Validate redirect_uri
+    if (!this.isValidRedirectUri(redirectUri)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: 'invalid_request',
+          error_description: 'Invalid redirect_uri',
+        }),
+      );
+      return;
+    }
+
+    // Create test user from form data
+    const testUser: MockTestUser = {
+      sub,
+      email,
+      name,
+    };
+
+    // Generate authorization code
+    const code = this.generateCode();
+    const scopes = scope.split(' ').filter(Boolean);
+
+    // Store the code
+    this.authCodes.set(code, {
+      code,
+      clientId,
+      redirectUri,
+      codeChallenge,
+      codeChallengeMethod,
+      scopes,
+      user: testUser,
+      state,
+      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+      used: false,
+    });
+
+    // Redirect back with code
+    const callbackUrl = new URL(redirectUri);
+    callbackUrl.searchParams.set('code', code);
+    if (state) {
+      callbackUrl.searchParams.set('state', state);
+    }
+
+    this.log(
+      `Manual auth approved for user: ${sub}, redirecting with code to ${callbackUrl.origin}${callbackUrl.pathname}`,
+    );
+    res.writeHead(302, { Location: callbackUrl.toString() });
+    res.end();
   }
 
   private readBody(req: IncomingMessage): Promise<string> {

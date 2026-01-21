@@ -47,7 +47,7 @@ This example shows the complete flow when an AI Agent wants to use protected MCP
 
 - **AI Agent**: Claude wants to create a GitHub issue
 - **MCP Client**: "Claude MCP Client" publishes metadata at `https://mcpclient.ai/oauth/metadata.json`
-- **User**: John (john@example.com) must approve the access
+- **User**: John (<john@example.com>) must approve the access
 - **Protected Tool**: `create_issue` in the `github-app`
 
 ### Complete Authorization Flow
@@ -481,7 +481,7 @@ import {
   InvalidClientIdUrlError,
   CimdSecurityError,
   CimdFetchError,
-} from '@frontmcp/sdk';
+} from '@frontmcp/auth';
 
 // In a custom hook or flow
 function handleCimdError(error: unknown) {

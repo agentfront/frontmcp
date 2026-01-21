@@ -57,10 +57,10 @@ const stateSchema = z.object({
   providerState: z.string().optional(),
   // Federated session
   federatedSessionId: z.string().optional(),
-  federatedSession: z.any().optional(), // FederatedAuthSession
+  federatedSession: z.unknown().optional(), // FederatedAuthSession
   // Provider tokens
-  providerTokens: z.any().optional(), // ProviderTokens
-  providerUserInfo: z.any().optional(), // ProviderUserInfo
+  providerTokens: z.unknown().optional(), // ProviderTokens
+  providerUserInfo: z.unknown().optional(), // ProviderUserInfo
 });
 
 const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
@@ -139,7 +139,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     // State format: "federated:{sessionId}:{randomNonce}"
     const stateParts = providerState.split(':');
     if (stateParts.length < 3 || stateParts[0] !== 'federated') {
-      this.logger.warn(`Invalid state format: ${providerState}`);
+      this.logger.warn(`Invalid state format: ${providerState?.slice(0, 20)}...`);
       this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid state parameter'), 400));
       return;
     }
