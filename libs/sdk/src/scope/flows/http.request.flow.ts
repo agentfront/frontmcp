@@ -17,16 +17,10 @@ import {
   normalizeScopeBase,
   FlowControl,
   toLegacyProtocolFlags,
-  isOrchestratedMode,
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 import { randomUUID } from '@frontmcp/utils';
-import {
-  OrchestratedAuthorization,
-  OrchestratedAuthAccessorAdapter,
-  ORCHESTRATED_AUTH_ACCESSOR,
-} from '../../auth/authorization';
 
 const plan = {
   pre: [
@@ -195,40 +189,6 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
               sessionPayload: session?.payload,
             },
           });
-
-          // For orchestrated mode, run auth:verify to get the full Authorization class
-          // This enables OrchestratedAuthorization with token store access
-          const authOptions = this.scope.auth?.options;
-          if (authOptions && isOrchestratedMode(authOptions)) {
-            try {
-              const authResult = await this.scope.runFlow('auth:verify', { request: this.rawInput.request });
-              if (authResult?.kind === 'authorized' && authResult.authorization) {
-                const fullAuthorization = authResult.authorization;
-                // Update extra with full authorization info (appIds, toolIds, etc.)
-                const currentExtra = ctx.authInfo?.extra ?? {};
-                ctx.updateAuthInfo({
-                  ...ctx.authInfo,
-                  extra: {
-                    ...currentExtra,
-                    authorization: {
-                      authorizedAppIds: fullAuthorization.authorizedAppIds ?? [],
-                      authorizedApps: fullAuthorization.authorizedApps ?? {},
-                      authorizedToolIds: fullAuthorization.authorizedToolIds ?? [],
-                      authorizedTools: fullAuthorization.authorizedTools ?? {},
-                    },
-                  },
-                } as Parameters<typeof ctx.updateAuthInfo>[0]);
-
-                // Inject accessor for `this.orchestration` support
-                if (fullAuthorization instanceof OrchestratedAuthorization) {
-                  const accessor = new OrchestratedAuthAccessorAdapter(fullAuthorization);
-                  ctx.setContextToken(ORCHESTRATED_AUTH_ACCESSOR, accessor);
-                }
-              }
-            } catch {
-              // auth:verify may not be registered, ignore
-            }
-          }
         }
       }
     } catch (error) {
