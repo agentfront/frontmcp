@@ -8,7 +8,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  limit: z.number().optional().default(10).describe('Maximum number of repos to list'),
+  limit: z.number().int().min(1).optional().default(10).describe('Maximum number of repos to list'),
 });
 
 const outputSchema = z.object({
@@ -38,7 +38,16 @@ export class GitHubReposTool extends ToolContext {
     // For E2E testing, check if the auth info contains federated provider claims
     // In a full implementation, this would use orchestration.tryGetToken('github')
     const authInfo = this.getAuthInfo();
-    const user = authInfo?.user as { federated?: { selectedProviders?: string[] } } | undefined;
+    const user = authInfo?.user as { sub?: string; federated?: { selectedProviders?: string[] } } | undefined;
+    const isAuthenticated = !!user?.sub;
+
+    if (!isAuthenticated) {
+      return {
+        success: false,
+        tokenReceived: false,
+        error: 'User is not authenticated',
+      };
+    }
 
     // Check if federated claims indicate github was selected
     const federatedClaims = user?.federated;

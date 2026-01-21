@@ -315,7 +315,12 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const localAuth = this.scope.auth as LocalPrimaryAuth;
     const sessionStore = localAuth.federatedSessionStore;
 
-    if (!sessionStore || typeof sessionStore.store !== 'function' || typeof sessionStore.update !== 'function') {
+    if (
+      !sessionStore ||
+      typeof sessionStore.store !== 'function' ||
+      typeof sessionStore.update !== 'function' ||
+      typeof sessionStore.delete !== 'function'
+    ) {
       this.logger.error('Federated session store not configured');
       this.respond(
         httpRespond.html(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500),

@@ -786,7 +786,9 @@ export class MockOAuthServer {
    * Handle userinfo endpoint (GET /userinfo)
    */
   private async handleUserInfoEndpoint(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Extract Bearer token from Authorization header
+    // Extract Bearer token from Authorization header.
+    // Note: Token is not validated - any Bearer token returns the configured test user.
+    // This is intentional for testing purposes.
     const authHeader = req.headers['authorization'];
     if (!authHeader?.startsWith('Bearer ')) {
       res.writeHead(401, { 'WWW-Authenticate': 'Bearer error="invalid_token"' });

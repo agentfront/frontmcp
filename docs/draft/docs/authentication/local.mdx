@@ -93,16 +93,16 @@ The callback endpoint processes the user's response from the authorization page 
 
 #### Callback Query Parameters
 
-| Parameter         | Description                                |
-| ----------------- | ------------------------------------------ |
-| `pending_auth_id` | Reference to pending authorization record  |
-| `email`           | User's email address                       |
-| `name`            | User's display name (optional)             |
-| `incremental`     | Set to `true` for progressive auth         |
-| `app_id`          | Target app for incremental authorization   |
-| `federated`       | Set to `true` for federated login          |
-| `providers`       | Selected provider IDs (array or string)    |
-| `tools`           | Selected tool IDs for consent (array)      |
+| Parameter         | Description                                         |
+| ----------------- | --------------------------------------------------- |
+| `pending_auth_id` | Reference to pending authorization record           |
+| `email`           | User's email address                                |
+| `name`            | User's display name (optional)                      |
+| `incremental`     | Set to `true` for progressive auth (optional)       |
+| `app_id`          | Target app for incremental authorization (optional) |
+| `federated`       | Set to `true` for federated login (optional)        |
+| `providers`       | Selected provider IDs (optional, array or string)   |
+| `tools`           | Selected tool IDs for consent (optional, array)     |
 
 #### Federated Provider Chaining
 
