@@ -22,7 +22,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ListNotesTool extends ToolContext<Input, Output> {
+export default class ListNotesTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(_input: Input): Promise<Output> {
     // Return mock notes for testing
     return {

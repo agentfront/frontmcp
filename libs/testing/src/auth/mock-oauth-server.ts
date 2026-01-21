@@ -145,7 +145,7 @@ export interface MockOAuthServerInfo {
  */
 export class MockOAuthServer {
   private readonly tokenFactory: TestTokenFactory;
-  private readonly options: MockOAuthServerOptions;
+  private options: MockOAuthServerOptions;
   private server: Server | null = null;
   private _info: MockOAuthServerInfo | null = null;
   private connections: Set<import('net').Socket> = new Set();
@@ -177,23 +177,23 @@ export class MockOAuthServer {
    * Set auto-approve mode for authorization requests
    */
   setAutoApprove(enabled: boolean): void {
-    (this.options as MockOAuthServerOptions).autoApprove = enabled;
+    this.options.autoApprove = enabled;
   }
 
   /**
    * Set the test user returned on authorization
    */
   setTestUser(user: MockTestUser): void {
-    (this.options as MockOAuthServerOptions).testUser = user;
+    this.options.testUser = user;
   }
 
   /**
    * Add a valid redirect URI
    */
   addValidRedirectUri(uri: string): void {
-    const uris = (this.options as MockOAuthServerOptions).validRedirectUris ?? [];
+    const uris = this.options.validRedirectUris ?? [];
     uris.push(uri);
-    (this.options as MockOAuthServerOptions).validRedirectUris = uris;
+    this.options.validRedirectUris = uris;
   }
 
   /**
@@ -859,6 +859,12 @@ export class MockOAuthServer {
           error_description: 'Invalid redirect_uri',
         }),
       );
+      return;
+    }
+
+    // Validate client_id if configured (safe to redirect now that redirect_uri is validated)
+    if (this.options.clientId && clientId !== this.options.clientId) {
+      this.redirectWithError(res, redirectUri, 'unauthorized_client', 'Invalid client_id', state);
       return;
     }
 

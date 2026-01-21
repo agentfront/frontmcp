@@ -186,11 +186,25 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // For incremental auth, we might need to use existing session's user sub
     const userSub = email ? this.generateUserSub(email) : undefined;
 
+    // Validate federated login is enabled for this authorization request
+    if (isFederated && !pendingAuth.federatedLogin) {
+      this.logger.warn('Federated login not enabled for this authorization request');
+      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Federated login not enabled'), 400));
+      return;
+    }
+
     // Calculate skipped providers from federated login
     let skippedProviders: string[] | undefined;
     if (isFederated && pendingAuth.federatedLogin) {
+      // Require at least one provider to be selected
+      if (!selectedProviders || selectedProviders.length === 0) {
+        this.logger.warn('No federated providers selected');
+        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'No federated providers selected'), 400));
+        return;
+      }
+
       const allProviders = pendingAuth.federatedLogin.providerIds;
-      const selected = selectedProviders || [];
+      const selected = selectedProviders;
 
       // Validate selectedProviders against allowed providerIds
       const invalidProviders = selected.filter((id) => !allProviders.includes(id));

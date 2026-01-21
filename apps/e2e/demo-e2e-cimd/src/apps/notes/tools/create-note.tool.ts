@@ -22,7 +22,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CreateNoteTool extends ToolContext<Input, Output> {
+export default class CreateNoteTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: Input): Promise<Output> {
     return {
       id: `note-${Date.now()}`,
