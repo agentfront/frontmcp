@@ -6,7 +6,7 @@ const port = parseInt(process.env['PORT'] ?? '3120', 10);
 @FrontMcp({
   info: { name: 'Demo E2E Hooks', version: '0.1.0' },
   apps: [AuditApp],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Warn },
   http: { port },
   transport: {
     protocol: { json: true, legacy: true, strictSession: false },

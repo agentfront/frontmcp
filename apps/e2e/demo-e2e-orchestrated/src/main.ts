@@ -8,7 +8,7 @@ const port = parseInt(process.env['PORT'] ?? '3121', 10);
 @FrontMcp({
   info: { name: 'Demo Orchestrated Auth', version: '0.1.0' },
   apps: [NotesApp, TasksApp],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
     mode: 'orchestrated',

@@ -19,6 +19,6 @@ import { NotesApp } from './apps/notes';
 export const serverConfig = {
   info: { name: 'Demo E2E Direct', version: '0.1.0' },
   apps: [NotesApp],
-  logging: { level: LogLevel.Verbose, enableConsole: true },
+  logging: { level: LogLevel.Warn, enableConsole: true },
   auth: { mode: 'public' as const },
 };

@@ -8,7 +8,7 @@ const port = parseInt(process.env['PORT'] ?? '3111', 10);
 @FrontMcp({
   info: { name: 'Demo E2E Redis', version: '0.1.0' },
   apps: [SessionsApp, VaultApp, TransportApp],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
     mode: 'public',

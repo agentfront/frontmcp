@@ -165,20 +165,29 @@ jobs:
       fail-fast: false
       matrix:
         project:
-          - demo-e2e-public
-          - demo-e2e-transparent
-          - demo-e2e-openapi
-          - demo-e2e-codecall
-          - demo-e2e-redis
-          - demo-e2e-providers
+          - demo-e2e-agents
           - demo-e2e-cache
-          - demo-e2e-ui
-          - demo-e2e-hooks
-          - demo-e2e-errors
-          - demo-e2e-notifications
-          - demo-e2e-serverless
-          - demo-e2e-multiapp
+          - demo-e2e-cimd
+          - demo-e2e-codecall
           - demo-e2e-config
+          - demo-e2e-direct
+          - demo-e2e-elicitation
+          - demo-e2e-errors
+          - demo-e2e-hooks
+          - demo-e2e-multiapp
+          - demo-e2e-notifications
+          - demo-e2e-openapi
+          - demo-e2e-orchestrated
+          - demo-e2e-providers
+          - demo-e2e-public
+          - demo-e2e-redis
+          - demo-e2e-remember
+          - demo-e2e-remote
+          - demo-e2e-serverless
+          - demo-e2e-standalone
+          - demo-e2e-transparent
+          - demo-e2e-transport-recreation
+          - demo-e2e-ui
     env:
       NX_DAEMON: "false"
     steps:
@@ -253,9 +262,6 @@ jobs:
 
       - name: Run unit tests with coverage
         run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
-
-      - name: Run E2E tests with coverage
-        run: npx nx run-many -t test --projects='demo-e2e-*' --coverage
 
       - name: Merge coverage reports
         run: node scripts/merge-coverage.mjs
