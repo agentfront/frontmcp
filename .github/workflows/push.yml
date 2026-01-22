@@ -125,6 +125,8 @@ jobs:
     name: "Discover E2E Projects"
     needs: setup
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.discover.outputs.projects }}
     steps:

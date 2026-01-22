@@ -33,6 +33,7 @@ const createMockToolRegistry = (visibleTools: string[], hiddenTools: string[] = 
 
   return {
     getTools: (includeHidden?: boolean) => (includeHidden ? allToolList : visibleToolList),
+    getToolsForListing: () => visibleToolList,
     findByName: jest.fn(),
     findByQualifiedName: jest.fn(),
     hasAny: jest.fn(),

@@ -2,10 +2,9 @@
 
 import { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
 import { SkillContent } from '../../common/interfaces';
-import { SkillMetadata, extractToolNames } from '../../common/metadata';
+import { SkillMetadata } from '../../common/metadata';
 import { SkillToolValidator, ToolValidationResult } from '../skill-validator';
 import {
-  SkillStorageProvider,
   SkillStorageProviderType,
   SkillSearchOptions,
   SkillSearchResult,
@@ -502,7 +501,17 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       name: skill.name,
       description: skill.description,
       instructions: skill.instructions,
-      tools: skill.tools.map((t) => (t.purpose ? { name: t.name, purpose: t.purpose } : t.name)),
+      tools: skill.tools.map((t) => {
+        // Preserve all fields: name, purpose, and required
+        if (t.purpose || t.required) {
+          return {
+            name: t.name,
+            ...(t.purpose && { purpose: t.purpose }),
+            ...(t.required && { required: t.required }),
+          };
+        }
+        return t.name;
+      }),
       parameters: skill.parameters,
       examples: skill.examples,
       // Include additional metadata for search results

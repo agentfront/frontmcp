@@ -1,14 +1,6 @@
 // file: libs/sdk/src/skill/skill.instance.ts
 
-import {
-  EntryOwnerRef,
-  SkillEntry,
-  SkillKind,
-  SkillRecord,
-  SkillMetadata,
-  SkillToolRef,
-  normalizeToolRef,
-} from '../common';
+import { EntryOwnerRef, SkillEntry, SkillKind, SkillRecord, SkillToolRef, normalizeToolRef } from '../common';
 import { SkillContent } from '../common/interfaces';
 import ProviderRegistry from '../provider/provider.registry';
 import { Scope } from '../scope';

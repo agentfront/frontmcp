@@ -10,7 +10,7 @@
  * unqualified tool names.
  */
 
-import { createSkillToolGuardHook, SkillToolGuardHookOptions } from '../hooks/skill-tool.hook';
+import { createSkillToolGuardHook } from '../hooks/skill-tool.hook';
 import { SkillSessionManager } from '../session/skill-session.manager';
 import { MemorySkillSessionStore } from '../session/skill-session-store.interface';
 import type { SkillContent } from '../../common/interfaces';

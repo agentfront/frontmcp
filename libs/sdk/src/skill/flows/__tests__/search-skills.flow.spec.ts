@@ -11,7 +11,6 @@
  */
 
 import 'reflect-metadata';
-import SearchSkillsFlow from '../search-skills.flow';
 import { normalizeToolRef } from '../../../common';
 import type { SkillSearchResult } from '../../skill-storage.interface';
 

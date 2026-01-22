@@ -102,12 +102,24 @@ export async function handleWaitingFallback(
   // Step 2: Wait for the result via pub/sub
   return new Promise<unknown>((resolve, reject) => {
     let resolved = false;
+    let unsubscribeFn: (() => Promise<void>) | null = null;
     const ttl = error.ttl || DEFAULT_FALLBACK_WAIT_TTL;
+
+    // Helper to safely unsubscribe
+    const safeUnsubscribe = (): void => {
+      if (unsubscribeFn) {
+        unsubscribeFn().catch(() => {
+          // Ignore unsubscribe errors after resolution
+        });
+        unsubscribeFn = null;
+      }
+    };
 
     // Set up timeout
     const timeoutHandle = setTimeout(() => {
       if (!resolved) {
         resolved = true;
+        safeUnsubscribe();
         logger.warn('handleWaitingFallback: timeout waiting for result', {
           elicitId: error.elicitId,
           ttl,
@@ -133,6 +145,7 @@ export async function handleWaitingFallback(
           if (!resolved) {
             resolved = true;
             clearTimeout(timeoutHandle);
+            safeUnsubscribe();
 
             logger.info('handleWaitingFallback: received result via pub/sub', {
               elicitId: error.elicitId,
@@ -159,11 +172,14 @@ export async function handleWaitingFallback(
       )
       .then((unsubscribe) => {
         // Store unsubscribe for cleanup on timeout/success
-        // The subscription will be cleaned up when the callback is called or timeout fires
         if (resolved) {
+          // Already resolved, clean up immediately
           unsubscribe().catch(() => {
             // Ignore unsubscribe errors after resolution
           });
+        } else {
+          // Store for later cleanup
+          unsubscribeFn = unsubscribe;
         }
       })
       .catch((err) => {

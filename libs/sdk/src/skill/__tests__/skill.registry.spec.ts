@@ -6,7 +6,7 @@
 
 import 'reflect-metadata';
 import SkillRegistry from '../skill.registry';
-import { Skill, SkillContext, SkillContent, SkillMetadata, SkillKind } from '../../common';
+import { Skill, SkillContext, SkillContent } from '../../common';
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { skill } from '../../common/decorators/skill.decorator';
 

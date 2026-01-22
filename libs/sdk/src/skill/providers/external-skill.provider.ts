@@ -14,6 +14,7 @@ import type {
 import type { SkillSyncState, SkillSyncStateStore, SyncResult, SkillSyncEntry } from '../sync/sync-state.interface';
 import { createEmptySyncState } from '../sync/sync-state.interface';
 import { computeSkillHash } from '../sync/skill-hash';
+import { PublicMcpError } from '../../errors';
 
 /**
  * Operating mode for external skill providers.
@@ -335,7 +336,16 @@ export abstract class ExternalSkillProviderBase implements SkillStorageProvider 
    */
   async syncSkills(localSkills: SkillContent[]): Promise<SyncResult> {
     if (this.mode !== 'persistent') {
-      throw new Error('[ExternalSkillProvider] syncSkills is only available in persistent mode');
+      throw new PublicMcpError(
+        '[ExternalSkillProvider] syncSkills is only available in persistent mode',
+        'SKILL_SYNC_MODE_ERROR',
+        400,
+      );
+    }
+
+    // Ensure provider is initialized before syncing
+    if (!this.syncState) {
+      await this.initialize();
     }
 
     const startTime = Date.now();
@@ -501,7 +511,17 @@ export abstract class ExternalSkillProviderBase implements SkillStorageProvider 
       name: skill.name,
       description: skill.description,
       instructions: skill.instructions,
-      tools: skill.tools.map((t) => (t.purpose ? { name: t.name, purpose: t.purpose } : t.name)),
+      tools: skill.tools.map((t) => {
+        // Preserve all fields: name, purpose, and required
+        if (t.purpose || t.required) {
+          return {
+            name: t.name,
+            ...(t.purpose && { purpose: t.purpose }),
+            ...(t.required && { required: t.required }),
+          };
+        }
+        return t.name;
+      }),
       parameters: skill.parameters,
       examples: skill.examples,
     };

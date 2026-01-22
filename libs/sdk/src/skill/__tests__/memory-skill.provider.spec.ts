@@ -4,7 +4,7 @@
  * Tests for in-memory skill storage provider with TF-IDF search.
  */
 
-import { MemorySkillProvider, MemorySkillProviderOptions } from '../providers/memory-skill.provider';
+import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import { SkillToolValidator } from '../skill-validator';
 import { SkillContent } from '../../common/interfaces';
 import { ToolRegistryInterface } from '../../common/interfaces/internal';

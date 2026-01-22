@@ -80,8 +80,8 @@ const stateSchema = z.object({
   format: z.enum(['full', 'instructions-only']),
   activateSession: z.boolean(),
   policyMode: z.enum(['strict', 'approval', 'permissive']).optional(),
-  loadResult: z.any().optional() as z.ZodType<SkillLoadResult | undefined>,
-  activationResult: z.any().optional() as z.ZodType<SkillActivationResult | undefined>,
+  loadResult: z.unknown().optional() as z.ZodType<SkillLoadResult | undefined>,
+  activationResult: z.unknown().optional() as z.ZodType<SkillActivationResult | undefined>,
   output: outputSchema.optional(),
 });
 

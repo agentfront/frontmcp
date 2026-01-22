@@ -236,15 +236,15 @@ describe('skill.events', () => {
       // This tests that listeners can safely unsubscribe during emit
       const listener1 = jest.fn();
       const listener2 = jest.fn();
-      let unsubscribe2: () => void;
+      const callbacks: { unsubscribe2?: () => void } = {};
 
       const unsubscribe1 = emitter.on(() => {
         listener1();
         // Unsubscribe listener2 during listener1's callback
-        unsubscribe2();
+        callbacks.unsubscribe2?.();
       });
 
-      unsubscribe2 = emitter.on(listener2);
+      callbacks.unsubscribe2 = emitter.on(listener2);
 
       const event: SkillChangeEvent = {
         kind: 'added',

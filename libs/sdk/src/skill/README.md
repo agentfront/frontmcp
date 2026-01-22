@@ -25,7 +25,7 @@ Key differences from tools:
 
 ## Architecture
 
-```
+```text
                          SkillRegistry (Main Facade)
                                   |
               +-------------------+-------------------+
@@ -217,7 +217,7 @@ export class SkillSessionManager {
 
 When multiple skills are loaded in a session, their allowed tools are combined (union):
 
-```
+```text
 Session State:
   activeSkills: Map<skillId, ActiveSkillInfo>
   allowedTools: Set<string> = union of all active skill tools
@@ -468,7 +468,7 @@ sequenceDiagram
 
 ## File Structure
 
-```
+```text
 libs/sdk/src/
 ├── skill/
 │   ├── index.ts                    # Public exports

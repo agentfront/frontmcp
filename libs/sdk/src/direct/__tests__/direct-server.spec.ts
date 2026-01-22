@@ -5,6 +5,7 @@
 import { DirectMcpServerImpl } from '../direct-server';
 import { FlowControl } from '../../common';
 import { InternalMcpError } from '../../errors';
+import type { Scope } from '../../scope/scope.instance';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
@@ -13,13 +14,16 @@ jest.mock('@frontmcp/utils', () => ({
   bytesToHex: jest.fn(() => 'mock-hex'),
 }));
 
+/** Minimal Scope interface required by DirectMcpServerImpl */
+type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService'>;
+
 describe('DirectMcpServerImpl', () => {
-  // Mock Scope
-  const createMockScope = () => ({
+  // Mock Scope with type-safe partial
+  const createMockScope = (): MockScope => ({
     runFlowForOutput: jest.fn(),
     transportService: {
       destroy: jest.fn().mockResolvedValue(undefined),
-    },
+    } as unknown as Scope['transportService'],
   });
 
   beforeEach(() => {
@@ -29,7 +33,7 @@ describe('DirectMcpServerImpl', () => {
   describe('constructor', () => {
     it('should create instance with scope', () => {
       const mockScope = createMockScope();
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       expect(server).toBeDefined();
       expect(server.ready).resolves.toBeUndefined();
@@ -42,7 +46,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { tools: [{ name: 'test-tool' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.listTools();
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -58,7 +62,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = createMockScope();
       mockScope.runFlowForOutput.mockResolvedValue({ tools: [] });
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       await server.listTools({
         authContext: {
           token: 'test-token',
@@ -87,7 +91,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { content: [{ type: 'text', text: 'Hello' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.callTool('test-tool', { arg1: 'value1' });
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -106,7 +110,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = createMockScope();
       mockScope.runFlowForOutput.mockResolvedValue({ content: [] });
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       await server.callTool('test-tool');
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -127,7 +131,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { resources: [{ uri: 'file://test.txt' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.listResources();
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -146,7 +150,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { resourceTemplates: [{ uriTemplate: 'file://{path}' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.listResourceTemplates();
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -165,7 +169,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { contents: [{ uri: 'file://test.txt', text: 'content' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.readResource('file://test.txt');
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -184,7 +188,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { prompts: [{ name: 'test-prompt' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.listPrompts();
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -203,7 +207,7 @@ describe('DirectMcpServerImpl', () => {
       const expectedResult = { messages: [{ role: 'user', content: 'Hello' }] };
       mockScope.runFlowForOutput.mockResolvedValue(expectedResult);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.getPrompt('test-prompt', { arg1: 'value1' });
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -225,7 +229,7 @@ describe('DirectMcpServerImpl', () => {
       const flowControl = new FlowControl('respond', { tools: [] });
       mockScope.runFlowForOutput.mockRejectedValue(flowControl);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       const result = await server.listTools();
 
       expect(result).toEqual({ tools: [] });
@@ -236,7 +240,7 @@ describe('DirectMcpServerImpl', () => {
       const flowControl = new FlowControl('fail', { error: 'Something went wrong' });
       mockScope.runFlowForOutput.mockRejectedValue(flowControl);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await expect(server.listTools()).rejects.toThrow(InternalMcpError);
       await expect(server.listTools()).rejects.toThrow('Flow ended with fail');
@@ -247,7 +251,7 @@ describe('DirectMcpServerImpl', () => {
       const flowControl = new FlowControl('abort', null);
       mockScope.runFlowForOutput.mockRejectedValue(flowControl);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await expect(server.listTools()).rejects.toThrow(InternalMcpError);
     });
@@ -257,7 +261,7 @@ describe('DirectMcpServerImpl', () => {
       const error = new Error('Unexpected error');
       mockScope.runFlowForOutput.mockRejectedValue(error);
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await expect(server.listTools()).rejects.toThrow('Unexpected error');
     });
@@ -266,7 +270,7 @@ describe('DirectMcpServerImpl', () => {
   describe('dispose', () => {
     it('should call transportService.destroy', async () => {
       const mockScope = createMockScope();
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await server.dispose();
 
@@ -278,7 +282,7 @@ describe('DirectMcpServerImpl', () => {
         runFlowForOutput: jest.fn(),
         transportService: undefined,
       };
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await expect(server.dispose()).resolves.not.toThrow();
     });
@@ -288,7 +292,7 @@ describe('DirectMcpServerImpl', () => {
       mockScope.transportService.destroy.mockRejectedValue(new Error('Cleanup failed'));
 
       const consoleSpy = jest.spyOn(console, 'debug').mockImplementation();
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await expect(server.dispose()).resolves.not.toThrow();
 
@@ -297,7 +301,7 @@ describe('DirectMcpServerImpl', () => {
 
     it('should only dispose once', async () => {
       const mockScope = createMockScope();
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await server.dispose();
       await server.dispose();
@@ -307,7 +311,7 @@ describe('DirectMcpServerImpl', () => {
 
     it('should throw InternalMcpError when calling methods after dispose', async () => {
       const mockScope = createMockScope();
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await server.dispose();
 
@@ -321,7 +325,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = createMockScope();
       mockScope.runFlowForOutput.mockResolvedValue({ tools: [] });
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       await server.listTools();
 
       expect(mockScope.runFlowForOutput).toHaveBeenCalledWith(
@@ -340,7 +344,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = createMockScope();
       mockScope.runFlowForOutput.mockResolvedValue({ tools: [] });
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       await server.listTools({
         authContext: {
           user: { sub: 'user-123', email: 'test@example.com' },
@@ -366,7 +370,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = createMockScope();
       mockScope.runFlowForOutput.mockResolvedValue({ tools: [] });
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       await server.listTools({
         authContext: {
           extra: { customField: 'customValue' },
@@ -389,7 +393,7 @@ describe('DirectMcpServerImpl', () => {
       const mockScope = createMockScope();
       mockScope.runFlowForOutput.mockResolvedValue({ tools: [] });
 
-      const server = new DirectMcpServerImpl(mockScope as any);
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
       await server.listTools({
         metadata: { requestId: 'req-123' },
       });

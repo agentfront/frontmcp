@@ -12,7 +12,7 @@ import {
 } from '../providers/external-skill.provider';
 import { MemorySyncStateStore } from '../sync/memory-sync-state.store';
 import type { SkillContent } from '../../common/interfaces';
-import type { SkillSearchResult, SkillLoadResult, SkillListResult } from '../skill-storage.interface';
+import type { SkillSearchResult } from '../skill-storage.interface';
 import type { FrontMcpLogger } from '../../common';
 
 // Helper to create test skills

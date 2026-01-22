@@ -93,18 +93,27 @@ export class ToolAuthorizationGuard {
     }
 
     // Handle approval flow
-    if (result.requiresApproval && opts.onApprovalRequired) {
-      const approved = await opts.onApprovalRequired(toolName, result.skillId);
-      if (approved) {
-        this.sessionManager.approveToolForSession(toolName);
-        this.sessionManager.recordToolCall(toolName);
-        return {
-          ...result,
-          allowed: true,
-          reason: 'dynamically_approved',
-        };
+    if (result.requiresApproval) {
+      if (opts.onApprovalRequired) {
+        const approved = await opts.onApprovalRequired(toolName, result.skillId);
+        if (approved) {
+          this.sessionManager.approveToolForSession(toolName);
+          this.sessionManager.recordToolCall(toolName);
+          return {
+            ...result,
+            allowed: true,
+            reason: 'dynamically_approved',
+            requiresApproval: false,
+          };
+        } else {
+          this.sessionManager.denyToolForSession(toolName);
+          if (opts.throwOnDenied) {
+            throw new ToolApprovalRequiredError(toolName, result.skillId);
+          }
+          return result;
+        }
       } else {
-        this.sessionManager.denyToolForSession(toolName);
+        // Approval required but no callback provided
         if (opts.throwOnDenied) {
           throw new ToolApprovalRequiredError(toolName, result.skillId);
         }
@@ -112,7 +121,7 @@ export class ToolAuthorizationGuard {
       }
     }
 
-    // Tool not allowed
+    // Tool not allowed (no approval flow applicable)
     if (opts.throwOnDenied) {
       const allowedTools = this.sessionManager.getToolAllowlist();
       throw new ToolNotAllowedError(result, allowedTools);

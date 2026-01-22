@@ -82,7 +82,22 @@ export class MemorySkillSessionStore implements SkillSessionStore {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    Object.assign(session, updates);
+    // Deep-clone Set fields to avoid mutation issues
+    const clonedUpdates = { ...updates };
+    if (updates.allowedTools) {
+      clonedUpdates.allowedTools = new Set(updates.allowedTools);
+    }
+    if (updates.requiredTools) {
+      clonedUpdates.requiredTools = new Set(updates.requiredTools);
+    }
+    if (updates.approvedTools) {
+      clonedUpdates.approvedTools = new Set(updates.approvedTools);
+    }
+    if (updates.deniedTools) {
+      clonedUpdates.deniedTools = new Set(updates.deniedTools);
+    }
+
+    Object.assign(session, clonedUpdates);
   }
 
   async delete(sessionId: string): Promise<void> {

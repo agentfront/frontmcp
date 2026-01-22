@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Type, isClass, getMetadata } from '@frontmcp/di';
+import { isValidMcpUri } from '@frontmcp/utils';
 import { RawZodShape } from '../types';
 import { FrontMcpToolTokens } from '../tokens';
 import type { ToolContext } from '../interfaces';
@@ -305,7 +306,13 @@ const skillExampleSchema = z.object({
 const skillInstructionSourceSchema = z.union([
   z.string().min(1), // Inline instructions
   z.object({ file: z.string().min(1) }).strict(), // File path
-  z.object({ url: z.string().url() }).strict(), // URL
+  z
+    .object({
+      url: z.string().refine(isValidMcpUri, {
+        message: 'URL must have a valid scheme (e.g., https://, file://, custom://)',
+      }),
+    })
+    .strict(), // URL
 ]);
 
 /**
@@ -392,6 +399,7 @@ export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
   if (typeof ref === 'function') {
     const name = getToolNameFromClass(ref as Type<ToolContext>);
     if (!name) {
+      // Note: Using plain Error to avoid circular dependency with errors module
       throw new Error(
         `Invalid tool class '${ref.name ?? 'unknown'}'. ` +
           'Tool class must be decorated with @Tool and have a name property.',
@@ -404,6 +412,7 @@ export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
   if (isToolRefWithClass(ref)) {
     const name = getToolNameFromClass(ref.tool);
     if (!name) {
+      // Note: Using plain Error to avoid circular dependency with errors module
       throw new Error(
         `Invalid tool class in reference. ` + 'Tool class must be decorated with @Tool and have a name property.',
       );
@@ -420,6 +429,7 @@ export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
     return { ...ref, required: ref.required ?? false };
   }
 
+  // Note: Using plain Error to avoid circular dependency with errors module
   throw new Error(`Invalid tool reference: ${JSON.stringify(ref)}`);
 }
 

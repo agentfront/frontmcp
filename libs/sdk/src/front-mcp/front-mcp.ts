@@ -259,9 +259,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wrappedHandler = async (request: any, ctx: any) => {
         // Inject auth info into context while preserving MCP SDK context properties
+        // Merge with existing authInfo to avoid clobbering any existing properties
         const enrichedCtx = {
           ...ctx,
-          authInfo: { sessionId },
+          authInfo: { ...ctx?.authInfo, sessionId },
         };
         return originalHandler(request, enrichedCtx);
       };
