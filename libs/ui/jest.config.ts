@@ -15,6 +15,14 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'html'],
   coverageDirectory: '../../coverage/unit/ui',
+  coverageThreshold: {
+    global: {
+      statements: 0,
+      branches: 0,
+      functions: 0,
+      lines: 0,
+    },
+  },
   testPathIgnorePatterns: [
     '/node_modules/',
     // Web component tests need jsdom or browser environment

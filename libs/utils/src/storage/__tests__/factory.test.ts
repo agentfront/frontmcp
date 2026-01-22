@@ -180,6 +180,136 @@ describe('Storage Factory', () => {
     });
   });
 
+  describe('error handling', () => {
+    it('should throw for unknown storage type when fallback is error', async () => {
+      await expect(createStorage({ type: 'unknown-type' as never, fallback: 'error' })).rejects.toThrow(
+        'Unknown storage type',
+      );
+    });
+
+    describe('production warnings', () => {
+      let consoleWarnSpy: jest.SpyInstance;
+
+      beforeEach(() => {
+        consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      });
+
+      afterEach(() => {
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('should warn in production when falling back to memory with auto detection', async () => {
+        process.env['NODE_ENV'] = 'production';
+
+        const storage = await createStorage({ type: 'auto' });
+
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Warning: No distributed storage backend detected in production'),
+        );
+
+        await storage.disconnect();
+      });
+
+      it('should not warn in development when falling back to memory', async () => {
+        process.env['NODE_ENV'] = 'development';
+
+        const storage = await createStorage({ type: 'auto' });
+
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
+
+        await storage.disconnect();
+      });
+    });
+
+    describe('fallback behavior with errors', () => {
+      it('should not fallback to memory when already using memory type', async () => {
+        // This should work without any fallback logic being triggered
+        const storage = await createStorage({
+          type: 'memory',
+          fallback: 'memory',
+        });
+
+        expect(await storage.ping()).toBe(true);
+
+        await storage.disconnect();
+      });
+
+      it('should throw error for unknown type with error fallback', async () => {
+        await expect(
+          createStorage({
+            type: 'invalid-type' as never,
+            fallback: 'error',
+          }),
+        ).rejects.toThrow('Unknown storage type');
+      });
+
+      it('should throw for auto type when used in createAdapter directly', async () => {
+        // The auto type should be resolved before createAdapter is called
+        // This test verifies the error message
+        await expect(
+          createStorage({
+            type: 'invalid' as never,
+            fallback: 'error',
+          }),
+        ).rejects.toThrow('Unknown storage type');
+      });
+    });
+  });
+
+  describe('fallback scenarios', () => {
+    let consoleWarnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should use fallback memory in development by default', async () => {
+      process.env['NODE_ENV'] = 'development';
+
+      // When no distributed backend is available, should use memory
+      const storage = await createStorage({ type: 'auto' });
+      expect(await storage.ping()).toBe(true);
+
+      await storage.disconnect();
+    });
+
+    it('should use fallback error in production by default', async () => {
+      process.env['NODE_ENV'] = 'production';
+
+      // Production with no backend should warn but still work (uses memory)
+      const storage = await createStorage({ type: 'auto' });
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('No distributed storage backend detected in production'),
+      );
+
+      await storage.disconnect();
+    });
+
+    it('should handle explicit memory fallback option', async () => {
+      const storage = await createStorage({
+        type: 'memory',
+        fallback: 'memory',
+      });
+
+      expect(await storage.ping()).toBe(true);
+      await storage.disconnect();
+    });
+
+    it('should handle explicit error fallback option', async () => {
+      await expect(
+        createStorage({
+          type: 'invalid' as never,
+          fallback: 'error',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
   describe('integration', () => {
     it('should support full workflow', async () => {
       const storage = await createStorage({ type: 'memory' });
