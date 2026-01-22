@@ -505,6 +505,373 @@ describe('Crypto Module', () => {
         expect(sha256Base64url(str)).toBe(sha256Base64url(bytes));
       });
     });
+
+    describe('base64Encode', () => {
+      // Import base64Encode and base64Decode
+      const { base64Encode, base64Decode } = require('../index');
+
+      it('should encode bytes to standard base64', () => {
+        const bytes = new TextEncoder().encode('Hello, World!');
+        const encoded = base64Encode(bytes);
+        expect(encoded).toBe('SGVsbG8sIFdvcmxkIQ==');
+      });
+
+      it('should include padding', () => {
+        const bytes = new TextEncoder().encode('a');
+        const encoded = base64Encode(bytes);
+        expect(encoded).toContain('=');
+        expect(encoded).toBe('YQ==');
+      });
+
+      it('should use standard base64 characters', () => {
+        // Create bytes that would produce + and / in standard base64
+        const bytes = new Uint8Array([0xfb, 0xff, 0xfe]);
+        const encoded = base64Encode(bytes);
+        // Should use standard characters (+ and /)
+        expect(encoded).toMatch(/^[A-Za-z0-9+/=]+$/);
+      });
+
+      it('should handle empty array', () => {
+        expect(base64Encode(new Uint8Array([]))).toBe('');
+      });
+    });
+
+    describe('base64Decode', () => {
+      const { base64Encode, base64Decode } = require('../index');
+
+      it('should decode standard base64 to bytes', () => {
+        const decoded = base64Decode('SGVsbG8sIFdvcmxkIQ==');
+        expect(new TextDecoder().decode(decoded)).toBe('Hello, World!');
+      });
+
+      it('should handle standard base64 characters', () => {
+        // Encode then decode
+        const original = new Uint8Array([0xfb, 0xff, 0xfe]);
+        const encoded = base64Encode(original);
+        const decoded = base64Decode(encoded);
+        expect(decoded).toEqual(original);
+      });
+
+      it('should handle empty string', () => {
+        expect(base64Decode('')).toEqual(new Uint8Array([]));
+      });
+
+      it('should roundtrip correctly', () => {
+        const original = randomBytes(100);
+        const encoded = base64Encode(original);
+        const decoded = base64Decode(encoded);
+        expect(decoded).toEqual(original);
+      });
+
+      it('should handle base64 without padding', () => {
+        // Some base64 implementations omit padding
+        const decoded = base64Decode('YQ');
+        expect(new TextDecoder().decode(decoded)).toBe('a');
+      });
+    });
+  });
+
+  describe('Re-exported PKCE Functions', () => {
+    const {
+      generateCodeVerifier,
+      generateCodeChallenge,
+      generatePkcePair,
+      verifyCodeChallenge,
+      isValidCodeVerifier,
+      isValidCodeChallenge,
+      PkceError,
+      MIN_CODE_VERIFIER_LENGTH,
+      MAX_CODE_VERIFIER_LENGTH,
+      DEFAULT_CODE_VERIFIER_LENGTH,
+    } = require('../index');
+
+    it('should export PKCE constants', () => {
+      expect(MIN_CODE_VERIFIER_LENGTH).toBe(43);
+      expect(MAX_CODE_VERIFIER_LENGTH).toBe(128);
+      expect(DEFAULT_CODE_VERIFIER_LENGTH).toBe(64);
+    });
+
+    it('should export PkceError class', () => {
+      expect(PkceError).toBeDefined();
+      const error = new PkceError('test error');
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe('test error');
+    });
+
+    it('should generate valid code verifier', () => {
+      const verifier = generateCodeVerifier();
+      expect(typeof verifier).toBe('string');
+      expect(verifier.length).toBeGreaterThanOrEqual(43);
+      expect(verifier.length).toBeLessThanOrEqual(128);
+    });
+
+    it('should generate code challenge from verifier', () => {
+      const verifier = generateCodeVerifier();
+      const challenge = generateCodeChallenge(verifier);
+      expect(typeof challenge).toBe('string');
+      expect(challenge.length).toBeGreaterThan(0);
+    });
+
+    it('should generate PKCE pair', () => {
+      const pair = generatePkcePair();
+      expect(pair.codeVerifier).toBeDefined();
+      expect(pair.codeChallenge).toBeDefined();
+    });
+
+    it('should verify code challenge correctly', () => {
+      const verifier = generateCodeVerifier();
+      const challenge = generateCodeChallenge(verifier);
+      const isValid = verifyCodeChallenge(verifier, challenge);
+      expect(isValid).toBe(true);
+    });
+
+    it('should validate code verifier', () => {
+      const validVerifier = generateCodeVerifier();
+      expect(isValidCodeVerifier(validVerifier)).toBe(true);
+      expect(isValidCodeVerifier('short')).toBe(false);
+    });
+
+    it('should validate code challenge', () => {
+      const verifier = generateCodeVerifier();
+      const challenge = generateCodeChallenge(verifier);
+      expect(isValidCodeChallenge(challenge)).toBe(true);
+      expect(isValidCodeChallenge('')).toBe(false);
+    });
+  });
+
+  describe('Re-exported HMAC Signing Functions', () => {
+    const { signData, verifyData, isSignedData, verifyOrParseData } = require('../index');
+    const testSecret = 'test-secret-for-crypto-spec';
+    const config = { secret: testSecret };
+
+    it('should export signData function', () => {
+      expect(typeof signData).toBe('function');
+      const signed = signData({ test: 'data' }, config);
+      expect(typeof signed).toBe('string');
+    });
+
+    it('should export verifyData function', () => {
+      expect(typeof verifyData).toBe('function');
+      const signed = signData({ test: 'value' }, config);
+      const verified = verifyData(signed, config);
+      expect(verified).toEqual({ test: 'value' });
+    });
+
+    it('should export isSignedData function', () => {
+      expect(typeof isSignedData).toBe('function');
+      const signed = signData({ test: 'value' }, config);
+      expect(isSignedData(signed)).toBe(true);
+      expect(isSignedData('{"not":"signed"}')).toBe(false);
+    });
+
+    it('should export verifyOrParseData function', () => {
+      expect(typeof verifyOrParseData).toBe('function');
+      const signed = signData({ test: 'value' }, config);
+      expect(verifyOrParseData(signed, config)).toEqual({ test: 'value' });
+      expect(verifyOrParseData('{"legacy":"data"}', config)).toEqual({ legacy: 'data' });
+    });
+  });
+
+  describe('Re-exported Encrypted Blob Functions', () => {
+    const {
+      encryptValue,
+      decryptValue,
+      tryDecryptValue,
+      serializeBlob,
+      deserializeBlob,
+      tryDeserializeBlob,
+      isValidEncryptedBlob,
+      encryptAndSerialize,
+      deserializeAndDecrypt,
+      tryDeserializeAndDecrypt,
+      EncryptedBlobError,
+    } = require('../index');
+
+    const testKey = randomBytes(32);
+
+    it('should export EncryptedBlobError', () => {
+      expect(EncryptedBlobError).toBeDefined();
+      const error = new EncryptedBlobError('test');
+      expect(error).toBeInstanceOf(Error);
+    });
+
+    it('should encrypt and decrypt values', () => {
+      const value = 'test-value';
+      const blob = encryptValue(value, testKey);
+      const decrypted = decryptValue(blob, testKey);
+      expect(decrypted).toBe(value);
+    });
+
+    it('should try decrypt and return null on failure', () => {
+      const blob = encryptValue('test', testKey);
+      const wrongKey = randomBytes(32);
+      const result = tryDecryptValue(blob, wrongKey);
+      expect(result).toBeNull();
+    });
+
+    it('should serialize and deserialize blobs', () => {
+      const blob = encryptValue('test', testKey);
+      const serialized = serializeBlob(blob);
+      expect(typeof serialized).toBe('string');
+      const deserialized = deserializeBlob(serialized);
+      expect(deserialized).toEqual(blob);
+    });
+
+    it('should try deserialize and return null on invalid input', () => {
+      expect(tryDeserializeBlob('invalid')).toBeNull();
+    });
+
+    it('should validate encrypted blobs', () => {
+      const blob = encryptValue('test', testKey);
+      expect(isValidEncryptedBlob(blob)).toBe(true);
+      expect(isValidEncryptedBlob({})).toBe(false);
+    });
+
+    it('should encrypt and serialize in one step', () => {
+      const serialized = encryptAndSerialize('test', testKey);
+      expect(typeof serialized).toBe('string');
+    });
+
+    it('should deserialize and decrypt in one step', () => {
+      const serialized = encryptAndSerialize('test-value', testKey);
+      const decrypted = deserializeAndDecrypt(serialized, testKey);
+      expect(decrypted).toBe('test-value');
+    });
+
+    it('should try deserialize and decrypt returning null on failure', () => {
+      const result = tryDeserializeAndDecrypt('invalid', testKey);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('Re-exported Secret Persistence Functions', () => {
+    const {
+      secretDataSchema,
+      validateSecretData,
+      parseSecretData,
+      isSecretPersistenceEnabled,
+      generateSecret,
+      createSecretData,
+    } = require('../index');
+
+    it('should export secretDataSchema', () => {
+      expect(secretDataSchema).toBeDefined();
+      expect(typeof secretDataSchema.safeParse).toBe('function');
+    });
+
+    it('should validate secret data', () => {
+      // Generate a valid base64url secret (32 bytes = 43 chars in base64url)
+      const validSecret = generateSecret(32);
+      const result = validateSecretData({
+        secret: validSecret,
+        createdAt: Date.now(),
+        version: 1,
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject invalid secret data', () => {
+      const result = validateSecretData({
+        secret: 'short',
+        createdAt: Date.now(),
+        version: 1,
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it('should parse valid secret data', () => {
+      const validSecret = generateSecret(32);
+      const data = {
+        secret: validSecret,
+        createdAt: Date.now(),
+        version: 1,
+      };
+      const parsed = parseSecretData(data);
+      expect(parsed).toEqual(data);
+    });
+
+    it('should return null for invalid secret data', () => {
+      const parsed = parseSecretData({ invalid: 'data' });
+      expect(parsed).toBeNull();
+    });
+
+    it('should check if secret persistence is enabled', () => {
+      const result = isSecretPersistenceEnabled();
+      expect(typeof result).toBe('boolean');
+    });
+
+    it('should generate secrets', () => {
+      const secret = generateSecret(32);
+      expect(typeof secret).toBe('string');
+      expect(secret.length).toBe(43); // base64url of 32 bytes is 43 chars
+    });
+
+    it('should create secret data with default options', () => {
+      const data = createSecretData();
+      expect(data.secret).toBeDefined();
+      expect(typeof data.secret).toBe('string');
+      expect(data.createdAt).toBeDefined();
+      expect(data.version).toBe(1);
+    });
+
+    it('should create secret data with custom bytes', () => {
+      const data = createSecretData({ secretBytes: 64 });
+      expect(data.secret).toBeDefined();
+      expect(data.secret.length).toBe(86); // base64url of 64 bytes is 86 chars
+    });
+  });
+
+  describe('Re-exported Key Persistence Functions', () => {
+    const {
+      validateKeyData,
+      parseKeyData,
+      isSecretKeyData,
+      isAsymmetricKeyData,
+      KeyPersistence,
+      createKeyPersistence,
+    } = require('../index');
+
+    it('should export validateKeyData function', () => {
+      expect(typeof validateKeyData).toBe('function');
+    });
+
+    it('should export parseKeyData function', () => {
+      expect(typeof parseKeyData).toBe('function');
+    });
+
+    it('should export isSecretKeyData function', () => {
+      expect(typeof isSecretKeyData).toBe('function');
+      expect(isSecretKeyData({ type: 'secret' })).toBe(true);
+      expect(isSecretKeyData({ type: 'asymmetric' })).toBe(false);
+    });
+
+    it('should export isAsymmetricKeyData function', () => {
+      expect(typeof isAsymmetricKeyData).toBe('function');
+      expect(isAsymmetricKeyData({ type: 'asymmetric' })).toBe(true);
+      expect(isAsymmetricKeyData({ type: 'secret' })).toBe(false);
+    });
+
+    it('should export KeyPersistence class', () => {
+      expect(KeyPersistence).toBeDefined();
+      expect(typeof KeyPersistence).toBe('function');
+    });
+
+    it('should export createKeyPersistence factory', () => {
+      expect(typeof createKeyPersistence).toBe('function');
+    });
+  });
+
+  describe('Runtime Utilities', () => {
+    const { assertNode } = require('../index');
+
+    it('should export assertNode function', () => {
+      expect(typeof assertNode).toBe('function');
+    });
+
+    it('should not throw in Node.js environment', () => {
+      expect(() => assertNode('testOperation')).not.toThrow();
+    });
   });
 
   describe('Integration: Session-like Encryption', () => {
@@ -553,6 +920,268 @@ describe('Crypto Module', () => {
       const tamperedData = new TextEncoder().encode(sessionId + 'x');
       const tamperedSignature = hmacSha256(signingKey, tamperedData);
       expect(timingSafeEqual(signature, tamperedSignature)).toBe(false);
+    });
+  });
+
+  describe('RSA Key Utilities (Node.js)', () => {
+    // Import Node.js specific utilities
+    const {
+      generateRsaKeyPair,
+      rsaSign,
+      rsaVerify,
+      createSignedJwt,
+      jwtAlgToNodeAlg,
+      isRsaPssAlg,
+    } = require('../node');
+    const crypto = require('node:crypto');
+
+    describe('generateRsaKeyPair()', () => {
+      it('should generate RSA key pair with default modulus length', () => {
+        const keyPair = generateRsaKeyPair();
+
+        expect(keyPair.privateKey).toBeDefined();
+        expect(keyPair.publicKey).toBeDefined();
+        expect(keyPair.publicJwk).toBeDefined();
+      });
+
+      it('should generate RSA key pair with custom modulus length', () => {
+        const keyPair = generateRsaKeyPair(3072);
+
+        expect(keyPair.privateKey).toBeDefined();
+        expect(keyPair.publicKey).toBeDefined();
+      });
+
+      it('should generate valid JWK', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+
+        expect(keyPair.publicJwk.kty).toBe('RSA');
+        expect(keyPair.publicJwk.alg).toBe('RS256');
+        expect(keyPair.publicJwk.use).toBe('sig');
+        expect(keyPair.publicJwk.n).toBeDefined();
+        expect(keyPair.publicJwk.e).toBeDefined();
+        expect(keyPair.publicJwk.kid).toMatch(/^rsa-key-/);
+      });
+
+      it('should generate unique key IDs', () => {
+        const keyPair1 = generateRsaKeyPair();
+        const keyPair2 = generateRsaKeyPair();
+
+        expect(keyPair1.publicJwk.kid).not.toBe(keyPair2.publicJwk.kid);
+      });
+
+      it('should support PS256 algorithm', () => {
+        const keyPair = generateRsaKeyPair(2048, 'PS256');
+
+        expect(keyPair.publicJwk.alg).toBe('PS256');
+      });
+    });
+
+    describe('rsaSign() and rsaVerify()', () => {
+      describe('RS256 (RSASSA-PKCS1-v1_5)', () => {
+        it('should sign and verify data with RS256', () => {
+          const keyPair = generateRsaKeyPair(2048, 'RS256');
+          const data = Buffer.from('Hello, World!');
+
+          const signature = rsaSign('RSA-SHA256', data, keyPair.privateKey);
+
+          expect(signature).toBeInstanceOf(Buffer);
+          expect(signature.length).toBeGreaterThan(0);
+
+          // Verify using rsaVerify
+          const isValid = rsaVerify('RS256', data, keyPair.publicJwk, signature);
+          expect(isValid).toBe(true);
+        });
+
+        it('should fail verification with wrong data', () => {
+          const keyPair = generateRsaKeyPair(2048, 'RS256');
+          const data = Buffer.from('Original data');
+          const wrongData = Buffer.from('Tampered data');
+
+          const signature = rsaSign('RSA-SHA256', data, keyPair.privateKey);
+
+          const isValid = rsaVerify('RS256', wrongData, keyPair.publicJwk, signature);
+          expect(isValid).toBe(false);
+        });
+
+        it('should fail verification with wrong key', () => {
+          const keyPair1 = generateRsaKeyPair(2048, 'RS256');
+          const keyPair2 = generateRsaKeyPair(2048, 'RS256');
+          const data = Buffer.from('Hello, World!');
+
+          const signature = rsaSign('RSA-SHA256', data, keyPair1.privateKey);
+
+          const isValid = rsaVerify('RS256', data, keyPair2.publicJwk, signature);
+          expect(isValid).toBe(false);
+        });
+      });
+
+      describe('RS384', () => {
+        it('should sign and verify data with RS384', () => {
+          const keyPair = generateRsaKeyPair(2048, 'RS384');
+          const data = Buffer.from('Test data for RS384');
+
+          const signature = rsaSign('RSA-SHA384', data, keyPair.privateKey);
+
+          const isValid = rsaVerify('RS384', data, keyPair.publicJwk, signature);
+          expect(isValid).toBe(true);
+        });
+      });
+
+      describe('RS512', () => {
+        it('should sign and verify data with RS512', () => {
+          const keyPair = generateRsaKeyPair(2048, 'RS512');
+          const data = Buffer.from('Test data for RS512');
+
+          const signature = rsaSign('RSA-SHA512', data, keyPair.privateKey);
+
+          const isValid = rsaVerify('RS512', data, keyPair.publicJwk, signature);
+          expect(isValid).toBe(true);
+        });
+      });
+
+      describe('PS256 (RSASSA-PSS)', () => {
+        it('should sign and verify data with PS256', () => {
+          const keyPair = generateRsaKeyPair(2048, 'PS256');
+          const data = Buffer.from('Test data for PS256');
+
+          const signature = rsaSign('RSA-SHA256', data, keyPair.privateKey, {
+            padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+          });
+
+          const isValid = rsaVerify('PS256', data, keyPair.publicJwk, signature);
+          expect(isValid).toBe(true);
+        });
+      });
+
+      describe('PS384', () => {
+        it('should sign and verify data with PS384', () => {
+          const keyPair = generateRsaKeyPair(2048, 'PS384');
+          const data = Buffer.from('Test data for PS384');
+
+          const signature = rsaSign('RSA-SHA384', data, keyPair.privateKey, {
+            padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+          });
+
+          const isValid = rsaVerify('PS384', data, keyPair.publicJwk, signature);
+          expect(isValid).toBe(true);
+        });
+      });
+
+      describe('PS512', () => {
+        it('should sign and verify data with PS512', () => {
+          const keyPair = generateRsaKeyPair(2048, 'PS512');
+          const data = Buffer.from('Test data for PS512');
+
+          const signature = rsaSign('RSA-SHA512', data, keyPair.privateKey, {
+            padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+          });
+
+          const isValid = rsaVerify('PS512', data, keyPair.publicJwk, signature);
+          expect(isValid).toBe(true);
+        });
+      });
+    });
+
+    describe('createSignedJwt()', () => {
+      it('should create a valid RS256 JWT', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+        const payload = {
+          sub: 'user123',
+          iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        };
+
+        const jwt = createSignedJwt(payload, keyPair.privateKey, keyPair.publicJwk.kid, 'RS256');
+
+        expect(typeof jwt).toBe('string');
+        const parts = jwt.split('.');
+        expect(parts.length).toBe(3);
+
+        // Verify header
+        const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+        expect(header.alg).toBe('RS256');
+        expect(header.typ).toBe('JWT');
+        expect(header.kid).toBe(keyPair.publicJwk.kid);
+
+        // Verify payload
+        const decodedPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+        expect(decodedPayload.sub).toBe('user123');
+      });
+
+      it('should create a valid PS256 JWT', () => {
+        const keyPair = generateRsaKeyPair(2048, 'PS256');
+        const payload = { sub: 'user456' };
+
+        const jwt = createSignedJwt(payload, keyPair.privateKey, keyPair.publicJwk.kid, 'PS256');
+
+        const parts = jwt.split('.');
+        expect(parts.length).toBe(3);
+
+        const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+        expect(header.alg).toBe('PS256');
+      });
+
+      it('should create JWT with default RS256 algorithm', () => {
+        const keyPair = generateRsaKeyPair();
+        const payload = { test: 'data' };
+
+        const jwt = createSignedJwt(payload, keyPair.privateKey, keyPair.publicJwk.kid);
+
+        const header = JSON.parse(Buffer.from(jwt.split('.')[0], 'base64url').toString());
+        expect(header.alg).toBe('RS256');
+      });
+
+      it('should create verifiable JWT', () => {
+        const keyPair = generateRsaKeyPair(2048, 'RS256');
+        const payload = { sub: 'test', data: 'value' };
+
+        const jwt = createSignedJwt(payload, keyPair.privateKey, keyPair.publicJwk.kid, 'RS256');
+
+        const [headerB64, payloadB64, signatureB64] = jwt.split('.');
+        const signatureInput = Buffer.from(`${headerB64}.${payloadB64}`);
+        const signature = Buffer.from(signatureB64, 'base64url');
+
+        const isValid = rsaVerify('RS256', signatureInput, keyPair.publicJwk, signature);
+        expect(isValid).toBe(true);
+      });
+
+      it('should handle complex payload objects', () => {
+        const keyPair = generateRsaKeyPair();
+        const payload = {
+          iss: 'https://issuer.example.com',
+          sub: 'user@example.com',
+          aud: ['api.example.com', 'web.example.com'],
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          iat: Math.floor(Date.now() / 1000),
+          nbf: Math.floor(Date.now() / 1000),
+          custom: {
+            roles: ['admin', 'user'],
+            permissions: ['read', 'write'],
+          },
+        };
+
+        const jwt = createSignedJwt(payload, keyPair.privateKey, keyPair.publicJwk.kid);
+
+        const decodedPayload = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString());
+        expect(decodedPayload.iss).toBe(payload.iss);
+        expect(decodedPayload.aud).toEqual(payload.aud);
+        expect(decodedPayload.custom.roles).toEqual(['admin', 'user']);
+      });
+    });
+
+    describe('jwtAlgToNodeAlg() and isRsaPssAlg() re-exports', () => {
+      it('should export jwtAlgToNodeAlg from node module', () => {
+        expect(jwtAlgToNodeAlg('RS256')).toBe('RSA-SHA256');
+        expect(jwtAlgToNodeAlg('PS256')).toBe('RSA-SHA256');
+      });
+
+      it('should export isRsaPssAlg from node module', () => {
+        expect(isRsaPssAlg('RS256')).toBe(false);
+        expect(isRsaPssAlg('PS256')).toBe(true);
+      });
     });
   });
 });

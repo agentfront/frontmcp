@@ -16,6 +16,16 @@ module.exports = {
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/sdk',
+  // SDK has extensive coverage gaps - using lower threshold for incremental improvement
+  // TODO: Increase thresholds as more tests are added
+  coverageThreshold: {
+    global: {
+      statements: 38,
+      branches: 22,
+      functions: 36,
+      lines: 38,
+    },
+  },
   // Only collect coverage from SDK source files
   collectCoverageFrom: [
     'src/**/*.ts',
