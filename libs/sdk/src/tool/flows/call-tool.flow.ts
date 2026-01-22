@@ -23,7 +23,6 @@ import {
   ElicitationFallbackRequired,
 } from '../../errors';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';

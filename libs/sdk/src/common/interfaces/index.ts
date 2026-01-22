@@ -33,5 +33,6 @@ export * from './prompt.interface';
 export * from './logger.interface';
 export * from './llm-adapter.interface';
 export * from './agent.interface';
+export * from './skill.interface';
 
 export * from './internal';

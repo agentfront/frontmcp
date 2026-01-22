@@ -7,6 +7,7 @@ import PromptRegistry from '../../prompt/prompt.registry';
 import AdapterRegistry from '../../adapter/adapter.regsitry';
 import PluginRegistry, { PluginScopeInfo } from '../../plugin/plugin.registry';
 import AgentRegistry from '../../agent/agent.registry';
+import SkillRegistry from '../../skill/skill.registry';
 
 export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   override readonly id: string;
@@ -19,6 +20,7 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   private appResources: ResourceRegistry;
   private appPrompts: PromptRegistry;
   private appAgents: AgentRegistry;
+  private appSkills: SkillRegistry;
 
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
@@ -58,12 +60,17 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     this.appAdapters = new AdapterRegistry(this.appProviders, this.metadata.adapters ?? []);
     await this.appAdapters.ready;
 
+    // Initialize tools FIRST to ensure they're available when skills validate tool references
     this.appTools = new ToolRegistry(this.appProviders, this.metadata.tools ?? [], appOwner);
+    await this.appTools.ready;
+
+    // Initialize remaining registries in parallel (skills can now access tools)
     this.appResources = new ResourceRegistry(this.appProviders, this.metadata.resources ?? [], appOwner);
     this.appPrompts = new PromptRegistry(this.appProviders, this.metadata.prompts ?? [], appOwner);
     this.appAgents = new AgentRegistry(this.appProviders, this.metadata.agents ?? [], appOwner);
+    this.appSkills = new SkillRegistry(this.appProviders, this.metadata.skills ?? [], appOwner);
 
-    await Promise.all([this.appTools.ready, this.appResources.ready, this.appPrompts.ready, this.appAgents.ready]);
+    await Promise.all([this.appResources.ready, this.appPrompts.ready, this.appAgents.ready, this.appSkills.ready]);
   }
 
   get providers(): Readonly<ProviderRegistry> {
@@ -92,5 +99,9 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
 
   get agents(): Readonly<AgentRegistry> {
     return this.appAgents;
+  }
+
+  get skills(): Readonly<SkillRegistry> {
+    return this.appSkills;
   }
 }

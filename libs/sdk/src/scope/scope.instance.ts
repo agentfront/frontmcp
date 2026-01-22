@@ -27,6 +27,13 @@ import ResourceRegistry from '../resource/resource.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import AgentRegistry from '../agent/agent.registry';
+import SkillRegistry from '../skill/skill.registry';
+import { SearchSkillsFlow, LoadSkillFlow } from '../skill/flows';
+import { getSkillTools } from '../skill/tools';
+import { SkillValidationError } from '../skill/errors/skill-validation.error';
+import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
+import { createSkillToolGuardHook } from '../skill/hooks';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { NotificationService } from '../notification';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import CompleteFlow from '../completion/flows/complete.flow';
@@ -54,6 +61,7 @@ export class Scope extends ScopeEntry {
   private scopeResources: ResourceRegistry;
   private scopePrompts: PromptRegistry;
   private scopeAgents: AgentRegistry;
+  private scopeSkills: SkillRegistry;
   private scopePlugins?: PluginRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
@@ -67,6 +75,9 @@ export class Scope extends ScopeEntry {
 
   /** Lazy-initialized elicitation store for distributed elicitation support */
   private _elicitationStore?: ElicitationStore;
+
+  /** Optional skill session manager for tool authorization enforcement */
+  private _skillSession?: SkillSessionManager;
 
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
@@ -293,6 +304,92 @@ export class Scope extends ScopeEntry {
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeAgents.ready;
 
+    // Initialize skill registry (scope-level skills from @FrontMcp metadata)
+    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
+    await this.scopeSkills.ready;
+
+    // Initialize skill session manager if skills are available
+    // Skill sessions enable tool authorization enforcement at runtime
+    // The session manager is always initialized when skills exist, but
+    // session activation is opt-in via LoadSkillFlow's activateSession parameter
+    if (this.scopeSkills.hasAny()) {
+      // Use in-memory store for now (Redis support can be added later)
+      const store = createSkillSessionStore({ type: 'memory' });
+
+      this._skillSession = new SkillSessionManager(
+        {
+          defaultPolicyMode: 'permissive', // Default to permissive for backwards compatibility
+        },
+        this.logger,
+        store,
+      );
+
+      // Register skill tool authorization guard hook
+      // This hook intercepts tool calls and enforces skill-based allowlists
+      const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
+        logger: this.logger,
+        trackToolCalls: true,
+      });
+      const guardHookInstance = new GuardHookClass();
+      const hookRecords = normalizeHooksFromCls(guardHookInstance);
+      if (hookRecords.length > 0) {
+        await this.scopeHooks.registerHooks(true, ...hookRecords);
+        this.logger.verbose('Skill tool authorization guard hook registered');
+      }
+
+      this.logger.verbose('Skill session manager initialized', {
+        storeType: store.type,
+      });
+    }
+
+    // Validate all skills after everything is initialized
+    // This ensures tools from plugins/adapters are also available for validation
+    if (this.scopeSkills.hasAny()) {
+      try {
+        const report = await this.scopeSkills.validateAllTools();
+        if (report.warningCount > 0) {
+          this.logger.verbose('Skill validation completed with warnings', {
+            totalSkills: report.totalSkills,
+            warningCount: report.warningCount,
+          });
+        }
+      } catch (error) {
+        if (error instanceof SkillValidationError) {
+          this.logger.error('Skill validation failed', {
+            failedSkills: error.failedSkills.map((s) => ({
+              name: s.skillName,
+              missingTools: s.missingTools,
+            })),
+          });
+          throw error;
+        }
+        throw error;
+      }
+    }
+
+    // Register skill flows if any skills are available
+    if (this.scopeSkills.hasAny()) {
+      await this.scopeFlows.registryFlows([SearchSkillsFlow, LoadSkillFlow]);
+
+      // Register skill tools (searchSkills, loadSkill)
+      const skillTools = getSkillTools();
+      for (const SkillToolClass of skillTools) {
+        try {
+          const toolRecord = normalizeTool(SkillToolClass);
+          const toolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
+            kind: 'scope',
+            id: '_skills',
+            ref: SkillToolClass,
+          });
+          await toolEntry.ready;
+          this.scopeTools.registerToolInstance(toolEntry);
+          this.logger.verbose(`Registered skill tool: ${toolRecord.metadata.name}`);
+        } catch (error) {
+          this.logger.warn(`Failed to register skill tool: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
+
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
@@ -387,6 +484,25 @@ export class Scope extends ScopeEntry {
 
   get agents(): AgentRegistry {
     return this.scopeAgents;
+  }
+
+  get skills(): SkillRegistry {
+    return this.scopeSkills;
+  }
+
+  /**
+   * Get the skill session manager for tool authorization enforcement.
+   * Returns undefined if skill sessions are not enabled.
+   *
+   * Skill sessions provide:
+   * - Tool allowlists: Only tools declared in the active skill can be called
+   * - Policy modes: strict (block), approval (prompt), or permissive (warn)
+   * - Rate limiting: Optional per-session tool call limits
+   *
+   * Enable via @FrontMcp metadata: `skills: { sessions: { enabled: true, defaultPolicyMode: 'strict' } }`
+   */
+  get skillSession(): SkillSessionManager | undefined {
+    return this._skillSession;
   }
 
   get plugins(): PluginRegistry | undefined {

@@ -17,3 +17,4 @@ export * from './resource.metadata';
 export * from './prompt.metadata';
 export * from './logger.metadata';
 export * from './agent.metadata';
+export * from './skill.metadata';
