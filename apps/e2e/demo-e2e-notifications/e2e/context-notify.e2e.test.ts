@@ -14,6 +14,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('ToolContext.notify() Method', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-notifications/src/main.ts',
+    project: 'demo-e2e-notifications',
     publicMode: true,
   });
 

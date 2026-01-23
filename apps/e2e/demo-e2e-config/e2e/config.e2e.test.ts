@@ -16,6 +16,7 @@ const DEBUG = process.env['DEBUG_E2E'] === '1';
 test.describe('Config Plugin E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-config/src/main.ts',
+    project: 'demo-e2e-config',
     publicMode: true,
     logLevel: DEBUG ? 'debug' : 'warn',
   });

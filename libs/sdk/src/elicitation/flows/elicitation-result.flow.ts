@@ -170,7 +170,8 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
   async buildResult() {
     this.logger.verbose('buildResult:start');
 
-    const { action, content } = this.state.required;
+    const { action } = this.state.required;
+    const content = this.state.content;
 
     // Map action directly to status (same names)
     const elicitResult: ElicitResult = {

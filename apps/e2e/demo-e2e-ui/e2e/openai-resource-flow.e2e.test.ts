@@ -15,6 +15,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('OpenAI Resource Flow E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-ui/src/main.ts',
+    project: 'demo-e2e-ui',
     publicMode: true,
   });
 

@@ -4,6 +4,7 @@ import { isValidMcpUri } from '@frontmcp/utils';
 import { RawZodShape } from '../types';
 import { FrontMcpToolTokens } from '../tokens';
 import type { ToolContext } from '../interfaces';
+import { InvalidInputError } from '../../errors/mcp.error';
 
 // ============================================
 // Skill Metadata Types
@@ -387,7 +388,7 @@ export function getToolNameFromClass(toolClass: Type<ToolContext>): string | und
  *
  * @param ref - The tool reference to normalize
  * @returns Normalized SkillToolRef with name, purpose, and required flag
- * @throws Error if tool class doesn't have a valid name
+ * @throws InvalidInputError if tool class doesn't have a valid name
  */
 export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
   // String tool name
@@ -399,8 +400,7 @@ export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
   if (typeof ref === 'function') {
     const name = getToolNameFromClass(ref as Type<ToolContext>);
     if (!name) {
-      // Note: Using plain Error to avoid circular dependency with errors module
-      throw new Error(
+      throw new InvalidInputError(
         `Invalid tool class '${ref.name ?? 'unknown'}'. ` +
           'Tool class must be decorated with @Tool and have a name property.',
       );
@@ -412,8 +412,7 @@ export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
   if (isToolRefWithClass(ref)) {
     const name = getToolNameFromClass(ref.tool);
     if (!name) {
-      // Note: Using plain Error to avoid circular dependency with errors module
-      throw new Error(
+      throw new InvalidInputError(
         `Invalid tool class in reference. ` + 'Tool class must be decorated with @Tool and have a name property.',
       );
     }
@@ -429,8 +428,7 @@ export function normalizeToolRef(ref: SkillToolInput): SkillToolRef {
     return { ...ref, required: ref.required ?? false };
   }
 
-  // Note: Using plain Error to avoid circular dependency with errors module
-  throw new Error(`Invalid tool reference: ${JSON.stringify(ref)}`);
+  throw new InvalidInputError(`Invalid tool reference: ${JSON.stringify(ref)}`);
 }
 
 /**

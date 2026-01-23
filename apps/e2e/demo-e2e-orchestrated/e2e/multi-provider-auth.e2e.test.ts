@@ -74,6 +74,7 @@ afterAll(async () => {
 test.describe('Multi-Provider Orchestrated Auth E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-orchestrated/src/main-multi-provider.ts',
+    project: 'demo-e2e-orchestrated',
   });
 
   test.describe('OAuth Metadata', () => {

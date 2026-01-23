@@ -76,6 +76,7 @@ interface RollbackResult {
 test.describe('Plugin Skills E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
+    project: 'demo-e2e-skills',
     publicMode: true,
   });
 

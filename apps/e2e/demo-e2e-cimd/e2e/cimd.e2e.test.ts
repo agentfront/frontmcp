@@ -22,6 +22,7 @@ let cimdServer: MockCimdServer;
 test.describe('CIMD E2E Tests', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-cimd/src/main.ts',
+    project: 'demo-e2e-cimd',
   });
 
   // Start CIMD server before all tests

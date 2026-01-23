@@ -26,13 +26,20 @@ let localMcpServer: TestServer | null = null;
 // Mock Mintlify MCP server instance
 let mockMintlifyServer: TestServer | null = null;
 
+// Port configuration from E2E_PORT_RANGES:
+// - demo-e2e-remote: 50210-50219 (using 50210 for gateway, 50211 for local MCP)
+// - mock-api: 50910-50919 (using 50910 for mock Mintlify)
+const MOCK_MINTLIFY_PORT = 50910;
+const LOCAL_MCP_PORT = 50211;
+
 // Start local MCP and mock Mintlify servers before all tests
 beforeAll(async () => {
-  log('[E2E] Starting mock Mintlify server on port 3097...');
+  log(`[E2E] Starting mock Mintlify server on port ${MOCK_MINTLIFY_PORT}...`);
   try {
     mockMintlifyServer = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-remote/src/mock-mintlify-server/main.ts',
-      port: 3097,
+      project: 'mock-api',
+      port: MOCK_MINTLIFY_PORT,
       startupTimeout: 60000,
       healthCheckPath: '/',
       debug: DEBUG,
@@ -43,11 +50,12 @@ beforeAll(async () => {
     throw error;
   }
 
-  log('[E2E] Starting local MCP server on port 3099...');
+  log(`[E2E] Starting local MCP server on port ${LOCAL_MCP_PORT}...`);
   try {
     localMcpServer = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
-      port: 3099,
+      project: 'demo-e2e-remote',
+      port: LOCAL_MCP_PORT,
       startupTimeout: 60000,
       healthCheckPath: '/', // Root path returns 404 which is OK for health check
       debug: DEBUG,
@@ -82,13 +90,13 @@ afterAll(async () => {
 test.describe('Remote MCP Server Orchestration E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-remote/src/main.ts',
+    project: 'demo-e2e-remote',
     publicMode: true,
-    port: 3098,
     logLevel: DEBUG ? 'debug' : 'warn',
     startupTimeout: 60000, // Give gateway more time to connect to servers
     env: {
-      LOCAL_MCP_PORT: '3099', // Match the port where local MCP server is started
-      MOCK_MINTLIFY_PORT: '3097', // Match the port where mock Mintlify server is started
+      LOCAL_MCP_PORT: String(LOCAL_MCP_PORT), // Match the port where local MCP server is started
+      MOCK_MINTLIFY_PORT: String(MOCK_MINTLIFY_PORT), // Match the port where mock Mintlify server is started
     },
   });
 

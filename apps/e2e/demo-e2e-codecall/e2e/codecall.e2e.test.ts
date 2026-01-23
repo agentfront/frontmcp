@@ -51,6 +51,7 @@ interface CodeCallSearchResult {
 test.describe('CodeCall Plugin E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-codecall/src/main.ts',
+    project: 'demo-e2e-codecall',
     publicMode: true,
   });
 

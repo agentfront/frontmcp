@@ -23,6 +23,7 @@ function parseToolResult(response: { result?: { content?: Array<{ type: string; 
 test.describe('ToolContext.progress() Method', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-notifications/src/main.ts',
+    project: 'demo-e2e-notifications',
     publicMode: true,
   });
 

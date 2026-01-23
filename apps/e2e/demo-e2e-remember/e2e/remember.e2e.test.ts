@@ -16,6 +16,7 @@ const DEBUG = process.env['DEBUG_E2E'] === '1';
 test.describe('Remember Plugin E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-remember/src/main.ts',
+    project: 'demo-e2e-remember',
     publicMode: true,
     logLevel: DEBUG ? 'debug' : 'warn',
   });

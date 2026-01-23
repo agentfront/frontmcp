@@ -28,16 +28,20 @@ export interface FallbackHandlerDeps {
 /**
  * Check if notifications can be delivered to this session.
  *
- * Returns true if the server is registered in NotificationService.
- * This is used to determine whether to use the waiting pattern
- * (send notification + wait for pub/sub) or fire-and-forget.
+ * Returns true if the client is registered with non-empty capabilities,
+ * indicating it's a full MCP client that can process notifications.
+ * Clients with empty capabilities (e.g., `{}`) are assumed to be minimal
+ * clients that cannot process notification-based flows.
  *
  * @param scope - The scope with notification service
  * @param sessionId - The session to check
  * @returns true if notifications can be delivered
  */
 export function canDeliverNotifications(scope: Scope, sessionId: string): boolean {
-  return scope.notifications.getClientCapabilities(sessionId) !== undefined;
+  const capabilities = scope.notifications.getClientCapabilities(sessionId);
+  // Check if capabilities exist AND have at least one property
+  // Empty capabilities ({}) indicates a minimal client without notification support
+  return capabilities !== undefined && Object.keys(capabilities).length > 0;
 }
 
 /**

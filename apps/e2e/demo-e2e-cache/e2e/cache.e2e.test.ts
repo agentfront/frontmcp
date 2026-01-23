@@ -11,6 +11,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Cache E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-cache/src/main.ts',
+    project: 'demo-e2e-cache',
     publicMode: true,
   });
 

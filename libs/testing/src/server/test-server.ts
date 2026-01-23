@@ -5,6 +5,17 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { ServerStartError } from '../errors';
+import {
+  reservePort,
+  getProjectPort,
+  getProjectPorts,
+  getPortRange,
+  releaseAllPorts,
+  getReservedPorts,
+  findAvailablePort,
+  E2E_PORT_RANGES,
+  E2EProject,
+} from './port-registry';
 
 // Environment variable to enable debug output for all test servers
 const DEBUG_SERVER = process.env['DEBUG_SERVER'] === '1' || process.env['DEBUG'] === '1';
@@ -14,8 +25,10 @@ const DEBUG_SERVER = process.env['DEBUG_SERVER'] === '1' || process.env['DEBUG']
 // ═══════════════════════════════════════════════════════════════════
 
 export interface TestServerOptions {
-  /** Port to run the server on (default: random available port) */
+  /** Port to run the server on (default: from project range or random) */
   port?: number;
+  /** E2E project name for port range allocation */
+  project?: string;
   /** Command to start the server */
   command?: string;
   /** Working directory */
@@ -67,13 +80,15 @@ export interface TestServerInfo {
  */
 export class TestServer {
   private process: ChildProcess | null = null;
-  private readonly options: Required<TestServerOptions>;
+  private readonly options: Required<Omit<TestServerOptions, 'project'>> & { project?: string };
   private _info: TestServerInfo;
   private logs: string[] = [];
+  private portRelease: (() => Promise<void>) | null = null;
 
-  private constructor(options: TestServerOptions, port: number) {
+  private constructor(options: TestServerOptions, port: number, portRelease?: () => Promise<void>) {
     this.options = {
       port,
+      project: options.project,
       command: options.command ?? '',
       cwd: options.cwd ?? process.cwd(),
       env: options.env ?? {},
@@ -81,6 +96,7 @@ export class TestServer {
       healthCheckPath: options.healthCheckPath ?? '/health',
       debug: options.debug ?? DEBUG_SERVER,
     };
+    this.portRelease = portRelease ?? null;
 
     this._info = {
       baseUrl: `http://localhost:${port}`,
@@ -92,7 +108,13 @@ export class TestServer {
    * Start a test server with custom command
    */
   static async start(options: TestServerOptions): Promise<TestServer> {
-    const port = options.port ?? (await findAvailablePort());
+    // Use port registry for allocation
+    const project = options.project ?? 'default';
+    const { port, release } = await reservePort(project, options.port);
+
+    // Release the reservation since the actual server will bind the port
+    await release();
+
     const server = new TestServer(options, port);
     try {
       await server.startProcess();
@@ -114,11 +136,16 @@ export class TestServer {
       );
     }
 
-    const port = options.port ?? (await findAvailablePort());
+    // Use the Nx project name for port range allocation
+    const { port, release } = await reservePort(project, options.port);
+
+    // Release the reservation since the actual server will bind the port
+    await release();
 
     const serverOptions: TestServerOptions = {
       ...options,
       port,
+      project,
       command: `npx nx serve ${project} --port ${port}`,
       cwd: options.cwd ?? process.cwd(),
     };
@@ -450,32 +477,21 @@ export class TestServer {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Find an available port
- */
-export async function findAvailablePort(): Promise<number> {
-  // Use a simple approach: try to create a server on port 0 to get an available port
-  const { createServer } = await import('net');
-
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-
-    server.listen(0, () => {
-      const address = server.address();
-      if (address && typeof address !== 'string') {
-        const port = address.port;
-        server.close(() => resolve(port));
-      } else {
-        reject(new Error('Could not get port'));
-      }
-    });
-
-    server.on('error', reject);
-  });
-}
-
-/**
  * Sleep for specified milliseconds
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// Re-export port registry utilities
+export {
+  reservePort,
+  getProjectPort,
+  getProjectPorts,
+  getPortRange,
+  releaseAllPorts,
+  getReservedPorts,
+  findAvailablePort,
+  E2E_PORT_RANGES,
+  type E2EProject,
+} from './port-registry';

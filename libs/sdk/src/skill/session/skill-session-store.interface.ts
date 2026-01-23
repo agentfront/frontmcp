@@ -53,10 +53,28 @@ export class MemorySkillSessionStore implements SkillSessionStore {
   readonly type = 'memory' as const;
   private sessions = new Map<string, SkillSessionState>();
 
+  /**
+   * Deep-clone the activeSkills Map and its nested Sets.
+   */
+  private cloneActiveSkills(
+    activeSkills: Map<string, import('./skill-session.types').ActiveSkillInfo>,
+  ): Map<string, import('./skill-session.types').ActiveSkillInfo> {
+    const cloned = new Map<string, import('./skill-session.types').ActiveSkillInfo>();
+    for (const [id, info] of activeSkills) {
+      cloned.set(id, {
+        ...info,
+        allowedTools: new Set(info.allowedTools),
+        requiredTools: new Set(info.requiredTools),
+      });
+    }
+    return cloned;
+  }
+
   async save(session: SkillSessionState): Promise<void> {
     // Clone the session to avoid reference issues
     this.sessions.set(session.sessionId, {
       ...session,
+      activeSkills: this.cloneActiveSkills(session.activeSkills),
       allowedTools: new Set(session.allowedTools),
       requiredTools: new Set(session.requiredTools),
       approvedTools: new Set(session.approvedTools),
@@ -71,6 +89,7 @@ export class MemorySkillSessionStore implements SkillSessionStore {
     // Return a clone
     return {
       ...session,
+      activeSkills: this.cloneActiveSkills(session.activeSkills),
       allowedTools: new Set(session.allowedTools),
       requiredTools: new Set(session.requiredTools),
       approvedTools: new Set(session.approvedTools),
@@ -82,8 +101,11 @@ export class MemorySkillSessionStore implements SkillSessionStore {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    // Deep-clone Set fields to avoid mutation issues
+    // Deep-clone Set and Map fields to avoid mutation issues
     const clonedUpdates = { ...updates };
+    if (updates.activeSkills) {
+      clonedUpdates.activeSkills = this.cloneActiveSkills(updates.activeSkills);
+    }
     if (updates.allowedTools) {
       clonedUpdates.allowedTools = new Set(updates.allowedTools);
     }
@@ -112,6 +134,7 @@ export class MemorySkillSessionStore implements SkillSessionStore {
       if (session.activeSkillId !== null) {
         active.push({
           ...session,
+          activeSkills: this.cloneActiveSkills(session.activeSkills),
           allowedTools: new Set(session.allowedTools),
           requiredTools: new Set(session.requiredTools),
           approvedTools: new Set(session.approvedTools),
