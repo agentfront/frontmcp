@@ -152,7 +152,7 @@ export class MemorySkillSessionStore implements SkillSessionStore {
     let cleaned = 0;
 
     for (const [sessionId, session] of this.sessions) {
-      // Clean up sessions that have been inactive
+      // Clean up sessions older than maxAge based on startedAt timestamp
       if (session.startedAt > 0 && now - session.startedAt > maxAge) {
         this.sessions.delete(sessionId);
         cleaned++;

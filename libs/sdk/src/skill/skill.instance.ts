@@ -7,6 +7,16 @@ import { Scope } from '../scope';
 import { loadInstructions, buildSkillContent } from './skill.utils';
 
 /**
+ * Extended SkillContent with additional metadata for caching.
+ * These fields are useful for search but not part of the base SkillContent interface.
+ */
+interface CachedSkillContent extends SkillContent {
+  tags?: string[];
+  priority?: number;
+  hideFromDiscovery?: boolean;
+}
+
+/**
  * Concrete implementation of a skill that can be loaded and searched.
  *
  * SkillInstance handles:
@@ -25,7 +35,7 @@ export class SkillInstance extends SkillEntry {
   private _cachedInstructions?: string;
 
   /** Cached skill content (built lazily) */
-  private _cachedContent?: SkillContent;
+  private _cachedContent?: CachedSkillContent;
 
   /** Tags for search indexing */
   private readonly _tags: string[];
@@ -104,14 +114,15 @@ export class SkillInstance extends SkillEntry {
     }
 
     const instructions = await this.loadInstructions();
-    this._cachedContent = buildSkillContent(this.metadata, instructions);
+    const baseContent = buildSkillContent(this.metadata, instructions);
 
-    // Add additional metadata that's useful for search but not in SkillContent
-    // We store these as extra properties on the cached content
-    (this._cachedContent as SkillContent & { tags?: string[]; priority?: number; hideFromDiscovery?: boolean }).tags =
-      this._tags;
-    (this._cachedContent as SkillContent & { priority?: number }).priority = this._priority;
-    (this._cachedContent as SkillContent & { hideFromDiscovery?: boolean }).hideFromDiscovery = this._hidden;
+    // Add additional metadata that's useful for search but not in base SkillContent
+    this._cachedContent = {
+      ...baseContent,
+      tags: this._tags,
+      priority: this._priority,
+      hideFromDiscovery: this._hidden,
+    };
 
     return this._cachedContent;
   }
@@ -170,7 +181,10 @@ export class SkillInstance extends SkillEntry {
 
   /**
    * Create a SkillContent from metadata without async loading.
-   * Uses inline instructions only - throws if instructions need loading.
+   * Returns cached content if available, builds from inline instructions,
+   * or returns undefined if instructions require async loading.
+   *
+   * @returns SkillContent if available synchronously, undefined otherwise
    */
   getContentSync(): SkillContent | undefined {
     if (this._cachedContent) {

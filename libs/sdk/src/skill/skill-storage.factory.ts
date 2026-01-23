@@ -16,7 +16,7 @@ import { SkillToolValidator } from './skill-validator';
 import { MemorySkillProvider, MemorySkillProviderOptions } from './providers/memory-skill.provider';
 import type { ExternalSkillProviderBase, ExternalSkillMode } from './providers/external-skill.provider';
 import type { SkillSyncStateStore } from './sync/sync-state.interface';
-import { PublicMcpError } from '../errors';
+import { PublicMcpError, MCP_ERROR_CODES } from '../errors';
 
 /**
  * VectorDB provider options (for external vector database).
@@ -224,7 +224,7 @@ export function createSkillStorageProvider(
         throw new PublicMcpError(
           'External provider type requires externalProvider instance. ' +
             'Create a class extending ExternalSkillProviderBase and pass it via externalProvider option.',
-          'SKILL_STORAGE_CONFIG_ERROR',
+          String(MCP_ERROR_CODES.INVALID_PARAMS),
           500,
         );
       }

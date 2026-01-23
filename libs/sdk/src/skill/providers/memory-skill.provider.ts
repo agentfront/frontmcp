@@ -101,6 +101,16 @@ interface SkillDocumentMetadata extends DocumentMetadata {
 }
 
 /**
+ * Extended SkillContent with additional metadata properties.
+ * Used internally for storing skills with tags, priority, and visibility.
+ */
+interface StoredSkillContent extends SkillContent {
+  tags?: string[];
+  priority?: number;
+  hideFromDiscovery?: boolean;
+}
+
+/**
  * Configuration options for MemorySkillProvider.
  */
 export interface MemorySkillProviderOptions {
@@ -354,14 +364,17 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   async update(skillId: string, skill: SkillContent): Promise<void> {
-    // Remove old entry
+    // Normalize: ensure skill.id matches skillId to prevent orphaned vector docs
+    const normalizedSkill = skill.id !== skillId ? { ...skill, id: skillId } : skill;
+
+    // Remove old entry by skillId
     if (this.vectorDB.hasDocument(skillId)) {
       this.vectorDB.removeDocument(skillId);
     }
 
-    // Add updated skill
-    this.skills.set(skillId, skill);
-    this.indexSkill(skill);
+    // Add updated skill with normalized id
+    this.skills.set(skillId, normalizedSkill);
+    this.indexSkill(normalizedSkill);
   }
 
   async remove(skillId: string): Promise<void> {
@@ -528,20 +541,20 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   private getSkillTags(skill: SkillContent): string[] {
     // Tags are stored in the metadata but not directly in SkillContent
     // We need to access them from the original metadata if available
-    return (skill as SkillContent & { tags?: string[] }).tags ?? [];
+    return (skill as StoredSkillContent).tags ?? [];
   }
 
   /**
    * Check if a skill is hidden from discovery.
    */
   private isHidden(skill: SkillContent): boolean {
-    return (skill as SkillContent & { hideFromDiscovery?: boolean }).hideFromDiscovery === true;
+    return (skill as StoredSkillContent).hideFromDiscovery === true;
   }
 
   /**
    * Get priority of a skill.
    */
   private getPriority(skill: SkillContent): number | undefined {
-    return (skill as SkillContent & { priority?: number }).priority;
+    return (skill as StoredSkillContent).priority;
   }
 }

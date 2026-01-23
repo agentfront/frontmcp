@@ -14,7 +14,7 @@ import type {
 import type { SkillSyncState, SkillSyncStateStore, SyncResult, SkillSyncEntry } from '../sync/sync-state.interface';
 import { createEmptySyncState } from '../sync/sync-state.interface';
 import { computeSkillHash } from '../sync/skill-hash';
-import { PublicMcpError } from '../../errors';
+import { PublicMcpError, MCP_ERROR_CODES } from '../../errors';
 
 /**
  * Operating mode for external skill providers.
@@ -338,7 +338,7 @@ export abstract class ExternalSkillProviderBase implements SkillStorageProvider 
     if (this.mode !== 'persistent') {
       throw new PublicMcpError(
         '[ExternalSkillProvider] syncSkills is only available in persistent mode',
-        'SKILL_SYNC_MODE_ERROR',
+        String(MCP_ERROR_CODES.INVALID_REQUEST),
         400,
       );
     }
@@ -466,9 +466,20 @@ export abstract class ExternalSkillProviderBase implements SkillStorageProvider 
   /**
    * Get the current sync state.
    * Returns null if in read-only mode or never synced.
+   * Returns a deep copy to prevent external mutation.
    */
   getSyncState(): SkillSyncState | null {
-    return this.syncState ? { ...this.syncState, entries: new Map(this.syncState.entries) } : null;
+    if (!this.syncState) {
+      return null;
+    }
+
+    // Deep copy entries to prevent mutation
+    const clonedEntries = new Map([...this.syncState.entries].map(([key, value]) => [key, { ...value }]));
+
+    return {
+      ...this.syncState,
+      entries: clonedEntries,
+    };
   }
 
   /**

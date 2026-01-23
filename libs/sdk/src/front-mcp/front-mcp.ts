@@ -256,15 +256,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const handler of handlers) {
       // Wrap handler to inject auth context (same pattern as in-memory-server)
       const originalHandler = handler.handler;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wrappedHandler = async (request: any, ctx: any) => {
+      const wrappedHandler = async (request: unknown, ctx: Record<string, unknown>) => {
         // Inject auth info into context while preserving MCP SDK context properties
         // Merge with existing authInfo to avoid clobbering any existing properties
+        const existingAuthInfo = ctx?.['authInfo'] as Record<string, unknown> | undefined;
         const enrichedCtx = {
           ...ctx,
-          authInfo: { ...ctx?.authInfo, sessionId },
+          authInfo: { ...existingAuthInfo, sessionId },
         };
-        return originalHandler(request, enrichedCtx);
+        // The cast is safe: request type matches handler.requestSchema
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return originalHandler(request as any, enrichedCtx as any);
       };
       // Cast required: MCP SDK's handler type expects specific context shape,
       // but our wrapped handlers preserve all context properties via pass-through

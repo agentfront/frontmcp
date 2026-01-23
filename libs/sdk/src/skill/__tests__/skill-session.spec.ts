@@ -611,6 +611,30 @@ describe('MemorySkillSessionStore', () => {
     expect(await store.get('old-session')).toBeNull();
     expect(await store.get('new-session')).not.toBeNull();
   });
+
+  it('should isolate retrieved sessions from store mutations', async () => {
+    const session = createSession('session-1');
+    await store.save(session);
+
+    // Retrieve the session and mutate it
+    const retrieved = await store.get('session-1');
+    expect(retrieved).not.toBeNull();
+
+    // Mutate the retrieved session's Sets and Maps
+    retrieved!.allowedTools.add('mutated_tool');
+    retrieved!.activeSkills.get('skill-1')!.allowedTools.add('another_mutated');
+    retrieved!.approvedTools.add('mutated_approved');
+    retrieved!.deniedTools.add('mutated_denied');
+
+    // Get a fresh copy from the store
+    const freshRetrieved = await store.get('session-1');
+
+    // Verify the fresh copy is not affected by mutations
+    expect(freshRetrieved!.allowedTools.has('mutated_tool')).toBe(false);
+    expect(freshRetrieved!.activeSkills.get('skill-1')!.allowedTools.has('another_mutated')).toBe(false);
+    expect(freshRetrieved!.approvedTools.has('mutated_approved')).toBe(false);
+    expect(freshRetrieved!.deniedTools.has('mutated_denied')).toBe(false);
+  });
 });
 
 describe('Session Serialization', () => {

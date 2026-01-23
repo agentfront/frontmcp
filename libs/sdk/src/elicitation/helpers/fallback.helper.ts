@@ -11,7 +11,15 @@ import type { FrontMcpLogger } from '../../common';
 import type { Scope } from '../../scope';
 import type { FallbackExecutionResult } from '../elicitation.types';
 import { DEFAULT_FALLBACK_WAIT_TTL } from '../elicitation.types';
-import { ElicitationFallbackRequired, ElicitationTimeoutError } from '../../errors';
+import { ElicitationFallbackRequired, ElicitationSubscriptionError } from '../../errors';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * Create a typed error result for tool responses.
+ */
+function createErrorResult(message: string): CallToolResult {
+  return { content: [{ type: 'text', text: message }], isError: true };
+}
 
 /**
  * Dependencies required by fallback handler functions.
@@ -130,15 +138,11 @@ export async function handleWaitingFallback(
           ttl,
         });
         // Return an error result instead of throwing
-        resolve({
-          content: [
-            {
-              type: 'text',
-              text: `Elicitation request timed out after ${Math.round(ttl / 1000)} seconds. The user did not respond in time.`,
-            },
-          ],
-          isError: true,
-        });
+        resolve(
+          createErrorResult(
+            `Elicitation request timed out after ${Math.round(ttl / 1000)} seconds. The user did not respond in time.`,
+          ),
+        );
       }
     }, ttl);
 
@@ -161,15 +165,7 @@ export async function handleWaitingFallback(
               resolve(result.result);
             } else {
               // Return error result
-              resolve({
-                content: [
-                  {
-                    type: 'text',
-                    text: result.error || 'Elicitation fallback execution failed',
-                  },
-                ],
-                isError: true,
-              });
+              resolve(createErrorResult(result.error || 'Elicitation fallback execution failed'));
             }
           }
         },
@@ -192,7 +188,7 @@ export async function handleWaitingFallback(
           resolved = true;
           clearTimeout(timeoutHandle);
           logger.error('handleWaitingFallback: failed to subscribe', err);
-          reject(new ElicitationTimeoutError(error.elicitId, ttl));
+          reject(new ElicitationSubscriptionError(error.elicitId, err instanceof Error ? err : undefined));
         }
       });
   });

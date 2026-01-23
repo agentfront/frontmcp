@@ -2,7 +2,7 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
-import { InvalidInputError } from '../../errors';
+import { InvalidInputError, InternalMcpError } from '../../errors';
 import { formatSkillForLLM } from '../skill.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import type { SkillSessionManager } from '../session/skill-session.manager';
@@ -158,7 +158,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const skillRegistry = this.scope.skills;
 
     if (!skillRegistry) {
-      throw new InvalidInputError('Skills are not available in this scope');
+      throw new InternalMcpError('Skill registry not configured');
     }
 
     // Load the skill
