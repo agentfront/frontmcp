@@ -5,17 +5,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { ServerStartError } from '../errors';
-import {
-  reservePort,
-  getProjectPort,
-  getProjectPorts,
-  getPortRange,
-  releaseAllPorts,
-  getReservedPorts,
-  findAvailablePort,
-  E2E_PORT_RANGES,
-  E2EProject,
-} from './port-registry';
+import { reservePort } from './port-registry';
 
 // Environment variable to enable debug output for all test servers
 const DEBUG_SERVER = process.env['DEBUG_SERVER'] === '1' || process.env['DEBUG'] === '1';

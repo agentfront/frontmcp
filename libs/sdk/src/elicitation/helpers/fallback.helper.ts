@@ -28,10 +28,10 @@ export interface FallbackHandlerDeps {
 /**
  * Check if notifications can be delivered to this session.
  *
- * Returns true if the client is registered with non-empty capabilities,
+ * Returns true if the client is registered with at least one defined capability,
  * indicating it's a full MCP client that can process notifications.
- * Clients with empty capabilities (e.g., `{}`) are assumed to be minimal
- * clients that cannot process notification-based flows.
+ * Clients with empty capabilities (e.g., `{}`) or all-undefined values are
+ * assumed to be minimal clients that cannot process notification-based flows.
  *
  * @param scope - The scope with notification service
  * @param sessionId - The session to check
@@ -39,9 +39,10 @@ export interface FallbackHandlerDeps {
  */
 export function canDeliverNotifications(scope: Scope, sessionId: string): boolean {
   const capabilities = scope.notifications.getClientCapabilities(sessionId);
-  // Check if capabilities exist AND have at least one property
-  // Empty capabilities ({}) indicates a minimal client without notification support
-  return capabilities !== undefined && Object.keys(capabilities).length > 0;
+  // Check if capabilities exist AND have at least one DEFINED property value
+  // Empty capabilities ({}) or all-undefined values indicates a minimal client
+  if (!capabilities) return false;
+  return Object.values(capabilities).some((v) => v !== undefined);
 }
 
 /**
