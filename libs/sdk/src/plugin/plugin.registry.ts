@@ -16,6 +16,7 @@ import AdapterRegistry from '../adapter/adapter.regsitry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
+import SkillRegistry from '../skill/skill.registry';
 import { normalizeProvider } from '../provider/provider.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
@@ -53,6 +54,8 @@ export default class PluginRegistry
   private readonly pResources: Map<Token, ResourceRegistry> = new Map();
   /** prompts by token */
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
+  /** skills by token */
+  private readonly pSkills: Map<Token, SkillRegistry> = new Map();
 
   private readonly scope: Scope;
   private readonly scopeInfo?: PluginScopeInfo;
@@ -137,8 +140,9 @@ export default class PluginRegistry
       const tools = new ToolRegistry(providers, rec.metadata.tools ?? [], pluginOwner);
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);
       const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? [], pluginOwner);
+      const skills = new SkillRegistry(providers, rec.metadata.skills ?? [], pluginOwner);
 
-      await Promise.all([tools.ready, resources.ready, prompts.ready]);
+      await Promise.all([tools.ready, resources.ready, prompts.ready, skills.ready]);
 
       // Register plugin registries with parent provider registry (app's providers)
       // This makes plugin tools discoverable during app's ToolRegistry adoption (Path 2)
@@ -146,6 +150,7 @@ export default class PluginRegistry
       this.providers.addRegistry('ToolRegistry', tools);
       this.providers.addRegistry('ResourceRegistry', resources);
       this.providers.addRegistry('PromptRegistry', prompts);
+      this.providers.addRegistry('SkillRegistry', skills);
 
       this.pProviders.set(token, providers);
       this.pPlugins.set(token, plugins);
@@ -153,6 +158,7 @@ export default class PluginRegistry
       this.pTools.set(token, tools);
       this.pResources.set(token, resources);
       this.pPrompts.set(token, prompts);
+      this.pSkills.set(token, skills);
 
       /**
        * Register exported providers to the parent providers registry.

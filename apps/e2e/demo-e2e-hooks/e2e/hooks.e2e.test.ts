@@ -11,6 +11,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Hooks E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-hooks/src/main.ts',
+    project: 'demo-e2e-hooks',
     publicMode: true,
   });
 

@@ -17,7 +17,16 @@ import type { JWK } from 'jose';
 export interface TestConfig {
   /** Server entry file path (e.g., './src/main.ts') */
   server?: string;
-  /** Port to run server on (default: auto-select available port) */
+  /**
+   * E2E project name for port range allocation.
+   * Each project has a dedicated port range to prevent conflicts during parallel test execution.
+   * See E2E_PORT_RANGES in port-registry.ts for available ranges.
+   *
+   * @example 'demo-e2e-skills' - Uses ports 50200-50209
+   * @example 'demo-e2e-public' - Uses ports 50000-50009
+   */
+  project?: string;
+  /** Port to run server on (default: auto-select from project range or dynamic) */
   port?: number;
   /** Transport type (default: 'streamable-http') */
   transport?: 'sse' | 'streamable-http';

@@ -58,7 +58,7 @@ const _upstreamProviders = buildUpstreamProviders();
 @FrontMcp({
   info: { name: 'Demo Multi-Provider Orchestrated Auth', version: '0.1.0' },
   apps: [NotesApp, TasksApp, GitHubApp],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
     mode: 'orchestrated',

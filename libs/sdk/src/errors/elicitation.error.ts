@@ -133,3 +133,34 @@ export class ElicitationEncryptionError extends InternalMcpError {
     return this.message;
   }
 }
+
+/**
+ * Elicitation subscription error.
+ *
+ * Thrown when subscription to elicitation pub/sub channel fails.
+ * This is distinct from timeout - it indicates a transport or infrastructure
+ * failure rather than user non-response.
+ */
+export class ElicitationSubscriptionError extends InternalMcpError {
+  /** The ID of the elicitation request that failed to subscribe */
+  readonly elicitId: string;
+
+  /** The underlying error that caused the subscription failure */
+  readonly originalError?: Error;
+
+  constructor(elicitId: string, originalError?: Error) {
+    super(
+      `Failed to subscribe to elicitation result: ${originalError?.message ?? 'Unknown error'}`,
+      'ELICITATION_SUBSCRIPTION_ERROR',
+    );
+    this.elicitId = elicitId;
+    this.originalError = originalError;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
+  }
+}

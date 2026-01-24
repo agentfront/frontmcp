@@ -10,6 +10,8 @@ module.exports = {
   displayName: '@frontmcp/sdk',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
+  // Limit workers to avoid SIGSEGV crashes on Node.js 24+
+  maxWorkers: '50%',
   transform: {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },

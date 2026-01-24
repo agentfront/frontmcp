@@ -10,6 +10,7 @@ import {
   AuthProviderType,
   PluginType,
   AdapterType,
+  SkillType,
 } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -18,6 +19,7 @@ import {
   annotatedFrontMcpPromptsSchema,
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
+  annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
   annotatedFrontMcpAgentsSchema,
 } from '../schemas';
@@ -102,6 +104,13 @@ export interface LocalAppMetadata {
   agents?: AgentType[];
 
   /**
+   * Skills that teach AI how to perform multi-step tasks using tools.
+   * Skills are workflow guides that combine multiple tools into coherent
+   * recipes. They can be discovered via searchSkills and loaded via loadSkill.
+   */
+  skills?: SkillType[];
+
+  /**
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
@@ -128,6 +137,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
   prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
   agents: z.array(annotatedFrontMcpAgentsSchema).optional(),
+  skills: z.array(annotatedFrontMcpSkillsSchema).optional(),
   auth: authOptionsSchema.optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])

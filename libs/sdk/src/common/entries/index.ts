@@ -12,3 +12,4 @@ export * from './resource.entry';
 export * from './prompt.entry';
 export * from './logger.entry';
 export * from './agent.entry';
+export * from './skill.entry';

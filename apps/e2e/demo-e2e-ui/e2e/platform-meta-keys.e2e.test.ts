@@ -14,6 +14,7 @@ import { test, expect, UIAssertions } from '@frontmcp/testing';
 test.describe('Platform Meta Keys E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-ui/src/main.ts',
+    project: 'demo-e2e-ui',
     publicMode: true,
   });
 

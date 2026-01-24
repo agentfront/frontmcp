@@ -21,7 +21,9 @@ import {
   PluginEntry,
   AdapterEntry,
   FrontMcpLogger,
+  SkillEntry,
 } from '../../common';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import { idFromString } from '@frontmcp/utils';
 import ProviderRegistry from '../../provider/provider.registry';
 import ToolRegistry from '../../tool/tool.registry';
@@ -61,6 +63,63 @@ class EmptyPluginRegistry implements PluginRegistryInterface {
 class EmptyAdapterRegistry implements AdapterRegistryInterface {
   getAdapters(): AdapterEntry[] {
     return [];
+  }
+}
+
+/**
+ * Empty skill registry for remote apps (remote apps don't support skills yet)
+ */
+class EmptySkillRegistry implements SkillRegistryInterface {
+  readonly owner = { kind: 'app' as const, id: '_remote', ref: EmptySkillRegistry };
+  getSkills(): SkillEntry[] {
+    return [];
+  }
+  findByName(): SkillEntry | undefined {
+    return undefined;
+  }
+  findByQualifiedName(): SkillEntry | undefined {
+    return undefined;
+  }
+  async search(): Promise<[]> {
+    return [];
+  }
+  async loadSkill(): Promise<undefined> {
+    return undefined;
+  }
+  async listSkills() {
+    return { skills: [], total: 0, hasMore: false };
+  }
+  hasAny(): boolean {
+    return false;
+  }
+  async count(): Promise<number> {
+    return 0;
+  }
+  subscribe(): () => void {
+    return () => {};
+  }
+  getCapabilities() {
+    return {};
+  }
+  async validateAllTools() {
+    // Empty registry - no skills to validate
+    return {
+      results: [],
+      isValid: true,
+      totalSkills: 0,
+      failedCount: 0,
+      warningCount: 0,
+    };
+  }
+  async syncToExternal() {
+    // Empty registry - no skills to sync
+    return null;
+  }
+  getExternalProvider() {
+    return undefined;
+  }
+  hasExternalProvider() {
+    return false;
   }
 }
 
@@ -104,6 +163,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   private readonly _prompts: PromptRegistry;
   private readonly _plugins: EmptyPluginRegistry;
   private readonly _adapters: EmptyAdapterRegistry;
+  private readonly _skills: EmptySkillRegistry;
 
   // Connection state
   private isConnected = false;
@@ -137,6 +197,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     this._prompts = new PromptRegistry(this.scopeProviders, [], this.appOwner);
     this._plugins = new EmptyPluginRegistry();
     this._adapters = new EmptyAdapterRegistry();
+    this._skills = new EmptySkillRegistry();
 
     // Get or create MCP client service
     const scope = this.scopeProviders.getActiveScope();
@@ -241,6 +302,10 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
 
   override get prompts(): PromptRegistryInterface {
     return this._prompts;
+  }
+
+  override get skills(): SkillRegistryInterface {
+    return this._skills;
   }
 
   /**

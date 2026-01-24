@@ -120,6 +120,39 @@ jobs:
             dist/
           retention-days: 1
 
+  # Discover E2E projects dynamically using Nx tags
+  discover-e2e:
+    name: "Discover E2E Projects"
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.discover.outputs.projects }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Discover E2E projects
+        id: discover
+        run: |
+          PROJECTS_JSON=$(npx nx show projects -p tag:type:e2e --json 2>/dev/null | jq -c '.' || echo "[]")
+          if [ "$PROJECTS_JSON" = "[]" ] || [ "$PROJECTS_JSON" = "null" ]; then
+            echo "::error::No E2E projects found with tag:type:e2e"
+            exit 1
+          fi
+          echo "Found $(echo $PROJECTS_JSON | jq 'length') E2E projects"
+          echo "projects=$PROJECTS_JSON" >> $GITHUB_OUTPUT
+
   # Unit tests (depends on build)
   unit-tests:
     name: "Unit Tests"
@@ -127,6 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NX_DAEMON: "false"
+      RUN_COVERAGE: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -153,34 +187,35 @@ jobs:
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
-      - name: Run unit tests
+      - name: Run unit tests (affected, no coverage)
+        if: env.RUN_COVERAGE != 'true'
         run: npx nx affected -t test --passWithNoTests --exclude='demo-e2e-*'
+
+      - name: Run unit tests (all, with coverage)
+        if: env.RUN_COVERAGE == 'true'
+        run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
+
+      - name: Upload unit coverage artifacts
+        if: env.RUN_COVERAGE == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage
+          path: coverage/unit/
+          retention-days: 1
+          if-no-files-found: warn
 
   # E2E tests - matrix strategy for parallelization
   e2e-tests:
     name: "E2E Tests (${{ matrix.project }})"
-    needs: [setup, build]
+    needs: [setup, build, discover-e2e]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - demo-e2e-public
-          - demo-e2e-transparent
-          - demo-e2e-openapi
-          - demo-e2e-codecall
-          - demo-e2e-redis
-          - demo-e2e-providers
-          - demo-e2e-cache
-          - demo-e2e-ui
-          - demo-e2e-hooks
-          - demo-e2e-errors
-          - demo-e2e-notifications
-          - demo-e2e-serverless
-          - demo-e2e-multiapp
-          - demo-e2e-config
+        project: ${{ fromJson(needs.discover-e2e.outputs.matrix) }}
     env:
       NX_DAEMON: "false"
+      RUN_COVERAGE: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -210,7 +245,12 @@ jobs:
       - name: Run E2E tests (${{ matrix.project }})
         id: test
         continue-on-error: true
-        run: npx nx run ${{ matrix.project }}:test
+        run: |
+          if [ "$RUN_COVERAGE" = "true" ]; then
+            npx nx run ${{ matrix.project }}:test --coverage
+          else
+            npx nx run ${{ matrix.project }}:test
+          fi
 
       - name: Reset Nx cache on failure
         if: steps.test.outcome == 'failure'
@@ -218,9 +258,23 @@ jobs:
 
       - name: Retry E2E tests (${{ matrix.project }})
         if: steps.test.outcome == 'failure'
-        run: npx nx run ${{ matrix.project }}:test
+        run: |
+          if [ "$RUN_COVERAGE" = "true" ]; then
+            npx nx run ${{ matrix.project }}:test --coverage
+          else
+            npx nx run ${{ matrix.project }}:test
+          fi
 
-  # Coverage report (runs on main branch only)
+      - name: Upload E2E coverage artifacts
+        if: env.RUN_COVERAGE == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-coverage-${{ matrix.project }}
+          path: coverage/e2e/${{ matrix.project }}/
+          retention-days: 1
+          if-no-files-found: warn
+
+  # Coverage report (runs on main branch only, merges artifacts from test jobs)
   coverage:
     name: "Coverage Report"
     needs: [setup, build, unit-tests, e2e-tests]
@@ -231,8 +285,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -243,19 +295,18 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Download build artifacts
+      - name: Download unit coverage artifacts
         uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: unit-coverage
+          path: coverage/unit/
 
-      - name: Restore Nx cache
-        uses: ./.github/actions/nx-cache-restore
-
-      - name: Run unit tests with coverage
-        run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
-
-      - name: Run E2E tests with coverage
-        run: npx nx run-many -t test --projects='demo-e2e-*' --coverage
+      - name: Download E2E coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-coverage-*
+          path: coverage/e2e/
+          merge-multiple: true
 
       - name: Merge coverage reports
         run: node scripts/merge-coverage.mjs

@@ -21,6 +21,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Serving Modes E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-ui/src/main.ts',
+    project: 'demo-e2e-ui',
     publicMode: true,
   });
 

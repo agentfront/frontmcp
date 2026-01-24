@@ -21,10 +21,8 @@ import {
   ToolExecutionError,
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
-  ElicitationTimeoutError,
 } from '../../errors';
-import type { FallbackExecutionResult } from '../../elicitation/elicitation.types';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
@@ -507,6 +505,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
         // Store pending fallback context in the elicitation store
         const authInfo = this.state.authInfo;
+        const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
         const sessionId = authInfo?.sessionId ?? 'anonymous';
         const scope = this.scope as Scope;
 
@@ -521,24 +520,29 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           expiresAt: Date.now() + error.ttl,
         });
 
-        // Check transport type to determine fallback strategy
-        // Streamable HTTP: Wait for result via pub/sub (request must stay open)
-        // SSE: Fire-and-forget (SSE handles routing, can use notifications)
-        const transportType = (authInfo as (AuthInfo & TransportExtension) | undefined)?.transport?.type;
+        // Determine transport type to choose the fallback strategy
+        const transportType = authInfoWithTransport?.transport?.type;
 
-        if (transportType === 'streamable-http') {
-          // Streamable HTTP: Wait for the result via pub/sub
+        // Use waiting pattern only if:
+        // 1. Transport is streamable-http (supports keeping connection open)
+        // 2. Notifications can be delivered (session is registered in NotificationService)
+        // Some LLMs don't support MCP notifications, so we need to fall back to fire-and-forget
+        if (transportType === 'streamable-http' && canDeliverNotifications(scope, sessionId)) {
+          // Waiting mode: Send notification + wait for pub/sub result
+          // This keeps the request open and returns the actual tool result
+          // when sendElicitationResult is called
           this.logger.info('execute: using waiting fallback for streamable-http', {
             elicitId: error.elicitId,
           });
-
-          const result = await this.handleWaitingFallback(error, sessionId, scope);
+          const deps: FallbackHandlerDeps = { scope, sessionId, logger: this.logger };
+          const result = await handleWaitingFallback(deps, error);
           toolContext.output = result;
-          this.logger.verbose('execute:done (waiting fallback completed)');
+          this.logger.verbose('execute:done (elicitation waiting fallback)');
           return;
         }
 
-        // SSE and other transports: Fire-and-forget pattern
+        // Fire-and-forget mode for SSE and other transports
+        // Return fallback instructions immediately so the LLM can call sendElicitationResult
         // Set output to fallback response (not an error)
         // This structured response tells the LLM how to continue
         const fallbackResponse: ElicitationFallbackResponse = {
@@ -566,7 +570,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         };
         toolContext.output = fallbackResponse;
 
-        this.logger.verbose('execute:done (elicitation fallback)');
+        this.logger.verbose('execute:done (elicitation fire-and-forget fallback)');
         return;
       }
 
@@ -576,153 +580,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         error instanceof Error ? error : undefined,
       );
     }
-  }
-
-  /**
-   * Handle waiting fallback for streamable-http transport.
-   *
-   * This method:
-   * 1. Subscribes to the fallback-result pub/sub channel
-   * 2. Waits for the result with timeout (same as elicitation TTL)
-   * 3. Returns the actual tool result from pub/sub
-   *
-   * Used when the transport type is streamable-http, which requires
-   * the original HTTP request to stay open and return the final result.
-   */
-  private async handleWaitingFallback(
-    error: ElicitationFallbackRequired,
-    sessionId: string,
-    scope: Scope,
-  ): Promise<CallToolResult> {
-    const { elicitId, ttl } = error;
-
-    return new Promise<CallToolResult>((resolve, reject) => {
-      let unsubscribe: (() => Promise<void>) | undefined;
-      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-      let resolved = false;
-
-      // Clean up function to prevent memory leaks
-      const cleanup = async () => {
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-          timeoutHandle = undefined;
-        }
-        if (unsubscribe) {
-          try {
-            await unsubscribe();
-          } catch (err) {
-            this.logger.warn('handleWaitingFallback: failed to unsubscribe', {
-              elicitId,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-          unsubscribe = undefined;
-        }
-      };
-
-      // Handle the callback from pub/sub
-      const handleResult = async (result: FallbackExecutionResult) => {
-        if (resolved) return; // Prevent duplicate handling
-        resolved = true;
-
-        this.logger.info('handleWaitingFallback: received result', {
-          elicitId,
-          success: result.success,
-        });
-
-        await cleanup();
-
-        if (result.success && result.result) {
-          resolve(result.result as CallToolResult);
-        } else {
-          // Convert error to a tool result (not a thrown error)
-          // This allows the LLM to see the error message and potentially retry
-          resolve({
-            content: [
-              {
-                type: 'text',
-                text: `Error: ${result.error || 'Tool execution failed'}`,
-              },
-            ],
-            isError: true,
-          });
-        }
-      };
-
-      // Set up timeout
-      timeoutHandle = setTimeout(async () => {
-        if (resolved) return;
-        resolved = true;
-
-        this.logger.warn('handleWaitingFallback: timeout waiting for result', {
-          elicitId,
-          ttl,
-        });
-
-        await cleanup();
-
-        // Clean up the pending fallback record
-        try {
-          await scope.elicitationStore.deletePendingFallback(elicitId);
-        } catch (err) {
-          this.logger.warn('handleWaitingFallback: failed to cleanup pending fallback', {
-            elicitId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-
-        reject(new ElicitationTimeoutError(elicitId, ttl));
-      }, ttl);
-
-      // Subscribe to the fallback result channel
-      scope.elicitationStore
-        .subscribeFallbackResult(elicitId, handleResult, sessionId)
-        .then((unsub) => {
-          if (resolved) {
-            // Already resolved (e.g., timeout occurred while subscribing)
-            // Ignore unsubscribe errors since we're cleaning up
-            unsub().catch(() => {
-              /* noop */
-            });
-            return;
-          }
-          unsubscribe = unsub;
-
-          this.logger.debug('handleWaitingFallback: subscribed to fallback result', {
-            elicitId,
-          });
-        })
-        .catch((err) => {
-          if (resolved) return;
-          resolved = true;
-
-          this.logger.error('handleWaitingFallback: failed to subscribe', {
-            elicitId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-
-          cleanup().then(async () => {
-            // Clean up the pending fallback record (consistent with timeout handler)
-            try {
-              await scope.elicitationStore.deletePendingFallback(elicitId);
-            } catch (cleanupErr) {
-              this.logger.warn('handleWaitingFallback: failed to cleanup pending fallback on subscribe error', {
-                elicitId,
-                error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
-              });
-            }
-
-            reject(
-              new ToolExecutionError(
-                error.toolName,
-                new Error(
-                  `Failed to subscribe to fallback result: ${err instanceof Error ? err.message : String(err)}`,
-                ),
-              ),
-            );
-          });
-        });
-    });
   }
 
   @Stage('validateOutput')

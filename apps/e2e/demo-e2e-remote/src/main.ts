@@ -40,7 +40,7 @@ const mockMintlifyPort = parseInt(process.env['MOCK_MINTLIFY_PORT'] ?? '3097', 1
       toolPatterns: ['mintlify:*', 'mintlify:SearchMintlify', 'SearchMintlify'],
     }),
   ],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Warn },
   http: { port },
   transport: {
     protocol: { json: true, legacy: true, strictSession: false },

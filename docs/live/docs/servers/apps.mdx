@@ -61,6 +61,7 @@ export default class Server {}
   tools?: ToolType[],
   resources?: ResourceType[],
   prompts?: PromptType[],
+  skills?: SkillType[],
   auth?: AuthOptions,                 // app‑default auth (overrides server auth)
   standalone?: 'includeInParent' | boolean, // isolate scope / expose separately
 })
@@ -80,6 +81,7 @@ export default class Server {}
 | `tools`         | Tool classes registered to this app                     |
 | `resources`     | Resource classes registered to this app                 |
 | `prompts`       | Prompt classes registered to this app                   |
+| `skills`        | Skill definitions for this app                          |
 | `auth`          | App-level auth config (overrides server auth)           |
 | `standalone`    | Isolation mode: `true`, `false`, or `'includeInParent'` |
 

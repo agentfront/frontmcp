@@ -9,6 +9,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Elicitation E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-elicitation/src/main.ts',
+    project: 'demo-e2e-elicitation',
     publicMode: true,
   });
 

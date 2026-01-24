@@ -11,6 +11,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Multi-App Server E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-multiapp/src/main.ts',
+    project: 'demo-e2e-multiapp',
     publicMode: true,
   });
 

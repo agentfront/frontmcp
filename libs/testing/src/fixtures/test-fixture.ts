@@ -81,6 +81,7 @@ async function initializeSharedResources(): Promise<void> {
 
       try {
         serverInstance = await TestServer.start({
+          project: currentConfig.project,
           port: currentConfig.port,
           command: serverCommand,
           env: currentConfig.env,
@@ -98,6 +99,7 @@ async function initializeSharedResources(): Promise<void> {
         throw new Error(
           `Failed to start test server.\n\n` +
             `Server entry: ${currentConfig.server}\n` +
+            `Project: ${currentConfig.project ?? 'default'}\n` +
             `Command: ${serverCommand}\n\n` +
             `Error: ${errMsg}`,
         );

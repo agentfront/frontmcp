@@ -11,3 +11,4 @@ export * from './resource.decorator';
 export * from './prompt.decorator';
 export * from './logger.decorator';
 export * from './agent.decorator';
+export * from './skill.decorator';

@@ -15,6 +15,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Transport Recreation E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-transport-recreation/src/main.ts',
+    project: 'demo-e2e-transport-recreation',
     publicMode: true,
   });
 

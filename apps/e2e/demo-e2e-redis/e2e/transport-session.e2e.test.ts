@@ -13,6 +13,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Transport Session E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-redis/src/main.ts',
+    project: 'demo-e2e-redis',
     publicMode: true,
   });
 

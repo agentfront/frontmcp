@@ -58,6 +58,45 @@ export {
 // Tool change events for subscription
 export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 
+// Skill exports - skills are knowledge/workflow packages for multi-step tasks
+export {
+  // Registry
+  SkillRegistry,
+  // Instance
+  SkillInstance,
+  createSkillInstance,
+  // Events
+  SkillEmitter,
+  // Providers
+  MemorySkillProvider,
+  // Validator
+  SkillToolValidator,
+  // Factory
+  createSkillStorageProvider,
+  createMemorySkillProvider,
+  // Utilities
+  normalizeSkill,
+  isSkillRecord,
+  formatSkillForLLM,
+} from './skill';
+export type {
+  SkillRegistryInterface,
+  IndexedSkill,
+  SkillChangeEvent,
+  SkillChangeKind,
+  SkillChangeScope,
+  SkillStorageProvider,
+  SkillStorageProviderType,
+  SkillSearchOptions,
+  SkillSearchResult,
+  SkillLoadResult,
+  SkillListOptions,
+  SkillListResult,
+  ToolValidationResult,
+  SkillStorageFactoryOptions,
+  SkillStorageFactoryResult,
+} from './skill';
+
 // Agent exports - only user-facing APIs
 export {
   // Decorator and builder

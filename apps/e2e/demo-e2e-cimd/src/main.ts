@@ -16,7 +16,7 @@ const port = Number.isNaN(parsedPort) ? 3150 : parsedPort;
 @FrontMcp({
   info: { name: 'Demo CIMD E2E', version: '0.1.0' },
   apps: [NotesApp],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
     mode: 'orchestrated',

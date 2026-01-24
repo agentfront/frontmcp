@@ -172,7 +172,8 @@ export class StreamableHttpTransport implements McpTransport {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      // NOTE: Don't clear timeout here - keep it active for SSE reading
+      // The timeout will be cleared after all processing (including SSE) is complete
 
       // Check for session ID in response headers
       const newSessionId = response.headers.get('mcp-session-id');
@@ -225,6 +226,8 @@ export class StreamableHttpTransport implements McpTransport {
         jsonResponse = await this.interceptors.processResponse(message, jsonResponse, Date.now() - startTime);
       }
 
+      // Clear timeout after all processing (including SSE) is complete
+      clearTimeout(timeoutId);
       return jsonResponse as JsonRpcResponse & { result?: T };
     } catch (error) {
       clearTimeout(timeoutId);

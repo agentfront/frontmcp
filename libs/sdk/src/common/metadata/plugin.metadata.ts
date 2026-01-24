@@ -1,13 +1,14 @@
 import { RawZodShape } from '../types';
 import { z } from 'zod';
 import { Token } from '@frontmcp/di';
-import { ProviderType, PluginType, AdapterType, ToolType, ResourceType, PromptType } from '../interfaces';
+import { ProviderType, PluginType, AdapterType, ToolType, ResourceType, PromptType, SkillType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpPromptsSchema,
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
+  annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
 
@@ -113,6 +114,13 @@ export interface PluginMetadata {
   prompts?: PromptType[];
 
   /**
+   * Plugin-scoped Skills that teach AI how to perform multi-step tasks.
+   * Skills are workflow guides that combine tools into coherent recipes.
+   * They can be discovered via searchSkills and loaded via loadSkill.
+   */
+  skills?: SkillType[];
+
+  /**
    * Determines where plugin hooks are registered:
    * - 'app' (default): Hooks fire only for requests to this app
    * - 'server': Hooks fire at gateway level for all apps
@@ -159,6 +167,7 @@ export const frontMcpPluginMetadataSchema = z
     tools: z.array(annotatedFrontMcpToolsSchema).optional(),
     resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
     prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
+    skills: z.array(annotatedFrontMcpSkillsSchema).optional(),
     scope: z.enum(['app', 'server']).optional().default('app'),
     contextExtensions: z.array(contextExtensionSchema).optional(),
   } satisfies RawZodShape<PluginMetadata>)

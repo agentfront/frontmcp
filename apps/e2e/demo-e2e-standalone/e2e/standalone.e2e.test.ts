@@ -13,6 +13,7 @@ test.describe('Standalone App E2E', () => {
   test.describe('Root Scope (Parent App)', () => {
     test.use({
       server: 'apps/e2e/demo-e2e-standalone/src/main.ts',
+      project: 'demo-e2e-standalone',
       publicMode: true,
     });
 
@@ -45,6 +46,7 @@ test.describe('Standalone App E2E', () => {
   test.describe('Isolated Scope (Standalone App)', () => {
     test.use({
       server: 'apps/e2e/demo-e2e-standalone/src/main.ts',
+      project: 'demo-e2e-standalone',
       publicMode: true,
     });
 
@@ -127,6 +129,7 @@ test.describe('Standalone App E2E', () => {
   test.describe('Scope Isolation', () => {
     test.use({
       server: 'apps/e2e/demo-e2e-standalone/src/main.ts',
+      project: 'demo-e2e-standalone',
       publicMode: true,
     });
 
@@ -175,6 +178,7 @@ test.describe('Standalone App E2E', () => {
   test.describe('Cross-Scope Tool Calls', () => {
     test.use({
       server: 'apps/e2e/demo-e2e-standalone/src/main.ts',
+      project: 'demo-e2e-standalone',
       publicMode: true,
     });
 
@@ -205,6 +209,7 @@ test.describe('Standalone App E2E', () => {
   test.describe('Path Routing Security', () => {
     test.use({
       server: 'apps/e2e/demo-e2e-standalone/src/main.ts',
+      project: 'demo-e2e-standalone',
       publicMode: true,
     });
 

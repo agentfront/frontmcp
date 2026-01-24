@@ -26,9 +26,10 @@ import {
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
+  annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
-import { AppType, PluginType, ProviderType, ResourceType, ToolType } from '../interfaces';
+import { AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -77,6 +78,12 @@ export interface FrontMcpBaseMetadata {
   resources?: ResourceType[];
 
   /**
+   * Shared skills that are available to all apps.
+   * These are merged (additively) with app-specific skills.
+   */
+  skills?: SkillType[];
+
+  /**
    * Server-level plugins that are instantiated per scope.
    * Each scope gets its own instance of these plugins.
    * These plugins have server-wide access (can see all apps in scope).
@@ -103,6 +110,7 @@ export const frontMcpBaseSchema = z.object({
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
+  skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
   plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),

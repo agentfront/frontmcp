@@ -82,6 +82,7 @@ export {
   ElicitationStoreNotInitializedError,
   ElicitationDisabledError,
   ElicitationEncryptionError,
+  ElicitationSubscriptionError,
 } from './elicitation.error';
 
 // Export remote MCP errors

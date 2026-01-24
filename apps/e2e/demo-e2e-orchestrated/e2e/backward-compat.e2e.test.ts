@@ -16,6 +16,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Orchestrated Auth Backward Compatibility E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-orchestrated/src/main.ts',
+    project: 'demo-e2e-orchestrated',
   });
 
   test.describe('Stateful Session Compatibility', () => {

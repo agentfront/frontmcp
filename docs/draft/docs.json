@@ -90,6 +90,7 @@
                   "docs/servers/prompts",
                   "docs/servers/agents",
                   "docs/servers/elicitation",
+                  "docs/servers/skills",
                   "docs/servers/discovery"
                 ]
               },

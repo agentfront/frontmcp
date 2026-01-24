@@ -2,13 +2,7 @@
  * Namespaced Storage Tests
  */
 import { MemoryStorageAdapter } from '../adapters/memory';
-import {
-  NamespacedStorageImpl,
-  buildPrefix,
-  createRootStorage,
-  createNamespacedStorage,
-  NAMESPACE_SEPARATOR,
-} from '../namespace';
+import { buildPrefix, createRootStorage, createNamespacedStorage } from '../namespace';
 import type { NamespacedStorage } from '../types';
 
 describe('Namespaced Storage', () => {

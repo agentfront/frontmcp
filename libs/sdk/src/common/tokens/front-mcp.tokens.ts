@@ -22,6 +22,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   tools: tokenFactory.meta('tools'),
   // global scoped resources (shared across apps)
   resources: tokenFactory.meta('resources'),
+  // global scoped skills (shared across apps)
+  skills: tokenFactory.meta('skills'),
   // server-level plugins (instantiated per scope)
   plugins: tokenFactory.meta('plugins'),
   // pagination configuration

@@ -24,3 +24,4 @@ export * from './resource.record';
 export * from './prompt.record';
 export * from './logger.record';
 export * from './agent.record';
+export * from './skill.record';
