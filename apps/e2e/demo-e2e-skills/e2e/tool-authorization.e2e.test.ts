@@ -13,14 +13,12 @@
  */
 import { test, expect } from '@frontmcp/testing';
 
-interface LoadSkillResult {
-  skill: {
-    id: string;
-    name: string;
-    description: string;
-    instructions: string;
-    tools: Array<{ name: string; purpose?: string; available: boolean }>;
-  };
+interface SkillResult {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: Array<{ name: string; purpose?: string; available: boolean }>;
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
@@ -32,6 +30,17 @@ interface LoadSkillResult {
     policyMode?: 'strict' | 'approval' | 'permissive';
     allowedTools?: string[];
   };
+}
+
+interface LoadSkillsResult {
+  skills: SkillResult[];
+  summary: {
+    totalSkills: number;
+    totalTools: number;
+    allToolsAvailable: boolean;
+    combinedWarnings?: string[];
+  };
+  nextSteps: string;
 }
 
 interface AdminActionResult {
@@ -99,8 +108,8 @@ test.describe('Tool Authorization E2E', () => {
   test.describe('Policy Mode - Permissive (Default)', () => {
     test('should allow tools in skill allowlist', async ({ mcp }) => {
       // Load skill with permissive mode (default)
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
@@ -117,8 +126,8 @@ test.describe('Tool Authorization E2E', () => {
 
     test('should allow tools not in skill allowlist in permissive mode', async ({ mcp }) => {
       // Load skill with default permissive mode
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'permissive',
       });
@@ -137,15 +146,16 @@ test.describe('Tool Authorization E2E', () => {
     });
 
     test('should verify session shows permissive policyMode', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
-      if (content.session?.activated) {
-        expect(content.session.policyMode).toBe('permissive');
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
+      if (skill.session?.activated) {
+        expect(skill.session.policyMode).toBe('permissive');
       }
     });
   });
@@ -153,8 +163,8 @@ test.describe('Tool Authorization E2E', () => {
   test.describe('Policy Mode - Strict', () => {
     test('should allow tools in skill allowlist with strict mode', async ({ mcp }) => {
       // Load skill with strict mode
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'strict',
       });
@@ -171,32 +181,34 @@ test.describe('Tool Authorization E2E', () => {
     });
 
     test('should verify session shows strict policyMode', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'strict',
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
-      if (content.session?.activated) {
-        expect(content.session.policyMode).toBe('strict');
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
+      if (skill.session?.activated) {
+        expect(skill.session.policyMode).toBe('strict');
       }
     });
 
     test('should include allowedTools in session when activated', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'strict',
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
-      if (content.session?.activated) {
-        expect(content.session.allowedTools).toBeDefined();
-        expect(content.session.allowedTools).toContain('github_get_pr');
-        expect(content.session.allowedTools).toContain('github_add_comment');
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
+      if (skill.session?.activated) {
+        expect(skill.session.allowedTools).toBeDefined();
+        expect(skill.session.allowedTools).toContain('github_get_pr');
+        expect(skill.session.allowedTools).toContain('github_add_comment');
       }
     });
   });
@@ -204,8 +216,8 @@ test.describe('Tool Authorization E2E', () => {
   test.describe('Policy Mode - Approval', () => {
     test('should allow tools in skill allowlist with approval mode', async ({ mcp }) => {
       // Load skill with approval mode
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'approval',
       });
@@ -220,156 +232,164 @@ test.describe('Tool Authorization E2E', () => {
     });
 
     test('should verify session shows approval policyMode', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'approval',
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
-      if (content.session?.activated) {
-        expect(content.session.policyMode).toBe('approval');
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
+      if (skill.session?.activated) {
+        expect(skill.session.policyMode).toBe('approval');
       }
     });
   });
 
   test.describe('Tool Allowlist Tracking', () => {
     test('should track review-pr skill tools', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
 
       // review-pr skill should have these tools
-      expect(content.skill.tools.find((t) => t.name === 'github_get_pr')).toBeDefined();
-      expect(content.skill.tools.find((t) => t.name === 'github_add_comment')).toBeDefined();
+      expect(skill.tools.find((t) => t.name === 'github_get_pr')).toBeDefined();
+      expect(skill.tools.find((t) => t.name === 'github_add_comment')).toBeDefined();
 
       // admin_action should NOT be in the skill's tools
-      expect(content.skill.tools.find((t) => t.name === 'admin_action')).toBeUndefined();
+      expect(skill.tools.find((t) => t.name === 'admin_action')).toBeUndefined();
     });
 
     test('should track notify-team skill tools', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'notify-team',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['notify-team'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
 
       // notify-team skill should have slack_notify
-      expect(content.skill.tools.find((t) => t.name === 'slack_notify')).toBeDefined();
-      expect(content.availableTools).toContain('slack_notify');
+      expect(skill.tools.find((t) => t.name === 'slack_notify')).toBeDefined();
+      expect(skill.availableTools).toContain('slack_notify');
 
       // admin_action should NOT be in the skill's tools
-      expect(content.skill.tools.find((t) => t.name === 'admin_action')).toBeUndefined();
+      expect(skill.tools.find((t) => t.name === 'admin_action')).toBeUndefined();
     });
 
     test('should track full-pr-workflow skill tools', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'full-pr-workflow',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['full-pr-workflow'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
 
       // full-pr-workflow has all three main tools
-      expect(content.skill.tools.find((t) => t.name === 'github_get_pr')).toBeDefined();
-      expect(content.skill.tools.find((t) => t.name === 'github_add_comment')).toBeDefined();
-      expect(content.skill.tools.find((t) => t.name === 'slack_notify')).toBeDefined();
+      expect(skill.tools.find((t) => t.name === 'github_get_pr')).toBeDefined();
+      expect(skill.tools.find((t) => t.name === 'github_add_comment')).toBeDefined();
+      expect(skill.tools.find((t) => t.name === 'slack_notify')).toBeDefined();
 
       // admin_action should NOT be in the skill's tools
-      expect(content.skill.tools.find((t) => t.name === 'admin_action')).toBeUndefined();
+      expect(skill.tools.find((t) => t.name === 'admin_action')).toBeUndefined();
     });
   });
 
   test.describe('Tool Availability', () => {
     test('should mark available tools correctly', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
 
       // Tools that are registered should be marked as available
-      const githubGetPr = content.skill.tools.find((t) => t.name === 'github_get_pr');
-      const githubAddComment = content.skill.tools.find((t) => t.name === 'github_add_comment');
+      const githubGetPr = skill.tools.find((t) => t.name === 'github_get_pr');
+      const githubAddComment = skill.tools.find((t) => t.name === 'github_add_comment');
 
       expect(githubGetPr?.available).toBe(true);
       expect(githubAddComment?.available).toBe(true);
     });
 
     test('should mark missing tools correctly', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-app',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-app'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
 
       // Tools that are NOT registered should be marked as unavailable
-      const dockerBuild = content.skill.tools.find((t) => t.name === 'docker_build');
-      const dockerPush = content.skill.tools.find((t) => t.name === 'docker_push');
-      const k8sApply = content.skill.tools.find((t) => t.name === 'k8s_apply');
+      const dockerBuild = skill.tools.find((t) => t.name === 'docker_build');
+      const dockerPush = skill.tools.find((t) => t.name === 'docker_push');
+      const k8sApply = skill.tools.find((t) => t.name === 'k8s_apply');
 
       expect(dockerBuild?.available).toBe(false);
       expect(dockerPush?.available).toBe(false);
       expect(k8sApply?.available).toBe(false);
 
       // But slack_notify should be available
-      const slackNotify = content.skill.tools.find((t) => t.name === 'slack_notify');
+      const slackNotify = skill.tools.find((t) => t.name === 'slack_notify');
       expect(slackNotify?.available).toBe(true);
     });
   });
 
   test.describe('Session State Verification', () => {
     test('should indicate activation status when session context exists', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
       // Session object may or may not be present depending on session context availability
       // When present, it should have an activated field
-      if (content.session !== undefined) {
-        expect(content.session.activated).toBeDefined();
+      if (skill.session !== undefined) {
+        expect(skill.session.activated).toBeDefined();
       }
     });
 
     test('should not return session object when not requested', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         // activateSession not set (defaults to false)
       });
       expect(loadResult).toBeSuccessful();
 
-      const content = loadResult.json<LoadSkillResult>();
+      const content = loadResult.json<LoadSkillsResult>();
+      const skill = content.skills[0];
       // When activateSession is false/not set, session should not be in response
-      expect(content.session).toBeUndefined();
+      expect(skill.session).toBeUndefined();
     });
   });
 
   test.describe('Cross-Skill Tool Access', () => {
     test('should access tools across multiple loaded skills', async ({ mcp }) => {
       // Load review-pr skill
-      await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
 
       // Load notify-team skill
-      await mcp.tools.call('loadSkill', {
-        skillId: 'notify-team',
+      await mcp.tools.call('loadSkills', {
+        skillIds: ['notify-team'],
         activateSession: true,
       });
 
@@ -394,7 +414,7 @@ test.describe('Tool Authorization E2E', () => {
       expect(tools).toContainTool('github_add_comment');
       expect(tools).toContainTool('slack_notify');
       expect(tools).toContainTool('admin_action');
-      expect(tools).toContainTool('loadSkill');
+      expect(tools).toContainTool('loadSkills');
       expect(tools).toContainTool('searchSkills');
     });
   });

@@ -3,7 +3,7 @@
  *
  * Tests plugin-level skill functionality:
  * - Plugin skill discovery via searchSkills
- * - Plugin skill loading via loadSkill
+ * - Plugin skill loading via loadSkills
  * - Plugin tools execution
  * - Mixed app and plugin skills
  * - Hidden plugin skill handling
@@ -24,15 +24,13 @@ interface SkillParameter {
   type?: string;
 }
 
-interface LoadSkillResult {
-  skill: {
-    id: string;
-    name: string;
-    description: string;
-    instructions: string;
-    tools: SkillTool[];
-    parameters?: SkillParameter[];
-  };
+interface SkillResult {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: SkillTool[];
+  parameters?: SkillParameter[];
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
@@ -44,6 +42,17 @@ interface LoadSkillResult {
     policyMode?: 'strict' | 'approval' | 'permissive';
     allowedTools?: string[];
   };
+}
+
+interface LoadSkillsResult {
+  skills: SkillResult[];
+  summary: {
+    totalSkills: number;
+    totalTools: number;
+    allToolsAvailable: boolean;
+    combinedWarnings?: string[];
+  };
+  nextSteps: string;
 }
 
 interface SearchSkillsResult {
@@ -169,57 +178,63 @@ test.describe('Plugin Skills E2E', () => {
 
   test.describe('Loading', () => {
     test('should load plugin skill with full content', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const result = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         format: 'full',
       });
 
       expect(result).toBeSuccessful();
 
-      const content = result.json<LoadSkillResult>();
-      expect(content.skill).toBeDefined();
-      expect(content.skill.id).toBe('deploy-workflow');
-      expect(content.skill.name).toBe('deploy-workflow');
-      expect(content.skill.instructions).toContain('Deployment Workflow');
-      expect(content.skill.tools.length).toBe(2);
+      const content = result.json<LoadSkillsResult>();
+      expect(content.skills).toBeDefined();
+      expect(content.skills.length).toBe(1);
+      const skill = content.skills[0];
+      expect(skill.id).toBe('deploy-workflow');
+      expect(skill.name).toBe('deploy-workflow');
+      expect(skill.instructions).toContain('Deployment Workflow');
+      expect(skill.tools.length).toBe(2);
     });
 
     test('should show plugin tools as available', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const result = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
       });
 
       expect(result).toBeSuccessful();
 
-      const content = result.json<LoadSkillResult>();
-      expect(content.availableTools).toContain('deploy_application');
-      expect(content.availableTools).toContain('rollback_deployment');
-      expect(content.isComplete).toBe(true);
+      const content = result.json<LoadSkillsResult>();
+      const skill = content.skills[0];
+      expect(skill.availableTools).toContain('deploy_application');
+      expect(skill.availableTools).toContain('rollback_deployment');
+      expect(skill.isComplete).toBe(true);
     });
 
     test('should load hidden plugin skill by direct ID', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkill', {
-        skillId: 'plugin-internal-skill',
+      const result = await mcp.tools.call('loadSkills', {
+        skillIds: ['plugin-internal-skill'],
       });
 
       expect(result).toBeSuccessful();
 
-      const content = result.json<LoadSkillResult>();
-      expect(content.skill).toBeDefined();
-      expect(content.skill.id).toBe('plugin-internal-skill');
-      expect(content.skill.name).toBe('plugin-internal-skill');
+      const content = result.json<LoadSkillsResult>();
+      expect(content.skills).toBeDefined();
+      expect(content.skills.length).toBe(1);
+      const skill = content.skills[0];
+      expect(skill.id).toBe('plugin-internal-skill');
+      expect(skill.name).toBe('plugin-internal-skill');
     });
 
     test('should include tool purposes in plugin skill', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const result = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
       });
 
       expect(result).toBeSuccessful();
 
-      const content = result.json<LoadSkillResult>();
-      const deployTool = content.skill.tools.find((t) => t.name === 'deploy_application');
-      const rollbackTool = content.skill.tools.find((t) => t.name === 'rollback_deployment');
+      const content = result.json<LoadSkillsResult>();
+      const skill = content.skills[0];
+      const deployTool = skill.tools.find((t) => t.name === 'deploy_application');
+      const rollbackTool = skill.tools.find((t) => t.name === 'rollback_deployment');
 
       expect(deployTool).toBeDefined();
       expect(deployTool!.purpose).toContain('Deploy the application');
@@ -231,8 +246,8 @@ test.describe('Plugin Skills E2E', () => {
   test.describe('Tool Execution', () => {
     test('should execute plugin tools after loading plugin skill', async ({ mcp }) => {
       // Load the skill first
-      await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         activateSession: true,
       });
 
@@ -296,47 +311,47 @@ test.describe('Plugin Skills E2E', () => {
 
     test('should load plugin skill after loading app skill', async ({ mcp }) => {
       // Load app skill
-      const appResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const appResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
         activateSession: true,
       });
 
       expect(appResult).toBeSuccessful();
 
       // Load plugin skill
-      const pluginResult = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const pluginResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         activateSession: true,
       });
 
       expect(pluginResult).toBeSuccessful();
 
-      const pluginContent = pluginResult.json<LoadSkillResult>();
-      expect(pluginContent.skill.id).toBe('deploy-workflow');
+      const pluginContent = pluginResult.json<LoadSkillsResult>();
+      expect(pluginContent.skills[0].id).toBe('deploy-workflow');
     });
 
     test('should have distinct tool sets between app and plugin skills', async ({ mcp }) => {
       // Load app skill
-      const appResult = await mcp.tools.call('loadSkill', {
-        skillId: 'review-pr',
+      const appResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['review-pr'],
       });
 
       expect(appResult).toBeSuccessful();
 
-      const appContent = appResult.json<LoadSkillResult>();
-      expect(appContent.availableTools).toContain('github_get_pr');
-      expect(appContent.availableTools).not.toContain('deploy_application');
+      const appContent = appResult.json<LoadSkillsResult>();
+      expect(appContent.skills[0].availableTools).toContain('github_get_pr');
+      expect(appContent.skills[0].availableTools).not.toContain('deploy_application');
 
       // Load plugin skill
-      const pluginResult = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const pluginResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
       });
 
       expect(pluginResult).toBeSuccessful();
 
-      const pluginContent = pluginResult.json<LoadSkillResult>();
-      expect(pluginContent.availableTools).toContain('deploy_application');
-      expect(pluginContent.availableTools).not.toContain('github_get_pr');
+      const pluginContent = pluginResult.json<LoadSkillsResult>();
+      expect(pluginContent.skills[0].availableTools).toContain('deploy_application');
+      expect(pluginContent.skills[0].availableTools).not.toContain('github_get_pr');
     });
 
     test('should use app tools and plugin tools in sequence', async ({ mcp }) => {
@@ -362,21 +377,22 @@ test.describe('Plugin Skills E2E', () => {
 
   test.describe('Authorization with Plugin Skills', () => {
     test('should enforce tool allowlist in strict mode with plugin skill', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         activateSession: true,
         policyMode: 'strict',
       });
 
       expect(loadResult).toBeSuccessful();
 
-      const loadContent = loadResult.json<LoadSkillResult>();
+      const loadContent = loadResult.json<LoadSkillsResult>();
+      const skill = loadContent.skills[0];
 
       // Session should show strict policy mode
-      if (loadContent.session?.activated) {
-        expect(loadContent.session.policyMode).toBe('strict');
-        expect(loadContent.session.allowedTools).toContain('deploy_application');
-        expect(loadContent.session.allowedTools).toContain('rollback_deployment');
+      if (skill.session?.activated) {
+        expect(skill.session.policyMode).toBe('strict');
+        expect(skill.session.allowedTools).toContain('deploy_application');
+        expect(skill.session.allowedTools).toContain('rollback_deployment');
       }
 
       // Plugin tool should work
@@ -388,36 +404,38 @@ test.describe('Plugin Skills E2E', () => {
     });
 
     test('should verify session shows plugin skill tools as allowed', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const result = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         activateSession: true,
       });
 
       expect(result).toBeSuccessful();
 
-      const content = result.json<LoadSkillResult>();
+      const content = result.json<LoadSkillsResult>();
+      const skill = content.skills[0];
 
       // If session was activated, verify tools
-      if (content.session?.activated) {
-        expect(content.session.allowedTools).toBeDefined();
-        expect(content.session.allowedTools).toContain('deploy_application');
-        expect(content.session.allowedTools).toContain('rollback_deployment');
+      if (skill.session?.activated) {
+        expect(skill.session.allowedTools).toBeDefined();
+        expect(skill.session.allowedTools).toContain('deploy_application');
+        expect(skill.session.allowedTools).toContain('rollback_deployment');
       }
     });
 
     test('should handle approval mode with plugin skill', async ({ mcp }) => {
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         activateSession: true,
         policyMode: 'approval',
       });
 
       expect(loadResult).toBeSuccessful();
 
-      const loadContent = loadResult.json<LoadSkillResult>();
+      const loadContent = loadResult.json<LoadSkillsResult>();
+      const skill = loadContent.skills[0];
 
-      if (loadContent.session?.activated) {
-        expect(loadContent.session.policyMode).toBe('approval');
+      if (skill.session?.activated) {
+        expect(skill.session.policyMode).toBe('approval');
       }
 
       // Tool in allowlist should work
@@ -444,7 +462,7 @@ test.describe('Plugin Skills E2E', () => {
       expect(tools).toContainTool('rollback_deployment');
 
       // Built-in skill tools
-      expect(tools).toContainTool('loadSkill');
+      expect(tools).toContainTool('loadSkills');
       expect(tools).toContainTool('searchSkills');
     });
   });
@@ -462,15 +480,15 @@ test.describe('Plugin Skills E2E', () => {
       expect(searchContent.skills.some((s) => s.id === 'deploy-workflow')).toBe(true);
 
       // 2. Load the skill
-      const loadResult = await mcp.tools.call('loadSkill', {
-        skillId: 'deploy-workflow',
+      const loadResult = await mcp.tools.call('loadSkills', {
+        skillIds: ['deploy-workflow'],
         activateSession: true,
       });
 
       expect(loadResult).toBeSuccessful();
 
-      const loadContent = loadResult.json<LoadSkillResult>();
-      expect(loadContent.skill.instructions).toContain('Deployment Workflow');
+      const loadContent = loadResult.json<LoadSkillsResult>();
+      expect(loadContent.skills[0].instructions).toContain('Deployment Workflow');
 
       // 3. Deploy to staging first
       const stagingResult = await mcp.tools.call('deploy_application', {

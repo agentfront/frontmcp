@@ -10,14 +10,7 @@ import type { ToolRegistryInterface } from '../../common';
  * Input schema for loadSkills tool.
  */
 const inputSchema = {
-  skillIds: z
-    .array(z.string().min(1))
-    .min(1)
-    .max(5)
-    .describe(
-      'Array of skill IDs or names to load. Load one skill when you know exactly what you need, ' +
-        'or load multiple related skills (up to 5) to combine their workflows.',
-    ),
+  skillIds: z.array(z.string().min(1)).min(1).max(5).describe('Array of skill IDs to load (1-5 skills)'),
   format: z
     .enum(['full', 'instructions-only'])
     .default('full')

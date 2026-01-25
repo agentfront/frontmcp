@@ -12,18 +12,27 @@
  */
 import { test, expect } from '@frontmcp/testing';
 
-interface LoadSkillResult {
-  skill: {
-    id: string;
-    name: string;
-    description: string;
-    instructions: string;
-    tools: Array<{ name: string; available: boolean }>;
-  };
+interface SkillResult {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: Array<{ name: string; available: boolean }>;
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
   formattedContent: string;
+}
+
+interface LoadSkillsResult {
+  skills: SkillResult[];
+  summary: {
+    totalSkills: number;
+    totalTools: number;
+    allToolsAvailable: boolean;
+    combinedWarnings?: string[];
+  };
+  nextSteps: string;
 }
 
 test.describe('MCP Skills-Only Mode E2E', () => {
@@ -44,11 +53,11 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       expect(tools).toContainTool('slack_notify');
     });
 
-    test('should list searchSkills and loadSkill tools', async ({ mcp }) => {
+    test('should list searchSkills and loadSkills tools', async ({ mcp }) => {
       const tools = await mcp.tools.list();
 
       expect(tools).toContainTool('searchSkills');
-      expect(tools).toContainTool('loadSkill');
+      expect(tools).toContainTool('loadSkills');
     });
   });
 
@@ -97,7 +106,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       }
     });
 
-    test('should still allow loadSkill in skills-only mode', async ({ server }) => {
+    test('should still allow loadSkills in skills-only mode', async ({ server }) => {
       const builder = server.createClientBuilder();
       const client = await builder
         .withTransport('streamable-http')
@@ -105,16 +114,17 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         .buildAndConnect();
 
       try {
-        const result = await client.tools.call('loadSkill', {
-          skillId: 'review-pr',
+        const result = await client.tools.call('loadSkills', {
+          skillIds: ['review-pr'],
         });
 
         expect(result).toBeSuccessful();
 
-        const content = result.json<LoadSkillResult>();
-        expect(content.skill).toBeDefined();
-        expect(content.skill.id).toBe('review-pr');
-        expect(content.formattedContent).toBeDefined();
+        const content = result.json<LoadSkillsResult>();
+        expect(content.skills).toBeDefined();
+        expect(content.skills.length).toBe(1);
+        expect(content.skills[0].id).toBe('review-pr');
+        expect(content.skills[0].formattedContent).toBeDefined();
       } finally {
         await client.disconnect();
       }

@@ -10,12 +10,12 @@ import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillPolicyMode, SkillActivationResult } from '../session/skill-session.types';
 import type { Scope } from '../../scope';
 
-// Input schema matching MCP request format - now supports multiple skill IDs
+// Input schema matching MCP request format - supports multiple skill IDs
 const inputSchema = z.object({
   request: z.object({
     method: z.literal('skills/load'),
     params: z.object({
-      skillIds: z.array(z.string().min(1)).min(1).max(5).describe('Array of skill IDs or names to load (1-5 skills)'),
+      skillIds: z.array(z.string().min(1)).min(1).max(5).describe('Array of skill IDs to load (1-5 skills)'),
       format: z
         .enum(['full', 'instructions-only'])
         .default('full')
@@ -166,6 +166,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     }
 
     const { skillIds, format, activateSession, policyMode } = params;
+
     this.state.set({ skillIds, format, activateSession, policyMode, warnings: [] });
     this.logger.verbose('parseInput:done');
   }
