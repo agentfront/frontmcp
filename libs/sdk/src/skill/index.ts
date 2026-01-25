@@ -36,7 +36,7 @@
 
 // Registry
 export { default as SkillRegistry } from './skill.registry';
-export type { SkillRegistryInterface, IndexedSkill, SkillRegistryOptions } from './skill.registry';
+export type { SkillRegistryInterface, IndexedSkill, SkillRegistryOptions, GetSkillsOptions } from './skill.registry';
 
 // Instance
 export { SkillInstance, createSkillInstance } from './skill.instance';
@@ -113,11 +113,21 @@ export {
   formatSkillForLLM,
 } from './skill.utils';
 
+// HTTP Utilities
+export {
+  formatSkillsForLlmCompact,
+  formatSkillsForLlmFull,
+  formatSkillForLLMWithSchemas,
+  skillToApiResponse,
+  filterSkillsByVisibility,
+} from './skill-http.utils';
+export type { CompactSkillSummary } from './skill-http.utils';
+
 // Flows
 export { SearchSkillsFlow, LoadSkillFlow } from './flows';
 
 // Tools (deprecated - use flows instead)
-export { SearchSkillsTool, LoadSkillTool, getSkillTools } from './tools';
+export { SearchSkillsTool, LoadSkillsTool, LoadSkillTool, getSkillTools } from './tools';
 
 // Session Management
 export { SkillSessionManager } from './session/skill-session.manager';
@@ -146,3 +156,28 @@ export { createSkillToolGuardHook, type SkillToolGuardHookOptions, type SkillToo
 export { ToolNotAllowedError, ToolApprovalRequiredError } from './errors/tool-not-allowed.error';
 export { SkillValidationError } from './errors/skill-validation.error';
 export type { SkillValidationResult, SkillValidationReport } from './errors/skill-validation.error';
+
+// Scope Helper
+export { registerSkillCapabilities } from './skill-scope.helper';
+export type { SkillScopeRegistrationOptions } from './skill-scope.helper';
+
+// Mode Utilities
+export { detectSkillsOnlyMode, isSkillsOnlySession } from './skill-mode.utils';
+export type { SkillsOnlySessionPayload } from './skill-mode.utils';
+
+// HTTP Authentication
+export { SkillHttpAuthValidator, createSkillHttpAuthValidator } from './auth';
+export type { SkillHttpAuthContext, SkillHttpAuthResult, SkillHttpAuthValidatorOptions } from './auth';
+
+// HTTP Caching
+export {
+  SkillHttpCache,
+  MemorySkillHttpCache,
+  RedisSkillHttpCache,
+  createSkillHttpCache,
+  getSkillHttpCache,
+  invalidateScopeCache,
+  invalidateSkillInCache,
+  disposeAllCaches,
+} from './cache';
+export type { SkillHttpCacheOptions, SkillHttpCacheResult } from './cache';

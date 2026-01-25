@@ -164,6 +164,22 @@ export class McpTestClientBuilder {
   }
 
   /**
+   * Set query parameters to append to the connection URL.
+   * Useful for testing mode switches like `?mode=skills_only`.
+   *
+   * @example
+   * ```typescript
+   * const client = await McpTestClient.create({ baseUrl })
+   *   .withQueryParams({ mode: 'skills_only' })
+   *   .buildAndConnect();
+   * ```
+   */
+  withQueryParams(params: Record<string, string>): this {
+    this.config.queryParams = { ...this.config.queryParams, ...params };
+    return this;
+  }
+
+  /**
    * Build the McpTestClient instance (does not connect)
    */
   build(): McpTestClient {

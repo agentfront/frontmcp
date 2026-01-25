@@ -464,6 +464,130 @@ class MyTool extends ToolContext {
 }
 ```
 
+## Skills Feature Organization
+
+### Keep scope.instance.ts Lean
+
+Use helper functions for feature-specific registration logic:
+
+```typescript
+// ✅ Good - use helper from skill module
+import { registerSkillCapabilities } from '../skill/skill-scope.helper';
+
+await registerSkillCapabilities({
+  skillRegistry: this.scopeSkills,
+  flowRegistry: this.scopeFlows,
+  toolRegistry: this.scopeTools,
+  providers: this.scopeProviders,
+  skillsConfig: this.metadata.skillsConfig,
+  logger: this.logger,
+});
+
+// ❌ Bad - inline 40+ lines of skill registration logic in scope.instance.ts
+```
+
+### Skills-Only Mode Detection
+
+Use the utility from skill module instead of inline detection:
+
+```typescript
+// ✅ Good - use utility
+import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
+const skillsOnlyMode = detectSkillsOnlyMode(query);
+
+// ❌ Bad - duplicated inline logic
+const mode = query?.['mode'];
+const skillsOnlyMode = mode === 'skills_only' || (Array.isArray(mode) && mode.includes('skills_only'));
+```
+
+### Type Usage for Visibility
+
+Use the `SkillVisibility` type from common/metadata instead of inline literals:
+
+```typescript
+// ✅ Good - use exported type
+import { SkillVisibility } from '../common/metadata/skill.metadata';
+private readonly visibility: SkillVisibility;
+
+// ❌ Bad - inline literal union
+private readonly visibility: 'mcp' | 'http' | 'both';
+```
+
+### Private Fields in Entry Classes
+
+Use `private` keyword without underscore prefix, expose via getters:
+
+```typescript
+// ✅ Good - idiomatic TypeScript
+private readonly tags: string[];
+private readonly priority: number;
+private cachedContent?: CachedSkillContent;
+
+getTags(): string[] { return this.tags; }
+getPriority(): number { return this.priority; }
+
+// ❌ Bad - underscore prefix pattern
+private readonly _tags: string[];
+getTags(): string[] { return this._tags; }
+```
+
+### Tool Schema Access
+
+Use `ToolEntry.getInputJsonSchema()` for single source of truth:
+
+```typescript
+// ✅ Good - use entry method
+const inputSchema = tool.getInputJsonSchema();
+
+// ❌ Bad - duplicated conversion logic
+if (tool.rawInputSchema) { ... }
+else if (tool.inputSchema) { try { toJSONSchema(z.object(...)) } }
+```
+
+### Skills HTTP Caching
+
+Configure via `skillsConfig.cache` option, supports memory (default) and Redis:
+
+```typescript
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    cache: {
+      enabled: true,
+      redis: { provider: 'redis', host: 'localhost' },
+      ttlMs: 60000,
+    },
+  },
+})
+```
+
+### Skills HTTP Authentication
+
+Configure via `skillsConfig.auth` option:
+
+```typescript
+// API key auth
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'api-key',
+    apiKeys: ['sk-xxx', 'sk-yyy'],
+  },
+})
+
+// JWT bearer auth
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'bearer',
+    jwt: {
+      issuer: 'https://auth.example.com',
+      audience: 'skills-api',
+    },
+  },
+})
+```
+
 ## Anti-Patterns to Avoid
 
 ❌ **Don't**: Use `node:crypto` directly (use `@frontmcp/utils` for cross-platform support)

@@ -2,6 +2,7 @@
 
 import { EntryOwnerRef, SkillEntry, SkillKind, SkillRecord, SkillToolRef, normalizeToolRef } from '../common';
 import { SkillContent } from '../common/interfaces';
+import { SkillVisibility } from '../common/metadata/skill.metadata';
 import ProviderRegistry from '../provider/provider.registry';
 import { Scope } from '../scope';
 import { loadInstructions, buildSkillContent } from './skill.utils';
@@ -14,6 +15,7 @@ interface CachedSkillContent extends SkillContent {
   tags?: string[];
   priority?: number;
   hideFromDiscovery?: boolean;
+  visibility?: SkillVisibility;
 }
 
 /**
@@ -26,42 +28,46 @@ interface CachedSkillContent extends SkillContent {
  */
 export class SkillInstance extends SkillEntry {
   /** The provider registry this skill is bound to */
-  private readonly _providers: ProviderRegistry;
+  private readonly providersRef: ProviderRegistry;
 
   /** The scope this skill operates in */
   readonly scope: Scope;
 
   /** Cached instructions (loaded lazily) */
-  private _cachedInstructions?: string;
+  private cachedInstructions?: string;
 
   /** Cached skill content (built lazily) */
-  private _cachedContent?: CachedSkillContent;
+  private cachedContent?: CachedSkillContent;
 
   /** Tags for search indexing */
-  private readonly _tags: string[];
+  private readonly tags: string[];
 
   /** Priority for search ranking */
-  private readonly _priority: number;
+  private readonly priority: number;
 
   /** Whether skill is hidden from discovery */
-  private readonly _hidden: boolean;
+  private readonly hidden: boolean;
+
+  /** Visibility mode for skill discovery */
+  private readonly skillVisibility: SkillVisibility;
 
   constructor(record: SkillRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
-    this._providers = providers;
+    this.providersRef = providers;
 
     // Set name and fullName
     this.name = record.metadata.id ?? record.metadata.name;
     this.fullName = `${this.owner.id}:${this.name}`;
 
     // Cache metadata properties for faster access
-    this._tags = record.metadata.tags ?? [];
-    this._priority = record.metadata.priority ?? 0;
-    this._hidden = record.metadata.hideFromDiscovery ?? false;
+    this.tags = record.metadata.tags ?? [];
+    this.priority = record.metadata.priority ?? 0;
+    this.hidden = record.metadata.hideFromDiscovery ?? false;
+    this.skillVisibility = record.metadata.visibility ?? 'both';
 
     // Get scope reference
-    this.scope = this._providers.getActiveScope();
+    this.scope = this.providersRef.getActiveScope();
 
     // Start initialization
     this.ready = this.initialize();
@@ -86,8 +92,8 @@ export class SkillInstance extends SkillEntry {
    * Results are cached after the first load.
    */
   override async loadInstructions(): Promise<string> {
-    if (this._cachedInstructions !== undefined) {
-      return this._cachedInstructions;
+    if (this.cachedInstructions !== undefined) {
+      return this.cachedInstructions;
     }
 
     // Determine base path for file resolution
@@ -100,8 +106,8 @@ export class SkillInstance extends SkillEntry {
     }
 
     // Load instructions from source
-    this._cachedInstructions = await loadInstructions(this.metadata.instructions, basePath);
-    return this._cachedInstructions;
+    this.cachedInstructions = await loadInstructions(this.metadata.instructions, basePath);
+    return this.cachedInstructions;
   }
 
   /**
@@ -109,22 +115,23 @@ export class SkillInstance extends SkillEntry {
    * Results are cached after the first load.
    */
   override async load(): Promise<SkillContent> {
-    if (this._cachedContent !== undefined) {
-      return this._cachedContent;
+    if (this.cachedContent !== undefined) {
+      return this.cachedContent;
     }
 
     const instructions = await this.loadInstructions();
     const baseContent = buildSkillContent(this.metadata, instructions);
 
     // Add additional metadata that's useful for search but not in base SkillContent
-    this._cachedContent = {
+    this.cachedContent = {
       ...baseContent,
-      tags: this._tags,
-      priority: this._priority,
-      hideFromDiscovery: this._hidden,
+      tags: this.tags,
+      priority: this.priority,
+      hideFromDiscovery: this.hidden,
+      visibility: this.skillVisibility,
     };
 
-    return this._cachedContent;
+    return this.cachedContent;
   }
 
   /**
@@ -147,36 +154,36 @@ export class SkillInstance extends SkillEntry {
    * Get the skill's tags.
    */
   override getTags(): string[] {
-    return this._tags;
+    return this.tags;
   }
 
   /**
    * Check if the skill is hidden from discovery.
    */
   override isHidden(): boolean {
-    return this._hidden;
+    return this.hidden;
   }
 
   /**
    * Get the skill's priority for search ranking.
    */
   override getPriority(): number {
-    return this._priority;
+    return this.priority;
   }
 
   /**
    * Get the provider registry.
    */
   get providers(): ProviderRegistry {
-    return this._providers;
+    return this.providersRef;
   }
 
   /**
    * Clear cached content (useful for hot-reload scenarios).
    */
   clearCache(): void {
-    this._cachedInstructions = undefined;
-    this._cachedContent = undefined;
+    this.cachedInstructions = undefined;
+    this.cachedContent = undefined;
   }
 
   /**
@@ -187,8 +194,8 @@ export class SkillInstance extends SkillEntry {
    * @returns SkillContent if available synchronously, undefined otherwise
    */
   getContentSync(): SkillContent | undefined {
-    if (this._cachedContent) {
-      return this._cachedContent;
+    if (this.cachedContent) {
+      return this.cachedContent;
     }
 
     // Only works with inline instructions

@@ -16,5 +16,10 @@ const port = parseInt(process.env['PORT'] ?? '3107', 10);
   transport: {
     protocol: { json: true, legacy: true, strictSession: false },
   },
+  skillsConfig: {
+    enabled: true,
+    auth: 'public', // Single auth config for all HTTP endpoints
+    mcpTools: true, // Keep searchSkills/loadSkills MCP tools enabled
+  },
 })
 export default class Server {}

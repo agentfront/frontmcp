@@ -186,6 +186,16 @@ export interface McpTestClientConfig {
    * - Others: Uses frontmcp/* + ui/* keys for compatibility
    */
   platform?: TestPlatformType;
+  /**
+   * Query parameters to append to the connection URL.
+   * Useful for testing mode switches like `?mode=skills_only`.
+   *
+   * Example:
+   * ```typescript
+   * queryParams: { mode: 'skills_only' }
+   * ```
+   */
+  queryParams?: Record<string, string>;
 }
 
 // ═══════════════════════════════════════════════════════════════════

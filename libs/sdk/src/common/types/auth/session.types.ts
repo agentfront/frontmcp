@@ -89,6 +89,12 @@ export type SessionIdPayload = {
   clientVersion?: string;
   /* Whether the client supports MCP elicitation (from initialize capabilities) */
   supportsElicitation?: boolean;
+  /**
+   * Whether this session is in skills-only mode.
+   * When true, tools/list returns empty array but skills/search and skills/load work normally.
+   * This is useful for planner agents that only need skill information.
+   */
+  skillsOnlyMode?: boolean;
 };
 export const sessionIdPayloadSchema = z.object({
   nodeId: z.string(),
@@ -101,6 +107,7 @@ export const sessionIdPayloadSchema = z.object({
   clientName: z.string().optional(),
   clientVersion: z.string().optional(),
   supportsElicitation: z.boolean().optional(),
+  skillsOnlyMode: z.boolean().optional(),
 } satisfies RawZodShape<SessionIdPayload>);
 
 export interface Authorization {

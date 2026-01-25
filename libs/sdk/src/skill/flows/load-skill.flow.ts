@@ -3,17 +3,19 @@
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
 import { InvalidInputError, InternalMcpError } from '../../errors';
-import { formatSkillForLLM } from '../skill.utils';
+import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
+import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillPolicyMode, SkillActivationResult } from '../session/skill-session.types';
+import type { Scope } from '../../scope';
 
-// Input schema matching MCP request format
+// Input schema matching MCP request format - now supports multiple skill IDs
 const inputSchema = z.object({
   request: z.object({
     method: z.literal('skills/load'),
     params: z.object({
-      skillId: z.string().min(1).describe('ID or name of the skill to load'),
+      skillIds: z.array(z.string().min(1)).min(1).max(5).describe('Array of skill IDs or names to load (1-5 skills)'),
       format: z
         .enum(['full', 'instructions-only'])
         .default('full')
@@ -31,36 +33,36 @@ const inputSchema = z.object({
   ctx: z.unknown(),
 });
 
-// Output schema
-const outputSchema = z.object({
-  skill: z.object({
-    id: z.string(),
-    name: z.string(),
-    description: z.string(),
-    instructions: z.string(),
-    tools: z.array(
+// Single skill result schema
+const skillResultSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  instructions: z.string(),
+  tools: z.array(
+    z.object({
+      name: z.string(),
+      purpose: z.string().optional(),
+      available: z.boolean(),
+      inputSchema: z.unknown().optional().describe('JSON Schema for tool input'),
+      outputSchema: z.unknown().optional().describe('JSON Schema for tool output'),
+    }),
+  ),
+  parameters: z
+    .array(
       z.object({
         name: z.string(),
-        purpose: z.string().optional(),
-        available: z.boolean(),
+        description: z.string().optional(),
+        required: z.boolean().optional(),
+        type: z.string().optional(),
       }),
-    ),
-    parameters: z
-      .array(
-        z.object({
-          name: z.string(),
-          description: z.string().optional(),
-          required: z.boolean().optional(),
-          type: z.string().optional(),
-        }),
-      )
-      .optional(),
-  }),
+    )
+    .optional(),
   availableTools: z.array(z.string()),
   missingTools: z.array(z.string()),
   isComplete: z.boolean(),
   warning: z.string().optional(),
-  formattedContent: z.string().describe('Formatted skill content ready for LLM consumption'),
+  formattedContent: z.string().describe('Formatted skill content ready for LLM consumption (includes tool schemas)'),
   // Session activation info (only present when activateSession is true)
   session: z
     .object({
@@ -72,22 +74,40 @@ const outputSchema = z.object({
     .optional(),
 });
 
+// Output schema with multiple skills and summary
+const outputSchema = z.object({
+  skills: z.array(skillResultSchema),
+  summary: z.object({
+    totalSkills: z.number(),
+    totalTools: z.number(),
+    allToolsAvailable: z.boolean(),
+    combinedWarnings: z.array(z.string()).optional(),
+  }),
+  nextSteps: z.string().describe('Guidance on what to do next with the loaded skills'),
+});
+
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
+// Load result with activation info for state
+interface LoadResultWithActivation {
+  loadResult: SkillLoadResult;
+  activationResult?: SkillActivationResult;
+}
+
 const stateSchema = z.object({
-  skillId: z.string(),
+  skillIds: z.array(z.string()),
   format: z.enum(['full', 'instructions-only']),
   activateSession: z.boolean(),
   policyMode: z.enum(['strict', 'approval', 'permissive']).optional(),
-  loadResult: z.unknown().optional() as z.ZodType<SkillLoadResult | undefined>,
-  activationResult: z.unknown().optional() as z.ZodType<SkillActivationResult | undefined>,
+  loadResults: z.unknown().optional() as z.ZodType<LoadResultWithActivation[] | undefined>,
+  warnings: z.array(z.string()).optional(),
   output: outputSchema.optional(),
 });
 
 const plan = {
   pre: ['parseInput'],
-  execute: ['loadSkill', 'activateSession'],
+  execute: ['loadSkills', 'activateSessions'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
@@ -107,17 +127,17 @@ const name = 'skills:load' as const;
 const { Stage } = FlowHooksOf<'skills:load'>(name);
 
 /**
- * Flow for loading a skill's full content.
+ * Flow for loading one or more skills' full content.
  *
- * This flow retrieves a skill's instructions, tool requirements, and parameters.
- * Use this after searching for skills to get the detailed workflow guide.
+ * This flow retrieves skill instructions, tool requirements, and parameters.
+ * Use this after searching for skills to get the detailed workflow guides.
  *
  * @example MCP Request
  * ```json
  * {
  *   "method": "skills/load",
  *   "params": {
- *     "skillId": "review-pr",
+ *     "skillIds": ["review-pr", "suggest-fixes"],
  *     "format": "full"
  *   }
  * }
@@ -145,15 +165,15 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
-    const { skillId, format, activateSession, policyMode } = params;
-    this.state.set({ skillId, format, activateSession, policyMode });
+    const { skillIds, format, activateSession, policyMode } = params;
+    this.state.set({ skillIds, format, activateSession, policyMode, warnings: [] });
     this.logger.verbose('parseInput:done');
   }
 
-  @Stage('loadSkill')
-  async loadSkill() {
-    this.logger.verbose('loadSkill:start');
-    const { skillId } = this.state.required;
+  @Stage('loadSkills')
+  async loadSkills() {
+    this.logger.verbose('loadSkills:start');
+    const { skillIds, warnings = [] } = this.state.required;
 
     const skillRegistry = this.scope.skills;
 
@@ -161,90 +181,154 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       throw new InternalMcpError('Skill registry not configured');
     }
 
-    // Load the skill
-    const result = await skillRegistry.loadSkill(skillId);
+    const loadResults: LoadResultWithActivation[] = [];
 
-    if (!result) {
-      throw new InvalidInputError(`Skill "${skillId}" not found`);
+    for (const skillId of skillIds) {
+      const result = await skillRegistry.loadSkill(skillId);
+
+      if (!result) {
+        warnings.push(`Skill "${skillId}" not found`);
+        continue;
+      }
+
+      loadResults.push({ loadResult: result });
     }
 
-    // Store load result for session activation
-    this.state.set({ loadResult: result });
-    this.logger.verbose('loadSkill:done');
+    this.state.set({ loadResults, warnings });
+    this.logger.verbose('loadSkills:done', { loaded: loadResults.length, notFound: warnings.length });
   }
 
   /**
-   * Activate a skill session for tool authorization enforcement.
+   * Activate skill sessions for tool authorization enforcement.
    * This stage only runs if activateSession is true in the input.
    */
-  @Stage('activateSession')
-  async activateSession() {
-    this.logger.verbose('activateSession:start');
-    const { activateSession, policyMode, loadResult } = this.state.required;
+  @Stage('activateSessions')
+  async activateSessions() {
+    this.logger.verbose('activateSessions:start');
+    const { activateSession, policyMode, loadResults } = this.state.required;
 
-    if (!activateSession || !loadResult) {
-      this.logger.verbose('activateSession:skip (not requested or no skill loaded)');
+    if (!activateSession || !loadResults || loadResults.length === 0) {
+      this.logger.verbose('activateSessions:skip (not requested or no skills loaded)');
       return;
     }
 
     // Try to get skill session manager from scope
-    // The manager is optional - it may not be configured
     const scope = this.scope as { skillSession?: SkillSessionManager };
     const sessionManager = scope.skillSession;
 
     if (!sessionManager) {
-      this.logger.verbose('activateSession:skip (no session manager available)');
+      this.logger.verbose('activateSessions:skip (no session manager available)');
       return;
     }
 
     // Check if we're in a session context
     const existingSession = sessionManager.getActiveSession();
     if (!existingSession) {
-      this.logger.warn('activateSession: not in a session context, cannot activate skill session');
+      this.logger.warn('activateSessions: not in a session context, cannot activate skill sessions');
       return;
     }
 
-    // Activate the skill
-    const { skill } = loadResult;
-    const activationResult = sessionManager.activateSkill(skill.id, skill, loadResult);
+    // Activate each skill
+    for (const item of loadResults) {
+      const { skill } = item.loadResult;
+      const activationResult = sessionManager.activateSkill(skill.id, skill, item.loadResult);
 
-    // Override policy mode if specified
-    if (policyMode) {
-      sessionManager.setPolicyMode(policyMode as SkillPolicyMode);
+      // Override policy mode if specified
+      if (policyMode) {
+        sessionManager.setPolicyMode(policyMode as SkillPolicyMode);
+      }
+
+      item.activationResult = activationResult;
+      this.logger.info(`activateSessions: activated skill "${skill.id}"`, {
+        policyMode: activationResult.session.policyMode,
+        allowedTools: activationResult.availableTools,
+      });
     }
 
-    this.state.set({ activationResult });
-    this.logger.info(`activateSession: activated skill "${skill.id}"`, {
-      policyMode: activationResult.session.policyMode,
-      allowedTools: activationResult.availableTools,
-    });
-    this.logger.verbose('activateSession:done');
+    this.state.set({ loadResults });
+    this.logger.verbose('activateSessions:done');
   }
 
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { loadResult, activationResult, format, activateSession } = this.state.required;
+    const { loadResults, warnings = [], format, activateSession } = this.state.required;
 
-    if (!loadResult) {
-      throw new InvalidInputError('Skill not loaded');
+    if (!loadResults || loadResults.length === 0) {
+      // Return empty result with guidance
+      const output: Output = {
+        skills: [],
+        summary: {
+          totalSkills: 0,
+          totalTools: 0,
+          allToolsAvailable: true,
+          combinedWarnings: warnings.length > 0 ? warnings : undefined,
+        },
+        nextSteps:
+          'No skills were loaded. ' +
+          (warnings.length > 0 ? warnings.join('; ') : 'Try searchSkills to find available skills.'),
+      };
+      this.respond(output);
+      return;
     }
 
-    const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
+    const toolRegistry = (this.scope as Scope).tools;
+    const skillResults: z.infer<typeof skillResultSchema>[] = [];
+    let totalTools = 0;
+    let allToolsAvailable = true;
 
-    // Build tools array with availability info
-    const tools = skill.tools.map((t) => ({
-      name: t.name,
-      purpose: t.purpose,
-      available: availableTools.includes(t.name),
-    }));
+    for (const { loadResult, activationResult } of loadResults) {
+      const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
 
-    // Format content for LLM
-    const formattedContent =
-      format === 'instructions-only' ? skill.instructions : formatSkillForLLM(skill, availableTools, missingTools);
+      if (missingTools.length > 0) {
+        allToolsAvailable = false;
+      }
 
-    const output: Output = {
-      skill: {
+      // Build tools array with availability info and schemas
+      const tools = skill.tools.map((t) => {
+        const isAvailable = availableTools.includes(t.name);
+        const result: {
+          name: string;
+          purpose?: string;
+          available: boolean;
+          inputSchema?: unknown;
+          outputSchema?: unknown;
+        } = {
+          name: t.name,
+          purpose: t.purpose,
+          available: isAvailable,
+        };
+
+        // Include schemas for available tools
+        if (isAvailable && toolRegistry) {
+          const toolEntry = toolRegistry.getTools(true).find((te) => te.name === t.name);
+          if (toolEntry) {
+            if (toolEntry.rawInputSchema) {
+              result.inputSchema = toolEntry.rawInputSchema;
+            }
+            const rawOutput = toolEntry.getRawOutputSchema?.() ?? toolEntry.rawOutputSchema;
+            if (rawOutput) {
+              result.outputSchema = rawOutput;
+            }
+          }
+        }
+
+        return result;
+      });
+
+      totalTools += tools.length;
+
+      // Format content for LLM
+      let formattedContent: string;
+      if (format === 'instructions-only') {
+        formattedContent = skill.instructions;
+      } else if (toolRegistry) {
+        formattedContent = formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry);
+      } else {
+        formattedContent = formatSkillForLLM(skill, availableTools, missingTools);
+      }
+
+      const skillResult: z.infer<typeof skillResultSchema> = {
         id: skill.id,
         name: skill.name,
         description: skill.description,
@@ -256,29 +340,60 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
           required: p.required,
           type: p.type,
         })),
-      },
-      availableTools,
-      missingTools,
-      isComplete,
-      warning,
-      formattedContent,
-    };
+        availableTools,
+        missingTools,
+        isComplete,
+        warning,
+        formattedContent,
+      };
 
-    // Add session info if activation was requested
-    if (activateSession) {
-      if (activationResult) {
-        output.session = {
-          activated: true,
-          sessionId: activationResult.session.sessionId,
-          policyMode: activationResult.session.policyMode,
-          allowedTools: activationResult.availableTools,
-        };
-      } else {
-        output.session = {
-          activated: false,
-        };
+      // Add session info if activation was requested
+      if (activateSession) {
+        if (activationResult) {
+          skillResult.session = {
+            activated: true,
+            sessionId: activationResult.session.sessionId,
+            policyMode: activationResult.session.policyMode,
+            allowedTools: activationResult.availableTools,
+          };
+        } else {
+          skillResult.session = {
+            activated: false,
+          };
+        }
+      }
+
+      skillResults.push(skillResult);
+    }
+
+    // Collect all warnings
+    const allWarnings = [...warnings];
+    for (const result of skillResults) {
+      if (result.warning) {
+        allWarnings.push(result.warning);
       }
     }
+
+    // Generate next steps guidance
+    const nextSteps = generateNextSteps(
+      skillResults.map((r) => ({
+        name: r.name,
+        isComplete: r.isComplete,
+        tools: r.tools,
+      })),
+      allToolsAvailable,
+    );
+
+    const output: Output = {
+      skills: skillResults,
+      summary: {
+        totalSkills: skillResults.length,
+        totalTools,
+        allToolsAvailable,
+        combinedWarnings: allWarnings.length > 0 ? allWarnings : undefined,
+      },
+      nextSteps,
+    };
 
     this.respond(output);
     this.logger.verbose('finalize:done');

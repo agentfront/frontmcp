@@ -157,8 +157,14 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     this.logger.verbose('finalize:start');
     const { results, options } = this.state.required;
 
+    // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP tools)
+    const mcpVisibleResults = (results as SkillSearchResult[]).filter((result) => {
+      const visibility = result.metadata.visibility ?? 'both';
+      return visibility === 'mcp' || visibility === 'both';
+    });
+
     // Transform results to output format
-    const skills = (results as SkillSearchResult[]).map((result) => ({
+    const skills = mcpVisibleResults.map((result) => ({
       id: result.metadata.id ?? result.metadata.name,
       name: result.metadata.name,
       description: result.metadata.description,

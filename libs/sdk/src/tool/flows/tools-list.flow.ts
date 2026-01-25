@@ -249,6 +249,15 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.info('findTools:start');
 
     try {
+      // Check for skills-only mode - return empty tools array
+      const { authInfo } = this.state.required;
+      if (authInfo.sessionIdPayload?.skillsOnlyMode) {
+        this.logger.info('findTools: skills-only mode - returning empty tools array');
+        this.state.set('tools', []);
+        this.logger.verbose('findTools:done (skills-only mode)');
+        return;
+      }
+
       const apps = this.scope.apps.getApps();
       this.logger.info(`findTools: discovered ${apps.length} app(s)`);
 
@@ -257,7 +266,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
       // Get elicitation support from session payload (set during MCP initialize)
       // authInfo is guaranteed by parseInput (throws if missing for authorized flow)
-      const { authInfo } = this.state.required;
       const supportsElicitation = authInfo.sessionIdPayload?.supportsElicitation;
 
       // Get tools appropriate for this client's elicitation support

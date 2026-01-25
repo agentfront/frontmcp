@@ -76,6 +76,35 @@ export abstract class ToolEntry<
   }
 
   /**
+   * Get the tool's input schema as JSON Schema.
+   * Returns rawInputSchema if available, otherwise converts from Zod schema shape.
+   *
+   * This is the single source of truth for tool input schema conversion.
+   * Used by skill HTTP utilities and other consumers needing JSON Schema format.
+   *
+   * @returns JSON Schema object or null if no schema is available
+   */
+  getInputJsonSchema(): Record<string, unknown> | null {
+    // Prefer rawInputSchema if already in JSON Schema format
+    if (this.rawInputSchema) {
+      return this.rawInputSchema;
+    }
+
+    // Convert Zod schema shape to JSON Schema
+    if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
+      try {
+        // Dynamic import to avoid circular dependencies
+        const { z, toJSONSchema } = require('zod');
+        return toJSONSchema(z.object(this.inputSchema));
+      } catch {
+        return { type: 'object', properties: {} };
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Create a tool context (class or function wrapper).
    */
   abstract create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<InSchema, OutSchema, In, Out>;
