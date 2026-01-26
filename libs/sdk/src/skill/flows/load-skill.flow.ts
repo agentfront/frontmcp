@@ -307,8 +307,10 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         if (isAvailable && toolEntryByName) {
           const toolEntry = toolEntryByName.get(t.name);
           if (toolEntry) {
-            if (toolEntry.rawInputSchema) {
-              result.inputSchema = toolEntry.rawInputSchema;
+            // Use getInputJsonSchema() to handle both raw JSON schemas and Zod-defined schemas
+            const inputSchema = toolEntry.getInputJsonSchema?.() ?? toolEntry.rawInputSchema;
+            if (inputSchema) {
+              result.inputSchema = inputSchema;
             }
             const rawOutput = toolEntry.getRawOutputSchema?.() ?? toolEntry.rawOutputSchema;
             if (rawOutput) {
