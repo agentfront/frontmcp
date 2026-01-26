@@ -282,3 +282,80 @@ export function formatSkillForLLM(skill: SkillContent, availableTools: string[],
 
   return parts.join('\n');
 }
+
+/**
+ * Generate next steps guidance after loading skills.
+ *
+ * @param skills - Array of loaded skills with their tool availability
+ * @param allToolsAvailable - Whether all tools across all skills are available
+ * @returns Human-readable guidance string
+ */
+export function generateNextSteps(
+  skills: Array<{ name: string; isComplete: boolean; tools: Array<{ name: string; available: boolean }> }>,
+  allToolsAvailable: boolean,
+): string {
+  if (skills.length === 0) {
+    return 'No skills were loaded. Try searchSkills to find available skills.';
+  }
+
+  if (!allToolsAvailable) {
+    const missingToolSkills = skills.filter((s) => !s.isComplete);
+    return (
+      `Some tools are missing for: ${missingToolSkills.map((s) => s.name).join(', ')}. ` +
+      'You can still follow the instructions but may need to skip or adapt steps that use unavailable tools. ' +
+      'Check the tools[] array in each skill to see which tools are available.'
+    );
+  }
+
+  if (skills.length === 1) {
+    const skill = skills[0];
+    return (
+      `Ready to execute "${skill.name}". ` +
+      'Read the formattedContent for step-by-step instructions. ' +
+      `The skill uses ${skill.tools.length} tool(s) - see their schemas in tools[].inputSchema to understand the expected parameters.`
+    );
+  }
+
+  return (
+    `Loaded ${skills.length} skills. Review each skill's instructions in formattedContent. ` +
+    'You can combine workflows by following instructions from multiple skills. ' +
+    'Check tools[].inputSchema for each tool to understand the expected parameters.'
+  );
+}
+
+/**
+ * Generate search guidance based on results.
+ *
+ * @param skills - Array of search results with executability info
+ * @param query - The original search query
+ * @returns Human-readable guidance string
+ */
+export function generateSearchGuidance(
+  skills: Array<{ name: string; score: number; canExecute: boolean }>,
+  query: string,
+): string {
+  if (skills.length === 0) {
+    return (
+      `No skills found for "${query}". ` +
+      'Try a different search query, or the MCP server may not have skills for this task. ' +
+      'You can still use individual tools directly - check the available tools list.'
+    );
+  }
+
+  const executableSkills = skills.filter((s) => s.canExecute);
+  const topSkill = skills[0];
+
+  if (executableSkills.length > 0) {
+    const topExecutable = executableSkills[0];
+    return (
+      `Found ${skills.length} skill(s). Recommended: loadSkills({ skillIds: ["${topExecutable.name}"] }) ` +
+      `to get full instructions. ${executableSkills.length} skill(s) have all tools available.`
+    );
+  }
+
+  return (
+    `Found ${skills.length} skill(s), but some tools are missing. ` +
+    `Try loadSkills({ skillIds: ["${topSkill.name}"] }) to see which tools are available. ` +
+    'You may be able to partially execute the workflow.'
+  );
+}

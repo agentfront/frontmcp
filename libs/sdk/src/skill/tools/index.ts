@@ -10,14 +10,19 @@
  */
 
 import { SearchSkillsTool } from './search-skills.tool';
-import { LoadSkillTool } from './load-skill.tool';
+import { LoadSkillsTool, LoadSkillTool } from './load-skills.tool';
 
-export { SearchSkillsTool, LoadSkillTool };
+export { SearchSkillsTool, LoadSkillsTool };
+
+/**
+ * @deprecated Use LoadSkillsTool instead
+ */
+export { LoadSkillTool };
 
 /**
  * Get all skill-related tools.
  * Used by the SDK to register skill tools when skills are available.
  */
 export function getSkillTools() {
-  return [SearchSkillsTool, LoadSkillTool];
+  return [SearchSkillsTool, LoadSkillsTool];
 }

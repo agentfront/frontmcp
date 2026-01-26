@@ -264,6 +264,30 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * ```
    */
   toolValidation?: 'strict' | 'warn' | 'ignore';
+
+  /**
+   * Where this skill is visible for discovery.
+   * Controls which discovery mechanisms can find this skill.
+   *
+   * - 'mcp': Only via searchSkills/loadSkill MCP tools
+   * - 'http': Only via HTTP API endpoints (/llm.txt, /skills)
+   * - 'both': Visible in both MCP and HTTP (default)
+   *
+   * Note: hideFromDiscovery=true hides from search but skill is still loadable by ID.
+   *
+   * @default 'both'
+   *
+   * @example HTTP-only skill (not visible via MCP searchSkills)
+   * ```typescript
+   * @Skill({
+   *   name: 'internal-process',
+   *   visibility: 'http',
+   *   instructions: { file: './internal.md' },
+   * })
+   * class InternalProcessSkill {}
+   * ```
+   */
+  visibility?: 'mcp' | 'http' | 'both';
 }
 
 // ============================================
@@ -324,6 +348,12 @@ export type SkillToolValidationMode = 'strict' | 'warn' | 'ignore';
 /**
  * Zod schema for validating SkillMetadata.
  */
+/**
+ * Visibility mode for skill discovery.
+ * Controls which mechanisms can find this skill.
+ */
+export type SkillVisibility = 'mcp' | 'http' | 'both';
+
 export const skillMetadataSchema = z
   .object({
     id: z.string().optional(),
@@ -337,6 +367,7 @@ export const skillMetadataSchema = z
     priority: z.number().optional().default(0),
     hideFromDiscovery: z.boolean().optional().default(false),
     toolValidation: z.enum(['strict', 'warn', 'ignore']).optional().default('warn'),
+    visibility: z.enum(['mcp', 'http', 'both']).optional().default('both'),
   } satisfies RawZodShape<SkillMetadata, ExtendFrontMcpSkillMetadata>)
   .passthrough();
 

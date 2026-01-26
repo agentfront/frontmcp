@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { Tool, ToolContext, normalizeToolRef } from '../../common';
 import { SkillSearchResult } from '../skill-storage.interface';
+import { generateSearchGuidance } from '../skill.utils';
 
 /**
  * Input schema for searchSkills tool.
@@ -24,19 +25,21 @@ const outputSchema = {
       id: z.string(),
       name: z.string(),
       description: z.string(),
-      score: z.number(),
+      score: z.number().describe('Relevance score (0-1), higher means better match'),
       tags: z.array(z.string()).optional(),
       tools: z.array(
         z.object({
           name: z.string(),
-          available: z.boolean(),
+          available: z.boolean().describe('Whether this tool is available on this server'),
         }),
       ),
       source: z.enum(['local', 'external']),
+      canExecute: z.boolean().describe('True if all required tools are available'),
     }),
   ),
   total: z.number(),
   hasMore: z.boolean(),
+  guidance: z.string().describe('Suggested next action based on search results'),
 };
 
 type Input = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -63,12 +66,29 @@ type Output = z.infer<z.ZodObject<typeof outputSchema>>;
 @Tool({
   name: 'searchSkills',
   description:
-    'Search for skills that can help with multi-step tasks. ' +
-    'Skills are workflow guides that combine multiple tools. ' +
-    'Use this to find relevant skills before starting complex tasks.',
+    'Discover available skills on this MCP server. Skills are pre-built workflows that guide you through ' +
+    "complex multi-step tasks using the server's tools.\n\n" +
+    '**This is the recommended starting point** when you need to:\n' +
+    "- Accomplish a task you haven't done before on this server\n" +
+    '- Find the right combination of tools for a complex workflow\n' +
+    '- Learn what capabilities this MCP server offers\n\n' +
+    '**How skills work:**\n' +
+    '1. Search for skills matching your goal (this tool)\n' +
+    '2. Load the full skill details with loadSkills\n' +
+    '3. Follow the step-by-step instructions, calling the tools listed\n\n' +
+    '**Search tips:**\n' +
+    '- Use natural language: "review a pull request", "deploy to production"\n' +
+    '- Filter by tags: tags: ["github", "devops"]\n' +
+    '- Filter by required tools: tools: ["git_commit", "git_push"]\n' +
+    '- Set requireAllTools: true to only see skills you can fully execute\n\n' +
+    '**Output explained:**\n' +
+    '- score: Relevance to your query (higher is better)\n' +
+    "- tools[].available: Whether you can use this tool (true) or it's missing (false)\n" +
+    '- canExecute: True if all tools are available for this skill\n' +
+    '- Use the skill id or name with loadSkills to get full instructions',
   inputSchema,
   outputSchema,
-  tags: ['skills', 'discovery'],
+  tags: ['skills', 'discovery', 'entry-point'],
   annotations: {
     title: 'Search Skills',
     readOnlyHint: true,
@@ -83,6 +103,7 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
         skills: [],
         total: 0,
         hasMore: false,
+        guidance: 'No skills are available on this server. You can still use individual tools directly.',
       };
     }
 
@@ -94,14 +115,18 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
       requireAllTools: input.requireAllTools,
     });
 
+    // Store pre-filtered count for hasMore calculation
+    const preFilteredCount = results.length;
+
+    // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP tools)
+    const mcpVisibleResults = results.filter((result: SkillSearchResult) => {
+      const visibility = result.metadata.visibility ?? 'both';
+      return visibility === 'mcp' || visibility === 'both';
+    });
+
     // Transform results to output format
-    const skills = results.map((result: SkillSearchResult) => ({
-      id: result.metadata.id ?? result.metadata.name,
-      name: result.metadata.name,
-      description: result.metadata.description,
-      score: result.score,
-      tags: result.metadata.tags,
-      tools: (result.metadata.tools ?? []).map((t) => {
+    const skills = mcpVisibleResults.map((result: SkillSearchResult) => {
+      const tools = (result.metadata.tools ?? []).map((t) => {
         // Use normalizeToolRef to correctly handle all tool reference types
         // including class-based refs where t.name would be the class name
         try {
@@ -118,20 +143,38 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
             available: result.availableTools.includes(toolName),
           };
         }
-      }),
-      source: result.source,
-    }));
+      });
+
+      return {
+        id: result.metadata.id ?? result.metadata.name,
+        name: result.metadata.name,
+        description: result.metadata.description,
+        score: result.score,
+        tags: result.metadata.tags,
+        tools,
+        source: result.source,
+        canExecute: tools.every((t) => t.available),
+      };
+    });
 
     // Pagination info:
-    // - total: number of results returned (search already filtered by query/tags/tools)
-    // - hasMore: true if we hit the limit (indicating more results may exist)
+    // - total: number of MCP-visible results returned
+    // - hasMore: true if pre-filtered results hit the limit (more results may exist)
+    // Note: We use preFilteredCount for hasMore because visibility filtering is post-search
     const total = skills.length;
-    const hasMore = skills.length >= input.limit;
+    const hasMore = preFilteredCount >= input.limit;
+
+    // Generate guidance based on results
+    const guidance = generateSearchGuidance(
+      skills.map((s) => ({ name: s.name, score: s.score, canExecute: s.canExecute })),
+      input.query,
+    );
 
     return {
       skills,
       total,
       hasMore,
+      guidance,
     };
   }
 }

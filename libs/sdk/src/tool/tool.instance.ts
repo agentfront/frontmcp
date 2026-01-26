@@ -121,9 +121,9 @@ export class ToolInstance<
     // Check if elicitation is enabled in scope (default: false)
     const elicitationEnabled = this.scope.metadata.elicitation?.enabled === true;
 
-    if (elicitationEnabled && baseSchema !== undefined) {
+    if (elicitationEnabled && baseSchema !== undefined && baseSchema !== null) {
       // Extend schema to include elicitation fallback response type
-      return extendOutputSchemaForElicitation(baseSchema);
+      return extendOutputSchemaForElicitation(baseSchema as Record<string, unknown>);
     }
 
     return baseSchema;

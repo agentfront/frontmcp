@@ -157,8 +157,17 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     this.logger.verbose('finalize:start');
     const { results, options } = this.state.required;
 
+    // Store pre-filtered count for hasMore calculation
+    const preFilteredCount = (results as SkillSearchResult[]).length;
+
+    // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP tools)
+    const mcpVisibleResults = (results as SkillSearchResult[]).filter((result) => {
+      const visibility = result.metadata.visibility ?? 'both';
+      return visibility === 'mcp' || visibility === 'both';
+    });
+
     // Transform results to output format
-    const skills = (results as SkillSearchResult[]).map((result) => ({
+    const skills = mcpVisibleResults.map((result) => ({
       id: result.metadata.id ?? result.metadata.name,
       name: result.metadata.name,
       description: result.metadata.description,
@@ -186,13 +195,14 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
     }));
 
     // Pagination info:
-    // - total: number of results returned (search already filtered by query/tags/tools)
-    // - hasMore: true if we hit the limit (indicating more results may exist)
-    // Note: We can't know the exact total of matching skills without a full scan,
+    // - total: number of MCP-visible results returned
+    // - hasMore: true if pre-filtered results hit the limit (more results may exist)
+    // Note: We use preFilteredCount for hasMore because visibility filtering is post-search.
+    // We can't know the exact total of matching skills without a full scan,
     // so we report the actual returned count and indicate if limit was reached.
     const limit = options.topK ?? 10;
     const total = skills.length;
-    const hasMore = skills.length >= limit;
+    const hasMore = preFilteredCount >= limit;
 
     const output: Output = {
       skills,

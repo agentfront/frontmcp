@@ -61,9 +61,9 @@ const DEFAULT_CLIENT_INFO = {
 // ═══════════════════════════════════════════════════════════════════
 
 export class McpTestClient {
-  // Platform and capabilities are optional - only set when testing platform-specific behavior
-  private readonly config: Required<Omit<McpTestClientConfig, 'platform' | 'capabilities'>> &
-    Pick<McpTestClientConfig, 'platform' | 'capabilities'>;
+  // Platform, capabilities, and queryParams are optional - only set when needed
+  private readonly config: Required<Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams'>> &
+    Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams'>;
   private transport: McpTransport | null = null;
   private initResult: InitializeResult | null = null;
   private requestIdCounter = 0;
@@ -100,6 +100,7 @@ export class McpTestClient {
       clientInfo: config.clientInfo ?? DEFAULT_CLIENT_INFO,
       platform: config.platform,
       capabilities: config.capabilities,
+      queryParams: config.queryParams,
     };
 
     // If a token is provided, user is authenticated (even in public mode)
@@ -870,10 +871,20 @@ export class McpTestClient {
   // ═══════════════════════════════════════════════════════════════════
 
   private createTransport(): McpTransport {
+    // Build URL with query params if provided using URL API for proper handling
+    let baseUrl = this.config.baseUrl;
+    if (this.config.queryParams && Object.keys(this.config.queryParams).length > 0) {
+      const url = new URL(baseUrl);
+      Object.entries(this.config.queryParams).forEach(([key, value]) => {
+        url.searchParams.set(key, String(value));
+      });
+      baseUrl = url.toString();
+    }
+
     switch (this.config.transport) {
       case 'streamable-http':
         return new StreamableHttpTransport({
-          baseUrl: this.config.baseUrl,
+          baseUrl,
           timeout: this.config.timeout,
           auth: this.config.auth,
           publicMode: this.config.publicMode,

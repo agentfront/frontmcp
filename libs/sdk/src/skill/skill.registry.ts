@@ -62,6 +62,25 @@ export interface SkillRegistryOptions {
 }
 
 /**
+ * Options for getting skills from the registry.
+ */
+export interface GetSkillsOptions {
+  /**
+   * Whether to include hidden skills.
+   * @default false
+   */
+  includeHidden?: boolean;
+
+  /**
+   * Filter by visibility context.
+   * - 'mcp': Only skills visible via MCP (visibility = 'mcp' or 'both')
+   * - 'http': Only skills visible via HTTP (visibility = 'http' or 'both')
+   * - 'all': All skills regardless of visibility (default)
+   */
+  visibility?: 'mcp' | 'http' | 'all';
+}
+
+/**
  * Interface for SkillRegistry consumers.
  */
 export interface SkillRegistryInterface {
@@ -69,9 +88,9 @@ export interface SkillRegistryInterface {
 
   /**
    * Get all skills in the registry.
-   * @param includeHidden - Whether to include hidden skills
+   * @param options - Options for filtering skills (or boolean for backwards compatibility)
    */
-  getSkills(includeHidden?: boolean): SkillEntry[];
+  getSkills(options?: boolean | GetSkillsOptions): SkillEntry[];
 
   /**
    * Find a skill by name.
@@ -380,10 +399,31 @@ export default class SkillRegistry
 
   /**
    * Get all skills in the registry.
+   * @param options - Options for filtering skills (or boolean for backwards compatibility)
    */
-  getSkills(includeHidden = false): SkillEntry[] {
-    const all = this.listAllIndexed().map((r) => r.instance);
-    return includeHidden ? all : all.filter((s) => !s.isHidden());
+  getSkills(options?: boolean | GetSkillsOptions): SkillEntry[] {
+    // Handle backwards compatibility with boolean argument
+    const opts: GetSkillsOptions = typeof options === 'boolean' ? { includeHidden: options } : (options ?? {});
+
+    const { includeHidden = false, visibility = 'all' } = opts;
+
+    let skills = this.listAllIndexed().map((r) => r.instance);
+
+    // Filter by hidden status
+    if (!includeHidden) {
+      skills = skills.filter((s) => !s.isHidden());
+    }
+
+    // Filter by visibility
+    if (visibility !== 'all') {
+      skills = skills.filter((s) => {
+        const skillVis = s.metadata.visibility ?? 'both';
+        if (skillVis === 'both') return true;
+        return skillVis === visibility;
+      });
+    }
+
+    return skills;
   }
 
   /**

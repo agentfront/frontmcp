@@ -20,6 +20,8 @@ import {
   LoggingOptionsInput,
   ElicitationOptionsInput,
   elicitationOptionsSchema,
+  SkillsConfigOptionsInput,
+  skillsConfigOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -103,6 +105,33 @@ export interface FrontMcpBaseMetadata {
    * @default { enabled: false }
    */
   elicitation?: ElicitationOptionsInput;
+
+  /**
+   * Skills HTTP endpoints configuration.
+   * Controls exposure of skills via HTTP endpoints for multi-agent architectures.
+   *
+   * When enabled, provides:
+   * - GET /llm.txt - Compact skill summaries
+   * - GET /llm_full.txt - Full skills with instructions and tool schemas
+   * - GET /skills - JSON API for listing/searching skills
+   * - GET /skills/{id} - Load specific skill by ID
+   *
+   * @default { enabled: false }
+   *
+   * @example Enable skills HTTP endpoints
+   * ```typescript
+   * skillsConfig: { enabled: true }
+   * ```
+   *
+   * @example HTTP-only (disable MCP tools)
+   * ```typescript
+   * skillsConfig: {
+   *   enabled: true,
+   *   mcpTools: false,  // No searchSkills/loadSkill MCP tools
+   * }
+   * ```
+   */
+  skillsConfig?: SkillsConfigOptionsInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -121,6 +150,7 @@ export const frontMcpBaseSchema = z.object({
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
   elicitation: elicitationOptionsSchema.optional(),
+  skillsConfig: skillsConfigOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

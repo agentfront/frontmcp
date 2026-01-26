@@ -2,7 +2,7 @@
 
 import { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
 import { SkillContent } from '../../common/interfaces';
-import { SkillMetadata } from '../../common/metadata';
+import { SkillMetadata, SkillVisibility } from '../../common/metadata';
 import { SkillToolValidator, ToolValidationResult } from '../skill-validator';
 import {
   SkillStorageProviderType,
@@ -108,6 +108,7 @@ interface StoredSkillContent extends SkillContent {
   tags?: string[];
   priority?: number;
   hideFromDiscovery?: boolean;
+  visibility?: SkillVisibility;
 }
 
 /**
@@ -508,6 +509,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     const tags = this.getSkillTags(skill);
     const priority = this.getPriority(skill);
     const hideFromDiscovery = this.isHidden(skill);
+    const visibility = this.getVisibility(skill);
 
     return {
       id: skill.id,
@@ -531,6 +533,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       ...(tags.length > 0 && { tags }),
       ...(priority !== undefined && { priority }),
       ...(hideFromDiscovery && { hideFromDiscovery }),
+      // Always include visibility for filtering
+      visibility: visibility ?? 'both',
     };
   }
 
@@ -556,5 +560,12 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private getPriority(skill: SkillContent): number | undefined {
     return (skill as StoredSkillContent).priority;
+  }
+
+  /**
+   * Get visibility of a skill.
+   */
+  private getVisibility(skill: SkillContent): SkillVisibility | undefined {
+    return (skill as StoredSkillContent).visibility;
   }
 }

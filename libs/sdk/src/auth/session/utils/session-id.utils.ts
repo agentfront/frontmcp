@@ -181,6 +181,12 @@ export interface CreateSessionOptions {
   userAgent?: string;
   /** Platform detection configuration from scope */
   platformDetectionConfig?: PlatformDetectionConfig;
+  /**
+   * Whether this session is in skills-only mode.
+   * When true, tools/list returns empty array but skills/search and skills/load work normally.
+   * Detected from `?mode=skills_only` query param on connection.
+   */
+  skillsOnlyMode?: boolean;
 }
 
 export function createSessionId(protocol: TransportProtocolType, token: string, options?: CreateSessionOptions) {
@@ -203,6 +209,8 @@ export function createSessionId(protocol: TransportProtocolType, token: string, 
     iat: nowSec(),
     protocol,
     platformType,
+    // Add skillsOnlyMode if provided
+    ...(options?.skillsOnlyMode && { skillsOnlyMode: true }),
   };
   const id = encryptJson(payload);
   cache.set(id, payload);

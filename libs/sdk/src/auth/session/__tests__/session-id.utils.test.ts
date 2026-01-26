@@ -177,6 +177,40 @@ describe('session-id.utils', () => {
       expect(mockEncryptValue).toHaveBeenCalled();
       expect(result.id).toBe('test-iv.test-tag.test-data');
     });
+
+    it('should set skillsOnlyMode when provided in options', () => {
+      const result = createSessionId('streamable-http', TEST_TOKEN, {
+        skillsOnlyMode: true,
+      });
+
+      expect(result.payload.skillsOnlyMode).toBe(true);
+    });
+
+    it('should not set skillsOnlyMode when not provided', () => {
+      const result = createSessionId('streamable-http', TEST_TOKEN);
+
+      expect(result.payload.skillsOnlyMode).toBeUndefined();
+    });
+
+    it('should not set skillsOnlyMode when explicitly false', () => {
+      const result = createSessionId('streamable-http', TEST_TOKEN, {
+        skillsOnlyMode: false,
+      });
+
+      expect(result.payload.skillsOnlyMode).toBeUndefined();
+    });
+
+    it('should combine skillsOnlyMode with other options', () => {
+      mockDetectPlatformFromUserAgent.mockReturnValue('cursor');
+
+      const result = createSessionId('streamable-http', TEST_TOKEN, {
+        userAgent: 'Cursor/1.0',
+        skillsOnlyMode: true,
+      });
+
+      expect(result.payload.skillsOnlyMode).toBe(true);
+      expect(result.payload.platformType).toBe('cursor');
+    });
   });
 
   // ============================================
@@ -237,6 +271,14 @@ describe('session-id.utils', () => {
       updateSessionPayload(id, { platformType: 'openai' });
 
       expect(payload.platformType).toBe('openai');
+    });
+
+    it('should update skillsOnlyMode field', () => {
+      const { id, payload } = createSessionId('streamable-http', TEST_TOKEN);
+
+      updateSessionPayload(id, { skillsOnlyMode: true });
+
+      expect(payload.skillsOnlyMode).toBe(true);
     });
 
     it('should return false for non-existent session', () => {

@@ -6,7 +6,6 @@ import {
   FlowPlan,
   FlowBase,
   FlowHooksOf,
-  sessionIdSchema,
   httpRespond,
   ServerRequestTokens,
   Authorization,
@@ -17,6 +16,7 @@ import {
 import { z } from 'zod';
 import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
+import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 
 export const plan = {
   pre: ['parseInput', 'router'],
@@ -139,9 +139,14 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
       session = authorization.session;
     } else {
       // No session - create new one (initialize request)
+      // Detect skills_only mode from query params
+      const query = request.query as Record<string, string | string[]> | undefined;
+      const skillsOnlyMode = detectSkillsOnlyMode(query);
+
       session = createSessionId('legacy-sse', token, {
         userAgent: request.headers?.['user-agent'] as string | undefined,
         platformDetectionConfig: (this.scope as Scope).metadata.transport?.platformDetection,
+        skillsOnlyMode,
       });
     }
 

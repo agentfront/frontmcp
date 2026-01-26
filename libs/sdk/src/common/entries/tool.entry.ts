@@ -52,11 +52,11 @@ export abstract class ToolEntry<
 
   inputSchema: InSchema;
   // This is whatever JSON-schema-ish thing you store for input; keeping type loose
-  rawInputSchema: any;
+  rawInputSchema: unknown;
   // This is your *metadata* outputSchema (literals / zod / raw shapes / arrays)
   outputSchema?: OutSchema;
   // Raw JSON Schema for output (for tool/list to expose)
-  rawOutputSchema?: any;
+  rawOutputSchema?: unknown;
 
   /**
    * Accessor used by tools/list to expose the tool's declared outputSchema.
@@ -71,8 +71,61 @@ export abstract class ToolEntry<
    * Accessor used by tools/list to expose the tool's output schema as JSON Schema.
    * Returns the raw JSON Schema representation if available.
    */
-  getRawOutputSchema(): any | undefined {
+  getRawOutputSchema(): unknown | undefined {
     return this.rawOutputSchema;
+  }
+
+  /**
+   * Get the tool's input schema as JSON Schema.
+   * Returns rawInputSchema if available, otherwise converts from Zod schema shape.
+   *
+   * This is the single source of truth for tool input schema conversion.
+   * Used by skill HTTP utilities and other consumers needing JSON Schema format.
+   *
+   * @returns JSON Schema object or null if no schema is available
+   */
+  getInputJsonSchema(): Record<string, unknown> | null {
+    // Prefer rawInputSchema if already in JSON Schema format
+    if (this.rawInputSchema) {
+      // Validate that rawInputSchema is actually an object before casting
+      if (
+        typeof this.rawInputSchema === 'object' &&
+        this.rawInputSchema !== null &&
+        !Array.isArray(this.rawInputSchema)
+      ) {
+        return this.rawInputSchema as Record<string, unknown>;
+      }
+      // rawInputSchema exists but isn't a valid object - fall through to conversion
+    }
+
+    // Convert Zod schema shape to JSON Schema
+    if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
+      try {
+        // Try Zod v4 import path first
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { z } = require('zod');
+        let toJSONSchema: (schema: unknown) => Record<string, unknown>;
+        try {
+          // Zod v4: toJSONSchema is in 'zod/v4/core'
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const zodV4 = require('zod/v4/core');
+          toJSONSchema = zodV4.toJSONSchema;
+        } catch {
+          // Zod v3: toJSONSchema may be available as zod-to-json-schema or not at all
+          // In this case, return a basic schema
+          return { type: 'object', properties: {} };
+        }
+        return toJSONSchema(z.object(this.inputSchema));
+      } catch (error) {
+        // Log the error for debugging purposes
+        if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+          console.warn('[ToolEntry] Failed to convert Zod schema to JSON Schema:', error);
+        }
+        return { type: 'object', properties: {} };
+      }
+    }
+
+    return null;
   }
 
   /**

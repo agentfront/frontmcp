@@ -12,3 +12,6 @@
 
 export { default as SearchSkillsFlow } from './search-skills.flow';
 export { default as LoadSkillFlow } from './load-skill.flow';
+
+// HTTP Flows (conditionally registered when skillsConfig.enabled is true)
+export { LlmTxtFlow, LlmFullTxtFlow, SkillsApiFlow } from './http';

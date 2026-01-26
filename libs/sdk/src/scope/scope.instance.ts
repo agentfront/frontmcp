@@ -28,9 +28,8 @@ import HookRegistry from '../hooks/hook.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import AgentRegistry from '../agent/agent.registry';
 import SkillRegistry from '../skill/skill.registry';
-import { SearchSkillsFlow, LoadSkillFlow } from '../skill/flows';
-import { getSkillTools } from '../skill/tools';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
+import { registerSkillCapabilities } from '../skill/skill-scope.helper';
 import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
 import { createSkillToolGuardHook } from '../skill/hooks';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
@@ -367,28 +366,15 @@ export class Scope extends ScopeEntry {
       }
     }
 
-    // Register skill flows if any skills are available
-    if (this.scopeSkills.hasAny()) {
-      await this.scopeFlows.registryFlows([SearchSkillsFlow, LoadSkillFlow]);
-
-      // Register skill tools (searchSkills, loadSkill)
-      const skillTools = getSkillTools();
-      for (const SkillToolClass of skillTools) {
-        try {
-          const toolRecord = normalizeTool(SkillToolClass);
-          const toolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
-            kind: 'scope',
-            id: '_skills',
-            ref: SkillToolClass,
-          });
-          await toolEntry.ready;
-          this.scopeTools.registerToolInstance(toolEntry);
-          this.logger.verbose(`Registered skill tool: ${toolRecord.metadata.name}`);
-        } catch (error) {
-          this.logger.warn(`Failed to register skill tool: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-    }
+    // Register skill flows and tools if any skills are available
+    await registerSkillCapabilities({
+      skillRegistry: this.scopeSkills,
+      flowRegistry: this.scopeFlows,
+      toolRegistry: this.scopeTools,
+      providers: this.scopeProviders,
+      skillsConfig: this.metadata.skillsConfig,
+      logger: this.logger,
+    });
 
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
