@@ -64,7 +64,13 @@
     "cors": "^2.8.5",
     "raw-body": "^3.0.0",
     "content-type": "^1.0.5",
-    "vectoriadb": "^2.0.2"
+    "vectoriadb": "^2.0.2",
+    "@vercel/kv": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vercel/kv": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@frontmcp/utils": "0.7.2",

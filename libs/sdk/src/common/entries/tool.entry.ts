@@ -87,7 +87,15 @@ export abstract class ToolEntry<
   getInputJsonSchema(): Record<string, unknown> | null {
     // Prefer rawInputSchema if already in JSON Schema format
     if (this.rawInputSchema) {
-      return this.rawInputSchema as Record<string, unknown>;
+      // Validate that rawInputSchema is actually an object before casting
+      if (
+        typeof this.rawInputSchema === 'object' &&
+        this.rawInputSchema !== null &&
+        !Array.isArray(this.rawInputSchema)
+      ) {
+        return this.rawInputSchema as Record<string, unknown>;
+      }
+      // rawInputSchema exists but isn't a valid object - fall through to conversion
     }
 
     // Convert Zod schema shape to JSON Schema

@@ -229,15 +229,15 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // Override policy mode if specified (session-level setting, apply before activating skills)
+    if (policyMode) {
+      sessionManager.setPolicyMode(policyMode as SkillPolicyMode);
+    }
+
     // Activate each skill
     for (const item of loadResults) {
       const { skill } = item.loadResult;
       const activationResult = sessionManager.activateSkill(skill.id, skill, item.loadResult);
-
-      // Override policy mode if specified
-      if (policyMode) {
-        sessionManager.setPolicyMode(policyMode as SkillPolicyMode);
-      }
 
       item.activationResult = activationResult;
       this.logger.info(`activateSessions: activated skill "${skill.id}"`, {

@@ -168,18 +168,39 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       skillId = path.slice(apiPath.length + 1);
     }
 
-    // Parse query parameters
-    const query = request.query?.['query'] as string | undefined;
-    const tagsParam = request.query?.['tags'] as string | string[] | undefined;
-    const toolsParam = request.query?.['tools'] as string | string[] | undefined;
-    const limitParam = request.query?.['limit'] as string | undefined;
-    const offsetParam = request.query?.['offset'] as string | undefined;
+    // Parse query parameters - handle arrays (take first element)
+    const queryRaw = request.query?.['query'];
+    const query = Array.isArray(queryRaw) ? queryRaw[0] : (queryRaw as string | undefined);
 
-    // Normalize tags and tools arrays
-    const tags = tagsParam ? (Array.isArray(tagsParam) ? tagsParam : tagsParam.split(',')) : undefined;
-    const tools = toolsParam ? (Array.isArray(toolsParam) ? toolsParam : toolsParam.split(',')) : undefined;
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+    // Normalize tags and tools arrays - handle both arrays and comma-separated strings
+    const tagsParam = request.query?.['tags'];
+    const tags = tagsParam
+      ? Array.isArray(tagsParam)
+        ? tagsParam.map((t) => String(t).trim()).filter(Boolean)
+        : String(tagsParam)
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+      : undefined;
+
+    const toolsParam = request.query?.['tools'];
+    const tools = toolsParam
+      ? Array.isArray(toolsParam)
+        ? toolsParam.map((t) => String(t).trim()).filter(Boolean)
+        : String(toolsParam)
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+      : undefined;
+
+    // Parse limit/offset with validation - only accept valid numeric strings
+    const limitRaw = request.query?.['limit'];
+    const limitStr = Array.isArray(limitRaw) ? limitRaw[0] : limitRaw;
+    const limit = limitStr && /^\d+$/.test(String(limitStr)) ? parseInt(String(limitStr), 10) : undefined;
+
+    const offsetRaw = request.query?.['offset'];
+    const offsetStr = Array.isArray(offsetRaw) ? offsetRaw[0] : offsetRaw;
+    const offset = offsetStr && /^\d+$/.test(String(offsetStr)) ? parseInt(String(offsetStr), 10) : undefined;
 
     // Determine action
     let action: 'list' | 'search' | 'get';
@@ -213,10 +234,20 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     switch (action) {
       case 'get':
-        await this.handleGetSkill(skillId!, skillRegistry, toolRegistry);
+        if (!skillId) {
+          this.respond(
+            httpRespond.json({ error: 'Bad Request', message: 'Missing skillId parameter' }, { status: 400 }),
+          );
+          return;
+        }
+        await this.handleGetSkill(skillId, skillRegistry, toolRegistry);
         break;
       case 'search':
-        await this.handleSearchSkills(query!, { tags, tools, limit }, skillRegistry);
+        if (!query) {
+          this.respond(httpRespond.json({ error: 'Bad Request', message: 'Missing query parameter' }, { status: 400 }));
+          return;
+        }
+        await this.handleSearchSkills(query, { tags, tools, limit }, skillRegistry);
         break;
       case 'list':
         await this.handleListSkills({ tags, tools, limit, offset }, skillRegistry);
@@ -269,7 +300,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
           name: skill.name,
           description: skill.description,
           instructions: skill.instructions,
-          tools: skill.tools.map((t: any) => ({
+          tools: skill.tools.map((t) => ({
             name: t.name,
             purpose: t.purpose,
             available: availableTools.includes(t.name),

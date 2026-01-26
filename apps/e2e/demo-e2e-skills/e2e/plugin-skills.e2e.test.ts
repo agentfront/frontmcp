@@ -172,7 +172,7 @@ test.describe('Plugin Skills E2E', () => {
       const deploySkill = content.skills.find((s) => s.id === 'deploy-workflow');
 
       expect(deploySkill).toBeDefined();
-      expect(deploySkill!.source).toBe('local');
+      expect(deploySkill?.source).toBe('local');
     });
   });
 
@@ -237,9 +237,9 @@ test.describe('Plugin Skills E2E', () => {
       const rollbackTool = skill.tools.find((t) => t.name === 'rollback_deployment');
 
       expect(deployTool).toBeDefined();
-      expect(deployTool!.purpose).toContain('Deploy the application');
+      expect(deployTool?.purpose).toContain('Deploy the application');
       expect(rollbackTool).toBeDefined();
-      expect(rollbackTool!.purpose).toContain('Rollback if needed');
+      expect(rollbackTool?.purpose).toContain('Rollback if needed');
     });
   });
 

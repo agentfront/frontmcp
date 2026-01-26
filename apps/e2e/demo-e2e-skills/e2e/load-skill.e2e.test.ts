@@ -204,8 +204,8 @@ test.describe('loadSkills E2E', () => {
       const githubGetPr = skill.tools.find((t) => t.name === 'github_get_pr');
 
       expect(githubGetPr).toBeDefined();
-      expect(githubGetPr!.purpose).toBeDefined();
-      expect(githubGetPr!.purpose).toContain('Fetch PR details');
+      expect(githubGetPr?.purpose).toBeDefined();
+      expect(githubGetPr?.purpose).toContain('Fetch PR details');
     });
   });
 
@@ -223,10 +223,10 @@ test.describe('loadSkills E2E', () => {
       expect(Array.isArray(skill.parameters)).toBe(true);
 
       // Should have pr_url parameter
-      const prUrlParam = skill.parameters!.find((p) => p.name === 'pr_url');
+      const prUrlParam = skill.parameters?.find((p) => p.name === 'pr_url');
       expect(prUrlParam).toBeDefined();
-      expect(prUrlParam!.required).toBe(true);
-      expect(prUrlParam!.type).toBe('string');
+      expect(prUrlParam?.required).toBe(true);
+      expect(prUrlParam?.type).toBe('string');
     });
   });
 
@@ -288,7 +288,7 @@ test.describe('loadSkills E2E', () => {
       const content = result.json<LoadSkillsResult>();
       expect(content.skills.length).toBe(0);
       expect(content.summary.combinedWarnings).toBeDefined();
-      expect(content.summary.combinedWarnings!.some((w) => w.includes('not found'))).toBe(true);
+      expect(content.summary.combinedWarnings?.some((w) => w.includes('not found'))).toBe(true);
     });
   });
 
