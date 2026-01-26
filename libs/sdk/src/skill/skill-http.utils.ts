@@ -140,6 +140,9 @@ export function formatSkillForLLMWithSchemas(
     parts.push('');
   }
 
+  // Pre-index tool entries for O(1) lookup instead of O(n) per tool
+  const toolEntryByName = new Map(toolRegistry.getTools(true).map((te) => [te.name, te]));
+
   // Tools section WITH FULL SCHEMAS
   if (skill.tools.length > 0) {
     parts.push('## Tools');
@@ -156,7 +159,7 @@ export function formatSkillForLLMWithSchemas(
 
       // Include full schema if tool is available
       if (isAvailable) {
-        const toolEntry = toolRegistry.getTools(true).find((t) => t.name === tool.name);
+        const toolEntry = toolEntryByName.get(tool.name);
         if (toolEntry) {
           const inputSchema = getToolInputSchema(toolEntry);
           const outputSchema = toolEntry.getRawOutputSchema?.() ?? toolEntry.rawOutputSchema;

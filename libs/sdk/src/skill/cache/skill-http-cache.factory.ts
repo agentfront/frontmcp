@@ -11,10 +11,12 @@ import { SkillHttpCache, MemorySkillHttpCache, RedisSkillHttpCache } from './ski
 
 /**
  * Redis configuration options for the cache.
+ *
+ * Supports 'redis' (uses ioredis under the hood) and 'vercel-kv' providers.
  */
 export interface SkillHttpCacheRedisOptions {
   /** Redis provider type */
-  provider: 'redis' | 'ioredis' | 'vercel-kv' | '@vercel/kv';
+  provider: 'redis' | 'vercel-kv' | '@vercel/kv';
   /** Redis host */
   host?: string;
   /** Redis port */
@@ -69,7 +71,7 @@ export interface SkillHttpCacheResult {
 function hasRedisProvider(redis: SkillHttpCacheRedisOptions | undefined): boolean {
   if (!redis?.provider) return false;
   const provider = redis.provider;
-  return provider === 'redis' || provider === 'ioredis' || provider === 'vercel-kv' || provider === '@vercel/kv';
+  return provider === 'redis' || provider === 'vercel-kv' || provider === '@vercel/kv';
 }
 
 /**
@@ -146,7 +148,7 @@ async function createRedisCache(
     });
   }
 
-  // Default to ioredis - use require for CommonJS compatibility
+  // Use ioredis for 'redis' provider - use require for CommonJS compatibility
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const Redis = require('ioredis');
   const client = new Redis({

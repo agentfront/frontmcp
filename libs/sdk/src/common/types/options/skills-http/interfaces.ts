@@ -312,10 +312,12 @@ export interface SkillsConfigCacheOptions {
   /**
    * Redis configuration for distributed caching.
    * If not provided, falls back to in-memory cache.
+   *
+   * Note: 'redis' provider uses ioredis under the hood.
    */
   redis?: {
     /** Redis provider type */
-    provider: 'redis' | 'ioredis' | 'vercel-kv' | '@vercel/kv';
+    provider: 'redis' | 'vercel-kv' | '@vercel/kv';
     /** Redis host */
     host?: string;
     /** Redis port */

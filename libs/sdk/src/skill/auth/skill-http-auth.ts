@@ -13,6 +13,7 @@
 
 import type { FrontMcpLogger } from '../../common';
 import type { SkillsConfigOptions } from '../../common/types/options/skills-http';
+import { timingSafeEqual } from '@frontmcp/utils';
 
 /**
  * Request context for auth validation.
@@ -110,6 +111,8 @@ export class SkillHttpAuthValidator {
    * Accepts API key in:
    * - X-API-Key header
    * - Authorization header as `ApiKey <key>`
+   *
+   * Uses timing-safe comparison to prevent timing attacks.
    */
   private validateApiKey(ctx: SkillHttpAuthContext): SkillHttpAuthResult {
     const apiKeys = this.skillsConfig.apiKeys ?? [];
@@ -127,15 +130,15 @@ export class SkillHttpAuthValidator {
     const authHeader = this.getHeader(ctx.headers, 'authorization');
     const apiKeyHeader = this.getHeader(ctx.headers, 'x-api-key');
 
-    // Check X-API-Key header first
-    if (apiKeyHeader && apiKeys.includes(apiKeyHeader)) {
+    // Check X-API-Key header first using timing-safe comparison
+    if (apiKeyHeader && this.timingSafeIncludes(apiKeys, apiKeyHeader)) {
       return { authorized: true };
     }
 
     // Check Authorization: ApiKey <key> format
     if (authHeader?.startsWith('ApiKey ')) {
       const key = authHeader.slice(7);
-      if (apiKeys.includes(key)) {
+      if (this.timingSafeIncludes(apiKeys, key)) {
         return { authorized: true };
       }
     }
@@ -145,6 +148,33 @@ export class SkillHttpAuthValidator {
       error: 'Invalid or missing API key',
       statusCode: 401,
     };
+  }
+
+  /**
+   * Check if any key in the list matches the candidate using timing-safe comparison.
+   * This prevents timing attacks that could reveal information about valid API keys.
+   */
+  private timingSafeIncludes(keys: string[], candidate: string): boolean {
+    const encoder = new TextEncoder();
+    const candidateBytes = encoder.encode(candidate);
+
+    // We must check all keys to ensure constant-time behavior
+    // Even if we find a match, continue checking to prevent timing leaks
+    let found = false;
+    for (const key of keys) {
+      const keyBytes = encoder.encode(key);
+      // Only compare if lengths match (length difference is not timing-sensitive)
+      if (keyBytes.length === candidateBytes.length) {
+        try {
+          if (timingSafeEqual(keyBytes, candidateBytes)) {
+            found = true;
+          }
+        } catch {
+          // Should not happen since we checked lengths, but handle gracefully
+        }
+      }
+    }
+    return found;
   }
 
   /**
@@ -206,10 +236,14 @@ export class SkillHttpAuthValidator {
 
   /**
    * Get a header value from the headers object.
+   * Performs case-insensitive header name lookup per HTTP spec.
    * Handles both string and string[] values.
    */
   private getHeader(headers: Record<string, string | string[] | undefined>, name: string): string | undefined {
-    const value = headers[name] ?? headers[name.toLowerCase()];
+    const lowerName = name.toLowerCase();
+    // Find the header key case-insensitively
+    const key = Object.keys(headers).find((k) => k.toLowerCase() === lowerName);
+    const value = key ? headers[key] : undefined;
     if (Array.isArray(value)) {
       return value[0];
     }

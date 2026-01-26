@@ -18,11 +18,14 @@ import {
   FlowHooksOf,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  ToolRegistryInterface,
 } from '../../../common';
 import { z } from 'zod';
 import { skillToApiResponse, formatSkillForLLMWithSchemas } from '../../skill-http.utils';
+import { formatSkillForLLM } from '../../skill.utils';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import { createSkillHttpAuthValidator } from '../../auth';
+import type { SkillRegistryInterface } from '../../skill.registry';
 
 const inputSchema = httpInputSchema;
 
@@ -221,7 +224,11 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     }
   }
 
-  private async handleGetSkill(skillId: string, skillRegistry: any, toolRegistry: any) {
+  private async handleGetSkill(
+    skillId: string,
+    skillRegistry: SkillRegistryInterface,
+    toolRegistry: ToolRegistryInterface | null,
+  ) {
     const loadResult = await skillRegistry.loadSkill(skillId);
 
     if (!loadResult) {
@@ -233,10 +240,10 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
 
-    // Check visibility
+    // Check visibility - look up by skill ID only for accurate matching
     const skillEntry = skillRegistry
       .getSkills(true)
-      .find((s: any) => s.name === skill.name || s.metadata.id === skill.id);
+      .find((s) => s.metadata.id === skill.id || (s.metadata.id === undefined && s.name === skill.id));
     if (skillEntry) {
       const visibility = skillEntry.metadata.visibility ?? 'both';
       if (visibility === 'mcp') {
@@ -250,8 +257,10 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       }
     }
 
-    // Generate formatted content with tool schemas
-    const formattedContent = formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry);
+    // Generate formatted content with tool schemas (use fallback if toolRegistry is null)
+    const formattedContent = toolRegistry
+      ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
+      : formatSkillForLLM(skill, availableTools, missingTools);
 
     this.respond(
       httpRespond.json({
@@ -280,7 +289,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
   private async handleSearchSkills(
     query: string,
     options: { tags?: string[]; tools?: string[]; limit?: number },
-    skillRegistry: any,
+    skillRegistry: SkillRegistryInterface,
   ) {
     const results = await skillRegistry.search(query, {
       topK: options.limit ?? 10,
@@ -289,20 +298,20 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     });
 
     // Filter by HTTP visibility
-    const filteredResults = results.filter((r: any) => {
+    const filteredResults = results.filter((r) => {
       const visibility = r.metadata.visibility ?? 'both';
       return visibility !== 'mcp';
     });
 
     this.respond(
       httpRespond.json({
-        skills: filteredResults.map((r: any) => ({
+        skills: filteredResults.map((r) => ({
           id: r.metadata.id ?? r.metadata.name,
           name: r.metadata.name,
           description: r.metadata.description,
           score: r.score,
           tags: r.metadata.tags ?? [],
-          tools: (r.metadata.tools ?? []).map((t: any) => (typeof t === 'string' ? t : t.name)),
+          tools: (r.metadata.tools ?? []).map((t) => (typeof t === 'string' ? t : (t as { name: string }).name)),
           priority: r.metadata.priority ?? 0,
           visibility: r.metadata.visibility ?? 'both',
         })),
@@ -313,7 +322,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
   private async handleListSkills(
     options: { tags?: string[]; tools?: string[]; limit?: number; offset?: number },
-    skillRegistry: any,
+    skillRegistry: SkillRegistryInterface,
   ) {
     // Get skills visible via HTTP
     const allSkills = skillRegistry.getSkills({ includeHidden: false, visibility: 'http' });
@@ -321,7 +330,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
     // Apply tag filter if specified
     let filteredSkills = allSkills;
     if (options.tags && options.tags.length > 0) {
-      filteredSkills = filteredSkills.filter((s: any) => {
+      filteredSkills = filteredSkills.filter((s) => {
         const skillTags = s.metadata.tags ?? [];
         return options.tags!.some((t) => skillTags.includes(t));
       });
@@ -329,8 +338,10 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     // Apply tool filter if specified
     if (options.tools && options.tools.length > 0) {
-      filteredSkills = filteredSkills.filter((s: any) => {
-        const skillTools = (s.metadata.tools ?? []).map((t: any) => (typeof t === 'string' ? t : t.name));
+      filteredSkills = filteredSkills.filter((s) => {
+        const skillTools = (s.metadata.tools ?? []).map((t) =>
+          typeof t === 'string' ? t : (t as { name: string }).name,
+        );
         return options.tools!.some((t) => skillTools.includes(t));
       });
     }
@@ -344,7 +355,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
 
     this.respond(
       httpRespond.json({
-        skills: paginatedSkills.map((s: any) => skillToApiResponse(s)),
+        skills: paginatedSkills.map((s) => skillToApiResponse(s)),
         total,
         hasMore,
         offset,

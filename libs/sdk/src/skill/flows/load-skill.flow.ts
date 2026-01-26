@@ -278,6 +278,9 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     let totalTools = 0;
     let allToolsAvailable = true;
 
+    // Pre-index tool entries for O(1) lookup instead of O(n) per tool
+    const toolEntryByName = toolRegistry ? new Map(toolRegistry.getTools(true).map((te) => [te.name, te])) : null;
+
     for (const { loadResult, activationResult } of loadResults) {
       const { skill, availableTools, missingTools, isComplete, warning } = loadResult;
 
@@ -301,8 +304,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         };
 
         // Include schemas for available tools
-        if (isAvailable && toolRegistry) {
-          const toolEntry = toolRegistry.getTools(true).find((te) => te.name === t.name);
+        if (isAvailable && toolEntryByName) {
+          const toolEntry = toolEntryByName.get(t.name);
           if (toolEntry) {
             if (toolEntry.rawInputSchema) {
               result.inputSchema = toolEntry.rawInputSchema;

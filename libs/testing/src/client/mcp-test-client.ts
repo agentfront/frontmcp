@@ -871,11 +871,14 @@ export class McpTestClient {
   // ═══════════════════════════════════════════════════════════════════
 
   private createTransport(): McpTransport {
-    // Build URL with query params if provided
+    // Build URL with query params if provided using URL API for proper handling
     let baseUrl = this.config.baseUrl;
     if (this.config.queryParams && Object.keys(this.config.queryParams).length > 0) {
-      const params = new URLSearchParams(this.config.queryParams);
-      baseUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+      const url = new URL(baseUrl);
+      Object.entries(this.config.queryParams).forEach(([key, value]) => {
+        url.searchParams.set(key, String(value));
+      });
+      baseUrl = url.toString();
     }
 
     switch (this.config.transport) {

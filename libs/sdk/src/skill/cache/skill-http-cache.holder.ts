@@ -68,11 +68,13 @@ export async function getSkillHttpCache(scope: ScopeEntry): Promise<SkillHttpCac
 
 /**
  * Cache configuration type from SkillsConfigOptions.
+ *
+ * Supports 'redis' (uses ioredis under the hood) and 'vercel-kv' providers.
  */
 interface CacheConfig {
   enabled?: boolean;
   redis?: {
-    provider: 'redis' | 'ioredis' | 'vercel-kv' | '@vercel/kv';
+    provider: 'redis' | 'vercel-kv' | '@vercel/kv';
     host?: string;
     port?: number;
     password?: string;
@@ -93,8 +95,13 @@ async function createCacheForScope(scopeId: string, cacheConfig: CacheConfig): P
       keyPrefix: cacheConfig.keyPrefix ?? `frontmcp:skills:${scopeId}:cache:`,
     });
     return cache;
-  } catch {
-    // Fall back to memory cache on error
+  } catch (error) {
+    // Log warning when falling back to memory cache due to Redis error
+    // This helps identify configuration issues in production
+    console.warn(
+      `[SkillHttpCache] Failed to create Redis cache for scope "${scopeId}", falling back to memory cache:`,
+      error instanceof Error ? error.message : String(error),
+    );
     return new MemorySkillHttpCache(cacheConfig.ttlMs ?? 60000);
   }
 }

@@ -456,7 +456,7 @@ export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefiniti
     let parameters: Record<string, unknown>;
     if (tool.rawInputSchema) {
       // Already converted to JSON Schema
-      parameters = tool.rawInputSchema;
+      parameters = tool.rawInputSchema as Record<string, unknown>;
     } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
       // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
       // Convert to JSON Schema using the same approach as tools-list.flow.ts

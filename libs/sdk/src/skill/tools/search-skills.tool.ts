@@ -115,6 +115,9 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
       requireAllTools: input.requireAllTools,
     });
 
+    // Store pre-filtered count for hasMore calculation
+    const preFilteredCount = results.length;
+
     // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP tools)
     const mcpVisibleResults = results.filter((result: SkillSearchResult) => {
       const visibility = result.metadata.visibility ?? 'both';
@@ -155,10 +158,11 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
     });
 
     // Pagination info:
-    // - total: number of results returned (search already filtered by query/tags/tools)
-    // - hasMore: true if we hit the limit (indicating more results may exist)
+    // - total: number of MCP-visible results returned
+    // - hasMore: true if pre-filtered results hit the limit (more results may exist)
+    // Note: We use preFilteredCount for hasMore because visibility filtering is post-search
     const total = skills.length;
-    const hasMore = skills.length >= input.limit;
+    const hasMore = preFilteredCount >= input.limit;
 
     // Generate guidance based on results
     const guidance = generateSearchGuidance(

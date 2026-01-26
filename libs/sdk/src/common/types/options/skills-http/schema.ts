@@ -33,12 +33,14 @@ export const skillsConfigJwtOptionsSchema = z.object({
 
 /**
  * Cache configuration schema.
+ *
+ * Supports 'redis' (uses ioredis under the hood) and 'vercel-kv' providers.
  */
 export const skillsConfigCacheOptionsSchema = z.object({
   enabled: z.boolean().optional().default(false),
   redis: z
     .object({
-      provider: z.enum(['redis', 'ioredis', 'vercel-kv', '@vercel/kv']),
+      provider: z.enum(['redis', 'vercel-kv', '@vercel/kv']),
       host: z.string().optional(),
       port: z.number().int().positive().optional(),
       password: z.string().optional(),
@@ -143,9 +145,19 @@ export function normalizeSkillsConfigOptions(options: SkillsConfigOptionsInput |
   normalizedApi: NormalizedEndpointConfig;
 } {
   const parsed = skillsConfigOptionsSchema.parse(options ?? {});
-  const prefix = parsed.prefix ?? '';
   const auth = parsed.auth ?? 'inherit';
   const apiKeys = parsed.apiKeys;
+
+  // Normalize prefix: ensure leading slash, remove trailing slash
+  let prefix = parsed.prefix ?? '';
+  if (prefix) {
+    if (!prefix.startsWith('/')) {
+      prefix = '/' + prefix;
+    }
+    if (prefix.endsWith('/')) {
+      prefix = prefix.slice(0, -1);
+    }
+  }
 
   return {
     ...parsed,
