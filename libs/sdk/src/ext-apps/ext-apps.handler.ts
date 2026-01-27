@@ -234,6 +234,9 @@ export class ExtAppsMessageHandler {
    * Handle ui/updateModelContext - Update model context with widget state.
    */
   private async handleUpdateModelContext(params: ExtAppsUpdateModelContextParams): Promise<void> {
+    if (!this.hostCapabilities.modelContextUpdate) {
+      throw new ExtAppsNotSupportedError('Model context update not advertised by host');
+    }
     if (!this.context.updateModelContext) {
       throw new ExtAppsNotSupportedError('Model context update not supported by host');
     }
@@ -249,6 +252,9 @@ export class ExtAppsMessageHandler {
    * Handle ui/openLink - Request to open a URL.
    */
   private async handleOpenLink(params: ExtAppsOpenLinkParams): Promise<void> {
+    if (!this.hostCapabilities.openLink) {
+      throw new ExtAppsNotSupportedError('Open link not advertised by host');
+    }
     if (!this.context.openLink) {
       throw new ExtAppsNotSupportedError('Open link not supported by host');
     }
@@ -259,11 +265,20 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError('URL is required');
     }
 
-    // Basic URL validation
+    // URL validation with scheme allowlist
+    let parsed: URL;
     try {
-      new URL(url);
+      parsed = new URL(url);
     } catch {
       throw new ExtAppsInvalidParamsError('Invalid URL format');
+    }
+
+    // Security: only allow safe URL schemes
+    const allowedSchemes = ['http:', 'https:'];
+    if (!allowedSchemes.includes(parsed.protocol)) {
+      throw new ExtAppsInvalidParamsError(
+        `URL scheme '${parsed.protocol}' not allowed. Only http: and https: are permitted.`,
+      );
     }
 
     this.logger.verbose(`handleOpenLink: url=${url}`);
@@ -275,14 +290,19 @@ export class ExtAppsMessageHandler {
    * Handle ui/setDisplayMode - Request display mode change.
    */
   private async handleSetDisplayMode(params: ExtAppsSetDisplayModeParams): Promise<void> {
-    if (!this.context.setDisplayMode) {
-      throw new ExtAppsNotSupportedError('Display mode change not supported by host');
-    }
-
     const { mode } = params;
 
     if (!mode || !['inline', 'fullscreen', 'pip'].includes(mode)) {
       throw new ExtAppsInvalidParamsError('Invalid display mode. Must be inline, fullscreen, or pip');
+    }
+
+    // Check if host advertised support for this display mode
+    if (this.hostCapabilities.displayModes && !this.hostCapabilities.displayModes.includes(mode)) {
+      throw new ExtAppsNotSupportedError(`Display mode '${mode}' not advertised by host`);
+    }
+
+    if (!this.context.setDisplayMode) {
+      throw new ExtAppsNotSupportedError('Display mode change not supported by host');
     }
 
     this.logger.verbose(`handleSetDisplayMode: mode=${mode}`);
@@ -343,6 +363,9 @@ export class ExtAppsMessageHandler {
    * Handle ui/registerTool - Register a widget-defined tool.
    */
   private async handleRegisterTool(params: ExtAppsRegisterToolParams): Promise<void> {
+    if (!this.hostCapabilities.widgetTools) {
+      throw new ExtAppsNotSupportedError('Widget tools not advertised by host');
+    }
     if (!this.context.registerTool) {
       throw new ExtAppsNotSupportedError('Widget tool registration not supported by host');
     }
@@ -370,6 +393,9 @@ export class ExtAppsMessageHandler {
    * Handle ui/unregisterTool - Unregister a widget-defined tool.
    */
   private async handleUnregisterTool(params: ExtAppsUnregisterToolParams): Promise<void> {
+    if (!this.hostCapabilities.widgetTools) {
+      throw new ExtAppsNotSupportedError('Widget tools not advertised by host');
+    }
     if (!this.context.unregisterTool) {
       throw new ExtAppsNotSupportedError('Widget tool unregistration not supported by host');
     }

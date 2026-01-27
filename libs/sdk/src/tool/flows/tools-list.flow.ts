@@ -499,8 +499,20 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             meta['ui/mimeType'] = 'text/html+mcp';
 
             // Add widget capabilities if configured (for ext-apps initialization)
+            // Map flattened config to spec-compliant structure (ExtAppsWidgetCapabilities)
             if (uiConfig.widgetCapabilities) {
-              meta['ui/capabilities'] = uiConfig.widgetCapabilities;
+              const capabilities: { tools?: { listChanged?: boolean }; supportsPartialInput?: boolean } = {};
+
+              if (uiConfig.widgetCapabilities.toolListChanged !== undefined) {
+                capabilities.tools = { listChanged: uiConfig.widgetCapabilities.toolListChanged };
+              }
+              if (uiConfig.widgetCapabilities.supportsPartialInput !== undefined) {
+                capabilities.supportsPartialInput = uiConfig.widgetCapabilities.supportsPartialInput;
+              }
+
+              if (Object.keys(capabilities).length > 0) {
+                meta['ui/capabilities'] = capabilities;
+              }
             }
 
             // Add manifest info for ext-apps (uses ui/* namespace)

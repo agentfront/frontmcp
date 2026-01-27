@@ -404,7 +404,7 @@ export class ExtAppsAdapter extends BaseAdapter {
    * Handle partial tool input (streaming).
    */
   private _handleToolInputPartial(params: ExtAppsToolInputParams): void {
-    this._toolInput = { ...this._toolInput, ...params.arguments };
+    this._toolInput = { ...this._toolInput, ...(params.arguments || {}) };
 
     // Emit tool:input-partial event
     this._emitBridgeEvent('tool:input-partial', { arguments: this._toolInput });
