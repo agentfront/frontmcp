@@ -21,6 +21,8 @@ import type {
   ExtAppsJsonRpcRequest,
   ExtAppsJsonRpcResponse,
   ExtAppsHostCapabilities,
+  ExtAppsInitializeParams,
+  ExtAppsInitializeResult,
 } from './ext-apps.types';
 import { EXT_APPS_ERROR_CODES } from './ext-apps.types';
 
@@ -154,6 +156,10 @@ export class ExtAppsMessageHandler {
    */
   private async routeMethod(method: string, params: unknown): Promise<unknown> {
     switch (method) {
+      // Initialization
+      case 'ui/initialize':
+        return this.handleInitialize(params as ExtAppsInitializeParams);
+
       // Core methods
       case 'ui/callServerTool':
         return this.handleCallServerTool(params as ExtAppsCallServerToolParams);
@@ -185,6 +191,24 @@ export class ExtAppsMessageHandler {
       default:
         throw new ExtAppsMethodNotFoundError(`Unknown ext-apps method: ${method}`);
     }
+  }
+
+  /**
+   * Handle ui/initialize - Protocol handshake with widget.
+   * Returns host capabilities and initial context.
+   */
+  private handleInitialize(params: ExtAppsInitializeParams): ExtAppsInitializeResult {
+    const { appInfo, protocolVersion } = params;
+
+    this.logger.verbose(
+      `handleInitialize: app=${appInfo?.name || 'unknown'} v${appInfo?.version || 'unknown'}, protocol=${protocolVersion}`,
+    );
+
+    // Return host capabilities and protocol acknowledgment
+    return {
+      hostCapabilities: this.hostCapabilities,
+      protocolVersion: protocolVersion || '2024-11-05',
+    };
   }
 
   /**
@@ -285,6 +309,10 @@ export class ExtAppsMessageHandler {
    * Handle ui/log - Forward logs to server logger.
    */
   private async handleLog(params: ExtAppsLogParams): Promise<void> {
+    if (!this.hostCapabilities.logging) {
+      throw new ExtAppsNotSupportedError('Logging not supported by host');
+    }
+
     const { level, message, data } = params;
 
     if (!message || typeof message !== 'string') {

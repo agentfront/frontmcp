@@ -267,6 +267,7 @@ var ExtAppsAdapter = {
   capabilities: Object.assign({}, DEFAULT_CAPABILITIES, { canPersistState: true, hasNetworkAccess: true }),
   trustedOrigins: ${originsArray},
   trustedOrigin: null,
+  originTrustPending: false,
   pendingRequests: {},
   requestId: 0,
   hostCapabilities: {},
@@ -337,6 +338,11 @@ var ExtAppsAdapter = {
         context.toolInput = params.arguments || {};
         window.dispatchEvent(new CustomEvent('tool:input', { detail: { arguments: context.toolInput } }));
         break;
+      case 'ui/notifications/tool-input-partial':
+        // Streaming: merge partial input with existing
+        context.toolInput = Object.assign({}, context.toolInput, params.arguments || {});
+        window.dispatchEvent(new CustomEvent('tool:input-partial', { detail: { arguments: context.toolInput } }));
+        break;
       case 'ui/notifications/tool-result':
         context.toolOutput = params.content;
         context.structuredContent = params.structuredContent;
@@ -347,17 +353,24 @@ var ExtAppsAdapter = {
         Object.assign(context.hostContext, params);
         context.notifyContextChange(params);
         break;
+      case 'ui/notifications/cancelled':
+        window.dispatchEvent(new CustomEvent('tool:cancelled', { detail: { reason: params.reason } }));
+        break;
     }
   },
   isOriginTrusted: function(origin) {
     if (this.trustedOrigins.length > 0) {
       return this.trustedOrigins.indexOf(origin) !== -1;
     }
-    // When no trusted origins configured, trust first message origin (trust-on-first-use).
-    // SECURITY WARNING: This creates a race condition - whichever iframe sends the first
-    // message establishes permanent trust. For production, always configure trustedOrigins.
+    // Trust-on-first-use: trust first message origin.
+    // SECURITY WARNING: For production, always configure trustedOrigins.
     if (!this.trustedOrigin) {
+      // Guard against race condition where multiple messages arrive simultaneously
+      if (this.originTrustPending) {
+        return false;
+      }
       if (window.parent !== window && origin) {
+        this.originTrustPending = true;
         this.trustedOrigin = origin;
         return true;
       }

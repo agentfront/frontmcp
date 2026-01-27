@@ -78,6 +78,7 @@ export class ExtAppsAdapter extends BaseAdapter {
   > = new Map();
   private _requestId = 0;
   private _trustedOrigin: string | undefined;
+  private _originTrustPending = false; // Guard against race condition in trust-on-first-use
   private _hostCapabilities: ExtAppsInitializeResult['hostCapabilities'] = {};
 
   constructor(config?: ExtAppsAdapterConfig) {
@@ -148,13 +149,22 @@ export class ExtAppsAdapter extends BaseAdapter {
     // Setup message listener
     this._setupMessageListener();
 
-    // Call base initialization
-    await super.initialize();
+    try {
+      // Call base initialization
+      await super.initialize();
 
-    // Perform ui/initialize handshake
-    await this._performHandshake();
+      // Perform ui/initialize handshake
+      await this._performHandshake();
 
-    this._initialized = true;
+      this._initialized = true;
+    } catch (error) {
+      // Clean up message listener on failure to prevent memory leak
+      if (this._messageListener && typeof window !== 'undefined') {
+        window.removeEventListener('message', this._messageListener);
+        this._messageListener = undefined;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -511,6 +521,30 @@ export class ExtAppsAdapter extends BaseAdapter {
   // ============================================
 
   /**
+   * Validate that the handshake response has the expected structure.
+   */
+  private _isValidInitializeResult(result: unknown): result is ExtAppsInitializeResult {
+    if (!result || typeof result !== 'object') return false;
+
+    const r = result as Record<string, unknown>;
+
+    // hostCapabilities is optional but must be an object if present
+    if (
+      r['hostCapabilities'] !== undefined &&
+      (typeof r['hostCapabilities'] !== 'object' || r['hostCapabilities'] === null)
+    ) {
+      return false;
+    }
+
+    // hostContext is optional but must be an object if present
+    if (r['hostContext'] !== undefined && (typeof r['hostContext'] !== 'object' || r['hostContext'] === null)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Perform the ui/initialize handshake with the host.
    */
   private async _performHandshake(): Promise<void> {
@@ -528,7 +562,14 @@ export class ExtAppsAdapter extends BaseAdapter {
     };
 
     try {
-      const result = (await this._sendRequest('ui/initialize', params)) as ExtAppsInitializeResult;
+      const rawResult = await this._sendRequest('ui/initialize', params);
+
+      // Validate response structure
+      if (!this._isValidInitializeResult(rawResult)) {
+        throw new Error('Invalid ui/initialize response structure');
+      }
+
+      const result = rawResult;
 
       // Store host capabilities
       this._hostCapabilities = result.hostCapabilities || {};
@@ -567,17 +608,33 @@ export class ExtAppsAdapter extends BaseAdapter {
   /**
    * Check if an origin is trusted.
    * Uses trust-on-first-use if no explicit origins configured.
+   *
+   * Security note: Trust-on-first-use has inherent risks. For production,
+   * always configure explicit trustedOrigins in adapter config.
    */
   private _isOriginTrusted(origin: string): boolean {
-    // Explicit trusted origins from config
+    // Explicit trusted origins from config (preferred for security)
     const trustedOrigins = this._config.options?.trustedOrigins;
     if (trustedOrigins && trustedOrigins.length > 0) {
       return trustedOrigins.includes(origin);
     }
 
     // Trust-on-first-use: trust the first origin we receive from
+    // Use a guard flag to prevent race condition where multiple
+    // messages arrive simultaneously before _trustedOrigin is set
     if (!this._trustedOrigin) {
+      // Check if another message is already establishing trust
+      if (this._originTrustPending) {
+        // Another message is in the process of establishing trust
+        // Reject this message to prevent race condition
+        return false;
+      }
+
+      // Mark that we're establishing trust
+      this._originTrustPending = true;
       this._trustedOrigin = origin;
+      // Note: _originTrustPending stays true - once trust is established,
+      // all subsequent first-use checks should use _trustedOrigin
       return true;
     }
 

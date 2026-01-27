@@ -12,6 +12,9 @@
  */
 
 import type { UITemplateConfig, UIContentSecurityPolicy } from '../types';
+import { DISPLAY_MODE_MAP } from './platform-meta.constants';
+
+export { DISPLAY_MODE_MAP, type ExtAppsDisplayMode } from './platform-meta.constants';
 
 // ============================================
 // Platform Types
@@ -472,15 +475,7 @@ function buildGenericMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<
 
   // Display mode preference
   if (uiConfig.displayMode) {
-    // Map generic display modes to MCP Apps specific values
-    const displayModeMap: Record<string, 'inline' | 'fullscreen' | 'pip'> = {
-      inline: 'inline',
-      fullscreen: 'fullscreen',
-      pip: 'pip',
-      widget: 'inline',
-      panel: 'fullscreen',
-    };
-    const mappedMode = displayModeMap[uiConfig.displayMode];
+    const mappedMode = DISPLAY_MODE_MAP[uiConfig.displayMode];
     if (mappedMode) {
       meta['ui/displayMode'] = mappedMode;
     }
@@ -532,16 +527,7 @@ function buildExtAppsMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<
 
   // Display mode preference
   if (uiConfig.displayMode) {
-    // Map generic display modes to MCP Apps specific values
-    const displayModeMap: Record<string, 'inline' | 'fullscreen' | 'pip'> = {
-      inline: 'inline',
-      fullscreen: 'fullscreen',
-      pip: 'pip',
-      // Map OpenAI-style values
-      widget: 'inline',
-      panel: 'fullscreen',
-    };
-    const mappedMode = displayModeMap[uiConfig.displayMode];
+    const mappedMode = DISPLAY_MODE_MAP[uiConfig.displayMode];
     if (mappedMode) {
       meta['ui/displayMode'] = mappedMode;
     }
@@ -663,12 +649,7 @@ export function buildToolDiscoveryMeta<In = unknown, Out = unknown>(
       }
 
       if (uiConfig.displayMode) {
-        const displayModeMap: Record<string, 'inline' | 'fullscreen' | 'pip'> = {
-          inline: 'inline',
-          fullscreen: 'fullscreen',
-          pip: 'pip',
-        };
-        const mappedMode = displayModeMap[uiConfig.displayMode];
+        const mappedMode = DISPLAY_MODE_MAP[uiConfig.displayMode];
         if (mappedMode) {
           meta['ui/displayMode'] = mappedMode;
         }
@@ -690,12 +671,7 @@ export function buildToolDiscoveryMeta<In = unknown, Out = unknown>(
       meta['ui/mimeType'] = 'text/html+mcp';
 
       if (uiConfig.displayMode) {
-        const displayModeMap: Record<string, 'inline' | 'fullscreen' | 'pip'> = {
-          inline: 'inline',
-          fullscreen: 'fullscreen',
-          pip: 'pip',
-        };
-        const mappedMode = displayModeMap[uiConfig.displayMode];
+        const mappedMode = DISPLAY_MODE_MAP[uiConfig.displayMode];
         if (mappedMode) {
           meta['ui/displayMode'] = mappedMode;
         }

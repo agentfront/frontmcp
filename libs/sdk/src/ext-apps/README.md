@@ -63,17 +63,17 @@ Key components:
 
 ### Widget → Host Requests
 
-| Method                  | Purpose                         | Host Capability Required |
-| ----------------------- | ------------------------------- | ------------------------ |
-| `ui/initialize`         | Protocol handshake              | (always supported)       |
-| `ui/callServerTool`     | Invoke a server-side MCP tool   | `serverToolProxy`        |
-| `ui/updateModelContext` | Update model context with state | `modelContextUpdate`     |
-| `ui/openLink`           | Request to open a URL           | `openLink`               |
-| `ui/setDisplayMode`     | Change display mode             | (always supported)       |
-| `ui/close`              | Close the widget                | (always supported)       |
-| `ui/log`                | Send log message to host        | `logging`                |
-| `ui/registerTool`       | Register widget-defined tool    | `widgetTools`            |
-| `ui/unregisterTool`     | Unregister widget-defined tool  | `widgetTools`            |
+| Method                  | Purpose                         | Host Capability Required              |
+| ----------------------- | ------------------------------- | ------------------------------------- |
+| `ui/initialize`         | Protocol handshake              | (always supported)                    |
+| `ui/callServerTool`     | Invoke a server-side MCP tool   | `serverToolProxy`                     |
+| `ui/updateModelContext` | Update model context with state | `modelContextUpdate`                  |
+| `ui/openLink`           | Request to open a URL           | `openLink`                            |
+| `ui/setDisplayMode`     | Change display mode             | Handler context must provide callback |
+| `ui/close`              | Close the widget                | Handler context must provide callback |
+| `ui/log`                | Send log message to host        | `logging`                             |
+| `ui/registerTool`       | Register widget-defined tool    | `widgetTools`                         |
+| `ui/unregisterTool`     | Unregister widget-defined tool  | `widgetTools`                         |
 
 ### Host → Widget Notifications
 

@@ -10,7 +10,6 @@ import {
   ExtAppsInvalidParamsError,
   ExtAppsNotSupportedError,
   type ExtAppsHandlerContext,
-  type ExtAppsMessageHandlerOptions,
 } from '../ext-apps.handler';
 import { EXT_APPS_ERROR_CODES } from '../ext-apps.types';
 import type { ExtAppsJsonRpcRequest } from '../ext-apps.types';
