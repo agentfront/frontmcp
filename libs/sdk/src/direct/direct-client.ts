@@ -40,7 +40,8 @@ import {
 } from './llm-platform';
 import type { Scope } from '../scope/scope.instance';
 import { PublicMcpError } from '../errors';
-
+import { randomUUID } from '@frontmcp/utils';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 /**
  * DirectClient implementation that wraps an MCP client.
  *
@@ -95,9 +96,7 @@ export class DirectClientImpl implements DirectClient {
    */
   static async create(scope: Scope, options?: ConnectOptions): Promise<DirectClient> {
     // Dynamic imports for tree-shaking
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
     const { createInMemoryServer } = await import('../transport/in-memory-server.js');
-    const { randomUUID } = await import('@frontmcp/utils');
 
     const sessionId = options?.session?.id ?? `direct:${randomUUID()}`;
     const clientInfo = options?.clientInfo ?? { name: 'mcp-client', version: '1.0.0' };
