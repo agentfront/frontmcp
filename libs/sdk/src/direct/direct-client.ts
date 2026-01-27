@@ -109,8 +109,8 @@ export class DirectClientImpl implements DirectClient {
     if (options?.session?.user) {
       authInfo['user'] = {
         iss: 'direct',
-        sub: options.session.user.sub ?? 'direct',
         ...options.session.user,
+        sub: options.session.user?.sub ?? 'direct',
       };
     }
 
@@ -120,39 +120,45 @@ export class DirectClientImpl implements DirectClient {
       authInfo: Object.keys(authInfo).length > 0 ? authInfo : undefined,
     });
 
-    // Build client capabilities
-    const clientCapabilities = options?.capabilities
-      ? {
-          capabilities: options.capabilities,
-        }
-      : undefined;
+    try {
+      // Build client capabilities
+      const clientCapabilities = options?.capabilities
+        ? {
+            capabilities: options.capabilities,
+          }
+        : undefined;
 
-    // Connect MCP client
-    // Note: Using 'any' cast for clientTransport to handle ESM/CJS type incompatibility
-    // between dynamic imports from @modelcontextprotocol/sdk
-    const mcpClient = new Client(clientInfo, clientCapabilities);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await mcpClient.connect(clientTransport as any);
+      // Connect MCP client
+      // Note: Using 'any' cast for clientTransport to handle ESM/CJS type incompatibility
+      // between dynamic imports from @modelcontextprotocol/sdk
+      const mcpClient = new Client(clientInfo, clientCapabilities);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await mcpClient.connect(clientTransport as any);
 
-    // Get server info from handshake
-    const serverInfo = mcpClient.getServerVersion();
-    const serverCapabilities = mcpClient.getServerCapabilities();
+      // Get server info from handshake
+      const serverInfo = mcpClient.getServerVersion();
+      const serverCapabilities = mcpClient.getServerCapabilities();
 
-    if (!serverInfo) {
-      throw new PublicMcpError('Failed to get server info from MCP handshake', 'HANDSHAKE_FAILED', 500);
+      if (!serverInfo) {
+        throw new PublicMcpError('Failed to get server info from MCP handshake', 'HANDSHAKE_FAILED', 500);
+      }
+      if (!serverCapabilities) {
+        throw new PublicMcpError('Failed to get server capabilities from MCP handshake', 'HANDSHAKE_FAILED', 500);
+      }
+
+      const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
+      client.closeServer = close;
+
+      // Set up internal handlers for notifications and requests
+      // Note: MCP SDK uses typed notification/request handlers with zod schemas
+      await client.setupNotificationHandlers(mcpClient);
+
+      return client;
+    } catch (error) {
+      // Ensure server cleanup on any error during client setup
+      await close();
+      throw error;
     }
-    if (!serverCapabilities) {
-      throw new PublicMcpError('Failed to get server capabilities from MCP handshake', 'HANDSHAKE_FAILED', 500);
-    }
-
-    const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
-    client.closeServer = close;
-
-    // Set up internal handlers for notifications and requests
-    // Note: MCP SDK uses typed notification/request handlers with zod schemas
-    await client.setupNotificationHandlers(mcpClient);
-
-    return client;
   }
 
   /**

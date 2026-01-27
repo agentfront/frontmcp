@@ -145,7 +145,7 @@ export default function skillsLoadRequestHandler({
       };
 
       // Validate result against schema
-      return SkillsLoadResultSchema.parse(result) as SkillsLoadResult;
+      return SkillsLoadResultSchema.parse(result);
     },
   };
 }

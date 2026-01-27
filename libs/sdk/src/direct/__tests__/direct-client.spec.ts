@@ -33,7 +33,7 @@ jest.mock('../../transport/in-memory-server', () => ({
   }),
 }));
 
-// Mock MCP SDK Client
+// Mock MCP SDK Client - defined before jest.mock to allow hoisting
 const mockMcpClient = {
   connect: jest.fn().mockResolvedValue(undefined),
   close: jest.fn().mockResolvedValue(undefined),
@@ -66,11 +66,15 @@ const mockMcpClient = {
   setRequestHandler: jest.fn(),
 };
 
-const MockClient = jest.fn().mockImplementation(() => mockMcpClient);
-
+// MockClient defined inside the mock factory to avoid hoisting issues
+// (jest.mock is hoisted, but accessing outer variables before they're defined causes errors)
 jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
-  Client: MockClient,
+  Client: jest.fn().mockImplementation(() => mockMcpClient),
 }));
+
+// Import the mocked Client to use in tests for assertions
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { Client: MockClient } = require('@modelcontextprotocol/sdk/client/index.js');
 
 describe('DirectClientImpl', () => {
   // Minimal mock scope

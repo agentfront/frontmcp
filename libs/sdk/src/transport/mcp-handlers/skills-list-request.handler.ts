@@ -56,7 +56,7 @@ export default function skillsListRequestHandler({
       };
 
       // Validate result against schema
-      return SkillsListResultSchema.parse(result) as SkillsListResult;
+      return SkillsListResultSchema.parse(result);
     },
   };
 }

@@ -71,7 +71,7 @@ export default function skillsSearchRequestHandler({
       };
 
       // Validate result against schema
-      return SkillsSearchResultSchema.parse(result) as SkillsSearchResult;
+      return SkillsSearchResultSchema.parse(result);
     },
   };
 }

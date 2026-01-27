@@ -143,8 +143,8 @@ function sanitizeSchemaForOpenAI(schema: Record<string, unknown>): Record<string
   // Clone to avoid mutating original
   const result = { ...schema };
 
-  // Add additionalProperties: false for strict mode compatibility
-  if (result['type'] === 'object' && !('additionalProperties' in result)) {
+  // Enforce additionalProperties: false for OpenAI strict mode compliance
+  if (result['type'] === 'object') {
     result['additionalProperties'] = false;
   }
 

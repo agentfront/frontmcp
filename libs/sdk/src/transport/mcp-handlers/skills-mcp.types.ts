@@ -40,6 +40,10 @@ export const SkillsSearchResultSchema = z.object({
   guidance: z.string(),
 });
 
+/**
+ * Skills search result type.
+ * Index signature allows additional server-provided properties for forward compatibility.
+ */
 export type SkillsSearchResult = z.infer<typeof SkillsSearchResultSchema> & {
   [key: string]: unknown;
 };
@@ -115,6 +119,10 @@ export const SkillsLoadResultSchema = z.object({
   nextSteps: z.string(),
 });
 
+/**
+ * Skills load result type.
+ * Index signature allows additional server-provided properties for forward compatibility.
+ */
 export type SkillsLoadResult = z.infer<typeof SkillsLoadResultSchema> & {
   [key: string]: unknown;
 };
@@ -159,6 +167,10 @@ export const SkillsListResultSchema = z.object({
   hasMore: z.boolean(),
 });
 
+/**
+ * Skills list result type.
+ * Index signature allows additional server-provided properties for forward compatibility.
+ */
 export type SkillsListResult = z.infer<typeof SkillsListResultSchema> & {
   [key: string]: unknown;
 };
