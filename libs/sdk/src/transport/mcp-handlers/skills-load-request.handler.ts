@@ -1,76 +1,12 @@
-import { z } from 'zod';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import {
+  SkillsLoadRequestSchema,
+  SkillsLoadResultSchema,
+  SkillsLoadRequest,
+  SkillsLoadResult,
+} from './skills-mcp.types';
 import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
-
-/**
- * Request schema for skills/load custom MCP method.
- */
-const SkillsLoadRequestSchema = z.object({
-  method: z.literal('skills/load'),
-  params: z.object({
-    skillIds: z.array(z.string()).min(1).describe('Array of skill IDs to load'),
-    format: z.enum(['full', 'instructions-only']).optional().describe('Content format'),
-    activateSession: z.boolean().optional().describe('Whether to activate a skill session'),
-    policyMode: z.enum(['strict', 'approval', 'permissive']).optional().describe('Policy mode for session'),
-  }),
-});
-
-type SkillsLoadRequest = z.infer<typeof SkillsLoadRequestSchema>;
-
-/**
- * Response schema for skills/load.
- */
-const SkillsLoadResultSchema = z.object({
-  skills: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      description: z.string(),
-      instructions: z.string(),
-      tools: z.array(
-        z.object({
-          name: z.string(),
-          purpose: z.string().optional(),
-          available: z.boolean(),
-          inputSchema: z.unknown().optional(),
-          outputSchema: z.unknown().optional(),
-        }),
-      ),
-      parameters: z
-        .array(
-          z.object({
-            name: z.string(),
-            description: z.string().optional(),
-            required: z.boolean().optional(),
-            type: z.string().optional(),
-          }),
-        )
-        .optional(),
-      availableTools: z.array(z.string()),
-      missingTools: z.array(z.string()),
-      isComplete: z.boolean(),
-      formattedContent: z.string(),
-      session: z
-        .object({
-          activated: z.boolean(),
-          sessionId: z.string().optional(),
-          policyMode: z.string().optional(),
-          allowedTools: z.array(z.string()).optional(),
-        })
-        .optional(),
-    }),
-  ),
-  summary: z.object({
-    totalSkills: z.number(),
-    totalTools: z.number(),
-    allToolsAvailable: z.boolean(),
-    combinedWarnings: z.array(z.string()).optional(),
-  }),
-  nextSteps: z.string(),
-});
-
-type SkillsLoadResult = z.infer<typeof SkillsLoadResultSchema>;
 
 /**
  * MCP handler for skills/load custom method.
@@ -84,6 +20,7 @@ export default function skillsLoadRequestHandler({
 
   return {
     requestSchema: SkillsLoadRequestSchema,
+    responseSchema: SkillsLoadResultSchema,
     handler: async (request: SkillsLoadRequest) => {
       const { skillIds, format } = request.params;
       logger.verbose(`skills/load: [${skillIds.join(', ')}]`);
@@ -194,11 +131,14 @@ export default function skillsLoadRequestHandler({
           ? `Loaded ${loadedSkills.length} skill(s). Follow the instructions to complete the task.`
           : 'No skills were loaded. Check the skill IDs and try again.';
 
-      return {
+      const result = {
         skills: loadedSkills,
         summary,
         nextSteps,
       };
+
+      // Validate result against schema
+      return SkillsLoadResultSchema.parse(result) as SkillsLoadResult;
     },
   };
 }
