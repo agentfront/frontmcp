@@ -33,6 +33,61 @@ export type AIPlatformType =
   | 'unknown';
 
 // ============================================
+// MIME Type Utilities
+// ============================================
+
+/**
+ * MCP Apps MIME type variants.
+ *
+ * - `'standard'`: `text/html+mcp` - The standard MCP Apps MIME type
+ * - `'profile'`: `text/html;profile=mcp-app` - Profile-based MIME type variant
+ */
+export type ExtAppsMimeTypeVariant = 'standard' | 'profile';
+
+/**
+ * Get the appropriate MCP Apps MIME type.
+ *
+ * MCP Apps supports two MIME type formats:
+ * - Standard: `text/html+mcp` (default)
+ * - Profile: `text/html;profile=mcp-app`
+ *
+ * The profile variant may be preferred by some hosts for content negotiation.
+ *
+ * @param variant - The MIME type variant to use
+ * @returns The MCP Apps MIME type string
+ *
+ * @example
+ * ```typescript
+ * import { getExtAppsMimeType } from '@frontmcp/uipack/adapters';
+ *
+ * // Default standard MIME type
+ * getExtAppsMimeType(); // 'text/html+mcp'
+ *
+ * // Profile-based MIME type
+ * getExtAppsMimeType('profile'); // 'text/html;profile=mcp-app'
+ * ```
+ */
+export function getExtAppsMimeType(variant: ExtAppsMimeTypeVariant = 'standard'): string {
+  switch (variant) {
+    case 'profile':
+      return 'text/html;profile=mcp-app';
+    case 'standard':
+    default:
+      return 'text/html+mcp';
+  }
+}
+
+/**
+ * Check if a MIME type is a valid MCP Apps MIME type.
+ *
+ * @param mimeType - The MIME type to check
+ * @returns True if the MIME type is a valid MCP Apps MIME type
+ */
+export function isExtAppsMimeType(mimeType: string): boolean {
+  return mimeType === 'text/html+mcp' || mimeType === 'text/html;profile=mcp-app';
+}
+
+// ============================================
 // UI Metadata
 // ============================================
 
@@ -295,14 +350,15 @@ export function buildOpenAICSP(csp: UIContentSecurityPolicy): {
 
 /**
  * Build Claude-specific metadata.
- * Claude widgets are network-blocked, so we don't include URI references.
- * Uses claude/* namespace for Claude-specific fields.
+ *
+ * Claude now supports MCP Apps (2026+) with full bidirectional communication.
+ * See: https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/
+ *
+ * Uses claude/* namespace for Claude-specific fields and ui/* namespace
+ * for MCP Apps fields (resourceUri, CSP, etc.).
  */
 function buildClaudeMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
-  // Claude uses inline HTML only (network-blocked)
-  // Don't include resource URI since Claude can't fetch it
-
-  // Widget description
+  // Claude-specific fields (claude/* namespace)
   if (uiConfig.widgetDescription) {
     meta['claude/widgetDescription'] = uiConfig.widgetDescription;
   }
@@ -312,9 +368,7 @@ function buildClaudeMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<I
     meta['claude/displayMode'] = uiConfig.displayMode;
   }
 
-  // Widget accessibility hint (informational for Claude)
-  // Note: Claude's Artifact system may not support tool callbacks,
-  // but we include this for consistency and future compatibility
+  // Widget accessibility hint
   if (uiConfig.widgetAccessible) {
     meta['claude/widgetAccessible'] = true;
   }
@@ -324,8 +378,24 @@ function buildClaudeMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<I
     meta['claude/prefersBorder'] = uiConfig.prefersBorder;
   }
 
-  // Note: We don't include CSP for Claude since it's network-blocked
-  // and CSP policies aren't applicable in the sandboxed iframe
+  // MCP Apps fields (ui/* namespace) - for Claude MCP Apps support
+  if (uiConfig.resourceUri) {
+    meta['ui/resourceUri'] = uiConfig.resourceUri;
+  }
+
+  // CSP for Claude MCP Apps (when network is available)
+  if (uiConfig.csp) {
+    const csp: { connectDomains?: string[]; resourceDomains?: string[] } = {};
+    if (uiConfig.csp.connectDomains?.length) {
+      csp.connectDomains = uiConfig.csp.connectDomains;
+    }
+    if (uiConfig.csp.resourceDomains?.length) {
+      csp.resourceDomains = uiConfig.csp.resourceDomains;
+    }
+    if (Object.keys(csp).length > 0) {
+      meta['ui/csp'] = csp;
+    }
+  }
 
   return meta;
 }
@@ -613,7 +683,43 @@ export function buildToolDiscoveryMeta<In = unknown, Out = unknown>(
       }
       break;
 
-    // Claude, Gemini, IDEs don't need discovery metadata
+    case 'claude':
+      // Claude MCP Apps (2026+) - same resourceUri format as ext-apps
+      // See: https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/
+      meta['ui/resourceUri'] = staticWidgetUri;
+      meta['ui/mimeType'] = 'text/html+mcp';
+
+      if (uiConfig.displayMode) {
+        const displayModeMap: Record<string, 'inline' | 'fullscreen' | 'pip'> = {
+          inline: 'inline',
+          fullscreen: 'fullscreen',
+          pip: 'pip',
+        };
+        const mappedMode = displayModeMap[uiConfig.displayMode];
+        if (mappedMode) {
+          meta['ui/displayMode'] = mappedMode;
+        }
+      }
+
+      if (uiConfig.prefersBorder !== undefined) {
+        meta['ui/prefersBorder'] = uiConfig.prefersBorder;
+      }
+
+      if (uiConfig.csp) {
+        const csp: { connectDomains?: string[]; resourceDomains?: string[] } = {};
+        if (uiConfig.csp.connectDomains?.length) {
+          csp.connectDomains = uiConfig.csp.connectDomains;
+        }
+        if (uiConfig.csp.resourceDomains?.length) {
+          csp.resourceDomains = uiConfig.csp.resourceDomains;
+        }
+        if (Object.keys(csp).length > 0) {
+          meta['ui/csp'] = csp;
+        }
+      }
+      break;
+
+    // Gemini, IDEs don't need discovery metadata
     // They use inline HTML at call time
     default:
       break;

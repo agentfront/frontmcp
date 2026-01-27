@@ -273,10 +273,29 @@ var ExtAppsAdapter = {
   canHandle: function() {
     if (typeof window === 'undefined') return false;
     if (window.parent === window) return false;
-    // Check for OpenAI SDK (window.openai.callTool) - defer to OpenAIAdapter
+
+    // Check for OpenAI SDK - defer to OpenAIAdapter
+    if (window.openai && window.openai.canvas) return false;
     if (window.openai && typeof window.openai.callTool === 'function') return false;
+
+    // Explicit ext-apps marker
     if (window.__mcpPlatform === 'ext-apps') return true;
-    return true;
+    if (window.__extAppsInitialized) return true;
+
+    // Claude MCP Apps mode (2026+) - uses ext-apps protocol
+    if (window.__mcpAppsEnabled) return true;
+
+    // Legacy Claude detection - defer to ClaudeAdapter
+    if (window.claude) return false;
+    if (window.__claudeArtifact) return false;
+    if (window.__mcpPlatform === 'claude') return false;
+    if (typeof location !== 'undefined') {
+      var href = location.href;
+      if (href.indexOf('claude.ai') !== -1 || href.indexOf('anthropic.com') !== -1) return false;
+    }
+
+    // Do NOT default to true for any iframe
+    return false;
   },
   initialize: function(context) {
     var self = this;
@@ -409,6 +428,34 @@ var ExtAppsAdapter = {
   },
   requestClose: function(context) {
     return this.sendRequest('ui/close', {});
+  },
+  // Extended ext-apps methods (full specification)
+  updateModelContext: function(context, data, merge) {
+    if (!this.hostCapabilities.modelContextUpdate) {
+      return Promise.reject(new Error('Model context update not supported'));
+    }
+    return this.sendRequest('ui/updateModelContext', { context: data, merge: merge !== false });
+  },
+  log: function(context, level, message, data) {
+    if (!this.hostCapabilities.logging) {
+      // Fallback to console logging if host doesn't support it
+      var logFn = console[level] || console.log;
+      logFn('[Widget] ' + message, data);
+      return Promise.resolve();
+    }
+    return this.sendRequest('ui/log', { level: level, message: message, data: data });
+  },
+  registerTool: function(context, name, description, inputSchema) {
+    if (!this.hostCapabilities.widgetTools) {
+      return Promise.reject(new Error('Widget tool registration not supported'));
+    }
+    return this.sendRequest('ui/registerTool', { name: name, description: description, inputSchema: inputSchema });
+  },
+  unregisterTool: function(context, name) {
+    if (!this.hostCapabilities.widgetTools) {
+      return Promise.reject(new Error('Widget tool unregistration not supported'));
+    }
+    return this.sendRequest('ui/unregisterTool', { name: name });
   }
 };
 `.trim();
@@ -432,6 +479,13 @@ var ClaudeAdapter = {
   }),
   canHandle: function() {
     if (typeof window === 'undefined') return false;
+
+    // If MCP Apps is enabled, let ext-apps adapter handle it
+    if (window.__mcpAppsEnabled) return false;
+    if (window.__mcpPlatform === 'ext-apps') return false;
+    if (window.__extAppsInitialized) return false;
+
+    // Legacy Claude detection
     if (window.__mcpPlatform === 'claude') return true;
     if (window.claude) return true;
     if (window.__claudeArtifact) return true;
@@ -799,6 +853,42 @@ FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
 FrontMcpBridge.prototype.requestClose = function() {
   if (!this._adapter) return Promise.reject(new Error('Not initialized'));
   return this._adapter.requestClose(this._context);
+};
+
+// Extended ext-apps methods (full specification)
+FrontMcpBridge.prototype.updateModelContext = function(context, merge) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.updateModelContext) {
+    return Promise.reject(new Error('updateModelContext not supported on this platform'));
+  }
+  return this._adapter.updateModelContext(this._context, context, merge);
+};
+
+FrontMcpBridge.prototype.log = function(level, message, data) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.log) {
+    // Fallback to console
+    var logFn = console[level] || console.log;
+    logFn('[Widget] ' + message, data);
+    return Promise.resolve();
+  }
+  return this._adapter.log(this._context, level, message, data);
+};
+
+FrontMcpBridge.prototype.registerTool = function(name, description, inputSchema) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.registerTool) {
+    return Promise.reject(new Error('registerTool not supported on this platform'));
+  }
+  return this._adapter.registerTool(this._context, name, description, inputSchema);
+};
+
+FrontMcpBridge.prototype.unregisterTool = function(name) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.unregisterTool) {
+    return Promise.reject(new Error('unregisterTool not supported on this platform'));
+  }
+  return this._adapter.unregisterTool(this._context, name);
 };
 
 FrontMcpBridge.prototype.setWidgetState = function(state) {

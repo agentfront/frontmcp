@@ -216,6 +216,52 @@ export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transp
 export type { TransportType, TransportKey } from './transport';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MCP Apps (ext-apps) Support
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ext-apps message handler for bidirectional widget communication
+export {
+  ExtAppsMessageHandler,
+  createExtAppsMessageHandler,
+  EXT_APPS_ERROR_CODES,
+  ExtAppsError,
+  ExtAppsMethodNotFoundError,
+  ExtAppsInvalidParamsError,
+  ExtAppsNotSupportedError,
+  ExtAppsToolNotFoundError,
+} from './ext-apps';
+
+export type {
+  // Core message params
+  ExtAppsCallServerToolParams,
+  ExtAppsUpdateModelContextParams,
+  ExtAppsOpenLinkParams,
+  // Display and lifecycle
+  ExtAppsDisplayMode,
+  ExtAppsSetDisplayModeParams,
+  ExtAppsCloseParams,
+  // Logging
+  ExtAppsLogLevel,
+  ExtAppsLogParams,
+  // Widget-defined tools
+  ExtAppsRegisterToolParams,
+  ExtAppsUnregisterToolParams,
+  // Capabilities
+  ExtAppsHostCapabilities,
+  ExtAppsWidgetCapabilities,
+  // Initialization
+  ExtAppsInitializeParams,
+  ExtAppsInitializeResult,
+  // Handler context
+  ExtAppsHandlerContext,
+  ExtAppsMessageHandlerOptions,
+  // JSON-RPC types
+  ExtAppsJsonRpcRequest,
+  ExtAppsJsonRpcResponse,
+  ExtAppsJsonRpcNotification,
+} from './ext-apps';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auth Session Stores
 // ─────────────────────────────────────────────────────────────────────────────
 

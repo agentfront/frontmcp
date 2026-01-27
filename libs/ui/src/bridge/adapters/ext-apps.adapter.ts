@@ -94,7 +94,13 @@ export class ExtAppsAdapter extends BaseAdapter {
   }
 
   /**
-   * Check if we're in an iframe (potential ext-apps context).
+   * Check if we're in an iframe with explicit ext-apps context.
+   *
+   * This adapter requires explicit ext-apps markers to avoid incorrectly
+   * matching other iframe-based platforms (e.g., Claude legacy artifacts).
+   *
+   * Claude MCP Apps (2026+) uses the ext-apps protocol - detected via
+   * __mcpAppsEnabled flag, which takes precedence over legacy Claude markers.
    */
   canHandle(): boolean {
     if (typeof window === 'undefined') return false;
@@ -103,16 +109,34 @@ export class ExtAppsAdapter extends BaseAdapter {
     const inIframe = window.parent !== window;
     if (!inIframe) return false;
 
-    // Check we're not already detected as OpenAI
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = window as any;
-    if (win.openai?.canvas) return false;
 
-    // Check for explicit ext-apps marker
+    // Check we're not already detected as OpenAI
+    if (win.openai?.canvas) return false;
+    if (win.openai && typeof win.openai.callTool === 'function') return false;
+
+    // Explicit ext-apps marker
     if (win.__mcpPlatform === 'ext-apps') return true;
 
-    // In an iframe without OpenAI SDK = likely ext-apps context
-    return true;
+    // ext-apps initialization flag (set by handshake)
+    if (win.__extAppsInitialized) return true;
+
+    // Claude MCP Apps mode (2026+) - uses ext-apps protocol
+    // See: https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/
+    if (win.__mcpAppsEnabled) return true;
+
+    // Legacy Claude detection - defer to Claude adapter
+    if (win.claude) return false;
+    if (win.__claudeArtifact) return false;
+    if (win.__mcpPlatform === 'claude') return false;
+    if (typeof location !== 'undefined') {
+      const href = location.href;
+      if (href.includes('claude.ai') || href.includes('anthropic.com')) return false;
+    }
+
+    // Do NOT default to true for any iframe
+    return false;
   }
 
   /**
@@ -188,6 +212,81 @@ export class ExtAppsAdapter extends BaseAdapter {
 
   override async requestClose(): Promise<void> {
     await this._sendRequest('ui/close', {});
+  }
+
+  // ============================================
+  // Extended ext-apps Methods (Full Specification)
+  // ============================================
+
+  /**
+   * Update the model context with widget state.
+   *
+   * This allows the widget to pass contextual information to the model,
+   * which can be used to inform subsequent interactions.
+   *
+   * @param context - The context data to update
+   * @param merge - Whether to merge with existing context (default: true)
+   */
+  async updateModelContext(context: unknown, merge = true): Promise<void> {
+    if (!this._hostCapabilities.modelContextUpdate) {
+      throw new Error('Model context update not supported by host');
+    }
+
+    await this._sendRequest('ui/updateModelContext', { context, merge });
+  }
+
+  /**
+   * Send a log message to the host.
+   *
+   * Allows the widget to forward log messages to the host for debugging
+   * or monitoring purposes.
+   *
+   * @param level - Log level (debug, info, warn, error)
+   * @param message - Log message
+   * @param data - Optional additional data
+   */
+  async log(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: unknown): Promise<void> {
+    if (!this._hostCapabilities.logging) {
+      // Fallback to console logging if host doesn't support it
+      const logFn = console[level] || console.log;
+      logFn(`[Widget] ${message}`, data);
+      return;
+    }
+
+    await this._sendRequest('ui/log', { level, message, data });
+  }
+
+  /**
+   * Register a widget-defined tool.
+   *
+   * Allows the widget to dynamically register tools that can be
+   * invoked by the model or user.
+   *
+   * @param name - Tool name
+   * @param description - Tool description
+   * @param inputSchema - Tool input schema (JSON Schema format)
+   */
+  async registerTool(name: string, description: string, inputSchema: Record<string, unknown>): Promise<void> {
+    if (!this._hostCapabilities.widgetTools) {
+      throw new Error('Widget tool registration not supported by host');
+    }
+
+    await this._sendRequest('ui/registerTool', { name, description, inputSchema });
+  }
+
+  /**
+   * Unregister a widget-defined tool.
+   *
+   * Removes a previously registered tool.
+   *
+   * @param name - Tool name to unregister
+   */
+  async unregisterTool(name: string): Promise<void> {
+    if (!this._hostCapabilities.widgetTools) {
+      throw new Error('Widget tool unregistration not supported by host');
+    }
+
+    await this._sendRequest('ui/unregisterTool', { name });
   }
 
   // ============================================

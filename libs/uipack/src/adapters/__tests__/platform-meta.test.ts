@@ -6,7 +6,14 @@
  * For static mode, tools/list provides the static widget URI via buildToolDiscoveryMeta.
  */
 
-import { buildUIMeta, buildToolDiscoveryMeta, type AIPlatformType, type UITemplateConfig } from '../platform-meta';
+import {
+  buildUIMeta,
+  buildToolDiscoveryMeta,
+  getExtAppsMimeType,
+  isExtAppsMimeType,
+  type AIPlatformType,
+  type UITemplateConfig,
+} from '../platform-meta';
 
 describe('Platform Metadata Adapters', () => {
   const baseUIConfig: UITemplateConfig = {
@@ -386,6 +393,37 @@ describe('Platform Metadata Adapters', () => {
     });
   });
 
+  describe('getExtAppsMimeType', () => {
+    it('should return standard MIME type by default', () => {
+      expect(getExtAppsMimeType()).toBe('text/html+mcp');
+    });
+
+    it('should return standard MIME type when explicitly requested', () => {
+      expect(getExtAppsMimeType('standard')).toBe('text/html+mcp');
+    });
+
+    it('should return profile MIME type when requested', () => {
+      expect(getExtAppsMimeType('profile')).toBe('text/html;profile=mcp-app');
+    });
+  });
+
+  describe('isExtAppsMimeType', () => {
+    it('should return true for standard MCP Apps MIME type', () => {
+      expect(isExtAppsMimeType('text/html+mcp')).toBe(true);
+    });
+
+    it('should return true for profile MCP Apps MIME type', () => {
+      expect(isExtAppsMimeType('text/html;profile=mcp-app')).toBe(true);
+    });
+
+    it('should return false for other MIME types', () => {
+      expect(isExtAppsMimeType('text/html')).toBe(false);
+      expect(isExtAppsMimeType('text/html+skybridge')).toBe(false);
+      expect(isExtAppsMimeType('application/json')).toBe(false);
+      expect(isExtAppsMimeType('')).toBe(false);
+    });
+  });
+
   describe('buildUIMeta - claude platform enhanced fields', () => {
     it('should include displayMode for Claude', () => {
       const meta = buildUIMeta({
@@ -439,7 +477,7 @@ describe('Platform Metadata Adapters', () => {
       expect(meta['claude/widgetDescription']).toBe('Claude widget description');
     });
 
-    it('should NOT include CSP for Claude (network-blocked)', () => {
+    it('should include CSP in ui/* namespace for Claude MCP Apps', () => {
       const meta = buildUIMeta({
         uiConfig: {
           ...baseUIConfig,
@@ -451,8 +489,83 @@ describe('Platform Metadata Adapters', () => {
         html,
       });
 
-      // Claude is network-blocked, so CSP is not applicable
+      // Claude MCP Apps (2026+) supports CSP in ui/* namespace
+      expect(meta['ui/csp']).toEqual({
+        connectDomains: ['https://api.example.com'],
+      });
+      // Should NOT have claude/* CSP (doesn't exist)
       expect(meta['claude/widgetCSP']).toBeUndefined();
+    });
+
+    it('should include resourceUri in ui/* namespace when provided', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          resourceUri: 'ui://widget/test.html',
+        },
+        platformType: 'claude',
+        html,
+      });
+
+      expect(meta['ui/resourceUri']).toBe('ui://widget/test.html');
+    });
+  });
+
+  describe('buildToolDiscoveryMeta - Claude MCP Apps', () => {
+    const staticWidgetUri = 'ui://widget/test_tool.html';
+
+    it('should include ui/resourceUri in discovery metadata for Claude', () => {
+      const meta = buildToolDiscoveryMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'claude',
+        staticWidgetUri,
+      });
+
+      expect(meta['ui/resourceUri']).toBe(staticWidgetUri);
+      expect(meta['ui/mimeType']).toBe('text/html+mcp');
+    });
+
+    it('should include CSP in discovery metadata for Claude', () => {
+      const meta = buildToolDiscoveryMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          csp: {
+            connectDomains: ['https://api.example.com'],
+          },
+        },
+        platformType: 'claude',
+        staticWidgetUri,
+      });
+
+      expect(meta['ui/csp']).toEqual({
+        connectDomains: ['https://api.example.com'],
+      });
+    });
+
+    it('should include displayMode in discovery metadata for Claude', () => {
+      const meta = buildToolDiscoveryMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          displayMode: 'fullscreen',
+        },
+        platformType: 'claude',
+        staticWidgetUri,
+      });
+
+      expect(meta['ui/displayMode']).toBe('fullscreen');
+    });
+
+    it('should include prefersBorder in discovery metadata for Claude', () => {
+      const meta = buildToolDiscoveryMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          prefersBorder: false,
+        },
+        platformType: 'claude',
+        staticWidgetUri,
+      });
+
+      expect(meta['ui/prefersBorder']).toBe(false);
     });
   });
 });

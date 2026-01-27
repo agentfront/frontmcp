@@ -11,6 +11,7 @@
 export {
   // Platform Types
   type AIPlatformType,
+  type ExtAppsMimeTypeVariant,
   // Metadata Types
   type UIMetadata,
   type BuildUIMetaOptions,
@@ -20,6 +21,9 @@ export {
   buildToolDiscoveryMeta,
   buildOpenAICSP,
   buildFrontMCPCSP,
+  // MIME Type Utilities
+  getExtAppsMimeType,
+  isExtAppsMimeType,
 } from './platform-meta';
 
 export {
