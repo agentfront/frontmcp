@@ -5,19 +5,14 @@
  * These utilities are separate from the decorator to keep @FrontMcp lean.
  */
 
-import type { FrontMcpConfigInput, frontMcpMetadataSchema } from '../common';
+import type { FrontMcpConfigInput } from '../common';
 import type { DirectClient, ConnectOptions, LLMConnectOptions } from './client.types';
 import { PLATFORM_CLIENT_INFO } from './llm-platform';
 import type { Scope } from '../scope/scope.instance';
 
-/**
- * Scope metadata interface for WeakMap key tracking.
- * Uses parsed config as cache key since config objects are stable references.
- */
-type ParsedConfig = ReturnType<typeof frontMcpMetadataSchema.parse>;
-
 // Cache for initialized scopes (singleton per parsed config)
-const scopeCache = new WeakMap<object, Promise<Scope>>();
+// Using let to allow reassignment in clearScopeCache()
+let scopeCache = new WeakMap<object, Promise<Scope>>();
 
 /**
  * Get or create a scope for the given config.
@@ -33,17 +28,24 @@ async function getScope(config: FrontMcpConfigInput): Promise<Scope> {
   let scopePromise = scopeCache.get(cacheKey);
   if (!scopePromise) {
     scopePromise = (async () => {
-      const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
+      try {
+        const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
+        const { PublicMcpError } = await import('../errors/index.js');
 
-      // Create instance without starting HTTP server
-      const instance = await FrontMcpInstance.createForGraph(config);
-      const scopes = instance.getScopes();
+        // Create instance without starting HTTP server
+        const instance = await FrontMcpInstance.createForGraph(config);
+        const scopes = instance.getScopes();
 
-      if (scopes.length === 0) {
-        throw new Error('No scopes initialized. Ensure at least one app is configured.');
+        if (scopes.length === 0) {
+          throw new PublicMcpError('No scopes initialized. Ensure at least one app is configured.', 'NO_SCOPES', 500);
+        }
+
+        return scopes[0] as Scope;
+      } catch (error) {
+        // Remove from cache on failure to allow retry
+        scopeCache.delete(cacheKey);
+        throw error;
       }
-
-      return scopes[0] as Scope;
     })();
     scopeCache.set(cacheKey, scopePromise);
   }
@@ -264,10 +266,9 @@ export async function connectVercelAI(config: FrontMcpConfigInput, options?: LLM
 
 /**
  * Clear the scope cache (for testing).
+ * Creates a new WeakMap instance to clear all cached entries.
  * @internal
  */
 export function clearScopeCache(): void {
-  // WeakMap doesn't have a clear() method, but since it's weak-referenced,
-  // entries will be GC'd when config objects are no longer referenced.
-  // For testing, callers should ensure they don't reuse config objects.
+  scopeCache = new WeakMap<object, Promise<Scope>>();
 }

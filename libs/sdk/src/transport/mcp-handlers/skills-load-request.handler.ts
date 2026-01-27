@@ -7,6 +7,7 @@ import {
 } from './skills-mcp.types';
 import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
 import { formatSkillForLLM } from '../../skill/skill.utils';
+import { PublicMcpError } from '../../errors';
 
 /**
  * MCP handler for skills/load custom method.
@@ -27,7 +28,7 @@ export default function skillsLoadRequestHandler({
 
       const skillRegistry = scope.skills;
       if (!skillRegistry) {
-        throw new Error('Skills capability not available');
+        throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
       }
 
       const toolRegistry = scope.tools;
@@ -36,6 +37,15 @@ export default function skillsLoadRequestHandler({
       const warnings: string[] = [];
       const allToolNames = new Set<string>();
       let allToolsAvailable = true;
+
+      // Build tool lookup map once before iteration (performance optimization)
+      const toolsByName = new Map<string, { getInputJsonSchema: () => unknown }>();
+      if (toolRegistry && format !== 'instructions-only') {
+        const allTools = toolRegistry.getTools(false);
+        for (const tool of allTools) {
+          toolsByName.set(tool.name, tool);
+        }
+      }
 
       for (const skillId of skillIds) {
         const loadResult = await skillRegistry.loadSkill(skillId);
@@ -63,16 +73,7 @@ export default function skillsLoadRequestHandler({
           ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
           : formatSkillForLLM(skill, availableTools, missingTools);
 
-        // Get tool schemas if full format is requested
-        // Build a lookup map from tool registry if available
-        const toolsByName = new Map<string, { getInputJsonSchema: () => unknown }>();
-        if (toolRegistry && format !== 'instructions-only') {
-          const allTools = toolRegistry.getTools(false);
-          for (const tool of allTools) {
-            toolsByName.set(tool.name, tool);
-          }
-        }
-
+        // Build tool info with schemas
         const toolsWithSchemas = skill.tools.map((t) => {
           const available = availableTools.includes(t.name);
           const toolInfo: {

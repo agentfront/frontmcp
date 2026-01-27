@@ -6,6 +6,7 @@ import {
   SkillsSearchResult,
 } from './skills-mcp.types';
 import { extractToolNames } from '../../common/metadata/skill.metadata';
+import { PublicMcpError } from '../../errors';
 
 /**
  * MCP handler for skills/search custom method.
@@ -26,7 +27,7 @@ export default function skillsSearchRequestHandler({
 
       const skillRegistry = scope.skills;
       if (!skillRegistry) {
-        throw new Error('Skills capability not available');
+        throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
       }
 
       // Search skills using the registry

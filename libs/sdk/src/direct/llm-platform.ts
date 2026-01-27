@@ -102,6 +102,30 @@ export interface VercelAITool {
 export type VercelAITools = Record<string, VercelAITool>;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Platform-Agnostic Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Union of all platform-specific tool formats.
+ * Returned by formatToolsForPlatform based on detected platform.
+ */
+export type FormattedTools = OpenAITool[] | ClaudeTool[] | LangChainTool[] | VercelAITools | McpTool[];
+
+/**
+ * Union of all platform-specific tool result formats.
+ * Returned by formatResultForPlatform based on detected platform.
+ */
+export type FormattedToolResult =
+  | string
+  | unknown
+  | Array<{ type: string; text: string }>
+  | CallToolResult
+  | {
+      text?: string[];
+      images?: Array<{ data: string; mimeType: string }>;
+    };
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tool Formatting
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -134,6 +158,11 @@ function sanitizeSchemaForOpenAI(schema: Record<string, unknown>): Record<string
     result['properties'] = sanitizedProperties;
   }
 
+  // Recursively handle array items
+  if (result['items'] && typeof result['items'] === 'object') {
+    result['items'] = sanitizeSchemaForOpenAI(result['items'] as Record<string, unknown>);
+  }
+
   return result;
 }
 
@@ -144,7 +173,7 @@ function sanitizeSchemaForOpenAI(schema: Record<string, unknown>): Record<string
  * @param platform - Target LLM platform
  * @returns Tools formatted for the platform
  */
-export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform): unknown {
+export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform): FormattedTools {
   switch (platform) {
     case 'openai':
       return tools.map(
@@ -200,8 +229,9 @@ export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform):
 /**
  * Extract text content from MCP CallToolResult.
  * Used for platforms that expect simple string/JSON results.
+ * Returns string for plain text, or parsed JSON (unknown) for structured data.
  */
-function extractTextContent(result: CallToolResult): string {
+function extractTextContent(result: CallToolResult): unknown {
   if (!result.content || result.content.length === 0) {
     return '';
   }
@@ -277,7 +307,7 @@ function extractStructuredResult(result: CallToolResult): unknown {
  * @param platform - Target LLM platform
  * @returns Result formatted for the platform
  */
-export function formatResultForPlatform(result: CallToolResult, platform: LLMPlatform): unknown {
+export function formatResultForPlatform(result: CallToolResult, platform: LLMPlatform): FormattedToolResult {
   // Handle toolResult-based response (newer MCP SDK versions)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const flexResult = result as any;

@@ -203,14 +203,15 @@ describe('connect utilities', () => {
       const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
       const config = createTestConfig();
 
+      // Note: ClientCapabilities uses 'roots', not 'tools' (tools is a ServerCapability)
       await connect(config, {
-        capabilities: { tools: { listChanged: true } },
+        capabilities: { roots: { listChanged: true } },
       });
 
       expect(Client).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          capabilities: { tools: { listChanged: true } },
+          capabilities: { roots: { listChanged: true } },
         }),
       );
     });

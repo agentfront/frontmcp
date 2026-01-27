@@ -5,6 +5,7 @@ import {
   SkillsListRequest,
   SkillsListResult,
 } from './skills-mcp.types';
+import { PublicMcpError } from '../../errors';
 
 /**
  * MCP handler for skills/list custom method.
@@ -26,7 +27,7 @@ export default function skillsListRequestHandler({
 
       const skillRegistry = scope.skills;
       if (!skillRegistry) {
-        throw new Error('Skills capability not available');
+        throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
       }
 
       // List skills using the registry

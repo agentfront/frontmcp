@@ -1,6 +1,21 @@
 import { Tool, ToolContext, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
 import { z } from 'zod';
 
+/**
+ * Auth info structure for DirectClient connections.
+ * User info is stored directly in authInfo when connecting via DirectClient.
+ */
+interface DirectAuthInfo {
+  token?: string;
+  user?: {
+    iss?: string;
+    sub?: string;
+    name?: string;
+    email?: string;
+    [key: string]: unknown;
+  };
+}
+
 const inputSchema = z.object({}).strict();
 
 const outputSchema = z.object({
@@ -40,10 +55,9 @@ export default class GetAuthInfoTool extends ToolContext<typeof inputSchema, typ
       };
     }
 
-    const authInfo = ctx.authInfo;
+    const authInfo = ctx.authInfo as DirectAuthInfo | undefined;
     // User info is stored directly in authInfo (from DirectClient), not in extra
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const user = (authInfo as any)?.user as Record<string, unknown> | undefined;
+    const user = authInfo?.user;
 
     return {
       sessionId: ctx.sessionId,

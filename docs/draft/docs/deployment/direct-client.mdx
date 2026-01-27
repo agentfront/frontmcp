@@ -266,7 +266,7 @@ const result = await client.complete({
 // result.completion.values: ['TypeScript', 'Types', 'Typography']
 
 // Complete for a resource argument
-const result = await client.complete({
+const resourceResult = await client.complete({
   ref: { type: 'ref/resource', uri: 'file://{path}' },
   argument: { name: 'path', value: '/src/' }
 });

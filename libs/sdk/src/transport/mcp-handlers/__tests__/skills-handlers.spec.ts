@@ -150,7 +150,7 @@ describe('Skills MCP Handlers', () => {
       };
       const ctx = createContext();
 
-      await expect(handler.handler(request, ctx as any)).rejects.toThrow('Skills capability not available');
+      await expect(handler.handler(request, ctx as any)).rejects.toThrow(/Skills capability not available/);
     });
   });
 
@@ -248,7 +248,45 @@ describe('Skills MCP Handlers', () => {
       };
       const ctx = createContext();
 
-      await expect(handler.handler(request, ctx as any)).rejects.toThrow('Skills capability not available');
+      await expect(handler.handler(request, ctx as any)).rejects.toThrow(/Skills capability not available/);
+    });
+
+    it('should exclude tool schemas when format is instructions-only', async () => {
+      // Set up tool registry with a tool that has a schema
+      mockToolRegistry.getTools.mockReturnValue([
+        {
+          name: 'tool1',
+          getInputJsonSchema: () => ({ type: 'object', properties: { foo: { type: 'string' } } }),
+        },
+      ]);
+
+      mockSkillRegistry.loadSkill.mockResolvedValueOnce({
+        skill: {
+          id: 'skill-1',
+          name: 'Test Skill',
+          description: 'A test skill',
+          instructions: 'Do the thing',
+          tools: [{ name: 'tool1', purpose: 'For doing' }],
+          parameters: [],
+        },
+        availableTools: ['tool1'],
+        missingTools: [],
+        isComplete: true,
+        warning: undefined,
+      });
+
+      const handler = skillsLoadRequestHandler(createHandlerOptions());
+      const request = {
+        method: 'skills/load' as const,
+        params: { skillIds: ['skill-1'], format: 'instructions-only' as const },
+      };
+      const ctx = createContext();
+
+      const result = await handler.handler(request, ctx as any);
+
+      expect(result.skills).toHaveLength(1);
+      // When format is 'instructions-only', inputSchema should not be included
+      expect(result.skills[0].tools[0].inputSchema).toBeUndefined();
     });
   });
 
@@ -367,7 +405,7 @@ describe('Skills MCP Handlers', () => {
       };
       const ctx = createContext();
 
-      await expect(handler.handler(request, ctx as any)).rejects.toThrow('Skills capability not available');
+      await expect(handler.handler(request, ctx as any)).rejects.toThrow(/Skills capability not available/);
     });
   });
 });

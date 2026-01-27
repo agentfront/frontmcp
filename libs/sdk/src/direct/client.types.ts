@@ -16,6 +16,10 @@ import type {
   CompleteResult,
   LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { FormattedTools, FormattedToolResult } from './llm-platform';
+
+// Re-export platform-specific types for convenience
+export type { FormattedTools, FormattedToolResult };
 
 /**
  * Supported LLM platforms for tool/result formatting.
@@ -361,7 +365,7 @@ export interface DirectClient {
    * - Vercel AI: `{ [name]: { description, parameters } }`
    * - Raw: MCP `Tool[]` format
    */
-  listTools(): Promise<unknown>;
+  listTools(): Promise<FormattedTools>;
 
   /**
    * Call a tool and get the result, formatted for the detected LLM platform.
@@ -369,7 +373,7 @@ export interface DirectClient {
    * @param name - Tool name
    * @param args - Tool arguments
    */
-  callTool(name: string, args?: Record<string, unknown>): Promise<unknown>;
+  callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult>;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Resource Operations (raw MCP format)

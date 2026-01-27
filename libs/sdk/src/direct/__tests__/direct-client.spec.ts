@@ -8,6 +8,12 @@ import type { Scope } from '../../scope/scope.instance';
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
   randomUUID: jest.fn(() => 'mock-uuid-1234'),
+  randomBytes: jest.fn(() => new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])),
+  bytesToHex: jest.fn((bytes: Uint8Array) =>
+    Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join(''),
+  ),
 }));
 
 // Mock client transport
@@ -635,6 +641,66 @@ describe('DirectClientImpl', () => {
             result: { action: 'decline' },
           },
         },
+        expect.anything(),
+      );
+    });
+
+    it('should invoke registered elicitation handler on notification', async () => {
+      // Track the notification handler registered via setNotificationHandler
+      let elicitationNotificationHandler: ((notification: { params?: unknown }) => void) | undefined;
+
+      // Mock setNotificationHandler to capture the elicitation handler
+      mockMcpClient.setNotificationHandler = jest.fn((schema: { method: string }, handler: unknown) => {
+        if (schema.method === 'elicitation/request') {
+          elicitationNotificationHandler = handler as (notification: { params?: unknown }) => void;
+        }
+      });
+
+      // Re-create client to trigger setupNotificationHandlers
+      const mockScope = createMockScope();
+      const newClient = await DirectClientImpl.create(mockScope as Scope);
+
+      // Register an elicitation handler
+      const handler = jest.fn().mockResolvedValue({ action: 'accept', content: { approved: true } });
+      newClient.onElicitation(handler);
+
+      // Mock the request method for submitting elicitation result
+      mockMcpClient.request.mockResolvedValueOnce(undefined);
+
+      // Simulate receiving an elicitation notification
+      expect(elicitationNotificationHandler).toBeDefined();
+      if (elicitationNotificationHandler) {
+        elicitationNotificationHandler({
+          params: {
+            elicitId: 'test-elicit-123',
+            message: 'Please confirm',
+            requestedSchema: { type: 'object' },
+            mode: 'form',
+            expiresAt: Date.now() + 60000,
+          },
+        });
+      }
+
+      // Wait for async handler to complete
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Verify handler was called with the request
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          elicitId: 'test-elicit-123',
+          message: 'Please confirm',
+        }),
+      );
+
+      // Verify result was submitted
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'elicitation/result',
+          params: {
+            elicitId: 'test-elicit-123',
+            result: { action: 'accept', content: { approved: true } },
+          },
+        }),
         expect.anything(),
       );
     });

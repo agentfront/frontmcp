@@ -31,8 +31,15 @@ import type {
   CompleteOptions,
   McpLogLevel,
 } from './client.types';
-import { detectPlatform, formatToolsForPlatform, formatResultForPlatform } from './llm-platform';
+import {
+  detectPlatform,
+  formatToolsForPlatform,
+  formatResultForPlatform,
+  type FormattedTools,
+  type FormattedToolResult,
+} from './llm-platform';
 import type { Scope } from '../scope/scope.instance';
+import { PublicMcpError } from '../errors';
 
 /**
  * DirectClient implementation that wraps an MCP client.
@@ -133,10 +140,10 @@ export class DirectClientImpl implements DirectClient {
     const serverCapabilities = mcpClient.getServerCapabilities();
 
     if (!serverInfo) {
-      throw new Error('Failed to get server info from MCP handshake');
+      throw new PublicMcpError('Failed to get server info from MCP handshake', 'HANDSHAKE_FAILED', 500);
     }
     if (!serverCapabilities) {
-      throw new Error('Failed to get server capabilities from MCP handshake');
+      throw new PublicMcpError('Failed to get server capabilities from MCP handshake', 'HANDSHAKE_FAILED', 500);
     }
 
     const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
@@ -151,38 +158,36 @@ export class DirectClientImpl implements DirectClient {
 
   /**
    * Set up notification handlers for resource updates and elicitation.
+   * Uses MCP SDK's setNotificationHandler for typed notification handling.
    * @internal
    */
   private setupNotificationHandlers(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mcpClient: any,
   ): void {
-    // Handle resource update notifications via the client's onclose/on notification methods
-    // The MCP SDK provides onnotification callback mechanism
-    if (typeof mcpClient.onnotification === 'function') {
-      const originalHandler = mcpClient.onnotification;
-      mcpClient.onnotification = (notification: { method?: string; params?: unknown }) => {
-        // Call original handler first
-        if (originalHandler) {
-          originalHandler(notification);
-        }
-
-        // Handle resource updates
-        if (notification.method === 'notifications/resources/updated') {
-          const uri = (notification.params as { uri?: string })?.uri;
+    // Handle resource update notifications using setNotificationHandler
+    if (typeof mcpClient.setNotificationHandler === 'function') {
+      // Handler for resource updated notifications
+      mcpClient.setNotificationHandler(
+        { method: 'notifications/resources/updated' },
+        (notification: { params?: { uri?: string } }) => {
+          const uri = notification.params?.uri;
           if (uri) {
             this.resourceUpdateHandlers.forEach((h) => h(uri));
           }
-        }
+        },
+      );
 
-        // Handle elicitation requests
-        if (notification.method === 'elicitation/request') {
-          const params = notification.params as ElicitationRequest | undefined;
+      // Handler for elicitation request notifications
+      mcpClient.setNotificationHandler(
+        { method: 'elicitation/request' },
+        (notification: { params?: ElicitationRequest }) => {
+          const params = notification.params;
           if (params) {
             this.handleElicitationRequest(params);
           }
-        }
-      };
+        },
+      );
     }
   }
 
@@ -209,12 +214,12 @@ export class DirectClientImpl implements DirectClient {
   // Tool Operations (platform-formatted)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async listTools(): Promise<unknown> {
+  async listTools(): Promise<FormattedTools> {
     const result = await this.mcpClient.listTools();
     return formatToolsForPlatform(result.tools, this.platform);
   }
 
-  async callTool(name: string, args?: Record<string, unknown>): Promise<unknown> {
+  async callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult> {
     const result = await this.mcpClient.callTool({
       name,
       arguments: args ?? {},
@@ -284,8 +289,12 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async close(): Promise<void> {
-    await this.mcpClient.close();
-    await this.closeServer?.();
+    try {
+      await this.mcpClient.close();
+    } finally {
+      // Ensure server cleanup runs even if mcpClient.close() throws
+      await this.closeServer?.();
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
