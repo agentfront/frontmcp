@@ -145,7 +145,9 @@ export class ExtAppsMessageHandler {
         error: {
           code: errorCode,
           message: errorMessage,
-          data: error instanceof Error ? { stack: error.stack } : undefined,
+          // Only include stack traces in development to avoid leaking internals in production
+          data:
+            process.env['NODE_ENV'] === 'development' && error instanceof Error ? { stack: error.stack } : undefined,
         },
       };
     }
@@ -339,6 +341,12 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError('Log message is required');
     }
 
+    // Validate log level
+    const validLevels = ['debug', 'info', 'warn', 'error'];
+    if (level && !validLevels.includes(level)) {
+      throw new ExtAppsInvalidParamsError(`Invalid log level '${level}'. Must be one of: ${validLevels.join(', ')}`);
+    }
+
     const widgetLogger = this.logger.child(`Widget:${this.context.sessionId}`);
 
     switch (level) {
@@ -380,8 +388,8 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError('Tool description is required');
     }
 
-    if (!inputSchema || typeof inputSchema !== 'object') {
-      throw new ExtAppsInvalidParamsError('Tool input schema is required');
+    if (!inputSchema || typeof inputSchema !== 'object' || Array.isArray(inputSchema)) {
+      throw new ExtAppsInvalidParamsError('Tool input schema must be a non-null object');
     }
 
     this.logger.verbose(`handleRegisterTool: name=${name}`);

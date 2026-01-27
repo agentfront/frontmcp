@@ -308,26 +308,116 @@ describe('ExtAppsMessageHandler', () => {
     });
 
     describe('ui/log', () => {
-      it('should log messages at different levels', async () => {
+      it('should log debug messages using verbose', async () => {
         const context = createMockContext();
         const handler = new ExtAppsMessageHandler({
           context,
           hostCapabilities: { logging: true },
         });
 
-        const levels = ['debug', 'info', 'warn', 'error'] as const;
+        const response = await handler.handleRequest(
+          createRequest('ui/log', {
+            level: 'debug',
+            message: 'Test debug message',
+            data: { extra: 'data' },
+          }),
+        );
 
-        for (const level of levels) {
-          const response = await handler.handleRequest(
-            createRequest('ui/log', {
-              level,
-              message: `Test ${level} message`,
-              data: { extra: 'data' },
-            }),
-          );
+        expect(response.error).toBeUndefined();
+        expect(mockLogger.child).toHaveBeenCalled();
+        expect(mockLogger.verbose).toHaveBeenCalledWith('Test debug message', { extra: 'data' });
+      });
 
-          expect(response.error).toBeUndefined();
-        }
+      it('should log info messages using info', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/log', {
+            level: 'info',
+            message: 'Test info message',
+            data: { key: 'value' },
+          }),
+        );
+
+        expect(response.error).toBeUndefined();
+        expect(mockLogger.info).toHaveBeenCalledWith('Test info message', { key: 'value' });
+      });
+
+      it('should log warn messages using warn', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/log', {
+            level: 'warn',
+            message: 'Test warn message',
+          }),
+        );
+
+        expect(response.error).toBeUndefined();
+        expect(mockLogger.warn).toHaveBeenCalledWith('Test warn message', undefined);
+      });
+
+      it('should log error messages using error', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/log', {
+            level: 'error',
+            message: 'Test error message',
+            data: { stack: 'error stack' },
+          }),
+        );
+
+        expect(response.error).toBeUndefined();
+        expect(mockLogger.error).toHaveBeenCalledWith('Test error message', { stack: 'error stack' });
+      });
+
+      it('should default to info for undefined level', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/log', {
+            message: 'Test message without level',
+          }),
+        );
+
+        expect(response.error).toBeUndefined();
+        expect(mockLogger.info).toHaveBeenCalledWith('Test message without level', undefined);
+      });
+
+      it('should reject invalid log level', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { logging: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/log', {
+            level: 'invalid-level',
+            message: 'Test message',
+          }),
+        );
+
+        expect(response.error).toBeDefined();
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('Invalid log level');
       });
 
       it('should reject missing message', async () => {
@@ -341,6 +431,19 @@ describe('ExtAppsMessageHandler', () => {
 
         expect(response.error).toBeDefined();
         expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+      });
+
+      it('should reject when logging is not supported', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { logging: false },
+        });
+
+        const response = await handler.handleRequest(createRequest('ui/log', { level: 'info', message: 'Test' }));
+
+        expect(response.error).toBeDefined();
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.NOT_SUPPORTED);
       });
     });
 
@@ -415,6 +518,46 @@ describe('ExtAppsMessageHandler', () => {
           }),
         );
         expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+      });
+
+      it('should reject inputSchema that is an array', async () => {
+        const registerTool = jest.fn().mockResolvedValue(undefined);
+        const context = createMockContext({ registerTool });
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { widgetTools: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/registerTool', {
+            name: 'my_tool',
+            description: 'My tool',
+            inputSchema: ['not', 'an', 'object'],
+          }),
+        );
+
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('must be a non-null object');
+      });
+
+      it('should reject null inputSchema', async () => {
+        const registerTool = jest.fn().mockResolvedValue(undefined);
+        const context = createMockContext({ registerTool });
+        const handler = new ExtAppsMessageHandler({
+          context,
+          hostCapabilities: { widgetTools: true },
+        });
+
+        const response = await handler.handleRequest(
+          createRequest('ui/registerTool', {
+            name: 'my_tool',
+            description: 'My tool',
+            inputSchema: null,
+          }),
+        );
+
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('must be a non-null object');
       });
     });
 

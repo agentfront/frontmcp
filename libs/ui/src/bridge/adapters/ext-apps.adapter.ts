@@ -132,8 +132,15 @@ export class ExtAppsAdapter extends BaseAdapter {
     if (win.__claudeArtifact) return false;
     if (win.__mcpPlatform === 'claude') return false;
     if (typeof location !== 'undefined') {
-      const href = location.href;
-      if (href.includes('claude.ai') || href.includes('anthropic.com')) return false;
+      try {
+        const url = new URL(location.href);
+        const hostname = url.hostname.toLowerCase();
+        const isClaudeHost = hostname === 'claude.ai' || hostname.endsWith('.claude.ai');
+        const isAnthropicHost = hostname === 'anthropic.com' || hostname.endsWith('.anthropic.com');
+        if (isClaudeHost || isAnthropicHost) return false;
+      } catch {
+        // If URL parsing fails, fall through to other checks
+      }
     }
 
     // Do NOT default to true for any iframe
@@ -193,7 +200,7 @@ export class ExtAppsAdapter extends BaseAdapter {
 
   override async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this._hostCapabilities.serverToolProxy) {
-      throw new Error('Server tool proxy not supported by host');
+      throw new ExtAppsNotSupportedError('Server tool proxy not supported by host');
     }
 
     return this._sendRequest('ui/callServerTool', {
@@ -239,7 +246,7 @@ export class ExtAppsAdapter extends BaseAdapter {
    */
   async updateModelContext(context: unknown, merge = true): Promise<void> {
     if (!this._hostCapabilities.modelContextUpdate) {
-      throw new Error('Model context update not supported by host');
+      throw new ExtAppsNotSupportedError('Model context update not supported by host');
     }
 
     await this._sendRequest('ui/updateModelContext', { context, merge });
@@ -278,7 +285,7 @@ export class ExtAppsAdapter extends BaseAdapter {
    */
   async registerTool(name: string, description: string, inputSchema: Record<string, unknown>): Promise<void> {
     if (!this._hostCapabilities.widgetTools) {
-      throw new Error('Widget tool registration not supported by host');
+      throw new ExtAppsNotSupportedError('Widget tool registration not supported by host');
     }
 
     await this._sendRequest('ui/registerTool', { name, description, inputSchema });
@@ -293,7 +300,7 @@ export class ExtAppsAdapter extends BaseAdapter {
    */
   async unregisterTool(name: string): Promise<void> {
     if (!this._hostCapabilities.widgetTools) {
-      throw new Error('Widget tool unregistration not supported by host');
+      throw new ExtAppsNotSupportedError('Widget tool unregistration not supported by host');
     }
 
     await this._sendRequest('ui/unregisterTool', { name });
@@ -633,8 +640,7 @@ export class ExtAppsAdapter extends BaseAdapter {
       // Mark that we're establishing trust
       this._originTrustPending = true;
       this._trustedOrigin = origin;
-      // Note: _originTrustPending stays true - once trust is established,
-      // all subsequent first-use checks should use _trustedOrigin
+      this._originTrustPending = false; // Reset after successful trust establishment
       return true;
     }
 
@@ -665,4 +671,14 @@ export class ExtAppsAdapter extends BaseAdapter {
  */
 export function createExtAppsAdapter(config?: ExtAppsAdapterConfig): ExtAppsAdapter {
   return new ExtAppsAdapter(config);
+}
+
+/**
+ * Error thrown when a feature is not supported by the host.
+ */
+export class ExtAppsNotSupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExtAppsNotSupportedError';
+  }
 }

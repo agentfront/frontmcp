@@ -146,7 +146,7 @@ const EXT_APPS_ERROR_CODES = {
 The main server-side handler for processing widget requests:
 
 ```typescript
-import { ExtAppsMessageHandler, createExtAppsMessageHandler } from '@frontmcp/sdk/ext-apps';
+import { ExtAppsMessageHandler, createExtAppsMessageHandler } from '@frontmcp/sdk';
 
 const handler = createExtAppsMessageHandler({
   context: {

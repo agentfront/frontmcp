@@ -171,8 +171,11 @@ describe('IIFE Generator', () => {
       expect(script).toContain("window.__mcpPlatform === 'claude'");
       expect(script).toContain('window.__claudeArtifact');
       expect(script).toContain('window.claude');
-      expect(script).toContain("href.indexOf('claude.ai')");
-      expect(script).toContain("href.indexOf('anthropic.com')");
+      // URL hostname validation using proper URL parsing
+      expect(script).toContain('new URL(location.href)');
+      expect(script).toContain('hostname.toLowerCase()');
+      expect(script).toContain("hostname === 'claude.ai'");
+      expect(script).toContain("hostname === 'anthropic.com'");
     });
 
     it('should require explicit ext-apps marker instead of defaulting to true', () => {

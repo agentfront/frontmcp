@@ -182,4 +182,109 @@ describe('ExtAppsAdapter', () => {
       // The method should handle window being undefined gracefully
     });
   });
+
+  describe('extended ext-apps methods', () => {
+    let adapterWithConfig: ExtAppsAdapter;
+
+    beforeEach(() => {
+      adapterWithConfig = new ExtAppsAdapter();
+    });
+
+    describe('updateModelContext', () => {
+      it('should throw ExtAppsNotSupportedError when modelContextUpdate capability is not present', async () => {
+        // Host capabilities don't include modelContextUpdate
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = {};
+
+        await expect(adapterWithConfig.updateModelContext({ key: 'value' })).rejects.toThrow(
+          'Model context update not supported by host',
+        );
+      });
+
+      it('should throw ExtAppsNotSupportedError when modelContextUpdate is false', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = { modelContextUpdate: false };
+
+        await expect(adapterWithConfig.updateModelContext({ key: 'value' })).rejects.toThrow(
+          'Model context update not supported by host',
+        );
+      });
+    });
+
+    describe('log', () => {
+      it('should fall back to console when host does not support logging', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = { logging: false };
+
+        const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+        await adapterWithConfig.log('info', 'Test message', { extra: 'data' });
+
+        expect(consoleSpy).toHaveBeenCalledWith('[Widget] Test message', { extra: 'data' });
+        consoleSpy.mockRestore();
+      });
+
+      it('should use correct console method for each log level', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = { logging: false };
+
+        const debugSpy = jest.spyOn(console, 'debug').mockImplementation();
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+        await adapterWithConfig.log('debug', 'Debug message');
+        expect(debugSpy).toHaveBeenCalledWith('[Widget] Debug message', undefined);
+
+        await adapterWithConfig.log('warn', 'Warn message');
+        expect(warnSpy).toHaveBeenCalledWith('[Widget] Warn message', undefined);
+
+        await adapterWithConfig.log('error', 'Error message');
+        expect(errorSpy).toHaveBeenCalledWith('[Widget] Error message', undefined);
+
+        debugSpy.mockRestore();
+        warnSpy.mockRestore();
+        errorSpy.mockRestore();
+      });
+    });
+
+    describe('registerTool', () => {
+      it('should throw ExtAppsNotSupportedError when widgetTools capability is not present', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = {};
+
+        await expect(adapterWithConfig.registerTool('my_tool', 'A tool', { type: 'object' })).rejects.toThrow(
+          'Widget tool registration not supported by host',
+        );
+      });
+
+      it('should throw ExtAppsNotSupportedError when widgetTools is false', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = { widgetTools: false };
+
+        await expect(adapterWithConfig.registerTool('my_tool', 'A tool', { type: 'object' })).rejects.toThrow(
+          'Widget tool registration not supported by host',
+        );
+      });
+    });
+
+    describe('unregisterTool', () => {
+      it('should throw ExtAppsNotSupportedError when widgetTools capability is not present', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = {};
+
+        await expect(adapterWithConfig.unregisterTool('my_tool')).rejects.toThrow(
+          'Widget tool unregistration not supported by host',
+        );
+      });
+
+      it('should throw ExtAppsNotSupportedError when widgetTools is false', async () => {
+        // @ts-expect-error - accessing private property for testing
+        adapterWithConfig._hostCapabilities = { widgetTools: false };
+
+        await expect(adapterWithConfig.unregisterTool('my_tool')).rejects.toThrow(
+          'Widget tool unregistration not supported by host',
+        );
+      });
+    });
+  });
 });

@@ -291,8 +291,15 @@ var ExtAppsAdapter = {
     if (window.__claudeArtifact) return false;
     if (window.__mcpPlatform === 'claude') return false;
     if (typeof location !== 'undefined') {
-      var href = location.href;
-      if (href.indexOf('claude.ai') !== -1 || href.indexOf('anthropic.com') !== -1) return false;
+      try {
+        var url = new URL(location.href);
+        var hostname = url.hostname.toLowerCase();
+        var isClaudeHost = hostname === 'claude.ai' || (hostname.length > 10 && hostname.slice(-10) === '.claude.ai');
+        var isAnthropicHost = hostname === 'anthropic.com' || (hostname.length > 14 && hostname.slice(-14) === '.anthropic.com');
+        if (isClaudeHost || isAnthropicHost) return false;
+      } catch (e) {
+        // If URL parsing fails, fall through to other checks
+      }
     }
 
     // Do NOT default to true for any iframe
@@ -372,6 +379,7 @@ var ExtAppsAdapter = {
       if (window.parent !== window && origin) {
         this.originTrustPending = true;
         this.trustedOrigin = origin;
+        this.originTrustPending = false; // Reset after successful trust establishment
         return true;
       }
       return false;
@@ -503,8 +511,15 @@ var ClaudeAdapter = {
     if (window.claude) return true;
     if (window.__claudeArtifact) return true;
     if (typeof location !== 'undefined') {
-      var href = location.href;
-      if (href.indexOf('claude.ai') !== -1 || href.indexOf('anthropic.com') !== -1) return true;
+      try {
+        var url = new URL(location.href);
+        var hostname = url.hostname.toLowerCase();
+        var isClaudeHost = hostname === 'claude.ai' || (hostname.length > 10 && hostname.slice(-10) === '.claude.ai');
+        var isAnthropicHost = hostname === 'anthropic.com' || (hostname.length > 14 && hostname.slice(-14) === '.anthropic.com');
+        if (isClaudeHost || isAnthropicHost) return true;
+      } catch (e) {
+        // If URL parsing fails, fall through
+      }
     }
     return false;
   },
