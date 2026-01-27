@@ -81,10 +81,25 @@ Key differences from tools:
 
 ### MCP Integration
 
-- **flows/search-skills.flow.ts** - `skills:search` MCP flow for skill discovery
-- **flows/load-skill.flow.ts** - `skills:load` MCP flow for loading skill content
+Skills are exposed through multiple MCP interfaces:
+
+**MCP Tools (for LLMs):**
+
 - **tools/search-skills.tool.ts** - `searchSkills` tool definition
 - **tools/load-skill.tool.ts** - `loadSkill` tool definition
+
+**MCP Flows (internal):**
+
+- **flows/search-skills.flow.ts** - `skills:search` MCP flow for skill discovery
+- **flows/load-skill.flow.ts** - `skills:load` MCP flow for loading skill content
+
+**MCP Custom Methods (for DirectClient):**
+
+- `skills/search` - Search for skills via MCP protocol
+- `skills/load` - Load skills by ID via MCP protocol
+- `skills/list` - List available skills via MCP protocol
+
+See `libs/sdk/src/transport/mcp-handlers/skills-*.handler.ts` for MCP handler implementations.
 
 ### Storage Providers
 
@@ -454,6 +469,35 @@ sequenceDiagram
     Tool->>LLM: Request human approval
   end
 ```
+
+## Programmatic Access via DirectClient
+
+Skills can be accessed programmatically using the DirectClient:
+
+```typescript
+import { connect } from '@frontmcp/sdk/direct';
+
+const client = await connect(scope);
+
+// Search for skills
+const searchResult = await client.searchSkills('code review', {
+  tags: ['github'],
+  limit: 10,
+});
+
+// Load skills
+const loadResult = await client.loadSkills(['review-pr', 'merge-pr'], {
+  format: 'full',
+});
+
+// List all skills
+const listResult = await client.listSkills({
+  sortBy: 'priority',
+  sortOrder: 'desc',
+});
+```
+
+See [DirectClient README](../direct/README.md) for complete API documentation.
 
 ## Notes for Contributors
 

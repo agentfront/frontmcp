@@ -305,6 +305,40 @@ const result = await this.elicit(message, schema, { ttl: 60000 }); // 1 minute
 // If timeout, ElicitationTimeoutError is thrown
 ```
 
+## Programmatic Access via DirectClient
+
+DirectClient supports elicitation handling for programmatic MCP access:
+
+```typescript
+import { connect } from '@frontmcp/sdk/direct';
+import type { ElicitationHandler, ElicitationRequest, ElicitationResponse } from '@frontmcp/sdk/direct';
+
+const client = await connect(scope);
+
+// Register elicitation handler
+const handler: ElicitationHandler = async (request: ElicitationRequest) => {
+  // Display UI or prompt user
+  const userInput = await promptUser(request.message, request.requestedSchema);
+
+  return {
+    action: 'accept',
+    content: userInput,
+  };
+};
+
+const unsubscribe = client.onElicitation(handler);
+
+// Call a tool that uses elicitation
+const result = await client.callTool('delete-file', { action: 'important.txt' });
+
+// Clean up
+unsubscribe();
+```
+
+If no handler is registered, elicitation requests are automatically declined.
+
+See [DirectClient README](../direct/README.md) for complete API documentation.
+
 ## Best Practices
 
 1. **Keep schemas simple**: Use clear, minimal schemas for better UX

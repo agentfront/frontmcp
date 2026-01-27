@@ -190,7 +190,22 @@ export {
 // Direct Server Access (Programmatic / In-Memory / Stdio)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Direct MCP Server - programmatic access without HTTP transport
+// Connect utilities - create DirectClient connections with LLM-aware formatting
+export { connect, connectOpenAI, connectClaude, connectLangChain, connectVercelAI } from './direct';
+export type {
+  DirectClient,
+  ConnectOptions,
+  LLMConnectOptions,
+  SessionOptions,
+  ClientInfo,
+  LLMPlatform,
+} from './direct';
+
+// LLM platform utilities (for advanced use)
+export { detectPlatform, formatToolsForPlatform, formatResultForPlatform, PLATFORM_CLIENT_INFO } from './direct';
+export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools } from './direct';
+
+// Direct MCP Server - legacy programmatic access without HTTP transport
 export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';
 
 // In-memory server for MCP SDK Client integration
