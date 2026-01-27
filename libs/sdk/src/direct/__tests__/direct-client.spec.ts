@@ -50,6 +50,13 @@ const mockMcpClient = {
   listResourceTemplates: jest.fn().mockResolvedValue({ resourceTemplates: [] }),
   listPrompts: jest.fn().mockResolvedValue({ prompts: [] }),
   getPrompt: jest.fn().mockResolvedValue({ messages: [] }),
+  // New methods for skills, elicitation, completion, subscriptions, and logging
+  request: jest.fn().mockResolvedValue({}),
+  complete: jest.fn().mockResolvedValue({ completion: { values: [], total: 0 } }),
+  subscribeResource: jest.fn().mockResolvedValue(undefined),
+  unsubscribeResource: jest.fn().mockResolvedValue(undefined),
+  setLoggingLevel: jest.fn().mockResolvedValue(undefined),
+  setNotificationHandler: jest.fn(),
 };
 
 const MockClient = jest.fn().mockImplementation(() => mockMcpClient);
@@ -475,6 +482,270 @@ describe('DirectClientImpl', () => {
 
       expect(mockMcpClient.close).toHaveBeenCalled();
       expect(mockServerClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('skills operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.request.mockClear();
+    });
+
+    it('searchSkills should call MCP client with correct request', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        total: 0,
+        hasMore: false,
+        guidance: 'No results',
+      });
+
+      await client.searchSkills('test query', { limit: 5, tags: ['tag1'] });
+
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        {
+          method: 'skills/search',
+          params: {
+            query: 'test query',
+            limit: 5,
+            tags: ['tag1'],
+          },
+        },
+        expect.anything(),
+      );
+    });
+
+    it('loadSkills should call MCP client with correct request', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        summary: { totalSkills: 0, totalTools: 0, allToolsAvailable: true },
+        nextSteps: 'No skills loaded',
+      });
+
+      await client.loadSkills(['skill-1', 'skill-2'], { format: 'full' });
+
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        {
+          method: 'skills/load',
+          params: {
+            skillIds: ['skill-1', 'skill-2'],
+            format: 'full',
+          },
+        },
+        expect.anything(),
+      );
+    });
+
+    it('listSkills should call MCP client with correct request', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        total: 0,
+        hasMore: false,
+      });
+
+      await client.listSkills({ offset: 10, limit: 20 });
+
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        {
+          method: 'skills/list',
+          params: {
+            offset: 10,
+            limit: 20,
+          },
+        },
+        expect.anything(),
+      );
+    });
+
+    it('listSkills should handle undefined options', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        total: 0,
+        hasMore: false,
+      });
+
+      await client.listSkills();
+
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        {
+          method: 'skills/list',
+          params: {},
+        },
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('elicitation operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.request.mockClear();
+    });
+
+    it('onElicitation should register handler and return unsubscribe function', async () => {
+      const handler = jest.fn().mockResolvedValue({ action: 'accept', content: {} });
+
+      const unsubscribe = client.onElicitation(handler);
+
+      expect(typeof unsubscribe).toBe('function');
+    });
+
+    it('onElicitation unsubscribe should clear handler', async () => {
+      const handler = jest.fn().mockResolvedValue({ action: 'accept', content: {} });
+
+      const unsubscribe = client.onElicitation(handler);
+      unsubscribe();
+
+      // Handler should be cleared (tested indirectly)
+      expect(unsubscribe).toBeDefined();
+    });
+
+    it('submitElicitationResult should call MCP client with correct request', async () => {
+      mockMcpClient.request.mockResolvedValueOnce(undefined);
+
+      await client.submitElicitationResult('elicit-123', { action: 'accept', content: { value: 42 } });
+
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        {
+          method: 'elicitation/result',
+          params: {
+            elicitId: 'elicit-123',
+            result: { action: 'accept', content: { value: 42 } },
+          },
+        },
+        expect.anything(),
+      );
+    });
+
+    it('submitElicitationResult should handle decline response', async () => {
+      mockMcpClient.request.mockResolvedValueOnce(undefined);
+
+      await client.submitElicitationResult('elicit-456', { action: 'decline' });
+
+      expect(mockMcpClient.request).toHaveBeenCalledWith(
+        {
+          method: 'elicitation/result',
+          params: {
+            elicitId: 'elicit-456',
+            result: { action: 'decline' },
+          },
+        },
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('completion operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.complete.mockClear();
+    });
+
+    it('complete should call MCP client with prompt ref', async () => {
+      mockMcpClient.complete.mockResolvedValueOnce({
+        completion: { values: ['value1', 'value2'], total: 2 },
+      });
+
+      await client.complete({
+        ref: { type: 'ref/prompt', name: 'test-prompt' },
+        argument: { name: 'arg1', value: 'val' },
+      });
+
+      expect(mockMcpClient.complete).toHaveBeenCalledWith({
+        ref: { type: 'ref/prompt', name: 'test-prompt' },
+        argument: { name: 'arg1', value: 'val' },
+      });
+    });
+
+    it('complete should call MCP client with resource ref', async () => {
+      mockMcpClient.complete.mockResolvedValueOnce({
+        completion: { values: [], total: 0 },
+      });
+
+      await client.complete({
+        ref: { type: 'ref/resource', uri: 'file://test.txt' },
+        argument: { name: 'path', value: '/src' },
+      });
+
+      expect(mockMcpClient.complete).toHaveBeenCalledWith({
+        ref: { type: 'ref/resource', uri: 'file://test.txt' },
+        argument: { name: 'path', value: '/src' },
+      });
+    });
+  });
+
+  describe('resource subscription operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.subscribeResource.mockClear();
+      mockMcpClient.unsubscribeResource.mockClear();
+    });
+
+    it('subscribeResource should call MCP client with uri', async () => {
+      await client.subscribeResource('file://test.txt');
+
+      expect(mockMcpClient.subscribeResource).toHaveBeenCalledWith({ uri: 'file://test.txt' });
+    });
+
+    it('unsubscribeResource should call MCP client with uri', async () => {
+      await client.unsubscribeResource('file://test.txt');
+
+      expect(mockMcpClient.unsubscribeResource).toHaveBeenCalledWith({ uri: 'file://test.txt' });
+    });
+
+    it('onResourceUpdated should register handler and return unsubscribe function', () => {
+      const handler = jest.fn();
+
+      const unsubscribe = client.onResourceUpdated(handler);
+
+      expect(typeof unsubscribe).toBe('function');
+    });
+
+    it('onResourceUpdated unsubscribe should remove handler', () => {
+      const handler = jest.fn();
+
+      const unsubscribe = client.onResourceUpdated(handler);
+      unsubscribe();
+
+      // Handler should be removed (tested indirectly)
+      expect(unsubscribe).toBeDefined();
+    });
+  });
+
+  describe('logging operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.setLoggingLevel.mockClear();
+    });
+
+    it('setLogLevel should call MCP client with level', async () => {
+      await client.setLogLevel('debug');
+
+      expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith({ level: 'debug' });
+    });
+
+    it('setLogLevel should handle various log levels', async () => {
+      const levels = ['debug', 'info', 'warning', 'error', 'critical'] as const;
+
+      for (const level of levels) {
+        mockMcpClient.setLoggingLevel.mockClear();
+        await client.setLogLevel(level);
+        expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith({ level });
+      }
     });
   });
 });

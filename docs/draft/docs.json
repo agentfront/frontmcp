@@ -175,6 +175,7 @@
                 "group": "Deployment",
                 "pages": [
                   "docs/deployment/runtime-modes",
+                  "docs/deployment/direct-client",
                   "docs/deployment/local-dev-server",
                   "docs/deployment/production-build",
                   "docs/deployment/redis-setup",

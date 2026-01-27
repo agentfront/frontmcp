@@ -17,6 +17,24 @@ export type {
   SessionOptions,
   ClientInfo,
   LLMPlatform,
+  // Skills types
+  SearchSkillsOptions,
+  SearchSkillsResult,
+  SkillSearchResultItem,
+  LoadSkillsOptions,
+  LoadSkillsResult,
+  LoadedSkillItem,
+  ListSkillsOptions,
+  ListSkillsResult,
+  // Elicitation types
+  ElicitationRequest,
+  ElicitationResponse,
+  ElicitationHandler,
+  // Completion types
+  CompleteOptions,
+  CompleteResult,
+  // Logging types
+  McpLogLevel,
 } from './client.types';
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -13,6 +13,9 @@ import getPromptRequestHandler from './get-prompt-request.handler';
 import completeRequestHandler from './complete-request.handler';
 import loggingSetLevelRequestHandler from './logging-set-level-request.handler';
 import rootsListChangedNotificationHandler from './roots-list-changed-notification.handler';
+import skillsSearchRequestHandler from './skills-search-request.handler';
+import skillsLoadRequestHandler from './skills-load-request.handler';
+import skillsListRequestHandler from './skills-list-request.handler';
 
 export function createMcpHandlers(options: McpHandlerOptions) {
   const toolsHandler = options.serverOptions?.capabilities?.tools
@@ -43,6 +46,12 @@ export function createMcpHandlers(options: McpHandlerOptions) {
   // Per MCP 2025-11-25 spec, servers MAY provide logging capability
   const loggingHandler = options.serverOptions?.capabilities?.logging ? [loggingSetLevelRequestHandler(options)] : [];
 
+  // Skills handlers are available when skill registry has skills
+  // Skills is a FrontMCP extension to MCP (custom methods: skills/search, skills/load, skills/list)
+  const skillsHandler = options.scope?.skills?.hasAny()
+    ? [skillsSearchRequestHandler(options), skillsLoadRequestHandler(options), skillsListRequestHandler(options)]
+    : [];
+
   return [
     initializeRequestHandler(options),
     initializedNotificationHandler(options),
@@ -52,6 +61,7 @@ export function createMcpHandlers(options: McpHandlerOptions) {
     ...promptsHandler,
     ...completionHandler,
     ...loggingHandler,
+    ...skillsHandler,
   ];
 }
 

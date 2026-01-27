@@ -12,8 +12,25 @@ import type {
   ListResourceTemplatesResult,
   ListPromptsResult,
   GetPromptResult,
+  CompleteResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { DirectClient, ConnectOptions, ClientInfo, LLMPlatform } from './client.types';
+import type {
+  DirectClient,
+  ConnectOptions,
+  ClientInfo,
+  LLMPlatform,
+  SearchSkillsOptions,
+  SearchSkillsResult,
+  LoadSkillsOptions,
+  LoadSkillsResult,
+  ListSkillsOptions,
+  ListSkillsResult,
+  ElicitationHandler,
+  ElicitationRequest,
+  ElicitationResponse,
+  CompleteOptions,
+  McpLogLevel,
+} from './client.types';
 import { detectPlatform, formatToolsForPlatform, formatResultForPlatform } from './llm-platform';
 import type { Scope } from '../scope/scope.instance';
 
@@ -37,6 +54,12 @@ export class DirectClientImpl implements DirectClient {
   private readonly serverInfo: Implementation;
   private readonly capabilities: ServerCapabilities;
   private closeServer?: () => Promise<void>;
+
+  // Elicitation handlers
+  private elicitationHandler?: ElicitationHandler;
+
+  // Resource update handlers
+  private resourceUpdateHandlers: Set<(uri: string) => void> = new Set();
 
   private constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,7 +141,68 @@ export class DirectClientImpl implements DirectClient {
 
     const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
     client.closeServer = close;
+
+    // Set up internal handlers for notifications
+    // Note: MCP SDK uses typed notification handlers; we set up generic handlers here
+    client.setupNotificationHandlers(mcpClient);
+
     return client;
+  }
+
+  /**
+   * Set up notification handlers for resource updates and elicitation.
+   * @internal
+   */
+  private setupNotificationHandlers(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mcpClient: any,
+  ): void {
+    // Handle resource update notifications via the client's onclose/on notification methods
+    // The MCP SDK provides onnotification callback mechanism
+    if (typeof mcpClient.onnotification === 'function') {
+      const originalHandler = mcpClient.onnotification;
+      mcpClient.onnotification = (notification: { method?: string; params?: unknown }) => {
+        // Call original handler first
+        if (originalHandler) {
+          originalHandler(notification);
+        }
+
+        // Handle resource updates
+        if (notification.method === 'notifications/resources/updated') {
+          const uri = (notification.params as { uri?: string })?.uri;
+          if (uri) {
+            this.resourceUpdateHandlers.forEach((h) => h(uri));
+          }
+        }
+
+        // Handle elicitation requests
+        if (notification.method === 'elicitation/request') {
+          const params = notification.params as ElicitationRequest | undefined;
+          if (params) {
+            this.handleElicitationRequest(params);
+          }
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle an incoming elicitation request.
+   * @internal
+   */
+  private async handleElicitationRequest(params: ElicitationRequest): Promise<void> {
+    if (this.elicitationHandler) {
+      try {
+        const response = await this.elicitationHandler(params);
+        await this.submitElicitationResult(params.elicitId, response);
+      } catch {
+        // If handler throws, decline the elicitation
+        await this.submitElicitationResult(params.elicitId, { action: 'decline' });
+      }
+    } else {
+      // Auto-decline if no handler registered
+      await this.submitElicitationResult(params.elicitId, { action: 'decline' });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -202,5 +286,108 @@ export class DirectClientImpl implements DirectClient {
   async close(): Promise<void> {
     await this.mcpClient.close();
     await this.closeServer?.();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Skills Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async searchSkills(query: string, options?: SearchSkillsOptions): Promise<SearchSkillsResult> {
+    return this.mcpClient.request(
+      {
+        method: 'skills/search',
+        params: {
+          query,
+          ...options,
+        },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any, // Schema validation happens server-side
+    );
+  }
+
+  async loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult> {
+    return this.mcpClient.request(
+      {
+        method: 'skills/load',
+        params: {
+          skillIds,
+          ...options,
+        },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any, // Schema validation happens server-side
+    );
+  }
+
+  async listSkills(options?: ListSkillsOptions): Promise<ListSkillsResult> {
+    return this.mcpClient.request(
+      {
+        method: 'skills/list',
+        params: options ?? {},
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any, // Schema validation happens server-side
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Elicitation Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  onElicitation(handler: ElicitationHandler): () => void {
+    this.elicitationHandler = handler;
+    return () => {
+      this.elicitationHandler = undefined;
+    };
+  }
+
+  async submitElicitationResult(elicitId: string, response: ElicitationResponse): Promise<void> {
+    await this.mcpClient.request(
+      {
+        method: 'elicitation/result',
+        params: {
+          elicitId,
+          result: response,
+        },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any, // Schema validation happens server-side
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Completion Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async complete(options: CompleteOptions): Promise<CompleteResult> {
+    return this.mcpClient.complete(options);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Resource Subscription Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async subscribeResource(uri: string): Promise<void> {
+    await this.mcpClient.subscribeResource({ uri });
+  }
+
+  async unsubscribeResource(uri: string): Promise<void> {
+    await this.mcpClient.unsubscribeResource({ uri });
+  }
+
+  onResourceUpdated(handler: (uri: string) => void): () => void {
+    this.resourceUpdateHandlers.add(handler);
+    return () => {
+      this.resourceUpdateHandlers.delete(handler);
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Logging Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async setLogLevel(level: McpLogLevel): Promise<void> {
+    await this.mcpClient.setLoggingLevel({ level });
   }
 }
