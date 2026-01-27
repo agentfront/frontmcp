@@ -10,6 +10,18 @@ import { formatSkillForLLM } from '../../skill/skill.utils';
 import { PublicMcpError } from '../../errors';
 
 /**
+ * Tool information entry with availability and optional schemas.
+ * Used in the skills/load response to describe each tool.
+ */
+interface ToolInfoEntry {
+  name: string;
+  purpose?: string;
+  available: boolean;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+}
+
+/**
  * MCP handler for skills/load custom method.
  *
  * Allows MCP clients to load skills by ID with full content.
@@ -74,15 +86,9 @@ export default function skillsLoadRequestHandler({
           : formatSkillForLLM(skill, availableTools, missingTools);
 
         // Build tool info with schemas
-        const toolsWithSchemas = skill.tools.map((t) => {
+        const toolsWithSchemas: ToolInfoEntry[] = skill.tools.map((t) => {
           const available = availableTools.includes(t.name);
-          const toolInfo: {
-            name: string;
-            purpose?: string;
-            available: boolean;
-            inputSchema?: unknown;
-            outputSchema?: unknown;
-          } = {
+          const toolInfo: ToolInfoEntry = {
             name: t.name,
             purpose: t.purpose,
             available,

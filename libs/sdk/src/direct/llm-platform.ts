@@ -132,6 +132,12 @@ export type FormattedToolResult =
 /**
  * Sanitize JSON schema for OpenAI strict mode.
  * OpenAI requires 'additionalProperties: false' for strict mode.
+ *
+ * Handles:
+ * - Object types: adds additionalProperties: false
+ * - Nested properties: recursively sanitizes
+ * - Array items: recursively sanitizes
+ * - Composition keywords (allOf, oneOf, anyOf): recursively sanitizes each variant
  */
 function sanitizeSchemaForOpenAI(schema: Record<string, unknown>): Record<string, unknown> {
   // Clone to avoid mutating original
@@ -161,6 +167,15 @@ function sanitizeSchemaForOpenAI(schema: Record<string, unknown>): Record<string
   // Recursively handle array items
   if (result['items'] && typeof result['items'] === 'object') {
     result['items'] = sanitizeSchemaForOpenAI(result['items'] as Record<string, unknown>);
+  }
+
+  // Recursively handle composition keywords (allOf, oneOf, anyOf)
+  for (const keyword of ['allOf', 'oneOf', 'anyOf'] as const) {
+    if (Array.isArray(result[keyword])) {
+      result[keyword] = (result[keyword] as Record<string, unknown>[]).map((variant) =>
+        variant && typeof variant === 'object' ? sanitizeSchemaForOpenAI(variant) : variant,
+      );
+    }
   }
 
   return result;

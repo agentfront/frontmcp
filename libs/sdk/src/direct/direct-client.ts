@@ -149,65 +149,79 @@ export class DirectClientImpl implements DirectClient {
     const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
     client.closeServer = close;
 
-    // Set up internal handlers for notifications
-    // Note: MCP SDK uses typed notification handlers; we set up generic handlers here
-    client.setupNotificationHandlers(mcpClient);
+    // Set up internal handlers for notifications and requests
+    // Note: MCP SDK uses typed notification/request handlers with zod schemas
+    await client.setupNotificationHandlers(mcpClient);
 
     return client;
   }
 
   /**
    * Set up notification handlers for resource updates and elicitation.
-   * Uses MCP SDK's setNotificationHandler for typed notification handling.
+   *
+   * Uses MCP SDK's typed notification/request handlers:
+   * - `ResourceUpdatedNotificationSchema` for resource update notifications
+   * - `ElicitRequestSchema` for elicitation requests (server-to-client request, not notification)
+   *
+   * Wrapped in try-catch to gracefully handle SDK version differences.
    * @internal
    */
-  private setupNotificationHandlers(
+  private async setupNotificationHandlers(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mcpClient: any,
-  ): void {
-    // Handle resource update notifications using setNotificationHandler
-    if (typeof mcpClient.setNotificationHandler === 'function') {
-      // Handler for resource updated notifications
-      mcpClient.setNotificationHandler(
-        { method: 'notifications/resources/updated' },
-        (notification: { params?: { uri?: string } }) => {
-          const uri = notification.params?.uri;
-          if (uri) {
-            this.resourceUpdateHandlers.forEach((h) => h(uri));
-          }
-        },
+  ): Promise<void> {
+    try {
+      // Dynamic import to handle ESM/CJS compatibility
+      const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await import(
+        '@modelcontextprotocol/sdk/types.js'
       );
 
-      // Handler for elicitation request notifications
-      mcpClient.setNotificationHandler(
-        { method: 'elicitation/request' },
-        (notification: { params?: ElicitationRequest }) => {
-          const params = notification.params;
+      // Handler for resource updated notifications
+      if (typeof mcpClient.setNotificationHandler === 'function') {
+        mcpClient.setNotificationHandler(
+          ResourceUpdatedNotificationSchema,
+          (notification: { params?: { uri?: string } }) => {
+            const uri = notification.params?.uri;
+            if (uri) {
+              this.resourceUpdateHandlers.forEach((h) => h(uri));
+            }
+          },
+        );
+      }
+
+      // Handler for elicitation requests (server-to-client request, not notification)
+      // The client responds with an ElicitResult
+      if (typeof mcpClient.setRequestHandler === 'function') {
+        mcpClient.setRequestHandler(ElicitRequestSchema, async (request: { params?: ElicitationRequest }) => {
+          const params = request.params;
           if (params) {
-            this.handleElicitationRequest(params);
+            return this.handleElicitationRequestInternal(params);
           }
-        },
-      );
+          return { action: 'decline' };
+        });
+      }
+    } catch {
+      // SDK version may not support these schemas - handlers are optional
+      // Fall back to no-op; subscriptions will still work via explicit calls
     }
   }
 
   /**
-   * Handle an incoming elicitation request.
+   * Handle an incoming elicitation request and return the result.
+   * Used by `setRequestHandler` which expects a return value.
    * @internal
    */
-  private async handleElicitationRequest(params: ElicitationRequest): Promise<void> {
+  private async handleElicitationRequestInternal(params: ElicitationRequest): Promise<ElicitationResponse> {
     if (this.elicitationHandler) {
       try {
-        const response = await this.elicitationHandler(params);
-        await this.submitElicitationResult(params.elicitId, response);
+        return await this.elicitationHandler(params);
       } catch {
         // If handler throws, decline the elicitation
-        await this.submitElicitationResult(params.elicitId, { action: 'decline' });
+        return { action: 'decline' };
       }
-    } else {
-      // Auto-decline if no handler registered
-      await this.submitElicitationResult(params.elicitId, { action: 'decline' });
     }
+    // Auto-decline if no handler registered
+    return { action: 'decline' };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -299,8 +313,27 @@ export class DirectClientImpl implements DirectClient {
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Skills Operations
+  //
+  // NOTE: Skills methods use `{} as any` for the response schema parameter because:
+  // 1. Skills are FrontMCP-specific extensions, not part of the MCP protocol
+  // 2. The server performs full schema validation using SkillsSearchResultSchema,
+  //    SkillsLoadResultSchema, and SkillsListResultSchema
+  // 3. The MCP SDK's client.request() requires a schema parameter, but we rely on
+  //    server-side validation for these custom methods
+  // 4. This avoids duplicating schema definitions in both client and server
   // ─────────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Search for skills matching a query.
+   *
+   * @param query - Search query string
+   * @param options - Optional search parameters (tags, tools, limit, requireAllTools)
+   * @returns Search results with matching skills
+   *
+   * @remarks
+   * Response validation is performed server-side using `SkillsSearchResultSchema`.
+   * The client trusts the server response for FrontMCP-specific extensions.
+   */
   async searchSkills(query: string, options?: SearchSkillsOptions): Promise<SearchSkillsResult> {
     return this.mcpClient.request(
       {
@@ -311,10 +344,21 @@ export class DirectClientImpl implements DirectClient {
         },
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any, // Schema validation happens server-side
+      {} as any, // Server-side validation via SkillsSearchResultSchema
     );
   }
 
+  /**
+   * Load skills by their IDs with full content.
+   *
+   * @param skillIds - Array of skill IDs to load
+   * @param options - Optional load parameters (format, activateSession, policyMode)
+   * @returns Loaded skills with instructions, tools, and metadata
+   *
+   * @remarks
+   * Response validation is performed server-side using `SkillsLoadResultSchema`.
+   * The client trusts the server response for FrontMCP-specific extensions.
+   */
   async loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult> {
     return this.mcpClient.request(
       {
@@ -325,10 +369,20 @@ export class DirectClientImpl implements DirectClient {
         },
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any, // Schema validation happens server-side
+      {} as any, // Server-side validation via SkillsLoadResultSchema
     );
   }
 
+  /**
+   * List available skills with optional filtering and pagination.
+   *
+   * @param options - Optional list parameters (offset, limit, tags, sortBy, sortOrder)
+   * @returns Paginated list of skills
+   *
+   * @remarks
+   * Response validation is performed server-side using `SkillsListResultSchema`.
+   * The client trusts the server response for FrontMCP-specific extensions.
+   */
   async listSkills(options?: ListSkillsOptions): Promise<ListSkillsResult> {
     return this.mcpClient.request(
       {
@@ -336,7 +390,7 @@ export class DirectClientImpl implements DirectClient {
         params: options ?? {},
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any, // Schema validation happens server-side
+      {} as any, // Server-side validation via SkillsListResultSchema
     );
   }
 

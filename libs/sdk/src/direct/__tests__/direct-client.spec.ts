@@ -63,6 +63,7 @@ const mockMcpClient = {
   unsubscribeResource: jest.fn().mockResolvedValue(undefined),
   setLoggingLevel: jest.fn().mockResolvedValue(undefined),
   setNotificationHandler: jest.fn(),
+  setRequestHandler: jest.fn(),
 };
 
 const MockClient = jest.fn().mockImplementation(() => mockMcpClient);
@@ -250,12 +251,13 @@ describe('DirectClientImpl', () => {
     it('should pass capabilities to MCP client', async () => {
       const mockScope = createMockScope();
 
+      // Use 'roots' which is a valid ClientCapability (not 'tools' which is ServerCapability)
       await DirectClientImpl.create(mockScope as Scope, {
-        capabilities: { tools: { listChanged: true } },
+        capabilities: { roots: { listChanged: true } },
       });
 
       expect(MockClient).toHaveBeenCalledWith(expect.anything(), {
-        capabilities: { tools: { listChanged: true } },
+        capabilities: { roots: { listChanged: true } },
       });
     });
 
@@ -601,14 +603,43 @@ describe('DirectClientImpl', () => {
       expect(typeof unsubscribe).toBe('function');
     });
 
-    it('onElicitation unsubscribe should clear handler', async () => {
+    it('onElicitation unsubscribe should clear handler so it is not called', async () => {
+      // Track the request handler registered via setRequestHandler
+      let elicitationRequestHandler:
+        | ((request: { params?: unknown }) => Promise<{ action: string; content?: unknown }>)
+        | undefined;
+
+      mockMcpClient.setRequestHandler = jest.fn((schema: unknown, handler: unknown) => {
+        elicitationRequestHandler = handler as typeof elicitationRequestHandler;
+      });
+
+      // Re-create client to trigger setupNotificationHandlers
+      const mockScope = createMockScope();
+      const newClient = await DirectClientImpl.create(mockScope as Scope);
+
       const handler = jest.fn().mockResolvedValue({ action: 'accept', content: {} });
 
-      const unsubscribe = client.onElicitation(handler);
+      // Subscribe and then immediately unsubscribe
+      const unsubscribe = newClient.onElicitation(handler);
       unsubscribe();
 
-      // Handler should be cleared (tested indirectly)
-      expect(unsubscribe).toBeDefined();
+      // Simulate receiving an elicitation request after unsubscribe
+      if (elicitationRequestHandler) {
+        const result = await elicitationRequestHandler({
+          params: {
+            elicitId: 'test-elicit-after-unsubscribe',
+            message: 'Should be declined',
+            requestedSchema: { type: 'object' },
+            mode: 'form',
+          },
+        });
+
+        // Should auto-decline since handler was cleared
+        expect(result).toEqual({ action: 'decline' });
+      }
+
+      // Verify handler was NOT called
+      expect(handler).not.toHaveBeenCalled();
     });
 
     it('submitElicitationResult should call MCP client with correct request', async () => {
@@ -645,15 +676,16 @@ describe('DirectClientImpl', () => {
       );
     });
 
-    it('should invoke registered elicitation handler on notification', async () => {
-      // Track the notification handler registered via setNotificationHandler
-      let elicitationNotificationHandler: ((notification: { params?: unknown }) => void) | undefined;
+    it('should invoke registered elicitation handler on request', async () => {
+      // Track the request handler registered via setRequestHandler
+      let elicitationRequestHandler:
+        | ((request: { params?: unknown }) => Promise<{ action: string; content?: unknown }>)
+        | undefined;
 
-      // Mock setNotificationHandler to capture the elicitation handler
-      mockMcpClient.setNotificationHandler = jest.fn((schema: { method: string }, handler: unknown) => {
-        if (schema.method === 'elicitation/request') {
-          elicitationNotificationHandler = handler as (notification: { params?: unknown }) => void;
-        }
+      // Mock setRequestHandler to capture the elicitation handler
+      mockMcpClient.setRequestHandler = jest.fn((schema: unknown, handler: unknown) => {
+        // The schema is the ElicitRequestSchema from MCP SDK
+        elicitationRequestHandler = handler as typeof elicitationRequestHandler;
       });
 
       // Re-create client to trigger setupNotificationHandlers
@@ -664,13 +696,10 @@ describe('DirectClientImpl', () => {
       const handler = jest.fn().mockResolvedValue({ action: 'accept', content: { approved: true } });
       newClient.onElicitation(handler);
 
-      // Mock the request method for submitting elicitation result
-      mockMcpClient.request.mockResolvedValueOnce(undefined);
-
-      // Simulate receiving an elicitation notification
-      expect(elicitationNotificationHandler).toBeDefined();
-      if (elicitationNotificationHandler) {
-        elicitationNotificationHandler({
+      // Simulate receiving an elicitation request and await the result
+      expect(elicitationRequestHandler).toBeDefined();
+      if (elicitationRequestHandler) {
+        const result = await elicitationRequestHandler({
           params: {
             elicitId: 'test-elicit-123',
             message: 'Please confirm',
@@ -679,10 +708,10 @@ describe('DirectClientImpl', () => {
             expiresAt: Date.now() + 60000,
           },
         });
-      }
 
-      // Wait for async handler to complete
-      await new Promise((resolve) => setTimeout(resolve, 10));
+        // Verify the result returned by the handler
+        expect(result).toEqual({ action: 'accept', content: { approved: true } });
+      }
 
       // Verify handler was called with the request
       expect(handler).toHaveBeenCalledWith(
@@ -690,18 +719,6 @@ describe('DirectClientImpl', () => {
           elicitId: 'test-elicit-123',
           message: 'Please confirm',
         }),
-      );
-
-      // Verify result was submitted
-      expect(mockMcpClient.request).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: 'elicitation/result',
-          params: {
-            elicitId: 'test-elicit-123',
-            result: { action: 'accept', content: { approved: true } },
-          },
-        }),
-        expect.anything(),
       );
     });
   });
@@ -778,14 +795,34 @@ describe('DirectClientImpl', () => {
       expect(typeof unsubscribe).toBe('function');
     });
 
-    it('onResourceUpdated unsubscribe should remove handler', () => {
+    it('onResourceUpdated unsubscribe should remove handler so it is not called', async () => {
+      // Track the notification handler registered via setNotificationHandler
+      let resourceUpdateHandler: ((notification: { params?: { uri?: string } }) => void) | undefined;
+
+      mockMcpClient.setNotificationHandler = jest.fn((schema: unknown, handler: unknown) => {
+        // Capture the resource update handler
+        resourceUpdateHandler = handler as typeof resourceUpdateHandler;
+      });
+
+      // Re-create client to trigger setupNotificationHandlers
+      const mockScope = createMockScope();
+      const newClient = await DirectClientImpl.create(mockScope as Scope);
+
       const handler = jest.fn();
 
-      const unsubscribe = client.onResourceUpdated(handler);
+      // Subscribe and then immediately unsubscribe
+      const unsubscribe = newClient.onResourceUpdated(handler);
       unsubscribe();
 
-      // Handler should be removed (tested indirectly)
-      expect(unsubscribe).toBeDefined();
+      // Simulate receiving a resource update notification after unsubscribe
+      if (resourceUpdateHandler) {
+        resourceUpdateHandler({
+          params: { uri: 'file://should-not-trigger-handler.txt' },
+        });
+      }
+
+      // Verify handler was NOT called
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 
