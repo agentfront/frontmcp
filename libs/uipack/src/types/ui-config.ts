@@ -454,6 +454,31 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
+   * MCP Apps: Explicit resource URI for the UI template.
+   * If not specified, auto-generated as `ui://widget/{toolName}.html`
+   *
+   * Use this when you need a specific URI pattern for your widget,
+   * such as when integrating with existing resource systems.
+   *
+   * @example 'ui://my-app/dashboard.html'
+   * @example 'ui://weather-service/forecast.html'
+   */
+  resourceUri?: string;
+
+  /**
+   * MCP Apps: Widget capabilities for ext-apps initialization.
+   *
+   * These capabilities are communicated to the host during tool discovery,
+   * allowing the host to enable or configure specific features.
+   */
+  widgetCapabilities?: {
+    /** Widget can emit tool list changes (dynamic tool registration) */
+    toolListChanged?: boolean;
+    /** Widget can handle partial tool input streaming */
+    supportsPartialInput?: boolean;
+  };
+
+  /**
    * Whether to show a border around the UI widget.
    * MCP Apps spec: `_meta.ui.prefersBorder`
    *

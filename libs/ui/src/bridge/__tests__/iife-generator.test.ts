@@ -166,6 +166,24 @@ describe('IIFE Generator', () => {
       expect(script).toContain('window.parent');
     });
 
+    it('should exclude Claude from ext-apps detection', () => {
+      // ext-apps adapter should not match Claude contexts
+      expect(script).toContain("window.__mcpPlatform === 'claude'");
+      expect(script).toContain('window.__claudeArtifact');
+      expect(script).toContain('window.claude');
+      // URL hostname validation using proper URL parsing
+      expect(script).toContain('new URL(location.href)');
+      expect(script).toContain('hostname.toLowerCase()');
+      expect(script).toContain("hostname === 'claude.ai'");
+      expect(script).toContain("hostname === 'anthropic.com'");
+    });
+
+    it('should require explicit ext-apps marker instead of defaulting to true', () => {
+      // ext-apps should not default to true for any iframe
+      // It should check for __extAppsInitialized
+      expect(script).toContain('window.__extAppsInitialized');
+    });
+
     it('should include theme detection', () => {
       expect(script).toContain('detectTheme');
       expect(script).toContain('prefers-color-scheme');

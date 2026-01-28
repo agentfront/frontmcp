@@ -199,6 +199,35 @@ ui: {
 }
 ```
 
+### resourceUri (ext-apps)
+
+Custom resource URI for the widget (ext-apps/MCP Apps):
+
+```typescript
+ui: {
+  template: WeatherWidget,
+  resourceUri: 'ui://my-app/weather.html', // Custom URI
+}
+```
+
+If not specified, auto-generated as `ui://widget/{toolName}.html`.
+
+### widgetCapabilities (ext-apps)
+
+Widget capabilities for ext-apps initialization:
+
+```typescript
+ui: {
+  template: MyWidget,
+  widgetCapabilities: {
+    toolListChanged: false,      // Widget cannot emit tool list changes
+    supportsPartialInput: true,  // Widget handles streaming input
+  },
+}
+```
+
+These capabilities are communicated to the host during tool discovery.
+
 ### wrapper
 
 Custom wrapper for the rendered content:

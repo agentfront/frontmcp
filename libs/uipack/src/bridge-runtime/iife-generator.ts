@@ -267,16 +267,43 @@ var ExtAppsAdapter = {
   capabilities: Object.assign({}, DEFAULT_CAPABILITIES, { canPersistState: true, hasNetworkAccess: true }),
   trustedOrigins: ${originsArray},
   trustedOrigin: null,
+  originTrustPending: false,
   pendingRequests: {},
   requestId: 0,
   hostCapabilities: {},
   canHandle: function() {
     if (typeof window === 'undefined') return false;
     if (window.parent === window) return false;
-    // Check for OpenAI SDK (window.openai.callTool) - defer to OpenAIAdapter
+
+    // Check for OpenAI SDK - defer to OpenAIAdapter
+    if (window.openai && window.openai.canvas) return false;
     if (window.openai && typeof window.openai.callTool === 'function') return false;
+
+    // Explicit ext-apps marker
     if (window.__mcpPlatform === 'ext-apps') return true;
-    return true;
+    if (window.__extAppsInitialized) return true;
+
+    // Claude MCP Apps mode (2026+) - uses ext-apps protocol
+    if (window.__mcpAppsEnabled) return true;
+
+    // Legacy Claude detection - defer to ClaudeAdapter
+    if (window.claude) return false;
+    if (window.__claudeArtifact) return false;
+    if (window.__mcpPlatform === 'claude') return false;
+    if (typeof location !== 'undefined') {
+      try {
+        var url = new URL(location.href);
+        var hostname = url.hostname.toLowerCase();
+        var isClaudeHost = hostname === 'claude.ai' || (hostname.length > 10 && hostname.slice(-10) === '.claude.ai');
+        var isAnthropicHost = hostname === 'anthropic.com' || (hostname.length > 14 && hostname.slice(-14) === '.anthropic.com');
+        if (isClaudeHost || isAnthropicHost) return false;
+      } catch (e) {
+        // If URL parsing fails, fall through to other checks
+      }
+    }
+
+    // Do NOT default to true for any iframe
+    return false;
   },
   initialize: function(context) {
     var self = this;
@@ -318,6 +345,11 @@ var ExtAppsAdapter = {
         context.toolInput = params.arguments || {};
         window.dispatchEvent(new CustomEvent('tool:input', { detail: { arguments: context.toolInput } }));
         break;
+      case 'ui/notifications/tool-input-partial':
+        // Streaming: merge partial input with existing
+        context.toolInput = Object.assign({}, context.toolInput, params.arguments || {});
+        window.dispatchEvent(new CustomEvent('tool:input-partial', { detail: { arguments: context.toolInput } }));
+        break;
       case 'ui/notifications/tool-result':
         context.toolOutput = params.content;
         context.structuredContent = params.structuredContent;
@@ -328,18 +360,26 @@ var ExtAppsAdapter = {
         Object.assign(context.hostContext, params);
         context.notifyContextChange(params);
         break;
+      case 'ui/notifications/cancelled':
+        window.dispatchEvent(new CustomEvent('tool:cancelled', { detail: { reason: params.reason } }));
+        break;
     }
   },
   isOriginTrusted: function(origin) {
     if (this.trustedOrigins.length > 0) {
       return this.trustedOrigins.indexOf(origin) !== -1;
     }
-    // When no trusted origins configured, trust first message origin (trust-on-first-use).
-    // SECURITY WARNING: This creates a race condition - whichever iframe sends the first
-    // message establishes permanent trust. For production, always configure trustedOrigins.
+    // Trust-on-first-use: trust first message origin.
+    // SECURITY WARNING: For production, always configure trustedOrigins.
     if (!this.trustedOrigin) {
+      // Guard against race condition where multiple messages arrive simultaneously
+      if (this.originTrustPending) {
+        return false;
+      }
       if (window.parent !== window && origin) {
+        this.originTrustPending = true;
         this.trustedOrigin = origin;
+        this.originTrustPending = false; // Reset after successful trust establishment
         return true;
       }
       return false;
@@ -409,6 +449,34 @@ var ExtAppsAdapter = {
   },
   requestClose: function(context) {
     return this.sendRequest('ui/close', {});
+  },
+  // Extended ext-apps methods (full specification)
+  updateModelContext: function(context, data, merge) {
+    if (!this.hostCapabilities.modelContextUpdate) {
+      return Promise.reject(new Error('Model context update not supported'));
+    }
+    return this.sendRequest('ui/updateModelContext', { context: data, merge: merge !== false });
+  },
+  log: function(context, level, message, data) {
+    if (!this.hostCapabilities.logging) {
+      // Fallback to console logging if host doesn't support it
+      var logFn = console[level] || console.log;
+      logFn('[Widget] ' + message, data);
+      return Promise.resolve();
+    }
+    return this.sendRequest('ui/log', { level: level, message: message, data: data });
+  },
+  registerTool: function(context, name, description, inputSchema) {
+    if (!this.hostCapabilities.widgetTools) {
+      return Promise.reject(new Error('Widget tool registration not supported'));
+    }
+    return this.sendRequest('ui/registerTool', { name: name, description: description, inputSchema: inputSchema });
+  },
+  unregisterTool: function(context, name) {
+    if (!this.hostCapabilities.widgetTools) {
+      return Promise.reject(new Error('Widget tool unregistration not supported'));
+    }
+    return this.sendRequest('ui/unregisterTool', { name: name });
   }
 };
 `.trim();
@@ -432,12 +500,26 @@ var ClaudeAdapter = {
   }),
   canHandle: function() {
     if (typeof window === 'undefined') return false;
+
+    // If MCP Apps is enabled, let ext-apps adapter handle it
+    if (window.__mcpAppsEnabled) return false;
+    if (window.__mcpPlatform === 'ext-apps') return false;
+    if (window.__extAppsInitialized) return false;
+
+    // Legacy Claude detection
     if (window.__mcpPlatform === 'claude') return true;
     if (window.claude) return true;
     if (window.__claudeArtifact) return true;
     if (typeof location !== 'undefined') {
-      var href = location.href;
-      if (href.indexOf('claude.ai') !== -1 || href.indexOf('anthropic.com') !== -1) return true;
+      try {
+        var url = new URL(location.href);
+        var hostname = url.hostname.toLowerCase();
+        var isClaudeHost = hostname === 'claude.ai' || (hostname.length > 10 && hostname.slice(-10) === '.claude.ai');
+        var isAnthropicHost = hostname === 'anthropic.com' || (hostname.length > 14 && hostname.slice(-14) === '.anthropic.com');
+        if (isClaudeHost || isAnthropicHost) return true;
+      } catch (e) {
+        // If URL parsing fails, fall through
+      }
     }
     return false;
   },
@@ -799,6 +881,42 @@ FrontMcpBridge.prototype.requestDisplayMode = function(mode) {
 FrontMcpBridge.prototype.requestClose = function() {
   if (!this._adapter) return Promise.reject(new Error('Not initialized'));
   return this._adapter.requestClose(this._context);
+};
+
+// Extended ext-apps methods (full specification)
+FrontMcpBridge.prototype.updateModelContext = function(context, merge) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.updateModelContext) {
+    return Promise.reject(new Error('updateModelContext not supported on this platform'));
+  }
+  return this._adapter.updateModelContext(this._context, context, merge);
+};
+
+FrontMcpBridge.prototype.log = function(level, message, data) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.log) {
+    // Fallback to console
+    var logFn = console[level] || console.log;
+    logFn('[Widget] ' + message, data);
+    return Promise.resolve();
+  }
+  return this._adapter.log(this._context, level, message, data);
+};
+
+FrontMcpBridge.prototype.registerTool = function(name, description, inputSchema) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.registerTool) {
+    return Promise.reject(new Error('registerTool not supported on this platform'));
+  }
+  return this._adapter.registerTool(this._context, name, description, inputSchema);
+};
+
+FrontMcpBridge.prototype.unregisterTool = function(name) {
+  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
+  if (!this._adapter.unregisterTool) {
+    return Promise.reject(new Error('unregisterTool not supported on this platform'));
+  }
+  return this._adapter.unregisterTool(this._context, name);
 };
 
 FrontMcpBridge.prototype.setWidgetState = function(state) {

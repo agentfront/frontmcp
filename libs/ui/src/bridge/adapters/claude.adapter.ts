@@ -51,7 +51,10 @@ export class ClaudeAdapter extends BaseAdapter {
   }
 
   /**
-   * Check if we're running in a Claude artifact/widget context.
+   * Check if we're running in a Claude legacy artifact/widget context.
+   *
+   * Claude MCP Apps (2026+) uses the ext-apps adapter instead.
+   * This adapter only handles legacy Claude artifacts without MCP Apps support.
    */
   canHandle(): boolean {
     if (typeof window === 'undefined') return false;
@@ -59,7 +62,13 @@ export class ClaudeAdapter extends BaseAdapter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = window as any;
 
-    // Check explicit platform marker
+    // If MCP Apps is enabled, let ext-apps adapter handle it
+    // See: https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/
+    if (win.__mcpAppsEnabled) return false;
+    if (win.__mcpPlatform === 'ext-apps') return false;
+    if (win.__extAppsInitialized) return false;
+
+    // Legacy Claude detection
     if (win.__mcpPlatform === 'claude') return true;
 
     // Check for Claude-specific global
@@ -68,7 +77,7 @@ export class ClaudeAdapter extends BaseAdapter {
     // Check for Claude artifact markers
     if (win.__claudeArtifact) return true;
 
-    // Check URL patterns for Claude
+    // Check URL patterns for Claude (legacy only)
     if (typeof location !== 'undefined') {
       const href = location.href;
       if (href.includes('claude.ai') || href.includes('anthropic.com')) {

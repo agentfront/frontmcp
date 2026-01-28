@@ -475,7 +475,9 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // - Other platforms: ui/* keys only (Claude, Cursor, etc.)
           const meta: Record<string, unknown> = {};
           const isExtApps = platformType === 'ext-apps';
-          const widgetUri = `ui://widget/${encodeURIComponent(finalName)}.html`;
+
+          // Use custom resourceUri from config if provided, otherwise auto-generate
+          const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
 
           if (isOpenAIPlatform) {
             // OpenAI-specific meta keys for ChatGPT widget discovery
@@ -495,6 +497,23 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             // SEP-1865 MCP Apps specification uses ui/* keys only
             meta['ui/resourceUri'] = widgetUri;
             meta['ui/mimeType'] = 'text/html+mcp';
+
+            // Add widget capabilities if configured (for ext-apps initialization)
+            // Map flattened config to spec-compliant structure (ExtAppsWidgetCapabilities)
+            if (uiConfig.widgetCapabilities) {
+              const capabilities: { tools?: { listChanged?: boolean }; supportsPartialInput?: boolean } = {};
+
+              if (uiConfig.widgetCapabilities.toolListChanged !== undefined) {
+                capabilities.tools = { listChanged: uiConfig.widgetCapabilities.toolListChanged };
+              }
+              if (uiConfig.widgetCapabilities.supportsPartialInput !== undefined) {
+                capabilities.supportsPartialInput = uiConfig.widgetCapabilities.supportsPartialInput;
+              }
+
+              if (Object.keys(capabilities).length > 0) {
+                meta['ui/capabilities'] = capabilities;
+              }
+            }
 
             // Add manifest info for ext-apps (uses ui/* namespace)
             meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
