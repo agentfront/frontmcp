@@ -13,14 +13,15 @@ import {
   validateMcpSessionHeader,
 } from '../../common';
 import { z } from 'zod';
-import { ElicitResultSchema, RequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
+import { createExtAppsMessageHandler, type ExtAppsJsonRpcRequest, type ExtAppsHostCapabilities } from '../../ext-apps';
 
 export const plan = {
   pre: ['parseInput', 'router'],
-  execute: ['onInitialize', 'onMessage', 'onElicitResult', 'onSseListener'],
+  execute: ['onInitialize', 'onMessage', 'onElicitResult', 'onSseListener', 'onExtApps'],
   post: [],
   finalize: ['cleanup'],
 } as const satisfies FlowPlan<string>;
@@ -46,7 +47,7 @@ const stateSessionSchema = z.object({
 export const stateSchema = z.object({
   token: z.string(),
   session: stateSessionSchema,
-  requestType: z.enum(['initialize', 'message', 'elicitResult', 'sseListener']).optional(),
+  requestType: z.enum(['initialize', 'message', 'elicitResult', 'sseListener', 'extApps']).optional(),
 });
 
 const name = 'handle:streamable-http' as const;
@@ -147,6 +148,9 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
+    } else if (method?.startsWith('ui/')) {
+      // Ext-apps methods: ui/initialize, ui/callServerTool, etc.
+      this.state.set('requestType', 'extApps');
     } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
       this.state.set('requestType', 'elicitResult');
     } else if (method && RequestSchema.safeParse(request.body).success) {
@@ -408,6 +412,113 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     // Forward GET request to transport (opens SSE stream for server→client notifications)
     await transport.handleRequest(request, response);
+    this.handled();
+  }
+
+  @Stage('onExtApps', {
+    filter: ({ state: { requestType } }) => requestType === 'extApps',
+  })
+  async onExtApps() {
+    const transportService = (this.scope as Scope).transportService;
+    const logger = this.scopeLogger.child('handle:streamable-http:onExtApps');
+
+    const { request, response } = this.rawInput;
+    const { token, session } = this.state.required;
+
+    logger.info('onExtApps: starting', {
+      sessionId: session.id?.slice(0, 20),
+      method: (request.body as { method?: string })?.method,
+    });
+
+    // 1. Try to get existing transport from memory
+    let transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    // 2. If not in memory, check if session exists in storage and recreate
+    if (!transport) {
+      try {
+        logger.info('onExtApps: transport not in memory, checking stored session', {
+          sessionId: session.id?.slice(0, 20),
+        });
+        const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+        if (storedSession) {
+          logger.info('onExtApps: recreating transport from stored session', {
+            sessionId: session.id?.slice(0, 20),
+            createdAt: storedSession.createdAt,
+            initialized: storedSession.initialized,
+          });
+          transport = await transportService.recreateTransporter(
+            'streamable-http',
+            token,
+            session.id,
+            storedSession,
+            response,
+          );
+        }
+      } catch (error) {
+        logger.warn('onExtApps: failed to recreate transport from stored session', {
+          sessionId: session.id?.slice(0, 20),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // 3. Session validation - same as onMessage
+    if (!transport) {
+      const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, session.id);
+      if (wasCreated) {
+        this.respond(httpRespond.sessionExpired('session expired'));
+      } else {
+        this.respond(httpRespond.sessionNotFound('session not initialized'));
+      }
+      return;
+    }
+
+    // 4. Create ExtAppsMessageHandler with session context
+    const scope = this.scope as Scope;
+
+    // Get host capabilities from scope metadata, with defaults
+    const configuredCapabilities = scope.metadata.extApps?.hostCapabilities;
+    const hostCapabilities: ExtAppsHostCapabilities = {
+      serverToolProxy: configuredCapabilities?.serverToolProxy ?? true,
+      logging: configuredCapabilities?.logging ?? true,
+      ...configuredCapabilities,
+    };
+
+    const handler = createExtAppsMessageHandler({
+      context: {
+        sessionId: session.id,
+        logger: scope.logger,
+        callTool: async (name, args) => {
+          // Route through CallToolFlow with session's authInfo
+          const result = await scope.runFlow('tools:call-tool', {
+            request: { method: 'tools/call', params: { name, arguments: args } },
+            ctx: {
+              authInfo: {
+                sessionId: session.id,
+                sessionIdPayload: session.payload,
+                token,
+              },
+            },
+          });
+          // Parse and return the tool result
+          const parsed = CallToolResultSchema.safeParse(result);
+          if (parsed.success) {
+            return parsed.data;
+          }
+          return result;
+        },
+        // Additional callbacks can be added here as needed:
+        // updateModelContext, openLink, setDisplayMode, close, registerTool, unregisterTool
+      },
+      hostCapabilities,
+    });
+
+    // 5. Handle the request
+    const jsonRpcRequest = request.body as ExtAppsJsonRpcRequest;
+    const jsonRpcResponse = await handler.handleRequest(jsonRpcRequest);
+
+    // 6. Send response
+    response.status(200).json(jsonRpcResponse);
     this.handled();
   }
 }

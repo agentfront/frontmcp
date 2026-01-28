@@ -32,4 +32,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   elicitation: tokenFactory.meta('elicitation'),
   // skills HTTP configuration
   skillsConfig: tokenFactory.meta('skillsConfig'),
+  // ext-apps configuration
+  extApps: tokenFactory.meta('extApps'),
 };

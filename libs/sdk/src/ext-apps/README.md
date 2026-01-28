@@ -146,7 +146,7 @@ const EXT_APPS_ERROR_CODES = {
 The main server-side handler for processing widget requests:
 
 ```typescript
-import { ExtAppsMessageHandler, createExtAppsMessageHandler } from '@frontmcp/sdk';
+import { createExtAppsMessageHandler } from '@frontmcp/sdk';
 
 const handler = createExtAppsMessageHandler({
   context: {
@@ -154,7 +154,10 @@ const handler = createExtAppsMessageHandler({
     logger: scopeLogger,
     callTool: async (name, args) => {
       // Route to tool call flow
-      return scope.flows.run('tools:call-tool', { name, args });
+      return scope.runFlow('tools:call-tool', {
+        request: { method: 'tools/call', params: { name, arguments: args } },
+        ctx: { authInfo: { sessionId: 'session-123' } },
+      });
     },
     updateModelContext: async (context, merge) => {
       // Update model context

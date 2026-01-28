@@ -22,6 +22,8 @@ import {
   elicitationOptionsSchema,
   SkillsConfigOptionsInput,
   skillsConfigOptionsSchema,
+  ExtAppsOptionsInput,
+  extAppsOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -132,6 +134,56 @@ export interface FrontMcpBaseMetadata {
    * ```
    */
   skillsConfig?: SkillsConfigOptionsInput;
+
+  /**
+   * MCP Apps (ext-apps) configuration.
+   * Controls handling of ext-apps widget-to-host communication over HTTP transport.
+   *
+   * When enabled, the HTTP transport will route `ui/*` JSON-RPC methods
+   * (ui/initialize, ui/callServerTool, etc.) through session validation
+   * and the ExtAppsMessageHandler.
+   *
+   * ## Host Capabilities
+   *
+   * Host capabilities advertise what features the server supports to widgets:
+   *
+   * | Capability           | Description                                      | Default |
+   * |---------------------|--------------------------------------------------|---------|
+   * | `serverToolProxy`   | Allow widgets to call MCP tools via ui/callServerTool | `true`  |
+   * | `logging`           | Allow widgets to send logs via ui/log            | `true`  |
+   * | `openLink`          | Allow widgets to request URL opening via ui/openLink | `false` |
+   * | `modelContextUpdate`| Allow widgets to update model context via ui/updateModelContext | `false` |
+   * | `widgetTools`       | Allow widgets to register/unregister tools dynamically | `false` |
+   * | `displayModes`      | Supported display modes: 'inline', 'fullscreen', 'pip' | `undefined` |
+   *
+   * @default { enabled: true, hostCapabilities: { serverToolProxy: true, logging: true } }
+   *
+   * @example Enable ext-apps with default capabilities
+   * ```typescript
+   * extApps: { enabled: true }
+   * ```
+   *
+   * @example Configure all host capabilities
+   * ```typescript
+   * extApps: {
+   *   enabled: true,
+   *   hostCapabilities: {
+   *     serverToolProxy: true,    // Widgets can call MCP tools
+   *     logging: true,            // Widgets can send logs
+   *     openLink: true,           // Widgets can request URL opening
+   *     modelContextUpdate: true, // Widgets can update model context
+   *     widgetTools: true,        // Widgets can register dynamic tools
+   *     displayModes: ['inline', 'fullscreen', 'pip'],
+   *   },
+   * }
+   * ```
+   *
+   * @example Disable ext-apps
+   * ```typescript
+   * extApps: { enabled: false }
+   * ```
+   */
+  extApps?: ExtAppsOptionsInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -151,6 +203,7 @@ export const frontMcpBaseSchema = z.object({
   pagination: paginationOptionsSchema.optional(),
   elicitation: elicitationOptionsSchema.optional(),
   skillsConfig: skillsConfigOptionsSchema.optional(),
+  extApps: extAppsOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
