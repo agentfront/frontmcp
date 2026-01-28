@@ -15,8 +15,9 @@ import { EXT_APPS_ERROR_CODES } from '../ext-apps.types';
 import type { ExtAppsJsonRpcRequest } from '../ext-apps.types';
 
 describe('ExtAppsMessageHandler', () => {
-  // Mock logger
+  // Mock logger with all FrontMcpLogger methods
   const mockLogger = {
+    debug: jest.fn(),
     verbose: jest.fn(),
     info: jest.fn(),
     warn: jest.fn(),
@@ -27,7 +28,7 @@ describe('ExtAppsMessageHandler', () => {
   // Base context with required methods
   const createMockContext = (overrides: Partial<ExtAppsHandlerContext> = {}): ExtAppsHandlerContext => ({
     sessionId: 'test-session-123',
-    logger: mockLogger as any,
+    logger: mockLogger as unknown as ExtAppsHandlerContext['logger'],
     callTool: jest.fn().mockResolvedValue({ result: 'tool-result' }),
     ...overrides,
   });
@@ -611,6 +612,74 @@ describe('ExtAppsMessageHandler', () => {
         expect(response.error).toBeDefined();
         expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.METHOD_NOT_FOUND);
         expect(response.error?.message).toContain('Unknown ext-apps method');
+      });
+    });
+
+    describe('params validation', () => {
+      it('should reject null params', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({ context });
+
+        const response = await handler.handleRequest(createRequest('ui/close', null as unknown));
+
+        expect(response.error).toBeDefined();
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('Invalid params: expected object');
+      });
+
+      it('should reject array params', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({ context });
+
+        const response = await handler.handleRequest(createRequest('ui/close', ['invalid']));
+
+        expect(response.error).toBeDefined();
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('Invalid params: expected object');
+      });
+
+      it('should reject primitive params (string)', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({ context });
+
+        const response = await handler.handleRequest(createRequest('ui/close', 'invalid'));
+
+        expect(response.error).toBeDefined();
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('Invalid params: expected object');
+      });
+
+      it('should reject primitive params (number)', async () => {
+        const context = createMockContext();
+        const handler = new ExtAppsMessageHandler({ context });
+
+        const response = await handler.handleRequest(createRequest('ui/close', 123));
+
+        expect(response.error).toBeDefined();
+        expect(response.error?.code).toBe(EXT_APPS_ERROR_CODES.INVALID_PARAMS);
+        expect(response.error?.message).toContain('Invalid params: expected object');
+      });
+
+      it('should accept undefined params', async () => {
+        const close = jest.fn().mockResolvedValue(undefined);
+        const context = createMockContext({ close });
+        const handler = new ExtAppsMessageHandler({ context });
+
+        const response = await handler.handleRequest(createRequest('ui/close', undefined));
+
+        expect(response.error).toBeUndefined();
+        expect(close).toHaveBeenCalled();
+      });
+
+      it('should accept valid object params', async () => {
+        const close = jest.fn().mockResolvedValue(undefined);
+        const context = createMockContext({ close });
+        const handler = new ExtAppsMessageHandler({ context });
+
+        const response = await handler.handleRequest(createRequest('ui/close', { reason: 'test' }));
+
+        expect(response.error).toBeUndefined();
+        expect(close).toHaveBeenCalledWith('test');
       });
     });
   });

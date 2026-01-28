@@ -157,38 +157,46 @@ export class ExtAppsMessageHandler {
    * Route a method to its handler.
    */
   private async routeMethod(method: string, params: unknown): Promise<unknown> {
+    // Validate params is an object (null check + type check)
+    if (params !== undefined && (params === null || typeof params !== 'object' || Array.isArray(params))) {
+      throw new ExtAppsInvalidParamsError('Invalid params: expected object');
+    }
+
+    // Normalize undefined params to empty object for handlers that destructure
+    const normalizedParams = params ?? {};
+
     switch (method) {
       // Initialization
       case 'ui/initialize':
-        return this.handleInitialize(params as ExtAppsInitializeParams);
+        return this.handleInitialize(normalizedParams as ExtAppsInitializeParams);
 
       // Core methods
       case 'ui/callServerTool':
-        return this.handleCallServerTool(params as ExtAppsCallServerToolParams);
+        return this.handleCallServerTool(normalizedParams as ExtAppsCallServerToolParams);
 
       case 'ui/updateModelContext':
-        return this.handleUpdateModelContext(params as ExtAppsUpdateModelContextParams);
+        return this.handleUpdateModelContext(normalizedParams as ExtAppsUpdateModelContextParams);
 
       case 'ui/openLink':
-        return this.handleOpenLink(params as ExtAppsOpenLinkParams);
+        return this.handleOpenLink(normalizedParams as ExtAppsOpenLinkParams);
 
       // Display and lifecycle
       case 'ui/setDisplayMode':
-        return this.handleSetDisplayMode(params as ExtAppsSetDisplayModeParams);
+        return this.handleSetDisplayMode(normalizedParams as ExtAppsSetDisplayModeParams);
 
       case 'ui/close':
-        return this.handleClose(params as ExtAppsCloseParams);
+        return this.handleClose(normalizedParams as ExtAppsCloseParams);
 
       // Logging
       case 'ui/log':
-        return this.handleLog(params as ExtAppsLogParams);
+        return this.handleLog(normalizedParams as ExtAppsLogParams);
 
       // Widget-defined tools
       case 'ui/registerTool':
-        return this.handleRegisterTool(params as ExtAppsRegisterToolParams);
+        return this.handleRegisterTool(normalizedParams as ExtAppsRegisterToolParams);
 
       case 'ui/unregisterTool':
-        return this.handleUnregisterTool(params as ExtAppsUnregisterToolParams);
+        return this.handleUnregisterTool(normalizedParams as ExtAppsUnregisterToolParams);
 
       default:
         throw new ExtAppsMethodNotFoundError(`Unknown ext-apps method: ${method}`);

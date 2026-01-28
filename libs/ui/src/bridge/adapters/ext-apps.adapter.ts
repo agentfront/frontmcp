@@ -535,16 +535,21 @@ export class ExtAppsAdapter extends BaseAdapter {
 
     const r = result as Record<string, unknown>;
 
-    // hostCapabilities is optional but must be an object if present
+    // hostCapabilities is optional but must be a non-null, non-array object if present
     if (
       r['hostCapabilities'] !== undefined &&
-      (typeof r['hostCapabilities'] !== 'object' || r['hostCapabilities'] === null)
+      (typeof r['hostCapabilities'] !== 'object' ||
+        r['hostCapabilities'] === null ||
+        Array.isArray(r['hostCapabilities']))
     ) {
       return false;
     }
 
-    // hostContext is optional but must be an object if present
-    if (r['hostContext'] !== undefined && (typeof r['hostContext'] !== 'object' || r['hostContext'] === null)) {
+    // hostContext is optional but must be a non-null, non-array object if present
+    if (
+      r['hostContext'] !== undefined &&
+      (typeof r['hostContext'] !== 'object' || r['hostContext'] === null || Array.isArray(r['hostContext']))
+    ) {
       return false;
     }
 
