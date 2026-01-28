@@ -12,6 +12,7 @@ import {
   FlowControl,
   validateMcpSessionHeader,
 } from '../../common';
+import { InternalMcpError } from '../../errors';
 import { z } from 'zod';
 import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../../scope';
@@ -148,7 +149,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
-    } else if (method?.startsWith('ui/')) {
+    } else if (typeof method === 'string' && method.startsWith('ui/')) {
       // Ext-apps methods: ui/initialize, ui/callServerTool, etc.
       this.state.set('requestType', 'extApps');
     } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
@@ -505,7 +506,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
           if (parsed.success) {
             return parsed.data;
           }
-          return result;
+          // Follow pattern from call-tool-request.handler.ts
+          throw new InternalMcpError('Tool call returned invalid result format');
         },
         // Additional callbacks can be added here as needed:
         // updateModelContext, openLink, setDisplayMode, close, registerTool, unregisterTool
