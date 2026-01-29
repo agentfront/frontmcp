@@ -1,0 +1,142 @@
+name: Performance Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Comma-separated list of apps to test (or "all")'
+        required: false
+        default: "all"
+
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build packages
+        run: yarn build
+
+      - name: Fetch performance baseline
+        run: yarn perf:fetch-baseline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Run performance tests
+        run: |
+          if [ "${{ github.event.inputs.apps }}" = "all" ] || [ -z "${{ github.event.inputs.apps }}" ]; then
+            yarn test:perf
+          else
+            # Convert comma-separated to space-separated for Nx
+            APPS=$(echo "${{ github.event.inputs.apps }}" | tr ',' ' ')
+            for app in $APPS; do
+              yarn nx run $app:test:perf || true
+            done
+          fi
+        env:
+          NODE_OPTIONS: "--expose-gc --max-old-space-size=4096"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: perf-results/
+          retention-days: 30
+        if: always()
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Read the markdown report
+            let report = '';
+            try {
+              // Try to read consolidated report
+              if (fs.existsSync('perf-results/report.md')) {
+                report = fs.readFileSync('perf-results/report.md', 'utf8');
+              } else {
+                // Try individual project reports
+                const dirs = ['demo-e2e-cache', 'demo-e2e-skills', 'demo-e2e-redis'];
+                for (const dir of dirs) {
+                  const path = `perf-results/${dir}/report.md`;
+                  if (fs.existsSync(path)) {
+                    report += fs.readFileSync(path, 'utf8') + '\n\n---\n\n';
+                  }
+                }
+              }
+            } catch (err) {
+              console.log('No report found:', err.message);
+              return;
+            }
+
+            if (!report) {
+              console.log('No performance report to post');
+              return;
+            }
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.body.includes('## Performance Test Results')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report,
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report,
+              });
+            }

@@ -20,7 +20,10 @@
     "coverage:merge": "node scripts/merge-coverage.mjs",
     "coverage:all": "npm run test:unit:coverage && npm run test:e2e:coverage && npm run coverage:merge",
     "coverage:check": "npx nyc check-coverage --temp-dir=coverage/merged",
-    "fix:imports": "node scripts/fix-unused-imports.mjs"
+    "fix:imports": "node scripts/fix-unused-imports.mjs",
+    "test:perf": "node --expose-gc ./node_modules/.bin/nx run-many -t test:perf --parallel 1",
+    "perf:fetch-baseline": "node scripts/perf-fetch-baseline.mjs",
+    "perf:publish-baseline": "node scripts/perf-publish-baseline.mjs"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": "prettier --write"
