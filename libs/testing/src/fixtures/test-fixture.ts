@@ -119,17 +119,25 @@ async function createTestFixtures(): Promise<TestFixtures> {
   // Ensure shared resources are initialized
   await initializeSharedResources();
 
+  // Ensure shared resources are available
+  if (!serverInstance) {
+    throw new Error('Server instance not initialized');
+  }
+  if (!tokenFactory) {
+    throw new Error('Token factory not initialized');
+  }
+
   // Create MCP client for this test
   // Pass publicMode if configured to skip authentication
   const clientInstance = await McpTestClient.create({
-    baseUrl: serverInstance!.info.baseUrl,
+    baseUrl: serverInstance.info.baseUrl,
     transport: currentConfig.transport ?? 'streamable-http',
     publicMode: currentConfig.publicMode,
   }).buildAndConnect();
 
   // Build fixtures
-  const auth = createAuthFixture(tokenFactory!);
-  const server = createServerFixture(serverInstance!);
+  const auth = createAuthFixture(tokenFactory);
+  const server = createServerFixture(serverInstance);
 
   return {
     mcp: clientInstance,

@@ -9,10 +9,9 @@ import type {
   ProjectSummary,
   PerfMeasurement,
   PerfBaseline,
-  RegressionResult,
   ParallelLeakDetectionResult,
 } from './types';
-import { RegressionDetector, summarizeRegressions } from './regression-detector';
+import { RegressionDetector } from './regression-detector';
 import { formatBytes, formatDuration, formatMicroseconds } from './metrics-collector';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -43,17 +42,20 @@ export class ReportGenerator {
       if (!projectGroups.has(m.project)) {
         projectGroups.set(m.project, []);
       }
-      projectGroups.get(m.project)!.push(m);
+      const group = projectGroups.get(m.project);
+      if (group) {
+        group.push(m);
+      }
     }
 
     // Build project summaries
     const projects: ProjectSummary[] = [];
-    for (const [project, projectMeasurements] of projectGroups) {
+    for (const [projectName, projectMeasurements] of projectGroups) {
       const summary = this.calculateSummary(projectMeasurements);
       const regressions = baseline ? this.detector.detectRegressions(projectMeasurements, baseline) : undefined;
 
       projects.push({
-        project,
+        project: projectName,
         summary,
         measurements: projectMeasurements,
         regressions,

@@ -6,7 +6,7 @@
  * - Performance comparison (cached vs non-cached)
  * - Resource access performance
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Cache Basic Performance', () => {
   perfTest.use({

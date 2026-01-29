@@ -399,9 +399,9 @@ export class McpTestClient {
       method: string;
       params?: Record<string, unknown>;
     }): Promise<JSONRPCResponse> => {
-      this.ensureConnected();
+      const transport = this.getConnectedTransport();
       const start = Date.now();
-      const response = await this.transport!.request(message);
+      const response = await transport.request(message);
       this.traceRequest(message.method, message.params, message.id, response, Date.now() - start);
       return response;
     },
@@ -410,16 +410,16 @@ export class McpTestClient {
      * Send a notification (no response expected)
      */
     notify: async (message: { jsonrpc: '2.0'; method: string; params?: Record<string, unknown> }): Promise<void> => {
-      this.ensureConnected();
-      await this.transport!.notify(message);
+      const transport = this.getConnectedTransport();
+      await transport.notify(message);
     },
 
     /**
      * Send raw string data (for error testing)
      */
     sendRaw: async (data: string): Promise<JSONRPCResponse> => {
-      this.ensureConnected();
-      return this.transport!.sendRaw(data);
+      const transport = this.getConnectedTransport();
+      return transport.sendRaw(data);
     },
   };
 
@@ -902,14 +902,14 @@ export class McpTestClient {
   }
 
   private async request<T>(method: string, params: Record<string, unknown>): Promise<McpResponse<T>> {
-    this.ensureConnected();
+    const transport = this.getConnectedTransport();
 
     const id = ++this.requestIdCounter;
     this._lastRequestId = id;
     const start = Date.now();
 
     try {
-      const response = await this.transport!.request<T>({
+      const response = await transport.request<T>({
         jsonrpc: '2.0',
         id,
         method,
@@ -953,9 +953,20 @@ export class McpTestClient {
   }
 
   private ensureConnected(): void {
-    if (!this.transport?.isConnected()) {
+    if (!this.transport || !this.transport.isConnected()) {
       throw new Error('Not connected to MCP server. Call connect() first.');
     }
+  }
+
+  /**
+   * Get the transport, throwing if not connected.
+   * This method is used after ensureConnected() to get a non-null transport.
+   */
+  private getConnectedTransport(): McpTransport {
+    if (!this.transport || !this.transport.isConnected()) {
+      throw new Error('Not connected to MCP server. Call connect() first.');
+    }
+    return this.transport;
   }
 
   private updateSessionActivity(): void {

@@ -9,12 +9,13 @@ import type {
   RequestInterceptor,
   ResponseInterceptor,
   InterceptorContext,
-  InterceptorResult,
   ResponseInterceptorContext,
-  ResponseInterceptorResult,
   MockRegistry,
 } from './interceptor.types';
 import { DefaultMockRegistry } from './mock-registry';
+
+// Re-export types for external consumers
+export type { InterceptorResult, ResponseInterceptorResult } from './interceptor.types';
 
 /**
  * Default implementation of InterceptorChain

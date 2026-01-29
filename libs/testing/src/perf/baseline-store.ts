@@ -102,12 +102,15 @@ export class BaselineStore {
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
-      grouped.get(key)!.push(m);
+      const group = grouped.get(key);
+      if (group) {
+        group.push(m);
+      }
     }
 
     // Create baselines for each test
     for (const [key, testMeasurements] of grouped) {
-      const [project, name] = key.split('::');
+      const [project] = key.split('::');
 
       const heapSamples = testMeasurements.map((m) => m.final?.memory.heapUsed ?? 0);
       const durationSamples = testMeasurements.map((m) => m.timing.durationMs);

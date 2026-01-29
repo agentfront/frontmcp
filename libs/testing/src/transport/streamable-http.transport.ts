@@ -521,7 +521,7 @@ export class StreamableHttpTransport implements McpTransport {
    */
   private parseSSEEvents(
     text: string,
-    requestId: string | number | undefined,
+    _requestId: string | number | undefined,
   ): { events: Array<{ type: string; data: string; id?: string }>; sessionId?: string } {
     const lines = text.split('\n');
     const events: Array<{ type: string; data: string; id?: string }> = [];
@@ -620,10 +620,16 @@ export class StreamableHttpTransport implements McpTransport {
       message: params?.message?.slice(0, 100),
     });
 
+    const requestId = request.id;
+    if (requestId === undefined || requestId === null) {
+      this.log('Elicitation request has no ID, cannot respond');
+      return;
+    }
+
     if (!this.elicitationHandler) {
       // No handler registered - send error response
       this.log('No elicitation handler registered, sending error');
-      await this.sendElicitationResponse(request.id!, {
+      await this.sendElicitationResponse(requestId, {
         action: 'decline',
       });
       return;
@@ -635,10 +641,10 @@ export class StreamableHttpTransport implements McpTransport {
       this.log('Elicitation handler response:', response);
 
       // Send the response back to the server
-      await this.sendElicitationResponse(request.id!, response);
+      await this.sendElicitationResponse(requestId, response);
     } catch (error) {
       this.log('Elicitation handler error:', error);
-      await this.sendElicitationResponse(request.id!, {
+      await this.sendElicitationResponse(requestId, {
         action: 'cancel',
       });
     }

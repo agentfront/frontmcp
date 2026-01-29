@@ -174,10 +174,10 @@ export class LeakDetector {
     }
 
     // Force GC to establish clean baseline
-    if (forceGc && isGcAvailable()) {
-      global.gc!();
-      global.gc!();
-      global.gc!();
+    if (forceGc && isGcAvailable() && global.gc) {
+      global.gc();
+      global.gc();
+      global.gc();
     }
 
     const samples: number[] = [];
@@ -186,9 +186,9 @@ export class LeakDetector {
     for (let i = 0; i < iterations; i++) {
       operation();
 
-      if (forceGc && isGcAvailable()) {
-        global.gc!();
-        global.gc!();
+      if (forceGc && isGcAvailable() && global.gc) {
+        global.gc();
+        global.gc();
       }
 
       samples.push(process.memoryUsage().heapUsed);

@@ -35,7 +35,10 @@ jest.setTimeout(120000); // 2 minutes default
 
 // Suppress verbose output during tests unless DEBUG is set
 if (process.env['DEBUG'] !== '1' && process.env['PERF_VERBOSE'] !== '1') {
-  // Keep only warnings and errors
+  // Save original console methods at module level
+  const originalLog = console.log;
+  const originalInfo = console.info;
+  const originalDebug = console.debug;
   const originalWarn = console.warn;
   const originalError = console.error;
 
@@ -48,9 +51,10 @@ if (process.env['DEBUG'] !== '1' && process.env['PERF_VERBOSE'] !== '1') {
   });
 
   afterAll(() => {
-    console.log = console.log;
-    console.info = console.info;
-    console.debug = console.debug;
+    // Restore original console methods
+    console.log = originalLog;
+    console.info = originalInfo;
+    console.debug = originalDebug;
   });
 }
 

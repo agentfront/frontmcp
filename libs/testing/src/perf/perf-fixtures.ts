@@ -36,7 +36,7 @@ export class PerfFixturesImpl implements PerfFixtures {
   private collector: MetricsCollector;
   private leakDetector: LeakDetector;
   private baselineSnapshot: PerfSnapshot | null = null;
-  private startTime: number = 0;
+  private startTime = 0;
   private issues: PerfIssue[] = [];
   private leakResults: LeakDetectionResult[] = [];
 

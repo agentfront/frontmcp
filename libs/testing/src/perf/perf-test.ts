@@ -33,7 +33,7 @@ import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 import { TestTokenFactory } from '../auth/token-factory';
 import { TestServer } from '../server/test-server';
 import type { TestConfig, TestFixtures, AuthFixture, ServerFixture, TestUser } from '../fixtures/fixture-types';
-import type { PerfFixtures, PerfTestConfig, PerfThresholds } from './types';
+import type { PerfFixtures, PerfTestConfig } from './types';
 import { createPerfFixtures, addGlobalMeasurement, PerfFixturesImpl } from './perf-fixtures';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -165,14 +165,21 @@ async function createTestFixtures(
 ): Promise<{ fixtures: PerfTestFixtures; perfImpl: PerfFixturesImpl }> {
   await initializeSharedResources();
 
+  if (!serverInstance) {
+    throw new Error('Server instance not initialized');
+  }
+  if (!tokenFactory) {
+    throw new Error('Token factory not initialized');
+  }
+
   const clientInstance = await McpTestClient.create({
-    baseUrl: serverInstance!.info.baseUrl,
+    baseUrl: serverInstance.info.baseUrl,
     transport: currentConfig.transport ?? 'streamable-http',
     publicMode: currentConfig.publicMode,
   }).buildAndConnect();
 
-  const auth = createAuthFixture(tokenFactory!);
-  const server = createServerFixture(serverInstance!);
+  const auth = createAuthFixture(tokenFactory);
+  const server = createServerFixture(serverInstance);
   const perfImpl = createPerfFixtures(testName, currentConfig.project ?? 'unknown');
 
   // Auto-capture baseline if forceGcOnBaseline is enabled

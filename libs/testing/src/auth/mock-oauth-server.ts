@@ -46,8 +46,21 @@
  */
 
 import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
-import { randomBytes, sha256Base64url, base64urlEncode } from '@frontmcp/utils';
 import type { TestTokenFactory } from './token-factory';
+
+// Lazy-loaded crypto utilities
+let _randomBytes: typeof import('@frontmcp/utils').randomBytes;
+let _sha256Base64url: typeof import('@frontmcp/utils').sha256Base64url;
+let _base64urlEncode: typeof import('@frontmcp/utils').base64urlEncode;
+
+async function loadCryptoUtils(): Promise<void> {
+  if (!_randomBytes) {
+    const utils = await import('@frontmcp/utils');
+    _randomBytes = utils.randomBytes;
+    _sha256Base64url = utils.sha256Base64url;
+    _base64urlEncode = utils.base64urlEncode;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // TYPES
@@ -1063,16 +1076,47 @@ export class MockOAuthServer {
   /**
    * Generate a random authorization code
    */
+  private async generateCodeAsync(): Promise<string> {
+    await loadCryptoUtils();
+    return _base64urlEncode(_randomBytes(32));
+  }
+
+  /**
+   * Generate a random authorization code (sync wrapper for compatibility)
+   */
   private generateCode(): string {
-    return base64urlEncode(randomBytes(32));
+    // Use crypto.getRandomValues for sync generation
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    // Base64url encode manually
+    const base64 = Buffer.from(bytes).toString('base64');
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   }
 
   /**
    * Compute PKCE code challenge from verifier
    */
+  private async computeCodeChallengeAsync(verifier: string, method?: string): Promise<string> {
+    if (method === 'S256') {
+      await loadCryptoUtils();
+      return _sha256Base64url(verifier);
+    }
+    // Plain method (not recommended but supported)
+    return verifier;
+  }
+
+  /**
+   * Compute PKCE code challenge from verifier (sync wrapper)
+   */
   private computeCodeChallenge(verifier: string, method?: string): string {
     if (method === 'S256') {
-      return sha256Base64url(verifier);
+      // Use Web Crypto API synchronously via crypto.subtle would be async
+      // For now, fallback to requiring the utils to be pre-loaded
+      if (_sha256Base64url) {
+        return _sha256Base64url(verifier);
+      }
+      // Fallback: This shouldn't happen in normal usage
+      throw new Error('Crypto utils not loaded. Call loadCryptoUtils() first.');
     }
     // Plain method (not recommended but supported)
     return verifier;

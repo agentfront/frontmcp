@@ -7,7 +7,7 @@
  * - Format options performance
  * - Tool discovery performance
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Skills Basic Performance', () => {
   perfTest.use({
