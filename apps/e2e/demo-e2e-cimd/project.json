@@ -43,6 +43,15 @@
         "passWithNoTests": true
       },
       "dependsOn": ["^build"]
+    },
+    "test:perf": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/perf-results/demo-e2e-cimd"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-cimd/jest.perf.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
     }
   }
 }

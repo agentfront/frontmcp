@@ -73,3 +73,6 @@ libs/*/src/**/*.d.ts.map
 apps/*/src/**/*.d.ts
 apps/*/src/**/*.d.ts.map
 /apps/demo/.env
+
+# Performance test results (generated)
+perf-results/

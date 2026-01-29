@@ -13,6 +13,9 @@ import ActivitiesListTool from './tools/activities-list.tool';
 import ActivitiesLogTool from './tools/activities-log.tool';
 import ActivitiesStatsTool from './tools/activities-stats.tool';
 
+// Admin tools
+import CrmResetTool from './tools/crm-reset.tool';
+
 // Resource and prompt
 import UsersResource from './resources/users.resource';
 import AnalyzeUserActivityPrompt from './prompts/analyze-user-activity.prompt';
@@ -35,6 +38,7 @@ import AnalyzeUserActivityPrompt from './prompts/analyze-user-activity.prompt';
     ActivitiesListTool,
     ActivitiesLogTool,
     ActivitiesStatsTool,
+    CrmResetTool,
   ],
   resources: [UsersResource],
   prompts: [AnalyzeUserActivityPrompt],
