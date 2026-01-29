@@ -10,9 +10,22 @@ on:
         required: true
 
 jobs:
-  publish-baseline:
+  perf:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - name: "group-1"
+            projects: "demo-e2e-agents,demo-e2e-cache,demo-e2e-cimd,demo-e2e-codecall,demo-e2e-config,demo-e2e-direct"
+          - name: "group-2"
+            projects: "demo-e2e-elicitation,demo-e2e-errors,demo-e2e-hooks,demo-e2e-multiapp,demo-e2e-notifications,demo-e2e-openapi"
+          - name: "group-3"
+            projects: "demo-e2e-orchestrated,demo-e2e-providers,demo-e2e-public,demo-e2e-redis,demo-e2e-remember,demo-e2e-remote"
+          - name: "group-4"
+            projects: "demo-e2e-serverless,demo-e2e-skills,demo-e2e-standalone,demo-e2e-transparent,demo-e2e-transport-recreation,demo-e2e-ui"
 
     services:
       redis:
@@ -43,12 +56,44 @@ jobs:
       - name: Build packages
         run: yarn build
 
-      - name: Run performance tests
-        run: yarn test:perf
+      - name: Run performance tests (${{ matrix.group.name }})
+        run: yarn nx run-many -t test:perf --projects=${{ matrix.group.projects }}
         env:
           NODE_OPTIONS: "--expose-gc --max-old-space-size=4096"
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report-${{ matrix.group.name }}
+          path: perf-results/
+          retention-days: 90
+        if: always()
+
+  publish-baseline:
+    needs: perf
+    runs-on: ubuntu-latest
+    if: always() && needs.perf.result == 'success'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: perf-results
+          pattern: perf-report-*
+          merge-multiple: true
 
       - name: Determine release tag
         id: tag
@@ -64,7 +109,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload baseline artifact
+      - name: Upload consolidated baseline artifact
         uses: actions/upload-artifact@v4
         with:
           name: perf-baseline-${{ steps.tag.outputs.TAG }}

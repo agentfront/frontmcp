@@ -20,6 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - name: "group-1"
+            projects: "demo-e2e-agents,demo-e2e-cache,demo-e2e-cimd,demo-e2e-codecall,demo-e2e-config,demo-e2e-direct"
+          - name: "group-2"
+            projects: "demo-e2e-elicitation,demo-e2e-errors,demo-e2e-hooks,demo-e2e-multiapp,demo-e2e-notifications,demo-e2e-openapi"
+          - name: "group-3"
+            projects: "demo-e2e-orchestrated,demo-e2e-providers,demo-e2e-public,demo-e2e-redis,demo-e2e-remember,demo-e2e-remote"
+          - name: "group-4"
+            projects: "demo-e2e-serverless,demo-e2e-skills,demo-e2e-standalone,demo-e2e-transparent,demo-e2e-transport-recreation,demo-e2e-ui"
+
     services:
       redis:
         image: redis:7
@@ -55,12 +68,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: Run performance tests
+      - name: Run performance tests (${{ matrix.group.name }})
         run: |
           if [ "${{ github.event.inputs.apps }}" = "all" ] || [ -z "${{ github.event.inputs.apps }}" ]; then
-            yarn test:perf
+            yarn nx run-many -t test:perf --projects=${{ matrix.group.projects }}
           else
-            # Convert comma-separated to space-separated for Nx
             APPS=$(echo "${{ github.event.inputs.apps }}" | tr ',' ' ')
             for app in $APPS; do
               yarn nx run $app:test:perf || true
@@ -74,10 +86,25 @@ jobs:
       - name: Upload performance report
         uses: actions/upload-artifact@v4
         with:
-          name: perf-report
+          name: perf-report-${{ matrix.group.name }}
           path: perf-results/
           retention-days: 30
         if: always()
+
+  report:
+    needs: perf
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: perf-results
+          pattern: perf-report-*
+          merge-multiple: true
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
@@ -86,16 +113,15 @@ jobs:
           script: |
             const fs = require('fs');
 
-            // Read the markdown report
             let report = '';
             try {
-              // Try to read consolidated report
               if (fs.existsSync('perf-results/report.md')) {
                 report = fs.readFileSync('perf-results/report.md', 'utf8');
               } else {
-                // Try individual project reports
-                const dirs = ['demo-e2e-cache', 'demo-e2e-skills', 'demo-e2e-redis'];
-                for (const dir of dirs) {
+                const projectDirs = fs.readdirSync('perf-results').filter(d =>
+                  d.startsWith('demo-e2e-') && fs.statSync(`perf-results/${d}`).isDirectory()
+                );
+                for (const dir of projectDirs) {
                   const path = `perf-results/${dir}/report.md`;
                   if (fs.existsSync(path)) {
                     report += fs.readFileSync(path, 'utf8') + '\n\n---\n\n';
@@ -112,7 +138,6 @@ jobs:
               return;
             }
 
-            // Find existing comment
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -124,7 +149,6 @@ jobs:
             );
 
             if (botComment) {
-              // Update existing comment
               await github.rest.issues.updateComment({
                 comment_id: botComment.id,
                 owner: context.repo.owner,
@@ -132,7 +156,6 @@ jobs:
                 body: report,
               });
             } else {
-              // Create new comment
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,

@@ -678,7 +678,7 @@ export class MockOAuthServer {
         return;
       }
 
-      const expectedChallenge = this.computeCodeChallenge(codeVerifier, method);
+      const expectedChallenge = await this.computeCodeChallengeAsync(codeVerifier, method);
       if (expectedChallenge !== codeRecord.codeChallenge) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(
@@ -1100,23 +1100,6 @@ export class MockOAuthServer {
     if (method === 'S256') {
       await loadCryptoUtils();
       return _sha256Base64url(verifier);
-    }
-    // Plain method (not recommended but supported)
-    return verifier;
-  }
-
-  /**
-   * Compute PKCE code challenge from verifier (sync wrapper)
-   */
-  private computeCodeChallenge(verifier: string, method?: string): string {
-    if (method === 'S256') {
-      // Use Web Crypto API synchronously via crypto.subtle would be async
-      // For now, fallback to requiring the utils to be pre-loaded
-      if (_sha256Base64url) {
-        return _sha256Base64url(verifier);
-      }
-      // Fallback: This shouldn't happen in normal usage
-      throw new Error('Crypto utils not loaded. Call loadCryptoUtils() first.');
     }
     // Plain method (not recommended but supported)
     return verifier;
