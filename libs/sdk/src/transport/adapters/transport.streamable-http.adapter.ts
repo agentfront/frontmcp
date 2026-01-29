@@ -27,6 +27,11 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
   override createTransport(sessionId: string, response: ServerResponse): RecreateableStreamableHTTPServerTransport {
     const sessionIdGenerator = resolveSessionIdGenerator(this.key.type, sessionId);
 
+    // Get EventStore from scope configuration (undefined if not enabled)
+    // By default, EventStore is disabled because Claude.ai's client doesn't handle priming events correctly.
+    // Enable via transport.eventStore config if your clients support SSE resumability.
+    const eventStore = this.scope.eventStore;
+
     return new RecreateableStreamableHTTPServerTransport({
       sessionIdGenerator,
       onsessionclosed: () => {
@@ -40,10 +45,11 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
           console.log(`stateless session initialized`);
         }
       },
-      // Disable eventStore to prevent priming events - Claude.ai's client doesn't handle them
+      // Pass EventStore from scope config (or undefined to disable resumability)
+      // When undefined: disabled to prevent priming events - Claude.ai's client doesn't handle them
       // The priming event has empty data with no `event:` type, which violates MCP spec
       // ("Event types MUST be message") and confuses some clients
-      eventStore: undefined,
+      eventStore,
     });
   }
 

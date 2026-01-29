@@ -79,6 +79,13 @@ perfTest.describe('Public Parallel Stress Testing', () => {
       (client, workerId) => {
         let callIndex = workerId;
         return async () => {
+          // Reset every 100 iterations to bound data growth and avoid O(n²) memory pattern
+          // Without periodic resets, list-notes responses grow progressively larger as notes accumulate,
+          // leading to quadratic data volume: Sum(i * ~200 bytes) for i=0 to ~1250 notes
+          if (callIndex > 0 && callIndex % 100 === 0) {
+            await resetClient.tools.call('notes-reset', {});
+          }
+
           const op = callIndex++ % 2;
           if (op === 0) {
             await client.tools.call('create-note', { title: `Note ${callIndex}`, content: `Content ${callIndex}` });

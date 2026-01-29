@@ -32,6 +32,15 @@ export { SupportedTransport } from './adapters/transport.local.adapter';
 // Type-only exports for TransportType and TransportKey (interfaces/type aliases)
 export type { TransportType, TransportKey } from './transport.types';
 
+// EventStore exports for SSE resumability support
+export { createEventStore, MemoryEventStore, RedisEventStore } from './event-stores';
+export type {
+  EventStoreConfig,
+  EventStoreResult,
+  MemoryEventStoreOptions,
+  RedisEventStoreOptions,
+} from './event-stores';
+
 /**
  * Creates an in-memory MCP server for programmatic access without HTTP transport.
  *

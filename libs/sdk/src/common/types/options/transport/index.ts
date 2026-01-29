@@ -13,6 +13,8 @@ export type {
   ProtocolPreset,
   // Persistence types
   PersistenceConfig,
+  // EventStore types
+  EventStoreConfig,
   // Session types (re-exported from session options)
   SessionMode,
   SessionModeOption,
@@ -30,6 +32,7 @@ export {
   transportOptionsSchema,
   // Sub-schemas
   persistenceConfigSchema,
+  eventStoreConfigSchema,
   // Protocol presets
   PROTOCOL_PRESETS,
   // Helper functions
