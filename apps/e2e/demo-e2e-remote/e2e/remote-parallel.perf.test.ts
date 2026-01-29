@@ -4,13 +4,65 @@
  * Tests remote gateway operations under parallel load using multiple clients.
  * The remote gateway orchestrates local:* and mintlify:* namespaced tools.
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { perfTest, expect, TestServer } from '@frontmcp/testing';
+
+// Port configuration from E2E_PORT_RANGES:
+// - demo-e2e-remote: 50210-50219 (using 50210 for gateway, 50211 for local MCP)
+// - mock-api: 50910-50919 (using 50910 for mock Mintlify)
+const LOCAL_MCP_PORT = 50211;
+const MOCK_MINTLIFY_PORT = 50910;
+
+// Local MCP server instance
+let localMcpServer: TestServer | null = null;
+// Mock Mintlify MCP server instance
+let mockMintlifyServer: TestServer | null = null;
+
+// Start local MCP and mock Mintlify servers before all perf tests
+perfTest.beforeAll(async () => {
+  // Start mock Mintlify server first
+  mockMintlifyServer = await TestServer.start({
+    command: 'npx tsx apps/e2e/demo-e2e-remote/src/mock-mintlify-server/main.ts',
+    project: 'mock-api',
+    port: MOCK_MINTLIFY_PORT,
+    startupTimeout: 60000,
+    healthCheckPath: '/',
+  });
+
+  // Then start local MCP server
+  localMcpServer = await TestServer.start({
+    command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
+    project: 'demo-e2e-remote',
+    port: LOCAL_MCP_PORT,
+    startupTimeout: 60000,
+    healthCheckPath: '/',
+  });
+
+  // Give the servers extra time to fully initialize
+  // The health check passes when HTTP is ready, but MCP handlers need more time
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+}, 120000);
+
+// Stop all servers after all perf tests
+perfTest.afterAll(async () => {
+  if (localMcpServer) {
+    await localMcpServer.stop();
+    localMcpServer = null;
+  }
+  if (mockMintlifyServer) {
+    await mockMintlifyServer.stop();
+    mockMintlifyServer = null;
+  }
+}, 30000);
 
 perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
   perfTest.use({
     server: 'apps/e2e/demo-e2e-remote/src/main.ts',
     project: 'demo-e2e-remote',
     publicMode: true,
+    env: {
+      LOCAL_MCP_PORT: String(LOCAL_MCP_PORT),
+      MOCK_MINTLIFY_PORT: String(MOCK_MINTLIFY_PORT),
+    },
   });
 
   perfTest('parallel stress: 5000 total local:echo operations', async ({ perf, server }) => {

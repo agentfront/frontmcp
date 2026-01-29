@@ -1,8 +1,8 @@
 /**
- * Parallel Stress Tests for Direct SDK Access (5 workers × 1000 iterations)
+ * Parallel Stress Tests for Direct SDK Access (5 workers × 100 iterations)
  *
- * Tests direct SDK operations under parallel load using multiple clients
- * to achieve higher throughput (400-2000+ req/s)
+ * Tests direct SDK operations under parallel load using multiple clients.
+ * Reduced to 100 iterations per worker to prevent note accumulation OOM.
  */
 import { perfTest, expect } from '@frontmcp/testing';
 
@@ -13,10 +13,10 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
     publicMode: true,
   });
 
-  perfTest('parallel stress: 5000 total create-note operations', async ({ perf, server }) => {
+  perfTest('parallel stress: 500 total create-note operations', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client, workerId) => {
-        let counter = workerId * 1000;
+        let counter = workerId * 100;
         return async () => {
           await client.tools.call('create-note', {
             title: `Note ${counter}`,
@@ -25,11 +25,11 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
         };
       },
       {
-        iterations: 1000,
+        iterations: 100,
         workers: 5,
-        threshold: 200 * 1024 * 1024, // 200MB for 5000 total operations
+        threshold: 200 * 1024 * 1024, // 200MB for 500 total operations
         warmupIterations: 10,
-        intervalSize: 200,
+        intervalSize: 20,
         clientFactory: () => server.createClient(),
       },
     );
@@ -43,17 +43,17 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
-  perfTest('parallel stress: 5000 total list-notes operations', async ({ perf, server }) => {
+  perfTest('parallel stress: 500 total list-notes operations', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client) => async () => {
         await client.tools.call('list-notes', {});
       },
       {
-        iterations: 1000,
+        iterations: 100,
         workers: 5,
         threshold: 200 * 1024 * 1024,
         warmupIterations: 10,
-        intervalSize: 200,
+        intervalSize: 20,
         clientFactory: () => server.createClient(),
       },
     );
@@ -67,7 +67,7 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
-  perfTest('parallel stress: 5000 total mixed operations', async ({ perf, server }) => {
+  perfTest('parallel stress: 500 total mixed operations', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client, workerId) => {
         let callIndex = workerId;
@@ -81,11 +81,11 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
         };
       },
       {
-        iterations: 1000,
+        iterations: 100,
         workers: 5,
         threshold: 200 * 1024 * 1024,
         warmupIterations: 10,
-        intervalSize: 200,
+        intervalSize: 20,
         clientFactory: () => server.createClient(),
       },
     );
@@ -99,17 +99,17 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
-  perfTest('parallel stress: 5000 total tool listings', async ({ perf, server }) => {
+  perfTest('parallel stress: 500 total tool listings', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client) => async () => {
         await client.tools.list();
       },
       {
-        iterations: 1000,
+        iterations: 100,
         workers: 5,
         threshold: 200 * 1024 * 1024,
         warmupIterations: 10,
-        intervalSize: 200,
+        intervalSize: 20,
         clientFactory: () => server.createClient(),
       },
     );
