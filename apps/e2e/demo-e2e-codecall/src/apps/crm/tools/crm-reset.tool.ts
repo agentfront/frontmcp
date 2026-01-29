@@ -12,7 +12,7 @@ const outputSchema = z.object({ success: z.boolean() });
   outputSchema,
 })
 export default class CrmResetTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
     crmStore.reset();
     return { success: true };
   }
