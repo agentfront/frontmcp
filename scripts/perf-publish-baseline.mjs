@@ -137,7 +137,8 @@ function loadReports() {
 }
 
 /**
- * Convert report to baseline format.
+ * Convert report to consolidated format with full test data mapped by name.
+ * Maintains backward compatibility with regression detection (heapUsed, durationMs, cpuTime fields).
  */
 function reportToBaseline(report, release) {
   const tests = {};
@@ -146,8 +147,8 @@ function reportToBaseline(report, release) {
     for (const measurement of project.measurements) {
       const testId = `${measurement.project}::${measurement.name}`;
 
-      // Simple baseline with single sample
       tests[testId] = {
+        // Required fields for TestBaseline interface (regression detection)
         testId,
         project: measurement.project,
         heapUsed: {
@@ -176,6 +177,15 @@ function reportToBaseline(report, release) {
         },
         createdAt: new Date().toISOString(),
         commitHash: report.commitHash,
+
+        // Extended fields - full measurement data
+        name: measurement.name,
+        timing: measurement.timing,
+        baseline: measurement.baseline,
+        final: measurement.final,
+        memoryDelta: measurement.memoryDelta,
+        issues: measurement.issues || [],
+        leakDetectionResults: measurement.leakDetectionResults,
       };
     }
   }
@@ -184,6 +194,7 @@ function reportToBaseline(report, release) {
     release,
     timestamp: new Date().toISOString(),
     commitHash: report.commitHash,
+    summary: report.summary,
     tests,
   };
 }
