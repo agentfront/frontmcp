@@ -118,6 +118,30 @@ jobs:
           pattern: perf-report-*
           merge-multiple: true
 
+      - name: Write full report to workflow summary
+        run: |
+          echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check if perf-results directory exists
+          if [ ! -d "perf-results" ]; then
+            echo "No performance results found." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          # Iterate through each project's report.md and append to summary
+          for dir in perf-results/demo-e2e-*/; do
+            if [ -f "$dir/report.md" ]; then
+              project=$(basename "$dir")
+              echo "---" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### $project" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              cat "$dir/report.md" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -141,11 +165,9 @@ jobs:
 
               for (const dir of projectDirs) {
                 const jsonPath = `perf-results/${dir}/report.json`;
-                const mdPath = `perf-results/${dir}/report.md`;
-                if (fs.existsSync(jsonPath) && fs.existsSync(mdPath)) {
+                if (fs.existsSync(jsonPath)) {
                   const json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-                  const md = fs.readFileSync(mdPath, 'utf8');
-                  projects.push({ name: dir, json, md });
+                  projects.push({ name: dir, json });
                 }
               }
             } catch (err) {
@@ -180,7 +202,7 @@ jobs:
             // Unique marker for bot comment detection
             const BOT_MARKER = '<!-- frontmcp-perf-bot -->';
 
-            // Build aggregated report
+            // Build compact report
             let report = `${BOT_MARKER}\n## Performance Test Results\n\n`;
             report += `**Status:** ${statusEmoji} ${statusText}\n\n`;
 
@@ -195,24 +217,9 @@ jobs:
             }
             report += `\n**Total:** ${totals.tests} tests across ${projects.length} projects\n\n`;
 
-            // Accordion for each project's details
-            report += `### Details\n\n`;
-            for (const p of projects) {
-              const s = p.json.summary;
-              const icon = s.failedTests > 0 || s.leakTests > 0 ? '❌' : s.warningTests > 0 ? '⚠️' : '✅';
-              const summaryText = `${icon} ${p.name} (${s.totalTests} tests, ${s.passedTests} passed)`;
-
-              // Extract project-specific content, removing redundant headers
-              let content = p.md
-                .replace(/^## Performance Test Results\n+/, '')
-                .replace(/\*\*Status:\*\*[^\n]*\n+/, '')
-                .replace(/### Summary[\s\S]*?(?=### Project Breakdown|$)/, '');
-
-              report += `<details>\n`;
-              report += `<summary>${summaryText}</summary>\n\n`;
-              report += content.trim();
-              report += `\n\n</details>\n\n`;
-            }
+            // Link to full report in workflow run
+            const workflowUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            report += `📊 [View full report in workflow run](${workflowUrl})\n\n`;
 
             // Footer
             const timestamp = new Date().toISOString();
