@@ -17,7 +17,7 @@
  */
 
 import { execSync } from 'child_process';
-import { readFileSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 const BASELINE_START_MARKER = '<!-- PERF_BASELINE_START -->';
@@ -125,12 +125,18 @@ function loadReports() {
   };
 
   for (const report of reports) {
-    merged.summary.totalTests += report.summary.totalTests;
-    merged.summary.passedTests += report.summary.passedTests;
-    merged.summary.warningTests += report.summary.warningTests;
-    merged.summary.failedTests += report.summary.failedTests;
-    merged.summary.leakTests += report.summary.leakTests;
-    merged.projects.push(...report.projects);
+    if (!report.summary) {
+      console.warn(`Report missing summary, skipping`);
+      continue;
+    }
+    merged.summary.totalTests += report.summary.totalTests ?? 0;
+    merged.summary.passedTests += report.summary.passedTests ?? 0;
+    merged.summary.warningTests += report.summary.warningTests ?? 0;
+    merged.summary.failedTests += report.summary.failedTests ?? 0;
+    merged.summary.leakTests += report.summary.leakTests ?? 0;
+    if (Array.isArray(report.projects)) {
+      merged.projects.push(...report.projects);
+    }
   }
 
   return merged;
@@ -160,12 +166,12 @@ function reportToBaseline(report, release) {
           sampleCount: 1,
         },
         durationMs: {
-          mean: measurement.timing.durationMs,
+          mean: measurement.timing?.durationMs ?? 0,
           stdDev: 0,
-          min: measurement.timing.durationMs,
-          max: measurement.timing.durationMs,
-          p95: measurement.timing.durationMs,
-          sampleCount: 1,
+          min: measurement.timing?.durationMs ?? 0,
+          max: measurement.timing?.durationMs ?? 0,
+          p95: measurement.timing?.durationMs ?? 0,
+          sampleCount: measurement.timing ? 1 : 0,
         },
         cpuTime: {
           mean: measurement.final?.cpu?.total || 0,
@@ -267,12 +273,14 @@ function updateRelease(tag, baselineContent) {
 
   // Update release using gh CLI
   const tmpFile = `/tmp/release-body-${Date.now()}.md`;
-  require('fs').writeFileSync(tmpFile, newBody);
+  writeFileSync(tmpFile, newBody);
 
-  const result = exec(`gh release edit "${tag}" --notes-file "${tmpFile}"`);
-  require('fs').unlinkSync(tmpFile);
-
-  return result !== null;
+  try {
+    const result = exec(`gh release edit "${tag}" --notes-file "${tmpFile}"`);
+    return result !== null;
+  } finally {
+    unlinkSync(tmpFile);
+  }
 }
 
 /**

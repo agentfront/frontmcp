@@ -168,6 +168,11 @@ export class LeakDetector {
     const opts = { ...DEFAULT_OPTIONS, ...options };
     const { iterations, threshold, warmupIterations, forceGc, intervalSize } = opts;
 
+    // Warn if GC is not available
+    if (forceGc && !isGcAvailable()) {
+      console.warn('[LeakDetector] Manual GC not available. Run Node.js with --expose-gc for accurate results.');
+    }
+
     // Run warmup iterations
     for (let i = 0; i < warmupIterations; i++) {
       operation();
@@ -245,65 +250,75 @@ export class LeakDetector {
     // Create operation functions for each worker using their dedicated client
     const operations = clients.map((client, workerId) => operationFactory(client, workerId));
 
-    // Run warmup iterations for all workers in parallel
-    console.log(`[LeakDetector] Running ${warmupIterations} warmup iterations per worker...`);
-    await Promise.all(
-      operations.map(async (operation) => {
-        for (let i = 0; i < warmupIterations; i++) {
-          await operation();
-        }
-      }),
-    );
+    // Helper to disconnect all clients
+    const disconnectClients = async () => {
+      await Promise.all(
+        clients.map(async (client) => {
+          if (client.disconnect) {
+            await client.disconnect();
+          }
+        }),
+      );
+    };
 
-    // Force GC to establish clean baseline
-    if (forceGc) {
-      await forceFullGc();
-    }
+    let workerResults: WorkerStats[];
+    let globalDurationMs: number;
 
-    console.log(`[LeakDetector] Starting parallel stress test: ${workers} workers × ${iterations} iterations`);
-    const globalStartTime = Date.now();
+    try {
+      // Run warmup iterations for all workers in parallel
+      console.log(`[LeakDetector] Running ${warmupIterations} warmup iterations per worker...`);
+      await Promise.all(
+        operations.map(async (operation) => {
+          for (let i = 0; i < warmupIterations; i++) {
+            await operation();
+          }
+        }),
+      );
 
-    // Run workers in parallel, each collecting their own samples
-    const workerResults = await Promise.all(
-      operations.map(async (operation, workerId) => {
-        const samples: number[] = [];
-        const workerStartTime = Date.now();
+      // Force GC to establish clean baseline
+      if (forceGc) {
+        await forceFullGc();
+      }
 
-        for (let i = 0; i < iterations; i++) {
-          await operation();
+      console.log(`[LeakDetector] Starting parallel stress test: ${workers} workers × ${iterations} iterations`);
+      const globalStartTime = Date.now();
 
-          // Only run GC occasionally in parallel mode to avoid contention
-          // GC every intervalSize iterations instead of every iteration
-          if (forceGc && i > 0 && i % intervalSize === 0) {
-            await forceFullGc(1, 2);
+      // Run workers in parallel, each collecting their own samples
+      workerResults = await Promise.all(
+        operations.map(async (operation, workerId) => {
+          const samples: number[] = [];
+          const workerStartTime = Date.now();
+
+          for (let i = 0; i < iterations; i++) {
+            await operation();
+
+            // Only run GC occasionally in parallel mode to avoid contention
+            // GC every intervalSize iterations instead of every iteration
+            if (forceGc && i > 0 && i % intervalSize === 0) {
+              await forceFullGc(1, 2);
+            }
+
+            samples.push(process.memoryUsage().heapUsed);
           }
 
-          samples.push(process.memoryUsage().heapUsed);
-        }
+          const workerDurationMs = Date.now() - workerStartTime;
+          const requestsPerSecond = (iterations / workerDurationMs) * 1000;
 
-        const workerDurationMs = Date.now() - workerStartTime;
-        const requestsPerSecond = (iterations / workerDurationMs) * 1000;
+          return {
+            workerId,
+            samples,
+            durationMs: workerDurationMs,
+            requestsPerSecond,
+            iterationsCompleted: iterations,
+          } satisfies WorkerStats;
+        }),
+      );
 
-        return {
-          workerId,
-          samples,
-          durationMs: workerDurationMs,
-          requestsPerSecond,
-          iterationsCompleted: iterations,
-        } satisfies WorkerStats;
-      }),
-    );
-
-    const globalDurationMs = Date.now() - globalStartTime;
-
-    // Disconnect all clients
-    await Promise.all(
-      clients.map(async (client) => {
-        if (client.disconnect) {
-          await client.disconnect();
-        }
-      }),
-    );
+      globalDurationMs = Date.now() - globalStartTime;
+    } finally {
+      // Disconnect all clients - guaranteed cleanup even on error
+      await disconnectClients();
+    }
 
     // Aggregate all samples from all workers
     const allSamples = workerResults.flatMap((w) => w.samples);
@@ -437,11 +452,13 @@ export class LeakDetector {
    */
   private generateIntervals(samples: number[], intervalSize: number): IntervalMeasurement[] {
     const intervals: IntervalMeasurement[] = [];
-    const numIntervals = Math.ceil(samples.length / intervalSize);
+    // Validate intervalSize to prevent division by zero or infinite loops
+    const safeIntervalSize = intervalSize <= 0 ? 1 : intervalSize;
+    const numIntervals = Math.ceil(samples.length / safeIntervalSize);
 
     for (let i = 0; i < numIntervals; i++) {
-      const startIdx = i * intervalSize;
-      const endIdx = Math.min((i + 1) * intervalSize - 1, samples.length - 1);
+      const startIdx = i * safeIntervalSize;
+      const endIdx = Math.min((i + 1) * safeIntervalSize - 1, samples.length - 1);
 
       if (startIdx >= samples.length) break;
 

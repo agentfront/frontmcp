@@ -9,6 +9,9 @@ on:
         description: "Release tag to publish baseline for"
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   perf:
     runs-on: ubuntu-latest
@@ -91,6 +94,8 @@ jobs:
     needs: perf
     runs-on: ubuntu-latest
     if: always() && needs.perf.result == 'success'
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4

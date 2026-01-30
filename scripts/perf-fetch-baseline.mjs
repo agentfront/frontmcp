@@ -199,7 +199,8 @@ async function main() {
   writeFileSync(OUTPUT_PATH, JSON.stringify(baseline, null, 2));
   console.log(`[perf-fetch-baseline] Baseline written to: ${OUTPUT_PATH}`);
   console.log(`[perf-fetch-baseline] Baseline from: ${baseline.release} (${baseline.timestamp})`);
-  console.log(`[perf-fetch-baseline] Tests: ${Object.keys(baseline.tests).length}`);
+  const testCount = baseline?.tests ? Object.keys(baseline.tests).length : 0;
+  console.log(`[perf-fetch-baseline] Tests: ${testCount}`);
 }
 
 main().catch((error) => {

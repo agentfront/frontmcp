@@ -952,15 +952,8 @@ export class McpTestClient {
     }
   }
 
-  private ensureConnected(): void {
-    if (!this.transport || !this.transport.isConnected()) {
-      throw new Error('Not connected to MCP server. Call connect() first.');
-    }
-  }
-
   /**
    * Get the transport, throwing if not connected.
-   * This method is used after ensureConnected() to get a non-null transport.
    */
   private getConnectedTransport(): McpTransport {
     if (!this.transport || !this.transport.isConnected()) {

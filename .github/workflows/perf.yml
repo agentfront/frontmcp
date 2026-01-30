@@ -5,11 +5,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      apps:
-        description: 'Comma-separated list of apps to test (or "all")'
-        required: false
-        default: "all"
 
 concurrency:
   group: perf-${{ github.ref }}
@@ -110,6 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     permissions:
+      contents: read
       pull-requests: write
 
     steps:

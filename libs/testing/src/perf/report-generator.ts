@@ -192,7 +192,7 @@ export class ReportGenerator {
         if (regressionsWithIssues.length > 0) {
           lines.push('**Regressions:**');
           for (const r of regressionsWithIssues) {
-            const emoji = r.status === 'regression' ? '!' : '!';
+            const emoji = r.status === 'regression' ? '❌' : '⚠️';
             lines.push(`- ${emoji} ${r.message}`);
           }
           lines.push('');
