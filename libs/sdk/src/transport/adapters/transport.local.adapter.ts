@@ -2,7 +2,6 @@ import { AuthenticatedServerRequest } from '../../server/server.types';
 import { TransportKey, TransportType } from '../transport.types';
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { InMemoryEventStore } from '../transport.event-store';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
@@ -30,7 +29,6 @@ export type SupportedTransport =
 export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   protected logger: FrontMcpLogger;
   protected transport: T;
-  protected eventStore = new InMemoryEventStore();
 
   /**
    * Pending elicitation request. Only one elicit per session is allowed.

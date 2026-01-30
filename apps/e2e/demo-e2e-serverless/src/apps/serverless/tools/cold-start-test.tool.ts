@@ -73,7 +73,8 @@ export default class ColdStartTestTool extends ToolContext<typeof inputSchema, t
 
   private async simulateWork(): Promise<void> {
     // Simulate some initialization work that would happen on cold start
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Using 2ms delay to keep tests fast while still simulating work
+    await new Promise((resolve) => setTimeout(resolve, 2));
   }
 
   private detectPlatform(): string {

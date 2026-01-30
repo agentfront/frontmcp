@@ -199,6 +199,73 @@ export interface PersistenceConfig {
 export type DistributedEnabled = boolean | 'auto';
 
 // ============================================
+// EVENT STORE CONFIGURATION TYPES
+// ============================================
+
+/**
+ * EventStore configuration for SSE resumability support.
+ *
+ * When enabled, clients can reconnect and resume missed SSE messages
+ * using the Last-Event-ID header per the MCP protocol.
+ *
+ * Note: By default, EventStore is disabled because Claude.ai's client
+ * doesn't handle the priming events correctly. Only enable if your
+ * clients support SSE resumability.
+ *
+ * @example Memory (single-node)
+ * ```typescript
+ * eventStore: {
+ *   enabled: true,
+ *   provider: 'memory',
+ *   maxEvents: 10000,
+ *   ttlMs: 300000,
+ * }
+ * ```
+ *
+ * @example Redis (distributed)
+ * ```typescript
+ * eventStore: {
+ *   enabled: true,
+ *   provider: 'redis',
+ *   redis: { host: 'localhost', port: 6379 },
+ * }
+ * ```
+ */
+export interface EventStoreConfig {
+  /**
+   * Whether EventStore is enabled.
+   * When true, clients can reconnect and resume missed SSE messages.
+   * @default false
+   */
+  enabled: boolean;
+
+  /**
+   * Storage provider type.
+   * - 'memory': In-memory storage (single-node only)
+   * - 'redis': Redis-backed storage (distributed)
+   * @default 'memory'
+   */
+  provider?: 'memory' | 'redis';
+
+  /**
+   * Maximum number of events to store before eviction.
+   * @default 10000
+   */
+  maxEvents?: number;
+
+  /**
+   * TTL in milliseconds for stored events.
+   * @default 300000 (5 minutes)
+   */
+  ttlMs?: number;
+
+  /**
+   * Redis configuration (required if provider is 'redis').
+   */
+  redis?: RedisOptionsInput;
+}
+
+// ============================================
 // MAIN TRANSPORT OPTIONS INTERFACE
 // ============================================
 
@@ -341,6 +408,24 @@ export interface TransportOptionsInterface {
    * @default true (false when distributedMode is enabled)
    */
   providerCaching?: boolean;
+
+  // ============================================
+  // EventStore Configuration
+  // ============================================
+
+  /**
+   * EventStore configuration for SSE resumability support.
+   *
+   * When enabled, clients can reconnect and resume missed SSE messages
+   * using the Last-Event-ID header per the MCP protocol.
+   *
+   * Note: By default, EventStore is disabled because Claude.ai's client
+   * doesn't handle the priming events correctly. Only enable if your
+   * clients support SSE resumability.
+   *
+   * @default undefined (disabled)
+   */
+  eventStore?: EventStoreConfig;
 }
 
 // ============================================

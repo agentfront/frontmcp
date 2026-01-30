@@ -17,6 +17,7 @@ import type {
   ProtocolPreset,
   SessionModeOption,
   DistributedEnabled,
+  EventStoreConfig,
 } from './interfaces';
 
 // Import session types for internal use (already exported from session folder)
@@ -30,6 +31,7 @@ export type {
   ProtocolPreset,
   SessionModeOption,
   DistributedEnabled,
+  EventStoreConfig,
 };
 
 // ============================================
@@ -210,6 +212,25 @@ export const persistenceConfigSchema = z.object({
 });
 
 // ============================================
+// EVENT STORE CONFIG SCHEMA
+// ============================================
+
+/**
+ * EventStore configuration schema for SSE resumability support.
+ *
+ * When enabled, clients can reconnect and resume missed SSE messages.
+ * By default, EventStore is disabled because Claude.ai's client
+ * doesn't handle priming events correctly.
+ */
+export const eventStoreConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  provider: z.enum(['memory', 'redis']).optional().default('memory'),
+  maxEvents: z.number().int().positive().optional().default(10000),
+  ttlMs: z.number().int().positive().optional().default(300000),
+  redis: redisOptionsSchema.optional(),
+});
+
+// ============================================
 // TRANSPORT OPTIONS SCHEMA
 // ============================================
 
@@ -252,6 +273,12 @@ export const transportOptionsSchema = z.object({
     .default(false),
 
   providerCaching: z.boolean().optional(),
+
+  // ============================================
+  // EventStore Configuration
+  // ============================================
+
+  eventStore: eventStoreConfigSchema.optional(),
 } satisfies RawZodShape<TransportOptionsInterface>);
 
 // ============================================

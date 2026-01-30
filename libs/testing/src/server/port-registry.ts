@@ -189,7 +189,7 @@ async function tryReservePort(port: number, project: string): Promise<boolean> {
       resolve(false);
     });
 
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, '::', () => {
       // Port is available and now held
       reservedPorts.set(port, {
         port,
@@ -247,7 +247,7 @@ async function isPortAvailable(port: number): Promise<boolean> {
       resolve(false);
     });
 
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, '::', () => {
       server.close(() => {
         resolve(true);
       });

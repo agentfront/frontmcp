@@ -1,0 +1,139 @@
+/**
+ * Parallel Stress Tests for Public Auth System (5 workers × 1000 iterations)
+ *
+ * Tests public mode operations under parallel load using multiple clients
+ */
+import { perfTest, expect } from '@frontmcp/testing';
+
+perfTest.describe('Public Parallel Stress Testing', () => {
+  perfTest.use({
+    server: 'apps/e2e/demo-e2e-public/src/main.ts',
+    project: 'demo-e2e-public',
+    publicMode: true,
+  });
+
+  perfTest('parallel stress: 5000 total create-note operations', async ({ perf, server }) => {
+    const result = await perf.checkLeakParallel(
+      (client, workerId) => {
+        let counter = workerId * 1000;
+        return async () => {
+          await client.tools.call('create-note', {
+            title: `Note ${counter}`,
+            content: `Content for note ${counter++}`,
+          });
+        };
+      },
+      {
+        iterations: 1000,
+        workers: 5,
+        threshold: 200 * 1024 * 1024, // 200MB for 5000 total operations
+        warmupIterations: 10,
+        intervalSize: 200,
+        clientFactory: () => server.createClient(),
+      },
+    );
+
+    console.log(
+      `[PARALLEL] create-note: ${result.totalRequestsPerSecond.toFixed(1)} req/s total ` +
+        `(${result.workersUsed} workers × ${result.totalIterations / result.workersUsed} iterations)`,
+    );
+
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.growthRate).toBeLessThan(200 * 1024);
+  });
+
+  perfTest('parallel stress: 5000 total list-notes operations', async ({ perf, server }) => {
+    // Reset store before leak check to prevent accumulated data from previous tests
+    const resetClient = await server.createClient();
+    await resetClient.tools.call('notes-reset', {});
+
+    const result = await perf.checkLeakParallel(
+      (client) => async () => {
+        await client.tools.call('list-notes', {});
+      },
+      {
+        iterations: 1000,
+        workers: 5,
+        threshold: 200 * 1024 * 1024,
+        warmupIterations: 10,
+        intervalSize: 200,
+        clientFactory: () => server.createClient(),
+      },
+    );
+
+    console.log(
+      `[PARALLEL] list-notes: ${result.totalRequestsPerSecond.toFixed(1)} req/s total ` +
+        `(${result.workersUsed} workers)`,
+    );
+
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.growthRate).toBeLessThan(200 * 1024);
+  });
+
+  perfTest('parallel stress: 5000 total mixed operations', async ({ perf, server }) => {
+    // Reset store before leak check to prevent accumulated data from previous tests
+    const resetClient = await server.createClient();
+    await resetClient.tools.call('notes-reset', {});
+
+    const result = await perf.checkLeakParallel(
+      (client, workerId) => {
+        let callIndex = workerId;
+        return async () => {
+          // Reset every 100 iterations to bound data growth and avoid O(n²) memory pattern
+          // Without periodic resets, list-notes responses grow progressively larger as notes accumulate,
+          // leading to quadratic data volume: Sum(i * ~200 bytes) for i=0 to ~1250 notes
+          if (callIndex > 0 && callIndex % 100 === 0) {
+            await resetClient.tools.call('notes-reset', {});
+          }
+
+          const op = callIndex++ % 2;
+          if (op === 0) {
+            await client.tools.call('create-note', { title: `Note ${callIndex}`, content: `Content ${callIndex}` });
+          } else {
+            await client.tools.call('list-notes', {});
+          }
+        };
+      },
+      {
+        iterations: 1000,
+        workers: 5,
+        threshold: 200 * 1024 * 1024,
+        warmupIterations: 10,
+        intervalSize: 200,
+        clientFactory: () => server.createClient(),
+      },
+    );
+
+    console.log(
+      `[PARALLEL] mixed operations: ${result.totalRequestsPerSecond.toFixed(1)} req/s total ` +
+        `(${result.workersUsed} workers)`,
+    );
+
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.growthRate).toBeLessThan(200 * 1024);
+  });
+
+  perfTest('parallel stress: 5000 total tool listings', async ({ perf, server }) => {
+    const result = await perf.checkLeakParallel(
+      (client) => async () => {
+        await client.tools.list();
+      },
+      {
+        iterations: 1000,
+        workers: 5,
+        threshold: 200 * 1024 * 1024,
+        warmupIterations: 10,
+        intervalSize: 200,
+        clientFactory: () => server.createClient(),
+      },
+    );
+
+    console.log(
+      `[PARALLEL] tools.list: ${result.totalRequestsPerSecond.toFixed(1)} req/s total ` +
+        `(${result.workersUsed} workers)`,
+    );
+
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.growthRate).toBeLessThan(200 * 1024);
+  });
+});

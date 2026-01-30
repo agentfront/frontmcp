@@ -49,6 +49,15 @@
         "runInBand": true,
         "passWithNoTests": true
       }
+    },
+    "test:perf": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/perf-results/demo-e2e-multiapp"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-multiapp/jest.perf.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
     }
   }
 }

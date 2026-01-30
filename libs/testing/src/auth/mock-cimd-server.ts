@@ -310,7 +310,7 @@ export class MockCimdServer {
     }
 
     const fullPath = path.startsWith('/') ? path : `/${path}`;
-    const clientId = `${this._info.baseUrl}${fullPath}`;
+    // Note: clientId would be `${this._info.baseUrl}${fullPath}` but is not used
 
     // Store as a special "invalid" client that bypasses validation
     this.clients.set(fullPath, {
@@ -383,8 +383,8 @@ export class MockCimdServer {
     }
 
     // Check for custom error responses first
-    if (this.customResponses.has(url)) {
-      const customResponse = this.customResponses.get(url)!;
+    const customResponse = this.customResponses.get(url);
+    if (customResponse) {
       res.writeHead(customResponse.status, { 'Content-Type': 'application/json' });
       res.end(customResponse.body ? JSON.stringify(customResponse.body) : '');
       this.log(`Returned custom error response: ${customResponse.status}`);

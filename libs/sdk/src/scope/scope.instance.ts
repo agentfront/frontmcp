@@ -45,6 +45,8 @@ import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { normalizeTool } from '../tool/tool.utils';
 import { ToolInstance } from '../tool/tool.instance';
+import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { createEventStore } from '../transport/event-stores';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -77,6 +79,9 @@ export class Scope extends ScopeEntry {
 
   /** Optional skill session manager for tool authorization enforcement */
   private _skillSession?: SkillSessionManager;
+
+  /** EventStore for SSE resumability support (optional) */
+  private _eventStore?: EventStore;
 
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
@@ -117,6 +122,17 @@ export class Scope extends ScopeEntry {
     // Pass transport persistence config to TransportService
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
+
+    // Initialize EventStore for SSE resumability support (optional)
+    // Disabled by default because Claude.ai's client doesn't handle priming events correctly
+    const eventStoreConfig = transportConfig?.eventStore;
+    if (eventStoreConfig?.enabled) {
+      const { eventStore } = createEventStore(eventStoreConfig, this.logger);
+      this._eventStore = eventStore;
+      this.logger.info('EventStore initialized for SSE resumability', {
+        provider: eventStoreConfig.provider ?? 'memory',
+      });
+    }
 
     // Initialize elicitation store for distributed elicitation support
     // Only initialize if elicitation is explicitly enabled (default: false)
@@ -514,6 +530,27 @@ export class Scope extends ScopeEntry {
       throw new ElicitationStoreNotInitializedError();
     }
     return this._elicitationStore;
+  }
+
+  /**
+   * Get the EventStore for SSE resumability support.
+   *
+   * Returns undefined if EventStore is not enabled.
+   * When enabled, clients can reconnect and resume missed SSE messages
+   * using the Last-Event-ID header per the MCP protocol.
+   *
+   * Enable via @FrontMcp metadata:
+   * ```typescript
+   * transport: {
+   *   eventStore: {
+   *     enabled: true,
+   *     provider: 'memory',  // or 'redis'
+   *   }
+   * }
+   * ```
+   */
+  get eventStore(): EventStore | undefined {
+    return this._eventStore;
   }
 
   /**

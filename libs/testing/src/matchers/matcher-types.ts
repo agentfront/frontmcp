@@ -304,7 +304,7 @@ export interface McpMatchers<R = unknown> {
 // JEST TYPE AUGMENTATION
 // ═══════════════════════════════════════════════════════════════════
 
-/* eslint-disable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-interface */
+/* eslint-disable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-interface, @typescript-eslint/no-empty-object-type */
 
 declare global {
   namespace jest {
@@ -318,7 +318,7 @@ declare global {
     interface InverseAsymmetricMatchers extends McpMatchers<void> {}
   }
 }
-/* eslint-enable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-interface */
+/* eslint-enable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-interface, @typescript-eslint/no-empty-object-type */
 
 // This export is needed to make this a module
 export {};

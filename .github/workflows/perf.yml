@@ -1,0 +1,255 @@
+name: Performance Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - demo-e2e-agents
+          - demo-e2e-cache
+          - demo-e2e-codecall
+          - demo-e2e-config
+          - demo-e2e-direct
+          - demo-e2e-elicitation
+          - demo-e2e-errors
+          - demo-e2e-hooks
+          - demo-e2e-multiapp
+          - demo-e2e-notifications
+          - demo-e2e-openapi
+          - demo-e2e-providers
+          - demo-e2e-public
+          - demo-e2e-redis
+          - demo-e2e-remember
+          - demo-e2e-remote
+          - demo-e2e-serverless
+          - demo-e2e-skills
+          - demo-e2e-standalone
+          - demo-e2e-transport-recreation
+          - demo-e2e-ui
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build packages
+        run: yarn build
+        env:
+          NX_DAEMON: "false"
+
+      - name: Save Nx cache
+        uses: ./.github/actions/nx-cache-save
+        if: github.ref == 'refs/heads/main'
+
+      - name: Fetch performance baseline
+        run: yarn perf:fetch-baseline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Run performance tests (${{ matrix.project }})
+        run: yarn nx run ${{ matrix.project }}:test:perf
+        env:
+          NODE_OPTIONS: "--expose-gc --max-old-space-size=4096"
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report-${{ matrix.project }}
+          path: perf-results/
+          retention-days: 30
+        if: always()
+
+  report:
+    needs: perf
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: perf-results
+          pattern: perf-report-*
+          merge-multiple: true
+
+      - name: Write full report to workflow summary
+        run: |
+          echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check if perf-results directory exists
+          if [ ! -d "perf-results" ]; then
+            echo "No performance results found." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          # Iterate through each project's report.md and append to summary
+          for dir in perf-results/demo-e2e-*/; do
+            if [ -f "$dir/report.md" ]; then
+              project=$(basename "$dir")
+              echo "---" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### $project" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              cat "$dir/report.md" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Collect all project results from JSON reports
+            const projects = [];
+            let projectDirs = [];
+
+            try {
+              if (!fs.existsSync('perf-results')) {
+                console.log('No perf-results directory found');
+                return;
+              }
+
+              projectDirs = fs.readdirSync('perf-results').filter(d =>
+                d.startsWith('demo-e2e-') && fs.statSync(`perf-results/${d}`).isDirectory()
+              );
+
+              for (const dir of projectDirs) {
+                const jsonPath = `perf-results/${dir}/report.json`;
+                if (fs.existsSync(jsonPath)) {
+                  const json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+                  projects.push({ name: dir, json });
+                }
+              }
+            } catch (err) {
+              console.log('Error reading reports:', err.message);
+              return;
+            }
+
+            if (projects.length === 0) {
+              console.log('No performance reports to post');
+              return;
+            }
+
+            // Calculate overall totals
+            const totals = { tests: 0, passed: 0, warnings: 0, failed: 0, leaks: 0 };
+            for (const p of projects) {
+              totals.tests += p.json.summary.totalTests;
+              totals.passed += p.json.summary.passedTests;
+              totals.warnings += p.json.summary.warningTests;
+              totals.failed += p.json.summary.failedTests;
+              totals.leaks += p.json.summary.leakTests;
+            }
+
+            const hasFailures = totals.failed > 0 || totals.leaks > 0;
+            const hasWarnings = totals.warnings > 0;
+            const statusEmoji = hasFailures ? '❌' : hasWarnings ? '⚠️' : '✅';
+            const statusText = hasFailures
+              ? `${totals.failed} failed, ${totals.leaks} leaks`
+              : hasWarnings
+                ? `${totals.warnings} warnings`
+                : 'All tests passed';
+
+            // Unique marker for bot comment detection
+            const BOT_MARKER = '<!-- frontmcp-perf-bot -->';
+
+            // Build compact report
+            let report = `${BOT_MARKER}\n## Performance Test Results\n\n`;
+            report += `**Status:** ${statusEmoji} ${statusText}\n\n`;
+
+            // Summary table
+            report += `### Summary\n\n`;
+            report += `| Project | Tests | Passed | Warnings | Failed | Leaks |\n`;
+            report += `|---------|-------|--------|----------|--------|-------|\n`;
+            for (const p of projects) {
+              const s = p.json.summary;
+              const icon = s.failedTests > 0 || s.leakTests > 0 ? '❌' : s.warningTests > 0 ? '⚠️' : '✅';
+              report += `| ${icon} ${p.name} | ${s.totalTests} | ${s.passedTests} | ${s.warningTests} | ${s.failedTests} | ${s.leakTests} |\n`;
+            }
+            report += `\n**Total:** ${totals.tests} tests across ${projects.length} projects\n\n`;
+
+            // Link to full report in workflow run
+            const workflowUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            report += `📊 [View full report in workflow run](${workflowUrl})\n\n`;
+
+            // Footer
+            const timestamp = new Date().toISOString();
+            report += `---\n`;
+            report += `Generated at: ${timestamp}\n`;
+            report += `Commit: \`${context.sha.substring(0, 8)}\`\n`;
+
+            // Find and update existing comment, or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.body.includes(BOT_MARKER)
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report,
+              });
+            }
