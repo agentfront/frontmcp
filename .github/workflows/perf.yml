@@ -26,7 +26,6 @@ jobs:
         project:
           - demo-e2e-agents
           - demo-e2e-cache
-          - demo-e2e-cimd
           - demo-e2e-codecall
           - demo-e2e-config
           - demo-e2e-direct
@@ -36,7 +35,6 @@ jobs:
           - demo-e2e-multiapp
           - demo-e2e-notifications
           - demo-e2e-openapi
-          - demo-e2e-orchestrated
           - demo-e2e-providers
           - demo-e2e-public
           - demo-e2e-redis
@@ -45,7 +43,6 @@ jobs:
           - demo-e2e-serverless
           - demo-e2e-skills
           - demo-e2e-standalone
-          - demo-e2e-transparent
           - demo-e2e-transport-recreation
           - demo-e2e-ui
 
@@ -66,6 +63,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -77,6 +77,12 @@ jobs:
 
       - name: Build packages
         run: yarn build
+        env:
+          NX_DAEMON: "false"
+
+      - name: Save Nx cache
+        uses: ./.github/actions/nx-cache-save
+        if: github.ref == 'refs/heads/main'
 
       - name: Fetch performance baseline
         run: yarn perf:fetch-baseline
@@ -123,31 +129,99 @@ jobs:
           script: |
             const fs = require('fs');
 
-            let report = '';
+            // Collect all project results from JSON reports
+            const projects = [];
+            let projectDirs = [];
+
             try {
-              if (fs.existsSync('perf-results/report.md')) {
-                report = fs.readFileSync('perf-results/report.md', 'utf8');
-              } else {
-                const projectDirs = fs.readdirSync('perf-results').filter(d =>
-                  d.startsWith('demo-e2e-') && fs.statSync(`perf-results/${d}`).isDirectory()
-                );
-                for (const dir of projectDirs) {
-                  const path = `perf-results/${dir}/report.md`;
-                  if (fs.existsSync(path)) {
-                    report += fs.readFileSync(path, 'utf8') + '\n\n---\n\n';
-                  }
+              if (!fs.existsSync('perf-results')) {
+                console.log('No perf-results directory found');
+                return;
+              }
+
+              projectDirs = fs.readdirSync('perf-results').filter(d =>
+                d.startsWith('demo-e2e-') && fs.statSync(`perf-results/${d}`).isDirectory()
+              );
+
+              for (const dir of projectDirs) {
+                const jsonPath = `perf-results/${dir}/report.json`;
+                const mdPath = `perf-results/${dir}/report.md`;
+                if (fs.existsSync(jsonPath) && fs.existsSync(mdPath)) {
+                  const json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+                  const md = fs.readFileSync(mdPath, 'utf8');
+                  projects.push({ name: dir, json, md });
                 }
               }
             } catch (err) {
-              console.log('No report found:', err.message);
+              console.log('Error reading reports:', err.message);
               return;
             }
 
-            if (!report) {
-              console.log('No performance report to post');
+            if (projects.length === 0) {
+              console.log('No performance reports to post');
               return;
             }
 
+            // Calculate overall totals
+            const totals = { tests: 0, passed: 0, warnings: 0, failed: 0, leaks: 0 };
+            for (const p of projects) {
+              totals.tests += p.json.summary.totalTests;
+              totals.passed += p.json.summary.passedTests;
+              totals.warnings += p.json.summary.warningTests;
+              totals.failed += p.json.summary.failedTests;
+              totals.leaks += p.json.summary.leakTests;
+            }
+
+            const hasFailures = totals.failed > 0 || totals.leaks > 0;
+            const hasWarnings = totals.warnings > 0;
+            const statusEmoji = hasFailures ? '❌' : hasWarnings ? '⚠️' : '✅';
+            const statusText = hasFailures
+              ? `${totals.failed} failed, ${totals.leaks} leaks`
+              : hasWarnings
+                ? `${totals.warnings} warnings`
+                : 'All tests passed';
+
+            // Build aggregated report
+            let report = `## Performance Test Results\n\n`;
+            report += `**Status:** ${statusEmoji} ${statusText}\n\n`;
+
+            // Summary table
+            report += `### Summary\n\n`;
+            report += `| Project | Tests | Passed | Warnings | Failed | Leaks |\n`;
+            report += `|---------|-------|--------|----------|--------|-------|\n`;
+            for (const p of projects) {
+              const s = p.json.summary;
+              const icon = s.failedTests > 0 || s.leakTests > 0 ? '❌' : s.warningTests > 0 ? '⚠️' : '✅';
+              report += `| ${icon} ${p.name} | ${s.totalTests} | ${s.passedTests} | ${s.warningTests} | ${s.failedTests} | ${s.leakTests} |\n`;
+            }
+            report += `\n**Total:** ${totals.tests} tests across ${projects.length} projects\n\n`;
+
+            // Accordion for each project's details
+            report += `### Details\n\n`;
+            for (const p of projects) {
+              const s = p.json.summary;
+              const icon = s.failedTests > 0 || s.leakTests > 0 ? '❌' : s.warningTests > 0 ? '⚠️' : '✅';
+              const summaryText = `${icon} ${p.name} (${s.totalTests} tests, ${s.passedTests} passed)`;
+
+              // Extract project-specific content, removing redundant headers
+              let content = p.md
+                .replace(/^## Performance Test Results\n+/, '')
+                .replace(/\*\*Status:\*\*[^\n]*\n+/, '')
+                .replace(/### Summary[\s\S]*?(?=### Project Breakdown|$)/, '');
+
+              report += `<details>\n`;
+              report += `<summary>${summaryText}</summary>\n\n`;
+              report += content.trim();
+              report += `\n\n</details>\n\n`;
+            }
+
+            // Footer
+            const timestamp = new Date().toISOString();
+            report += `---\n`;
+            report += `Generated at: ${timestamp}\n`;
+            report += `Commit: \`${context.sha.substring(0, 8)}\`\n`;
+
+            // Find and update existing comment, or create new one
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
