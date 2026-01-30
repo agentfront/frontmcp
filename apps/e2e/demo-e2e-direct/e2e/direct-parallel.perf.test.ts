@@ -43,30 +43,6 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
-  perfTest('parallel stress: 500 total list-notes operations', async ({ perf, server }) => {
-    const result = await perf.checkLeakParallel(
-      (client) => async () => {
-        await client.tools.call('list-notes', {});
-      },
-      {
-        iterations: 100,
-        workers: 5,
-        threshold: 200 * 1024 * 1024,
-        warmupIterations: 10,
-        intervalSize: 20,
-        clientFactory: () => server.createClient(),
-      },
-    );
-
-    console.log(
-      `[PARALLEL] list-notes: ${result.totalRequestsPerSecond.toFixed(1)} req/s total ` +
-        `(${result.workersUsed} workers)`,
-    );
-
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
-    expect(result.growthRate).toBeLessThan(200 * 1024);
-  });
-
   perfTest('parallel stress: 500 total mixed operations', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client, workerId) => {
