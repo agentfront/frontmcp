@@ -247,8 +247,10 @@ function updateRelease(tag, baselineContent) {
 
   if (startIdx !== -1 && endIdx !== -1) {
     // Find the start of the baseline section (including header)
-    const sectionStart = newBody.lastIndexOf('## Performance Baseline', startIdx);
-    const actualStart = sectionStart !== -1 ? sectionStart : startIdx;
+    // Only look for header within reasonable proximity (200 chars before marker)
+    const searchStart = Math.max(0, startIdx - 200);
+    const sectionStart = newBody.indexOf('## Performance Baseline', searchStart);
+    const actualStart = (sectionStart !== -1 && sectionStart < startIdx) ? sectionStart : startIdx;
     const actualEnd = endIdx + BASELINE_END_MARKER.length;
 
     // Also remove any trailing stats after the end marker

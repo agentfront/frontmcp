@@ -232,39 +232,33 @@ export class LeakDetector {
     const opts = { ...DEFAULT_PARALLEL_OPTIONS, ...options };
     const { iterations, threshold, warmupIterations, forceGc, workers, intervalSize, clientFactory } = opts;
 
+    // Validate intervalSize to prevent modulo by zero
+    const safeIntervalSize = Math.max(1, intervalSize);
+
     // Warn if GC is not available
     if (forceGc && !isGcAvailable()) {
       console.warn('[LeakDetector] Manual GC not available. Run Node.js with --expose-gc for accurate results.');
     }
 
     // Create clients sequentially to avoid overwhelming the server
-    console.log(`[LeakDetector] Creating ${workers} clients sequentially...`);
+    // Track created clients for cleanup even if creation fails partway through
     const clients: ParallelTestClient[] = [];
-    for (let i = 0; i < workers; i++) {
-      console.log(`[LeakDetector] Creating client ${i + 1}/${workers}...`);
-      const client = await clientFactory();
-      clients.push(client);
-    }
-    console.log(`[LeakDetector] All ${workers} clients connected`);
-
-    // Create operation functions for each worker using their dedicated client
-    const operations = clients.map((client, workerId) => operationFactory(client, workerId));
-
-    // Helper to disconnect all clients
-    const disconnectClients = async () => {
-      await Promise.all(
-        clients.map(async (client) => {
-          if (client.disconnect) {
-            await client.disconnect();
-          }
-        }),
-      );
-    };
 
     let workerResults: WorkerStats[];
     let globalDurationMs: number;
 
     try {
+      console.log(`[LeakDetector] Creating ${workers} clients sequentially...`);
+      for (let i = 0; i < workers; i++) {
+        console.log(`[LeakDetector] Creating client ${i + 1}/${workers}...`);
+        const client = await clientFactory();
+        clients.push(client);
+      }
+      console.log(`[LeakDetector] All ${workers} clients connected`);
+
+      // Create operation functions for each worker using their dedicated client
+      const operations = clients.map((client, workerId) => operationFactory(client, workerId));
+
       // Run warmup iterations for all workers in parallel
       console.log(`[LeakDetector] Running ${warmupIterations} warmup iterations per worker...`);
       await Promise.all(
@@ -293,8 +287,8 @@ export class LeakDetector {
             await operation();
 
             // Only run GC occasionally in parallel mode to avoid contention
-            // GC every intervalSize iterations instead of every iteration
-            if (forceGc && i > 0 && i % intervalSize === 0) {
+            // GC every safeIntervalSize iterations instead of every iteration
+            if (forceGc && i > 0 && i % safeIntervalSize === 0) {
               await forceFullGc(1, 2);
             }
 
@@ -317,7 +311,14 @@ export class LeakDetector {
       globalDurationMs = Date.now() - globalStartTime;
     } finally {
       // Disconnect all clients - guaranteed cleanup even on error
-      await disconnectClients();
+      // This includes partial cleanup if client creation failed partway through
+      await Promise.all(
+        clients.map(async (client) => {
+          if (client.disconnect) {
+            await client.disconnect();
+          }
+        }),
+      );
     }
 
     // Aggregate all samples from all workers

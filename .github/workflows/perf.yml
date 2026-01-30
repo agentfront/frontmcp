@@ -177,8 +177,11 @@ jobs:
                 ? `${totals.warnings} warnings`
                 : 'All tests passed';
 
+            // Unique marker for bot comment detection
+            const BOT_MARKER = '<!-- frontmcp-perf-bot -->';
+
             // Build aggregated report
-            let report = `## Performance Test Results\n\n`;
+            let report = `${BOT_MARKER}\n## Performance Test Results\n\n`;
             report += `**Status:** ${statusEmoji} ${statusText}\n\n`;
 
             // Summary table
@@ -225,7 +228,7 @@ jobs:
             });
 
             const botComment = comments.find(comment =>
-              comment.body.includes('## Performance Test Results')
+              comment.body.includes(BOT_MARKER)
             );
 
             if (botComment) {

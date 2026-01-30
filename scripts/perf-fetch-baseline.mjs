@@ -91,21 +91,17 @@ async function getReleaseComments(owner, repo, tag) {
     return [];
   }
 
-  let releaseId;
+  let releaseData;
   try {
-    const release = JSON.parse(releaseJson);
-    releaseId = release.id;
+    releaseData = JSON.parse(releaseJson);
   } catch {
     console.error('Failed to parse release JSON');
     return [];
   }
 
-  // Get comments for this release
+  // Check release body for baseline
   // Note: GitHub doesn't have a direct API for release comments,
   // so we check if the baseline is in the release body instead
-  const releaseData = JSON.parse(releaseJson);
-
-  // Check release body for baseline
   if (releaseData.body && releaseData.body.includes(BASELINE_START_MARKER)) {
     return [{ body: releaseData.body }];
   }
@@ -198,7 +194,7 @@ async function main() {
 
   writeFileSync(OUTPUT_PATH, JSON.stringify(baseline, null, 2));
   console.log(`[perf-fetch-baseline] Baseline written to: ${OUTPUT_PATH}`);
-  console.log(`[perf-fetch-baseline] Baseline from: ${baseline.release} (${baseline.timestamp})`);
+  console.log(`[perf-fetch-baseline] Baseline from: ${baseline.release ?? 'unknown'} (${baseline.timestamp ?? 'unknown'})`);
   const testCount = baseline?.tests ? Object.keys(baseline.tests).length : 0;
   console.log(`[perf-fetch-baseline] Tests: ${testCount}`);
 }
