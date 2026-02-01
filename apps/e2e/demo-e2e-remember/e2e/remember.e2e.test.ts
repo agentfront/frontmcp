@@ -10,11 +10,15 @@
  */
 import { test, expect } from '@frontmcp/testing';
 
+// Enable verbose logging only when DEBUG_E2E is set
+const DEBUG = process.env['DEBUG_E2E'] === '1';
+
 test.describe('Remember Plugin E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-remember/src/main.ts',
+    project: 'demo-e2e-remember',
     publicMode: true,
-    logLevel: 'debug',
+    logLevel: DEBUG ? 'debug' : 'warn',
   });
 
   test.describe('Basic Remember/Recall Operations', () => {

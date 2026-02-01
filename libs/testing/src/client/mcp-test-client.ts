@@ -7,7 +7,6 @@ import type {
   McpTestClientConfig,
   McpResponse,
   TestTransportType,
-  TestAuthConfig,
   TestClientCapabilities,
   ToolResultWrapper,
   ResourceContentWrapper,
@@ -32,6 +31,7 @@ import type {
   ResourceTemplate,
   Prompt,
   JSONRPCResponse,
+  ElicitationHandler,
 } from './mcp-test-client.types';
 import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type { McpTransport } from '../transport/transport.interface';
@@ -61,9 +61,9 @@ const DEFAULT_CLIENT_INFO = {
 // ═══════════════════════════════════════════════════════════════════
 
 export class McpTestClient {
-  // Platform and capabilities are optional - only set when testing platform-specific behavior
-  private readonly config: Required<Omit<McpTestClientConfig, 'platform' | 'capabilities'>> &
-    Pick<McpTestClientConfig, 'platform' | 'capabilities'>;
+  // Platform, capabilities, and queryParams are optional - only set when needed
+  private readonly config: Required<Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams'>> &
+    Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams'>;
   private transport: McpTransport | null = null;
   private initResult: InitializeResult | null = null;
   private requestIdCounter = 0;
@@ -81,6 +81,9 @@ export class McpTestClient {
   // Interceptor chain
   private _interceptors: InterceptorChain;
 
+  // Elicitation handler for server→client elicit requests
+  private _elicitationHandler?: ElicitationHandler;
+
   // ═══════════════════════════════════════════════════════════════════
   // CONSTRUCTOR & FACTORY
   // ═══════════════════════════════════════════════════════════════════
@@ -97,6 +100,7 @@ export class McpTestClient {
       clientInfo: config.clientInfo ?? DEFAULT_CLIENT_INFO,
       platform: config.platform,
       capabilities: config.capabilities,
+      queryParams: config.queryParams,
     };
 
     // If a token is provided, user is authenticated (even in public mode)
@@ -395,9 +399,9 @@ export class McpTestClient {
       method: string;
       params?: Record<string, unknown>;
     }): Promise<JSONRPCResponse> => {
-      this.ensureConnected();
+      const transport = this.getConnectedTransport();
       const start = Date.now();
-      const response = await this.transport!.request(message);
+      const response = await transport.request(message);
       this.traceRequest(message.method, message.params, message.id, response, Date.now() - start);
       return response;
     },
@@ -406,16 +410,16 @@ export class McpTestClient {
      * Send a notification (no response expected)
      */
     notify: async (message: { jsonrpc: '2.0'; method: string; params?: Record<string, unknown> }): Promise<void> => {
-      this.ensureConnected();
-      await this.transport!.notify(message);
+      const transport = this.getConnectedTransport();
+      await transport.notify(message);
     },
 
     /**
      * Send raw string data (for error testing)
      */
     sendRaw: async (data: string): Promise<JSONRPCResponse> => {
-      this.ensureConnected();
-      return this.transport!.sendRaw(data);
+      const transport = this.getConnectedTransport();
+      return transport.sendRaw(data);
     },
   };
 
@@ -487,6 +491,67 @@ export class McpTestClient {
       await this.raw.notify({ jsonrpc: '2.0', method, params });
     },
   };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ELICITATION
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Register a handler for elicitation requests from the server.
+   *
+   * When a tool calls `this.elicit()` during execution, the server sends an
+   * `elicitation/create` request to the client. This handler is called to
+   * provide the response that would normally come from user interaction.
+   *
+   * @param handler - Function that receives the elicitation request and returns a response
+   *
+   * @example
+   * ```typescript
+   * // Simple acceptance
+   * mcp.onElicitation(async () => ({
+   *   action: 'accept',
+   *   content: { confirmed: true }
+   * }));
+   *
+   * // Conditional response based on request
+   * mcp.onElicitation(async (request) => {
+   *   if (request.message.includes('delete')) {
+   *     return { action: 'decline' };
+   *   }
+   *   return { action: 'accept', content: { approved: true } };
+   * });
+   *
+   * // Multi-step wizard
+   * let step = 0;
+   * mcp.onElicitation(async () => {
+   *   step++;
+   *   if (step === 1) return { action: 'accept', content: { name: 'Alice' } };
+   *   return { action: 'accept', content: { color: 'blue' } };
+   * });
+   * ```
+   */
+  onElicitation(handler: ElicitationHandler): void {
+    this._elicitationHandler = handler;
+    // Pass handler to transport if already connected
+    if (this.transport?.setElicitationHandler) {
+      this.transport.setElicitationHandler(handler);
+    }
+    this.log('debug', 'Elicitation handler registered');
+  }
+
+  /**
+   * Clear the elicitation handler.
+   *
+   * After calling this, elicitation requests from the server will not be
+   * handled automatically. This can be used to test timeout scenarios.
+   */
+  clearElicitationHandler(): void {
+    this._elicitationHandler = undefined;
+    if (this.transport?.setElicitationHandler) {
+      this.transport.setElicitationHandler(undefined);
+    }
+    this.log('debug', 'Elicitation handler cleared');
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // LOGGING & DEBUGGING
@@ -751,8 +816,13 @@ export class McpTestClient {
 
   private async initialize(): Promise<McpResponse<InitializeResult>> {
     // Use configured capabilities or default to base capabilities
+    // Default includes elicitation.form for testing elicitation workflows
+    // Note: MCP SDK expects form to be an object, not boolean
     const capabilities: TestClientCapabilities = this.config.capabilities ?? {
       sampling: {},
+      elicitation: {
+        form: {},
+      },
     };
 
     return this.request<InitializeResult>('initialize', {
@@ -801,16 +871,27 @@ export class McpTestClient {
   // ═══════════════════════════════════════════════════════════════════
 
   private createTransport(): McpTransport {
+    // Build URL with query params if provided using URL API for proper handling
+    let baseUrl = this.config.baseUrl;
+    if (this.config.queryParams && Object.keys(this.config.queryParams).length > 0) {
+      const url = new URL(baseUrl);
+      Object.entries(this.config.queryParams).forEach(([key, value]) => {
+        url.searchParams.set(key, String(value));
+      });
+      baseUrl = url.toString();
+    }
+
     switch (this.config.transport) {
       case 'streamable-http':
         return new StreamableHttpTransport({
-          baseUrl: this.config.baseUrl,
+          baseUrl,
           timeout: this.config.timeout,
           auth: this.config.auth,
           publicMode: this.config.publicMode,
           debug: this.config.debug,
           interceptors: this._interceptors,
           clientInfo: this.config.clientInfo,
+          elicitationHandler: this._elicitationHandler,
         });
       case 'sse':
         // TODO: Implement SSE transport
@@ -821,14 +902,14 @@ export class McpTestClient {
   }
 
   private async request<T>(method: string, params: Record<string, unknown>): Promise<McpResponse<T>> {
-    this.ensureConnected();
+    const transport = this.getConnectedTransport();
 
     const id = ++this.requestIdCounter;
     this._lastRequestId = id;
     const start = Date.now();
 
     try {
-      const response = await this.transport!.request<T>({
+      const response = await transport.request<T>({
         jsonrpc: '2.0',
         id,
         method,
@@ -871,10 +952,14 @@ export class McpTestClient {
     }
   }
 
-  private ensureConnected(): void {
-    if (!this.transport?.isConnected()) {
+  /**
+   * Get the transport, throwing if not connected.
+   */
+  private getConnectedTransport(): McpTransport {
+    if (!this.transport || !this.transport.isConnected()) {
       throw new Error('Not connected to MCP server. Call connect() first.');
     }
+    return this.transport;
   }
 
   private updateSessionActivity(): void {

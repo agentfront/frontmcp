@@ -89,6 +89,8 @@
                   "docs/servers/resources",
                   "docs/servers/prompts",
                   "docs/servers/agents",
+                  "docs/servers/elicitation",
+                  "docs/servers/skills",
                   "docs/servers/discovery"
                 ]
               },
@@ -101,6 +103,7 @@
                   "docs/authentication/local",
                   "docs/authentication/remote",
                   "docs/authentication/remote-proxy",
+                  "docs/authentication/cimd",
                   "docs/authentication/progressive",
                   "docs/authentication/token",
                   "docs/authentication/production",
@@ -171,6 +174,8 @@
               {
                 "group": "Deployment",
                 "pages": [
+                  "docs/deployment/runtime-modes",
+                  "docs/deployment/direct-client",
                   "docs/deployment/local-dev-server",
                   "docs/deployment/production-build",
                   "docs/deployment/redis-setup",

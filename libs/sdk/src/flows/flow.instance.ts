@@ -218,10 +218,16 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     }
 
     // Build views with current context if available
-    const views = await this.globalProviders.buildViews(
-      sessionKey,
-      currentContext ? new Map([[FRONTMCP_CONTEXT, currentContext]]) : undefined,
-    );
+    // Include context tokens (e.g., ORCHESTRATED_AUTH_ACCESSOR) for DI resolution
+    let contextProviders: Map<Token, unknown> | undefined;
+    if (currentContext) {
+      contextProviders = new Map<Token, unknown>([[FRONTMCP_CONTEXT as Token, currentContext]]);
+      // Merge context tokens registered by auth flows (e.g., ORCHESTRATED_AUTH_ACCESSOR)
+      for (const [token, value] of currentContext.getContextTokens()) {
+        contextProviders.set(token as Token, value);
+      }
+    }
+    const views = await this.globalProviders.buildViews(sessionKey, contextProviders);
 
     // Merge context-scoped providers into deps for resolution by FlowClass
     const mergedDeps = new Map(deps);

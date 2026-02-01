@@ -1,5 +1,4 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
-import { DashboardApp } from '@frontmcp/plugins';
 
 // Other demo apps available but not active:
 import WeatherMcpApp from './apps/weather';
@@ -10,13 +9,17 @@ import CrmMcpApp from './apps/crm';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
+  apps: [WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
   logging: { level: LogLevel.Verbose },
   http: {
     port: 3003,
   },
   transport: {
-    protocol: 'full',
+    protocol: 'legacy',
+  },
+  redis: {
+    port: 6379,
+    host: 'localhost',
   },
   auth: {
     mode: 'transparent',

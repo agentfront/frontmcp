@@ -10,3 +10,6 @@ export { AuthHeaders } from './auth-headers';
 
 export { TestUsers, createTestUser } from './user-fixtures';
 export type { TestUserFixture } from './user-fixtures';
+
+export { MockOAuthServer } from './mock-oauth-server';
+export type { MockOAuthServerOptions, MockOAuthServerInfo, MockTestUser } from './mock-oauth-server';

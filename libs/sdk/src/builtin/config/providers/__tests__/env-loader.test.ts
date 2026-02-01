@@ -44,7 +44,7 @@ describe('env-loader', () => {
       it('should block __proto__ pollution', () => {
         const obj: Record<string, unknown> = {};
         setNestedValue(obj, '__proto__.polluted', 'bad');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         expect(({} as any).polluted).toBeUndefined();
         expect(obj).toEqual({});
       });
@@ -52,7 +52,7 @@ describe('env-loader', () => {
       it('should block nested __proto__ pollution', () => {
         const obj: Record<string, unknown> = {};
         setNestedValue(obj, 'foo.__proto__.polluted', 'bad');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         expect(({} as any).polluted).toBeUndefined();
         expect(obj).toEqual({});
       });
@@ -60,7 +60,7 @@ describe('env-loader', () => {
       it('should block constructor pollution', () => {
         const obj: Record<string, unknown> = {};
         setNestedValue(obj, 'constructor.prototype.polluted', 'bad');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         expect(({} as any).polluted).toBeUndefined();
         expect(obj).toEqual({});
       });

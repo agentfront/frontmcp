@@ -33,12 +33,22 @@
         "cwd": "{workspaceRoot}"
       }
     },
-    "test:e2e": {
+    "test": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-transport-recreation"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-transport-recreation/jest.e2e.config.ts",
-        "runInBand": true
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:perf": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/perf-results/demo-e2e-transport-recreation"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-transport-recreation/jest.perf.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
       }
     }
   }

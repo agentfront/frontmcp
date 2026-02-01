@@ -5,7 +5,14 @@
     "rootDir": "./src",
     "declaration": true,
     "declarationMap": true,
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "paths": {
+      "@frontmcp/utils": ["libs/utils/dist/index.d.ts"],
+      "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"],
+      "@frontmcp/sdk/*": ["libs/sdk/dist/*/index.d.ts"],
+      "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],
+      "@frontmcp/ui/*": ["libs/ui/dist/*/index.d.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": [

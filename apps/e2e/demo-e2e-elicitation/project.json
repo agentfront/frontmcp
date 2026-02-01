@@ -1,0 +1,63 @@
+{
+  "name": "demo-e2e-elicitation",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-elicitation/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:elicitation"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-elicitation",
+        "main": "apps/e2e/demo-e2e-elicitation/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-elicitation/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-elicitation/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-elicitation/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-elicitation"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-elicitation/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-elicitation-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-elicitation/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:perf": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/perf-results/demo-e2e-elicitation"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-elicitation/jest.perf.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

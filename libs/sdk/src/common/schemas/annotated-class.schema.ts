@@ -12,6 +12,7 @@ import {
   FrontMcpProviderTokens,
   FrontMcpResourceTokens,
   FrontMcpResourceTemplateTokens,
+  FrontMcpSkillTokens,
   FrontMcpToolTokens,
 } from '../tokens';
 import {
@@ -211,4 +212,35 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
     return false;
   },
   { message: 'agents items must be annotated with @Agent() | @FrontMcpAgent() or use agent() builder.' },
+);
+
+export const annotatedFrontMcpSkillsSchema = z.custom<Type>(
+  (v): v is Type => {
+    // Check for class-based @Skill decorator
+    if (typeof v === 'function') {
+      if (Reflect.hasMetadata(FrontMcpSkillTokens.type, v)) {
+        return true;
+      }
+      // Check for function-style skill() builder
+      if (v[FrontMcpSkillTokens.type] !== undefined) {
+        return true;
+      }
+    }
+    // Check for object-based skill configuration (SkillValueRecord or SkillFileRecord)
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      const kind = obj['kind'];
+      // SkillValueRecord has kind: 'VALUE', SkillFileRecord has kind: 'FILE'
+      // Both have metadata with name
+      if (
+        (kind === 'VALUE' || kind === 'FILE') &&
+        obj['metadata'] &&
+        typeof (obj['metadata'] as Record<string, unknown>)['name'] === 'string'
+      ) {
+        return true;
+      }
+    }
+    return false;
+  },
+  { message: 'skills items must be annotated with @Skill() | @FrontMcpSkill() or use skill() builder.' },
 );

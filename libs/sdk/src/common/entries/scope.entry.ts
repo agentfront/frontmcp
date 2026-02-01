@@ -19,6 +19,7 @@ import {
 import { FlowName, ScopeMetadata } from '../metadata';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
 import type { NotificationService } from '../../notification';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
   abstract readonly id: string;
@@ -47,6 +48,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
   abstract get resources(): ResourceRegistryInterface;
 
   abstract get prompts(): PromptRegistryInterface;
+
+  abstract get skills(): SkillRegistryInterface;
 
   abstract get notifications(): NotificationService;
 

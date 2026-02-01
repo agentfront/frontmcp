@@ -12,6 +12,7 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Error Handling E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-errors/src/main.ts',
+    project: 'demo-e2e-errors',
     publicMode: true,
   });
 

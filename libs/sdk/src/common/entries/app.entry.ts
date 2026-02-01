@@ -9,6 +9,7 @@ import {
   ResourceRegistryInterface,
   ToolRegistryInterface,
 } from '../interfaces';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import { AppMetadata } from '../metadata';
 
 export abstract class AppEntry<Metadata = AppMetadata> extends BaseEntry<AppRecord, AppInterface, Metadata> {
@@ -35,4 +36,6 @@ export abstract class AppEntry<Metadata = AppMetadata> extends BaseEntry<AppReco
   abstract get resources(): ResourceRegistryInterface;
 
   abstract get prompts(): PromptRegistryInterface;
+
+  abstract get skills(): SkillRegistryInterface;
 }

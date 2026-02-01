@@ -3,7 +3,9 @@
 
 import { z } from 'zod';
 import {
+  cimdConfigSchema,
   consentConfigSchema,
+  federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
   localSigningConfigSchema,
   publicAccessConfigSchema,
@@ -62,6 +64,12 @@ const orchestratedSharedFields = {
   consent: consentConfigSchema.optional(),
 
   /**
+   * Federated authentication configuration
+   * Controls validation behavior for multi-provider callbacks
+   */
+  federatedAuth: federatedAuthConfigSchema.optional(),
+
+  /**
    * Token refresh settings
    */
   refresh: tokenRefreshConfigSchema.optional(),
@@ -77,6 +85,13 @@ const orchestratedSharedFields = {
    * @default { enabled: true, skippedAppBehavior: 'anonymous' }
    */
   incrementalAuth: incrementalAuthConfigSchema.optional(),
+
+  /**
+   * CIMD (Client ID Metadata Documents) configuration.
+   * Enables OAuth clients to use HTTPS URLs as client identifiers.
+   * @default { enabled: true }
+   */
+  cimd: cimdConfigSchema.optional(),
 };
 
 // ============================================

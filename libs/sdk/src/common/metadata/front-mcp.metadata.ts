@@ -4,9 +4,7 @@ import {
   authOptionsSchema,
   ServerInfoOptions,
   serverInfoOptionsSchema,
-  HttpOptions,
   httpOptionsSchema,
-  LoggingOptions,
   loggingOptionsSchema,
   RawZodShape,
   AuthOptionsInput,
@@ -20,15 +18,22 @@ import {
   paginationOptionsSchema,
   HttpOptionsInput,
   LoggingOptionsInput,
+  ElicitationOptionsInput,
+  elicitationOptionsSchema,
+  SkillsConfigOptionsInput,
+  skillsConfigOptionsSchema,
+  ExtAppsOptionsInput,
+  extAppsOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
+  annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
-import { AppType, PluginType, ProviderType, ResourceType, ToolType } from '../interfaces';
+import { AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -77,6 +82,12 @@ export interface FrontMcpBaseMetadata {
   resources?: ResourceType[];
 
   /**
+   * Shared skills that are available to all apps.
+   * These are merged (additively) with app-specific skills.
+   */
+  skills?: SkillType[];
+
+  /**
    * Server-level plugins that are instantiated per scope.
    * Each scope gets its own instance of these plugins.
    * These plugins have server-wide access (can see all apps in scope).
@@ -88,6 +99,91 @@ export interface FrontMcpBaseMetadata {
    * Currently only tool list pagination is supported (tools/list endpoint).
    */
   pagination?: PaginationOptions;
+
+  /**
+   * Elicitation configuration.
+   * Controls whether tools can request interactive user input during execution.
+   * When enabled, tool output schemas are extended to include elicitation fallback response type.
+   * @default { enabled: false }
+   */
+  elicitation?: ElicitationOptionsInput;
+
+  /**
+   * Skills HTTP endpoints configuration.
+   * Controls exposure of skills via HTTP endpoints for multi-agent architectures.
+   *
+   * When enabled, provides:
+   * - GET /llm.txt - Compact skill summaries
+   * - GET /llm_full.txt - Full skills with instructions and tool schemas
+   * - GET /skills - JSON API for listing/searching skills
+   * - GET /skills/{id} - Load specific skill by ID
+   *
+   * @default { enabled: false }
+   *
+   * @example Enable skills HTTP endpoints
+   * ```typescript
+   * skillsConfig: { enabled: true }
+   * ```
+   *
+   * @example HTTP-only (disable MCP tools)
+   * ```typescript
+   * skillsConfig: {
+   *   enabled: true,
+   *   mcpTools: false,  // No searchSkills/loadSkill MCP tools
+   * }
+   * ```
+   */
+  skillsConfig?: SkillsConfigOptionsInput;
+
+  /**
+   * MCP Apps (ext-apps) configuration.
+   * Controls handling of ext-apps widget-to-host communication over HTTP transport.
+   *
+   * When enabled, the HTTP transport will route `ui/*` JSON-RPC methods
+   * (ui/initialize, ui/callServerTool, etc.) through session validation
+   * and the ExtAppsMessageHandler.
+   *
+   * ## Host Capabilities
+   *
+   * Host capabilities advertise what features the server supports to widgets:
+   *
+   * | Capability           | Description                                      | Default |
+   * |---------------------|--------------------------------------------------|---------|
+   * | `serverToolProxy`   | Allow widgets to call MCP tools via ui/callServerTool | `true`  |
+   * | `logging`           | Allow widgets to send logs via ui/log            | `true`  |
+   * | `openLink`          | Allow widgets to request URL opening via ui/openLink | `false` |
+   * | `modelContextUpdate`| Allow widgets to update model context via ui/updateModelContext | `false` |
+   * | `widgetTools`       | Allow widgets to register/unregister tools dynamically | `false` |
+   * | `displayModes`      | Supported display modes: 'inline', 'fullscreen', 'pip' | `undefined` |
+   *
+   * @default { enabled: true, hostCapabilities: { serverToolProxy: true, logging: true } }
+   *
+   * @example Enable ext-apps with default capabilities
+   * ```typescript
+   * extApps: { enabled: true }
+   * ```
+   *
+   * @example Configure all host capabilities
+   * ```typescript
+   * extApps: {
+   *   enabled: true,
+   *   hostCapabilities: {
+   *     serverToolProxy: true,    // Widgets can call MCP tools
+   *     logging: true,            // Widgets can send logs
+   *     openLink: true,           // Widgets can request URL opening
+   *     modelContextUpdate: true, // Widgets can update model context
+   *     widgetTools: true,        // Widgets can register dynamic tools
+   *     displayModes: ['inline', 'fullscreen', 'pip'],
+   *   },
+   * }
+   * ```
+   *
+   * @example Disable ext-apps
+   * ```typescript
+   * extApps: { enabled: false }
+   * ```
+   */
+  extApps?: ExtAppsOptionsInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -95,6 +191,7 @@ export const frontMcpBaseSchema = z.object({
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
+  skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
   plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),
@@ -104,6 +201,9 @@ export const frontMcpBaseSchema = z.object({
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
+  elicitation: elicitationOptionsSchema.optional(),
+  skillsConfig: skillsConfigOptionsSchema.optional(),
+  extApps: extAppsOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

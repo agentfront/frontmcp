@@ -19,9 +19,16 @@ MCP Bridge is a runtime adapter that:
 interface MCPBridge {
   readonly provider: 'openai' | 'ext-apps' | 'claude' | 'unknown';
 
+  // Core methods
   callTool(name: string, params: object): Promise<unknown>;
   sendMessage(content: string): Promise<void>;
   openLink(url: string): Promise<void>;
+
+  // ext-apps specific methods (SEP-1865)
+  updateModelContext(context: unknown, merge?: boolean): Promise<void>;
+  log(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: unknown): Promise<void>;
+  registerTool(name: string, description: string, inputSchema: object): Promise<void>;
+  unregisterTool(name: string): Promise<void>;
 
   readonly toolInput: Record<string, unknown>;
   readonly toolOutput: unknown;
@@ -187,6 +194,76 @@ const unsubscribe = window.mcpBridge.onToolResult((result) => {
 });
 ```
 
+## ext-apps Methods (SEP-1865)
+
+The MCP Apps Extension protocol (SEP-1865) provides additional bidirectional communication methods for ext-apps widgets.
+
+### Update Model Context
+
+Share widget state with the AI model:
+
+```typescript
+// Update context (merged with existing by default)
+await window.mcpBridge.updateModelContext({
+  selectedItem: 'item-123',
+  userPreference: 'detailed',
+});
+
+// Replace context entirely
+await window.mcpBridge.updateModelContext(newContext, false);
+```
+
+This allows the model to reference widget state in subsequent interactions.
+
+### Widget Logging
+
+Send log messages to the host for debugging:
+
+```typescript
+await window.mcpBridge.log('info', 'Widget initialized');
+await window.mcpBridge.log('debug', 'User clicked button', { buttonId: 'submit' });
+await window.mcpBridge.log('warn', 'Connection slow');
+await window.mcpBridge.log('error', 'Failed to fetch data', { error: err.message });
+```
+
+### Dynamic Tool Registration
+
+Widgets can register tools dynamically:
+
+```typescript
+// Register a widget-defined tool
+await window.mcpBridge.registerTool(
+  'widget_action',
+  'Performs an action from the widget',
+  {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['approve', 'reject'] },
+      reason: { type: 'string' },
+    },
+    required: ['action'],
+  }
+);
+
+// Later, unregister when no longer needed
+await window.mcpBridge.unregisterTool('widget_action');
+```
+
+### Check Host Capabilities
+
+Before using ext-apps features, check if the host supports them:
+
+```typescript
+// The bridge falls back gracefully, but you can check explicitly
+try {
+  await window.mcpBridge.updateModelContext({ key: 'value' });
+} catch (err) {
+  if (err.message.includes('not supported')) {
+    console.log('Host does not support model context updates');
+  }
+}
+```
+
 ## Complete Interactive Widget
 
 ```typescript
@@ -288,13 +365,33 @@ ui: {
 
 ## Platform Compatibility
 
-| Feature           | OpenAI | Claude  | Gemini |
-| ----------------- | ------ | ------- | ------ |
-| `callTool`        | Yes    | No      | No     |
-| `sendMessage`     | Yes    | No      | No     |
-| `openLink`        | Yes    | Yes     | Yes    |
-| `setWidgetState`  | Yes    | No      | No     |
-| `onContextChange` | Yes    | Limited | No     |
+| Feature                | OpenAI | ext-apps | Claude  | Gemini |
+| ---------------------- | ------ | -------- | ------- | ------ |
+| `callTool`             | Yes    | Yes*     | Yes*    | No     |
+| `sendMessage`          | Yes    | Yes      | Yes     | No     |
+| `openLink`             | Yes    | Yes*     | Yes*    | Yes    |
+| `setWidgetState`       | Yes    | Yes      | Yes     | No     |
+| `onContextChange`      | Yes    | Yes      | Yes     | No     |
+| `updateModelContext`   | No     | Yes*     | Yes*    | No     |
+| `log`                  | No     | Yes*     | Yes*    | No     |
+| `registerTool`         | No     | Yes*     | Yes*    | No     |
+| `unregisterTool`       | No     | Yes*     | Yes*    | No     |
+| `resourceUri`          | Yes    | Yes      | Yes     | No     |
+
+*Features depend on host capabilities negotiated during initialization.
+
+<Note>
+  **Claude MCP Apps:** Claude supports the ext-apps protocol with full
+  bidirectional JSON-RPC communication via `window.__mcpAppsEnabled`.
+
+  See: [MCP Apps Announcement](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
+</Note>
+
+<Note>
+  **Platform Detection:** The bridge uses explicit markers to detect each platform.
+  For ext-apps, set `window.__mcpPlatform = 'ext-apps'` before loading the bridge.
+  Generic iframes without markers will use the fallback generic adapter.
+</Note>
 
 Always check capabilities before using features:
 

@@ -274,3 +274,49 @@ export {
   // Cache
   CredentialCache,
 } from './vault';
+
+// ============================================
+// CIMD Module
+// ============================================
+export {
+  // Logger
+  type CimdLogger,
+  noopLogger,
+  // Types & Schemas
+  clientMetadataDocumentSchema,
+  cimdCacheConfigSchema,
+  cimdSecurityConfigSchema,
+  cimdNetworkConfigSchema,
+  cimdConfigSchema,
+  type ClientMetadataDocument,
+  type ClientMetadataDocumentInput,
+  type CimdCacheConfig,
+  type CimdSecurityConfig,
+  type CimdNetworkConfig,
+  type CimdConfig,
+  type CimdConfigInput,
+  type CimdResolutionResult,
+  // Errors
+  CimdError,
+  InvalidClientIdUrlError,
+  CimdFetchError,
+  CimdValidationError,
+  CimdClientIdMismatchError,
+  CimdSecurityError,
+  RedirectUriMismatchError,
+  CimdResponseTooLargeError,
+  CimdDisabledError,
+  // Validator
+  isCimdClientId,
+  validateClientIdUrl,
+  checkSsrfProtection,
+  hasOnlyLocalhostRedirectUris,
+  // Cache
+  CimdCache,
+  extractCacheHeaders,
+  parseCacheHeaders,
+  type CimdCacheEntry,
+  type CacheableHeaders,
+  // Service
+  CimdService,
+} from './cimd';

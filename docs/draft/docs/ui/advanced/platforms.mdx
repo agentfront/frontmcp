@@ -55,6 +55,120 @@ if (platform.scripts === 'inline') {
 }
 ```
 
+## ext-apps (SEP-1865)
+
+ext-apps is the MCP Apps Extension protocol that standardizes bidirectional widget communication across AI hosts.
+
+### Features
+
+- Full network access
+- JSON-RPC 2.0 over postMessage
+- Bidirectional communication (widget ↔ host)
+- Tool invocation from widgets
+- Model context updates
+- Dynamic tool registration
+- Widget logging
+
+### Configuration
+
+```typescript
+import { EXT_APPS_PLATFORM } from '@frontmcp/uipack/theme';
+
+// Platform preset
+console.log(EXT_APPS_PLATFORM);
+// {
+//   id: 'ext-apps',
+//   network: 'open',
+//   scripts: 'external',
+//   capabilities: {
+//     callTool: true,        // Depends on serverToolProxy
+//     sendMessage: true,
+//     openExternal: true,    // Depends on openLink capability
+//     requestDisplayMode: true,
+//     widgetState: true,
+//     updateModelContext: true,  // Depends on modelContextUpdate
+//     registerTool: true,    // Depends on widgetTools
+//   },
+// }
+```
+
+### Host Capabilities
+
+ext-apps uses capability negotiation during initialization. The host advertises supported features:
+
+```typescript
+interface ExtAppsHostCapabilities {
+  serverToolProxy?: boolean;    // Can proxy tool calls to MCP server
+  openLink?: boolean;           // Can open external URLs
+  modelContextUpdate?: boolean; // Supports model context updates
+  widgetTools?: boolean;        // Supports widget-defined tools
+  displayModes?: ('inline' | 'fullscreen' | 'pip')[];
+  logging?: boolean;            // Supports widget logging
+}
+```
+
+### JSON-RPC Communication
+
+ext-apps widgets communicate via JSON-RPC 2.0 over postMessage:
+
+```typescript
+// Widget sends request
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "ui/callServerTool",
+  "params": { "name": "get_weather", "arguments": { "city": "NYC" } }
+}
+
+// Host responds
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": { "temperature": 72, "conditions": "Sunny" }
+}
+```
+
+### Tool Discovery Metadata
+
+Tools with UI templates expose ext-apps metadata in `tools/list`:
+
+```typescript
+@Tool({
+  name: 'weather',
+  ui: {
+    template: WeatherWidget,
+    resourceUri: 'ui://my-app/weather.html',  // Custom URI (optional)
+    widgetCapabilities: {
+      toolListChanged: false,
+      supportsPartialInput: true,
+    },
+  },
+})
+```
+
+The discovery response includes:
+
+```json
+{
+  "ui/resourceUri": "ui://my-app/weather.html",
+  "ui/capabilities": {
+    "tools": { "listChanged": false },
+    "supportsPartialInput": true
+  }
+}
+```
+
+### MIME Types
+
+ext-apps uses specific MIME types:
+
+```typescript
+import { getExtAppsMimeType } from '@frontmcp/uipack/adapters';
+
+getExtAppsMimeType('standard');  // 'text/html+mcp'
+getExtAppsMimeType('profile');   // 'text/html;profile=mcp-app'
+```
+
 ## OpenAI
 
 OpenAI's Apps SDK provides full widget capabilities:

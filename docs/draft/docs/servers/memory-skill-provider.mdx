@@ -1,0 +1,215 @@
+---
+title: Memory Skill Provider
+description: In-memory skill storage provider using TF-IDF for search
+---
+
+# Memory Skill Provider
+
+The `MemorySkillProvider` is the default skill storage provider in FrontMCP. It stores skills in memory and uses TF-IDF (Term Frequency-Inverse Document Frequency) vectorization for similarity-based skill search.
+
+## Overview
+
+When no external storage is configured, FrontMCP uses the MemorySkillProvider to:
+
+- Store skills in an in-memory Map
+- Index skill content using TF-IDF for semantic search
+- Validate tool references against the tool registry
+- Filter and sort skills by tags, priority, and visibility
+
+## Configuration
+
+### Constructor Options
+
+```typescript
+interface MemorySkillProviderOptions {
+  /**
+   * Default number of search results.
+   * @default 10
+   */
+  defaultTopK?: number;
+
+  /**
+   * Default minimum similarity threshold.
+   * @default 0.1
+   */
+  defaultMinScore?: number;
+
+  /**
+   * Optional tool validator for enriching results.
+   */
+  toolValidator?: SkillToolValidator;
+}
+```
+
+### Basic Usage
+
+```typescript
+import { MemorySkillProvider } from '@frontmcp/sdk';
+
+const provider = new MemorySkillProvider({
+  defaultTopK: 5,
+  defaultMinScore: 0.2,
+});
+
+await provider.initialize();
+```
+
+### With Tool Validation
+
+```typescript
+import { MemorySkillProvider, SkillToolValidator } from '@frontmcp/sdk';
+
+const provider = new MemorySkillProvider({
+  defaultTopK: 10,
+  defaultMinScore: 0.1,
+});
+
+// Set tool validator after construction if not available at creation time
+provider.setToolValidator(new SkillToolValidator(toolRegistry));
+```
+
+## Search Behavior
+
+### TF-IDF Weighting
+
+The provider uses weighted TF-IDF indexing to improve search relevance:
+
+| Field | Weight | Description |
+|-------|--------|-------------|
+| Description | 3x | Most important for matching |
+| Tags | 2x | Category and topic signals |
+| Tools | 1x | Tool name and purpose |
+| Name | 1x | Skill identifier |
+| Parameters | 1x | Parameter names and descriptions |
+| Examples | 1x | Scenario descriptions |
+
+### Stop Words
+
+Common stop words are filtered from queries and indexing to improve search quality. This includes articles (the, a, an), prepositions (in, on, at), conjunctions (and, or, but), and common fillers (please, help, want).
+
+### Search Options
+
+```typescript
+interface SkillSearchOptions {
+  /** Number of results to return */
+  topK?: number;
+  /** Minimum similarity score (0-1) */
+  minScore?: number;
+  /** Filter by tags */
+  tags?: string[];
+  /** Filter by required tools */
+  tools?: string[];
+  /** Only return skills with all tools available */
+  requireAllTools?: boolean;
+  /** Exclude specific skill IDs */
+  excludeIds?: string[];
+}
+
+const results = await provider.search('analyze code', {
+  topK: 5,
+  minScore: 0.3,
+  tags: ['development'],
+  requireAllTools: true,
+});
+```
+
+## Storage Operations
+
+### Adding Skills
+
+```typescript
+// Add a single skill
+await provider.add(skillContent);
+
+// Bulk add for efficiency (uses batch indexing)
+await provider.addMany([skill1, skill2, skill3]);
+```
+
+### Updating Skills
+
+The update method normalizes the skill ID to prevent orphaned vector documents:
+
+```typescript
+await provider.update('skill-id', updatedSkillContent);
+```
+
+### Removing Skills
+
+```typescript
+await provider.remove('skill-id');
+
+// Clear all skills
+await provider.clear();
+```
+
+## Extended Metadata
+
+Skills stored in MemorySkillProvider can include additional metadata beyond the base `SkillContent` interface:
+
+```typescript
+interface StoredSkillContent extends SkillContent {
+  /** Tags for categorization and search */
+  tags?: string[];
+  /** Priority for search ranking */
+  priority?: number;
+  /** Hide from discovery/search results */
+  hideFromDiscovery?: boolean;
+}
+```
+
+These fields are:
+- Indexed for search (tags with 2x weight)
+- Used for filtering (`tags`, `hideFromDiscovery`)
+- Used for sorting (`priority`)
+
+## Related Types
+
+### SkillContent
+
+The base skill content structure:
+
+```typescript
+interface SkillContent {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: SkillToolRef[];
+  parameters?: SkillParameter[];
+  examples?: SkillExample[];
+}
+```
+
+### SkillSearchResult
+
+```typescript
+interface SkillSearchResult {
+  metadata: SkillMetadata;
+  score: number;
+  availableTools: string[];
+  missingTools: string[];
+  source: 'local' | 'external';
+}
+```
+
+### SkillLoadResult
+
+```typescript
+interface SkillLoadResult {
+  skill: SkillContent;
+  availableTools: string[];
+  missingTools: string[];
+  isComplete: boolean;
+  warning?: string;
+}
+```
+
+## Performance Considerations
+
+- **Memory Usage**: All skills are stored in memory. For large skill sets (1000+), consider using an external provider.
+- **Reindexing**: The TF-IDF index is rebuilt after each add/update operation. Use `addMany()` for bulk operations.
+- **Thread Safety**: The provider is not thread-safe. In multi-threaded environments, use external storage.
+
+## See Also
+
+- [Skills Overview](/servers/skills) - Complete skills documentation

@@ -1,0 +1,422 @@
+---
+title: Runtime Modes
+slug: deployment/runtime-modes
+icon: layer-group
+description: Choose how to integrate FrontMCP - as an embedded SDK, HTTP server, or serverless handler
+---
+
+FrontMCP supports three integration modes depending on how you want to deploy and run your MCP server. Choose the mode that best fits your architecture.
+
+## Overview
+
+| Mode | Use Case | Transport | Entry Point |
+|------|----------|-----------|-------------|
+| **SDK Mode** | Embed in agent code | In-process | `connect()`, `connectOpenAI()`, etc. |
+| **Server Mode** | Standalone HTTP server | HTTP (SSE, Streamable) | `@FrontMcp` with `http.port` |
+| **Handler Mode** | Serverless functions | HTTP (stateless) | `createHandler()` or `FRONTMCP_SERVERLESS=1` |
+
+---
+
+## SDK Mode (Embedded)
+
+Use SDK mode when your agent code directly calls FrontMCP tools without HTTP. This is ideal for:
+
+- LangChain, Vercel AI, or OpenAI SDK integrations
+- In-process agent frameworks
+- Testing and local development
+
+### Entry Points
+
+| Function | Platform | Tool Format |
+|----------|----------|-------------|
+| `connect()` | Auto-detect | Based on clientInfo |
+| `connectOpenAI()` | OpenAI | `[{ type: 'function', function: { name, parameters } }]` |
+| `connectClaude()` | Anthropic | `[{ name, input_schema }]` |
+| `connectLangChain()` | LangChain | `[{ name, schema }]` |
+| `connectVercelAI()` | Vercel AI | `{ [name]: { parameters } }` |
+
+### Benefits
+
+- **Zero network overhead** — tools execute in-process
+- **Automatic format conversion** — tools are formatted for your LLM platform
+- **Simple auth injection** — pass JWT tokens directly via `authToken` option
+- **Singleton scope** — config objects are cached for efficient reuse
+
+### Example: OpenAI Integration
+
+```typescript
+import { connectOpenAI } from '@frontmcp/sdk';
+import OpenAI from 'openai';
+
+// Your FrontMCP server config (same as @FrontMcp decorator)
+const serverConfig = {
+  info: { name: 'My Tools', version: '1.0.0' },
+  apps: [MyApp],
+};
+
+// Connect with auth token
+const client = await connectOpenAI(serverConfig, {
+  authToken: 'user-jwt-token',
+  session: { id: 'session-123' },
+});
+
+// Tools are already in OpenAI format!
+const tools = await client.listTools();
+
+const openai = new OpenAI();
+const response = await openai.chat.completions.create({
+  model: 'gpt-4-turbo',
+  tools,
+  messages: [{ role: 'user', content: 'What is the weather?' }],
+});
+
+// Call tool if model requested it
+if (response.choices[0].message.tool_calls) {
+  const toolCall = response.choices[0].message.tool_calls[0];
+  const result = await client.callTool(
+    toolCall.function.name,
+    JSON.parse(toolCall.function.arguments)
+  );
+}
+
+await client.close();
+```
+
+### Example: Vercel AI SDK
+
+```typescript
+import { connectVercelAI } from '@frontmcp/sdk';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const client = await connectVercelAI(serverConfig, {
+  authToken: 'user-jwt',
+});
+
+const tools = await client.listTools();  // Vercel AI SDK format
+
+const { text } = await generateText({
+  model: openai('gpt-4-turbo'),
+  tools,
+  prompt: 'What is the weather in NYC?',
+});
+
+await client.close();
+```
+
+### Example: Anthropic Claude
+
+```typescript
+import { connectClaude } from '@frontmcp/sdk';
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = await connectClaude(serverConfig, { authToken: 'token' });
+const tools = await client.listTools();  // Claude format
+
+const anthropic = new Anthropic();
+const response = await anthropic.messages.create({
+  model: 'claude-3-opus-20240229',
+  tools,
+  messages: [{ role: 'user', content: 'What is the weather?' }],
+});
+
+await client.close();
+```
+
+---
+
+## Server Mode (HTTP)
+
+Use Server mode when you need a standalone MCP server that clients connect to over HTTP. This is ideal for:
+
+- Claude Desktop and other MCP clients
+- Shared server for multiple clients
+- Production deployments with persistent connections
+
+### Configuration
+
+```typescript
+import 'reflect-metadata';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import MyApp from './my.app';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  http: { port: 3001 },
+  transport: { protocol: 'legacy' },
+  logging: { level: LogLevel.INFO },
+})
+export default class Server {}
+```
+
+### Transport Protocols
+
+Server mode supports multiple transport protocols:
+
+| Protocol | Description | Use Case |
+|----------|-------------|----------|
+| `legacy` | SSE + Streamable + Legacy SSE | Maximum compatibility (default) |
+| `modern` | SSE + Streamable HTTP | Newer MCP clients |
+| `stateless-api` | No sessions, request/response | Simple API access |
+| `full` | All protocols enabled | Maximum flexibility |
+
+<CodeGroup>
+```ts Default (Legacy)
+@FrontMcp({
+  transport: { protocol: 'legacy' },  // Default - backwards compatible
+})
+```
+
+```ts Modern Only
+@FrontMcp({
+  transport: { protocol: 'modern' },  // SSE + Streamable HTTP
+})
+```
+
+```ts Custom Config
+@FrontMcp({
+  transport: {
+    protocol: {
+      sse: true,
+      streamable: true,
+      json: true,
+      stateless: false,
+      legacy: true,
+      strictSession: false,
+    },
+  },
+})
+```
+</CodeGroup>
+
+### Session Storage
+
+For production, configure Redis for session persistence:
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  http: { port: 3001 },
+  redis: {
+    host: 'redis.example.com',
+    port: 6379,
+    keyPrefix: 'mcp:',
+  },
+  transport: {
+    sessionMode: 'stateful',
+    persistence: { defaultTtlMs: 3600000 },
+  },
+})
+export default class Server {}
+```
+
+### Running the Server
+
+```bash
+# Development with hot-reload
+npm run dev
+
+# Production
+npm run build
+npm run start
+```
+
+---
+
+## Handler Mode (Serverless)
+
+Use Handler mode when deploying to serverless platforms like Vercel, AWS Lambda, or Cloudflare Workers. This mode:
+
+- Does not start an HTTP server
+- Exports a request handler for the platform
+- Requires distributed storage (Redis, Vercel KV)
+
+### Configuration
+
+Handler mode is triggered by setting `FRONTMCP_SERVERLESS=1` in your entry point wrapper:
+
+```typescript
+// Your FrontMCP server
+@FrontMcp({
+  info: { name: 'Serverless', version: '1.0.0' },
+  apps: [MyApp],
+  transport: { protocol: 'stateless-api' },
+  redis: { provider: 'vercel-kv' },
+})
+export default class Handler {}
+```
+
+The build command generates a wrapper that sets the environment variable:
+
+```javascript
+// Generated dist/index.js (simplified)
+process.env.FRONTMCP_SERVERLESS = '1';
+import './main.js';
+import { getServerlessHandlerAsync } from '@frontmcp/sdk';
+
+export default async function handler(req, res) {
+  const app = await getServerlessHandlerAsync();
+  return app(req, res);
+}
+```
+
+### Quick Start
+
+<Tabs>
+  <Tab title="Vercel">
+    ```bash
+    # Create project with Vercel target
+    npx frontmcp create my-app --target vercel
+
+    # Or build existing project
+    frontmcp build --adapter vercel
+
+    # Deploy
+    vercel deploy
+    ```
+  </Tab>
+  <Tab title="AWS Lambda">
+    ```bash
+    # Create project with Lambda target
+    npx frontmcp create my-app --target lambda
+
+    # Install required dependency
+    npm install @codegenie/serverless-express
+
+    # Build and deploy
+    frontmcp build --adapter lambda
+    cd ci && sam build && sam deploy
+    ```
+  </Tab>
+  <Tab title="Cloudflare">
+    ```bash
+    # Create project with Cloudflare target
+    npx frontmcp create my-app --target cloudflare
+
+    # Build and deploy
+    frontmcp build --adapter cloudflare
+    wrangler deploy
+    ```
+  </Tab>
+</Tabs>
+
+### Storage Requirements
+
+<Warning>
+Serverless environments require distributed storage. In-memory storage does not work reliably since each invocation may run on a different instance.
+</Warning>
+
+<Tabs>
+  <Tab title="Vercel KV">
+    ```typescript
+    @FrontMcp({
+      redis: {
+        provider: 'vercel-kv',
+        // Uses KV_REST_API_URL and KV_REST_API_TOKEN from env
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Upstash">
+    ```typescript
+    @FrontMcp({
+      redis: {
+        provider: 'upstash',
+        // Uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from env
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Redis">
+    ```typescript
+    @FrontMcp({
+      redis: {
+        host: process.env.REDIS_HOST,
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+    })
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Comparison Table
+
+| Feature | SDK Mode | Server Mode | Handler Mode |
+|---------|----------|-------------|--------------|
+| **Network** | In-process | HTTP | HTTP (stateless) |
+| **Use Case** | Embedded agents | Standalone server | Serverless platforms |
+| **Session** | In-memory | Configurable | Distributed required |
+| **Entry Point** | `connect()` | `@FrontMcp` | `createHandler()` |
+| **Scaling** | Single process | Horizontal | Auto-scaling |
+| **Auth** | Token injection | OAuth/JWT | OAuth/JWT |
+| **Cold Start** | None | None | Platform-dependent |
+
+---
+
+## Decision Guide
+
+<AccordionGroup>
+  <Accordion title="When to use SDK Mode">
+    Choose SDK mode when:
+    - Your agent code calls FrontMCP tools directly
+    - You're using LangChain, Vercel AI SDK, or OpenAI SDK
+    - You want zero network overhead
+    - You need automatic tool format conversion
+    - You're building an in-process agent
+
+    **Not recommended when:**
+    - External clients need to connect to your server
+    - You need Claude Desktop compatibility
+  </Accordion>
+
+  <Accordion title="When to use Server Mode">
+    Choose Server mode when:
+    - MCP clients connect over the network (Claude Desktop, etc.)
+    - You need SSE or Streamable HTTP transport
+    - You want a long-running server process
+    - Multiple clients share the same server
+
+    **Not recommended when:**
+    - You're deploying to serverless platforms
+    - Your agent code runs in the same process
+  </Accordion>
+
+  <Accordion title="When to use Handler Mode">
+    Choose Handler mode when:
+    - Deploying to Vercel, AWS Lambda, or Cloudflare Workers
+    - You want auto-scaling without managing servers
+    - You need serverless cost efficiency
+
+    **Not recommended when:**
+    - You need persistent WebSocket connections
+    - Cold start latency is unacceptable
+    - In-memory session state is required
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Local Dev Server" icon="computer" href="/docs/deployment/local-dev-server">
+    Run and test your FrontMCP server locally
+  </Card>
+
+  <Card title="Production Build" icon="hammer" href="/docs/deployment/production-build">
+    Build and optimize for production deployment
+  </Card>
+
+  <Card title="Serverless Deployment" icon="cloud" href="/docs/deployment/serverless">
+    Detailed guide for Vercel, Lambda, and Cloudflare
+  </Card>
+
+  <Card title="Redis Setup" icon="database" href="/docs/deployment/redis-setup">
+    Configure Redis for session persistence
+  </Card>
+</CardGroup>

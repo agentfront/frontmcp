@@ -28,6 +28,7 @@ export {
 } from './front-mcp/serverless-handler';
 export * from './common';
 export * from './errors';
+export * from './elicitation';
 export * from './remote-mcp';
 
 // Re-export MCP types commonly needed
@@ -56,6 +57,45 @@ export {
 
 // Tool change events for subscription
 export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
+
+// Skill exports - skills are knowledge/workflow packages for multi-step tasks
+export {
+  // Registry
+  SkillRegistry,
+  // Instance
+  SkillInstance,
+  createSkillInstance,
+  // Events
+  SkillEmitter,
+  // Providers
+  MemorySkillProvider,
+  // Validator
+  SkillToolValidator,
+  // Factory
+  createSkillStorageProvider,
+  createMemorySkillProvider,
+  // Utilities
+  normalizeSkill,
+  isSkillRecord,
+  formatSkillForLLM,
+} from './skill';
+export type {
+  SkillRegistryInterface,
+  IndexedSkill,
+  SkillChangeEvent,
+  SkillChangeKind,
+  SkillChangeScope,
+  SkillStorageProvider,
+  SkillStorageProviderType,
+  SkillSearchOptions,
+  SkillSearchResult,
+  SkillLoadResult,
+  SkillListOptions,
+  SkillListResult,
+  ToolValidationResult,
+  SkillStorageFactoryOptions,
+  SkillStorageFactoryResult,
+} from './skill';
 
 // Agent exports - only user-facing APIs
 export {
@@ -150,7 +190,22 @@ export {
 // Direct Server Access (Programmatic / In-Memory / Stdio)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Direct MCP Server - programmatic access without HTTP transport
+// Connect utilities - create DirectClient connections with LLM-aware formatting
+export { connect, connectOpenAI, connectClaude, connectLangChain, connectVercelAI } from './direct';
+export type {
+  DirectClient,
+  ConnectOptions,
+  LLMConnectOptions,
+  SessionOptions,
+  ClientInfo,
+  LLMPlatform,
+} from './direct';
+
+// LLM platform utilities (for advanced use)
+export { detectPlatform, formatToolsForPlatform, formatResultForPlatform, PLATFORM_CLIENT_INFO } from './direct';
+export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools } from './direct';
+
+// Direct MCP Server - legacy programmatic access without HTTP transport
 export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';
 
 // In-memory server for MCP SDK Client integration
@@ -159,3 +214,56 @@ export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transp
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP Apps (ext-apps) Support
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ext-apps message handler for bidirectional widget communication
+export {
+  ExtAppsMessageHandler,
+  createExtAppsMessageHandler,
+  EXT_APPS_ERROR_CODES,
+  ExtAppsError,
+  ExtAppsMethodNotFoundError,
+  ExtAppsInvalidParamsError,
+  ExtAppsNotSupportedError,
+  ExtAppsToolNotFoundError,
+} from './ext-apps';
+
+export type {
+  // Core message params
+  ExtAppsCallServerToolParams,
+  ExtAppsUpdateModelContextParams,
+  ExtAppsOpenLinkParams,
+  // Display and lifecycle
+  ExtAppsDisplayMode,
+  ExtAppsSetDisplayModeParams,
+  ExtAppsCloseParams,
+  // Logging
+  ExtAppsLogLevel,
+  ExtAppsLogParams,
+  // Widget-defined tools
+  ExtAppsRegisterToolParams,
+  ExtAppsUnregisterToolParams,
+  // Capabilities
+  ExtAppsHostCapabilities,
+  ExtAppsWidgetCapabilities,
+  // Initialization
+  ExtAppsInitializeParams,
+  ExtAppsInitializeResult,
+  // Handler context
+  ExtAppsHandlerContext,
+  ExtAppsMessageHandlerOptions,
+  // JSON-RPC types
+  ExtAppsJsonRpcRequest,
+  ExtAppsJsonRpcResponse,
+  ExtAppsJsonRpcNotification,
+} from './ext-apps';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth Session Stores
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Orchestrated token store for upstream provider tokens
+export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from './auth/session';

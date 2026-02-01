@@ -41,11 +41,11 @@
         "passWithNoTests": true
       }
     },
-    "test:e2e": {
+    "test:perf": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-standalone-e2e"],
+      "outputs": ["{workspaceRoot}/perf-results/demo-e2e-standalone"],
       "options": {
-        "jestConfig": "apps/e2e/demo-e2e-standalone/jest.e2e.config.ts",
+        "jestConfig": "apps/e2e/demo-e2e-standalone/jest.perf.config.ts",
         "runInBand": true,
         "passWithNoTests": true
       }

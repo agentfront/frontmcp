@@ -181,6 +181,12 @@ export interface CreateSessionOptions {
   userAgent?: string;
   /** Platform detection configuration from scope */
   platformDetectionConfig?: PlatformDetectionConfig;
+  /**
+   * Whether this session is in skills-only mode.
+   * When true, tools/list returns empty array but skills/search and skills/load work normally.
+   * Detected from `?mode=skills_only` query param on connection.
+   */
+  skillsOnlyMode?: boolean;
 }
 
 export function createSessionId(protocol: TransportProtocolType, token: string, options?: CreateSessionOptions) {
@@ -203,6 +209,8 @@ export function createSessionId(protocol: TransportProtocolType, token: string, 
     iat: nowSec(),
     protocol,
     platformType,
+    // Add skillsOnlyMode if provided
+    ...(options?.skillsOnlyMode && { skillsOnlyMode: true }),
   };
   const id = encryptJson(payload);
   cache.set(id, payload);
@@ -249,4 +257,30 @@ export function updateSessionPayload(sessionId: string, updates: Partial<Session
   }
 
   return false;
+}
+
+/**
+ * Retrieve client info (name/version) from a session ID.
+ * Useful for logging, stateless access, or when NotificationService is not available.
+ *
+ * @param sessionId - The encrypted session ID
+ * @returns Client info object or null if session is invalid or has no client info
+ */
+export function getSessionClientInfo(sessionId: string): { name?: string; version?: string } | null {
+  // Check cache first (may have updated client info from initialize)
+  const cached = cache.get(sessionId);
+  if (cached && hasValidSessionStructure(cached)) {
+    return { name: cached.clientName, version: cached.clientVersion };
+  }
+
+  // Fall back to decrypting from the encrypted session ID
+  const decrypted = safeDecrypt(sessionId);
+  if (hasValidSessionStructure(decrypted) || isValidPublicSessionPayload(decrypted)) {
+    const payload = decrypted as SessionIdPayload;
+    // Cache for subsequent access
+    cache.set(sessionId, payload);
+    return { name: payload.clientName, version: payload.clientVersion };
+  }
+
+  return null;
 }

@@ -7,7 +7,6 @@ import {
   FlowPlan,
   FlowRunOptions,
   ToolContext,
-  ToolCtorArgs,
   ToolEntry,
   isOrchestratedMode,
 } from '../../common';
@@ -21,12 +20,54 @@ import {
   InvalidOutputError,
   ToolExecutionError,
   AuthorizationRequiredError,
+  ElicitationFallbackRequired,
 } from '../../errors';
+import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+
+/**
+ * Type for transport extension on AuthInfo.
+ *
+ * The MCP SDK's AuthInfo type doesn't include transport natively.
+ * The LocalTransportAdapter adds a `transport` property with:
+ * - sendElicitRequest: method to send elicitation requests to the client
+ * - type: transport type string (e.g., 'sse', 'streamable-http')
+ *
+ * We use a separate type instead of extending AuthInfo because the MCP SDK's
+ * AuthInfo type has strict constraints that conflict with interface extension.
+ */
+type TransportExtension = {
+  transport?: {
+    sendElicitRequest: <S extends z.ZodType>(
+      relatedRequestId: number | string,
+      message: string,
+      requestedSchema: S,
+      options?: import('../../elicitation').ElicitOptions,
+    ) => Promise<import('../../elicitation').ElicitResult<S extends z.ZodType<infer O> ? O : unknown>>;
+    type: string;
+  };
+};
+
+/**
+ * Fallback response structure for elicitation.
+ * Returned when elicitation is not supported by the client and requires
+ * the LLM to collect user input via sendElicitationResult tool.
+ */
+interface ElicitationFallbackResponse {
+  content: Array<{ type: 'text'; text: string }>;
+  _meta: {
+    elicitationPending: {
+      elicitId: string;
+      message: string;
+      schema: Record<string, unknown>;
+      instructions: string;
+    };
+  };
+}
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -55,6 +96,8 @@ const stateSchema = z.object({
   uiMeta: z.record(z.string(), z.unknown()).optional(),
   // Progress token from request's _meta (for progress notifications)
   progressToken: z.union([z.string(), z.number()]).optional(),
+  // JSON-RPC request ID (for elicitation routing)
+  jsonRpcRequestId: z.union([z.string(), z.number()]).optional(),
 });
 
 const plan = {
@@ -132,7 +175,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Extract progressToken from request's _meta (for progress notifications)
     const progressToken = params._meta?.progressToken;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo, _toolOwnerId: toolOwnerId, progressToken });
+    // Extract JSON-RPC request ID for elicitation routing
+    const jsonRpcRequestId = ctx.requestId;
+
+    this.state.set({
+      input: params,
+      authInfo: ctx.authInfo,
+      _toolOwnerId: toolOwnerId,
+      progressToken,
+      jsonRpcRequestId,
+    });
     this.logger.verbose('parseInput:done');
   }
 
@@ -361,6 +413,29 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       this.appendContextHooks(toolHooks);
       context.mark('createToolCallContext');
+
+      // Set tool name and input for fallback elicitation support
+      // These are used by the elicit() method when throwing ElicitationFallbackRequired
+      context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
+      context._toolInputInternal = input.arguments;
+
+      // Wire transport to FrontMcpContext for elicitation support
+      // The transport is stored in authInfo.transport by the local adapter
+      // Cast with TransportExtension since MCP SDK's AuthInfo doesn't include transport
+      const frontmcpContext = context.tryGetContext();
+      const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
+      if (frontmcpContext && authInfoWithTransport?.transport?.sendElicitRequest) {
+        const transport = authInfoWithTransport.transport;
+        // Pass the JSON-RPC request ID for proper elicitation routing
+        // The MCP SDK uses this to route messages through the correct SSE stream
+        const jsonRpcRequestId = this.state.jsonRpcRequestId;
+        frontmcpContext.setTransport({
+          sendElicitRequest: transport.sendElicitRequest.bind(transport),
+          type: transport.type,
+          jsonRpcRequestId,
+        });
+      }
+
       this.state.set('toolContext', context);
       this.logger.verbose('createToolCallContext:done');
     } catch (error) {
@@ -421,6 +496,84 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       toolContext.output = await toolContext.execute(toolContext.input);
       this.logger.verbose('execute:done');
     } catch (error) {
+      // Handle elicitation fallback for clients that don't support elicitation
+      if (error instanceof ElicitationFallbackRequired) {
+        this.logger.info('execute: elicitation fallback required', {
+          elicitId: error.elicitId,
+          toolName: error.toolName,
+        });
+
+        // Store pending fallback context in the elicitation store
+        const authInfo = this.state.authInfo;
+        const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
+        const sessionId = authInfo?.sessionId ?? 'anonymous';
+        const scope = this.scope as Scope;
+
+        await scope.elicitationStore.setPendingFallback({
+          elicitId: error.elicitId,
+          sessionId,
+          toolName: error.toolName,
+          toolInput: error.toolInput,
+          elicitMessage: error.elicitMessage,
+          elicitSchema: error.schema,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + error.ttl,
+        });
+
+        // Determine transport type to choose the fallback strategy
+        const transportType = authInfoWithTransport?.transport?.type;
+
+        // Use waiting pattern only if:
+        // 1. Transport is streamable-http (supports keeping connection open)
+        // 2. Notifications can be delivered (session is registered in NotificationService)
+        // Some LLMs don't support MCP notifications, so we need to fall back to fire-and-forget
+        if (transportType === 'streamable-http' && canDeliverNotifications(scope, sessionId)) {
+          // Waiting mode: Send notification + wait for pub/sub result
+          // This keeps the request open and returns the actual tool result
+          // when sendElicitationResult is called
+          this.logger.info('execute: using waiting fallback for streamable-http', {
+            elicitId: error.elicitId,
+          });
+          const deps: FallbackHandlerDeps = { scope, sessionId, logger: this.logger };
+          const result = await handleWaitingFallback(deps, error);
+          toolContext.output = result;
+          this.logger.verbose('execute:done (elicitation waiting fallback)');
+          return;
+        }
+
+        // Fire-and-forget mode for SSE and other transports
+        // Return fallback instructions immediately so the LLM can call sendElicitationResult
+        // Set output to fallback response (not an error)
+        // This structured response tells the LLM how to continue
+        const fallbackResponse: ElicitationFallbackResponse = {
+          content: [
+            {
+              type: 'text',
+              text:
+                `This tool requires user input to continue.\n\n` +
+                `**Question:** ${error.elicitMessage}\n\n` +
+                `After collecting the user's response, call the \`sendElicitationResult\` tool with:\n` +
+                `- elicitId: "${error.elicitId}"\n` +
+                `- action: "accept", "cancel", or "decline"\n` +
+                `- content: (the user's response matching the schema below)\n\n` +
+                `**Expected Response Schema:**\n\`\`\`json\n${JSON.stringify(error.schema, null, 2)}\n\`\`\``,
+            },
+          ],
+          _meta: {
+            elicitationPending: {
+              elicitId: error.elicitId,
+              message: error.elicitMessage,
+              schema: error.schema,
+              instructions: 'Call sendElicitationResult tool after collecting user input',
+            },
+          },
+        };
+        toolContext.output = fallbackResponse;
+
+        this.logger.verbose('execute:done (elicitation fire-and-forget fallback)');
+        return;
+      }
+
       this.logger.error('execute: tool execution failed', error);
       throw new ToolExecutionError(
         this.state.tool?.metadata.name || 'unknown',
@@ -627,10 +780,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           ? typeof uiConfig.template === 'function'
             ? 'react-component'
             : typeof uiConfig.template === 'string'
-            ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
-              ? 'react-file'
-              : 'html-file'
-            : 'unknown'
+              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+                ? 'react-file'
+                : 'html-file'
+              : 'unknown'
           : 'none',
       });
 

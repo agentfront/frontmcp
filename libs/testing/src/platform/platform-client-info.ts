@@ -152,10 +152,30 @@ export interface ExperimentalCapabilities {
 }
 
 /**
+ * Form elicitation capability options.
+ */
+export interface FormElicitationCapability {
+  /** Whether to apply default values from the schema */
+  applyDefaults?: boolean;
+}
+
+/**
+ * Elicitation capabilities for interactive user input.
+ * Note: MCP SDK expects form/url to be objects, not booleans.
+ */
+export interface ElicitationCapabilities {
+  /** Support for form-based elicitation - use empty object {} to enable */
+  form?: FormElicitationCapability | Record<string, unknown>;
+  /** Support for URL-based elicitation - use empty object {} to enable */
+  url?: Record<string, unknown>;
+}
+
+/**
  * Client capabilities sent during MCP initialization.
  */
 export interface TestClientCapabilities {
   sampling?: Record<string, unknown>;
+  elicitation?: ElicitationCapabilities;
   experimental?: ExperimentalCapabilities;
 }
 
@@ -171,6 +191,11 @@ export interface TestClientCapabilities {
 export function getPlatformCapabilities(platform: TestPlatformType): TestClientCapabilities {
   const baseCapabilities: TestClientCapabilities = {
     sampling: {},
+    // Include elicitation.form by default for testing elicitation workflows
+    // Note: MCP SDK expects form to be an object, not boolean
+    elicitation: {
+      form: {},
+    },
   };
 
   // ext-apps requires the io.modelcontextprotocol/ui extension for detection

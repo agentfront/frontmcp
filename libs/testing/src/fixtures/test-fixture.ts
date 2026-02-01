@@ -70,15 +70,40 @@ async function initializeSharedResources(): Promise<void> {
       serverInstance = TestServer.connect(currentConfig.baseUrl);
       serverStartedByUs = false;
     } else if (currentConfig.server) {
-      // Start new server
-      serverInstance = await TestServer.start({
-        port: currentConfig.port,
-        command: resolveServerCommand(currentConfig.server),
-        env: currentConfig.env,
-        startupTimeout: currentConfig.startupTimeout ?? 30000,
-        debug: currentConfig.logLevel === 'debug',
-      });
-      serverStartedByUs = true;
+      // Start new server with detailed error handling
+      const serverCommand = resolveServerCommand(currentConfig.server);
+      const isDebug =
+        currentConfig.logLevel === 'debug' || process.env['DEBUG'] === '1' || process.env['DEBUG_SERVER'] === '1';
+
+      if (isDebug) {
+        console.log(`[TestFixture] Starting server: ${serverCommand}`);
+      }
+
+      try {
+        serverInstance = await TestServer.start({
+          project: currentConfig.project,
+          port: currentConfig.port,
+          command: serverCommand,
+          env: currentConfig.env,
+          startupTimeout: currentConfig.startupTimeout ?? 30000,
+          debug: isDebug,
+        });
+        serverStartedByUs = true;
+
+        if (isDebug) {
+          console.log(`[TestFixture] Server started at ${serverInstance.info.baseUrl}`);
+        }
+      } catch (error) {
+        // Re-throw with additional context
+        const errMsg = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to start test server.\n\n` +
+            `Server entry: ${currentConfig.server}\n` +
+            `Project: ${currentConfig.project ?? 'default'}\n` +
+            `Command: ${serverCommand}\n\n` +
+            `Error: ${errMsg}`,
+        );
+      }
     } else {
       throw new Error(
         'test.use() requires either "server" (entry file path) or "baseUrl" (for external server) option',
@@ -94,17 +119,25 @@ async function createTestFixtures(): Promise<TestFixtures> {
   // Ensure shared resources are initialized
   await initializeSharedResources();
 
+  // Ensure shared resources are available
+  if (!serverInstance) {
+    throw new Error('Server instance not initialized');
+  }
+  if (!tokenFactory) {
+    throw new Error('Token factory not initialized');
+  }
+
   // Create MCP client for this test
   // Pass publicMode if configured to skip authentication
   const clientInstance = await McpTestClient.create({
-    baseUrl: serverInstance!.info.baseUrl,
+    baseUrl: serverInstance.info.baseUrl,
     transport: currentConfig.transport ?? 'streamable-http',
     publicMode: currentConfig.publicMode,
   }).buildAndConnect();
 
   // Build fixtures
-  const auth = createAuthFixture(tokenFactory!);
-  const server = createServerFixture(serverInstance!);
+  const auth = createAuthFixture(tokenFactory);
+  const server = createServerFixture(serverInstance);
 
   return {
     mcp: clientInstance,
@@ -118,7 +151,22 @@ async function createTestFixtures(): Promise<TestFixtures> {
  * @param fixtures - The test fixtures to clean up
  * @param testFailed - Whether the test failed (to output server logs)
  */
-async function cleanupTestFixtures(fixtures: TestFixtures, _testFailed = false): Promise<void> {
+async function cleanupTestFixtures(fixtures: TestFixtures, testFailed = false): Promise<void> {
+  // Output server logs if test failed (helps with debugging)
+  if (testFailed && serverInstance) {
+    const logs = serverInstance.getLogs();
+    if (logs.length > 0) {
+      console.error('\n[TestFixture] === Server Logs (test failed) ===');
+      // Show last 50 lines of logs to avoid flooding output
+      const recentLogs = logs.slice(-50);
+      if (logs.length > 50) {
+        console.error(`[TestFixture] (showing last 50 of ${logs.length} log entries)`);
+      }
+      console.error(recentLogs.join('\n'));
+      console.error('[TestFixture] === End Server Logs ===\n');
+    }
+  }
+
   // Disconnect client
   if (fixtures.mcp.isConnected()) {
     await fixtures.mcp.disconnect();

@@ -76,6 +76,12 @@ export * from './errors';
 - **Purpose**: Plugin system and extensions
 - **Scope**: Extensibility framework
 
+#### @frontmcp/auth
+
+- **Purpose**: Authentication, session management, credential vault, CIMD, and OAuth extensions
+- **Scope**: Standalone auth library used by SDK and other packages
+- **Note**: All authentication-related code should be placed in this library, not in SDK
+
 ### Demo Applications
 
 #### demo (`apps/demo`)
@@ -262,6 +268,21 @@ Never:
 - `git commit --amend`
 - Any command that modifies git history
 
+## Task Completion Checklist
+
+**Before completing a task**, run the following cleanup:
+
+```bash
+# Remove unused imports from changed files
+node scripts/fix-unused-imports.mjs
+```
+
+This script automatically:
+
+- Finds all files changed in the current branch (compared to main)
+- Removes unused imports using ESLint
+- Supports custom base branch: `node scripts/fix-unused-imports.mjs <branch-name>`
+
 ## Plugin Development
 
 ### Creating Plugins with Context Extensions
@@ -298,22 +319,49 @@ See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete e
 
 ### Crypto Utilities
 
-**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly.
+**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly or implement custom crypto functions.
 
 ```typescript
 import {
+  // PKCE (RFC 7636)
+  generateCodeVerifier, // PKCE code verifier (43-128 chars)
+  generateCodeChallenge, // PKCE code challenge (S256)
+  generatePkcePair, // Generate both verifier and challenge
+
+  // Hashing
+  sha256, // SHA-256 hash (Uint8Array)
+  sha256Hex, // SHA-256 hash (hex string)
+  sha256Base64url, // SHA-256 hash (base64url string)
+
+  // Encryption
   hkdfSha256, // HKDF-SHA256 key derivation (RFC 5869)
   encryptAesGcm, // AES-256-GCM encryption
   decryptAesGcm, // AES-256-GCM decryption
+
+  // Random generation
   randomBytes, // Cryptographic random bytes
-  sha256,
-  sha256Hex, // SHA-256 hashing
+  randomUUID, // UUID v4 generation
+
+  // Encoding
   base64urlEncode, // Base64url encoding
   base64urlDecode, // Base64url decoding
 } from '@frontmcp/utils';
 ```
 
 This ensures cross-platform support (Node.js and browser) with consistent behavior.
+
+```typescript
+// ✅ Good - use utils for PKCE
+import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
+const verifier = generateCodeVerifier();
+const challenge = sha256Base64url(verifier);
+
+// ❌ Bad - custom implementation
+private generatePkceVerifier(): string {
+  const chars = 'ABC...';
+  // Don't do this - use generateCodeVerifier() instead
+}
+```
 
 ### File System Utilities
 
@@ -350,6 +398,54 @@ Benefits:
 - Consistent API across the codebase
 - Centralized error handling and logging
 
+### Storage Factory Pattern
+
+**IMPORTANT**: When creating stores (session stores, elicitation stores, etc.), always use the factory pattern. Never construct stores directly with raw Redis clients.
+
+```typescript
+// ✅ Good - Use factory function
+import { createSessionStore } from '@frontmcp/sdk/auth/session';
+import { createElicitationStore } from '@frontmcp/sdk/elicitation';
+
+const sessionStore = await createSessionStore({
+  provider: 'redis',
+  host: 'localhost',
+  port: 6379,
+  keyPrefix: 'mcp:session:',
+});
+
+const { store, type } = createElicitationStore({
+  redis: { provider: 'redis', host: 'localhost', port: 6379 },
+  keyPrefix: 'mcp:elicit:',
+  logger,
+});
+
+// ❌ Bad - Direct construction with raw Redis client
+const Redis = require('ioredis');
+const client = new Redis({ host: 'localhost' });
+const store = new RedisElicitationStore(client, logger); // DON'T DO THIS
+```
+
+**Factory Pattern Benefits:**
+
+- Automatic provider detection (Redis, Vercel KV, etc.)
+- Consistent key prefix handling
+- Lazy-loading of dependencies (avoids bundling ioredis when not used)
+- Built-in error handling and logging
+- Support for fallback to memory store in development
+- Edge runtime detection and appropriate error messages
+
+**Creating New Store Factories:**
+
+1. Create a factory file (e.g., `my-store.factory.ts`)
+2. Use `RedisOptions` type for configuration
+3. Use type guards (`isRedisProvider()`, `isVercelKvProvider()`) for provider detection
+4. Lazy-require implementations: `const { MyStore } = require('./my.store')`
+5. Return store type information: `{ store, type: 'redis' | 'memory' }`
+6. Handle Edge runtime restrictions (throw if memory not supported)
+
+See `libs/sdk/src/elicitation/elicitation-store.factory.ts` for a complete example.
+
 ### RememberPlugin Usage
 
 When `RememberPlugin` is installed, tools can use `this.remember` and `this.approval`:
@@ -368,6 +464,130 @@ class MyTool extends ToolContext {
 }
 ```
 
+## Skills Feature Organization
+
+### Keep scope.instance.ts Lean
+
+Use helper functions for feature-specific registration logic:
+
+```typescript
+// ✅ Good - use helper from skill module
+import { registerSkillCapabilities } from '../skill/skill-scope.helper';
+
+await registerSkillCapabilities({
+  skillRegistry: this.scopeSkills,
+  flowRegistry: this.scopeFlows,
+  toolRegistry: this.scopeTools,
+  providers: this.scopeProviders,
+  skillsConfig: this.metadata.skillsConfig,
+  logger: this.logger,
+});
+
+// ❌ Bad - inline 40+ lines of skill registration logic in scope.instance.ts
+```
+
+### Skills-Only Mode Detection
+
+Use the utility from skill module instead of inline detection:
+
+```typescript
+// ✅ Good - use utility
+import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
+const skillsOnlyMode = detectSkillsOnlyMode(query);
+
+// ❌ Bad - duplicated inline logic
+const mode = query?.['mode'];
+const skillsOnlyMode = mode === 'skills_only' || (Array.isArray(mode) && mode.includes('skills_only'));
+```
+
+### Type Usage for Visibility
+
+Use the `SkillVisibility` type from common/metadata instead of inline literals:
+
+```typescript
+// ✅ Good - use exported type
+import { SkillVisibility } from '../common/metadata/skill.metadata';
+private readonly visibility: SkillVisibility;
+
+// ❌ Bad - inline literal union
+private readonly visibility: 'mcp' | 'http' | 'both';
+```
+
+### Private Fields in Entry Classes
+
+Use `private` keyword without underscore prefix, expose via getters:
+
+```typescript
+// ✅ Good - idiomatic TypeScript
+private readonly tags: string[];
+private readonly priority: number;
+private cachedContent?: CachedSkillContent;
+
+getTags(): string[] { return this.tags; }
+getPriority(): number { return this.priority; }
+
+// ❌ Bad - underscore prefix pattern
+private readonly _tags: string[];
+getTags(): string[] { return this._tags; }
+```
+
+### Tool Schema Access
+
+Use `ToolEntry.getInputJsonSchema()` for single source of truth:
+
+```typescript
+// ✅ Good - use entry method
+const inputSchema = tool.getInputJsonSchema();
+
+// ❌ Bad - duplicated conversion logic
+if (tool.rawInputSchema) { ... }
+else if (tool.inputSchema) { try { toJSONSchema(z.object(...)) } }
+```
+
+### Skills HTTP Caching
+
+Configure via `skillsConfig.cache` option, supports memory (default) and Redis:
+
+```typescript
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    cache: {
+      enabled: true,
+      redis: { provider: 'redis', host: 'localhost' },
+      ttlMs: 60000,
+    },
+  },
+})
+```
+
+### Skills HTTP Authentication
+
+Configure via `skillsConfig.auth` option:
+
+```typescript
+// API key auth
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'api-key',
+    apiKeys: ['sk-xxx', 'sk-yyy'],
+  },
+})
+
+// JWT bearer auth
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'bearer',
+    jwt: {
+      issuer: 'https://auth.example.com',
+      audience: 'skills-api',
+    },
+  },
+})
+```
+
 ## Anti-Patterns to Avoid
 
 ❌ **Don't**: Use `node:crypto` directly (use `@frontmcp/utils` for cross-platform support)
@@ -382,6 +602,7 @@ class MyTool extends ToolContext {
 ❌ **Don't**: Mutate rawInput in flows - use state.set() for flow state
 ❌ **Don't**: Hardcode capabilities in adapters - use registry.getCapabilities()
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
+❌ **Don't**: Put auth-related code in libs/sdk/src/auth (use libs/auth instead)
 
 ✅ **Do**: Use clean, descriptive names for everything
 ✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations
@@ -394,3 +615,4 @@ class MyTool extends ToolContext {
 ✅ **Do**: Use `unknown` instead of `any` for generic type defaults
 ✅ **Do**: Validate hooks match their entry type (fail fast)
 ✅ **Do**: Use specific MCP error classes with JSON-RPC codes
+✅ **Do**: Place authentication logic in `libs/auth`, import via `@frontmcp/auth`

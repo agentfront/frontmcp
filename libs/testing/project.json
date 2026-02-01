@@ -24,7 +24,9 @@
           "libs/testing/src/setup.ts",
           "libs/testing/src/fixtures/index.ts",
           "libs/testing/src/matchers/index.ts",
-          "libs/testing/src/playwright/index.ts"
+          "libs/testing/src/playwright/index.ts",
+          "libs/testing/src/perf/index.ts",
+          "libs/testing/src/perf/perf-setup.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
@@ -33,6 +35,8 @@
             "@frontmcp/sdk/*",
             "@frontmcp/ui",
             "@frontmcp/ui/*",
+            "@frontmcp/utils",
+            "@frontmcp/utils/*",
             "@modelcontextprotocol/sdk",
             "@modelcontextprotocol/sdk/*",
             "@playwright/test",
@@ -61,7 +65,9 @@
           "libs/testing/src/setup.ts",
           "libs/testing/src/fixtures/index.ts",
           "libs/testing/src/matchers/index.ts",
-          "libs/testing/src/playwright/index.ts"
+          "libs/testing/src/playwright/index.ts",
+          "libs/testing/src/perf/index.ts",
+          "libs/testing/src/perf/perf-setup.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },
@@ -70,6 +76,8 @@
             "@frontmcp/sdk/*",
             "@frontmcp/ui",
             "@frontmcp/ui/*",
+            "@frontmcp/utils",
+            "@frontmcp/utils/*",
             "@modelcontextprotocol/sdk",
             "@modelcontextprotocol/sdk/*",
             "@playwright/test",

@@ -135,6 +135,49 @@ tokenStorage: {
 
 ---
 
+## OrchestratedTokenStore Interface
+
+When using orchestrated mode with federated authentication, FrontMCP stores provider tokens using the `OrchestratedTokenStore` interface.
+
+### Interface Methods
+
+| Method | Description |
+|--------|-------------|
+| `storeTokens(authorizationId, providerId, tokens)` | Store tokens for a provider |
+| `getTokens(authorizationId, providerId)` | Retrieve tokens for a provider |
+| `deleteTokens(authorizationId, providerId)` | Delete tokens for a provider |
+| `getProviderIds(authorizationId)` | Get all provider IDs with stored tokens |
+| `migrateTokens(fromAuthId, toAuthId)` | Migrate tokens between authorization IDs |
+
+### Token Migration
+
+The `migrateTokens()` method is used internally during federated auth completion to transfer tokens from a pending authorization ID to the final authorization ID:
+
+```typescript
+import { InMemoryOrchestratedTokenStore } from '@frontmcp/sdk';
+
+const tokenStore = new InMemoryOrchestratedTokenStore();
+
+// During federated auth, tokens are stored with pending ID
+await tokenStore.storeTokens('pending:abc123', 'github', {
+  accessToken: 'gho_xxx',
+  refreshToken: 'ghr_xxx',
+});
+
+// After JWT issuance, tokens are migrated to real auth ID
+await tokenStore.migrateTokens('pending:abc123', 'user:real-auth-id');
+
+// Query which providers have tokens
+const providerIds = await tokenStore.getProviderIds('user:real-auth-id');
+// => ['github']
+```
+
+<Info>
+  `migrateTokens()` is called automatically during the OAuth token exchange flow when completing federated authentication.
+</Info>
+
+---
+
 ## Token Lifetimes
 
 FrontMCP uses default token lifetimes:

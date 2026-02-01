@@ -80,7 +80,7 @@ export { AuthHeaders } from './auth/auth-headers';
 export { TestUsers, createTestUser } from './auth/user-fixtures';
 export type { TestUserFixture } from './auth/user-fixtures';
 export { MockOAuthServer } from './auth/mock-oauth-server';
-export type { MockOAuthServerOptions, MockOAuthServerInfo } from './auth/mock-oauth-server';
+export type { MockOAuthServerOptions, MockOAuthServerInfo, MockTestUser } from './auth/mock-oauth-server';
 export { MockAPIServer } from './auth/mock-api-server';
 export type {
   MockAPIServerOptions,
@@ -91,6 +91,8 @@ export type {
   MockResponseHelper,
   MockRouteHandler,
 } from './auth/mock-api-server';
+export { MockCimdServer } from './auth/mock-cimd-server';
+export type { MockCimdServerOptions, MockCimdServerInfo, MockCimdClientOptions } from './auth/mock-cimd-server';
 
 // ═══════════════════════════════════════════════════════════════════
 // SERVER
@@ -266,3 +268,84 @@ export {
   EXPECTED_FRONTMCP_TOOLS_LIST_META_KEYS,
   EXPECTED_FRONTMCP_TOOL_CALL_META_KEYS,
 } from './example-tools';
+
+// ═══════════════════════════════════════════════════════════════════
+// PERFORMANCE TESTING
+// ═══════════════════════════════════════════════════════════════════
+
+export {
+  // Primary API
+  perfTest,
+
+  // Metrics Collection
+  MetricsCollector,
+  isGcAvailable,
+  forceGc,
+  forceFullGc,
+  formatBytes,
+  formatMicroseconds,
+  formatDuration,
+
+  // Leak Detection
+  LeakDetector,
+  assertNoLeak,
+  createLeakDetector,
+
+  // Fixtures
+  createPerfFixtures,
+  PerfFixturesImpl,
+  getGlobalMeasurements,
+  clearGlobalMeasurements,
+
+  // Baseline Storage
+  BaselineStore,
+  parseBaselineFromComment,
+  formatBaselineAsComment,
+  getBaselineStore,
+
+  // Regression Detection
+  RegressionDetector,
+  summarizeRegressions,
+  getRegressionDetector,
+
+  // Report Generation
+  ReportGenerator,
+  saveReports,
+  createReportGenerator,
+} from './perf';
+
+export type {
+  // Memory & CPU Types
+  MemoryMetrics,
+  CpuMetrics,
+  PerfSnapshot,
+
+  // Measurement Types
+  PerfMeasurement,
+  PerfIssue,
+  PerfThresholds,
+
+  // Leak Detection Types
+  LeakDetectionOptions,
+  LeakDetectionResult,
+
+  // Baseline & Regression Types
+  MetricBaseline,
+  TestBaseline,
+  PerfBaseline,
+  RegressionConfig,
+  MetricRegression,
+  RegressionResult,
+
+  // Report Types
+  PerfTestSummary,
+  ProjectSummary,
+  PerfReport,
+
+  // Fixture Types
+  PerfFixtures,
+  PerfTestFixtures,
+  PerfTestConfig,
+  PerfTestFn,
+  PerfTestWithFixtures,
+} from './perf';

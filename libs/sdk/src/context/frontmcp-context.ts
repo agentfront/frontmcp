@@ -17,6 +17,11 @@ import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
 import type { SessionIdPayload } from '../common/types';
 import { InvalidInputError } from '../errors/mcp.error';
+import { ElicitResult, ElicitOptions } from '../elicitation';
+import { ZodType } from 'zod';
+
+/** Symbol key for storing pre-resolved elicit result in context store */
+const PRE_RESOLVED_ELICIT_KEY = Symbol.for('frontmcp:pre-resolved-elicit');
 
 /**
  * Request metadata extracted from HTTP headers.
@@ -83,15 +88,32 @@ export interface TransportAccessor {
    *
    * @param message - Message to display to the user
    * @param requestedSchema - Zod schema for validating the response
-   * @returns Typed elicit result with action and validated content
+   * @param options - Elicit options (mode, ttl, elicitationId)
+   * @returns Typed elicit result with status and validated content
+   * @throws ElicitationNotSupportedError if client doesn't support elicitation
+   * @throws ElicitationTimeoutError if request times out
    */
-  elicit<T>(message: string, requestedSchema: T): Promise<{ action: string; content: unknown }>;
+  elicit<S extends ZodType>(
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>;
 }
 
 // Forward declaration for type reference (avoid circular imports)
 type FlowBaseRef = { readonly name: string };
 type ScopeRef = { readonly id: string; readonly logger: FrontMcpLogger };
-type TransportRef = { sendElicitRequest: TransportAccessor['elicit']; readonly type: string };
+interface TransportRef {
+  sendElicitRequest: <S extends ZodType>(
+    relatedRequestId: number | string,
+    message: string,
+    requestedSchema: S,
+    options?: ElicitOptions,
+  ) => Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>>;
+  readonly type: string;
+  /** JSON-RPC request ID for this request - used for elicitation routing */
+  readonly jsonRpcRequestId?: number | string;
+}
 
 /**
  * Session ID validation constants.
@@ -204,6 +226,16 @@ export class FrontMcpContext {
   private readonly marks: Map<string, number> = new Map();
   private readonly store: Map<string | symbol, unknown> = new Map();
 
+  // =====================
+  // DI Token Storage (for context extensions)
+  // =====================
+
+  /**
+   * Tokens that should be injected into the provider context.
+   * These are registered by auth flows and made available to tools via context extensions.
+   */
+  private readonly _contextTokens: Map<unknown, unknown> = new Map();
+
   constructor(args: FrontMcpContextArgs) {
     // Validate session ID
     validateSessionId(args.sessionId);
@@ -286,8 +318,23 @@ export class FrontMcpContext {
     if (!this._transport) return undefined;
     const transportRef = this._transport;
     return {
+      // TODO: Consider deriving supportsElicit from transport capabilities
+      // instead of hardcoding true when transport is available
       supportsElicit: true,
-      elicit: (message, schema) => transportRef.sendElicitRequest(message, schema),
+      elicit: (message, schema, options) => {
+        // Use the JSON-RPC request ID from the transport for proper stream routing
+        // The MCP SDK uses this to route elicitation requests through the correct SSE stream
+        const relatedRequestId = transportRef.jsonRpcRequestId;
+        if (relatedRequestId === undefined) {
+          // Fail fast: missing jsonRpcRequestId indicates a programming error or
+          // improper context setup. Using a fallback ID can cause routing collisions.
+          throw new InvalidInputError(
+            'Missing jsonRpcRequestId for elicitation request. ' +
+              'Ensure the transport context is properly initialized before calling elicit().',
+          );
+        }
+        return transportRef.sendElicitRequest(relatedRequestId, message, schema, options);
+      },
     };
   }
 
@@ -371,6 +418,73 @@ export class FrontMcpContext {
    */
   delete(key: string | symbol): boolean {
     return this.store.delete(key);
+  }
+
+  // =====================
+  // Pre-Resolved Elicit
+  // =====================
+
+  /**
+   * Set a pre-resolved elicit result for fallback continuation.
+   *
+   * Used when sendElicitationResult is called to re-invoke the original tool
+   * with the user's response already available. The tool's elicit() call will
+   * return this result immediately instead of making a new elicit request.
+   *
+   * @param result - The elicit result from the user
+   * @internal
+   */
+  setPreResolvedElicitResult(result: ElicitResult<unknown>): void {
+    this.store.set(PRE_RESOLVED_ELICIT_KEY, result);
+  }
+
+  /**
+   * Get the pre-resolved elicit result, if any.
+   *
+   * Called by elicit() to check if a result was pre-resolved (fallback continuation).
+   *
+   * @returns The pre-resolved result, or undefined if not set
+   * @internal
+   */
+  getPreResolvedElicitResult(): ElicitResult<unknown> | undefined {
+    return this.store.get(PRE_RESOLVED_ELICIT_KEY) as ElicitResult<unknown> | undefined;
+  }
+
+  /**
+   * Clear the pre-resolved elicit result.
+   *
+   * Called after the result has been consumed to prevent it from being used again.
+   *
+   * @internal
+   */
+  clearPreResolvedElicitResult(): void {
+    this.store.delete(PRE_RESOLVED_ELICIT_KEY);
+  }
+
+  // =====================
+  // Context Token Operations
+  // =====================
+
+  /**
+   * Set a token-based provider to be injected into the DI context.
+   * Used by auth flows to make providers available to tools via context extensions.
+   *
+   * @param token - DI token (e.g., ORCHESTRATED_AUTH_ACCESSOR)
+   * @param instance - Provider instance to inject
+   * @internal
+   */
+  setContextToken<T>(token: unknown, instance: T): void {
+    this._contextTokens.set(token, instance);
+  }
+
+  /**
+   * Get all context tokens for injection into provider views.
+   *
+   * @returns Map of token to instance
+   * @internal
+   */
+  getContextTokens(): ReadonlyMap<unknown, unknown> {
+    return new Map(this._contextTokens);
   }
 
   // =====================

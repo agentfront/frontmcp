@@ -1,0 +1,466 @@
+---
+title: DirectClient
+slug: deployment/direct-client
+icon: plug
+---
+
+DirectClient provides programmatic access to FrontMCP servers without HTTP or stdio transports. Connect directly from your TypeScript/JavaScript code with automatic LLM-aware response formatting.
+
+<Info>
+DirectClient is ideal for SDK integrations, unit testing, AI agent frameworks (LangChain, Vercel AI), and same-process embeddings where network overhead is undesirable.
+</Info>
+
+## Transport Comparison
+
+FrontMCP supports multiple ways to connect to MCP servers. Choose based on your use case:
+
+| Aspect | DirectClient | Stdio | HTTP (Streamable) |
+|--------|--------------|-------|-------------------|
+| **Use Case** | SDK access, testing, same-process | CLI tools, desktop clients | Remote servers, web apps |
+| **Connection** | In-process (no network) | Stdin/stdout pipes | HTTP/HTTPS requests |
+| **Process Model** | Same process | Separate process | Separate server |
+| **Latency** | Lowest | Low (IPC overhead) | Higher (network) |
+| **Session State** | In-memory | Per-process | Persistent (Redis) |
+| **Auth** | Direct token injection | Environment-based | Bearer tokens, OAuth |
+| **Best For** | Agent frameworks, tests | Claude Desktop, Cursor | Production APIs |
+
+### When to Use DirectClient
+
+- **Building AI agents**: Integrate MCP tools directly into LangChain, Vercel AI, or custom agent code
+- **Testing**: Write unit/integration tests without spinning up servers
+- **Same-process integrations**: Embed MCP capabilities in your application
+- **Performance-critical**: Avoid network/IPC overhead for high-throughput scenarios
+
+### When to Use Stdio
+
+- **Desktop MCP clients**: Claude Desktop, Cursor, VS Code extensions
+- **CLI tools**: Command-line interfaces that spawn MCP servers
+- **Local development**: Quick testing with standard MCP clients
+
+### When to Use HTTP Transport
+
+- **Production deployments**: Remote servers, load balancing, scaling
+- **Web applications**: Browser-based clients, REST-like access
+- **Multi-tenant systems**: Shared servers with authentication
+- **Distributed architectures**: Microservices, serverless
+
+---
+
+## Quick Start
+
+### Basic Connection
+
+```typescript
+import { connect } from '@frontmcp/sdk/direct';
+import { MyServer } from './server';
+
+// Get your FrontMCP scope
+const scope = await MyServer.createScope();
+
+// Connect directly
+const client = await connect(scope);
+
+// Use the client
+const tools = await client.listTools();
+const result = await client.callTool('my-tool', { arg: 'value' });
+
+// Clean up
+await client.close();
+```
+
+### LLM-Specific Connections
+
+For automatic tool/result formatting based on LLM platform:
+
+```typescript
+import {
+  connectOpenAI,
+  connectClaude,
+  connectLangChain,
+  connectVercelAI
+} from '@frontmcp/sdk/direct';
+
+// OpenAI format (function calling)
+const openaiClient = await connectOpenAI(scope, {
+  authToken: 'my-token',
+  session: { user: { sub: 'user-123' } }
+});
+
+// Claude format (tool_use blocks)
+const claudeClient = await connectClaude(scope);
+
+// LangChain format
+const langchainClient = await connectLangChain(scope);
+
+// Vercel AI format
+const vercelClient = await connectVercelAI(scope);
+```
+
+---
+
+## Core Operations
+
+### Tool Operations
+
+```typescript
+// List all tools (formatted for detected platform)
+const tools = await client.listTools();
+
+// Call a tool
+const result = await client.callTool('tool-name', {
+  param1: 'value1',
+  param2: 123
+});
+```
+
+### Resource Operations
+
+```typescript
+// List resources
+const resources = await client.listResources();
+
+// Read a resource
+const content = await client.readResource('file://path/to/resource.txt');
+
+// List resource templates
+const templates = await client.listResourceTemplates();
+```
+
+### Prompt Operations
+
+```typescript
+// List prompts
+const prompts = await client.listPrompts();
+
+// Get a prompt with arguments
+const prompt = await client.getPrompt('my-prompt', {
+  topic: 'TypeScript'
+});
+```
+
+---
+
+## Skills Operations
+
+Skills are modular knowledge packages that teach AI how to perform multi-step tasks.
+
+### Search Skills
+
+```typescript
+const result = await client.searchSkills('code review', {
+  tags: ['github'],           // Filter by tags
+  tools: ['github_get_pr'],   // Filter by required tools
+  limit: 10,                  // Max results (1-50)
+  requireAllTools: true       // Require all specified tools
+});
+
+// Result:
+// {
+//   skills: [{ id, name, description, score, tags, tools, source }],
+//   total: number,
+//   hasMore: boolean,
+//   guidance: string
+// }
+```
+
+### Load Skills
+
+```typescript
+const result = await client.loadSkills(['skill-1', 'skill-2'], {
+  format: 'full',              // 'full' | 'instructions-only'
+  activateSession: true,       // Activate skill session
+  policyMode: 'approval'       // 'strict' | 'approval' | 'permissive'
+});
+
+// Result:
+// {
+//   skills: [{
+//     id, name, description, instructions,
+//     tools: [{ name, purpose, available, inputSchema }],
+//     availableTools, missingTools, isComplete, formattedContent
+//   }],
+//   summary: { totalSkills, totalTools, allToolsAvailable },
+//   nextSteps: string
+// }
+```
+
+### List Skills
+
+```typescript
+const result = await client.listSkills({
+  offset: 0,
+  limit: 20,
+  tags: ['productivity'],
+  sortBy: 'priority',         // 'name' | 'priority' | 'createdAt'
+  sortOrder: 'desc'
+});
+
+// Result:
+// {
+//   skills: [{ id, name, description, tags, priority }],
+//   total: number,
+//   hasMore: boolean
+// }
+```
+
+---
+
+## Elicitation Handling
+
+Elicitation allows tools to request user input during execution. DirectClient can handle these requests programmatically.
+
+### Register Handler
+
+```typescript
+import type { ElicitationHandler } from '@frontmcp/sdk/direct';
+
+const handler: ElicitationHandler = async (request) => {
+  // request: { elicitId, message, requestedSchema, mode, expiresAt }
+
+  // Prompt user and return response
+  const userInput = await promptUser(request.message);
+
+  return {
+    action: 'accept',  // 'accept' | 'cancel' | 'decline'
+    content: userInput
+  };
+};
+
+// Register handler (returns unsubscribe function)
+const unsubscribe = client.onElicitation(handler);
+
+// Call a tool that uses elicitation
+const result = await client.callTool('delete-file', { path: 'important.txt' });
+
+// Clean up
+unsubscribe();
+```
+
+<Warning>
+If no handler is registered, elicitation requests are automatically declined.
+</Warning>
+
+### Manual Submission
+
+For async or external elicitation handling:
+
+```typescript
+await client.submitElicitationResult('elicit-123', {
+  action: 'accept',
+  content: { approved: true, comment: 'Looks good!' }
+});
+```
+
+---
+
+## Completion Operations
+
+Request argument completion for prompts or resources:
+
+```typescript
+// Complete for a prompt argument
+const result = await client.complete({
+  ref: { type: 'ref/prompt', name: 'my-prompt' },
+  argument: { name: 'topic', value: 'Type' }
+});
+// result.completion.values: ['TypeScript', 'Types', 'Typography']
+
+// Complete for a resource argument
+const resourceResult = await client.complete({
+  ref: { type: 'ref/resource', uri: 'file://{path}' },
+  argument: { name: 'path', value: '/src/' }
+});
+```
+
+---
+
+## Resource Subscriptions
+
+Subscribe to resource updates for real-time notifications:
+
+```typescript
+// Subscribe to a resource
+await client.subscribeResource('file://config.json');
+
+// Register update handler
+const unsubscribe = client.onResourceUpdated((uri: string) => {
+  console.log(`Resource updated: ${uri}`);
+});
+
+// Later: unsubscribe
+await client.unsubscribeResource('file://config.json');
+unsubscribe();
+```
+
+---
+
+## Logging Control
+
+Set server-side logging level:
+
+```typescript
+// Levels: 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'
+await client.setLogLevel('debug');
+```
+
+---
+
+## Connection Options
+
+```typescript
+interface ConnectOptions {
+  // Custom client info for platform detection
+  clientInfo?: {
+    name: string;
+    version: string;
+  };
+
+  // Session configuration
+  session?: {
+    id?: string;  // Custom session ID
+    user?: {      // User context
+      sub?: string;
+      email?: string;
+      name?: string;
+    };
+  };
+
+  // Auth token for protected servers
+  authToken?: string;
+
+  // Client capabilities
+  capabilities?: {
+    roots?: { listChanged?: boolean };
+    sampling?: {};
+    elicitation?: {};
+  };
+}
+```
+
+---
+
+## Info Methods
+
+```typescript
+// Get session ID
+const sessionId = client.getSessionId();
+
+// Get client info
+const clientInfo = client.getClientInfo();
+// { name: 'openai-agent', version: '1.0.0' }
+
+// Get server info
+const serverInfo = client.getServerInfo();
+// { name: 'my-server', version: '1.0.0' }
+
+// Get server capabilities
+const capabilities = client.getCapabilities();
+// { tools: { listChanged: true }, resources: {...} }
+
+// Get detected platform
+const platform = client.getDetectedPlatform();
+// 'openai' | 'claude' | 'langchain' | 'vercel-ai' | 'raw'
+```
+
+---
+
+## Platform-Specific Formatting
+
+DirectClient automatically formats tools and results based on the detected platform:
+
+| Platform | Tool Format | Result Format |
+|----------|-------------|---------------|
+| OpenAI | `{ type: 'function', function: {...} }` | Parsed JSON or string |
+| Claude | `{ name, description, input_schema }` | Content array |
+| LangChain | `{ name, description, schema }` | Parsed JSON |
+| Vercel AI | `{ [name]: { description, parameters } }` | Parsed JSON |
+| Raw | MCP native format | MCP CallToolResult |
+
+---
+
+## Error Handling
+
+```typescript
+try {
+  const result = await client.callTool('my-tool', args);
+} catch (error) {
+  if (error.code === -32002) {
+    // Resource not found
+  } else if (error.code === -32602) {
+    // Invalid params
+  } else if (error.code === -32603) {
+    // Internal error
+  }
+}
+```
+
+---
+
+## Type Exports
+
+All types are exported from `@frontmcp/sdk/direct`:
+
+```typescript
+import type {
+  // Core
+  DirectClient,
+  ConnectOptions,
+  LLMConnectOptions,
+  ClientInfo,
+  LLMPlatform,
+
+  // Skills
+  SearchSkillsOptions,
+  SearchSkillsResult,
+  LoadSkillsOptions,
+  LoadSkillsResult,
+  ListSkillsOptions,
+  ListSkillsResult,
+
+  // Elicitation
+  ElicitationRequest,
+  ElicitationResponse,
+  ElicitationHandler,
+
+  // Completion
+  CompleteOptions,
+  CompleteResult,
+
+  // Logging
+  McpLogLevel,
+} from '@frontmcp/sdk/direct';
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always close the client">
+    ```typescript
+    const client = await connect(scope);
+    try {
+      // Use client...
+    } finally {
+      await client.close();
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use LLM-specific helpers">
+    Use `connectOpenAI`, `connectClaude`, etc. for automatic response formatting instead of manual conversion.
+  </Accordion>
+
+  <Accordion title="Handle elicitation for interactive tools">
+    Register an `onElicitation` handler if your tools use `this.elicit()` for user input.
+  </Accordion>
+
+  <Accordion title="Check capabilities before using optional features">
+    ```typescript
+    const caps = client.getCapabilities();
+    if (caps.resources?.subscribe) {
+      await client.subscribeResource(uri);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

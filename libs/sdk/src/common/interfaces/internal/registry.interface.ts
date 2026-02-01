@@ -118,6 +118,9 @@ export interface ToolRegistryInterface {
   // inline tools plus discovered by nested tool registries
   getTools(includeHidden?: boolean): ToolEntry[];
 
+  // tools appropriate for MCP listing based on client elicitation support
+  getToolsForListing(supportsElicitation?: boolean): ToolEntry[];
+
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];
 
@@ -194,9 +197,13 @@ export type AppRegistryKind =
   | 'ToolRegistry'
   | 'PromptRegistry'
   | 'ResourceRegistry'
-  | 'AgentRegistry';
+  | 'AgentRegistry'
+  | 'SkillRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
+
+// Import SkillRegistryInterface - using type import to avoid circular dependency
+import type { SkillRegistryInterface } from '../../../skill/skill.registry';
 
 export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;
@@ -212,4 +219,5 @@ export type RegistryType = {
   ResourceRegistry: ResourceRegistryInterface;
   PromptRegistry: PromptRegistryInterface;
   AgentRegistry: AgentRegistryInterface;
+  SkillRegistry: SkillRegistryInterface;
 };

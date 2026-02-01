@@ -349,10 +349,20 @@ export interface ExtAppsInitializeResult {
     version: string;
   };
   hostCapabilities: {
+    /** Host supports opening links */
     openLink?: boolean;
+    /** Host supports proxying tool calls to the MCP server */
     serverToolProxy?: boolean;
+    /** Host supports reading resources */
     resourceRead?: boolean;
+    /** Host supports logging */
     logging?: boolean;
+    /** Host supports model context updates */
+    modelContextUpdate?: boolean;
+    /** Host supports widget-defined tools */
+    widgetTools?: boolean;
+    /** Supported display modes */
+    displayModes?: ('inline' | 'fullscreen' | 'pip')[];
   };
   hostContext: HostContext;
 }

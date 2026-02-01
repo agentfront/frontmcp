@@ -2,13 +2,7 @@
  * Namespaced Storage Tests
  */
 import { MemoryStorageAdapter } from '../adapters/memory';
-import {
-  NamespacedStorageImpl,
-  buildPrefix,
-  createRootStorage,
-  createNamespacedStorage,
-  NAMESPACE_SEPARATOR,
-} from '../namespace';
+import { buildPrefix, createRootStorage, createNamespacedStorage } from '../namespace';
 import type { NamespacedStorage } from '../types';
 
 describe('Namespaced Storage', () => {
@@ -199,6 +193,15 @@ describe('Namespaced Storage', () => {
       expect(keys).toContain('key2');
       expect(keys).toContain('sub:key3');
       expect(keys).not.toContain('ns:key1'); // Prefix should be stripped
+    });
+
+    it('should handle unprefixing when key does not start with prefix', async () => {
+      // Test with root storage (empty prefix) - unprefixKey should return key unchanged
+      const rootKeys = await storage.keys('*');
+      // Keys should be returned as-is when there's no prefix
+      expect(rootKeys).toContain('ns:key1');
+      expect(rootKeys).toContain('ns:key2');
+      expect(rootKeys).toContain('other:key');
     });
 
     it('should filter with pattern within namespace', async () => {

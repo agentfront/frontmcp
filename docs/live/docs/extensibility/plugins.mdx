@@ -20,6 +20,7 @@ import { Plugin } from '@frontmcp/sdk';
   providers: [MyProvider],     // plugin-scoped providers
   exports: [MyProvider],       // re-export to host app
   tools: [MyTool],             // contribute tools
+  skills: [MySkill],           // contribute skills
 })
 export default class MyPlugin {}
 ```
@@ -237,6 +238,62 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   }
 }
 ```
+
+## Contributing Skills
+
+Plugins can contribute skills that teach AI how to perform workflows using the plugin's tools:
+
+```ts
+import { Plugin, Skill, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Plugin tool
+const deployInputSchema = z.object({
+  environment: z.enum(['staging', 'production']),
+  version: z.string(),
+});
+
+@Tool({
+  name: 'deploy_application',
+  description: 'Deploy application to specified environment',
+  inputSchema: deployInputSchema,
+})
+class DeployTool extends ToolContext<typeof deployInputSchema> {
+  async execute(input) {
+    return { success: true, environment: input.environment };
+  }
+}
+
+// Plugin skill that uses the tool
+@Skill({
+  name: 'deploy-workflow',
+  description: 'Complete deployment workflow',
+  instructions: `
+    ## Deployment Workflow
+    1. Use deploy_application to deploy
+    2. Verify deployment success
+  `,
+  tools: [
+    { tool: DeployTool, purpose: 'Deploy the application', required: true },
+  ],
+  tags: ['devops', 'deployment'],
+})
+class DeployWorkflowSkill {}
+
+@Plugin({
+  name: 'devops-plugin',
+  description: 'DevOps tools and deployment workflows',
+  tools: [DeployTool],
+  skills: [DeployWorkflowSkill],
+})
+export class DevOpsPlugin {}
+```
+
+Plugin skills are **automatically adopted** into the app's skill registry when the plugin is attached. They appear in `searchSkills` results alongside app-level skills and can be loaded with `loadSkill`.
+
+<Tip>
+Use plugin skills to bundle workflow knowledge with the tools they use. This creates self-contained, reusable functionality modules.
+</Tip>
 
 ## Available Hooks
 

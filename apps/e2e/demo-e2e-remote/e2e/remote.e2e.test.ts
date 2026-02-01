@@ -12,59 +12,98 @@
  * - Prompt discovery and execution
  * - Gateway caching behavior
  * - Error handling
+ *
+ * Set DEBUG_E2E=1 environment variable for verbose logging.
  */
 import { test, expect, TestServer } from '@frontmcp/testing';
 
+// Enable verbose logging only when DEBUG_E2E is set
+const DEBUG = process.env['DEBUG_E2E'] === '1';
+const log = DEBUG ? console.log.bind(console) : () => {};
+
 // Local MCP server instance
 let localMcpServer: TestServer | null = null;
+// Mock Mintlify MCP server instance
+let mockMintlifyServer: TestServer | null = null;
 
-// Start local MCP server before all tests
+// Port configuration from E2E_PORT_RANGES:
+// - demo-e2e-remote: 50210-50219 (using 50210 for gateway, 50211 for local MCP)
+// - mock-api: 50910-50919 (using 50910 for mock Mintlify)
+const MOCK_MINTLIFY_PORT = 50910;
+const LOCAL_MCP_PORT = 50211;
+
+// Start local MCP and mock Mintlify servers before all tests
 beforeAll(async () => {
-  console.log('[E2E] Starting local MCP server on port 3099...');
+  log(`[E2E] Starting mock Mintlify server on port ${MOCK_MINTLIFY_PORT}...`);
+  try {
+    mockMintlifyServer = await TestServer.start({
+      command: 'npx tsx apps/e2e/demo-e2e-remote/src/mock-mintlify-server/main.ts',
+      project: 'mock-api',
+      port: MOCK_MINTLIFY_PORT,
+      startupTimeout: 60000,
+      healthCheckPath: '/',
+      debug: DEBUG,
+    });
+    log('[E2E] Mock Mintlify server started:', mockMintlifyServer.info.baseUrl);
+  } catch (error) {
+    console.error('[E2E] Failed to start mock Mintlify server:', error);
+    throw error;
+  }
+
+  log(`[E2E] Starting local MCP server on port ${LOCAL_MCP_PORT}...`);
   try {
     localMcpServer = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
-      port: 3099,
+      project: 'demo-e2e-remote',
+      port: LOCAL_MCP_PORT,
       startupTimeout: 60000,
       healthCheckPath: '/', // Root path returns 404 which is OK for health check
-      debug: true,
+      debug: DEBUG,
     });
-    console.log('[E2E] Local MCP server started:', localMcpServer.info.baseUrl);
+    log('[E2E] Local MCP server started:', localMcpServer.info.baseUrl);
 
     // Give the local server extra time to fully initialize
     // The health check passes when HTTP is ready, but MCP handlers need more time
-    console.log('[E2E] Waiting for local MCP server to fully initialize...');
+    log('[E2E] Waiting for servers to fully initialize...');
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    console.log('[E2E] Local MCP server should now be fully ready');
+    log('[E2E] All servers should now be fully ready');
   } catch (error) {
     console.error('[E2E] Failed to start local MCP server:', error);
     throw error;
   }
-}, 90000);
+}, 120000);
 
-// Stop local MCP server after all tests
+// Stop all servers after all tests
 afterAll(async () => {
   if (localMcpServer) {
-    console.log('[E2E] Stopping local MCP server...');
+    log('[E2E] Stopping local MCP server...');
     await localMcpServer.stop();
     localMcpServer = null;
+  }
+  if (mockMintlifyServer) {
+    log('[E2E] Stopping mock Mintlify server...');
+    await mockMintlifyServer.stop();
+    mockMintlifyServer = null;
   }
 }, 30000);
 
 test.describe('Remote MCP Server Orchestration E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-remote/src/main.ts',
+    project: 'demo-e2e-remote',
     publicMode: true,
-    port: 3098,
-    logLevel: 'debug',
-    startupTimeout: 60000, // Give gateway more time to connect to local server
-    env: { LOCAL_MCP_PORT: '3099' }, // Match the port where local MCP server is started
+    logLevel: DEBUG ? 'debug' : 'warn',
+    startupTimeout: 60000, // Give gateway more time to connect to servers
+    env: {
+      LOCAL_MCP_PORT: String(LOCAL_MCP_PORT), // Match the port where local MCP server is started
+      MOCK_MINTLIFY_PORT: String(MOCK_MINTLIFY_PORT), // Match the port where mock Mintlify server is started
+    },
   });
 
   test('basic connectivity test', async ({ mcp }) => {
-    console.log('[TEST] Running basic connectivity test');
+    log('[TEST] Running basic connectivity test');
     expect(mcp.isConnected()).toBe(true);
-    console.log('[TEST] Server connected, name:', mcp.serverInfo.name);
+    log('[TEST] Server connected, name:', mcp.serverInfo.name);
   });
 
   test.describe('Connection & Discovery', () => {
@@ -75,7 +114,7 @@ test.describe('Remote MCP Server Orchestration E2E', () => {
 
     test('should discover tools from local MCP server', async ({ mcp }) => {
       const tools = await mcp.tools.list();
-      console.log(
+      log(
         '[TEST] Found tools:',
         tools.map((t: unknown) => {
           if (typeof t === 'object' && t !== null && 'name' in t) {

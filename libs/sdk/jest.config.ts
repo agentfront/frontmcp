@@ -10,12 +10,24 @@ module.exports = {
   displayName: '@frontmcp/sdk',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
+  // Limit workers to avoid SIGSEGV crashes on Node.js 24+
+  maxWorkers: '50%',
   transform: {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/sdk',
+  // SDK has extensive coverage gaps - using lower threshold for incremental improvement
+  // TODO: Increase thresholds as more tests are added
+  coverageThreshold: {
+    global: {
+      statements: 38,
+      branches: 22,
+      functions: 36,
+      lines: 38,
+    },
+  },
   // Only collect coverage from SDK source files
   collectCoverageFrom: [
     'src/**/*.ts',

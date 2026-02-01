@@ -110,9 +110,13 @@ export class TestTokenFactory {
       ...options.claims,
     };
 
+    if (!this.privateKey) {
+      throw new Error('Private key not initialized');
+    }
+
     const token = await new SignJWT(payload)
       .setProtectedHeader({ alg: 'RS256', kid: this.keyId })
-      .sign(this.privateKey!);
+      .sign(this.privateKey);
 
     return token;
   }
@@ -177,9 +181,13 @@ export class TestTokenFactory {
       exp: now - 3600, // Expired 1 hour ago
     };
 
+    if (!this.privateKey) {
+      throw new Error('Private key not initialized');
+    }
+
     const token = await new SignJWT(payload)
       .setProtectedHeader({ alg: 'RS256', kid: this.keyId })
-      .sign(this.privateKey!);
+      .sign(this.privateKey);
 
     return token;
   }
@@ -213,8 +221,11 @@ export class TestTokenFactory {
    */
   async getPublicJwks(): Promise<{ keys: JWK[] }> {
     await this.ensureKeys();
+    if (!this.jwk) {
+      throw new Error('JWK not initialized');
+    }
     return {
-      keys: [this.jwk!],
+      keys: [this.jwk],
     };
   }
 

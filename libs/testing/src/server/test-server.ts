@@ -4,14 +4,21 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
+import { ServerStartError } from '../errors';
+import { reservePort } from './port-registry';
+
+// Environment variable to enable debug output for all test servers
+const DEBUG_SERVER = process.env['DEBUG_SERVER'] === '1' || process.env['DEBUG'] === '1';
 
 // ═══════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════
 
 export interface TestServerOptions {
-  /** Port to run the server on (default: random available port) */
+  /** Port to run the server on (default: from project range or random) */
   port?: number;
+  /** E2E project name for port range allocation */
+  project?: string;
   /** Command to start the server */
   command?: string;
   /** Working directory */
@@ -63,20 +70,23 @@ export interface TestServerInfo {
  */
 export class TestServer {
   private process: ChildProcess | null = null;
-  private readonly options: Required<TestServerOptions>;
+  private readonly options: Required<Omit<TestServerOptions, 'project'>> & { project?: string };
   private _info: TestServerInfo;
   private logs: string[] = [];
+  private portRelease: (() => Promise<void>) | null = null;
 
-  private constructor(options: TestServerOptions, port: number) {
+  private constructor(options: TestServerOptions, port: number, portRelease?: () => Promise<void>) {
     this.options = {
       port,
+      project: options.project,
       command: options.command ?? '',
       cwd: options.cwd ?? process.cwd(),
       env: options.env ?? {},
       startupTimeout: options.startupTimeout ?? 30000,
       healthCheckPath: options.healthCheckPath ?? '/health',
-      debug: options.debug ?? false,
+      debug: options.debug ?? DEBUG_SERVER,
     };
+    this.portRelease = portRelease ?? null;
 
     this._info = {
       baseUrl: `http://localhost:${port}`,
@@ -88,7 +98,13 @@ export class TestServer {
    * Start a test server with custom command
    */
   static async start(options: TestServerOptions): Promise<TestServer> {
-    const port = options.port ?? (await findAvailablePort());
+    // Use port registry for allocation
+    const project = options.project ?? 'default';
+    const { port, release } = await reservePort(project, options.port);
+
+    // Release the reservation since the actual server will bind the port
+    await release();
+
     const server = new TestServer(options, port);
     try {
       await server.startProcess();
@@ -110,11 +126,16 @@ export class TestServer {
       );
     }
 
-    const port = options.port ?? (await findAvailablePort());
+    // Use the Nx project name for port range allocation
+    const { port, release } = await reservePort(project, options.port);
+
+    // Release the reservation since the actual server will bind the port
+    await release();
 
     const serverOptions: TestServerOptions = {
       ...options,
       port,
+      project,
       command: `npx nx serve ${project} --port ${port}`,
       cwd: options.cwd ?? process.cwd(),
     };
@@ -318,19 +339,50 @@ export class TestServer {
     });
 
     // Wait for server to be ready, but detect early process exit
-    await this.waitForReadyWithExitDetection(() => {
-      if (exitError) {
-        return { exited: true, error: exitError };
-      }
-      if (processExited) {
-        const recentLogs = this.logs.slice(-10).join('\n');
-        return {
-          exited: true,
-          error: new Error(`Server process exited unexpectedly with code ${exitCode}.\n\nRecent logs:\n${recentLogs}`),
-        };
-      }
-      return { exited: false };
-    });
+    try {
+      await this.waitForReadyWithExitDetection(() => {
+        if (exitError) {
+          return { exited: true, error: exitError };
+        }
+        if (processExited) {
+          const allLogs = this.logs.join('\n');
+          const errorLogs = this.logs
+            .filter((l) => l.includes('[ERROR]') || l.toLowerCase().includes('error'))
+            .join('\n');
+          return {
+            exited: true,
+            error: new ServerStartError(
+              `Server process exited unexpectedly with code ${exitCode}.\n\n` +
+                `Command: ${this.options.command}\n` +
+                `CWD: ${this.options.cwd}\n` +
+                `Port: ${this.options.port}\n\n` +
+                `=== Error Logs ===\n${errorLogs || 'No error logs captured'}\n\n` +
+                `=== Full Logs ===\n${allLogs || 'No logs captured'}`,
+            ),
+          };
+        }
+        return { exited: false };
+      });
+    } catch (error) {
+      // Always print logs on startup failure for debugging
+      this.printLogsOnFailure('Server startup failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Print server logs on failure for debugging
+   */
+  private printLogsOnFailure(context: string): void {
+    const allLogs = this.logs.join('\n');
+    if (allLogs) {
+      console.error(`\n[TestServer] ${context}`);
+      console.error(`[TestServer] Command: ${this.options.command}`);
+      console.error(`[TestServer] Port: ${this.options.port}`);
+      console.error(`[TestServer] CWD: ${this.options.cwd}`);
+      console.error(`[TestServer] === Server Logs ===\n${allLogs}`);
+      console.error(`[TestServer] === End Logs ===\n`);
+    }
   }
 
   /**
@@ -340,27 +392,43 @@ export class TestServer {
     const timeoutMs = this.options.startupTimeout;
     const deadline = Date.now() + timeoutMs;
     const checkInterval = 100;
+    let lastHealthCheckError: string | null = null;
+    let healthCheckAttempts = 0;
+
+    this.log(`Waiting for server to be ready (timeout: ${timeoutMs}ms)...`);
 
     while (Date.now() < deadline) {
       // Check if process has exited before continuing to poll
       const exitStatus = checkExit();
       if (exitStatus.exited) {
-        throw exitStatus.error ?? new Error('Server process exited unexpectedly');
+        throw exitStatus.error ?? new ServerStartError('Server process exited unexpectedly');
       }
 
+      healthCheckAttempts++;
       try {
-        const response = await fetch(`${this._info.baseUrl}${this.options.healthCheckPath}`, {
+        const healthUrl = `${this._info.baseUrl}${this.options.healthCheckPath}`;
+        const response = await fetch(healthUrl, {
           method: 'GET',
           signal: AbortSignal.timeout(1000),
         });
 
         if (response.ok || response.status === 404) {
           // 404 is okay - it means the server is running but might not have a health endpoint
-          this.log('Server is ready');
+          this.log(`Server is ready after ${healthCheckAttempts} health check attempts`);
           return;
         }
-      } catch {
-        // Server not ready yet
+        lastHealthCheckError = `HTTP ${response.status}: ${response.statusText}`;
+      } catch (err) {
+        // Server not ready yet - capture error for debugging
+        lastHealthCheckError = err instanceof Error ? err.message : String(err);
+      }
+
+      // Log progress every 5 seconds
+      const elapsed = Date.now() - (deadline - timeoutMs);
+      if (elapsed > 0 && elapsed % 5000 < checkInterval) {
+        this.log(
+          `Still waiting for server... (${Math.round(elapsed / 1000)}s elapsed, last error: ${lastHealthCheckError})`,
+        );
       }
 
       await sleep(checkInterval);
@@ -369,10 +437,22 @@ export class TestServer {
     // Final check before throwing timeout error
     const finalExitStatus = checkExit();
     if (finalExitStatus.exited) {
-      throw finalExitStatus.error ?? new Error('Server process exited unexpectedly');
+      throw finalExitStatus.error ?? new ServerStartError('Server process exited unexpectedly');
     }
 
-    throw new Error(`Server did not become ready within ${timeoutMs}ms`);
+    // Build detailed timeout error
+    const allLogs = this.logs.join('\n');
+    throw new ServerStartError(
+      `Server did not become ready within ${timeoutMs}ms.\n\n` +
+        `Command: ${this.options.command}\n` +
+        `CWD: ${this.options.cwd}\n` +
+        `Port: ${this.options.port}\n` +
+        `Health check URL: ${this._info.baseUrl}${this.options.healthCheckPath}\n` +
+        `Health check attempts: ${healthCheckAttempts}\n` +
+        `Last health check error: ${lastHealthCheckError ?? 'none'}\n\n` +
+        `=== Server Logs ===\n${allLogs || 'No logs captured'}\n\n` +
+        `TIP: Set DEBUG_SERVER=1 or DEBUG=1 environment variable for verbose output`,
+    );
   }
 
   private log(message: string): void {
@@ -387,32 +467,21 @@ export class TestServer {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Find an available port
- */
-export async function findAvailablePort(): Promise<number> {
-  // Use a simple approach: try to create a server on port 0 to get an available port
-  const { createServer } = await import('net');
-
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-
-    server.listen(0, () => {
-      const address = server.address();
-      if (address && typeof address !== 'string') {
-        const port = address.port;
-        server.close(() => resolve(port));
-      } else {
-        reject(new Error('Could not get port'));
-      }
-    });
-
-    server.on('error', reject);
-  });
-}
-
-/**
  * Sleep for specified milliseconds
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// Re-export port registry utilities
+export {
+  reservePort,
+  getProjectPort,
+  getProjectPorts,
+  getPortRange,
+  releaseAllPorts,
+  getReservedPorts,
+  findAvailablePort,
+  E2E_PORT_RANGES,
+  type E2EProject,
+} from './port-registry';

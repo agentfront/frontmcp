@@ -510,6 +510,482 @@ server.clearLogs(): void
 
 ---
 
+## MockOAuthServer
+
+A fully-functional mock OAuth 2.0 / OpenID Connect server for testing authentication flows.
+
+### Constructor
+
+```ts
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+const tokenFactory = new TestTokenFactory();
+const server = new MockOAuthServer(tokenFactory, options?: MockOAuthServerOptions);
+```
+
+### MockOAuthServerOptions
+
+```ts
+interface MockOAuthServerOptions {
+  port?: number;                              // Port to listen on (default: auto)
+  autoApprove?: boolean;                      // Auto-approve authorization requests
+  testUser?: MockTestUser;                    // User info for authorized sessions
+  clientId?: string;                          // Expected client_id
+  clientSecret?: string;                      // Expected client_secret (optional)
+  validRedirectUris?: string[];               // Allowed redirect URIs (supports wildcards)
+  accessTokenTtlSeconds?: number;             // Access token lifetime (default: 3600)
+  refreshTokenTtlSeconds?: number;            // Refresh token lifetime (default: 2592000)
+  debug?: boolean;                            // Enable debug logging
+}
+```
+
+### MockTestUser
+
+```ts
+interface MockTestUser {
+  sub: string;                                // Subject identifier (required)
+  email?: string;                             // Email claim
+  name?: string;                              // Name claim
+  picture?: string;                           // Picture URL claim
+  claims?: Record<string, unknown>;           // Additional claims
+}
+```
+
+### Methods
+
+#### start
+
+Start the OAuth server.
+
+```ts
+server.start(): Promise<MockOAuthServerInfo>
+```
+
+#### stop
+
+Stop the OAuth server.
+
+```ts
+server.stop(): Promise<void>
+```
+
+#### setAutoApprove
+
+Enable or disable auto-approval of authorization requests.
+
+```ts
+server.setAutoApprove(enabled: boolean): void
+```
+
+#### setTestUser
+
+Set the test user for authorized sessions.
+
+```ts
+server.setTestUser(user: MockTestUser): void
+```
+
+#### addValidRedirectUri
+
+Add a valid redirect URI pattern.
+
+```ts
+server.addValidRedirectUri(uri: string): void
+```
+
+#### clearStoredTokens
+
+Clear all stored authorization codes and refresh tokens.
+
+```ts
+server.clearStoredTokens(): void
+```
+
+#### getTokenFactory
+
+Get the token factory used by this server.
+
+```ts
+server.getTokenFactory(): TestTokenFactory
+```
+
+### Properties
+
+#### info
+
+Server information (available after `start()`).
+
+```ts
+interface MockOAuthServerInfo {
+  baseUrl: string;                            // Base URL (e.g., http://localhost:8080)
+  port: number;                               // Listening port
+  issuer: string;                             // Token issuer URL
+  jwksUrl: string;                            // JWKS endpoint URL
+}
+```
+
+### Supported Endpoints
+
+| Endpoint | Description |
+| -------- | ----------- |
+| `/.well-known/openid-configuration` | OpenID Connect discovery |
+| `/.well-known/oauth-authorization-server` | OAuth 2.0 metadata |
+| `/.well-known/jwks.json` | JSON Web Key Set |
+| `/oauth/authorize` | Authorization endpoint |
+| `/oauth/token` | Token endpoint |
+| `/userinfo` | UserInfo endpoint |
+
+### Supported Grant Types
+
+- `authorization_code` - Standard OAuth 2.0 authorization code flow
+- `refresh_token` - Token refresh
+- `anonymous` - Issue anonymous tokens (for testing)
+
+### Example
+
+```ts
+import { test } from '@frontmcp/testing';
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+
+test.describe('OAuth integration', () => {
+  let oauthServer: MockOAuthServer;
+
+  test.beforeAll(async () => {
+    const tokenFactory = new TestTokenFactory();
+    oauthServer = new MockOAuthServer(tokenFactory, {
+      autoApprove: true,
+      testUser: { sub: 'user-123', email: 'test@example.com' },
+      clientId: 'my-client',
+      validRedirectUris: ['http://localhost:*/callback'],
+    });
+    await oauthServer.start();
+  });
+
+  test.afterAll(async () => {
+    await oauthServer.stop();
+  });
+
+  test('should complete OAuth flow', async () => {
+    // Construct endpoints from baseUrl:
+    // `${oauthServer.info.baseUrl}/oauth/authorize`
+    // `${oauthServer.info.baseUrl}/oauth/token`
+  });
+});
+```
+
+---
+
+## MockCimdServer
+
+Mock server for CIMD (Client ID Metadata Documents) testing. Serves client metadata documents at configurable paths, allowing testing of OAuth flows with dynamic client registration via CIMD.
+
+### Constructor
+
+```ts
+import { MockCimdServer } from '@frontmcp/testing';
+
+const cimdServer = new MockCimdServer(options?: MockCimdServerOptions);
+```
+
+### MockCimdServerOptions
+
+```ts
+interface MockCimdServerOptions {
+  port?: number;                            // Port to listen on (default: random available port)
+  debug?: boolean;                          // Enable debug logging
+}
+```
+
+### MockCimdClientOptions
+
+Options for registering a mock CIMD client.
+
+```ts
+interface MockCimdClientOptions {
+  name: string;                             // Human-readable name (also used for URL path)
+  path?: string;                            // Custom path (default: derived from name)
+  redirectUris?: string[];                  // Redirect URIs (default: ['http://localhost:3000/callback'])
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post' | 'private_key_jwt';
+  grantTypes?: string[];                    // OAuth grant types (default: ['authorization_code'])
+  responseTypes?: string[];                 // OAuth response types (default: ['code'])
+  clientUri?: string;                       // Client home page URL
+  logoUri?: string;                         // Client logo URL
+  scope?: string;                           // Requested OAuth scopes (space-separated)
+  contacts?: string[];                      // Contact emails
+}
+```
+
+### Methods
+
+#### start
+
+Start the mock CIMD server.
+
+```ts
+cimdServer.start(): Promise<MockCimdServerInfo>
+```
+
+#### stop
+
+Stop the mock CIMD server.
+
+```ts
+cimdServer.stop(): Promise<void>
+```
+
+#### registerClient
+
+Register a client and return its client_id URL.
+
+```ts
+cimdServer.registerClient(options: MockCimdClientOptions): string
+```
+
+Returns the `client_id` URL to use in OAuth flows (e.g., `http://localhost:PORT/clients/test-client/metadata.json`).
+
+#### getClientId
+
+Get the client_id URL for a previously registered client.
+
+```ts
+cimdServer.getClientId(name: string): string
+```
+
+#### removeClient
+
+Remove a registered client.
+
+```ts
+cimdServer.removeClient(name: string): void
+```
+
+#### clear
+
+Clear all registered clients and custom responses.
+
+```ts
+cimdServer.clear(): void
+```
+
+#### registerInvalidDocument
+
+Register an invalid document for error testing.
+
+```ts
+cimdServer.registerInvalidDocument(path: string, document: unknown): void
+```
+
+#### registerFetchError
+
+Register a custom error response for a path.
+
+```ts
+cimdServer.registerFetchError(path: string, statusCode: number, body?: unknown): void
+```
+
+### Property
+
+#### info
+
+Server info (only available after `start()`).
+
+```ts
+cimdServer.info: MockCimdServerInfo
+```
+
+```ts
+interface MockCimdServerInfo {
+  baseUrl: string;                          // Base URL of the server
+  port: number;                             // Port the server is listening on
+}
+```
+
+### Example
+
+```ts
+import { test } from '@frontmcp/testing';
+import { MockCimdServer } from '@frontmcp/testing';
+
+test.describe('CIMD integration', () => {
+  let cimdServer: MockCimdServer;
+
+  test.beforeAll(async () => {
+    cimdServer = new MockCimdServer();
+    await cimdServer.start();
+  });
+
+  test.afterAll(async () => {
+    await cimdServer.stop();
+  });
+
+  test('should use CIMD client_id in OAuth flow', async () => {
+    // Register a client
+    const clientId = cimdServer.registerClient({
+      name: 'Test Client',
+      redirectUris: ['http://localhost:3000/callback'],
+    });
+
+    // clientId is now a URL like:
+    // http://localhost:PORT/clients/test-client/metadata.json
+
+    // Use clientId in OAuth flow
+    // The OAuth server will fetch the metadata from this URL
+  });
+
+  test('should test error handling', async () => {
+    // Register an error response
+    cimdServer.registerFetchError('/clients/broken/metadata.json', 500);
+
+    // Test how your code handles CIMD fetch failures
+  });
+});
+```
+
+---
+
+## TestTokenFactory
+
+Factory for creating JWT tokens for testing authentication.
+
+### Constructor
+
+```ts
+import { TestTokenFactory } from '@frontmcp/testing';
+
+const factory = new TestTokenFactory(options?: TokenFactoryOptions);
+```
+
+### TokenFactoryOptions
+
+```ts
+interface TokenFactoryOptions {
+  issuer?: string;                            // Token issuer (default: 'https://test-issuer.local')
+  audience?: string;                          // Token audience (default: 'test-audience')
+  expiresInSeconds?: number;                  // Default token lifetime (default: 3600)
+}
+```
+
+### Methods
+
+#### createTestToken
+
+Create a token with custom claims.
+
+```ts
+factory.createTestToken(options: CreateTokenOptions): Promise<string>
+```
+
+```ts
+interface CreateTokenOptions {
+  sub: string;                                // Subject (required)
+  scopes?: string[];                          // OAuth scopes
+  email?: string;                             // Email claim
+  name?: string;                              // Name claim
+  claims?: Record<string, unknown>;           // Custom claims
+  expiresIn?: number;                         // Lifetime in seconds
+}
+```
+
+#### createAdminToken
+
+Create a token with admin privileges.
+
+```ts
+factory.createAdminToken(): Promise<string>
+```
+
+Returns a token with `sub: 'test-admin'` and `scopes: ['*']`.
+
+#### createUserToken
+
+Create a token with standard user privileges.
+
+```ts
+factory.createUserToken(): Promise<string>
+```
+
+Returns a token with `sub: 'test-user'` and `scopes: ['read', 'write']`.
+
+#### createAnonymousToken
+
+Create an anonymous token.
+
+```ts
+factory.createAnonymousToken(): Promise<string>
+```
+
+Returns a token with `sub: 'anonymous'` and no scopes.
+
+#### createExpiredToken
+
+Create an already-expired token for testing expiration handling.
+
+```ts
+factory.createExpiredToken(options: Omit<CreateTokenOptions, 'expiresIn'>): Promise<string>
+```
+
+#### createTokenWithInvalidSignature
+
+Create a token with an invalid signature for testing signature verification.
+
+```ts
+factory.createTokenWithInvalidSignature(options: CreateTokenOptions): string
+```
+
+#### getPublicJwks
+
+Get the public JWKS for token verification.
+
+```ts
+factory.getPublicJwks(): JsonWebKeySet
+```
+
+#### getIssuer
+
+Get the token issuer.
+
+```ts
+factory.getIssuer(): string
+```
+
+#### getAudience
+
+Get the token audience.
+
+```ts
+factory.getAudience(): string
+```
+
+### Example
+
+```ts
+import { TestTokenFactory } from '@frontmcp/testing';
+
+const factory = new TestTokenFactory({
+  issuer: 'https://auth.example.com',
+  audience: 'my-api',
+});
+
+// Create various token types
+const adminToken = await factory.createAdminToken();
+const userToken = await factory.createUserToken();
+const customToken = await factory.createTestToken({
+  sub: 'custom-user',
+  scopes: ['read', 'write', 'delete'],
+  email: 'custom@example.com',
+  claims: { tenant_id: 'tenant-123' },
+});
+
+// For testing error cases
+const expiredToken = await factory.createExpiredToken({ sub: 'user' });
+const invalidToken = factory.createTokenWithInvalidSignature({ sub: 'user' });
+
+// Get JWKS for server configuration
+const jwks = factory.getPublicJwks();
+```
+
+---
+
 ## Mock Registry
 
 The `mcp.mock` API for mocking MCP responses.
@@ -902,6 +1378,23 @@ import type {
   // Server types
   ServerFixture,
   ClientOptions,
+
+  // OAuth server types
+  MockOAuthServer,
+  MockOAuthServerOptions,
+  MockOAuthServerInfo,
+  MockTestUser,
+
+  // CIMD server types
+  MockCimdServer,
+  MockCimdServerOptions,
+  MockCimdServerInfo,
+  MockCimdClientOptions,
+
+  // Token factory types
+  TestTokenFactory,
+  TokenFactoryOptions,
+  CreateTokenOptions,
 
   // Mock types
   MockOptions,

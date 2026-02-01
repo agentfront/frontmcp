@@ -25,14 +25,10 @@ import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 
 // Import utilities from @frontmcp/utils
-import type { NameCase } from '@frontmcp/utils';
-import { splitWords, toCase, sepFor, shortHash, ensureMaxLen } from '@frontmcp/utils';
 
 // MCP-specific naming utilities
-import { normalizeSegment, normalizeProviderId, normalizeOwnerPath } from '../utils/naming.utils';
 
 // Lineage utilities
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 
 export function collectToolMetadata(cls: ToolType): ToolMetadata {
   const extended = getMetadata(extendedToolMetadata, cls);
@@ -456,7 +452,7 @@ export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefiniti
     let parameters: Record<string, unknown>;
     if (tool.rawInputSchema) {
       // Already converted to JSON Schema
-      parameters = tool.rawInputSchema;
+      parameters = tool.rawInputSchema as Record<string, unknown>;
     } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
       // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
       // Convert to JSON Schema using the same approach as tools-list.flow.ts

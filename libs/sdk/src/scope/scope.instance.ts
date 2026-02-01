@@ -27,12 +27,26 @@ import ResourceRegistry from '../resource/resource.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import AgentRegistry from '../agent/agent.registry';
+import SkillRegistry from '../skill/skill.registry';
+import { SkillValidationError } from '../skill/errors/skill-validation.error';
+import { registerSkillCapabilities } from '../skill/skill-scope.helper';
+import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
+import { createSkillToolGuardHook } from '../skill/hooks';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { NotificationService } from '../notification';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
+import { ElicitationStore, createElicitationStore } from '../elicitation';
+import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
+import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error';
+import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import { normalizeTool } from '../tool/tool.utils';
+import { ToolInstance } from '../tool/tool.instance';
+import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { createEventStore } from '../transport/event-stores';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -48,6 +62,7 @@ export class Scope extends ScopeEntry {
   private scopeResources: ResourceRegistry;
   private scopePrompts: PromptRegistry;
   private scopeAgents: AgentRegistry;
+  private scopeSkills: SkillRegistry;
   private scopePlugins?: PluginRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
@@ -58,6 +73,15 @@ export class Scope extends ScopeEntry {
   readonly orchestrated: boolean = false;
 
   readonly server: FrontMcpServer;
+
+  /** Lazy-initialized elicitation store for distributed elicitation support */
+  private _elicitationStore?: ElicitationStore;
+
+  /** Optional skill session manager for tool authorization enforcement */
+  private _skillSession?: SkillSessionManager;
+
+  /** EventStore for SSE resumability support (optional) */
+  private _eventStore?: EventStore;
 
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
@@ -99,6 +123,32 @@ export class Scope extends ScopeEntry {
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
 
+    // Initialize EventStore for SSE resumability support (optional)
+    // Disabled by default because Claude.ai's client doesn't handle priming events correctly
+    const eventStoreConfig = transportConfig?.eventStore;
+    if (eventStoreConfig?.enabled) {
+      const { eventStore } = createEventStore(eventStoreConfig, this.logger);
+      this._eventStore = eventStore;
+      this.logger.info('EventStore initialized for SSE resumability', {
+        provider: eventStoreConfig.provider ?? 'memory',
+      });
+    }
+
+    // Initialize elicitation store for distributed elicitation support
+    // Only initialize if elicitation is explicitly enabled (default: false)
+    const elicitationEnabled = this.metadata.elicitation?.enabled === true;
+    if (elicitationEnabled) {
+      // Use elicitation-specific redis config, or fall back to global redis
+      const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
+      const { store: elicitStore } = await createElicitationStore({
+        redis: elicitationRedis,
+        keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
+        logger: this.logger,
+        isEdgeRuntime: this.isEdgeRuntime(),
+      });
+      this._elicitationStore = elicitStore;
+    }
+
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     await this.scopeAuth.ready;
 
@@ -121,6 +171,13 @@ export class Scope extends ScopeEntry {
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
+
+    // Register sendElicitationResult system tool (hidden by default)
+    // This tool is used for fallback elicitation with non-supporting clients
+    // Only register if elicitation is enabled
+    if (elicitationEnabled) {
+      this.registerSendElicitationResultTool(scopeRef);
+    }
 
     this.toolUIRegistry = new ToolUIRegistry();
 
@@ -262,12 +319,91 @@ export class Scope extends ScopeEntry {
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeAgents.ready;
 
+    // Initialize skill registry (scope-level skills from @FrontMcp metadata)
+    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
+    await this.scopeSkills.ready;
+
+    // Initialize skill session manager if skills are available
+    // Skill sessions enable tool authorization enforcement at runtime
+    // The session manager is always initialized when skills exist, but
+    // session activation is opt-in via LoadSkillFlow's activateSession parameter
+    if (this.scopeSkills.hasAny()) {
+      // Use in-memory store for now (Redis support can be added later)
+      const store = createSkillSessionStore({ type: 'memory' });
+
+      this._skillSession = new SkillSessionManager(
+        {
+          defaultPolicyMode: 'permissive', // Default to permissive for backwards compatibility
+        },
+        this.logger,
+        store,
+      );
+
+      // Register skill tool authorization guard hook
+      // This hook intercepts tool calls and enforces skill-based allowlists
+      const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
+        logger: this.logger,
+        trackToolCalls: true,
+      });
+      const guardHookInstance = new GuardHookClass();
+      const hookRecords = normalizeHooksFromCls(guardHookInstance);
+      if (hookRecords.length > 0) {
+        await this.scopeHooks.registerHooks(true, ...hookRecords);
+        this.logger.verbose('Skill tool authorization guard hook registered');
+      }
+
+      this.logger.verbose('Skill session manager initialized', {
+        storeType: store.type,
+      });
+    }
+
+    // Validate all skills after everything is initialized
+    // This ensures tools from plugins/adapters are also available for validation
+    if (this.scopeSkills.hasAny()) {
+      try {
+        const report = await this.scopeSkills.validateAllTools();
+        if (report.warningCount > 0) {
+          this.logger.verbose('Skill validation completed with warnings', {
+            totalSkills: report.totalSkills,
+            warningCount: report.warningCount,
+          });
+        }
+      } catch (error) {
+        if (error instanceof SkillValidationError) {
+          this.logger.error('Skill validation failed', {
+            failedSkills: error.failedSkills.map((s) => ({
+              name: s.skillName,
+              missingTools: s.missingTools,
+            })),
+          });
+          throw error;
+        }
+        throw error;
+      }
+    }
+
+    // Register skill flows and tools if any skills are available
+    await registerSkillCapabilities({
+      skillRegistry: this.scopeSkills,
+      flowRegistry: this.scopeFlows,
+      toolRegistry: this.scopeTools,
+      providers: this.scopeProviders,
+      skillsConfig: this.metadata.skillsConfig,
+      logger: this.logger,
+    });
+
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
 
-    // Register logging, completion, and agent flows
-    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow, CallAgentFlow]);
+    // Register logging, completion, agent, and elicitation flows
+    await this.scopeFlows.registryFlows([
+      SetLevelFlow,
+      CompleteFlow,
+      CallAgentFlow,
+      ElicitationRequestFlow,
+      ElicitationResultFlow,
+    ]);
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
@@ -352,12 +488,116 @@ export class Scope extends ScopeEntry {
     return this.scopeAgents;
   }
 
+  get skills(): SkillRegistry {
+    return this.scopeSkills;
+  }
+
+  /**
+   * Get the skill session manager for tool authorization enforcement.
+   * Returns undefined if skill sessions are not enabled.
+   *
+   * Skill sessions provide:
+   * - Tool allowlists: Only tools declared in the active skill can be called
+   * - Policy modes: strict (block), approval (prompt), or permissive (warn)
+   * - Rate limiting: Optional per-session tool call limits
+   *
+   * Enable via @FrontMcp metadata: `skills: { sessions: { enabled: true, defaultPolicyMode: 'strict' } }`
+   */
+  get skillSession(): SkillSessionManager | undefined {
+    return this._skillSession;
+  }
+
   get plugins(): PluginRegistry | undefined {
     return this.scopePlugins;
   }
 
   get notifications(): NotificationService {
     return this.notificationService;
+  }
+
+  /**
+   * Get the elicitation store for distributed elicitation support.
+   *
+   * Lazily initializes the store using the elicitation store factory:
+   * - Redis: Uses RedisElicitationStore for distributed deployments
+   * - In-memory: Uses InMemoryElicitationStore for single-node/dev
+   * - Edge runtime without Redis: Throws error (Edge functions are stateless)
+   *
+   * @see createElicitationStore for factory implementation details
+   */
+  get elicitationStore(): ElicitationStore {
+    if (!this._elicitationStore) {
+      throw new ElicitationStoreNotInitializedError();
+    }
+    return this._elicitationStore;
+  }
+
+  /**
+   * Get the EventStore for SSE resumability support.
+   *
+   * Returns undefined if EventStore is not enabled.
+   * When enabled, clients can reconnect and resume missed SSE messages
+   * using the Last-Event-ID header per the MCP protocol.
+   *
+   * Enable via @FrontMcp metadata:
+   * ```typescript
+   * transport: {
+   *   eventStore: {
+   *     enabled: true,
+   *     provider: 'memory',  // or 'redis'
+   *   }
+   * }
+   * ```
+   */
+  get eventStore(): EventStore | undefined {
+    return this._eventStore;
+  }
+
+  /**
+   * Register the sendElicitationResult system tool.
+   * This tool is hidden by default and only shown to clients that don't support elicitation.
+   */
+  private registerSendElicitationResultTool(scopeRef: EntryOwnerRef): void {
+    try {
+      const toolRecord = normalizeTool(SendElicitationResultTool);
+      const systemToolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
+        kind: 'scope',
+        id: '_system',
+        ref: SendElicitationResultTool,
+      });
+      this.scopeTools.registerToolInstance(systemToolEntry);
+      this.logger.verbose('Registered sendElicitationResult system tool');
+    } catch (error) {
+      // Log error but don't fail scope initialization
+      this.logger.warn(
+        `Failed to register sendElicitationResult tool: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Detect if running on Edge runtime (Vercel Edge, Cloudflare Workers).
+   * Edge functions are stateless and require external storage for elicitation.
+   */
+  private isEdgeRuntime(): boolean {
+    // Check for Vercel Edge Runtime
+    if (typeof globalThis !== 'undefined' && 'EdgeRuntime' in globalThis) {
+      return true;
+    }
+    // Check for Cloudflare Workers
+    if (typeof globalThis !== 'undefined' && 'caches' in globalThis && !('window' in globalThis)) {
+      return true;
+    }
+    // Check for common environment variables (guarded for Edge runtimes where process may not exist)
+    if (
+      typeof process !== 'undefined' &&
+      typeof process.env !== 'undefined' &&
+      process.env['VERCEL_ENV'] !== undefined &&
+      process.env['EDGE_RUNTIME'] !== undefined
+    ) {
+      return true;
+    }
+    return false;
   }
 
   /**

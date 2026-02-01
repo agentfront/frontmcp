@@ -22,6 +22,7 @@ export default class RedisProvider {
       maxRetriesPerRequest: 3,
     });
 
+    // TODO: migrate to the storage utils
     this.client.on('connect', () => console.log('[Redis] Connected'));
     this.client.on('error', (err) => console.error('[Redis] Error:', err));
   }

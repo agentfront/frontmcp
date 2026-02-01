@@ -27,14 +27,18 @@ import {
   deriveExpectedAudience,
 } from '@frontmcp/auth';
 import type { JSONWebKeySet } from 'jose';
+import { deriveAuthorizationId } from '../utils';
 import {
   PublicAuthorization,
   TransparentAuthorization,
   OrchestratedAuthorization,
+  OrchestratedProviderState,
   Authorization,
   TransparentVerifiedPayload,
+  TokenStore,
 } from '../authorization';
 import { authUserSchema, llmSafeAuthContextSchema } from '../authorization';
+import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 // Input schema
 const inputSchema = httpRequestInputSchema;
@@ -396,7 +400,37 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       });
     } else if (authMode === 'orchestrated') {
       // Orchestrated mode: local auth server
-      // TODO: Retrieve token store from scope configuration
+      // Get the token store from LocalPrimaryAuth for secure token retrieval
+      let tokenStore: TokenStore | undefined;
+      if (this.scope.auth instanceof LocalPrimaryAuth) {
+        tokenStore = this.scope.auth.orchestratedTokenStore;
+      }
+
+      // Extract provider authorization from JWT claims (federated login)
+      const federatedClaims = jwtPayload?.['federated'] as
+        | { selectedProviders?: string[]; skippedProviders?: string[] }
+        | undefined;
+      const consentClaims = jwtPayload?.['consent'] as { selectedTools?: string[] } | undefined;
+      let providerStates: Record<string, OrchestratedProviderState> | undefined;
+      let providerIdsFromStore: string[] | undefined;
+
+      if (tokenStore) {
+        try {
+          const authorizationId = deriveAuthorizationId(token);
+          providerIdsFromStore = await tokenStore.getProviderIds(authorizationId);
+          providerStates = Object.fromEntries(
+            providerIdsFromStore.map((providerId) => [
+              providerId,
+              {
+                id: providerId,
+              },
+            ]),
+          );
+        } catch (error) {
+          this.logger.warn(`Failed to load provider tokens from store: ${error}`);
+        }
+      }
+
       authorization = OrchestratedAuthorization.create({
         token,
         user: {
@@ -409,7 +443,12 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
         claims: jwtPayload,
         expiresAt: jwtPayload?.['exp'] ? (jwtPayload['exp'] as number) * 1000 : undefined,
         primaryProviderId: this.scope.auth?.id ?? 'default',
-        // tokenStore will be injected by scope
+        tokenStore,
+        // Populate authorized tools from consent claims if available
+        authorizedToolIds: consentClaims?.selectedTools,
+        // Populate authorized providers from federated claims if available
+        authorizedProviderIds: providerIdsFromStore?.length ? providerIdsFromStore : federatedClaims?.selectedProviders,
+        providers: providerStates,
       });
     } else {
       // Public mode with token (authenticated public)

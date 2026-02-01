@@ -14,6 +14,7 @@ import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError } from '../errors';
+import { randomUUID } from '@frontmcp/utils';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -247,13 +248,30 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Create MCP server
     const mcpServer = new McpServer(scope.metadata.info, serverOptions);
 
-    // Register handlers
+    // Generate session ID for stdio connection
+    const sessionId = `stdio:${randomUUID()}`;
+
+    // Register handlers with auth context injection
     const handlers = createMcpHandlers({ scope, serverOptions });
     for (const handler of handlers) {
+      // Wrap handler to inject auth context (same pattern as in-memory-server)
+      const originalHandler = handler.handler;
+      const wrappedHandler = async (request: unknown, ctx: Record<string, unknown>) => {
+        // Inject auth info into context while preserving MCP SDK context properties
+        // Merge with existing authInfo to avoid clobbering any existing properties
+        const existingAuthInfo = ctx?.['authInfo'] as Record<string, unknown> | undefined;
+        const enrichedCtx = {
+          ...ctx,
+          authInfo: { ...existingAuthInfo, sessionId },
+        };
+        // The cast is safe: request type matches handler.requestSchema
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return originalHandler(request as any, enrichedCtx as any);
+      };
       // Cast required: MCP SDK's handler type expects specific context shape,
       // but our wrapped handlers preserve all context properties via pass-through
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      mcpServer.setRequestHandler(handler.requestSchema, handler.handler as any);
+      mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
     }
 
     // Create stdio transport and connect

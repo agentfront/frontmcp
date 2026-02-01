@@ -24,8 +24,9 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { randomUUID, sha256Hex } from '@frontmcp/utils';
+import { randomUUID, sha256Hex, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
 import { escapeHtml } from '../ui';
+import { startNextProvider, createFederatedAuthSession, type ProviderPkce } from '../session/federated-auth.session';
 
 const inputSchema = httpInputSchema;
 
@@ -63,7 +64,7 @@ const outputSchema = z.union([HttpRedirectSchema, HttpHtmlSchema]);
 
 const plan = {
   pre: ['parseInput', 'validatePendingAuth'],
-  execute: ['handleIncrementalAuth', 'createAuthorizationCode', 'redirectToClient'],
+  execute: ['handleIncrementalAuth', 'handleFederatedAuth', 'createAuthorizationCode', 'redirectToClient'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -185,18 +186,60 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // For incremental auth, we might need to use existing session's user sub
     const userSub = email ? this.generateUserSub(email) : undefined;
 
+    // Validate federated login is enabled for this authorization request
+    if (isFederated && !pendingAuth.federatedLogin) {
+      this.logger.warn('Federated login not enabled for this authorization request');
+      this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Federated login not enabled'), 400));
+      return;
+    }
+
     // Calculate skipped providers from federated login
     let skippedProviders: string[] | undefined;
     if (isFederated && pendingAuth.federatedLogin) {
+      // Require at least one provider to be selected
+      if (!selectedProviders || selectedProviders.length === 0) {
+        this.logger.warn('No federated providers selected');
+        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'No federated providers selected'), 400));
+        return;
+      }
+
       const allProviders = pendingAuth.federatedLogin.providerIds;
-      const selected = selectedProviders || [];
+      const selected = selectedProviders;
+
+      // Validate selectedProviders against allowed providerIds
+      const invalidProviders = selected.filter((id) => !allProviders.includes(id));
+      if (invalidProviders.length > 0) {
+        this.logger.warn(`Invalid provider IDs: ${invalidProviders.join(', ')}`);
+        this.respond(httpRespond.html(this.renderErrorPage('invalid_request', 'Invalid provider selection'), 400));
+        return;
+      }
+
       skippedProviders = allProviders.filter((id) => !selected.includes(id));
     }
 
     // Get consent state
     const consentEnabled = pendingAuth.consent?.enabled ?? false;
+    const availableToolIds = pendingAuth.consent?.availableToolIds ?? [];
+
+    if (consentEnabled && selectedTools) {
+      const invalidToolIds = selectedTools.filter((toolId) => !availableToolIds.includes(toolId));
+      if (invalidToolIds.length > 0) {
+        this.logger.warn(`Invalid consent tool selection: ${invalidToolIds.join(', ')}`);
+        this.respond(
+          httpRespond.html(
+            this.renderErrorPage(
+              'invalid_request',
+              'Invalid tool selection. Please restart authorization and choose from the available tools.',
+            ),
+            400,
+          ),
+        );
+        return;
+      }
+    }
+
     // If consent was enabled and user submitted selection, use it; otherwise use all available
-    const finalSelectedTools = consentEnabled && selectedTools ? selectedTools : pendingAuth.consent?.availableToolIds;
+    const finalSelectedTools = consentEnabled && selectedTools ? selectedTools : availableToolIds;
 
     this.state.set({
       clientId: pendingAuth.clientId,
@@ -254,6 +297,142 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     this.logger.info(
       `Incremental auth prepared for app: ${targetAppId}, existing auth: ${existingAuthorizationId || 'none'}`,
     );
+  }
+
+  /**
+   * Handle federated authentication - start provider chain
+   * When user selects providers on federated login page, we need to:
+   * 1. Create a federated session to track progress
+   * 2. Start OAuth flow with the first selected provider
+   * 3. Chain through remaining providers
+   */
+  @Stage('handleFederatedAuth')
+  async handleFederatedAuth() {
+    const {
+      isFederated,
+      selectedProviders,
+      email,
+      name,
+      userSub,
+      codeChallenge,
+      clientId,
+      redirectUri,
+      scopes,
+      originalState,
+      resource,
+    } = this.state;
+
+    // Skip if not federated auth or no providers selected
+    if (!isFederated || !selectedProviders || selectedProviders.length === 0) {
+      return;
+    }
+
+    // For federated auth, we need to create a session and start the provider chain
+    // instead of immediately creating an authorization code
+    this.logger.info(`Starting federated auth with ${selectedProviders.length} providers`);
+
+    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const sessionStore = localAuth.federatedSessionStore;
+
+    if (
+      !sessionStore ||
+      typeof sessionStore.store !== 'function' ||
+      typeof sessionStore.update !== 'function' ||
+      typeof sessionStore.delete !== 'function'
+    ) {
+      this.logger.error('Federated session store not configured');
+      this.respond(
+        httpRespond.html(this.renderErrorPage('server_error', 'Federated authentication not configured'), 500),
+      );
+      return;
+    }
+
+    // Validate required fields
+    if (!codeChallenge || !clientId || !redirectUri) {
+      this.logger.error('Missing required fields for federated auth');
+      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization request incomplete'), 500));
+      return;
+    }
+
+    // Create federated session using type-safe factory function
+    const federatedSession = createFederatedAuthSession({
+      pendingAuthId: this.state.required.pendingAuthId || randomUUID(),
+      clientId,
+      redirectUri,
+      scopes: scopes ?? [],
+      state: originalState,
+      resource,
+      userInfo: {
+        email,
+        name,
+        sub: userSub,
+      },
+      frontmcpPkce: {
+        challenge: codeChallenge,
+        method: 'S256',
+      },
+      providerIds: selectedProviders,
+    });
+
+    // Store the session
+    await sessionStore.store(federatedSession);
+    this.logger.info(`Created federated session: ${federatedSession.id}`);
+
+    // Get first provider and start OAuth flow
+    const firstProviderId = selectedProviders[0];
+
+    // Generate PKCE for the provider
+    const verifier = generateCodeVerifier();
+    const challenge = sha256Base64url(verifier);
+    const pkce: ProviderPkce = {
+      verifier,
+      challenge,
+      method: 'S256',
+    };
+
+    // Generate state for provider
+    const providerState = `federated:${federatedSession.id}:${randomUUID()}`;
+
+    // Start the provider in the session
+    startNextProvider(federatedSession, pkce, providerState);
+
+    // Update session with current provider info
+    await sessionStore.update(federatedSession);
+
+    // Build redirect URL to first provider
+    const providerConfig = localAuth.getProviderConfig(firstProviderId);
+    if (!providerConfig) {
+      // Provider not configured yet - clean up session and fall back to normal auth
+      this.logger.warn(`Provider ${firstProviderId} not configured, falling back to normal auth`);
+      await sessionStore.delete(federatedSession.id);
+      this.state.set({
+        isFederated: false,
+        selectedProviders: undefined,
+        skippedProviders: undefined,
+      });
+      return;
+    }
+
+    const redirectUrl = await localAuth.buildProviderAuthorizeUrl(firstProviderId, {
+      state: providerState,
+      codeChallenge: pkce.challenge,
+      codeChallengeMethod: 'S256',
+    });
+
+    if (!redirectUrl) {
+      this.logger.error(`Failed to build authorize URL for provider: ${firstProviderId}`);
+      await sessionStore.delete(federatedSession.id);
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('server_error', `Failed to initiate auth with provider: ${firstProviderId}`),
+          500,
+        ),
+      );
+      return;
+    }
+
+    this.logger.info(`Redirecting to first provider: ${firstProviderId}`);
+    this.respond(httpRespond.redirect(redirectUrl));
   }
 
   @Stage('createAuthorizationCode')

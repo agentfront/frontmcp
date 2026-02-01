@@ -4,7 +4,7 @@ import 'reflect-metadata';
 import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
 import { isUIType } from '@frontmcp/uipack/types';
@@ -24,7 +24,8 @@ const outputSchema = ListToolsResultSchema;
 const stateSchema = z.object({
   cursor: z.string().optional(),
   // z.any() used because AuthInfo is an external type from @modelcontextprotocol/sdk that varies by SDK version
-  authInfo: z.any().optional() as z.ZodType<AuthInfo>,
+  // Non-optional for 'authorized' flows - transport layer ensures authInfo is always present
+  authInfo: z.any() as z.ZodType<AuthInfo>,
   platformType: z.string().optional() as z.ZodType<AIPlatformType | undefined>,
   tools: z.array(
     z.object({
@@ -165,9 +166,16 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'tools/list');
     }
 
-    // Extract authInfo and detect platform type
+    // Extract authInfo - required for 'authorized' flows (transport layer ensures it's present)
     const authInfo = ctx?.authInfo;
-    const sessionId = authInfo?.sessionId;
+    if (!authInfo) {
+      throw new InternalMcpError(
+        'AuthInfo missing in tools/list for authorized flow - this should never happen',
+        'AUTH_INFO_MISSING',
+      );
+    }
+
+    const sessionId = authInfo.sessionId;
 
     // Cast scope to access notifications service for platform detection
     const scope = this.scope as Scope;
@@ -176,7 +184,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     // then fall back to notification service (detected from MCP clientInfo),
     // finally default to 'unknown'
     const platformType: AIPlatformType =
-      authInfo?.sessionIdPayload?.platformType ??
+      authInfo.sessionIdPayload?.platformType ??
       (sessionId ? scope.notifications?.getPlatformType(sessionId) : undefined) ??
       'unknown';
 
@@ -241,13 +249,27 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.info('findTools:start');
 
     try {
+      // Check for skills-only mode - return empty tools array
+      const { authInfo } = this.state.required;
+      if (authInfo.sessionIdPayload?.skillsOnlyMode) {
+        this.logger.info('findTools: skills-only mode - returning empty tools array');
+        this.state.set('tools', []);
+        this.logger.verbose('findTools:done (skills-only mode)');
+        return;
+      }
+
       const apps = this.scope.apps.getApps();
       this.logger.info(`findTools: discovered ${apps.length} app(s)`);
 
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
       const seenToolIds = new Set<string>();
 
-      const scopeTools = this.scope.tools.getTools();
+      // Get elicitation support from session payload (set during MCP initialize)
+      // authInfo is guaranteed by parseInput (throws if missing for authorized flow)
+      const supportsElicitation = authInfo.sessionIdPayload?.supportsElicitation;
+
+      // Get tools appropriate for this client's elicitation support
+      const scopeTools = this.scope.tools.getToolsForListing(supportsElicitation);
       this.logger.verbose(`findTools: scope tools=${scopeTools.length}`);
 
       for (const tool of scopeTools) {
@@ -261,7 +283,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         }
       }
 
-      this.logger.info(`findTools: total tools collected=${tools.length} (deduped from ${scopeTools.length})`);
+      this.logger.info(`findTools: total tools collected=${tools.length}`);
       if (tools.length === 0) {
         this.logger.warn('findTools: no tools found across apps');
       }
@@ -397,9 +419,11 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         };
 
         // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
-        const outputSchemaRaw = tool.getRawOutputSchema();
-        if (outputSchemaRaw) {
-          item.outputSchema = outputSchemaRaw;
+        // Note: When elicitation is enabled, getRawOutputSchema() transparently extends
+        // the schema to include the elicitation fallback response type
+        const outputSchema = tool.getRawOutputSchema();
+        if (outputSchema) {
+          item.outputSchema = outputSchema as typeof item.outputSchema;
         }
 
         // Add _meta for tools with UI configuration
@@ -451,7 +475,9 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // - Other platforms: ui/* keys only (Claude, Cursor, etc.)
           const meta: Record<string, unknown> = {};
           const isExtApps = platformType === 'ext-apps';
-          const widgetUri = `ui://widget/${encodeURIComponent(finalName)}.html`;
+
+          // Use custom resourceUri from config if provided, otherwise auto-generate
+          const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
 
           if (isOpenAIPlatform) {
             // OpenAI-specific meta keys for ChatGPT widget discovery
@@ -471,6 +497,23 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             // SEP-1865 MCP Apps specification uses ui/* keys only
             meta['ui/resourceUri'] = widgetUri;
             meta['ui/mimeType'] = 'text/html+mcp';
+
+            // Add widget capabilities if configured (for ext-apps initialization)
+            // Map flattened config to spec-compliant structure (ExtAppsWidgetCapabilities)
+            if (uiConfig.widgetCapabilities) {
+              const capabilities: { tools?: { listChanged?: boolean }; supportsPartialInput?: boolean } = {};
+
+              if (uiConfig.widgetCapabilities.toolListChanged !== undefined) {
+                capabilities.tools = { listChanged: uiConfig.widgetCapabilities.toolListChanged };
+              }
+              if (uiConfig.widgetCapabilities.supportsPartialInput !== undefined) {
+                capabilities.supportsPartialInput = uiConfig.widgetCapabilities.supportsPartialInput;
+              }
+
+              if (Object.keys(capabilities).length > 0) {
+                meta['ui/capabilities'] = capabilities;
+              }
+            }
 
             // Add manifest info for ext-apps (uses ui/* namespace)
             meta['ui/cdn'] = buildCDNInfoForUIType(uiType);

@@ -78,6 +78,7 @@ export class ExtAppsAdapter extends BaseAdapter {
   > = new Map();
   private _requestId = 0;
   private _trustedOrigin: string | undefined;
+  private _originTrustPending = false; // Guard against race condition in trust-on-first-use
   private _hostCapabilities: ExtAppsInitializeResult['hostCapabilities'] = {};
 
   constructor(config?: ExtAppsAdapterConfig) {
@@ -94,7 +95,13 @@ export class ExtAppsAdapter extends BaseAdapter {
   }
 
   /**
-   * Check if we're in an iframe (potential ext-apps context).
+   * Check if we're in an iframe with explicit ext-apps context.
+   *
+   * This adapter requires explicit ext-apps markers to avoid incorrectly
+   * matching other iframe-based platforms (e.g., Claude legacy artifacts).
+   *
+   * Claude MCP Apps (2026+) uses the ext-apps protocol - detected via
+   * __mcpAppsEnabled flag, which takes precedence over legacy Claude markers.
    */
   canHandle(): boolean {
     if (typeof window === 'undefined') return false;
@@ -103,16 +110,41 @@ export class ExtAppsAdapter extends BaseAdapter {
     const inIframe = window.parent !== window;
     if (!inIframe) return false;
 
-    // Check we're not already detected as OpenAI
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = window as any;
-    if (win.openai?.canvas) return false;
 
-    // Check for explicit ext-apps marker
+    // Check we're not already detected as OpenAI
+    if (win.openai?.canvas) return false;
+    if (win.openai && typeof win.openai.callTool === 'function') return false;
+
+    // Explicit ext-apps marker
     if (win.__mcpPlatform === 'ext-apps') return true;
 
-    // In an iframe without OpenAI SDK = likely ext-apps context
-    return true;
+    // ext-apps initialization flag (set by handshake)
+    if (win.__extAppsInitialized) return true;
+
+    // Claude MCP Apps mode (2026+) - uses ext-apps protocol
+    // See: https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/
+    if (win.__mcpAppsEnabled) return true;
+
+    // Legacy Claude detection - defer to Claude adapter
+    if (win.claude) return false;
+    if (win.__claudeArtifact) return false;
+    if (win.__mcpPlatform === 'claude') return false;
+    if (typeof location !== 'undefined') {
+      try {
+        const url = new URL(location.href);
+        const hostname = url.hostname.toLowerCase();
+        const isClaudeHost = hostname === 'claude.ai' || hostname.endsWith('.claude.ai');
+        const isAnthropicHost = hostname === 'anthropic.com' || hostname.endsWith('.anthropic.com');
+        if (isClaudeHost || isAnthropicHost) return false;
+      } catch {
+        // If URL parsing fails, fall through to other checks
+      }
+    }
+
+    // Do NOT default to true for any iframe
+    return false;
   }
 
   /**
@@ -124,13 +156,22 @@ export class ExtAppsAdapter extends BaseAdapter {
     // Setup message listener
     this._setupMessageListener();
 
-    // Call base initialization
-    await super.initialize();
+    try {
+      // Call base initialization
+      await super.initialize();
 
-    // Perform ui/initialize handshake
-    await this._performHandshake();
+      // Perform ui/initialize handshake
+      await this._performHandshake();
 
-    this._initialized = true;
+      this._initialized = true;
+    } catch (error) {
+      // Clean up message listener on failure to prevent memory leak
+      if (this._messageListener && typeof window !== 'undefined') {
+        window.removeEventListener('message', this._messageListener);
+        this._messageListener = undefined;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -159,7 +200,7 @@ export class ExtAppsAdapter extends BaseAdapter {
 
   override async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this._hostCapabilities.serverToolProxy) {
-      throw new Error('Server tool proxy not supported by host');
+      throw new ExtAppsNotSupportedError('Server tool proxy not supported by host');
     }
 
     return this._sendRequest('ui/callServerTool', {
@@ -188,6 +229,81 @@ export class ExtAppsAdapter extends BaseAdapter {
 
   override async requestClose(): Promise<void> {
     await this._sendRequest('ui/close', {});
+  }
+
+  // ============================================
+  // Extended ext-apps Methods (Full Specification)
+  // ============================================
+
+  /**
+   * Update the model context with widget state.
+   *
+   * This allows the widget to pass contextual information to the model,
+   * which can be used to inform subsequent interactions.
+   *
+   * @param context - The context data to update
+   * @param merge - Whether to merge with existing context (default: true)
+   */
+  async updateModelContext(context: unknown, merge = true): Promise<void> {
+    if (!this._hostCapabilities.modelContextUpdate) {
+      throw new ExtAppsNotSupportedError('Model context update not supported by host');
+    }
+
+    await this._sendRequest('ui/updateModelContext', { context, merge });
+  }
+
+  /**
+   * Send a log message to the host.
+   *
+   * Allows the widget to forward log messages to the host for debugging
+   * or monitoring purposes.
+   *
+   * @param level - Log level (debug, info, warn, error)
+   * @param message - Log message
+   * @param data - Optional additional data
+   */
+  async log(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: unknown): Promise<void> {
+    if (!this._hostCapabilities.logging) {
+      // Fallback to console logging if host doesn't support it
+      const logFn = console[level] || console.log;
+      logFn(`[Widget] ${message}`, data);
+      return;
+    }
+
+    await this._sendRequest('ui/log', { level, message, data });
+  }
+
+  /**
+   * Register a widget-defined tool.
+   *
+   * Allows the widget to dynamically register tools that can be
+   * invoked by the model or user.
+   *
+   * @param name - Tool name
+   * @param description - Tool description
+   * @param inputSchema - Tool input schema (JSON Schema format)
+   */
+  async registerTool(name: string, description: string, inputSchema: Record<string, unknown>): Promise<void> {
+    if (!this._hostCapabilities.widgetTools) {
+      throw new ExtAppsNotSupportedError('Widget tool registration not supported by host');
+    }
+
+    await this._sendRequest('ui/registerTool', { name, description, inputSchema });
+  }
+
+  /**
+   * Unregister a widget-defined tool.
+   *
+   * Removes a previously registered tool.
+   *
+   * @param name - Tool name to unregister
+   */
+  async unregisterTool(name: string): Promise<void> {
+    if (!this._hostCapabilities.widgetTools) {
+      throw new ExtAppsNotSupportedError('Widget tool unregistration not supported by host');
+    }
+
+    await this._sendRequest('ui/unregisterTool', { name });
   }
 
   // ============================================
@@ -295,7 +411,7 @@ export class ExtAppsAdapter extends BaseAdapter {
    * Handle partial tool input (streaming).
    */
   private _handleToolInputPartial(params: ExtAppsToolInputParams): void {
-    this._toolInput = { ...this._toolInput, ...params.arguments };
+    this._toolInput = { ...this._toolInput, ...(params.arguments || {}) };
 
     // Emit tool:input-partial event
     this._emitBridgeEvent('tool:input-partial', { arguments: this._toolInput });
@@ -412,6 +528,35 @@ export class ExtAppsAdapter extends BaseAdapter {
   // ============================================
 
   /**
+   * Validate that the handshake response has the expected structure.
+   */
+  private _isValidInitializeResult(result: unknown): result is ExtAppsInitializeResult {
+    if (!result || typeof result !== 'object') return false;
+
+    const r = result as Record<string, unknown>;
+
+    // hostCapabilities is optional but must be a non-null, non-array object if present
+    if (
+      r['hostCapabilities'] !== undefined &&
+      (typeof r['hostCapabilities'] !== 'object' ||
+        r['hostCapabilities'] === null ||
+        Array.isArray(r['hostCapabilities']))
+    ) {
+      return false;
+    }
+
+    // hostContext is optional but must be a non-null, non-array object if present
+    if (
+      r['hostContext'] !== undefined &&
+      (typeof r['hostContext'] !== 'object' || r['hostContext'] === null || Array.isArray(r['hostContext']))
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Perform the ui/initialize handshake with the host.
    */
   private async _performHandshake(): Promise<void> {
@@ -429,7 +574,14 @@ export class ExtAppsAdapter extends BaseAdapter {
     };
 
     try {
-      const result = (await this._sendRequest('ui/initialize', params)) as ExtAppsInitializeResult;
+      const rawResult = await this._sendRequest('ui/initialize', params);
+
+      // Validate response structure
+      if (!this._isValidInitializeResult(rawResult)) {
+        throw new Error('Invalid ui/initialize response structure');
+      }
+
+      const result = rawResult;
 
       // Store host capabilities
       this._hostCapabilities = result.hostCapabilities || {};
@@ -468,17 +620,32 @@ export class ExtAppsAdapter extends BaseAdapter {
   /**
    * Check if an origin is trusted.
    * Uses trust-on-first-use if no explicit origins configured.
+   *
+   * Security note: Trust-on-first-use has inherent risks. For production,
+   * always configure explicit trustedOrigins in adapter config.
    */
   private _isOriginTrusted(origin: string): boolean {
-    // Explicit trusted origins from config
+    // Explicit trusted origins from config (preferred for security)
     const trustedOrigins = this._config.options?.trustedOrigins;
     if (trustedOrigins && trustedOrigins.length > 0) {
       return trustedOrigins.includes(origin);
     }
 
     // Trust-on-first-use: trust the first origin we receive from
+    // Use a guard flag to prevent race condition where multiple
+    // messages arrive simultaneously before _trustedOrigin is set
     if (!this._trustedOrigin) {
+      // Check if another message is already establishing trust
+      if (this._originTrustPending) {
+        // Another message is in the process of establishing trust
+        // Reject this message to prevent race condition
+        return false;
+      }
+
+      // Mark that we're establishing trust
+      this._originTrustPending = true;
       this._trustedOrigin = origin;
+      this._originTrustPending = false; // Reset after successful trust establishment
       return true;
     }
 
@@ -509,4 +676,14 @@ export class ExtAppsAdapter extends BaseAdapter {
  */
 export function createExtAppsAdapter(config?: ExtAppsAdapterConfig): ExtAppsAdapter {
   return new ExtAppsAdapter(config);
+}
+
+/**
+ * Error thrown when a feature is not supported by the host.
+ */
+export class ExtAppsNotSupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExtAppsNotSupportedError';
+  }
 }
