@@ -1,0 +1,551 @@
+---
+title: Testing Plugins and Hooks
+slug: guides/testing-plugins-and-hooks
+description: Write E2E tests for custom plugins, hooks, and authorization logic
+icon: puzzle-piece
+---
+
+This guide covers advanced testing scenarios for FrontMCP applications, including testing plugins, hooks, caching behavior, and authorization logic.
+
+<Info>
+**Prerequisites**:
+- Completed [Testing Your First Tool](/frontmcp/guides/testing-your-first-tool)
+- Understanding of [plugins](/frontmcp/guides/create-plugin) and [hooks](/frontmcp/guides/customize-flow-stages)
+</Info>
+
+## What You'll Learn
+
+- Testing cache plugin behavior (hits and misses)
+- Testing authorization plugins
+- Testing hook execution order
+- Multi-client testing scenarios
+- Mocking external dependencies
+
+---
+
+## Testing Cache Plugin
+
+The Cache plugin stores tool results and returns them on subsequent calls. Test both cache hits and misses.
+
+### Setup
+
+```typescript
+import { test, expect } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+  env: {
+    REDIS_HOST: 'localhost',
+    REDIS_PORT: '6379',
+  },
+});
+```
+
+### Testing Cache Miss (First Call)
+
+```typescript
+test('first call executes tool (cache miss)', async ({ mcp, server }) => {
+  // Clear any cached data
+  server.clearLogs();
+
+  const result = await mcp.tools.call('expensive:get-report', {
+    reportId: 'unique-123',
+  });
+
+  expect(result).toBeSuccessful();
+
+  // Check logs to verify tool actually executed
+  const logs = server.getLogs();
+  expect(logs.some(log => log.includes('Generating report'))).toBe(true);
+});
+```
+
+### Testing Cache Hit (Subsequent Calls)
+
+```typescript
+test('subsequent calls return cached result', async ({ mcp, server }) => {
+  const input = { reportId: 'cached-456' };
+
+  // First call - cache miss
+  const result1 = await mcp.tools.call('expensive:get-report', input);
+  expect(result1).toBeSuccessful();
+
+  server.clearLogs();
+
+  // Second call - should be cache hit
+  const result2 = await mcp.tools.call('expensive:get-report', input);
+  expect(result2).toBeSuccessful();
+
+  // Results should be identical
+  expect(result2.json()).toEqual(result1.json());
+
+  // Tool should NOT have executed again
+  const logs = server.getLogs();
+  expect(logs.some(log => log.includes('Generating report'))).toBe(false);
+});
+```
+
+### Testing Cache with Different Inputs
+
+```typescript
+test('different inputs create separate cache entries', async ({ mcp }) => {
+  const result1 = await mcp.tools.call('expensive:get-report', {
+    reportId: 'report-A',
+  });
+
+  const result2 = await mcp.tools.call('expensive:get-report', {
+    reportId: 'report-B',
+  });
+
+  // Both should succeed
+  expect(result1).toBeSuccessful();
+  expect(result2).toBeSuccessful();
+
+  // Results should be different
+  expect(result1.json().reportId).toBe('report-A');
+  expect(result2.json().reportId).toBe('report-B');
+});
+```
+
+---
+
+## Testing Authorization Plugin
+
+Test that your authorization plugin correctly filters tools based on user roles.
+
+### Setup with Authentication
+
+```typescript
+import { test, expect } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+  auth: {
+    mode: 'orchestrated',
+    type: 'local',
+  },
+});
+```
+
+### Testing Role-Based Tool Filtering
+
+```typescript
+test.describe('Role-Based Authorization', () => {
+  test('admin sees all tools', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'admin-user',
+      claims: { roles: ['admin'] },
+    });
+    await mcp.authenticate(token);
+
+    const tools = await mcp.tools.list();
+
+    expect(tools).toContainTool('expense:create');
+    expect(tools).toContainTool('expense:approve');  // Admin-only
+    expect(tools).toContainTool('expense:delete');   // Admin-only
+  });
+
+  test('regular user sees limited tools', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'regular-user',
+      claims: { roles: ['user'] },
+    });
+    await mcp.authenticate(token);
+
+    const tools = await mcp.tools.list();
+
+    expect(tools).toContainTool('expense:create');
+    expect(tools).not.toContainTool('expense:approve');
+    expect(tools).not.toContainTool('expense:delete');
+  });
+
+  test('manager sees manager tools', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'manager-user',
+      claims: { roles: ['manager'] },
+    });
+    await mcp.authenticate(token);
+
+    const tools = await mcp.tools.list();
+
+    expect(tools).toContainTool('expense:create');
+    expect(tools).toContainTool('expense:approve');  // Manager can approve
+    expect(tools).not.toContainTool('expense:delete');
+  });
+});
+```
+
+### Testing Tool Execution Authorization
+
+```typescript
+test('user cannot execute admin-only tools even if known', async ({ mcp, auth }) => {
+  const token = await auth.createToken({
+    sub: 'regular-user',
+    claims: { roles: ['user'] },
+  });
+  await mcp.authenticate(token);
+
+  // Even if user knows the tool name, execution should fail
+  const result = await mcp.tools.call('expense:delete', {
+    expenseId: 'exp-123',
+  });
+
+  expect(result).toBeError();
+});
+```
+
+---
+
+## Testing Site-Scoped Authorization
+
+Test multi-tenant access control.
+
+```typescript
+test.describe('Site-Scoped Authorization', () => {
+  test('user can access their authorized sites', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'user-1',
+      claims: { sites: ['site-A', 'site-B'] },
+    });
+    await mcp.authenticate(token);
+
+    const result = await mcp.tools.call('employee:list', {
+      siteId: 'site-A',
+    });
+
+    expect(result).toBeSuccessful();
+  });
+
+  test('user cannot access unauthorized sites', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'user-1',
+      claims: { sites: ['site-A', 'site-B'] },
+    });
+    await mcp.authenticate(token);
+
+    const result = await mcp.tools.call('employee:list', {
+      siteId: 'site-C',  // Not authorized
+    });
+
+    expect(result).toBeError();
+  });
+
+  test('admin can access all sites', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'admin-user',
+      claims: { roles: ['admin'], sites: ['*'] },
+    });
+    await mcp.authenticate(token);
+
+    // Admin can access any site
+    const resultA = await mcp.tools.call('employee:list', { siteId: 'site-A' });
+    const resultC = await mcp.tools.call('employee:list', { siteId: 'site-C' });
+
+    expect(resultA).toBeSuccessful();
+    expect(resultC).toBeSuccessful();
+  });
+});
+```
+
+---
+
+## Multi-Client Testing
+
+Test scenarios involving multiple concurrent users.
+
+```typescript
+test.describe('Multi-User Scenarios', () => {
+  test('users see only their own data', async ({ server, auth }) => {
+    // Create two authenticated clients
+    const user1Client = await server.createClient({
+      token: await auth.createToken({ sub: 'user-1' }),
+    });
+
+    const user2Client = await server.createClient({
+      token: await auth.createToken({ sub: 'user-2' }),
+    });
+
+    try {
+      // User 1 creates a note
+      await user1Client.tools.call('notes:create', {
+        title: 'User 1 Private Note',
+        content: 'Secret content',
+      });
+
+      // User 2 lists notes - should not see user 1's note
+      const user2Notes = await user2Client.resources.read('notes://all');
+      const notes = user2Notes.json();
+
+      expect(notes.every(n => n.ownerId !== 'user-1')).toBe(true);
+
+      // User 1 lists notes - should see their note
+      const user1Notes = await user1Client.resources.read('notes://all');
+      expect(user1Notes.json().some(n => n.title === 'User 1 Private Note')).toBe(true);
+    } finally {
+      await user1Client.disconnect();
+      await user2Client.disconnect();
+    }
+  });
+
+  test('concurrent tool calls work correctly', async ({ server, auth }) => {
+    const clients = await Promise.all(
+      Array.from({ length: 5 }, async (_, i) => {
+        return server.createClient({
+          token: await auth.createToken({ sub: `user-${i}` }),
+        });
+      })
+    );
+
+    try {
+      // All clients call a tool simultaneously
+      const results = await Promise.all(
+        clients.map((client, i) =>
+          client.tools.call('calculator:add', { a: i, b: 10 })
+        )
+      );
+
+      // All should succeed with correct results
+      results.forEach((result, i) => {
+        expect(result).toBeSuccessful();
+        expect(result.json()).toBe(i + 10);
+      });
+    } finally {
+      await Promise.all(clients.map(c => c.disconnect()));
+    }
+  });
+});
+```
+
+---
+
+## Mocking External HTTP Calls
+
+Test tools that call external APIs without making real requests.
+
+```typescript
+import { test, expect, httpMock } from '@frontmcp/testing';
+
+test.describe('External API Integration', () => {
+  test('weather tool returns mocked data', async ({ mcp }) => {
+    const interceptor = httpMock.interceptor();
+
+    // Mock the external weather API
+    interceptor.get('https://api.weather.com/v1/current', {
+      body: {
+        location: 'San Francisco',
+        temperature: 18,
+        conditions: 'foggy',
+      },
+    });
+
+    try {
+      const result = await mcp.tools.call('weather:get-current', {
+        location: 'San Francisco',
+      });
+
+      expect(result).toBeSuccessful();
+      expect(result.json().temperature).toBe(18);
+      expect(result.json().conditions).toBe('foggy');
+    } finally {
+      interceptor.restore();
+    }
+  });
+
+  test('handles API errors gracefully', async ({ mcp }) => {
+    const interceptor = httpMock.interceptor();
+
+    // Mock API returning error
+    interceptor.get('https://api.weather.com/v1/current', {
+      status: 503,
+      body: { error: 'Service unavailable' },
+    });
+
+    try {
+      const result = await mcp.tools.call('weather:get-current', {
+        location: 'Unknown',
+      });
+
+      expect(result).toBeError();
+    } finally {
+      interceptor.restore();
+    }
+  });
+
+  test('handles network timeouts', async ({ mcp }) => {
+    const interceptor = httpMock.interceptor();
+
+    // Mock slow response
+    interceptor.get('https://api.weather.com/v1/current', {
+      delay: 10000,  // 10 second delay
+      body: {},
+    });
+
+    try {
+      const result = await mcp.tools.call('weather:get-current', {
+        location: 'Slow City',
+      });
+
+      // Tool should handle timeout gracefully
+      expect(result).toBeError();
+    } finally {
+      interceptor.restore();
+    }
+  });
+});
+```
+
+---
+
+## Testing Hook Behavior
+
+Test that hooks execute in the correct order and modify behavior as expected.
+
+```typescript
+test.describe('Hook Execution', () => {
+  test('validation hook rejects invalid input', async ({ mcp }) => {
+    // Assuming a custom validation hook rejects negative amounts
+    const result = await mcp.tools.call('expense:create', {
+      amount: -100,  // Negative - should be rejected by hook
+      category: 'Travel',
+    });
+
+    expect(result).toBeError();
+  });
+
+  test('transformation hook modifies output', async ({ mcp, auth }) => {
+    const token = await auth.createToken({ sub: 'user-1' });
+    await mcp.authenticate(token);
+
+    const result = await mcp.tools.call('user:get-profile', {});
+
+    expect(result).toBeSuccessful();
+
+    // Assuming a Did hook adds metadata to all responses
+    const data = result.json();
+    expect(data._metadata).toBeDefined();
+    expect(data._metadata.requestedBy).toBe('user-1');
+  });
+
+  test('audit hook logs tool execution', async ({ mcp, server, auth }) => {
+    const token = await auth.createToken({ sub: 'audit-test-user' });
+    await mcp.authenticate(token);
+
+    server.clearLogs();
+
+    await mcp.tools.call('expense:create', {
+      amount: 50,
+      category: 'Meals',
+    });
+
+    // Check that audit hook logged the execution
+    const logs = server.getLogs();
+    expect(logs.some(log =>
+      log.includes('audit') &&
+      log.includes('expense:create') &&
+      log.includes('audit-test-user')
+    )).toBe(true);
+  });
+});
+```
+
+---
+
+## Testing Rate Limiting
+
+If you have rate limiting plugins:
+
+```typescript
+test.describe('Rate Limiting', () => {
+  test('allows requests within limit', async ({ mcp, auth }) => {
+    const token = await auth.createToken({ sub: 'user-1' });
+    await mcp.authenticate(token);
+
+    // Make 5 requests (assuming limit is 10/minute)
+    for (let i = 0; i < 5; i++) {
+      const result = await mcp.tools.call('api:fetch', { id: i });
+      expect(result).toBeSuccessful();
+    }
+  });
+
+  test('rejects requests over limit', async ({ mcp, auth }) => {
+    const token = await auth.createToken({ sub: 'rate-test-user' });
+    await mcp.authenticate(token);
+
+    // Make many requests to exceed limit
+    const results = await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        mcp.tools.call('api:fetch', { id: i })
+      )
+    );
+
+    // Some should succeed, later ones should fail
+    const successes = results.filter(r => !r.isError);
+    const failures = results.filter(r => r.isError);
+
+    expect(successes.length).toBeGreaterThan(0);
+    expect(failures.length).toBeGreaterThan(0);
+  });
+});
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Clean up between tests">
+    ```typescript
+    test.beforeEach(async ({ server }) => {
+      server.clearLogs();
+      // Clear any shared state
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Use try/finally for multi-client tests">
+    ```typescript
+    const client = await server.createClient({ token });
+    try {
+      // Test code
+    } finally {
+      await client.disconnect();
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Mock external dependencies">
+    Never make real API calls in tests. Use `httpMock.interceptor()` to mock all external HTTP requests.
+  </Accordion>
+
+  <Accordion title="Test edge cases in authorization">
+    - User with no roles
+    - User with multiple roles
+    - Expired tokens
+    - Invalid tokens
+    - Missing claims
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="HTTP Mocking" icon="globe" href="/frontmcp/testing/http-mocking">
+    Advanced HTTP mocking techniques
+  </Card>
+
+  <Card title="Interceptors" icon="filter" href="/frontmcp/testing/interceptors">
+    Mock MCP protocol responses
+  </Card>
+
+  <Card title="Authentication" icon="key" href="/frontmcp/testing/authentication">
+    Complete auth testing reference
+  </Card>
+
+  <Card title="API Reference" icon="book" href="/frontmcp/testing/api-reference">
+    Full testing API documentation
+  </Card>
+</CardGroup>

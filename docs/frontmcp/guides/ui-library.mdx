@@ -5,7 +5,7 @@ icon: grip
 description: Ship HTML-first consent, status, and orchestration screens with @frontmcp/ui and @frontmcp/uipack.
 ---
 
-The FrontMCP UI packages provide a platform-aware HTML component system designed for LLM surfaces. They render complete markup (no React runtime required) and ship a Tailwind v4 theme system, HTMX hooks, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
+The FrontMCP UI packages provide a platform-aware HTML component system designed for LLM surfaces. They render complete markup (no React runtime required) and ship a Tailwind v4 theme system, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
 
 <Note>
 **Package responsibilities:**
@@ -17,7 +17,6 @@ The FrontMCP UI packages provide a platform-aware HTML component system designed
 
 - **Pure HTML output** – Components return strings so you can stream them directly through MCP resources, auth flows, or ngrok tunnels.
 - **Platform detection** – Helpers detect OpenAI, Claude, Gemini, and local browsers so you can inline scripts when networks are blocked.
-- **HTMX everywhere** – Buttons, forms, modals, and tables expose `htmx` options for progressive enhancement.
 - **Theme system** – Ship the default GitHub/OpenAI skin or mint your own palette, typography, and CDN URLs.
 - **Zod validation** – Each component validates props at runtime and renders helpful error boxes instead of crashing.
 
@@ -62,37 +61,11 @@ const html = baseLayout(content, {
   theme: DEFAULT_THEME,
   width: 'md',
   align: 'center',
-  scripts: { tailwind: true, htmx: true },
+  scripts: { tailwind: true },
 });
 ```
 
 Send `html` as the body of an MCP resource, OAuth consent page, or even an email.
-
-## HTMX-powered interactions
-
-Every interactive component accepts an `htmx` block. Attributes are sanitized to prevent unsafe protocols or arbitrary data-\* fields, so you can expose progressive enhancement safely.
-
-```ts
-import { form, input, button } from '@frontmcp/ui/components';
-
-const loginForm = form(
-  `
-  ${input({ name: 'email', label: 'Email', type: 'email', required: true })}
-  ${input({ name: 'code', label: 'One-time code', type: 'text', required: true })}
-  ${button('Verify', { type: 'submit', variant: 'primary' })}
-`,
-  {
-    action: '/api/login',
-    method: 'post',
-    htmx: {
-      post: '/api/login',
-      target: '#result',
-      swap: 'innerHTML',
-      indicator: '#loading-indicator',
-    },
-  },
-);
-```
 
 ## Theme and platform detection
 
@@ -116,7 +89,6 @@ const theme = createTheme({
   cdn: {
     scripts: {
       tailwind: 'https://cdn.example.com/tailwind-4.js',
-      htmx: { url: 'https://cdn.example.com/htmx.min.js', integrity: 'sha512-abc' },
     },
   },
 });
@@ -182,9 +154,31 @@ const broken = button('Continue', { variant: 'purple' as any });
 ```
 
 <Warning>
-Validation errors render in development and production. Keep an eye on your previews to ensure you only ship supported variants, attributes, and HTMX actions.
+Validation errors render in development and production. Keep an eye on your previews to ensure you only ship supported variants and attributes.
 </Warning>
 
 ## Widgets and next steps
 
-The `@frontmcp/ui/widgets` module exposes OpenAI App SDK components (resource pickers, action lists) plus status badges, progress indicators, and table helpers. Pair this guide with the [CodeCall CRM demo](/docs/frontmcp/guides/codecall-crm-demo) to see the library inside a full orchestration workflow, or expose the HTML through an MCP resource for your own consent flows.
+The `@frontmcp/ui/widgets` module exposes OpenAI App SDK components (resource pickers, action lists) plus status badges, progress indicators, and table helpers. Pair this guide with the [CodeCall CRM demo](/frontmcp/guides/codecall-crm-demo) to see the library inside a full orchestration workflow, or expose the HTML through an MCP resource for your own consent flows.
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CodeCall CRM Demo" icon="users" href="/frontmcp/guides/codecall-crm-demo">
+    See UI in a complete application
+  </Card>
+
+  <Card title="Building Tool UI" icon="palette" href="/frontmcp/guides/building-tool-ui">
+    Use UI components in tool templates
+  </Card>
+
+  <Card title="Tools Reference" icon="wrench" href="/frontmcp/servers/tools">
+    Full @Tool decorator documentation
+  </Card>
+
+  <Card title="Resources Reference" icon="database" href="/frontmcp/servers/resources">
+    Expose HTML through MCP resources
+  </Card>
+</CardGroup>

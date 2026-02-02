@@ -1,0 +1,261 @@
+---
+title: Your First Tool
+slug: guides/your-first-tool
+description: Create your first MCP tool with FrontMCP in under 5 minutes
+icon: rocket
+---
+
+Build a simple calculator tool to learn the fundamentals of FrontMCP tool development. By the end of this guide, you'll understand how to create, validate, and test MCP tools.
+
+<Info>
+**Prerequisites**: A FrontMCP project initialized ([see Installation](/frontmcp/getting-started/installation))
+</Info>
+
+## What You'll Build
+
+A simple `add` tool that adds two numbers together with full type safety and input validation.
+
+---
+
+## Step 1: Create the Tool File
+
+Create a new file `src/apps/calculator/tools/add.tool.ts`:
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'add',
+  description: 'Add two numbers together',
+  inputSchema: {
+    a: z.number().describe('First number'),
+    b: z.number().describe('Second number'),
+  },
+  outputSchema: 'number',
+})
+export default class AddTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return input.a + input.b;
+  }
+}
+```
+
+Let's break this down:
+
+| Property | Purpose |
+|----------|---------|
+| `name` | Unique identifier for the tool |
+| `description` | Helps LLMs understand when to use this tool |
+| `inputSchema` | Zod schema for input validation |
+| `outputSchema` | Can be a Zod schema or shorthand like `'number'` |
+| `execute()` | The logic that runs when the tool is called |
+
+---
+
+## Step 2: Create the App
+
+Create `src/apps/calculator/index.ts` to group your tools:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import AddTool from './tools/add.tool';
+
+@App({
+  id: 'calculator',
+  name: 'Calculator App',
+  tools: [AddTool],
+})
+export default class CalculatorApp {}
+```
+
+---
+
+## Step 3: Register with the Server
+
+Update your main server file to include the app:
+
+```typescript
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import CalculatorApp from './apps/calculator';
+
+@FrontMcp({
+  info: { name: 'My MCP Server', version: '1.0.0' },
+  apps: [CalculatorApp],
+  http: { port: 3000 },
+  logging: { level: LogLevel.INFO },
+})
+export default class Server {}
+```
+
+---
+
+## Step 4: Test Your Tool
+
+<Steps>
+  <Step title="Start the server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Open MCP Inspector">
+    ```bash
+    npx @modelcontextprotocol/inspector
+    ```
+
+    Connect to `http://localhost:3000` and you'll see your `calculator:add` tool listed.
+  </Step>
+
+  <Step title="Call the tool">
+    In the Inspector, call the tool with:
+    ```json
+    { "a": 5, "b": 3 }
+    ```
+
+    You should get back `8`.
+  </Step>
+</Steps>
+
+---
+
+## Adding More Tools
+
+Let's add a `multiply` tool. Create `src/apps/calculator/tools/multiply.tool.ts`:
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'multiply',
+  description: 'Multiply two numbers together',
+  inputSchema: {
+    a: z.number().describe('First number'),
+    b: z.number().describe('Second number'),
+  },
+  outputSchema: 'number',
+})
+export default class MultiplyTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return input.a * input.b;
+  }
+}
+```
+
+Then add it to your app:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import AddTool from './tools/add.tool';
+import MultiplyTool from './tools/multiply.tool';
+
+@App({
+  id: 'calculator',
+  name: 'Calculator App',
+  tools: [AddTool, MultiplyTool],
+})
+export default class CalculatorApp {}
+```
+
+---
+
+## Input Validation
+
+Zod automatically validates inputs. Try calling `add` with invalid input:
+
+```json
+{ "a": "not a number", "b": 3 }
+```
+
+You'll get a validation error because `"not a number"` isn't a valid number.
+
+### Common Validation Patterns
+
+```typescript
+inputSchema: {
+  // Required string
+  name: z.string().min(1),
+
+  // Optional with default
+  limit: z.number().default(10),
+
+  // Enum values
+  status: z.enum(['active', 'inactive']),
+
+  // Array of strings
+  tags: z.array(z.string()),
+
+  // Nested object
+  config: z.object({
+    enabled: z.boolean(),
+    threshold: z.number().positive(),
+  }),
+}
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Write clear descriptions">
+    Good descriptions help LLMs choose the right tool:
+
+    ```typescript
+    // Good - specific and actionable
+    description: 'Add two numbers together and return their sum'
+
+    // Bad - too vague
+    description: 'Math operation'
+    ```
+  </Accordion>
+
+  <Accordion title="Use .describe() on schema fields">
+    Add context for each input field:
+
+    ```typescript
+    inputSchema: {
+      amount: z.number().positive().describe('Amount in USD'),
+      category: z.string().describe('Expense category like "travel" or "meals"'),
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Keep tools focused">
+    Each tool should do one thing well. Instead of a `calculate` tool that handles add/subtract/multiply/divide, create separate tools for each operation.
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    ```typescript
+    async execute(input: { a: number; b: number }) {
+      if (input.b === 0) {
+        throw new Error('Cannot divide by zero');
+      }
+      return input.a / input.b;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add Caching" icon="database" href="/frontmcp/guides/caching-and-cache-miss">
+    Cache tool results for better performance
+  </Card>
+
+  <Card title="Create Prompts" icon="message" href="/frontmcp/guides/prompts-and-resources">
+    Build prompts and resources alongside tools
+  </Card>
+
+  <Card title="Add UI Templates" icon="palette" href="/frontmcp/guides/building-tool-ui">
+    Render rich HTML widgets for tool outputs
+  </Card>
+
+  <Card title="Tool Reference" icon="book" href="/frontmcp/servers/tools">
+    Full tool decorator documentation
+  </Card>
+</CardGroup>

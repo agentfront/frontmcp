@@ -7,6 +7,13 @@ icon: file-code
 
 The OpenAPI Adapter automatically converts REST API endpoints defined in an OpenAPI 3.x specification into fully-functional MCP tools. This guide walks you through adding the adapter to your app.
 
+<Info>
+**Prerequisites**:
+- A FrontMCP project initialized ([see Installation](/frontmcp/getting-started/installation))
+- An OpenAPI 3.x specification (URL or local file)
+- Basic understanding of REST APIs
+</Info>
+
 ## What You'll Build
 
 By the end of this guide, you'll have:
@@ -20,14 +27,6 @@ By the end of this guide, you'll have:
   The OpenAPI Adapter is perfect for quickly exposing REST APIs to AI agents without writing custom tool code for each
   endpoint.
 </Tip>
-
----
-
-## Prerequisites
-
-- A FrontMCP project initialized ([see Installation](/docs/frontmcp/getting-started/installation))
-- An OpenAPI 3.x specification (URL or local file)
-- Basic understanding of REST APIs
 
 ---
 
@@ -443,17 +442,17 @@ OpenapiAdapter.init({
 ## What's Next?
 
 <CardGroup cols={2}>
-  <Card title="Full OpenAPI Adapter Docs" icon="book" href="/docs/frontmcp/adapters/openapi-adapter">
+  <Card title="Full OpenAPI Adapter Docs" icon="book" href="/frontmcp/adapters/openapi-adapter">
     Explore all configuration options and advanced features
   </Card>
 
-<Card title="Authentication Setup" icon="lock" href="/docs/frontmcp/servers/authentication/overview">
-  Learn how to configure authentication for your APIs
-</Card>
+  <Card title="Authentication Setup" icon="lock" href="/frontmcp/authentication/overview">
+    Learn how to configure authentication for your APIs
+  </Card>
 
-<Card title="Plugin System" icon="puzzle-piece" href="/docs/frontmcp/servers/extensibility/plugins">
-  Add caching, logging, and other features to generated tools
-</Card>
+  <Card title="Plugin System" icon="puzzle-piece" href="/frontmcp/plugins/creating-plugins">
+    Add caching, logging, and other features to generated tools
+  </Card>
 
   <Card title="Demo App" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo/src/apps/expenses">
     See a complete example using the OpenAPI adapter

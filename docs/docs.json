@@ -129,6 +129,8 @@
                 "pages": [
                   "frontmcp/deployment/local-dev-server",
                   "frontmcp/deployment/production-build",
+                  "frontmcp/deployment/runtime-modes",
+                  "frontmcp/deployment/direct-client",
                   "frontmcp/deployment/redis-setup",
                   "frontmcp/deployment/vercel-kv",
                   "frontmcp/deployment/serverless"
@@ -176,9 +178,44 @@
           {
             "group": "Guides",
             "pages": [
-              "frontmcp/guides/ast-guard",
-              "frontmcp/guides/enclave",
-              "frontmcp/guides/vectoriadb",
+              {
+                "group": "Quick Start",
+                "icon": "rocket",
+                "pages": [
+                  "frontmcp/guides/your-first-tool",
+                  "frontmcp/guides/add-openapi-adapter",
+                  "frontmcp/guides/caching-and-cache-miss"
+                ]
+              },
+              {
+                "group": "Building Features",
+                "icon": "hammer",
+                "pages": [
+                  "frontmcp/guides/create-plugin",
+                  "frontmcp/guides/customize-flow-stages",
+                  "frontmcp/guides/building-tool-ui",
+                  "frontmcp/guides/prompts-and-resources"
+                ]
+              },
+              {
+                "group": "Advanced Patterns",
+                "icon": "graduation-cap",
+                "pages": [
+                  "frontmcp/guides/role-based-authorization",
+                  "frontmcp/guides/site-scoped-authorization",
+                  "frontmcp/guides/codecall-crm-demo",
+                  "frontmcp/guides/agents-orchestration"
+                ]
+              },
+              {
+                "group": "Testing",
+                "icon": "flask",
+                "pages": [
+                  "frontmcp/guides/testing-your-first-tool",
+                  "frontmcp/guides/testing-openapi-adapter",
+                  "frontmcp/guides/testing-plugins-and-hooks"
+                ]
+              },
               "frontmcp/guides/ui-library"
             ]
           }

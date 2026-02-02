@@ -1,0 +1,439 @@
+---
+title: Role-Based Authorization
+slug: guides/role-based-authorization
+description: Control tool access based on user roles with a custom authorization plugin
+icon: shield
+---
+
+Role-based authorization lets you control which tools users can see and execute based on their roles (admin, manager, user, etc.). This guide shows you how to build an authorization plugin that filters tools based on user claims.
+
+<Info>
+**Prerequisites**:
+- Understanding of FrontMCP plugins ([see Create a Plugin](/frontmcp/guides/create-plugin))
+- A FrontMCP project with authentication configured
+</Info>
+
+## What You'll Build
+
+An authorization plugin that:
+- Extends tool metadata to include required roles
+- Filters the tool list based on user roles
+- Works with any authentication provider
+
+---
+
+## Step 1: Define Types and Metadata Extension
+
+First, extend the tool metadata to include authorization requirements:
+
+```typescript
+// plugins/authorization.types.ts
+
+// Extend global tool metadata to add authorization fields
+declare global {
+  interface ExtendFrontMcpToolMetadata {
+    authorization?: AuthorizationToolOptions;
+  }
+}
+
+export interface AuthorizationPluginOptions {
+  /**
+   * Whether to enable authorization checks.
+   * @default true
+   */
+  enabled?: boolean;
+}
+
+export interface AuthorizationToolOptions {
+  /**
+   * Roles required to access this tool.
+   * User must have ALL specified roles.
+   */
+  requiredRoles: string[];
+}
+```
+
+<Tip>
+By extending `ExtendFrontMcpToolMetadata`, TypeScript will recognize the `authorization` field on all tool metadata.
+</Tip>
+
+---
+
+## Step 2: Create the Authorization Plugin
+
+```typescript
+// plugins/authorization.plugin.ts
+import { DynamicPlugin, Plugin, FlowCtxOf, FlowHooksOf } from '@frontmcp/sdk';
+import { AuthorizationPluginOptions, AuthorizationToolOptions } from './authorization.types';
+
+// Get the hook decorator for list-tools flow
+const ListToolsHook = FlowHooksOf('tools:list-tools');
+
+@Plugin({
+  name: 'authorization',
+  description: 'Role-based access control for tools',
+})
+export default class AuthorizationPlugin extends DynamicPlugin<AuthorizationPluginOptions> {
+  constructor(protected options?: AuthorizationPluginOptions) {
+    super();
+  }
+
+  /**
+   * Hook that runs AFTER finding tools, filtering out unauthorized ones.
+   * Using 'findTools' stage ensures we filter the list before it's returned.
+   */
+  @ListToolsHook.Did('findTools')
+  async filterToolsByRole(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    const { tools } = flowCtx.state.required;
+    const { ctx: { authInfo } } = flowCtx.rawInput;
+
+    const authorizedTools = tools.filter(({ tool }) => {
+      const metadata = tool.metadata;
+
+      // If no authorization required, allow access
+      if (!metadata.authorization) return true;
+
+      const { requiredRoles } = metadata.authorization;
+      const userRoles = this.extractRoles(authInfo);
+
+      // If user has no roles, deny access to tools requiring roles
+      if (!userRoles || userRoles.length === 0) return false;
+
+      // Check if user has ALL required roles
+      return requiredRoles.every((role) => userRoles.includes(role));
+    });
+
+    // Update the tools list with filtered results
+    flowCtx.state.set('tools', authorizedTools);
+  }
+
+  /**
+   * Safely extract roles array from authInfo
+   */
+  private extractRoles(authInfo: unknown): string[] {
+    if (!authInfo || typeof authInfo !== 'object') return [];
+
+    const auth = authInfo as Record<string, unknown>;
+    const user = auth.user as Record<string, unknown> | undefined;
+
+    if (!user) return [];
+
+    const roles = user.roles;
+    if (Array.isArray(roles)) {
+      return roles.map(String);
+    }
+
+    return [];
+  }
+}
+```
+
+---
+
+## Step 3: Apply to Your App
+
+Register the plugin with your app:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import AuthorizationPlugin from './plugins/authorization.plugin';
+import CreateExpenseTool from './tools/create-expense.tool';
+import ApproveExpenseTool from './tools/approve-expense.tool';
+import DeleteExpenseTool from './tools/delete-expense.tool';
+
+@App({
+  id: 'expense',
+  name: 'Expense App',
+  plugins: [AuthorizationPlugin],
+  tools: [
+    CreateExpenseTool,    // Available to all
+    ApproveExpenseTool,   // Manager only
+    DeleteExpenseTool,    // Admin only
+  ],
+})
+export default class ExpenseApp {}
+```
+
+---
+
+## Step 4: Add Authorization to Tools
+
+Mark tools with their required roles:
+
+```typescript
+// tools/approve-expense.tool.ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'approve-expense',
+  description: 'Approve a pending expense (managers only)',
+  inputSchema: {
+    expenseId: z.string(),
+    comment: z.string().optional(),
+  },
+  // Add authorization metadata
+  authorization: {
+    requiredRoles: ['manager'],  // Requires manager role
+  },
+})
+export default class ApproveExpenseTool extends ToolContext {
+  async execute(input: { expenseId: string; comment?: string }) {
+    // Approval logic here
+    return { approved: true, expenseId: input.expenseId };
+  }
+}
+```
+
+```typescript
+// tools/delete-expense.tool.ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'delete-expense',
+  description: 'Delete an expense (admin only)',
+  inputSchema: {
+    expenseId: z.string(),
+    reason: z.string(),
+  },
+  authorization: {
+    requiredRoles: ['admin'],  // Requires admin role
+  },
+})
+export default class DeleteExpenseTool extends ToolContext {
+  async execute(input: { expenseId: string; reason: string }) {
+    // Deletion logic here
+    return { deleted: true, expenseId: input.expenseId };
+  }
+}
+```
+
+```typescript
+// tools/create-expense.tool.ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'create-expense',
+  description: 'Create a new expense',
+  inputSchema: {
+    amount: z.number().positive(),
+    category: z.string(),
+    description: z.string(),
+  },
+  // No authorization field = available to all authenticated users
+})
+export default class CreateExpenseTool extends ToolContext {
+  async execute(input: { amount: number; category: string; description: string }) {
+    // Creation logic here
+    return { created: true, id: 'exp-123' };
+  }
+}
+```
+
+---
+
+## How It Works
+
+<Steps>
+  <Step title="User requests tool list">
+    Client calls `tools/list` to get available tools.
+  </Step>
+
+  <Step title="Plugin hook intercepts">
+    The `ListToolsHook.Did('findTools')` hook runs after tools are found but before the response is sent.
+  </Step>
+
+  <Step title="Filter by roles">
+    The plugin checks each tool's `authorization.requiredRoles` against the user's roles from `authInfo`.
+  </Step>
+
+  <Step title="Return filtered list">
+    Only tools the user is authorized to see are returned.
+  </Step>
+</Steps>
+
+---
+
+## Advanced: Multiple Roles
+
+Require multiple roles for sensitive operations:
+
+```typescript
+@Tool({
+  name: 'bulk-delete',
+  description: 'Bulk delete expenses',
+  inputSchema: { expenseIds: z.array(z.string()) },
+  authorization: {
+    requiredRoles: ['admin', 'finance'],  // Must have BOTH roles
+  },
+})
+export default class BulkDeleteTool extends ToolContext {
+  // ...
+}
+```
+
+---
+
+## Advanced: OR Logic for Roles
+
+Modify the plugin to support OR logic:
+
+```typescript
+// Update types
+export interface AuthorizationToolOptions {
+  requiredRoles: string[];
+  mode?: 'all' | 'any';  // 'all' = AND, 'any' = OR
+}
+
+// Update plugin
+@ListToolsHook.Did('findTools')
+async filterToolsByRole(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+  const { tools } = flowCtx.state.required;
+  const { ctx: { authInfo } } = flowCtx.rawInput;
+
+  const authorizedTools = tools.filter(({ tool }) => {
+    const auth = tool.metadata.authorization;
+    if (!auth) return true;
+
+    const userRoles = this.extractRoles(authInfo);
+    if (!userRoles.length) return false;
+
+    const { requiredRoles, mode = 'all' } = auth;
+
+    if (mode === 'any') {
+      // User needs at least ONE of the required roles
+      return requiredRoles.some((role) => userRoles.includes(role));
+    }
+
+    // Default: User needs ALL required roles
+    return requiredRoles.every((role) => userRoles.includes(role));
+  });
+
+  flowCtx.state.set('tools', authorizedTools);
+}
+```
+
+Usage:
+
+```typescript
+@Tool({
+  name: 'view-reports',
+  authorization: {
+    requiredRoles: ['manager', 'finance', 'executive'],
+    mode: 'any',  // Any of these roles can access
+  },
+})
+```
+
+---
+
+## Testing Authorization
+
+```typescript
+import { createTestingModule } from '@frontmcp/sdk/testing';
+import ExpenseApp from './apps/expense';
+
+describe('Authorization', () => {
+  it('should hide admin tools from regular users', async () => {
+    const { scope } = await createTestingModule({
+      apps: [ExpenseApp],
+    });
+
+    // Mock regular user
+    const tools = await scope.listTools({
+      authInfo: {
+        user: { id: 'user-1', roles: ['user'] },
+      },
+    });
+
+    expect(tools.find(t => t.name === 'delete-expense')).toBeUndefined();
+    expect(tools.find(t => t.name === 'create-expense')).toBeDefined();
+  });
+
+  it('should show admin tools to admins', async () => {
+    const { scope } = await createTestingModule({
+      apps: [ExpenseApp],
+    });
+
+    // Mock admin user
+    const tools = await scope.listTools({
+      authInfo: {
+        user: { id: 'admin-1', roles: ['admin', 'user'] },
+      },
+    });
+
+    expect(tools.find(t => t.name === 'delete-expense')).toBeDefined();
+  });
+});
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Hide vs. Deny">
+    This plugin **hides** unauthorized tools from the list. Users won't see tools they can't use, providing a cleaner UX. For additional security, also validate roles during tool execution.
+  </Accordion>
+
+  <Accordion title="Role Naming Conventions">
+    Use clear, consistent role names:
+
+    ```typescript
+    // Good
+    requiredRoles: ['admin']
+    requiredRoles: ['manager', 'finance']
+
+    // Avoid
+    requiredRoles: ['ADMIN']  // Inconsistent casing
+    requiredRoles: ['admin-level-2']  // Too specific
+    ```
+  </Accordion>
+
+  <Accordion title="Default to Deny">
+    For sensitive applications, flip the default:
+
+    ```typescript
+    // In plugin: deny if no authorization specified
+    if (!metadata.authorization) {
+      return hasRole(userRoles, 'authenticated');
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Combine with Execution Hooks">
+    For defense in depth, also check roles during execution:
+
+    ```typescript
+    @ToolHook.Will('execute', { priority: 900 })
+    async validateExecution(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+      const { tool, toolContext } = flowCtx.state;
+      // Re-validate roles here
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Site-Scoped Authorization" icon="building" href="/frontmcp/guides/site-scoped-authorization">
+    Multi-tenant authorization patterns
+  </Card>
+
+  <Card title="Authentication Modes" icon="lock" href="/frontmcp/authentication/modes">
+    Configure authentication for your server
+  </Card>
+
+  <Card title="Plugin Development" icon="puzzle-piece" href="/frontmcp/guides/create-plugin">
+    Build more custom plugins
+  </Card>
+
+  <Card title="Testing Guide" icon="flask" href="/frontmcp/testing/overview">
+    Test authorization scenarios
+  </Card>
+</CardGroup>
