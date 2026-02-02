@@ -1,0 +1,256 @@
+---
+title: "@App"
+description: "The @App decorator defines an application module that groups related tools, resources, prompts, agents, and other components."
+icon: "cube"
+---
+
+## Basic Usage
+
+```typescript
+import { App, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'get_user',
+  inputSchema: { userId: z.string() },
+})
+class GetUserTool extends ToolContext {
+  async execute(input: { userId: string }) {
+    return { id: input.userId, name: 'John' };
+  }
+}
+
+@App({
+  name: 'users',
+  description: 'User management application',
+  tools: [GetUserTool],
+})
+export class UsersApp {}
+```
+
+## Signature
+
+```typescript
+function App(providedMetadata: LocalAppMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique application name |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Stable identifier for tracking |
+| `description` | `string` | Human-readable description |
+
+### Components
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `tools` | `ToolType[]` | Tools defined by this app |
+| `resources` | `ResourceType[]` | Resources defined by this app |
+| `prompts` | `PromptType[]` | Prompts defined by this app |
+| `agents` | `AgentType[]` | Agents defined by this app |
+| `skills` | `SkillType[]` | Skills defined by this app |
+
+```typescript
+@App({
+  name: 'crm',
+  tools: [GetContactTool, CreateContactTool],
+  resources: [ContactResource],
+  prompts: [SalesEmailPrompt],
+  agents: [SalesAgent],
+  skills: [LeadQualificationSkill],
+})
+class CrmApp {}
+```
+
+### Extension Points
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `providers` | `ProviderType[]` | App-scoped dependency providers |
+| `plugins` | `PluginType[]` | App-specific plugins |
+| `authProviders` | `AuthProviderType[]` | Authentication providers |
+| `adapters` | `AdapterType[]` | Framework adapters |
+
+```typescript
+@App({
+  name: 'crm',
+  providers: [CrmService, ContactRepository],
+  plugins: [AuditPlugin],
+  authProviders: [SalesforceOAuthProvider],
+})
+class CrmApp {}
+```
+
+### Configuration
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `config` | `Record<string, unknown>` | App-specific configuration |
+
+```typescript
+@App({
+  name: 'crm',
+  config: {
+    apiBaseUrl: 'https://api.salesforce.com',
+    maxRetries: 3,
+  },
+})
+class CrmApp {}
+```
+
+## Multi-App Architecture
+
+FrontMCP supports organizing functionality across multiple apps:
+
+```typescript
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+
+// User management app
+@App({
+  name: 'users',
+  tools: [GetUserTool, CreateUserTool, UpdateUserTool],
+  resources: [UserProfileResource],
+})
+class UsersApp {}
+
+// Order management app
+@App({
+  name: 'orders',
+  tools: [GetOrderTool, CreateOrderTool],
+  resources: [OrderResource, OrderHistoryResource],
+})
+class OrdersApp {}
+
+// Analytics app
+@App({
+  name: 'analytics',
+  tools: [GetMetricsTool, GenerateReportTool],
+  agents: [AnalyticsAgent],
+})
+class AnalyticsApp {}
+
+// Main server combining all apps
+@FrontMcp({
+  info: { name: 'E-Commerce Platform', version: '1.0.0' },
+  apps: [UsersApp, OrdersApp, AnalyticsApp],
+})
+export default class ECommercePlatform {}
+```
+
+## App Isolation
+
+Each app maintains its own:
+- Tool namespace (tools are prefixed with app name on conflict)
+- Provider scope (providers are isolated per app)
+- Auth context (apps can have different auth providers)
+
+```typescript
+// Tools from different apps can have the same name
+@App({
+  name: 'github',
+  tools: [SearchTool], // Exported as 'github_search' if conflict
+})
+class GitHubApp {}
+
+@App({
+  name: 'jira',
+  tools: [SearchTool], // Exported as 'jira_search' if conflict
+})
+class JiraApp {}
+```
+
+## Provider Inheritance
+
+Apps can access providers from the parent server:
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  providers: [ConfigService], // Available to all apps
+})
+class Server {}
+
+@App({
+  name: 'my-app',
+  providers: [MyAppService], // App-specific provider
+})
+class MyApp {}
+
+// In a tool
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute() {
+    // Access server-level provider
+    const config = this.get(ConfigService);
+    // Access app-level provider
+    const service = this.get(MyAppService);
+  }
+}
+```
+
+## Standalone vs Gateway Apps
+
+### Standalone App
+
+A standalone app runs independently:
+
+```typescript
+@App({
+  name: 'standalone-app',
+  standalone: true,
+  tools: [MyTool],
+})
+class StandaloneApp {}
+
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [StandaloneApp],
+  splitByApp: true, // Each standalone app gets its own scope
+})
+class Server {}
+```
+
+### Gateway App
+
+Apps without `standalone: true` are combined in a gateway scope:
+
+```typescript
+@App({ name: 'app1', tools: [Tool1] })
+class App1 {}
+
+@App({ name: 'app2', tools: [Tool2] })
+class App2 {}
+
+@FrontMcp({
+  info: { name: 'Gateway', version: '1.0.0' },
+  apps: [App1, App2], // Combined into single gateway scope
+})
+class Gateway {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@FrontMcp" icon="rocket" href="/frontmcp/sdk-reference/decorators/frontmcp">
+    Server configuration
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Define tools
+  </Card>
+  <Card title="@Plugin" icon="plug" href="/frontmcp/sdk-reference/decorators/plugin">
+    Create plugins
+  </Card>
+  <Card title="Scope" icon="layer-group" href="/frontmcp/sdk-reference/core/scope">
+    Registry access
+  </Card>
+</CardGroup>

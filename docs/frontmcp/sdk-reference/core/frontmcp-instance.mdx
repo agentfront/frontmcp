@@ -1,0 +1,272 @@
+---
+title: "FrontMcpInstance"
+description: "FrontMcpInstance is the main entry point for creating and managing FrontMCP servers. It provides multiple factory methods for different deployment scenarios."
+icon: "server"
+---
+
+## Class Definition
+
+```typescript
+export class FrontMcpInstance implements FrontMcpInterface {
+  config: FrontMcpConfigType;
+  readonly ready: Promise<void>;
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `config` | `FrontMcpConfigType` | Parsed server configuration |
+| `ready` | `Promise<void>` | Promise that resolves when fully initialized |
+
+## Factory Methods
+
+### bootstrap(options)
+
+Create and start an HTTP server.
+
+```typescript
+static async bootstrap(options: FrontMcpConfigType): Promise<void>
+```
+
+Best for: Standalone HTTP server deployments.
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+await FrontMcpInstance.bootstrap(config);
+// Server running on configured port
+```
+
+### createHandler(options)
+
+Create a serverless handler without starting a server.
+
+```typescript
+static async createHandler(options: FrontMcpConfigType): Promise<unknown>
+```
+
+Best for: Serverless deployments (Vercel, AWS Lambda).
+
+```typescript
+// api/mcp.ts (Vercel)
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from '../src/server';
+
+export default FrontMcpInstance.createHandler(config);
+```
+
+### createDirect(options)
+
+Create a DirectMcpServer for programmatic access.
+
+```typescript
+static async createDirect(options: FrontMcpConfigInput): Promise<DirectMcpServer>
+```
+
+Best for: Testing, embedding, CLI tools, agent backends.
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+const server = await FrontMcpInstance.createDirect(config);
+
+// Use programmatically
+const tools = await server.listTools();
+const result = await server.callTool('my_tool', { arg: 'value' });
+
+// Cleanup
+await server.dispose();
+```
+
+### createForGraph(options)
+
+Create an instance for introspection without starting server.
+
+```typescript
+static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance>
+```
+
+Best for: Graph visualization, introspection, analysis.
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+const instance = await FrontMcpInstance.createForGraph(config);
+const scopes = instance.getScopes();
+
+// Analyze registries
+scopes.forEach(scope => {
+  console.log('Tools:', scope.tools.getTools().length);
+  console.log('Resources:', scope.resources.getResources().length);
+});
+```
+
+### runStdio(options)
+
+Run the server with stdio transport.
+
+```typescript
+static async runStdio(options: FrontMcpConfigInput): Promise<void>
+```
+
+Best for: Claude Desktop, stdio-based MCP clients.
+
+```typescript
+// bin/cli.ts
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from '../src/server';
+
+await FrontMcpInstance.runStdio(config);
+// Never returns until connection closes
+```
+
+## Instance Methods
+
+### getConfig()
+
+Get the server configuration.
+
+```typescript
+getConfig(): FrontMcpConfigType
+```
+
+### getScopes()
+
+Get all initialized scopes.
+
+```typescript
+getScopes(): ScopeEntry[]
+```
+
+```typescript
+const instance = await FrontMcpInstance.createForGraph(config);
+const scopes = instance.getScopes();
+
+scopes.forEach(scope => {
+  console.log('Scope ID:', scope.id);
+  console.log('Tools:', scope.tools.getTools().map(t => t.name));
+});
+```
+
+### start()
+
+Start the HTTP server (called internally by bootstrap).
+
+```typescript
+start(): void
+```
+
+## Initialization Sequence
+
+```
+Constructor
+  ↓ sets this.ready = this.initialize()
+initialize()
+  ↓
+1. Initialize ProviderRegistry (global providers)
+2. Initialize LoggerRegistry (depends on providers)
+3. Initialize ScopeRegistry (creates Scope instances)
+  ↓
+ready Promise resolves
+```
+
+## Usage Examples
+
+### Development Server
+
+```typescript
+// src/index.ts
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+async function main() {
+  await FrontMcpInstance.bootstrap(config);
+  console.log('Server started');
+}
+
+main().catch(console.error);
+```
+
+### Serverless (Vercel)
+
+```typescript
+// api/mcp/[[...slug]].ts
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from '../../src/server';
+
+export default FrontMcpInstance.createHandler(config);
+```
+
+### Testing
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+describe('MCP Server', () => {
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await FrontMcpInstance.createDirect(config);
+  });
+
+  afterAll(async () => {
+    await server.dispose();
+  });
+
+  test('list tools', async () => {
+    const tools = await server.listTools();
+    expect(tools.length).toBeGreaterThan(0);
+  });
+
+  test('call tool', async () => {
+    const result = await server.callTool('my_tool', { input: 'test' });
+    expect(result).toBeDefined();
+  });
+});
+```
+
+### Claude Desktop Integration
+
+```json
+// claude_desktop_config.json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "node",
+      "args": ["dist/cli.js"],
+      "cwd": "/path/to/server"
+    }
+  }
+}
+```
+
+```typescript
+// src/cli.ts
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+FrontMcpInstance.runStdio(config).catch(console.error);
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@FrontMcp" icon="at" href="/frontmcp/sdk-reference/decorators/frontmcp">
+    Server decorator
+  </Card>
+  <Card title="Scope" icon="layer-group" href="/frontmcp/sdk-reference/core/scope">
+    Registry access
+  </Card>
+  <Card title="DirectClient" icon="plug" href="/frontmcp/sdk-reference/core/direct-client">
+    Programmatic access
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/frontmcp/deployment/production-build">
+    Deployment guides
+  </Card>
+</CardGroup>

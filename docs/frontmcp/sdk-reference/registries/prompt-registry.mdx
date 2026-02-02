@@ -1,0 +1,272 @@
+---
+title: "PromptRegistry"
+description: "The PromptRegistry manages all MCP prompts within a scope. Prompts are reusable message templates that can be parameterized."
+icon: "message"
+---
+
+## Overview
+
+```typescript
+import { PromptRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const prompts = scope.prompts;
+
+// List all prompts
+const allPrompts = prompts.getPrompts();
+
+// Find a specific prompt
+const prompt = prompts.findByName('code_review');
+```
+
+## Methods
+
+### getPrompts()
+
+Get all prompts (local + adopted).
+
+```typescript
+getPrompts(includeHidden?: boolean): ReadonlyArray<PromptEntry>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `includeHidden` | `boolean` | `false` | Include hidden prompts |
+
+**Example:**
+
+```typescript
+// Get all visible prompts
+const prompts = registry.getPrompts();
+
+// Include hidden prompts
+const allPrompts = registry.getPrompts(true);
+```
+
+### findByName()
+
+Find a prompt by its base name.
+
+```typescript
+findByName(name: string): PromptEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const prompt = registry.findByName('code_review');
+if (prompt) {
+  console.log(`Found: ${prompt.description}`);
+}
+```
+
+### findAllByName()
+
+Find all prompts matching a name (when multiple exist).
+
+```typescript
+findAllByName(name: string): ReadonlyArray<PromptEntry>
+```
+
+**Example:**
+
+```typescript
+// When multiple apps define 'greeting' prompt
+const prompts = registry.findAllByName('greeting');
+for (const prompt of prompts) {
+  console.log(`${prompt.qualifiedId}: ${prompt.description}`);
+}
+```
+
+### findByQualifiedName()
+
+Find a prompt by its fully qualified name.
+
+```typescript
+findByQualifiedName(qualifiedName: string): PromptEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const prompt = registry.findByQualifiedName('my-app:code_review');
+```
+
+### getExported()
+
+Lookup a prompt by its exported (resolved) name.
+
+```typescript
+getExported(name: string, opts?: { ignoreCase?: boolean }): PromptEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const prompt = registry.getExported('Code_Review');
+```
+
+### exportResolvedNames()
+
+Produce unique, conflict-aware exported names.
+
+```typescript
+exportResolvedNames(opts?: ExportResolvedNamesOptions): Map<string, PromptEntry>
+```
+
+**Example:**
+
+```typescript
+const exportedNames = registry.exportResolvedNames();
+// code_review → app1:code_review
+// app2_code_review → app2:code_review (conflict resolved)
+```
+
+### getInlinePrompts()
+
+Get prompts defined inline (local only).
+
+```typescript
+getInlinePrompts(): ReadonlyArray<PromptEntry>
+```
+
+### listAllInstances()
+
+List all prompt instances (locals + adopted).
+
+```typescript
+listAllInstances(): ReadonlyArray<PromptEntry>
+```
+
+### listByOwner()
+
+List prompts by owner path.
+
+```typescript
+listByOwner(ownerPath: string): ReadonlyArray<PromptEntry>
+```
+
+**Example:**
+
+```typescript
+const appPrompts = registry.listByOwner('my-app');
+```
+
+### registerPromptInstance()
+
+Register a pre-constructed PromptInstance directly.
+
+```typescript
+registerPromptInstance(prompt: PromptInstance): void
+```
+
+<Note>
+Typically used internally for remote app prompts.
+</Note>
+
+### subscribe()
+
+Subscribe to prompt change events.
+
+```typescript
+subscribe(
+  opts: SubscribeOptions,
+  cb: (event: PromptChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+**Example:**
+
+```typescript
+const unsubscribe = registry.subscribe({}, (event) => {
+  console.log(`Prompt ${event.kind}:`, event.entry?.name);
+});
+
+// Later
+unsubscribe();
+```
+
+### getCapabilities()
+
+Get MCP capabilities for prompts.
+
+```typescript
+getCapabilities(): { listChanged: boolean }
+```
+
+**Example:**
+
+```typescript
+const caps = registry.getCapabilities();
+// { listChanged: true }
+```
+
+### hasAny()
+
+Check if any prompts exist.
+
+```typescript
+hasAny(): boolean
+```
+
+### adoptFromChild()
+
+Adopt prompts from a child registry.
+
+```typescript
+adoptFromChild(child: PromptRegistry, childOwner: Owner): void
+```
+
+## Change Events
+
+```typescript
+interface PromptChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: ReadonlyArray<PromptEntry>;
+  entry?: PromptEntry;
+  sessionId?: string;
+  relatedRequestId?: string;
+}
+```
+
+## Indexes
+
+| Index | Key | Description |
+|-------|-----|-------------|
+| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
+| `byName` | `name` | Base name lookup |
+| `byOwnerAndName` | `owner:name` | Scoped name lookup |
+| `byOwner` | `ownerPath` | All prompts by owner |
+
+## Prompt Arguments
+
+Prompts can define required and optional arguments:
+
+```typescript
+@Prompt({
+  name: 'code_review',
+  description: 'Review code for best practices',
+  arguments: [
+    { name: 'language', description: 'Programming language', required: true },
+    { name: 'style', description: 'Review style', required: false },
+  ],
+})
+class CodeReviewPrompt extends PromptContext { }
+```
+
+Arguments are validated when the prompt is called:
+
+```typescript
+const entry = registry.findByName('code_review');
+// entry.arguments contains the argument definitions
+```
+
+## Related
+
+- [Prompt Decorator](/frontmcp/sdk-reference/decorators/prompt)
+- [PromptContext](/frontmcp/sdk-reference/contexts/prompt-context)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

@@ -1,0 +1,405 @@
+---
+title: "DirectClient"
+description: "DirectClient provides programmatic access to FrontMCP servers with automatic tool formatting for different LLM platforms (OpenAI, Claude, LangChain, etc.)."
+icon: "plug"
+---
+
+## Interface
+
+```typescript
+interface DirectClient {
+  // Tools
+  listTools(): Promise<FormattedTools>;
+  callTool(name: string, args?: Record<string, unknown>): Promise<FormattedToolResult>;
+
+  // Resources
+  listResources(): Promise<ListResourcesResult>;
+  readResource(uri: string): Promise<ReadResourceResult>;
+  listResourceTemplates(): Promise<ListResourceTemplatesResult>;
+
+  // Prompts
+  listPrompts(): Promise<ListPromptsResult>;
+  getPrompt(name: string, args?: Record<string, string>): Promise<GetPromptResult>;
+
+  // Skills
+  searchSkills(query: string, options?: SearchSkillsOptions): Promise<SearchSkillsResult>;
+  loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult>;
+  listSkills(options?: ListSkillsOptions): Promise<ListSkillsResult>;
+
+  // Info
+  getSessionId(): string;
+  getClientInfo(): ClientInfo;
+  getServerInfo(): Implementation;
+  getCapabilities(): ServerCapabilities;
+  getDetectedPlatform(): LLMPlatform;
+
+  // Lifecycle
+  close(): Promise<void>;
+}
+```
+
+## Connection Functions
+
+### connect(config, options?)
+
+Create a generic DirectClient.
+
+```typescript
+import { connect } from '@frontmcp/sdk';
+
+const client = await connect(config, {
+  clientInfo: { name: 'my-agent', version: '1.0.0' },
+  authToken: 'jwt-token',
+});
+```
+
+### connectOpenAI(config, options?)
+
+Create a client with OpenAI tool formatting.
+
+```typescript
+import { connectOpenAI } from '@frontmcp/sdk';
+
+const client = await connectOpenAI(config);
+const tools = await client.listTools();
+// tools are in OpenAI function format
+```
+
+### connectClaude(config, options?)
+
+Create a client with Anthropic Claude formatting.
+
+```typescript
+import { connectClaude } from '@frontmcp/sdk';
+
+const client = await connectClaude(config);
+const tools = await client.listTools();
+// tools are in Claude tool format
+```
+
+### connectLangChain(config, options?)
+
+Create a client with LangChain tool formatting.
+
+```typescript
+import { connectLangChain } from '@frontmcp/sdk';
+
+const client = await connectLangChain(config);
+const tools = await client.listTools();
+// tools are in LangChain schema format
+```
+
+### connectVercelAI(config, options?)
+
+Create a client with Vercel AI SDK formatting.
+
+```typescript
+import { connectVercelAI } from '@frontmcp/sdk';
+
+const client = await connectVercelAI(config);
+const tools = await client.listTools();
+// tools are in Vercel AI format
+```
+
+## Connection Options
+
+```typescript
+interface ConnectOptions {
+  clientInfo?: ClientInfo;
+  session?: SessionOptions;
+  authToken?: string;
+  capabilities?: Partial<ClientCapabilities>;
+}
+
+interface SessionOptions {
+  id?: string;
+  user?: {
+    sub?: string;
+    name?: string;
+    email?: string;
+    [key: string]: unknown;
+  };
+}
+
+interface ClientInfo {
+  name: string;
+  version: string;
+}
+```
+
+## Tool Operations
+
+### listTools()
+
+List all available tools with platform-specific formatting.
+
+```typescript
+const tools = await client.listTools();
+// FormattedTools depends on detected platform
+```
+
+### callTool(name, args?)
+
+Execute a tool and get platform-formatted result.
+
+```typescript
+const result = await client.callTool('my_tool', {
+  input: 'test',
+  count: 5,
+});
+```
+
+## Resource Operations
+
+### listResources()
+
+List all static resources.
+
+```typescript
+const { resources } = await client.listResources();
+resources.forEach(r => console.log(r.uri, r.name));
+```
+
+### readResource(uri)
+
+Read a resource by URI.
+
+```typescript
+const { contents } = await client.readResource('config://app');
+console.log(contents[0].text);
+```
+
+### listResourceTemplates()
+
+List all resource templates.
+
+```typescript
+const { resourceTemplates } = await client.listResourceTemplates();
+resourceTemplates.forEach(t => console.log(t.uriTemplate));
+```
+
+## Prompt Operations
+
+### listPrompts()
+
+List all prompts.
+
+```typescript
+const { prompts } = await client.listPrompts();
+prompts.forEach(p => console.log(p.name, p.description));
+```
+
+### getPrompt(name, args?)
+
+Get a prompt with arguments.
+
+```typescript
+const { messages } = await client.getPrompt('research', {
+  topic: 'AI safety',
+});
+```
+
+## Skill Operations
+
+### searchSkills(query, options?)
+
+Search for skills.
+
+```typescript
+const { skills } = await client.searchSkills('code review', {
+  limit: 5,
+});
+```
+
+### loadSkills(skillIds, options?)
+
+Load skills into the session.
+
+```typescript
+await client.loadSkills(['review-pr'], {
+  activateSession: true,
+  policyMode: 'strict',
+});
+```
+
+### listSkills(options?)
+
+List all available skills.
+
+```typescript
+const { skills } = await client.listSkills();
+```
+
+## Elicitation
+
+### onElicitation(handler)
+
+Register handler for elicitation requests.
+
+```typescript
+const unsubscribe = client.onElicitation(async (request) => {
+  console.log('Server asking:', request.message);
+
+  // Get user input
+  const response = await getUserInput(request.requestedSchema);
+
+  return {
+    action: 'accept',
+    content: response,
+  };
+});
+
+// Later: unsubscribe()
+```
+
+### submitElicitationResult(elicitId, response)
+
+Submit elicitation response.
+
+```typescript
+await client.submitElicitationResult('elicit-123', {
+  action: 'accept',
+  content: { confirmed: true },
+});
+```
+
+## Lifecycle
+
+### close()
+
+Close the client connection.
+
+```typescript
+await client.close();
+```
+
+## Usage Examples
+
+### Testing Tools
+
+```typescript
+import { connect } from '@frontmcp/sdk';
+import config from './server';
+
+describe('Tools', () => {
+  let client: DirectClient;
+
+  beforeAll(async () => {
+    client = await connect(config);
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  test('list tools', async () => {
+    const tools = await client.listTools();
+    expect(tools.length).toBeGreaterThan(0);
+  });
+
+  test('call tool', async () => {
+    const result = await client.callTool('get_user', { userId: '123' });
+    expect(result.id).toBe('123');
+  });
+});
+```
+
+### OpenAI Integration
+
+```typescript
+import { connectOpenAI } from '@frontmcp/sdk';
+import OpenAI from 'openai';
+
+const client = await connectOpenAI(config);
+const openai = new OpenAI();
+
+// Get tools in OpenAI format
+const tools = await client.listTools();
+
+// Use with OpenAI
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'List all users' }],
+  tools,
+});
+
+// Handle tool calls
+for (const toolCall of completion.choices[0].message.tool_calls || []) {
+  const result = await client.callTool(
+    toolCall.function.name,
+    JSON.parse(toolCall.function.arguments)
+  );
+  // Continue conversation with result...
+}
+```
+
+### Skill Workflow
+
+```typescript
+const client = await connect(config);
+
+// Search for relevant skills
+const search = await client.searchSkills('data analysis', { limit: 3 });
+console.log('Found skills:', search.skills.map(s => s.name));
+
+// Load skill into session
+const load = await client.loadSkills([search.skills[0].id], {
+  activateSession: true,
+  policyMode: 'strict',
+});
+
+// Now only skill's tools are available
+const tools = await client.listTools();
+// tools are filtered to skill's allowlist
+```
+
+### With Authentication
+
+```typescript
+import { connect } from '@frontmcp/sdk';
+import config from './server';
+
+const client = await connect(config, {
+  authToken: 'eyJ...',  // JWT token
+  session: {
+    user: {
+      sub: 'user-123',
+      name: 'John Doe',
+      email: 'john@example.com',
+    },
+  },
+});
+
+// Tools will have access to auth context
+const result = await client.callTool('get_my_profile');
+```
+
+## Scope Caching
+
+Connection functions use WeakMap caching to ensure singleton scopes:
+
+```typescript
+// Same config object = same scope
+const client1 = await connect(config);
+const client2 = await connect(config); // Reuses scope
+
+// Different config = different scope
+const client3 = await connect({ ...config }); // New scope
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpInstance" icon="server" href="/frontmcp/sdk-reference/core/frontmcp-instance">
+    Server bootstrap
+  </Card>
+  <Card title="Testing Overview" icon="flask-vial" href="/frontmcp/testing/overview">
+    Testing guide
+  </Card>
+  <Card title="Runtime Modes" icon="toggle-on" href="/frontmcp/deployment/runtime-modes">
+    Deployment modes
+  </Card>
+  <Card title="Skills" icon="lightbulb" href="/frontmcp/servers/skills">
+    Skills documentation
+  </Card>
+</CardGroup>

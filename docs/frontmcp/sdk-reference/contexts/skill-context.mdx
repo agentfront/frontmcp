@@ -1,0 +1,480 @@
+---
+title: "SkillContext"
+description: "SkillContext is the base class for skill implementations. It extends ExecutionContextBase and provides methods for loading instructions and building skill content."
+icon: "lightbulb"
+---
+
+## Class Definition
+
+```typescript
+export abstract class SkillContext extends ExecutionContextBase<SkillContent>
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metadata` | `SkillMetadata` | Skill metadata |
+| `skillName` | `string` | Skill name |
+| `skillId` | `string` | Skill ID |
+
+## Abstract Methods
+
+### loadInstructions()
+
+Load skill instructions from the configured source.
+
+```typescript
+abstract loadInstructions(): Promise<string>
+```
+
+Instructions can come from:
+- Inline string
+- File reference (`{ file: './path.md' }`)
+- URL reference (`{ url: 'https://...' }`)
+
+### build()
+
+Build the complete skill content.
+
+```typescript
+abstract build(): Promise<SkillContent>
+```
+
+## SkillContent Interface
+
+```typescript
+interface SkillContent {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: Array<{
+    name: string;
+    purpose?: string;
+    required?: boolean;
+  }>;
+  parameters?: SkillParameter[];
+  examples?: SkillExample[];
+}
+```
+
+## Methods
+
+### getToolRefs()
+
+Get normalized tool references from metadata.
+
+```typescript
+getToolRefs(): SkillToolRef[]
+```
+
+```typescript
+interface SkillToolRef {
+  name: string;
+  purpose?: string;
+  required?: boolean;
+}
+```
+
+### getToolNames()
+
+Get tool names from metadata.
+
+```typescript
+getToolNames(): string[]
+```
+
+## Basic Example
+
+```typescript
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'data-analysis',
+  description: 'Analyze datasets and generate insights',
+  instructions: `
+# Data Analysis Workflow
+
+1. Load the dataset using query_database
+2. Analyze patterns and trends
+3. Generate visualizations with create_chart
+4. Summarize findings
+  `,
+  tools: ['query_database', 'create_chart'],
+})
+class DataAnalysisSkill extends SkillContext {
+  async loadInstructions() {
+    // Return inline instructions
+    return this.metadata.instructions as string;
+  }
+
+  async build() {
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions: await this.loadInstructions(),
+      tools: this.getToolRefs().map(ref => ({
+        name: ref.name,
+        purpose: ref.purpose,
+        required: ref.required !== false,
+      })),
+    };
+  }
+}
+```
+
+## File-Based Instructions
+
+```typescript
+import { Skill, SkillContext } from '@frontmcp/sdk';
+import { readFile } from '@frontmcp/utils';
+import { resolve } from 'path';
+
+@Skill({
+  name: 'code-review',
+  description: 'Code review workflow',
+  instructions: { file: './skills/code-review.md' },
+  tools: ['github_get_pr', 'github_comment'],
+})
+class CodeReviewSkill extends SkillContext {
+  async loadInstructions() {
+    const source = this.metadata.instructions;
+
+    if (typeof source === 'string') {
+      return source;
+    }
+
+    if ('file' in source) {
+      const filePath = resolve(process.cwd(), source.file);
+      return readFile(filePath, 'utf-8');
+    }
+
+    throw new Error('Unknown instruction source');
+  }
+
+  async build() {
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions: await this.loadInstructions(),
+      tools: this.getToolRefs().map(ref => ({
+        name: ref.name,
+        purpose: ref.purpose,
+        required: ref.required !== false,
+      })),
+      parameters: this.metadata.parameters,
+      examples: this.metadata.examples,
+    };
+  }
+}
+```
+
+## URL-Based Instructions
+
+```typescript
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'api-integration',
+  description: 'API integration workflow',
+  instructions: { url: 'https://docs.example.com/skills/api-integration.md' },
+  tools: ['http_request', 'parse_json'],
+})
+class ApiIntegrationSkill extends SkillContext {
+  async loadInstructions() {
+    const source = this.metadata.instructions;
+
+    if (typeof source === 'string') {
+      return source;
+    }
+
+    if ('url' in source) {
+      const response = await this.fetch(source.url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch instructions: ${response.status}`);
+      }
+      return response.text();
+    }
+
+    if ('file' in source) {
+      // Handle file...
+    }
+
+    throw new Error('Unknown instruction source');
+  }
+
+  async build() {
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions: await this.loadInstructions(),
+      tools: this.getToolRefs().map(ref => ({
+        name: ref.name,
+        purpose: ref.purpose,
+        required: ref.required !== false,
+      })),
+    };
+  }
+}
+```
+
+## With Parameters and Examples
+
+```typescript
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'deploy-application',
+  description: 'Deploy applications to cloud environments',
+  instructions: `
+# Deployment Workflow
+
+## Prerequisites
+- Ensure all tests pass
+- Verify configuration
+
+## Steps
+1. Build the application
+2. Run smoke tests
+3. Deploy to target environment
+4. Verify deployment
+5. Notify team
+  `,
+  tools: [
+    { name: 'build_app', purpose: 'Build the application', required: true },
+    { name: 'run_tests', purpose: 'Execute test suite', required: true },
+    { name: 'deploy', purpose: 'Deploy to environment', required: true },
+    { name: 'health_check', purpose: 'Verify deployment health', required: true },
+    { name: 'notify_slack', purpose: 'Send notifications', required: false },
+  ],
+  parameters: [
+    {
+      name: 'environment',
+      description: 'Target deployment environment',
+      required: true,
+      type: 'string',
+    },
+    {
+      name: 'version',
+      description: 'Version to deploy',
+      required: false,
+      type: 'string',
+      default: 'latest',
+    },
+    {
+      name: 'notifyChannel',
+      description: 'Slack channel for notifications',
+      required: false,
+      type: 'string',
+    },
+  ],
+  examples: [
+    {
+      scenario: 'Deploy to staging',
+      parameters: { environment: 'staging', version: 'v1.2.3' },
+      expectedOutcome: 'Application deployed to staging environment',
+    },
+    {
+      scenario: 'Deploy to production with notification',
+      parameters: {
+        environment: 'production',
+        version: 'v1.2.3',
+        notifyChannel: '#deployments',
+      },
+      expectedOutcome: 'Application deployed to production, team notified',
+    },
+  ],
+  tags: ['devops', 'deployment', 'ci-cd'],
+  priority: 5,
+})
+class DeployApplicationSkill extends SkillContext {
+  async loadInstructions() {
+    return this.metadata.instructions as string;
+  }
+
+  async build() {
+    const instructions = await this.loadInstructions();
+
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions,
+      tools: this.getToolRefs().map(ref => ({
+        name: ref.name,
+        purpose: ref.purpose,
+        required: ref.required !== false,
+      })),
+      parameters: this.metadata.parameters,
+      examples: this.metadata.examples,
+    };
+  }
+}
+```
+
+## Full Example
+
+```typescript
+import { Skill, SkillContext, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { z } from 'zod';
+import { readFile } from '@frontmcp/utils';
+import { resolve } from 'path';
+
+// Tools
+@Tool({
+  name: 'jira_get_sprint',
+  inputSchema: { sprintId: z.string() },
+})
+class JiraGetSprintTool extends ToolContext {
+  async execute(input) {
+    return { sprintId: input.sprintId, name: 'Sprint 23', issues: [] };
+  }
+}
+
+@Tool({
+  name: 'jira_create_issue',
+  inputSchema: { title: z.string(), description: z.string() },
+})
+class JiraCreateIssueTool extends ToolContext {
+  async execute(input) {
+    return { issueKey: 'PROJ-123', title: input.title };
+  }
+}
+
+@Tool({
+  name: 'confluence_create_page',
+  inputSchema: { title: z.string(), content: z.string() },
+})
+class ConfluenceCreatePageTool extends ToolContext {
+  async execute(input) {
+    return { pageId: 'page-123', url: 'https://...' };
+  }
+}
+
+// Skill
+@Skill({
+  name: 'sprint-retrospective',
+  description: 'Conduct and document sprint retrospectives',
+  instructions: { file: './skills/sprint-retro.md' },
+  tools: [
+    { name: 'jira_get_sprint', purpose: 'Get sprint details and issues', required: true },
+    { name: 'confluence_create_page', purpose: 'Document retrospective notes', required: true },
+    { name: 'jira_create_issue', purpose: 'Create improvement tickets', required: false },
+  ],
+  parameters: [
+    { name: 'sprintId', description: 'Sprint to retrospect', required: true, type: 'string' },
+    { name: 'teamName', description: 'Team name', required: true, type: 'string' },
+  ],
+  examples: [
+    {
+      scenario: 'Run retrospective for completed sprint',
+      parameters: { sprintId: 'sprint-23', teamName: 'Platform Team' },
+      expectedOutcome: 'Retrospective documented, improvement issues created',
+    },
+  ],
+  tags: ['agile', 'retrospective', 'jira', 'confluence'],
+})
+class SprintRetrospectiveSkill extends SkillContext {
+  async loadInstructions() {
+    const source = this.metadata.instructions;
+
+    if (typeof source === 'string') {
+      return source;
+    }
+
+    if ('file' in source) {
+      try {
+        const filePath = resolve(process.cwd(), source.file);
+        return await readFile(filePath, 'utf-8');
+      } catch (error) {
+        this.logger.warn('Failed to load instructions from file, using fallback');
+        return this.getFallbackInstructions();
+      }
+    }
+
+    if ('url' in source) {
+      const response = await this.fetch(source.url);
+      if (!response.ok) {
+        this.logger.warn('Failed to fetch instructions from URL, using fallback');
+        return this.getFallbackInstructions();
+      }
+      return response.text();
+    }
+
+    return this.getFallbackInstructions();
+  }
+
+  private getFallbackInstructions(): string {
+    return `
+# Sprint Retrospective Workflow
+
+1. Get sprint details using jira_get_sprint
+2. Review completed and incomplete issues
+3. Gather team feedback on:
+   - What went well
+   - What could be improved
+   - Action items
+4. Document in Confluence using confluence_create_page
+5. Create improvement issues in Jira if needed
+    `;
+  }
+
+  async build() {
+    this.mark('loading-instructions');
+    const instructions = await this.loadInstructions();
+
+    this.mark('building-content');
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions,
+      tools: this.getToolRefs().map(ref => ({
+        name: ref.name,
+        purpose: ref.purpose,
+        required: ref.required !== false,
+      })),
+      parameters: this.metadata.parameters,
+      examples: this.metadata.examples,
+    };
+  }
+}
+
+@App({
+  name: 'agile-tools',
+  tools: [JiraGetSprintTool, JiraCreateIssueTool, ConfluenceCreatePageTool],
+  skills: [SprintRetrospectiveSkill],
+})
+class AgileToolsApp {}
+
+@FrontMcp({
+  info: { name: 'Agile Assistant', version: '1.0.0' },
+  apps: [AgileToolsApp],
+  skillsConfig: {
+    enabled: true,
+    validation: 'strict',
+  },
+})
+export default class AgileServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Skill" icon="at" href="/frontmcp/sdk-reference/decorators/skill">
+    Skill decorator
+  </Card>
+  <Card title="SkillRegistry" icon="database" href="/frontmcp/sdk-reference/registries/skill-registry">
+    Skill registry
+  </Card>
+  <Card title="Skills Overview" icon="lightbulb" href="/frontmcp/servers/skills">
+    Skills documentation
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Tool decorator
+  </Card>
+</CardGroup>

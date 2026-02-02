@@ -1,0 +1,185 @@
+---
+title: Creating Plugins
+description: Build custom FrontMCP plugins
+---
+
+# Creating Plugins
+
+Build custom plugins to extend FrontMCP with your own functionality.
+
+## Basic Plugin Structure
+
+```typescript
+import { Plugin, PluginContext } from '@frontmcp/sdk';
+
+export class MyPlugin implements Plugin {
+  name = 'my-plugin';
+
+  constructor(private options: MyPluginOptions) {}
+
+  async onInit(ctx: PluginContext) {
+    console.log('Plugin initialized');
+  }
+
+  async beforeTool(ctx: ToolContext) {
+    console.log(`Before: ${ctx.toolName}`);
+  }
+
+  async afterTool(ctx: ToolContext, result: any) {
+    console.log(`After: ${ctx.toolName}`);
+    return result; // Can modify result
+  }
+}
+```
+
+## Adding Tools
+
+Plugins can add tools to the server:
+
+```typescript
+export class AnalyticsPlugin implements Plugin {
+  name = 'analytics';
+
+  getTools() {
+    return [
+      {
+        name: 'trackEvent',
+        description: 'Track an analytics event',
+        schema: z.object({
+          event: z.string(),
+          properties: z.record(z.any()).optional()
+        }),
+        handler: async ({ event, properties }) => {
+          await this.analytics.track(event, properties);
+          return { tracked: true };
+        }
+      }
+    ];
+  }
+}
+```
+
+## Adding Resources
+
+Plugins can add resources:
+
+```typescript
+export class ConfigPlugin implements Plugin {
+  name = 'config';
+
+  getResources() {
+    return [
+      {
+        name: 'config',
+        description: 'Server configuration',
+        uri: 'config://settings',
+        handler: async () => this.config
+      }
+    ];
+  }
+}
+```
+
+## Intercepting Calls
+
+Modify tool behavior:
+
+```typescript
+export class LoggingPlugin implements Plugin {
+  name = 'logging';
+
+  async beforeTool(ctx: ToolContext) {
+    ctx.startTime = Date.now();
+    this.logger.info(`Calling ${ctx.toolName}`, { params: ctx.params });
+  }
+
+  async afterTool(ctx: ToolContext, result: any) {
+    const duration = Date.now() - ctx.startTime;
+    this.logger.info(`${ctx.toolName} completed`, { duration, result });
+    return result;
+  }
+
+  async onError(error: Error, ctx: ToolContext) {
+    this.logger.error(`${ctx.toolName} failed`, { error: error.message });
+  }
+}
+```
+
+## Providing Services
+
+Share services with apps:
+
+```typescript
+export class DatabasePlugin implements Plugin {
+  name = 'database';
+  private client: DatabaseClient;
+
+  async onInit() {
+    this.client = await Database.connect(this.options.url);
+  }
+
+  async onDestroy() {
+    await this.client.disconnect();
+  }
+
+  getProviders() {
+    return [
+      {
+        provide: 'Database',
+        useValue: this.client
+      }
+    ];
+  }
+}
+```
+
+## Configuration
+
+Make plugins configurable:
+
+```typescript
+interface RateLimitOptions {
+  maxRequests: number;
+  windowMs: number;
+}
+
+export class RateLimitPlugin implements Plugin {
+  name = 'rate-limit';
+
+  constructor(private options: RateLimitOptions) {}
+
+  async beforeTool(ctx: ToolContext) {
+    const key = `${ctx.userId}:${ctx.toolName}`;
+    const count = await this.increment(key);
+
+    if (count > this.options.maxRequests) {
+      throw new Error('Rate limit exceeded');
+    }
+  }
+}
+```
+
+## Publishing Plugins
+
+```bash
+# Package structure
+my-plugin/
+├── src/
+│   └── index.ts
+├── package.json
+└── README.md
+
+# Publish
+npm publish
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/docs/official/cache">
+    Learn from Cache Plugin
+  </Card>
+  <Card title="Community" icon="users" href="/frontmcp/plugins/docs/community/overview">
+    Share your plugin
+  </Card>
+</CardGroup>

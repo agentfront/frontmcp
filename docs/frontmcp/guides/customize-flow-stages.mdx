@@ -1,0 +1,641 @@
+---
+title: Customize Flow Stages
+slug: guides/customize-flow-stages
+description: Hook into tool execution lifecycle to enforce policy, add telemetry, or transform inputs/outputs
+icon: diagram-project
+---
+
+Hooks allow you to intercept and modify tool execution at specific lifecycle stages. Use hooks to add cross-cutting concerns like validation, logging, auditing, rate limiting, and data transformation without modifying individual tools.
+
+## Core Concepts
+
+<CardGroup cols={2}>
+  <Card title="Flows" icon="sitemap">
+    Named execution pipelines with defined stages (e.g., `tools:call-tool`, `http:request`)
+  </Card>
+
+  <Card title="Hook Types" icon="link">
+    **Will** (before), **Did** (after), **Around** (wrap), **Stage** (replace)
+  </Card>
+
+  <Card title="Priority" icon="arrow-up-1-9">
+    Higher priority runs first for Will/Stage; Did runs in reverse order
+  </Card>
+  <Card title="Context" icon="database">
+    Shared state object passed through all stages, allowing data flow between hooks
+  </Card>
+</CardGroup>
+
+---
+
+## Hook Types
+
+<Tabs>
+  <Tab title="Will (Before)">
+    Runs **before** a stage executes. Use for:
+    - Input validation
+    - Pre-processing
+    - Short-circuiting execution
+    - Setting up context
+
+    ```ts
+    @ToolHook.Will('execute', { priority: 100 })
+    async validateInput(ctx: FlowCtxOf<'tools:call-tool'>) {
+      const { toolContext } = ctx.state;
+      if (!toolContext) return;
+
+      // Validate required fields
+      if (!toolContext.input.amount || toolContext.input.amount <= 0) {
+        throw new Error('Amount must be greater than 0');
+      }
+    }
+    ```
+
+  </Tab>
+
+  <Tab title="Did (After)">
+    Runs **after** a stage completes. Use for:
+    - Post-processing
+    - Logging/auditing
+    - Output transformation
+    - Cleanup
+
+    ```ts
+    @ToolHook.Did('execute', { priority: 100 })
+    async redactSensitiveData(ctx: FlowCtxOf<'tools:call-tool'>) {
+      const { toolContext } = ctx.state;
+      if (!toolContext?.output) return;
+
+      // Redact sensitive fields
+      if (typeof toolContext.output === 'object') {
+        toolContext.output = {
+          ...toolContext.output,
+          ssn: '***-**-****',
+          creditCard: '****-****-****-****',
+        };
+      }
+    }
+    ```
+
+  </Tab>
+
+  <Tab title="Around (Wrap)">
+    Wraps execution, running code before and after. Use for:
+    - Timing/profiling
+    - Try-catch error handling
+    - Resource management
+    - Transactions
+
+    ```ts
+    @ToolHook.Around('execute')
+    async measureExecutionTime(
+      ctx: FlowCtxOf<'tools:call-tool'>,
+      next: () => Promise<void>
+    ) {
+      const start = Date.now();
+      const { toolContext } = ctx.state;
+
+      try {
+        await next(); // Execute the stage
+      } finally {
+        const duration = Date.now() - start;
+        this.logger.info(`Tool ${toolContext?.toolName} took ${duration}ms`);
+      }
+    }
+    ```
+
+  </Tab>
+
+  <Tab title="Stage (Replace)">
+    Replaces the default stage implementation entirely. Use for:
+    - Complete custom logic
+    - Alternative implementations
+    - Advanced control flow
+
+    ```ts
+    @ToolHook.Stage('validate', { priority: 500 })
+    async customValidation(ctx: FlowCtxOf<'tools:call-tool'>) {
+      // Custom validation logic
+      const { tool, toolContext } = ctx.state;
+      if (!tool || !toolContext) return;
+
+      // Your custom validation
+      await this.validateSchema(toolContext.input, tool.inputSchema);
+    }
+    ```
+
+  </Tab>
+</Tabs>
+
+---
+
+## Available Flows
+
+FrontMCP provides pre-defined hooks for common flows:
+
+<CodeGroup>
+
+```ts Tool Execution
+import { ToolHook } from '@frontmcp/sdk';
+
+class MyPlugin {
+  @ToolHook.Will('execute')
+  async beforeToolExecution(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Hook into tool execution
+  }
+
+  @ToolHook.Did('execute')
+  async afterToolExecution(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Post-process tool results
+  }
+}
+```
+
+```ts HTTP Requests
+import { HttpHook } from '@frontmcp/sdk';
+
+class MyPlugin {
+  @HttpHook.Will('execute')
+  async beforeHttpRequest(ctx: FlowCtxOf<'http:request'>) {
+    // Intercept HTTP requests
+  }
+}
+```
+
+```ts List Tools
+import { ListToolsHook } from '@frontmcp/sdk';
+
+class MyPlugin {
+  @ListToolsHook.Did('execute')
+  async afterListTools(ctx: FlowCtxOf<'tools:list-tools'>) {
+    // Filter or transform tool list
+  }
+}
+```
+
+</CodeGroup>
+
+<Info>
+  You can also create custom flows using `FlowHooksOf('custom-flow-name')` for application-specific pipelines.
+</Info>
+
+---
+
+## Complete Examples
+
+### Example 1: Request Validation & Auditing
+
+```ts
+import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'audit-plugin',
+  description: 'Validates requests and logs all tool executions',
+})
+export default class AuditPlugin {
+  @ToolHook.Will('execute', { priority: 100 })
+  async validateRequest(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext, tool } = ctx.state;
+    if (!toolContext || !tool) return;
+
+    // Enforce tenant isolation
+    const tenantId = toolContext.authInfo.user?.tenantId;
+    if (!tenantId && tool.metadata.requiresTenant) {
+      throw new Error('Tenant ID required for this tool');
+    }
+
+    // Rate limiting check
+    await this.checkRateLimit(tenantId, tool.fullName);
+  }
+
+  @ToolHook.Did('execute', { priority: 100 })
+  async auditExecution(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext, tool } = ctx.state;
+    if (!toolContext || !tool) return;
+
+    // Log execution
+    await this.auditLog.record({
+      toolName: tool.fullName,
+      userId: toolContext.authInfo.user?.id,
+      tenantId: toolContext.authInfo.user?.tenantId,
+      input: toolContext.input,
+      output: toolContext.output,
+      timestamp: new Date().toISOString(),
+      duration: ctx.metrics?.duration,
+    });
+  }
+
+  private async checkRateLimit(tenantId: string, toolName: string) {
+    // Rate limiting logic
+  }
+}
+```
+
+### Example 2: Error Handling & Retries
+
+```ts
+import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'resilience-plugin',
+  description: 'Adds retry logic and error handling to tools',
+})
+export default class ResiliencePlugin {
+  @ToolHook.Around('execute')
+  async withRetry(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
+    const { tool, toolContext } = ctx.state;
+    if (!tool || !toolContext) return await next();
+
+    const maxRetries = tool.metadata.retries ?? 0;
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          this.logger.warn(`Retry attempt ${attempt} for ${tool.fullName}`);
+          await this.delay(attempt * 1000); // Exponential backoff
+        }
+
+        await next();
+        return; // Success
+      } catch (error) {
+        lastError = error as Error;
+
+        // Don't retry on validation errors
+        if (error.message.includes('validation')) {
+          throw error;
+        }
+
+        if (attempt === maxRetries) {
+          throw lastError;
+        }
+      }
+    }
+  }
+
+  @ToolHook.Did('execute', { priority: -100 })
+  async handleError(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext } = ctx.state;
+    if (!toolContext) return;
+
+    // Transform errors into user-friendly messages
+    if (ctx.error) {
+      this.logger.error('Tool execution failed', {
+        tool: toolContext.toolName,
+        error: ctx.error.message,
+      });
+
+      // Could transform or wrap the error here
+    }
+  }
+
+  private delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+```
+
+### Example 3: Data Transformation Pipeline
+
+```ts
+import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'transform-plugin',
+  description: 'Transforms inputs and outputs',
+})
+export default class TransformPlugin {
+  @ToolHook.Will('execute', { priority: 50 })
+  async normalizeInput(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext } = ctx.state;
+    if (!toolContext) return;
+
+    // Normalize string inputs
+    if (typeof toolContext.input === 'object') {
+      for (const [key, value] of Object.entries(toolContext.input)) {
+        if (typeof value === 'string') {
+          toolContext.input[key] = value.trim().toLowerCase();
+        }
+      }
+    }
+  }
+
+  @ToolHook.Did('execute', { priority: 50 })
+  async enrichOutput(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext, tool } = ctx.state;
+    if (!toolContext?.output || typeof toolContext.output !== 'object') {
+      return;
+    }
+
+    // Add metadata to all responses
+    toolContext.output = {
+      ...toolContext.output,
+      _metadata: {
+        toolName: tool?.fullName,
+        executedAt: new Date().toISOString(),
+        version: tool?.metadata.version || '1.0.0',
+      },
+    };
+  }
+}
+```
+
+---
+
+## Priority System
+
+<Info>
+  Priority determines execution order. Higher priority runs **first** for Will/Stage hooks, and **last** for Did hooks.
+</Info>
+
+```ts
+class PriorityExample {
+  @ToolHook.Will('execute', { priority: 100 })
+  async firstValidation() {
+    // Runs first
+  }
+
+  @ToolHook.Will('execute', { priority: 50 })
+  async secondValidation() {
+    // Runs second
+  }
+
+  @ToolHook.Did('execute', { priority: 100 })
+  async firstCleanup() {
+    // Runs last (Did reverses order)
+  }
+
+  @ToolHook.Did('execute', { priority: 50 })
+  async secondCleanup() {
+    // Runs first
+  }
+}
+```
+
+---
+
+## Flow Context
+
+The flow context (`FlowCtxOf<'flow-name'>`) contains:
+
+- `state` - Shared state between hooks (tool, toolContext, request, response, etc.)
+- `error` - Any error that occurred during execution
+- `metrics` - Timing and performance data
+- `logger` - Logger instance for this flow
+
+<CodeGroup>
+
+```ts Accessing State
+@ToolHook.Will('execute')
+async logToolInfo(ctx: FlowCtxOf<'tools:call-tool'>) {
+  const { tool, toolContext } = ctx.state;
+
+  ctx.logger.info('Executing tool', {
+    name: tool?.fullName,
+    input: toolContext?.input,
+  });
+}
+```
+
+```ts Modifying State
+@ToolHook.Will('execute')
+async enrichContext(ctx: FlowCtxOf<'tools:call-tool'>) {
+  const { toolContext } = ctx.state;
+  if (!toolContext) return;
+
+  // Add user info to context
+  ctx.state.userEmail = toolContext.authInfo.user?.email;
+  ctx.state.requestId = generateRequestId();
+}
+```
+
+```ts Accessing Modified State
+@ToolHook.Did('execute')
+async useEnrichedContext(ctx: FlowCtxOf<'tools:call-tool'>) {
+  // Access data from earlier hooks
+  const requestId = ctx.state.requestId;
+  const userEmail = ctx.state.userEmail;
+
+  this.logger.info('Request completed', { requestId, userEmail });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Hook Registry API
+
+For advanced use cases, you can programmatically access and manage hooks using the Hook Registry API. This is useful when building custom flow orchestration or when you need to dynamically query which hooks are registered.
+
+### Accessing the Hook Registry
+
+```ts
+import { FlowCtxOf } from '@frontmcp/sdk';
+
+class MyPlugin {
+  @ToolHook.Will('execute')
+  async checkRegisteredHooks(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const hookRegistry = ctx.scope.providers.getHooksRegistry();
+
+    // Now you can use registry methods
+    const hooks = hookRegistry.getFlowHooks('tools:call-tool');
+  }
+}
+```
+
+### Registry Methods
+
+<Tabs>
+  <Tab title="getFlowHooks">
+    Retrieves all hooks registered for a specific flow.
+
+    ```ts
+    const hooks = hookRegistry.getFlowHooks('tools:call-tool');
+    // Returns: HookEntry[] - all hooks for this flow
+    ```
+
+  </Tab>
+
+  <Tab title="getFlowHooksForOwner">
+    Retrieves hooks for a specific flow, optionally filtered by owner ID. This is particularly useful for multi-tenant scenarios or when you need to isolate hooks by context.
+
+    **Parameters:**
+    - `flow`: The flow name (e.g., `'tools:call-tool'`)
+    - `ownerId` (optional): The owner ID to filter by
+
+    **Behavior:**
+    - If no `ownerId` is provided, returns all hooks for the flow
+    - If `ownerId` is provided, returns:
+      - Hooks belonging to the specified owner
+      - Global hooks (hooks with no owner)
+
+    ```ts
+    // Get all hooks for a flow
+    const allHooks = hookRegistry.getFlowHooksForOwner('tools:call-tool');
+
+    // Get hooks for a specific owner (e.g., a specific tool or plugin)
+    const ownerHooks = hookRegistry.getFlowHooksForOwner(
+      'tools:call-tool',
+      'my-plugin-id'
+    );
+    // Returns only hooks owned by 'my-plugin-id' + global hooks
+    ```
+
+    **Use Cases:**
+    - **Tool-specific hooks**: When a tool registers hooks that should only apply to its own execution
+    - **Multi-tenant isolation**: Filter hooks by tenant ID to ensure proper isolation
+    - **Plugin scoping**: Get hooks that belong to a specific plugin
+
+  </Tab>
+
+  <Tab title="getFlowStageHooks">
+    Retrieves hooks for a specific flow and stage combination.
+
+    ```ts
+    const executeHooks = hookRegistry.getFlowStageHooks(
+      'tools:call-tool',
+      'execute'
+    );
+    // Returns: HookEntry[] - all hooks for the 'execute' stage
+    ```
+
+  </Tab>
+
+  <Tab title="getClsHooks">
+    Retrieves hooks defined on a specific class.
+
+    ```ts
+    const classHooks = hookRegistry.getClsHooks(MyPlugin);
+    // Returns: HookEntry[] - all hooks defined on MyPlugin class
+    ```
+
+  </Tab>
+</Tabs>
+
+### Example: Owner-Scoped Hook Filtering
+
+```ts
+import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'tool-isolation-plugin',
+  description: 'Demonstrates owner-scoped hook retrieval',
+})
+export default class ToolIsolationPlugin {
+  @ToolHook.Will('execute')
+  async filterHooksByOwner(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext } = ctx.state;
+    if (!toolContext) return;
+
+    const hookRegistry = ctx.scope.providers.getHooksRegistry();
+    const toolOwnerId = toolContext.tool?.metadata.owner?.id;
+
+    // Get only hooks relevant to this specific tool
+    const relevantHooks = hookRegistry.getFlowHooksForOwner('tools:call-tool', toolOwnerId);
+
+    ctx.logger.info(`Found ${relevantHooks.length} hooks for this tool`, {
+      toolOwnerId,
+      hooks: relevantHooks.map((h) => h.metadata.stage),
+    });
+  }
+}
+```
+
+<Warning>
+  The Hook Registry API is an advanced feature primarily intended for framework developers and complex plugin authors.
+  Most users should use the decorator-based approach (`@ToolHook`, `@HttpHook`, etc.) instead.
+</Warning>
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="1. Use Plugins for Reusable Hooks">
+    Package related hooks into plugins to reuse across multiple apps:
+
+    ```ts
+    @Plugin({
+      name: 'my-hooks',
+      description: 'Reusable hook collection',
+    })
+    export default class MyHooksPlugin {
+      @ToolHook.Will('execute')
+      async myValidation(ctx) {
+        // Validation logic
+      }
+    }
+
+    // Use in app
+    @App({
+      plugins: [MyHooksPlugin],
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="2. Set Appropriate Priorities">
+    - **Validation**: High priority (90-100)
+    - **Transformation**: Medium priority (40-60)
+    - **Logging/Metrics**: Low priority (1-20)
+
+    This ensures validation runs before transformation, and logging captures everything.
+
+  </Accordion>
+
+  <Accordion title="3. Handle Errors Gracefully">
+    ```ts
+    @ToolHook.Will('execute')
+    async safeValidation(ctx) {
+      try {
+        await this.validate(ctx.state.toolContext?.input);
+      } catch (error) {
+        // Transform validation errors
+        throw new ValidationError(`Invalid input: ${error.message}`);
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="4. Use Context for Data Sharing">
+    ```ts
+    @ToolHook.Will('execute')
+    async startTimer(ctx) {
+      ctx.state.startTime = Date.now();
+    }
+
+    @ToolHook.Did('execute')
+    async endTimer(ctx) {
+      const duration = Date.now() - ctx.state.startTime;
+      this.logger.info(`Execution took ${duration}ms`);
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="5. Avoid Heavy Computation in Hooks">
+    Hooks run for every tool execution. Keep them fast:
+    - Use caching for expensive operations
+    - Delegate heavy work to background jobs
+    - Consider async/non-blocking operations
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Links & Resources
+
+<CardGroup cols={3}>
+  <Card title="Plugin Documentation" icon="puzzle-piece" href="/docs/frontmcp/servers/extensibility/plugins">
+    Learn more about FrontMCP plugins
+  </Card>
+
+<Card title="Tool Documentation" icon="wrench" href="/docs/frontmcp/servers/tools">
+  Understand tool lifecycle and execution
+</Card>
+
+  <Card title="Cache Plugin" icon="database" href="/docs/frontmcp/plugins/cache-plugin">
+    See hooks in action with the Cache Plugin
+  </Card>
+</CardGroup>

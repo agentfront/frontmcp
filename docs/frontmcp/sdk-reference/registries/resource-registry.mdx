@@ -1,0 +1,324 @@
+---
+title: "ResourceRegistry"
+description: "The ResourceRegistry manages all MCP resources within a scope, including both static resources and resource templates."
+icon: "file"
+---
+
+## Overview
+
+```typescript
+import { ResourceRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const resources = scope.resources;
+
+// List all static resources
+const allResources = resources.getResources();
+
+// List all resource templates
+const templates = resources.getResourceTemplates();
+
+// Find by URI
+const resource = resources.findByUri('file:///config.json');
+```
+
+## Methods
+
+### getResources()
+
+Get all static resources (not templates).
+
+```typescript
+getResources(includeHidden?: boolean): ReadonlyArray<ResourceEntry>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `includeHidden` | `boolean` | `false` | Include hidden resources |
+
+**Example:**
+
+```typescript
+// Get all visible resources
+const resources = registry.getResources();
+
+// Include hidden resources
+const allResources = registry.getResources(true);
+```
+
+### getResourceTemplates()
+
+Get all resource templates.
+
+```typescript
+getResourceTemplates(): ReadonlyArray<ResourceEntry>
+```
+
+**Example:**
+
+```typescript
+const templates = registry.getResourceTemplates();
+for (const template of templates) {
+  console.log(`Template: ${template.uriTemplate}`);
+}
+```
+
+### findByUri()
+
+Find a resource by exact URI match.
+
+```typescript
+findByUri(uri: string): ResourceEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const resource = registry.findByUri('file:///config.json');
+if (resource) {
+  console.log(`Found: ${resource.name}`);
+}
+```
+
+### matchTemplateByUri()
+
+Match a URI against template resources.
+
+```typescript
+matchTemplateByUri(uri: string): {
+  template: ResourceEntry;
+  params: Record<string, string>;
+} | undefined
+```
+
+**Example:**
+
+```typescript
+// Given template: 'file:///users/{userId}/profile'
+const match = registry.matchTemplateByUri('file:///users/123/profile');
+if (match) {
+  console.log(match.template.name); // user-profile
+  console.log(match.params); // { userId: '123' }
+}
+```
+
+### findResourceForUri()
+
+Find resource by URI (exact match or template).
+
+```typescript
+findResourceForUri(uri: string): ResourceEntry | undefined
+```
+
+**Example:**
+
+```typescript
+// Will try exact match first, then template matching
+const resource = registry.findResourceForUri('file:///users/123/profile');
+```
+
+### findByName()
+
+Find a resource by its base name.
+
+```typescript
+findByName(name: string): ResourceEntry | undefined
+```
+
+### findByQualifiedName()
+
+Find a resource by its fully qualified name.
+
+```typescript
+findByQualifiedName(qualifiedName: string): ResourceEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const resource = registry.findByQualifiedName('my-app:config');
+```
+
+### getExported()
+
+Lookup a resource by its exported (resolved) name.
+
+```typescript
+getExported(name: string, opts?: { ignoreCase?: boolean }): ResourceEntry | undefined
+```
+
+### exportResolvedNames()
+
+Produce unique, conflict-aware exported names.
+
+```typescript
+exportResolvedNames(opts?: ExportResolvedNamesOptions): Map<string, ResourceEntry>
+```
+
+### getInlineResources()
+
+Get resources defined inline (local only).
+
+```typescript
+getInlineResources(): ReadonlyArray<ResourceEntry>
+```
+
+### listAllInstances()
+
+List all resource instances (locals + adopted).
+
+```typescript
+listAllInstances(): ReadonlyArray<ResourceEntry>
+```
+
+### listByOwner()
+
+List resources by owner path.
+
+```typescript
+listByOwner(ownerPath: string): ReadonlyArray<ResourceEntry>
+```
+
+### registerResourceInstance()
+
+Register a pre-constructed ResourceEntry directly.
+
+```typescript
+registerResourceInstance(resource: ResourceEntry): void
+```
+
+### registerDynamicResource()
+
+Register a resource or template at runtime.
+
+```typescript
+registerDynamicResource(resourceDef: DynamicResourceDef): ResourceEntry
+```
+
+**Example:**
+
+```typescript
+// Register a dynamic resource
+const entry = registry.registerDynamicResource({
+  name: 'dynamic-config',
+  uri: 'config://runtime',
+  description: 'Runtime configuration',
+  mimeType: 'application/json',
+  read: async () => ({ text: JSON.stringify(config) }),
+});
+```
+
+### subscribe()
+
+Subscribe to resource change events.
+
+```typescript
+subscribe(
+  opts: SubscribeOptions,
+  cb: (event: ResourceChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+**Example:**
+
+```typescript
+const unsubscribe = registry.subscribe({}, (event) => {
+  console.log(`Resource ${event.kind}:`, event.entry?.uri);
+});
+
+// Later
+unsubscribe();
+```
+
+### getCapabilities()
+
+Get MCP capabilities for resources.
+
+```typescript
+getCapabilities(): { subscribe: boolean; listChanged: boolean }
+```
+
+**Example:**
+
+```typescript
+const caps = registry.getCapabilities();
+// { subscribe: false, listChanged: true }
+```
+
+### hasAny()
+
+Check if any resources exist.
+
+```typescript
+hasAny(): boolean
+```
+
+### adoptFromChild()
+
+Adopt resources from a child registry.
+
+```typescript
+adoptFromChild(child: ResourceRegistry, childOwner: Owner): void
+```
+
+## Change Events
+
+```typescript
+interface ResourceChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: ReadonlyArray<ResourceEntry>;
+  entry?: ResourceEntry;
+  sessionId?: string;
+  relatedRequestId?: string;
+}
+```
+
+## Indexes
+
+| Index | Key | Description |
+|-------|-----|-------------|
+| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
+| `byName` | `name` | Base name lookup |
+| `byUri` | `uri` | Static resource URI lookup |
+| `byUriTemplate` | `uriTemplate` | Template URI lookup |
+| `byOwner` | `ownerPath` | All resources by owner |
+
+## Static vs Template Resources
+
+<CardGroup cols={2}>
+  <Card title="Static Resources" icon="file">
+    Have a fixed `uri` property. Found via `findByUri()`.
+  </Card>
+  <Card title="Template Resources" icon="puzzle-piece">
+    Have a `uriTemplate` with parameters. Matched via `matchTemplateByUri()`.
+  </Card>
+</CardGroup>
+
+**Example:**
+
+```typescript
+// Static resource
+@Resource({
+  name: 'config',
+  uri: 'file:///config.json',
+})
+class ConfigResource extends ResourceContext { }
+
+// Template resource
+@ResourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'file:///users/{userId}/profile',
+})
+class UserProfileResource extends ResourceContext<{ userId: string }> { }
+```
+
+## Related
+
+- [Resource Decorator](/frontmcp/sdk-reference/decorators/resource)
+- [ResourceTemplate Decorator](/frontmcp/sdk-reference/decorators/resource-template)
+- [ResourceContext](/frontmcp/sdk-reference/contexts/resource-context)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

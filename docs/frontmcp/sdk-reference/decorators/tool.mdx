@@ -1,0 +1,360 @@
+---
+title: "@Tool"
+description: "The @Tool decorator defines an MCP tool with validated input/output schemas and full TypeScript type inference."
+icon: "wrench"
+---
+
+## Basic Usage
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'get_weather',
+  description: 'Get current weather for a location',
+  inputSchema: {
+    city: z.string().describe('City name'),
+    units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
+  },
+})
+class GetWeatherTool extends ToolContext {
+  async execute(input: { city: string; units: 'celsius' | 'fahrenheit' }) {
+    const weather = await fetchWeather(input.city, input.units);
+    return { temperature: weather.temp, conditions: weather.conditions };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Tool<I extends Shape, O extends OutputSchema>(
+  opts: ToolMetadataOptions<I, O>
+): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique tool identifier |
+| `inputSchema` | `ZodShape` | Zod object shape for input validation |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `description` | `string` | Tool description for AI |
+| `outputSchema` | `ZodType` | Output validation schema |
+| `id` | `string` | Stable identifier for tracking |
+| `tags` | `string[]` | Categorization tags |
+
+### Output Types
+
+```typescript
+// Object output
+@Tool({
+  name: 'create_user',
+  inputSchema: { name: z.string(), email: z.string().email() },
+  outputSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+})
+
+// Primitive outputs
+@Tool({
+  name: 'calculate',
+  inputSchema: { expression: z.string() },
+  outputSchema: 'number', // Returns a number
+})
+
+// MCP content types
+@Tool({
+  name: 'generate_image',
+  inputSchema: { prompt: z.string() },
+  outputSchema: 'image', // Returns base64 image
+})
+
+@Tool({
+  name: 'text_to_speech',
+  inputSchema: { text: z.string() },
+  outputSchema: 'audio', // Returns base64 audio
+})
+
+@Tool({
+  name: 'fetch_document',
+  inputSchema: { uri: z.string() },
+  outputSchema: 'resource', // Returns MCP resource
+})
+```
+
+### Authorization
+
+```typescript
+@Tool({
+  name: 'sensitive_operation',
+  inputSchema: { data: z.string() },
+  authProviders: [
+    { ref: 'github', scopes: ['repo', 'user'] },
+  ],
+})
+class SensitiveTool extends ToolContext {
+  async execute(input) {
+    // Access is validated before execute() is called
+    const token = this.getAuthInfo().accessToken;
+    return await callApi(token, input.data);
+  }
+}
+```
+
+### Annotations
+
+```typescript
+@Tool({
+  name: 'delete_file',
+  inputSchema: { path: z.string() },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+})
+```
+
+### Examples
+
+```typescript
+@Tool({
+  name: 'search_users',
+  inputSchema: { query: z.string(), limit: z.number().optional() },
+  examples: [
+    {
+      input: { query: 'john', limit: 10 },
+      output: { users: [{ id: '1', name: 'John Doe' }], total: 1 },
+    },
+  ],
+})
+```
+
+### UI Configuration
+
+```typescript
+@Tool({
+  name: 'user_profile',
+  inputSchema: { userId: z.string() },
+  ui: {
+    widget: 'user-card',
+    template: 'react',
+  },
+})
+```
+
+## Function-Based Alternative
+
+For simpler tools, use the `tool()` function:
+
+```typescript
+import { tool } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const getWeather = tool({
+  name: 'get_weather',
+  description: 'Get current weather',
+  inputSchema: { city: z.string() },
+})((input, ctx) => {
+  // ctx provides access to context methods
+  const config = ctx.get(ConfigToken);
+  return { temperature: 72, city: input.city };
+});
+```
+
+## Context Methods
+
+The `ToolContext` base class provides:
+
+### Dependency Injection
+
+```typescript
+async execute(input) {
+  const service = this.get(ServiceToken);      // Required dependency
+  const optional = this.tryGet(OptionalToken); // Optional dependency
+}
+```
+
+### Notifications
+
+```typescript
+async execute(input) {
+  // Log message (MCP 2025-11-25 spec)
+  await this.notify('Processing started', 'info');
+
+  // Progress notification
+  await this.progress(50, 100, 'Halfway done...');
+}
+```
+
+### Elicitation (Interactive Input)
+
+```typescript
+async execute(input) {
+  const result = await this.elicit(
+    'Please confirm this action',
+    z.object({ confirmed: z.boolean() }),
+    { mode: 'form', ttl: 300000 }
+  );
+
+  if (result.status === 'accept' && result.content.confirmed) {
+    // Proceed with action
+  }
+}
+```
+
+### Platform Detection
+
+```typescript
+async execute(input) {
+  // Detect AI platform
+  if (this.platform === 'claude') {
+    // Claude-specific formatting
+  }
+
+  // Get client info
+  const client = this.clientInfo; // { name: 'claude', version: '1.0' }
+}
+```
+
+### Authentication
+
+```typescript
+async execute(input) {
+  const auth = this.getAuthInfo();
+  const token = auth.accessToken;
+  const user = auth.user;
+}
+```
+
+### HTTP Requests
+
+```typescript
+async execute(input) {
+  // Context-aware fetch with auto-injected headers
+  const response = await this.fetch('https://api.example.com/data', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+```
+
+### Error Handling
+
+```typescript
+async execute(input) {
+  if (!input.valid) {
+    this.fail(new Error('Invalid input'));
+  }
+
+  // Early return with output
+  if (cached) {
+    this.respond(cached); // Ends execution
+  }
+}
+```
+
+## Type Inference
+
+FrontMCP provides helper types for extracting input/output types:
+
+```typescript
+import { ToolInputOf, ToolOutputOf } from '@frontmcp/sdk';
+
+const metadata = {
+  name: 'my_tool',
+  inputSchema: { x: z.number(), y: z.number() },
+  outputSchema: z.object({ result: z.number() }),
+} as const;
+
+type Input = ToolInputOf<typeof metadata>;   // { x: number; y: number }
+type Output = ToolOutputOf<typeof metadata>; // { result: number }
+```
+
+## Full Example
+
+```typescript
+import { Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const inputSchema = {
+  operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+  a: z.number(),
+  b: z.number(),
+};
+
+const outputSchema = z.object({
+  result: z.number(),
+  operation: z.string(),
+});
+
+@Tool({
+  name: 'calculate',
+  description: 'Perform arithmetic operations',
+  inputSchema,
+  outputSchema,
+  annotations: {
+    readOnlyHint: true,
+    idempotentHint: true,
+  },
+  examples: [
+    { input: { operation: 'add', a: 2, b: 3 }, output: { result: 5, operation: 'add' } },
+  ],
+})
+class CalculateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input) {
+    await this.notify(`Calculating ${input.operation}(${input.a}, ${input.b})`, 'debug');
+
+    let result: number;
+    switch (input.operation) {
+      case 'add': result = input.a + input.b; break;
+      case 'subtract': result = input.a - input.b; break;
+      case 'multiply': result = input.a * input.b; break;
+      case 'divide':
+        if (input.b === 0) this.fail(new Error('Division by zero'));
+        result = input.a / input.b;
+        break;
+    }
+
+    return { result, operation: input.operation };
+  }
+}
+
+@App({ name: 'calculator', tools: [CalculateTool] })
+class CalculatorApp {}
+
+@FrontMcp({
+  info: { name: 'Calculator', version: '1.0.0' },
+  apps: [CalculatorApp],
+})
+export default class CalculatorServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="ToolContext" icon="code" href="/frontmcp/sdk-reference/contexts/tool-context">
+    Context class details
+  </Card>
+  <Card title="ToolRegistry" icon="database" href="/frontmcp/sdk-reference/registries/tool-registry">
+    Tool registry API
+  </Card>
+  <Card title="Tool Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/tool-errors">
+    Tool-related errors
+  </Card>
+  <Card title="@Resource" icon="file" href="/frontmcp/sdk-reference/decorators/resource">
+    Define resources
+  </Card>
+</CardGroup>

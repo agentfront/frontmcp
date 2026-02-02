@@ -1,0 +1,315 @@
+---
+title: "ExecutionContextBase"
+description: "ExecutionContextBase is the abstract base class that provides common functionality for all entry context classes (ToolContext, ResourceContext, AgentContext, SkillContext)."
+icon: "code"
+---
+
+## Class Definition
+
+```typescript
+export abstract class ExecutionContextBase<Out = unknown> {
+  readonly runId: string;
+  activeStage: string;
+  protected readonly logger: FrontMcpLogger;
+  protected readonly providers: ProviderRegistryInterface;
+}
+```
+
+## Constructor
+
+```typescript
+type ExecutionContextBaseArgs = {
+  providers: ProviderRegistryInterface;
+  logger: FrontMcpLogger;
+  authInfo: Partial<AuthInfo>;
+};
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `runId` | `string` | Unique identifier for this execution (UUID) |
+| `activeStage` | `string` | Current execution stage (default: 'init') |
+| `logger` | `FrontMcpLogger` | Logger instance with scope prefix |
+
+## Methods
+
+### Dependency Injection
+
+#### get\<T\>(token)
+
+Get a required dependency from the provider registry.
+
+```typescript
+get<T>(token: Token<T>): T
+```
+
+**Throws:** `DependencyNotFoundError` if token is not registered.
+
+```typescript
+const userService = this.get(UserServiceToken);
+const config = this.get(ConfigService);
+```
+
+#### tryGet\<T\>(token)
+
+Try to get an optional dependency.
+
+```typescript
+tryGet<T>(token: Token<T>): T | undefined
+```
+
+```typescript
+const cache = this.tryGet(CacheServiceToken);
+if (cache) {
+  const cached = await cache.get(key);
+}
+```
+
+### Context Access
+
+#### get context()
+
+Get the current request context.
+
+```typescript
+get context(): FrontMcpContext
+```
+
+**Throws:** `RequestContextNotAvailableError` if not in request scope.
+
+```typescript
+const ctx = this.context;
+const requestId = ctx.requestId;
+const sessionId = ctx.sessionId;
+```
+
+#### tryGetContext()
+
+Try to get request context without throwing.
+
+```typescript
+tryGetContext(): FrontMcpContext | undefined
+```
+
+```typescript
+const ctx = this.tryGetContext();
+if (ctx) {
+  // We're in a request scope
+}
+```
+
+### Scope Access
+
+#### get scope
+
+Get the current scope with all registries.
+
+```typescript
+get scope(): ScopeEntry
+```
+
+```typescript
+const tools = this.scope.tools;
+const resources = this.scope.resources;
+const prompts = this.scope.prompts;
+const agents = this.scope.agents;
+const skills = this.scope.skills;
+```
+
+### Authentication
+
+#### getAuthInfo()
+
+Get authentication information for the current request.
+
+```typescript
+getAuthInfo(): Partial<AuthInfo>
+```
+
+```typescript
+const auth = this.getAuthInfo();
+const user = auth.user;
+const token = auth.accessToken;
+const scopes = auth.scopes;
+```
+
+### Execution Tracking
+
+#### mark(stage)
+
+Mark the current execution stage for debugging and profiling.
+
+```typescript
+mark(stage: string): void
+```
+
+```typescript
+this.mark('validation');
+await validate(input);
+
+this.mark('processing');
+const result = await process(input);
+
+this.mark('complete');
+```
+
+### Error Handling
+
+#### fail(err)
+
+Fail the execution with an error.
+
+```typescript
+protected fail(err: Error): never
+```
+
+```typescript
+if (!input.valid) {
+  this.fail(new InvalidInputError('Input validation failed'));
+}
+```
+
+#### get error
+
+Get the current error, if any.
+
+```typescript
+protected get error(): Error | undefined
+```
+
+### HTTP Requests
+
+#### fetch(input, init?)
+
+Make HTTP requests with auto-injected headers.
+
+```typescript
+fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>
+```
+
+Automatically injects:
+- Authorization headers
+- Trace context headers
+- Custom headers from context
+
+```typescript
+const response = await this.fetch('https://api.example.com/data', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ key: 'value' }),
+});
+
+if (!response.ok) {
+  this.fail(new Error(`API error: ${response.status}`));
+}
+
+return response.json();
+```
+
+### Configuration
+
+#### get config
+
+Get typed configuration access (requires ConfigPlugin).
+
+```typescript
+get config(): ConfigService
+```
+
+```typescript
+const apiKey = this.config.get('API_KEY');
+const port = this.config.getNumber('PORT', 3000);
+const debug = this.config.getBoolean('DEBUG', false);
+```
+
+## Protected Logger
+
+#### get contextLogger
+
+Get a child logger with request context.
+
+```typescript
+protected get contextLogger(): FrontMcpLogger
+```
+
+```typescript
+this.contextLogger.info('Processing request', {
+  input,
+  requestId: this.context.requestId,
+});
+```
+
+## Usage Example
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'process_data',
+  inputSchema: { data: z.string() },
+})
+class ProcessDataTool extends ToolContext {
+  async execute(input: { data: string }) {
+    // Unique run ID for this execution
+    this.logger.info('Starting execution', { runId: this.runId });
+
+    // Mark stages
+    this.mark('validation');
+    if (!input.data) {
+      this.fail(new InvalidInputError('Data is required'));
+    }
+
+    // Get dependencies
+    this.mark('setup');
+    const processor = this.get(ProcessorServiceToken);
+    const cache = this.tryGet(CacheServiceToken);
+
+    // Check cache
+    if (cache) {
+      const cached = await cache.get(input.data);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    // Process
+    this.mark('processing');
+    const result = await processor.process(input.data);
+
+    // Make external call
+    this.mark('external-api');
+    const enriched = await this.fetch('https://api.example.com/enrich', {
+      method: 'POST',
+      body: JSON.stringify(result),
+    }).then(r => r.json());
+
+    // Cache result
+    if (cache) {
+      await cache.set(input.data, enriched);
+    }
+
+    this.mark('complete');
+    return enriched;
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="ToolContext" icon="wrench" href="/frontmcp/sdk-reference/contexts/tool-context">
+    Tool-specific context
+  </Card>
+  <Card title="ResourceContext" icon="file" href="/frontmcp/sdk-reference/contexts/resource-context">
+    Resource-specific context
+  </Card>
+  <Card title="AgentContext" icon="robot" href="/frontmcp/sdk-reference/contexts/agent-context">
+    Agent-specific context
+  </Card>
+  <Card title="ProviderRegistry" icon="database" href="/frontmcp/sdk-reference/registries/provider-registry">
+    Dependency injection
+  </Card>
+</CardGroup>

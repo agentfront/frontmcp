@@ -1,0 +1,238 @@
+---
+title: "@Resource"
+description: "The @Resource decorator defines a static MCP resource with a fixed URI that can be read by AI clients."
+icon: "file"
+---
+
+## Basic Usage
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+
+@Resource({
+  name: 'app-config',
+  uri: 'config://app',
+  mimeType: 'application/json',
+  description: 'Application configuration',
+})
+class AppConfigResource extends ResourceContext {
+  async execute(uri: string) {
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify({ version: '1.0.0', debug: false }),
+      }],
+    };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Resource(providedMetadata: ResourceMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique resource identifier |
+| `uri` | `string` | Resource URI (must be valid per RFC 3986) |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `title` | `string` | Human-readable title |
+| `description` | `string` | Resource description |
+| `mimeType` | `string` | MIME type (e.g., 'application/json') |
+| `icons` | `Icon[]` | Icons for display |
+
+## URI Schemes
+
+Resources can use any valid URI scheme:
+
+```typescript
+// File scheme
+@Resource({
+  name: 'readme',
+  uri: 'file:///docs/README.md',
+  mimeType: 'text/markdown',
+})
+
+// Custom scheme
+@Resource({
+  name: 'database-schema',
+  uri: 'db://schema/users',
+  mimeType: 'application/json',
+})
+
+// HTTPS scheme
+@Resource({
+  name: 'api-spec',
+  uri: 'https://api.example.com/openapi.json',
+  mimeType: 'application/json',
+})
+```
+
+## Return Format
+
+Resources must return `ReadResourceResult`:
+
+```typescript
+interface ReadResourceResult {
+  contents: Array<{
+    uri: string;
+    mimeType?: string;
+    text?: string;      // Text content
+    blob?: string;      // Base64-encoded binary content
+  }>;
+}
+```
+
+### Text Content
+
+```typescript
+@Resource({ name: 'text-file', uri: 'file://readme.txt' })
+class TextResource extends ResourceContext {
+  async execute(uri: string) {
+    return {
+      contents: [{
+        uri,
+        mimeType: 'text/plain',
+        text: 'Hello, World!',
+      }],
+    };
+  }
+}
+```
+
+### Binary Content
+
+```typescript
+@Resource({ name: 'image', uri: 'file://logo.png', mimeType: 'image/png' })
+class ImageResource extends ResourceContext {
+  async execute(uri: string) {
+    const imageBuffer = await readFile('/path/to/logo.png');
+    return {
+      contents: [{
+        uri,
+        mimeType: 'image/png',
+        blob: imageBuffer.toString('base64'),
+      }],
+    };
+  }
+}
+```
+
+## Function-Based Alternative
+
+```typescript
+import { resource } from '@frontmcp/sdk';
+
+const appConfig = resource({
+  name: 'app-config',
+  uri: 'config://app',
+  mimeType: 'application/json',
+})((uri, params) => ({
+  contents: [{
+    uri,
+    mimeType: 'application/json',
+    text: JSON.stringify({ version: '1.0.0' }),
+  }],
+}));
+```
+
+## Context Methods
+
+The `ResourceContext` base class provides:
+
+```typescript
+async execute(uri: string, params: Record<string, string>) {
+  // Dependency injection
+  const db = this.get(DatabaseToken);
+
+  // Logging
+  this.logger.info('Reading resource', { uri });
+
+  // Authentication
+  const auth = this.getAuthInfo();
+
+  // Access scope
+  const tools = this.scope.tools;
+
+  // Error handling
+  if (!exists) {
+    this.fail(new ResourceNotFoundError(uri));
+  }
+
+  // Early return
+  this.respond({ contents: [...] });
+}
+```
+
+## Full Example
+
+```typescript
+import { Resource, ResourceContext, App, FrontMcp } from '@frontmcp/sdk';
+
+@Resource({
+  name: 'system-status',
+  uri: 'status://system',
+  title: 'System Status',
+  description: 'Current system health and metrics',
+  mimeType: 'application/json',
+})
+class SystemStatusResource extends ResourceContext {
+  async execute(uri: string) {
+    this.mark('fetching-metrics');
+
+    const metrics = {
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      timestamp: new Date().toISOString(),
+    };
+
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify(metrics, null, 2),
+      }],
+    };
+  }
+}
+
+@App({
+  name: 'monitoring',
+  resources: [SystemStatusResource],
+})
+class MonitoringApp {}
+
+@FrontMcp({
+  info: { name: 'Monitor', version: '1.0.0' },
+  apps: [MonitoringApp],
+})
+export default class MonitorServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@ResourceTemplate" icon="file-code" href="/frontmcp/sdk-reference/decorators/resource-template">
+    Dynamic URI templates
+  </Card>
+  <Card title="ResourceContext" icon="code" href="/frontmcp/sdk-reference/contexts/resource-context">
+    Context class details
+  </Card>
+  <Card title="ResourceRegistry" icon="database" href="/frontmcp/sdk-reference/registries/resource-registry">
+    Resource registry API
+  </Card>
+  <Card title="Resource Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/resource-errors">
+    Resource-related errors
+  </Card>
+</CardGroup>

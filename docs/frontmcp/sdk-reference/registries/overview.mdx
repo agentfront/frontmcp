@@ -1,0 +1,238 @@
+---
+title: "Registries Overview"
+description: "FrontMCP uses registries to manage collections of tools, resources, prompts, agents, skills, and other components. All registries follow common patterns for registration, lookup, and change events."
+icon: "database"
+---
+
+## Available Registries
+
+<CardGroup cols={2}>
+  <Card title="ToolRegistry" icon="wrench" href="/frontmcp/sdk-reference/registries/tool-registry">
+    Manage MCP tools
+  </Card>
+  <Card title="ResourceRegistry" icon="file" href="/frontmcp/sdk-reference/registries/resource-registry">
+    Manage resources and templates
+  </Card>
+  <Card title="PromptRegistry" icon="message" href="/frontmcp/sdk-reference/registries/prompt-registry">
+    Manage prompts
+  </Card>
+  <Card title="AgentRegistry" icon="robot" href="/frontmcp/sdk-reference/registries/agent-registry">
+    Manage agents
+  </Card>
+  <Card title="SkillRegistry" icon="lightbulb" href="/frontmcp/sdk-reference/registries/skill-registry">
+    Manage skills
+  </Card>
+  <Card title="PluginRegistry" icon="plug" href="/frontmcp/sdk-reference/registries/plugin-registry">
+    Manage plugins
+  </Card>
+  <Card title="HookRegistry" icon="hook" href="/frontmcp/sdk-reference/registries/hook-registry">
+    Manage flow hooks
+  </Card>
+  <Card title="ProviderRegistry" icon="syringe" href="/frontmcp/sdk-reference/registries/provider-registry">
+    Manage DI providers
+  </Card>
+  <Card title="AuthRegistry" icon="lock" href="/frontmcp/sdk-reference/registries/auth-registry">
+    Manage auth providers
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Lifecycle
+
+All registries follow this lifecycle:
+
+```
+buildMap()     → Extract tokens, definitions from metadata
+buildGraph()   → Validate dependencies, populate graph
+initialize()   → Create instances, adopt from children
+```
+
+### Indexing
+
+Registries maintain indexes for O(1) lookups:
+
+- `byQualifiedId`: qualifiedId → entry
+- `byName`: baseName → entries[]
+- `byOwnerAndName`: "ownerKey:name" → entry
+- Registry-specific indexes (byUri, byId, etc.)
+
+### Change Events
+
+All registries emit change events:
+
+```typescript
+interface ChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: ReadonlyArray<Entry>;
+  sessionId?: string;
+  relatedRequestId?: string;
+}
+```
+
+Subscribe to changes:
+
+```typescript
+const unsubscribe = scope.tools.subscribe({}, (event) => {
+  console.log(`Tool ${event.kind}:`, event);
+});
+```
+
+### Adoption
+
+Registries adopt entries from child registries:
+
+```typescript
+// Parent adopts child's tools
+parentRegistry.adoptFromChild(childRegistry, owner);
+```
+
+- References are shared (not cloned)
+- Lineage tracking for qualified names
+- Live updates via subscriptions
+
+### Export Name Resolution
+
+Registries generate unique export names to avoid conflicts:
+
+```typescript
+// Two apps with same tool name
+app1/search → 'search' (no conflict)
+app2/search → 'app2_search' (conflict resolved with prefix)
+```
+
+### Capabilities
+
+Registries expose MCP capabilities:
+
+```typescript
+const caps = scope.tools.getCapabilities();
+// { listChanged: true }
+```
+
+## Accessing Registries
+
+### From Context Classes
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute() {
+    // Access via scope
+    const tools = this.scope.tools;
+    const resources = this.scope.resources;
+
+    // List entries
+    const allTools = tools.getTools();
+
+    // Find specific entry
+    const tool = tools.findByName('other_tool');
+  }
+}
+```
+
+### From Scope
+
+```typescript
+const scope = instance.getScopes()[0];
+
+// All registries available
+scope.tools;      // ToolRegistry
+scope.resources;  // ResourceRegistry
+scope.prompts;    // PromptRegistry
+scope.agents;     // AgentRegistry
+scope.skills;     // SkillRegistry
+scope.plugins;    // PluginRegistry
+scope.hooks;      // HookRegistry
+scope.providers;  // ProviderRegistry
+scope.auth;       // FrontMcpAuth (primary)
+scope.authProviders; // AuthRegistry
+```
+
+## Common Methods
+
+Most registries share these methods:
+
+### Listing
+
+```typescript
+// Get all entries
+registry.getTools();       // ToolRegistry
+registry.getResources();   // ResourceRegistry
+registry.getPrompts();     // PromptRegistry
+registry.getAgents();      // AgentRegistry
+registry.getSkills();      // SkillRegistry
+```
+
+### Finding
+
+```typescript
+// Find by name
+registry.findByName('name');
+
+// Find by qualified name
+registry.findByQualifiedName('app:name');
+
+// Check existence
+registry.has('name');
+```
+
+### Capabilities
+
+```typescript
+// Get MCP capabilities
+registry.getCapabilities();
+// { listChanged: boolean, subscribe?: boolean, ... }
+```
+
+### Subscriptions
+
+```typescript
+// Subscribe to changes
+const unsubscribe = registry.subscribe(
+  { filter: (event) => event.kind === 'added' },
+  (event) => console.log('Entry added:', event)
+);
+
+// Later
+unsubscribe();
+```
+
+## Owner Tracking
+
+Each entry tracks its owner:
+
+```typescript
+interface Owner {
+  kind: 'scope' | 'app' | 'plugin' | 'adapter' | 'agent';
+  id: string;
+  ref?: Token;
+}
+```
+
+Owners are used for:
+- Qualified name generation
+- Lineage tracking
+- Access control
+
+## Lineage System
+
+Entries track their lineage (chain of owners):
+
+```typescript
+// Tool in: scope → app → plugin
+const tool = registry.findByName('tool');
+console.log(tool.lineage);
+// [
+//   { kind: 'scope', id: 'main' },
+//   { kind: 'app', id: 'my-app' },
+//   { kind: 'plugin', id: 'my-plugin' },
+// ]
+```
+
+Used for:
+- Generating qualified names
+- Preventing double-prefixing
+- Debugging ownership

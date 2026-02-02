@@ -1,0 +1,396 @@
+---
+title: "@Skill"
+description: "The @Skill decorator defines a knowledge package that bundles instructions and tool references for specific workflows."
+icon: "lightbulb"
+---
+
+## Basic Usage
+
+```typescript
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'code-review',
+  description: 'Complete code review workflow',
+  instructions: `
+# Code Review Workflow
+
+1. Fetch the pull request details
+2. Review the code changes
+3. Check for common issues
+4. Post review comments
+  `,
+  tools: ['github_get_pr', 'github_post_comment'],
+})
+class CodeReviewSkill extends SkillContext {
+  async loadInstructions() {
+    return this.metadata.instructions as string;
+  }
+
+  async build() {
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions: await this.loadInstructions(),
+      tools: this.getToolRefs(),
+    };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Skill(providedMetadata: SkillMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique skill identifier |
+| `description` | `string` | Skill description |
+| `instructions` | `string \| { file: string } \| { url: string }` | Skill instructions |
+| `tools` | `SkillToolInput[]` | Tools used by the skill |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Stable identifier |
+| `parameters` | `SkillParameter[]` | Input parameters |
+| `examples` | `SkillExample[]` | Usage examples |
+| `tags` | `string[]` | Categorization tags |
+| `priority` | `number` | Execution priority |
+
+## Instruction Sources
+
+### Inline String
+
+```typescript
+@Skill({
+  name: 'my-skill',
+  description: 'My skill',
+  instructions: '# Instructions\n\n1. Step one\n2. Step two',
+  tools: [],
+})
+```
+
+### File Reference
+
+```typescript
+@Skill({
+  name: 'my-skill',
+  description: 'My skill',
+  instructions: { file: './skills/my-skill.md' },
+  tools: [],
+})
+```
+
+### URL Reference
+
+```typescript
+@Skill({
+  name: 'my-skill',
+  description: 'My skill',
+  instructions: { url: 'https://example.com/skills/my-skill.md' },
+  tools: [],
+})
+```
+
+## Tool References
+
+### By Name
+
+```typescript
+tools: ['tool_name', 'another_tool']
+```
+
+### By Class
+
+```typescript
+tools: [MyToolClass, AnotherToolClass]
+```
+
+### With Purpose
+
+```typescript
+tools: [
+  { name: 'github_get_pr', purpose: 'Fetch PR details', required: true },
+  { name: 'github_comment', purpose: 'Post review feedback', required: false },
+]
+```
+
+### With Class and Purpose
+
+```typescript
+tools: [
+  { class: GitHubGetPRTool, purpose: 'Fetch PR details' },
+]
+```
+
+## Parameters
+
+Define input parameters for skills:
+
+```typescript
+@Skill({
+  name: 'deploy',
+  description: 'Deploy application',
+  instructions: '...',
+  tools: ['deploy_app'],
+  parameters: [
+    {
+      name: 'environment',
+      description: 'Target environment',
+      required: true,
+      type: 'string',
+    },
+    {
+      name: 'version',
+      description: 'Version to deploy',
+      required: false,
+      type: 'string',
+      default: 'latest',
+    },
+  ],
+})
+```
+
+## Examples
+
+Provide usage examples:
+
+```typescript
+@Skill({
+  name: 'data-analysis',
+  description: 'Analyze data sets',
+  instructions: '...',
+  tools: ['query_database', 'generate_chart'],
+  examples: [
+    {
+      scenario: 'Analyze monthly sales',
+      parameters: { table: 'sales', period: 'monthly' },
+      expectedOutcome: 'Sales trends chart and summary report',
+    },
+  ],
+})
+```
+
+## Function-Based Alternative
+
+```typescript
+import { skill } from '@frontmcp/sdk';
+
+const codeReviewSkill = skill({
+  name: 'code-review',
+  description: 'Code review workflow',
+  instructions: { file: './code-review.md' },
+  tools: ['github_get_pr', 'github_comment'],
+  tags: ['github', 'review'],
+});
+```
+
+## Skill Content Output
+
+Skills build to `SkillContent`:
+
+```typescript
+interface SkillContent {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  tools: Array<{
+    name: string;
+    purpose?: string;
+    required?: boolean;
+  }>;
+  parameters?: SkillParameter[];
+  examples?: SkillExample[];
+}
+```
+
+## Skill Validation
+
+Skills are validated on server startup:
+
+```typescript
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  skillsConfig: {
+    enabled: true,
+    validation: 'strict', // 'strict' | 'warn' | 'ignore'
+  },
+})
+```
+
+- **strict**: Fail if skill references missing tools
+- **warn**: Log warnings but continue
+- **ignore**: Skip validation
+
+## Skill Sessions
+
+Skills can be loaded into sessions for focused tool access:
+
+```typescript
+// Client-side
+const client = await connect(config);
+
+// Search for skills
+const results = await client.searchSkills('code review');
+
+// Load skill into session
+await client.loadSkills(['code-review'], {
+  activateSession: true,
+  policyMode: 'strict', // Only allow skill's tools
+});
+
+// Now tool calls are restricted to skill's tool allowlist
+```
+
+## Full Example
+
+```typescript
+import { Skill, SkillContext, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Tools
+@Tool({
+  name: 'jira_get_issue',
+  inputSchema: { issueKey: z.string() },
+})
+class JiraGetIssueTool extends ToolContext {
+  async execute(input) {
+    return { key: input.issueKey, summary: 'Issue summary' };
+  }
+}
+
+@Tool({
+  name: 'jira_update_status',
+  inputSchema: { issueKey: z.string(), status: z.string() },
+})
+class JiraUpdateStatusTool extends ToolContext {
+  async execute(input) {
+    return { success: true };
+  }
+}
+
+@Tool({
+  name: 'slack_notify',
+  inputSchema: { channel: z.string(), message: z.string() },
+})
+class SlackNotifyTool extends ToolContext {
+  async execute(input) {
+    return { sent: true };
+  }
+}
+
+// Skill
+@Skill({
+  name: 'sprint-planning',
+  description: 'Assist with Agile sprint planning',
+  instructions: `
+# Sprint Planning Workflow
+
+## Overview
+Help the team plan their next sprint by reviewing backlog items and updating statuses.
+
+## Steps
+
+1. **Review Backlog**
+   - Use \`jira_get_issue\` to fetch backlog items
+   - Analyze priority and estimates
+
+2. **Assign to Sprint**
+   - Use \`jira_update_status\` to move items to sprint
+   - Verify capacity constraints
+
+3. **Notify Team**
+   - Use \`slack_notify\` to inform the team
+   - Share sprint goals and assignments
+
+## Best Practices
+- Keep sprint scope realistic
+- Balance workload across team members
+- Leave buffer for unexpected work
+  `,
+  tools: [
+    { name: 'jira_get_issue', purpose: 'Fetch issue details from backlog', required: true },
+    { name: 'jira_update_status', purpose: 'Move issues to sprint', required: true },
+    { name: 'slack_notify', purpose: 'Notify team of sprint plan', required: false },
+  ],
+  parameters: [
+    { name: 'sprintName', description: 'Name of the sprint', required: true, type: 'string' },
+    { name: 'capacity', description: 'Team capacity in story points', required: false, type: 'number', default: 40 },
+  ],
+  examples: [
+    {
+      scenario: 'Plan a two-week sprint',
+      parameters: { sprintName: 'Sprint 23', capacity: 40 },
+      expectedOutcome: 'Sprint backlog populated with balanced workload',
+    },
+  ],
+  tags: ['agile', 'jira', 'planning'],
+  priority: 10,
+})
+class SprintPlanningSkill extends SkillContext {
+  async loadInstructions() {
+    return this.metadata.instructions as string;
+  }
+
+  async build() {
+    return {
+      id: this.skillId,
+      name: this.metadata.name,
+      description: this.metadata.description,
+      instructions: await this.loadInstructions(),
+      tools: this.getToolRefs().map(ref => ({
+        name: ref.name,
+        purpose: ref.purpose,
+        required: ref.required !== false,
+      })),
+      parameters: this.metadata.parameters,
+      examples: this.metadata.examples,
+    };
+  }
+}
+
+@App({
+  name: 'project-management',
+  tools: [JiraGetIssueTool, JiraUpdateStatusTool, SlackNotifyTool],
+  skills: [SprintPlanningSkill],
+})
+class ProjectManagementApp {}
+
+@FrontMcp({
+  info: { name: 'PM Assistant', version: '1.0.0' },
+  apps: [ProjectManagementApp],
+  skillsConfig: {
+    enabled: true,
+    validation: 'strict',
+  },
+})
+export default class PMAssistantServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="SkillContext" icon="code" href="/frontmcp/sdk-reference/contexts/skill-context">
+    Context class details
+  </Card>
+  <Card title="SkillRegistry" icon="database" href="/frontmcp/sdk-reference/registries/skill-registry">
+    Skill registry API
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Define tools
+  </Card>
+  <Card title="Skills Overview" icon="lightbulb" href="/frontmcp/servers/skills">
+    Skills documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,172 @@
+---
+title: Remember Plugin
+description: Give AI agents persistent memory across sessions. Remember user preferences, conversation context, and learned information.
+---
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-remember
+```
+
+## Basic Usage
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+import { RememberPlugin } from '@frontmcp/plugin-remember';
+
+@FrontMcp({
+  plugins: [
+    new RememberPlugin({
+      store: redis // or 'memory' for development
+    })
+  ]
+})
+export class MyServer {}
+```
+
+## Added Tools
+
+The plugin adds these tools to your server:
+
+### remember
+
+Store information for later:
+
+```typescript
+// AI agent can call:
+await mcp.callTool('remember', {
+  key: 'user_preference',
+  value: 'prefers dark mode',
+  ttl: 86400000 // 24 hours
+});
+```
+
+### recall
+
+Retrieve stored information:
+
+```typescript
+const preference = await mcp.callTool('recall', {
+  key: 'user_preference'
+});
+// "prefers dark mode"
+```
+
+### forget
+
+Remove stored information:
+
+```typescript
+await mcp.callTool('forget', {
+  key: 'user_preference'
+});
+```
+
+## Configuration
+
+```typescript
+new RememberPlugin({
+  // Storage backend
+  store: redis, // or 'memory'
+
+  // Default TTL
+  ttl: 86400000 * 30, // 30 days
+
+  // Key prefix
+  prefix: 'memory:',
+
+  // Per-user namespacing
+  namespace: (ctx) => ctx.userId,
+
+  // Maximum memories per user
+  maxItems: 1000
+})
+```
+
+## Memory Categories
+
+Organize memories by category:
+
+```typescript
+await mcp.callTool('remember', {
+  category: 'preferences',
+  key: 'theme',
+  value: 'dark'
+});
+
+await mcp.callTool('remember', {
+  category: 'context',
+  key: 'current_project',
+  value: 'AgentFront documentation'
+});
+```
+
+## Semantic Memory
+
+Store with embeddings for semantic retrieval:
+
+```typescript
+new RememberPlugin({
+  store: redis,
+  vectorDb: vectoriaDb, // Enable semantic search
+
+  // Configure embedding
+  embedding: {
+    model: 'text-embedding-3-small',
+    dimensions: 1536
+  }
+})
+```
+
+Semantic recall:
+
+```typescript
+const memories = await mcp.callTool('recallSimilar', {
+  query: 'What does the user like?',
+  limit: 5
+});
+```
+
+## Conversation History
+
+Automatically remember conversation context:
+
+```typescript
+new RememberPlugin({
+  store: redis,
+  conversationHistory: {
+    enabled: true,
+    maxMessages: 100,
+    summarizeAfter: 50
+  }
+})
+```
+
+## Access in Tools
+
+Access memories in your tools:
+
+```typescript
+@App({ name: 'assistant' })
+class AssistantApp {
+  constructor(private memory: MemoryProvider) {}
+
+  @Tool({ name: 'greet' })
+  async greet() {
+    const name = await this.memory.get('user_name');
+    return `Hello, ${name || 'there'}!`;
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CodeCall Plugin" icon="code" href="/frontmcp/plugins/docs/official/codecall">
+    Code execution
+  </Card>
+  <Card title="VectoriaDB" icon="database" href="/vectoriadb/docs/introduction">
+    Semantic search
+  </Card>
+</CardGroup>

@@ -1,0 +1,142 @@
+---
+title: Cache Plugin
+description: Cache tool responses to improve performance and reduce external API calls.
+---
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-cache
+```
+
+## Basic Usage
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugin-cache';
+
+@FrontMcp({
+  plugins: [
+    new CachePlugin({
+      ttl: 60000 // 1 minute default TTL
+    })
+  ]
+})
+export class MyServer {}
+```
+
+## Configuration
+
+```typescript
+new CachePlugin({
+  // Default TTL in milliseconds
+  ttl: 60000,
+
+  // Storage backend
+  storage: 'memory', // or 'redis'
+
+  // Redis configuration (if storage is 'redis')
+  redis: {
+    url: 'redis://localhost:6379'
+  },
+
+  // Maximum cache size (memory only)
+  maxSize: 1000,
+
+  // Cache key prefix
+  prefix: 'mcp:cache:'
+})
+```
+
+## Tool-Level Caching
+
+Cache specific tools:
+
+```typescript
+@Tool({
+  name: 'getUser',
+  cache: {
+    ttl: 300000, // 5 minutes
+    key: (params) => `user:${params.id}`
+  }
+})
+async getUser({ id }) {
+  return await db.users.findById(id);
+}
+```
+
+## Cache Invalidation
+
+### Manual Invalidation
+
+```typescript
+@Tool({ name: 'updateUser' })
+async updateUser({ id, data }) {
+  await db.users.update(id, data);
+
+  // Invalidate cache
+  await this.cache.invalidate(`user:${id}`);
+
+  return { success: true };
+}
+```
+
+### Pattern Invalidation
+
+```typescript
+// Invalidate all user caches
+await this.cache.invalidatePattern('user:*');
+```
+
+## Cache Strategies
+
+### Read-Through
+
+```typescript
+const user = await this.cache.get(`user:${id}`, async () => {
+  return await db.users.findById(id);
+}, { ttl: 60000 });
+```
+
+### Write-Through
+
+```typescript
+await this.cache.set(`user:${id}`, user);
+await db.users.update(id, user);
+```
+
+## Redis Backend
+
+For production, use Redis:
+
+```typescript
+import { CachePlugin, RedisCache } from '@frontmcp/plugins';
+import Redis from 'ioredis';
+
+const redis = new Redis(process.env.REDIS_URL);
+
+new CachePlugin({
+  storage: new RedisCache(redis)
+})
+```
+
+## Cache Events
+
+```typescript
+const cache = new CachePlugin({
+  onHit: (key) => console.log(`Cache hit: ${key}`),
+  onMiss: (key) => console.log(`Cache miss: ${key}`),
+  onEvict: (key) => console.log(`Cache evict: ${key}`)
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Remember Plugin" icon="brain" href="/frontmcp/plugins/docs/official/remember">
+    Persistent memory
+  </Card>
+  <Card title="CodeCall Plugin" icon="code" href="/frontmcp/plugins/docs/official/codecall">
+    Code execution
+  </Card>
+</CardGroup>

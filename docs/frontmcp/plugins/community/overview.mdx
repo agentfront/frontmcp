@@ -1,0 +1,129 @@
+---
+title: Community Plugins
+description: Discover plugins created by the FrontMCP community, or share your own.
+---
+
+## Featured Plugins
+
+<Note>
+  Community plugins are maintained by their authors. Review code before using in production.
+</Note>
+
+### Database Adapters
+
+- **@frontmcp/plugin-postgres** - PostgreSQL integration
+- **@frontmcp/plugin-mongodb** - MongoDB integration
+- **@frontmcp/plugin-prisma** - Prisma ORM adapter
+
+### Authentication
+
+- **@frontmcp/plugin-clerk** - Clerk authentication
+- **@frontmcp/plugin-supabase-auth** - Supabase Auth integration
+
+### Observability
+
+- **@frontmcp/plugin-sentry** - Sentry error tracking
+- **@frontmcp/plugin-datadog** - Datadog APM integration
+- **@frontmcp/plugin-opentelemetry** - OpenTelemetry tracing
+
+### Integrations
+
+- **@frontmcp/plugin-slack** - Slack notifications
+- **@frontmcp/plugin-discord** - Discord bot integration
+- **@frontmcp/plugin-email** - Email sending (SendGrid, Resend)
+
+## Using Community Plugins
+
+```bash
+npm install @frontmcp/plugin-postgres
+```
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+import { PostgresPlugin } from '@frontmcp/plugin-postgres';
+
+@FrontMcp({
+  plugins: [
+    new PostgresPlugin({
+      connectionString: process.env.DATABASE_URL
+    })
+  ]
+})
+export class MyServer {}
+```
+
+## Publishing Your Plugin
+
+### 1. Create Plugin Package
+
+```bash
+mkdir my-plugin
+cd my-plugin
+npm init
+```
+
+### 2. Implement Plugin Interface
+
+```typescript
+import { Plugin } from '@frontmcp/sdk';
+
+export class MyPlugin implements Plugin {
+  name = 'my-plugin';
+  // Implementation
+}
+```
+
+### 3. Add Documentation
+
+Include a README with:
+- Installation instructions
+- Configuration options
+- Usage examples
+- API reference
+
+### 4. Publish
+
+```bash
+npm publish
+```
+
+### 5. Submit to Registry
+
+Open a PR to add your plugin to the community registry:
+
+```
+https://github.com/agentfront/frontmcp-plugins
+```
+
+## Plugin Guidelines
+
+### Quality Standards
+
+- TypeScript types for all exports
+- Comprehensive error handling
+- Unit tests with >80% coverage
+- No security vulnerabilities
+
+### Documentation
+
+- Clear installation instructions
+- Configuration reference
+- Usage examples
+- Changelog
+
+### Maintenance
+
+- Respond to issues within 7 days
+- Keep dependencies updated
+- Follow semantic versioning
+
+## Get Help
+
+<CardGroup cols={2}>
+  <Card title="GitHub Discussions" icon="github" href="https://github.com/agentfront/frontmcp/discussions">
+    Ask questions and share ideas
+  </Card>
+  <Card title="Create Plugin" icon="wrench" href="/frontmcp/plugins/docs/creating-plugins">
+    Plugin development guide
+  </Card>
+</CardGroup>

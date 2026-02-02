@@ -1,0 +1,456 @@
+---
+title: "AgentContext"
+description: "AgentContext is the base class for autonomous AI agents. It extends ExecutionContextBase and provides LLM integration, tool execution, and the default agent loop."
+icon: "robot"
+---
+
+## Class Definition
+
+```typescript
+export class AgentContext<
+  InSchema extends ToolInputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
+  In = AgentInputOf<{ inputSchema: InSchema }>,
+  Out = AgentOutputOf<{ outputSchema: OutSchema }>,
+> extends ExecutionContextBase<Out>
+```
+
+<Note>
+Unlike other context classes, `AgentContext` is not abstract and provides a default `execute()` implementation that runs the agent loop.
+</Note>
+
+## Type Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `InSchema` | Input schema type |
+| `OutSchema` | Output schema type |
+| `In` | Inferred input type |
+| `Out` | Inferred output type |
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metadata` | `AgentMetadata` | Agent metadata |
+| `input` | `In` | Agent input |
+| `output` | `Out \| undefined` | Agent output |
+| `llmAdapter` | `AgentLlmAdapter` | LLM provider adapter |
+| `systemInstructions` | `string` | System prompt |
+| `toolDefinitions` | `AgentToolDefinition[]` | Available tools |
+| `agentName` | `string` | Agent name |
+| `agentId` | `string` | Agent ID |
+| `platform` | `AIPlatformType` | Detected AI platform |
+| `clientInfo` | `ClientInfo \| undefined` | Client information |
+
+## Default Behavior
+
+By default, agents run an automatic execution loop:
+
+```typescript
+@Agent({
+  name: 'my-agent',
+  llm: { adapter: 'openai', model: 'gpt-4' },
+  tools: [MyTool],
+})
+class MyAgent extends AgentContext {
+  // No execute() override needed - uses default loop
+}
+```
+
+The default loop:
+1. Builds user message from input
+2. Sends to LLM with available tools
+3. If LLM requests tool call, executes tool and sends result back
+4. Repeats until LLM returns final response
+5. Parses and returns output
+
+## Methods
+
+### Execution
+
+#### execute(input)
+
+Main execution method. Override for custom behavior.
+
+```typescript
+async execute(input: In): Promise<Out>
+```
+
+Default implementation calls `runAgentLoop()`.
+
+#### runAgentLoop(input)
+
+Run the default agent execution loop.
+
+```typescript
+protected runAgentLoop(input: In): Promise<Out>
+```
+
+```typescript
+async execute(input) {
+  // Pre-processing
+  await this.notify('Starting agent...', 'info');
+
+  // Run default loop
+  const result = await this.runAgentLoop(input);
+
+  // Post-processing
+  return { ...result, processed: true };
+}
+```
+
+### Message Building (Overridable)
+
+#### buildUserMessage(input)
+
+Convert input to LLM message.
+
+```typescript
+protected buildUserMessage(input: In): string
+```
+
+```typescript
+protected buildUserMessage(input) {
+  // Custom message formatting
+  return `Task: ${input.task}\nContext: ${JSON.stringify(input.context)}`;
+}
+```
+
+#### parseAgentResponse(content)
+
+Parse LLM response to output type.
+
+```typescript
+protected parseAgentResponse(content: string | null): Out
+```
+
+```typescript
+protected parseAgentResponse(content) {
+  // Custom parsing
+  return JSON.parse(content || '{}');
+}
+```
+
+### LLM Methods
+
+#### completion(prompt, tools?, options?)
+
+Generate LLM completion.
+
+```typescript
+protected completion(
+  prompt: AgentPrompt,
+  tools?: AgentToolDefinition[],
+  options?: AgentCompletionOptions
+): Promise<AgentCompletion>
+```
+
+```typescript
+const response = await this.completion({
+  systemPrompt: 'You are a helpful assistant.',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+```
+
+#### streamCompletion(prompt, tools?)
+
+Stream LLM completion.
+
+```typescript
+protected streamCompletion(
+  prompt: AgentPrompt,
+  tools?: AgentToolDefinition[]
+): AsyncGenerator<AgentCompletionChunk>
+```
+
+```typescript
+for await (const chunk of this.streamCompletion(prompt)) {
+  process.stdout.write(chunk.content || '');
+}
+```
+
+### Tool Execution
+
+#### executeTool(name, args)
+
+Execute a tool by name.
+
+```typescript
+protected executeTool(
+  name: string,
+  args: Record<string, unknown>
+): Promise<unknown>
+```
+
+```typescript
+protected async executeTool(name, args) {
+  this.logger.info(`Executing: ${name}`, { args });
+  return super.executeTool(name, args);
+}
+```
+
+#### invokeAgent(agentId, input)
+
+Invoke another agent.
+
+```typescript
+protected invokeAgent(
+  agentId: string,
+  input: unknown
+): Promise<unknown>
+```
+
+```typescript
+const result = await this.invokeAgent('sub-agent', { task: 'subtask' });
+```
+
+### Notifications
+
+#### notify(message, level?)
+
+Send log message notification.
+
+```typescript
+protected notify(
+  message: string | Record<string, unknown>,
+  level?: 'debug' | 'info' | 'warning' | 'error'
+): Promise<boolean>
+```
+
+#### progress(progress, total?, message?)
+
+Send progress notification.
+
+```typescript
+protected progress(
+  progress: number,
+  total?: number,
+  message?: string
+): Promise<boolean>
+```
+
+### Elicitation
+
+#### elicit\<S\>(message, requestedSchema, options?)
+
+Request interactive user input.
+
+```typescript
+protected elicit<S extends ZodType>(
+  message: string,
+  requestedSchema: S,
+  options?: ElicitOptions
+): Promise<ElicitResult<z.infer<S>>>
+```
+
+## Custom Agent Example
+
+```typescript
+import { Agent, AgentContext, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'search',
+  inputSchema: { query: z.string() },
+})
+class SearchTool extends ToolContext {
+  async execute(input) {
+    return { results: [`Result for: ${input.query}`] };
+  }
+}
+
+@Agent({
+  name: 'research-agent',
+  description: 'Researches topics using search',
+  systemInstructions: `You are a research assistant.
+Use the search tool to find information.
+Synthesize findings into a comprehensive report.`,
+  inputSchema: { topic: z.string(), depth: z.enum(['brief', 'detailed']) },
+  outputSchema: z.object({
+    summary: z.string(),
+    sources: z.array(z.string()),
+  }),
+  llm: {
+    adapter: 'openai',
+    model: 'gpt-4-turbo',
+    apiKey: { env: 'OPENAI_API_KEY' },
+    temperature: 0.7,
+  },
+  tools: [SearchTool],
+})
+class ResearchAgent extends AgentContext {
+  // Override to add custom logic
+  async execute(input) {
+    await this.notify(`Researching: ${input.topic}`, 'info');
+    await this.progress(0, 100, 'Starting research...');
+
+    // Run the default agent loop
+    const result = await this.runAgentLoop(input);
+
+    await this.progress(100, 100, 'Research complete');
+
+    return result;
+  }
+
+  // Override message building
+  protected buildUserMessage(input) {
+    return `Research the topic "${input.topic}" with ${input.depth} depth.
+Provide a comprehensive summary with sources.`;
+  }
+
+  // Override tool execution for logging
+  protected async executeTool(name, args) {
+    this.logger.info(`Agent using tool: ${name}`, { args });
+    await this.notify(`Using tool: ${name}`, 'debug');
+    return super.executeTool(name, args);
+  }
+}
+```
+
+## Multi-Agent Orchestration
+
+```typescript
+@Agent({
+  name: 'orchestrator',
+  description: 'Coordinates multiple specialized agents',
+  llm: { adapter: 'openai', model: 'gpt-4' },
+  systemInstructions: `You orchestrate tasks across specialized agents:
+- research-agent: For information gathering
+- writer-agent: For content creation
+- reviewer-agent: For quality checking
+
+Delegate tasks appropriately and synthesize results.`,
+})
+class OrchestratorAgent extends AgentContext {
+  async execute(input) {
+    await this.notify('Orchestrator starting...', 'info');
+
+    // Delegate to research agent
+    const research = await this.invokeAgent('research-agent', {
+      topic: input.topic,
+      depth: 'detailed',
+    });
+
+    // Delegate to writer agent
+    const draft = await this.invokeAgent('writer-agent', {
+      research,
+      style: input.style,
+    });
+
+    // Delegate to reviewer agent
+    const reviewed = await this.invokeAgent('reviewer-agent', {
+      content: draft,
+    });
+
+    return reviewed;
+  }
+}
+```
+
+## Full Example
+
+```typescript
+import { Agent, AgentContext, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Tools
+@Tool({
+  name: 'calculate',
+  inputSchema: { expression: z.string() },
+})
+class CalculateTool extends ToolContext {
+  async execute(input) {
+    // Safe eval for simple expressions
+    const result = Function(`return ${input.expression}`)();
+    return { result };
+  }
+}
+
+@Tool({
+  name: 'store_result',
+  inputSchema: { key: z.string(), value: z.any() },
+})
+class StoreResultTool extends ToolContext {
+  async execute(input) {
+    await this.remember.set(input.key, JSON.stringify(input.value));
+    return { stored: true };
+  }
+}
+
+// Agent
+@Agent({
+  name: 'math-assistant',
+  description: 'Helps with mathematical calculations',
+  systemInstructions: `You are a math assistant.
+- Use the calculate tool for computations
+- Use store_result to save intermediate results
+- Show your work step by step
+- Verify your answers`,
+  inputSchema: {
+    problem: z.string().describe('Math problem to solve'),
+    showWork: z.boolean().default(true),
+  },
+  outputSchema: z.object({
+    answer: z.union([z.number(), z.string()]),
+    steps: z.array(z.string()).optional(),
+    confidence: z.enum(['high', 'medium', 'low']),
+  }),
+  llm: {
+    adapter: 'openai',
+    model: 'gpt-4-turbo',
+    apiKey: { env: 'OPENAI_API_KEY' },
+    temperature: 0.2, // Lower for math accuracy
+  },
+  tools: [CalculateTool, StoreResultTool],
+  tags: ['math', 'calculator'],
+})
+class MathAssistantAgent extends AgentContext {
+  async execute(input) {
+    await this.notify(`Solving: ${input.problem}`, 'info');
+
+    try {
+      return await this.runAgentLoop(input);
+    } catch (error) {
+      this.logger.error('Agent failed', { error });
+
+      // Return graceful error response
+      return {
+        answer: 'Unable to solve',
+        confidence: 'low',
+        steps: [`Error: ${error.message}`],
+      };
+    }
+  }
+}
+
+@App({
+  name: 'math',
+  agents: [MathAssistantAgent],
+  tools: [CalculateTool, StoreResultTool],
+})
+class MathApp {}
+
+@FrontMcp({
+  info: { name: 'Math Assistant', version: '1.0.0' },
+  apps: [MathApp],
+})
+export default class MathServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Agent" icon="at" href="/frontmcp/sdk-reference/decorators/agent">
+    Agent decorator
+  </Card>
+  <Card title="AgentRegistry" icon="database" href="/frontmcp/sdk-reference/registries/agent-registry">
+    Agent registry
+  </Card>
+  <Card title="Agent Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/agent-errors">
+    Agent errors
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Tool decorator
+  </Card>
+</CardGroup>

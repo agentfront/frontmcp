@@ -1,0 +1,379 @@
+---
+title: "@Plugin"
+description: "The @Plugin decorator creates reusable modules that bundle providers, tools, resources, and context extensions."
+icon: "plug"
+---
+
+## Basic Usage
+
+```typescript
+import { Plugin, Provider, Token } from '@frontmcp/sdk';
+
+// Provider for the plugin
+@Provider()
+class CacheService {
+  private cache = new Map<string, string>();
+
+  async get(key: string) {
+    return this.cache.get(key);
+  }
+
+  async set(key: string, value: string) {
+    this.cache.set(key, value);
+  }
+}
+
+export const CacheServiceToken = new Token<CacheService>('CacheService');
+
+// Plugin definition
+@Plugin({
+  name: 'cache',
+  description: 'In-memory caching for tools',
+  providers: [
+    { provide: CacheServiceToken, useClass: CacheService },
+  ],
+})
+export class CachePlugin {}
+```
+
+## Signature
+
+```typescript
+function Plugin(providedMetadata: PluginMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique plugin identifier |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Stable identifier |
+| `description` | `string` | Plugin description |
+| `scope` | `'app' \| 'server'` | Plugin scope level |
+
+### Components
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `providers` | `ProviderType[]` | Plugin providers |
+| `tools` | `ToolType[]` | Plugin tools |
+| `resources` | `ResourceType[]` | Plugin resources |
+| `prompts` | `PromptType[]` | Plugin prompts |
+| `skills` | `SkillType[]` | Plugin skills |
+| `adapters` | `AdapterType[]` | Framework adapters |
+| `plugins` | `PluginType[]` | Nested plugins |
+
+### Extensions
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `contextExtensions` | `ContextExtension[]` | Add properties to context classes |
+
+## Context Extensions
+
+Extend all context classes with custom properties:
+
+```typescript
+import { Plugin, Provider, Token, ExecutionContextBase } from '@frontmcp/sdk';
+
+// 1. Define token
+export const RememberAccessorToken = new Token<RememberAccessor>('RememberAccessor');
+
+// 2. Define accessor
+@Provider()
+class RememberAccessor {
+  async get(key: string): Promise<string | undefined> {
+    // Implementation
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    // Implementation
+  }
+}
+
+// 3. Augment types (in .d.ts or separate file)
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly remember: RememberAccessor;
+  }
+}
+
+// 4. Define plugin with context extension
+@Plugin({
+  name: 'remember',
+  description: 'Session memory for tools',
+  providers: [
+    { provide: RememberAccessorToken, useClass: RememberAccessor },
+  ],
+  contextExtensions: [
+    {
+      property: 'remember',
+      token: RememberAccessorToken,
+      errorMessage: 'Remember plugin not installed',
+    },
+  ],
+})
+export class RememberPlugin {}
+```
+
+Now in tools:
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute() {
+    // Access extended property
+    await this.remember.set('lastRun', new Date().toISOString());
+    const lastRun = await this.remember.get('lastRun');
+  }
+}
+```
+
+## Plugin Scopes
+
+### App Scope (Default)
+
+Hooks register at app level:
+
+```typescript
+@Plugin({
+  name: 'app-plugin',
+  scope: 'app', // Default
+})
+class AppPlugin {}
+```
+
+### Server Scope
+
+Hooks register at gateway/server level:
+
+```typescript
+@Plugin({
+  name: 'server-plugin',
+  scope: 'server',
+})
+class ServerPlugin {}
+```
+
+<Warning>
+Server-scoped plugins cannot be used in standalone apps. They require a gateway configuration.
+</Warning>
+
+## Nested Plugins
+
+Plugins can include other plugins:
+
+```typescript
+@Plugin({
+  name: 'analytics',
+  plugins: [MetricsPlugin, LoggingPlugin],
+  providers: [AnalyticsService],
+})
+class AnalyticsPlugin {}
+```
+
+## Using Plugins
+
+### In Apps
+
+```typescript
+@App({
+  name: 'my-app',
+  plugins: [CachePlugin, RememberPlugin],
+  tools: [MyTool],
+})
+class MyApp {}
+```
+
+### In Server
+
+```typescript
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  plugins: [GlobalLoggingPlugin], // Server-level plugins
+})
+class Server {}
+```
+
+## Plugin with Tools
+
+```typescript
+import { Plugin, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'send_elicitation_result',
+  description: 'Send user response to pending elicitation',
+  inputSchema: {
+    elicitId: z.string(),
+    response: z.any(),
+  },
+})
+class SendElicitationResultTool extends ToolContext {
+  async execute(input) {
+    // Plugin-provided tool implementation
+  }
+}
+
+@Plugin({
+  name: 'elicitation',
+  tools: [SendElicitationResultTool],
+  providers: [ElicitationService],
+})
+export class ElicitationPlugin {}
+```
+
+## Full Example
+
+```typescript
+import { Plugin, Provider, Token, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Tokens
+export const ApprovalServiceToken = new Token<ApprovalService>('ApprovalService');
+export const ApprovalAccessorToken = new Token<ApprovalAccessor>('ApprovalAccessor');
+
+// Services
+@Provider()
+class ApprovalService {
+  private approvals = new Map<string, boolean>();
+
+  approve(toolName: string) {
+    this.approvals.set(toolName, true);
+  }
+
+  isApproved(toolName: string): boolean {
+    return this.approvals.get(toolName) === true;
+  }
+
+  revoke(toolName: string) {
+    this.approvals.delete(toolName);
+  }
+}
+
+@Provider()
+class ApprovalAccessor {
+  constructor(private service: ApprovalService) {}
+
+  async isApproved(toolName: string): Promise<boolean> {
+    return this.service.isApproved(toolName);
+  }
+
+  async approve(toolName: string): Promise<void> {
+    this.service.approve(toolName);
+  }
+}
+
+// Module augmentation
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly approval: ApprovalAccessor;
+  }
+}
+
+// Plugin tool
+@Tool({
+  name: 'approve_tool',
+  description: 'Approve a tool for execution',
+  inputSchema: { toolName: z.string() },
+})
+class ApproveToolTool extends ToolContext {
+  async execute(input: { toolName: string }) {
+    const accessor = this.get(ApprovalAccessorToken);
+    await accessor.approve(input.toolName);
+    return { approved: input.toolName };
+  }
+}
+
+// Plugin definition
+@Plugin({
+  name: 'approval',
+  description: 'Tool approval system',
+  providers: [
+    { provide: ApprovalServiceToken, useClass: ApprovalService },
+    { provide: ApprovalAccessorToken, useClass: ApprovalAccessor },
+  ],
+  tools: [ApproveToolTool],
+  contextExtensions: [
+    {
+      property: 'approval',
+      token: ApprovalAccessorToken,
+      errorMessage: 'Approval plugin not installed',
+    },
+  ],
+})
+export class ApprovalPlugin {}
+
+// Using the plugin
+@Tool({
+  name: 'dangerous_operation',
+  inputSchema: { data: z.string() },
+})
+class DangerousOperationTool extends ToolContext {
+  async execute(input: { data: string }) {
+    // Check approval via context extension
+    const isApproved = await this.approval.isApproved('dangerous_operation');
+
+    if (!isApproved) {
+      return { error: 'This tool requires approval. Please run approve_tool first.' };
+    }
+
+    // Proceed with operation
+    return { result: 'Operation completed' };
+  }
+}
+
+@App({
+  name: 'secure-app',
+  plugins: [ApprovalPlugin],
+  tools: [DangerousOperationTool],
+})
+class SecureApp {}
+
+@FrontMcp({
+  info: { name: 'Secure Server', version: '1.0.0' },
+  apps: [SecureApp],
+})
+export default class SecureServer {}
+```
+
+## Official Plugins
+
+FrontMCP provides several official plugins:
+
+<CardGroup cols={2}>
+  <Card title="RememberPlugin" icon="brain" href="/frontmcp/plugins/official/remember">
+    Session memory for tools
+  </Card>
+  <Card title="CachePlugin" icon="database" href="/frontmcp/plugins/official/cache">
+    Response caching
+  </Card>
+  <Card title="CodeCallPlugin" icon="code" href="/frontmcp/plugins/official/codecall">
+    Dynamic code execution
+  </Card>
+</CardGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="PluginRegistry" icon="database" href="/frontmcp/sdk-reference/registries/plugin-registry">
+    Plugin registry API
+  </Card>
+  <Card title="@Provider" icon="syringe" href="/frontmcp/sdk-reference/decorators/provider">
+    Dependency providers
+  </Card>
+  <Card title="Creating Plugins" icon="puzzle-piece" href="/frontmcp/plugins/creating-plugins">
+    Plugin development guide
+  </Card>
+  <Card title="@App" icon="cube" href="/frontmcp/sdk-reference/decorators/app">
+    Application modules
+  </Card>
+</CardGroup>

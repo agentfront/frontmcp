@@ -1,0 +1,389 @@
+---
+title: "Flow Hooks"
+description: "FrontMCP provides hook decorators for intercepting and extending flow execution. Hooks allow you to add cross-cutting concerns like logging, validation, and caching."
+icon: "code-branch"
+---
+
+## Hook Types
+
+| Decorator | Timing | Use Case |
+|-----------|--------|----------|
+| `@Stage` | Define execution stage | Custom flow steps |
+| `@Will` | Before stage executes | Pre-processing, validation |
+| `@Did` | After stage executes | Post-processing, logging |
+| `@Around` | Wraps stage execution | Caching, error handling |
+
+## FlowHooksOf
+
+Create typed hook decorators for a specific flow:
+
+```typescript
+import { FlowHooksOf } from '@frontmcp/sdk';
+
+const { Stage, Will, Did, Around } = FlowHooksOf('tools:call-tool');
+
+class MyHooks {
+  @Will('execute')
+  async beforeExecute(ctx: ToolFlowContext) {
+    console.log('Before tool execution');
+  }
+
+  @Did('execute')
+  async afterExecute(ctx: ToolFlowContext) {
+    console.log('After tool execution');
+  }
+}
+```
+
+## Available Flows
+
+| Flow Name | Description |
+|-----------|-------------|
+| `tools:call-tool` | Tool execution |
+| `tools:list-tools` | List tools |
+| `resources:read-resource` | Read resource |
+| `resources:list-resources` | List resources |
+| `prompts:get-prompt` | Get prompt |
+| `prompts:list-prompts` | List prompts |
+| `http:request` | HTTP request handling |
+
+## @Will (Before Hook)
+
+Execute before a flow stage:
+
+```typescript
+const { Will } = FlowHooksOf('tools:call-tool');
+
+class ValidationHooks {
+  @Will('execute', { priority: 10 })
+  async validateInput(ctx: ToolFlowContext) {
+    const input = ctx.state.get('input');
+    if (!input) {
+      throw new Error('Input is required');
+    }
+  }
+
+  @Will('execute', { priority: 20 })
+  async logStart(ctx: ToolFlowContext) {
+    console.log(`Starting tool: ${ctx.state.get('toolName')}`);
+  }
+}
+```
+
+### Priority
+
+Lower priority values execute first:
+
+```typescript
+@Will('execute', { priority: 10 }) // Executes first
+@Will('execute', { priority: 20 }) // Executes second
+```
+
+### Filter
+
+Conditionally execute hooks:
+
+```typescript
+@Will('execute', {
+  filter: (ctx) => ctx.state.get('toolName') === 'sensitive_tool'
+})
+async logSensitiveAccess(ctx) {
+  console.log('Accessing sensitive tool');
+}
+```
+
+## @Did (After Hook)
+
+Execute after a flow stage:
+
+```typescript
+const { Did } = FlowHooksOf('tools:call-tool');
+
+class AuditHooks {
+  @Did('execute')
+  async auditToolCall(ctx: ToolFlowContext) {
+    const toolName = ctx.state.get('toolName');
+    const output = ctx.state.get('output');
+    await this.auditService.log({
+      tool: toolName,
+      timestamp: new Date(),
+      success: !ctx.state.get('error'),
+    });
+  }
+}
+```
+
+## @Around (Wrapper Hook)
+
+Wrap stage execution for full control:
+
+```typescript
+const { Around } = FlowHooksOf('tools:call-tool');
+
+class CachingHooks {
+  @Around('execute')
+  async cacheResults(ctx: ToolFlowContext, next: () => Promise<void>) {
+    const cacheKey = this.getCacheKey(ctx);
+    const cached = await this.cache.get(cacheKey);
+
+    if (cached) {
+      ctx.state.set('output', cached);
+      return; // Skip actual execution
+    }
+
+    await next(); // Execute the stage
+
+    const output = ctx.state.get('output');
+    await this.cache.set(cacheKey, output);
+  }
+}
+```
+
+## @Stage (Custom Stage)
+
+Define custom flow stages:
+
+```typescript
+const { Stage, Will, Did } = FlowHooksOf('tools:call-tool');
+
+class CustomFlow {
+  @Stage('preProcess')
+  async preProcess(ctx: ToolFlowContext) {
+    // Custom pre-processing stage
+    const input = ctx.state.get('input');
+    ctx.state.set('processedInput', transform(input));
+  }
+
+  @Will('preProcess')
+  async beforePreProcess(ctx) {
+    console.log('About to pre-process');
+  }
+
+  @Did('preProcess')
+  async afterPreProcess(ctx) {
+    console.log('Pre-processing complete');
+  }
+}
+```
+
+## Hook Options
+
+```typescript
+interface HookOptions<Ctx = unknown> {
+  priority?: number;                              // Execution order (lower = first)
+  filter?: (ctx: Ctx) => boolean | Promise<boolean>; // Conditional execution
+}
+```
+
+## Registering Hooks
+
+### In Apps
+
+```typescript
+@App({
+  name: 'my-app',
+  providers: [AuditHooks, CachingHooks],
+  tools: [MyTool],
+})
+class MyApp {}
+```
+
+### In Plugins
+
+```typescript
+@Plugin({
+  name: 'audit-plugin',
+  providers: [AuditHooks],
+})
+class AuditPlugin {}
+```
+
+## Hook Context
+
+Hooks receive flow context with access to:
+
+```typescript
+interface FlowContext {
+  state: FlowState;           // Flow state (input, output, metadata)
+  logger: FrontMcpLogger;     // Logger instance
+  providers: ProviderRegistry; // Dependency injection
+}
+
+// Access state
+const input = ctx.state.get('input');
+ctx.state.set('output', result);
+
+// Access providers
+const service = ctx.providers.get(ServiceToken);
+
+// Access logger
+ctx.logger.info('Processing');
+```
+
+## Error Handling
+
+Errors in hooks are caught and logged:
+
+```typescript
+@Will('execute')
+async validateInput(ctx) {
+  // Throwing stops execution and reports error
+  throw new InvalidInputError('Validation failed');
+}
+
+@Around('execute')
+async errorHandler(ctx, next) {
+  try {
+    await next();
+  } catch (error) {
+    ctx.logger.error('Execution failed', { error });
+    // Re-throw or handle
+    throw error;
+  }
+}
+```
+
+## Full Example
+
+```typescript
+import { FlowHooksOf, Provider, Plugin, App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const { Will, Did, Around } = FlowHooksOf('tools:call-tool');
+
+// Audit hook provider
+@Provider()
+class AuditHooks {
+  private auditLog: Array<{ tool: string; timestamp: Date; duration: number }> = [];
+
+  @Will('execute', { priority: 0 })
+  async recordStart(ctx) {
+    ctx.state.set('_auditStartTime', Date.now());
+  }
+
+  @Did('execute', { priority: 1000 })
+  async recordEnd(ctx) {
+    const startTime = ctx.state.get('_auditStartTime');
+    const duration = Date.now() - startTime;
+    const toolName = ctx.state.get('toolName');
+
+    this.auditLog.push({
+      tool: toolName,
+      timestamp: new Date(),
+      duration,
+    });
+
+    ctx.logger.info(`Tool ${toolName} completed in ${duration}ms`);
+  }
+
+  getAuditLog() {
+    return this.auditLog;
+  }
+}
+
+// Rate limiting hook
+@Provider()
+class RateLimitHooks {
+  private calls = new Map<string, number[]>();
+  private maxCallsPerMinute = 60;
+
+  @Will('execute', { priority: 5 })
+  async checkRateLimit(ctx) {
+    const toolName = ctx.state.get('toolName');
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+
+    const recentCalls = (this.calls.get(toolName) || [])
+      .filter(t => t > oneMinuteAgo);
+
+    if (recentCalls.length >= this.maxCallsPerMinute) {
+      throw new RateLimitError(60);
+    }
+
+    recentCalls.push(now);
+    this.calls.set(toolName, recentCalls);
+  }
+}
+
+// Caching hook
+@Provider()
+class CacheHooks {
+  private cache = new Map<string, { value: unknown; expires: number }>();
+  private ttl = 60000; // 1 minute
+
+  @Around('execute', {
+    filter: (ctx) => ctx.state.get('toolMetadata')?.annotations?.idempotentHint === true
+  })
+  async cacheIdempotent(ctx, next) {
+    const toolName = ctx.state.get('toolName');
+    const input = ctx.state.get('input');
+    const cacheKey = `${toolName}:${JSON.stringify(input)}`;
+
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      ctx.logger.debug('Cache hit', { toolName });
+      ctx.state.set('output', cached.value);
+      return;
+    }
+
+    await next();
+
+    const output = ctx.state.get('output');
+    this.cache.set(cacheKey, {
+      value: output,
+      expires: Date.now() + this.ttl,
+    });
+  }
+}
+
+// Plugin bundling hooks
+@Plugin({
+  name: 'observability',
+  description: 'Audit logging, rate limiting, and caching',
+  providers: [AuditHooks, RateLimitHooks, CacheHooks],
+})
+class ObservabilityPlugin {}
+
+// Sample tool
+@Tool({
+  name: 'get_data',
+  inputSchema: { key: z.string() },
+  annotations: { idempotentHint: true },
+})
+class GetDataTool extends ToolContext {
+  async execute(input: { key: string }) {
+    return { data: `Value for ${input.key}` };
+  }
+}
+
+// App using plugin
+@App({
+  name: 'data-app',
+  plugins: [ObservabilityPlugin],
+  tools: [GetDataTool],
+})
+class DataApp {}
+
+@FrontMcp({
+  info: { name: 'Observable Server', version: '1.0.0' },
+  apps: [DataApp],
+})
+export default class ObservableServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="HookRegistry" icon="database" href="/frontmcp/sdk-reference/registries/hook-registry">
+    Hook registry API
+  </Card>
+  <Card title="Flow Types" icon="code" href="/frontmcp/sdk-reference/types/flow-types">
+    Flow type definitions
+  </Card>
+  <Card title="@Plugin" icon="plug" href="/frontmcp/sdk-reference/decorators/plugin">
+    Create plugins
+  </Card>
+  <Card title="Customize Flows" icon="diagram-project" href="/frontmcp/guides/customize-flow-stages">
+    Flow customization guide
+  </Card>
+</CardGroup>
