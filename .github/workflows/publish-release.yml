@@ -314,15 +314,23 @@ jobs:
           # Find the latest stable tag before this release for generating diff
           git fetch --tags
 
-          # Get all stable version tags (vX.Y.Z without -rc or -beta suffix)
           CURRENT_VERSION="${{ needs.prepare.outputs.version }}"
+          RELEASE_LINE="${{ needs.prepare.outputs.release_line }}"
 
-          # Find the previous stable tag
-          PREV_TAG=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -2 | head -1)
+          # Find the previous stable tag within the same release line
+          # Filter to vX.Y.* where X.Y matches the release line, excluding pre-releases
+          PREV_TAG=$(git tag -l "v${RELEASE_LINE}.*" --sort=-v:refname \
+            | grep -E "^v${RELEASE_LINE}\.[0-9]+$" \
+            | grep -v "^v${CURRENT_VERSION}$" \
+            | head -1)
 
-          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "v$CURRENT_VERSION" ]; then
-            # If no previous tag or same as current, get the one before
-            PREV_TAG=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -3 | head -1)
+          # Fallback to any previous stable tag if no matching release line tag
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag in release line ${RELEASE_LINE}, falling back to global search"
+            PREV_TAG=$(git tag -l 'v*' --sort=-v:refname \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | grep -v "^v${CURRENT_VERSION}$" \
+              | head -1)
           fi
 
           echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
@@ -336,7 +344,7 @@ jobs:
 
           if [ -n "$PREV_TAG" ]; then
             # Generate diff of source files for AI analysis (limit to 50KB)
-            git diff "$PREV_TAG"..HEAD -- '*.ts' '*.tsx' '*.js' '*.json' \
+            git diff "$PREV_TAG"..HEAD -- '**/*.ts' '**/*.tsx' '**/*.js' '**/*.json' \
               ':!**/package-lock.json' ':!**/yarn.lock' ':!**/*.spec.ts' ':!**/*.test.ts' \
               | head -c 50000 > /tmp/changes.diff
 
@@ -503,6 +511,12 @@ jobs:
           # Skip if no docs repo PAT configured
           if [ -z "$DOCS_REPO_PAT" ]; then
             echo "Docs repo PAT not configured, skipping docs sync"
+            exit 0
+          fi
+
+          # Skip if no Card MDX was generated
+          if [ ! -s /tmp/card-mdx.txt ]; then
+            echo "No Card MDX generated, skipping docs sync"
             exit 0
           fi
 
