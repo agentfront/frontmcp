@@ -1,0 +1,708 @@
+---
+title: Testing OpenAPI Adapter
+slug: guides/testing-openapi-adapter
+description: Write E2E tests for OpenAPI-generated tools using HTTP mocking
+icon: file-code
+---
+
+When you use the OpenAPI Adapter to generate MCP tools from an API specification, you need to mock both the OpenAPI spec fetch and the actual API calls. This guide shows you how to write comprehensive tests for OpenAPI-generated tools.
+
+<Info>
+**Prerequisites**:
+- Understanding of [OpenAPI Adapter](/frontmcp/guides/add-openapi-adapter)
+- Familiarity with [@frontmcp/testing](/frontmcp/testing/overview)
+- Basic knowledge of [HTTP Mocking](/frontmcp/testing/http-mocking)
+</Info>
+
+## What You'll Learn
+
+- Mock OpenAPI spec loading
+- Test generated CRUD operations
+- Handle authentication in tests
+- Test error scenarios
+- Verify request/response transformations
+
+---
+
+## The Challenge
+
+OpenAPI-generated tools make HTTP requests to external APIs. Without mocking:
+
+1. **Spec loading fails** - The adapter fetches the OpenAPI spec at startup
+2. **API calls fail** - Generated tools call the real API
+3. **Tests aren't isolated** - External state affects test results
+4. **Tests are slow** - Network latency adds up
+
+---
+
+## Step 1: Set Up Test Configuration
+
+First, configure your test file:
+
+```typescript title="openapi-app.e2e.ts"
+import { test, expect, httpMock, httpResponse } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+});
+
+// Reusable mock interceptor
+let interceptor: ReturnType<typeof httpMock.interceptor>;
+
+beforeEach(() => {
+  interceptor = httpMock.interceptor();
+});
+
+afterEach(() => {
+  interceptor.restore();
+});
+```
+
+---
+
+## Step 2: Mock the OpenAPI Specification
+
+The adapter fetches the OpenAPI spec when the server starts. Mock this first:
+
+```typescript
+// Sample OpenAPI 3.0 specification
+const openApiSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Expense API',
+    version: '1.0.0',
+  },
+  servers: [
+    { url: 'https://api.example.com' },
+  ],
+  paths: {
+    '/expenses': {
+      get: {
+        operationId: 'listExpenses',
+        summary: 'List all expenses',
+        responses: {
+          '200': {
+            description: 'List of expenses',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Expense' },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        operationId: 'createExpense',
+        summary: 'Create a new expense',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateExpenseInput' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Created expense',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Expense' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/expenses/{id}': {
+      get: {
+        operationId: 'getExpense',
+        summary: 'Get expense by ID',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Expense details',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Expense' },
+              },
+            },
+          },
+          '404': {
+            description: 'Expense not found',
+          },
+        },
+      },
+      delete: {
+        operationId: 'deleteExpense',
+        summary: 'Delete an expense',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          '204': { description: 'Deleted' },
+        },
+      },
+    },
+  },
+  components: {
+    schemas: {
+      Expense: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          amount: { type: 'number' },
+          category: { type: 'string' },
+          description: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreateExpenseInput: {
+        type: 'object',
+        required: ['amount', 'category'],
+        properties: {
+          amount: { type: 'number' },
+          category: { type: 'string' },
+          description: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+// Mock the spec endpoint before each test
+beforeEach(() => {
+  interceptor = httpMock.interceptor();
+
+  // Mock OpenAPI spec fetch
+  interceptor.get('https://api.example.com/openapi.json', {
+    body: openApiSpec,
+  });
+});
+```
+
+---
+
+## Step 3: Test Tool Discovery
+
+Verify that tools are generated from the spec:
+
+```typescript
+test.describe('OpenAPI Tool Generation', () => {
+  test('generates tools from OpenAPI spec', async ({ mcp }) => {
+    const tools = await mcp.tools.list();
+
+    // Tools are named: {adapter-name}:{operationId}
+    expect(tools).toContainTool('expense-api:listExpenses');
+    expect(tools).toContainTool('expense-api:createExpense');
+    expect(tools).toContainTool('expense-api:getExpense');
+    expect(tools).toContainTool('expense-api:deleteExpense');
+  });
+
+  test('tools have correct descriptions', async ({ mcp }) => {
+    const tools = await mcp.tools.list();
+
+    const listTool = tools.find(t => t.name === 'expense-api:listExpenses');
+    expect(listTool?.description).toContain('List all expenses');
+
+    const createTool = tools.find(t => t.name === 'expense-api:createExpense');
+    expect(createTool?.description).toContain('Create a new expense');
+  });
+});
+```
+
+---
+
+## Step 4: Test GET Operations
+
+Test list and get-by-ID operations:
+
+```typescript
+test.describe('GET Operations', () => {
+  test('listExpenses returns array of expenses', async ({ mcp }) => {
+    const mockExpenses = [
+      { id: '1', amount: 50, category: 'Travel', description: 'Taxi' },
+      { id: '2', amount: 120, category: 'Meals', description: 'Client dinner' },
+    ];
+
+    interceptor.get('https://api.example.com/expenses', {
+      body: mockExpenses,
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+
+    expect(result).toBeSuccessful();
+    expect(result.json()).toHaveLength(2);
+    expect(result.json()[0].category).toBe('Travel');
+  });
+
+  test('getExpense returns single expense', async ({ mcp }) => {
+    const mockExpense = {
+      id: 'exp-123',
+      amount: 75.50,
+      category: 'Office Supplies',
+      description: 'Printer paper',
+      createdAt: '2024-01-15T10:30:00Z',
+    };
+
+    interceptor.get('https://api.example.com/expenses/exp-123', {
+      body: mockExpense,
+    });
+
+    const result = await mcp.tools.call('expense-api:getExpense', {
+      id: 'exp-123',
+    });
+
+    expect(result).toBeSuccessful();
+    expect(result.json().id).toBe('exp-123');
+    expect(result.json().amount).toBe(75.50);
+  });
+
+  test('getExpense handles 404', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses/not-found', {
+      status: 404,
+      body: { error: 'Expense not found' },
+    });
+
+    const result = await mcp.tools.call('expense-api:getExpense', {
+      id: 'not-found',
+    });
+
+    expect(result).toBeError();
+  });
+});
+```
+
+---
+
+## Step 5: Test POST Operations
+
+Test create operations with request body validation:
+
+```typescript
+test.describe('POST Operations', () => {
+  test('createExpense sends correct request body', async ({ mcp }) => {
+    const createdExpense = {
+      id: 'new-123',
+      amount: 99.99,
+      category: 'Travel',
+      description: 'Airport parking',
+      createdAt: '2024-01-20T14:00:00Z',
+    };
+
+    const postHandle = interceptor.post('https://api.example.com/expenses', {
+      status: 201,
+      body: createdExpense,
+    });
+
+    const result = await mcp.tools.call('expense-api:createExpense', {
+      amount: 99.99,
+      category: 'Travel',
+      description: 'Airport parking',
+    });
+
+    expect(result).toBeSuccessful();
+    expect(result.json().id).toBe('new-123');
+
+    // Verify the request body was correct
+    const calls = postHandle.calls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({
+      amount: 99.99,
+      category: 'Travel',
+      description: 'Airport parking',
+    });
+  });
+
+  test('createExpense handles validation errors', async ({ mcp }) => {
+    interceptor.post('https://api.example.com/expenses', {
+      status: 400,
+      body: {
+        error: 'Validation failed',
+        details: [{ field: 'amount', message: 'must be positive' }],
+      },
+    });
+
+    const result = await mcp.tools.call('expense-api:createExpense', {
+      amount: -50,
+      category: 'Travel',
+    });
+
+    expect(result).toBeError();
+  });
+});
+```
+
+---
+
+## Step 6: Test DELETE Operations
+
+Test delete operations:
+
+```typescript
+test.describe('DELETE Operations', () => {
+  test('deleteExpense sends DELETE request', async ({ mcp }) => {
+    const deleteHandle = interceptor.delete(
+      'https://api.example.com/expenses/exp-456',
+      { status: 204 }
+    );
+
+    const result = await mcp.tools.call('expense-api:deleteExpense', {
+      id: 'exp-456',
+    });
+
+    expect(result).toBeSuccessful();
+
+    // Verify DELETE was called
+    expect(deleteHandle.callCount()).toBe(1);
+  });
+
+  test('deleteExpense handles not found', async ({ mcp }) => {
+    interceptor.delete('https://api.example.com/expenses/missing', {
+      status: 404,
+      body: { error: 'Expense not found' },
+    });
+
+    const result = await mcp.tools.call('expense-api:deleteExpense', {
+      id: 'missing',
+    });
+
+    expect(result).toBeError();
+  });
+});
+```
+
+---
+
+## Step 7: Test with Authentication
+
+If your OpenAPI adapter uses authentication:
+
+```typescript
+test.describe('Authenticated Requests', () => {
+  test('includes auth header from token', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'user-123',
+      scopes: ['expenses:read'],
+    });
+    await mcp.authenticate(token);
+
+    const getHandle = interceptor.get('https://api.example.com/expenses', {
+      body: [],
+    });
+
+    await mcp.tools.call('expense-api:listExpenses', {});
+
+    // Verify Authorization header was sent
+    const calls = getHandle.calls();
+    expect(calls[0].headers['authorization']).toMatch(/^Bearer /);
+  });
+
+  test('includes tenant header from user claims', async ({ mcp, auth }) => {
+    const token = await auth.createToken({
+      sub: 'user-123',
+      claims: { tenantId: 'tenant-abc' },
+    });
+    await mcp.authenticate(token);
+
+    const getHandle = interceptor.get('https://api.example.com/expenses', {
+      body: [],
+    });
+
+    await mcp.tools.call('expense-api:listExpenses', {});
+
+    // Verify custom header (if using headersMapper)
+    const calls = getHandle.calls();
+    expect(calls[0].headers['x-tenant-id']).toBe('tenant-abc');
+  });
+});
+```
+
+---
+
+## Step 8: Test Error Scenarios
+
+Cover various API error responses:
+
+```typescript
+test.describe('Error Handling', () => {
+  test('handles 401 Unauthorized', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses', {
+      status: 401,
+      body: { error: 'Invalid or expired token' },
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+    expect(result).toBeError();
+  });
+
+  test('handles 403 Forbidden', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses', {
+      status: 403,
+      body: { error: 'Insufficient permissions' },
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+    expect(result).toBeError();
+  });
+
+  test('handles 500 Server Error', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses', {
+      status: 500,
+      body: { error: 'Internal server error' },
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+    expect(result).toBeError();
+  });
+
+  test('handles network timeout', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses', {
+      delay: 60000,  // 60 second delay (will timeout)
+      body: {},
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+    expect(result).toBeError();
+  });
+
+  test('handles malformed JSON response', async ({ mcp }) => {
+    interceptor.mock({
+      match: { url: 'https://api.example.com/expenses' },
+      response: {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: 'not valid json{{{',
+      },
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+    expect(result).toBeError();
+  });
+});
+```
+
+---
+
+## Step 9: Test Query Parameters
+
+Test operations with query parameters:
+
+```typescript
+test.describe('Query Parameters', () => {
+  test('passes query parameters correctly', async ({ mcp }) => {
+    // Assuming the spec has query params for filtering
+    const getHandle = interceptor.get(/expenses\?/, {
+      body: [{ id: '1', category: 'Travel' }],
+    });
+
+    await mcp.tools.call('expense-api:listExpenses', {
+      category: 'Travel',
+      limit: 10,
+      offset: 0,
+    });
+
+    const calls = getHandle.calls();
+    const url = new URL(calls[0].url);
+
+    expect(url.searchParams.get('category')).toBe('Travel');
+    expect(url.searchParams.get('limit')).toBe('10');
+  });
+});
+```
+
+---
+
+## Complete Test Suite Example
+
+Here's a complete, runnable test file:
+
+```typescript title="expense-api.e2e.ts"
+import { test, expect, httpMock, httpResponse } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+});
+
+let interceptor: ReturnType<typeof httpMock.interceptor>;
+
+// OpenAPI spec - define once, reuse
+const openApiSpec = {
+  openapi: '3.0.0',
+  info: { title: 'Expense API', version: '1.0.0' },
+  servers: [{ url: 'https://api.example.com' }],
+  paths: {
+    '/expenses': {
+      get: { operationId: 'listExpenses', summary: 'List expenses' },
+      post: { operationId: 'createExpense', summary: 'Create expense' },
+    },
+    '/expenses/{id}': {
+      get: { operationId: 'getExpense', summary: 'Get expense' },
+      delete: { operationId: 'deleteExpense', summary: 'Delete expense' },
+    },
+  },
+};
+
+beforeEach(() => {
+  interceptor = httpMock.interceptor();
+
+  // Always mock the spec endpoint
+  interceptor.get('https://api.example.com/openapi.json', {
+    body: openApiSpec,
+  });
+});
+
+afterEach(() => {
+  interceptor.restore();
+});
+
+test.describe('Expense API OpenAPI Adapter', () => {
+  test('lists all expenses', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses', {
+      body: [
+        { id: '1', amount: 50, category: 'Travel' },
+        { id: '2', amount: 100, category: 'Meals' },
+      ],
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+
+    expect(result).toBeSuccessful();
+    expect(result.json()).toHaveLength(2);
+  });
+
+  test('creates an expense', async ({ mcp }) => {
+    interceptor.post('https://api.example.com/expenses', {
+      status: 201,
+      body: { id: 'new-1', amount: 75, category: 'Office' },
+    });
+
+    const result = await mcp.tools.call('expense-api:createExpense', {
+      amount: 75,
+      category: 'Office',
+    });
+
+    expect(result).toBeSuccessful();
+    expect(result.json().id).toBe('new-1');
+  });
+
+  test('gets expense by ID', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses/123', {
+      body: { id: '123', amount: 200, category: 'Equipment' },
+    });
+
+    const result = await mcp.tools.call('expense-api:getExpense', { id: '123' });
+
+    expect(result).toBeSuccessful();
+    expect(result.json().amount).toBe(200);
+  });
+
+  test('deletes an expense', async ({ mcp }) => {
+    interceptor.delete('https://api.example.com/expenses/456', {
+      status: 204,
+    });
+
+    const result = await mcp.tools.call('expense-api:deleteExpense', { id: '456' });
+
+    expect(result).toBeSuccessful();
+  });
+
+  test('handles API errors gracefully', async ({ mcp }) => {
+    interceptor.get('https://api.example.com/expenses', {
+      status: 500,
+      body: { error: 'Database connection failed' },
+    });
+
+    const result = await mcp.tools.call('expense-api:listExpenses', {});
+
+    expect(result).toBeError();
+  });
+});
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always mock the spec endpoint">
+    The OpenAPI spec is fetched when the server starts. Mock it in `beforeEach`:
+    ```typescript
+    beforeEach(() => {
+      interceptor.get('/openapi.json', { body: openApiSpec });
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Use realistic mock data">
+    Mock responses should match the schema defined in your OpenAPI spec:
+    ```typescript
+    // Match the schema
+    { id: 'string', amount: 123.45, category: 'Travel' }
+
+    // Don't use invalid types
+    { id: 123, amount: 'fifty dollars' }  // Wrong!
+    ```
+  </Accordion>
+
+  <Accordion title="Verify request details">
+    Use call tracking to verify headers, body, and URL:
+    ```typescript
+    const handle = interceptor.post('/api/data', { body: {} });
+    await mcp.tools.call('tool', input);
+
+    const calls = handle.calls();
+    expect(calls[0].headers['content-type']).toBe('application/json');
+    expect(calls[0].body).toEqual(expectedBody);
+    ```
+  </Accordion>
+
+  <Accordion title="Test all error codes">
+    Cover 4xx and 5xx responses:
+    - 400 Bad Request (validation errors)
+    - 401 Unauthorized
+    - 403 Forbidden
+    - 404 Not Found
+    - 429 Rate Limited
+    - 500 Server Error
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="HTTP Mocking Reference" icon="globe" href="/frontmcp/testing/http-mocking">
+    Complete HTTP mocking API
+  </Card>
+
+  <Card title="OpenAPI Adapter" icon="file-code" href="/frontmcp/adapters/openapi-adapter">
+    Full adapter configuration
+  </Card>
+
+  <Card title="Testing Overview" icon="flask" href="/frontmcp/testing/overview">
+    Testing framework basics
+  </Card>
+
+  <Card title="Test Authentication" icon="key" href="/frontmcp/testing/authentication">
+    Testing with auth tokens
+  </Card>
+</CardGroup>

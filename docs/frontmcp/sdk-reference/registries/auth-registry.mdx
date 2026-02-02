@@ -1,0 +1,258 @@
+---
+title: "AuthRegistry"
+description: "The AuthRegistry manages authentication providers within a scope. It handles auth configuration, provider detection, and orchestration."
+icon: "lock"
+---
+
+## Overview
+
+```typescript
+import { AuthRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const auth = scope.authProviders;
+
+// Get primary auth provider
+const primary = auth.getPrimary();
+
+// Get all auth providers
+const providers = auth.getAuthProviders();
+```
+
+## Methods
+
+### getPrimary()
+
+Get the primary auth provider.
+
+```typescript
+getPrimary(): FrontMcpAuth
+```
+
+**Example:**
+
+```typescript
+const auth = registry.getPrimary();
+
+// Check if user is authenticated
+const isAuth = await auth.isAuthenticated(request);
+
+// Get current user
+const user = await auth.getUser(request);
+```
+
+### getAuthProviders()
+
+Get all auth provider entries.
+
+```typescript
+getAuthProviders(): ReadonlyArray<AuthProviderEntry>
+```
+
+**Example:**
+
+```typescript
+const providers = registry.getAuthProviders();
+for (const provider of providers) {
+  console.log(`Provider: ${provider.name} (${provider.mode})`);
+}
+```
+
+## Auth Modes
+
+FrontMCP supports multiple authentication modes:
+
+<CardGroup cols={3}>
+  <Card title="Public" icon="globe">
+    No authentication required
+  </Card>
+  <Card title="Transparent" icon="eye">
+    Auth handled externally
+  </Card>
+  <Card title="Orchestrated" icon="shield-check">
+    Full auth flow management
+  </Card>
+</CardGroup>
+
+### Public Mode
+
+No authentication required:
+
+```typescript
+@FrontMcp({
+  name: 'public-server',
+  auth: { mode: 'public' },
+})
+class PublicServer { }
+```
+
+### Transparent Mode
+
+Auth is handled by an external system (e.g., API gateway):
+
+```typescript
+@FrontMcp({
+  name: 'transparent-server',
+  auth: {
+    mode: 'transparent',
+    headerName: 'X-User-Id',
+  },
+})
+class TransparentServer { }
+```
+
+### Orchestrated Mode
+
+Full auth flow with OAuth support:
+
+```typescript
+@FrontMcp({
+  name: 'orchestrated-server',
+  auth: {
+    mode: 'orchestrated',
+    providers: ['google', 'github'],
+    sessionStore: 'redis',
+  },
+})
+class OrchestratedServer { }
+```
+
+## Properties
+
+### primary
+
+The primary auth provider instance (`FrontMcpAuth`).
+
+### parsedOptions
+
+The parsed authentication configuration.
+
+### requiresOrchestration
+
+Whether the current configuration requires orchestration.
+
+```typescript
+if (registry.requiresOrchestration) {
+  // Setup OAuth callbacks, session management, etc.
+}
+```
+
+### detection
+
+Auth provider detection result across apps in scope.
+
+```typescript
+interface AuthProviderDetectionResult {
+  hasAuth: boolean;
+  modes: AuthMode[];
+  providers: string[];
+}
+```
+
+## Auth Provider Detection
+
+The registry detects auth requirements across the scope hierarchy:
+
+```typescript
+// Check detection result
+const detection = registry.detection;
+
+if (detection.hasAuth) {
+  console.log(`Modes: ${detection.modes.join(', ')}`);
+  console.log(`Providers: ${detection.providers.join(', ')}`);
+}
+```
+
+## Context Extensions
+
+Orchestrated auth installs context extensions:
+
+```typescript
+@Tool({ name: 'protected_tool', inputSchema: {} })
+class ProtectedTool extends ToolContext {
+  async execute() {
+    // Auth context extension
+    const user = this.auth.getUser();
+    const token = this.auth.getAccessToken();
+  }
+}
+```
+
+## Configuration Validation
+
+The registry validates auth configuration:
+
+```typescript
+// Invalid configuration throws
+@FrontMcp({
+  auth: {
+    mode: 'orchestrated',
+    providers: [], // Error: No providers specified
+  },
+})
+class InvalidServer { }
+```
+
+## FrontMcpAuth API
+
+The primary auth provider exposes:
+
+```typescript
+interface FrontMcpAuth {
+  // Check authentication
+  isAuthenticated(request: Request): Promise<boolean>;
+
+  // Get user info
+  getUser(request: Request): Promise<User | null>;
+
+  // Get access token
+  getAccessToken(request: Request): Promise<string | null>;
+
+  // Handle OAuth callback
+  handleCallback(request: Request): Promise<AuthResult>;
+
+  // Logout
+  logout(request: Request): Promise<void>;
+}
+```
+
+## Session Integration
+
+Auth integrates with session management:
+
+```typescript
+@FrontMcp({
+  auth: {
+    mode: 'orchestrated',
+    sessionStore: {
+      provider: 'redis',
+      host: 'localhost',
+      keyPrefix: 'auth:session:',
+    },
+  },
+})
+class SecureServer { }
+```
+
+## Multi-App Auth
+
+When multiple apps have different auth requirements:
+
+```typescript
+@FrontMcp({
+  name: 'server',
+  apps: [PublicApp, ProtectedApp],
+})
+class MultiAuthServer { }
+
+// The registry detects mixed auth modes
+const detection = scope.authProviders.detection;
+// detection.modes = ['public', 'orchestrated']
+```
+
+## Related
+
+- [Authentication Overview](/frontmcp/authentication/overview)
+- [Auth Modes](/frontmcp/authentication/modes)
+- [Production Auth](/frontmcp/authentication/production)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

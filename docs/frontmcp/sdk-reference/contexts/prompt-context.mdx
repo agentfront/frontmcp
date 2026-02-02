@@ -1,0 +1,414 @@
+---
+title: "PromptContext"
+description: "PromptContext is the base class for all prompt implementations. It provides access to prompt arguments and methods for building prompt responses."
+icon: "message"
+---
+
+<Note>
+`PromptContext` does not extend `ExecutionContextBase` but provides a similar interface for consistency.
+</Note>
+
+## Class Definition
+
+```typescript
+export abstract class PromptContext {
+  readonly args: Record<string, string>;
+  readonly metadata: PromptMetadata;
+  readonly runId: string;
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metadata` | `PromptMetadata` | Prompt metadata (name, description, etc.) |
+| `args` | `Record<string, string>` | Arguments passed to the prompt |
+| `output` | `GetPromptResult \| undefined` | Prompt result (after execution) |
+| `promptName` | `string` | Prompt name |
+| `promptId` | `string` | Prompt ID |
+| `authInfo` | `AuthInfo` | Authentication information |
+| `runId` | `string` | Unique execution identifier |
+
+## Abstract Method
+
+### execute(args)
+
+The main execution method that must be implemented.
+
+```typescript
+abstract execute(args: Record<string, string>): Promise<GetPromptResult>
+```
+
+### Return Format
+
+Prompts must return `GetPromptResult`:
+
+```typescript
+interface GetPromptResult {
+  description?: string;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: TextContent | ImageContent | EmbeddedResource;
+  }>;
+}
+```
+
+## Methods
+
+### Dependency Injection
+
+#### get\<T\>(token)
+
+Get a required dependency.
+
+```typescript
+get<T>(token: Token<T>): T
+```
+
+```typescript
+const templateEngine = this.get(TemplateEngineToken);
+```
+
+#### tryGet\<T\>(token)
+
+Try to get an optional dependency.
+
+```typescript
+tryGet<T>(token: Token<T>): T | undefined
+```
+
+### Response Methods
+
+#### respond(value)
+
+Set output and end execution immediately.
+
+```typescript
+respond(value: GetPromptResult): never
+```
+
+### Scope Access
+
+#### scope
+
+Get the current scope with all registries.
+
+```typescript
+get scope(): ScopeEntry
+```
+
+### Execution Tracking
+
+#### mark(stage)
+
+Mark current execution stage.
+
+```typescript
+mark(stage: string): void
+```
+
+### Error Handling
+
+#### fail(err)
+
+Fail execution with an error.
+
+```typescript
+protected fail(err: Error): never
+```
+
+### History
+
+#### outputHistory
+
+History of output changes.
+
+```typescript
+get outputHistory(): ReadonlyArray<GetPromptResult>
+```
+
+## Content Types
+
+### Text Content
+
+```typescript
+{
+  role: 'user',
+  content: {
+    type: 'text',
+    text: 'Your prompt text here',
+  },
+}
+```
+
+### Image Content
+
+```typescript
+{
+  role: 'user',
+  content: {
+    type: 'image',
+    data: 'base64-encoded-image-data',
+    mimeType: 'image/png',
+  },
+}
+```
+
+### Embedded Resource
+
+```typescript
+{
+  role: 'user',
+  content: {
+    type: 'resource',
+    resource: {
+      uri: 'file://context.md',
+      text: 'Resource content here',
+      mimeType: 'text/markdown',
+    },
+  },
+}
+```
+
+## Basic Example
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'greeting',
+  description: 'Generate a personalized greeting',
+  arguments: [
+    { name: 'name', description: 'Name to greet', required: true },
+    { name: 'style', description: 'Greeting style', required: false },
+  ],
+})
+class GreetingPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    const style = args.style || 'friendly';
+
+    return {
+      description: `Greeting for ${args.name}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Generate a ${style} greeting for ${args.name}.`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+## Multi-Turn Conversation
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'code-review',
+  description: 'Code review conversation',
+  arguments: [
+    { name: 'code', required: true },
+    { name: 'language', required: true },
+  ],
+})
+class CodeReviewPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    return {
+      description: 'Code review conversation',
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `You are an expert ${args.language} code reviewer. Focus on:
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance considerations
+- Security issues`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `I'll review your ${args.language} code focusing on quality, bugs, performance, and security. Please share the code.`,
+          },
+        },
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please review this code:\n\n\`\`\`${args.language}\n${args.code}\n\`\`\``,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+## With Template Engine
+
+```typescript
+import { Prompt, PromptContext, Provider, Token } from '@frontmcp/sdk';
+
+export const TemplateEngineToken = new Token<TemplateEngine>('TemplateEngine');
+
+@Provider()
+class TemplateEngine {
+  render(template: string, vars: Record<string, string>): string {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || '');
+  }
+}
+
+@Prompt({
+  name: 'email-draft',
+  description: 'Draft an email',
+  arguments: [
+    { name: 'recipient', required: true },
+    { name: 'subject', required: true },
+    { name: 'tone', required: false },
+  ],
+})
+class EmailDraftPrompt extends PromptContext {
+  private template = `
+Draft a professional email with the following details:
+- To: {{recipient}}
+- Subject: {{subject}}
+- Tone: {{tone}}
+
+Please write a complete email including:
+1. Appropriate greeting
+2. Clear body content
+3. Professional closing
+`;
+
+  async execute(args: Record<string, string>) {
+    const engine = this.get(TemplateEngineToken);
+    const promptText = engine.render(this.template, {
+      recipient: args.recipient,
+      subject: args.subject,
+      tone: args.tone || 'professional',
+    });
+
+    return {
+      description: `Email draft: ${args.subject}`,
+      messages: [
+        {
+          role: 'user',
+          content: { type: 'text', text: promptText },
+        },
+      ],
+    };
+  }
+}
+```
+
+## Full Example
+
+```typescript
+import { Prompt, PromptContext, App, FrontMcp } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'api-documentation',
+  title: 'API Documentation Generator',
+  description: 'Generate API documentation from endpoint details',
+  arguments: [
+    { name: 'endpoint', description: 'API endpoint path', required: true },
+    { name: 'method', description: 'HTTP method', required: true },
+    { name: 'description', description: 'Endpoint description', required: true },
+    { name: 'parameters', description: 'JSON parameters spec', required: false },
+    { name: 'response', description: 'JSON response example', required: false },
+  ],
+})
+class ApiDocumentationPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    this.mark('building');
+
+    const sections: string[] = [
+      `## ${args.method.toUpperCase()} ${args.endpoint}`,
+      '',
+      args.description,
+      '',
+    ];
+
+    if (args.parameters) {
+      sections.push('### Parameters');
+      sections.push('```json');
+      sections.push(args.parameters);
+      sections.push('```');
+      sections.push('');
+    }
+
+    if (args.response) {
+      sections.push('### Response Example');
+      sections.push('```json');
+      sections.push(args.response);
+      sections.push('```');
+      sections.push('');
+    }
+
+    const context = sections.join('\n');
+
+    return {
+      description: `Documentation for ${args.method} ${args.endpoint}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `You are a technical writer. Generate comprehensive API documentation in Markdown format.
+
+Here is the endpoint information:
+
+${context}
+
+Please generate:
+1. A clear description of what the endpoint does
+2. Detailed parameter documentation with types and validation rules
+3. Response schema documentation
+4. Example requests using curl
+5. Common error responses
+6. Any relevant notes or warnings`,
+          },
+        },
+      ],
+    };
+  }
+}
+
+@App({
+  name: 'docs',
+  prompts: [ApiDocumentationPrompt],
+})
+class DocsApp {}
+
+@FrontMcp({
+  info: { name: 'Documentation Generator', version: '1.0.0' },
+  apps: [DocsApp],
+})
+export default class DocGenServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Prompt" icon="at" href="/frontmcp/sdk-reference/decorators/prompt">
+    Prompt decorator
+  </Card>
+  <Card title="PromptRegistry" icon="database" href="/frontmcp/sdk-reference/registries/prompt-registry">
+    Prompt registry
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Tool decorator
+  </Card>
+  <Card title="@Agent" icon="robot" href="/frontmcp/sdk-reference/decorators/agent">
+    Agent decorator
+  </Card>
+</CardGroup>

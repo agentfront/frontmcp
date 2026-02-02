@@ -1,0 +1,263 @@
+---
+title: "HookRegistry"
+description: "The HookRegistry manages all flow hooks within a scope. Hooks intercept and extend the execution of tools, resources, and prompts at various stages."
+icon: "plug"
+---
+
+## Overview
+
+```typescript
+import { HookRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const hooks = scope.hooks;
+
+// Get all hooks
+const allHooks = hooks.getHooks();
+
+// Get hooks for a specific flow
+const toolHooks = hooks.getFlowHooks('tools:call-tool');
+```
+
+## Methods
+
+### getHooks()
+
+Get all hooks (instances, unordered).
+
+```typescript
+getHooks(): ReadonlyArray<HookEntry>
+```
+
+**Example:**
+
+```typescript
+const hooks = registry.getHooks();
+for (const hook of hooks) {
+  console.log(`Hook: ${hook.flow} @ ${hook.stage}`);
+}
+```
+
+### getFlowHooks()
+
+Get hooks for a given flow, sorted by priority (descending).
+
+```typescript
+getFlowHooks(flow: string): ReadonlyArray<HookEntry>
+```
+
+**Example:**
+
+```typescript
+const hooks = registry.getFlowHooks('tools:call-tool');
+// Hooks are sorted: highest priority first
+```
+
+### getFlowStageHooks()
+
+Get hooks for a specific flow and stage.
+
+```typescript
+getFlowStageHooks(flow: string, stage: string): ReadonlyArray<HookEntry>
+```
+
+**Example:**
+
+```typescript
+const beforeHooks = registry.getFlowStageHooks('tools:call-tool', 'beforeExecute');
+const afterHooks = registry.getFlowStageHooks('tools:call-tool', 'afterExecute');
+```
+
+### getFlowHooksForOwner()
+
+Get flow hooks filtered by owner.
+
+```typescript
+getFlowHooksForOwner(flow: string, ownerId?: string): ReadonlyArray<HookEntry>
+```
+
+**Example:**
+
+```typescript
+// Get hooks only for 'my-app' owner
+const appHooks = registry.getFlowHooksForOwner('tools:call-tool', 'my-app');
+```
+
+### getClsHooks()
+
+Get hooks defined on a given class.
+
+```typescript
+getClsHooks(token: Token): ReadonlyArray<HookEntry>
+```
+
+**Example:**
+
+```typescript
+const classHooks = registry.getClsHooks(MyToolClass);
+```
+
+### registerHooks()
+
+Register hooks dynamically.
+
+```typescript
+registerHooks(embedded: boolean, ...records: HookRecord[]): void
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `embedded` | `boolean` | Whether hooks are class-embedded |
+| `records` | `HookRecord[]` | Hook definitions to register |
+
+**Example:**
+
+```typescript
+registry.registerHooks(false, {
+  flow: 'tools:call-tool',
+  stage: 'beforeExecute',
+  priority: 100,
+  handler: async (ctx) => {
+    console.log('Tool called:', ctx.toolName);
+  },
+});
+```
+
+## Hook Structure
+
+```typescript
+interface HookEntry {
+  flow: string;           // Flow name (e.g., 'tools:call-tool')
+  stage: string;          // Stage name (e.g., 'beforeExecute')
+  priority: number;       // Execution priority (higher = first)
+  handler: HookHandler;   // Handler function
+  ownerId?: string;       // Owner filter
+  embedded: boolean;      // Whether embedded in a class
+}
+```
+
+## Available Flows
+
+<CardGroup cols={2}>
+  <Card title="tools:call-tool" icon="wrench">
+    Tool execution flow
+  </Card>
+  <Card title="resources:read-resource" icon="file">
+    Resource read flow
+  </Card>
+  <Card title="resources:list-resources" icon="list">
+    Resource listing flow
+  </Card>
+  <Card title="prompts:get-prompt" icon="message">
+    Prompt retrieval flow
+  </Card>
+</CardGroup>
+
+## Flow Stages
+
+Most flows have these stages:
+
+| Stage | Description |
+|-------|-------------|
+| `beforeValidation` | Before input validation |
+| `afterValidation` | After input validation |
+| `beforeExecute` | Before execution |
+| `afterExecute` | After execution |
+| `onError` | On error (for error handling) |
+| `finally` | Always runs (cleanup) |
+
+## Priority
+
+Hooks are sorted by priority (descending):
+
+```typescript
+// Priority 100 runs before priority 50
+registry.registerHooks(false,
+  { flow: 'tools:call-tool', stage: 'beforeExecute', priority: 100, handler: firstHook },
+  { flow: 'tools:call-tool', stage: 'beforeExecute', priority: 50, handler: secondHook },
+);
+```
+
+## Embedded vs External Hooks
+
+### Embedded Hooks
+
+Defined on tool/resource/prompt classes using `@Hooks` decorator:
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+@Hooks([
+  {
+    stage: 'beforeExecute',
+    handler: (ctx) => console.log('Before execute'),
+  },
+])
+class MyTool extends ToolContext {
+  async execute() { }
+}
+```
+
+Embedded hooks:
+- Are scoped to their class
+- Use `getClsHooks()` for lookup
+- Have `embedded: true`
+
+### External Hooks
+
+Registered via plugins or directly:
+
+```typescript
+@Plugin({
+  name: 'audit',
+  hooks: [
+    {
+      flow: 'tools:call-tool',
+      stage: 'afterExecute',
+      handler: async (ctx) => {
+        await auditLog(ctx.toolName, ctx.result);
+      },
+    },
+  ],
+})
+class AuditPlugin { }
+```
+
+External hooks:
+- Can target any flow
+- Use `getFlowHooks()` for lookup
+- Have `embedded: false`
+
+## Hook Context
+
+Hooks receive a context object with:
+
+```typescript
+interface HookContext {
+  flow: string;
+  stage: string;
+  state: Map<string, unknown>;    // Shared state between hooks
+  input?: unknown;                 // Input data
+  output?: unknown;                // Output data (after execute)
+  error?: Error;                   // Error (in onError stage)
+  scope: Scope;                    // Access to registries
+  skip(): void;                    // Skip remaining hooks
+  abort(error: Error): void;       // Abort with error
+}
+```
+
+## Index Structure
+
+Unlike other registries, HookRegistry uses specialized indexes:
+
+| Index | Key | Description |
+|-------|-----|-------------|
+| `recordsByCls` | `Token` | Historical records by class |
+| `entriesByCls` | `Token` | Hook instances by class |
+| `hooksByFlow` | `flow` | Hooks indexed by flow |
+| `hooksByFlowStage` | `flow:stage` | Hooks indexed by flow + stage |
+
+## Related
+
+- [Hooks Decorator](/frontmcp/sdk-reference/decorators/hooks)
+- [Creating Plugins](/frontmcp/plugins/creating-plugins)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

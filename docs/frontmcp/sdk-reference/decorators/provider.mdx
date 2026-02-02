@@ -1,0 +1,404 @@
+---
+title: "@Provider"
+description: "The @Provider decorator registers a class as a dependency injection provider that can be injected into tools, resources, agents, and other components."
+icon: "syringe"
+---
+
+## Basic Usage
+
+```typescript
+import { Provider } from '@frontmcp/sdk';
+
+@Provider()
+export class UserService {
+  async findById(id: string) {
+    return { id, name: 'John Doe' };
+  }
+
+  async create(data: { name: string; email: string }) {
+    return { id: 'user_123', ...data };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Provider(providedMetadata?: ProviderMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `scope` | `'singleton' \| 'scoped' \| 'transient'` | `'singleton'` | Provider lifecycle scope |
+
+### Singleton (Default)
+
+Single instance shared across all requests:
+
+```typescript
+@Provider() // or @Provider({ scope: 'singleton' })
+class ConfigService {
+  private config: Record<string, string>;
+
+  constructor() {
+    this.config = loadConfig();
+  }
+
+  get(key: string) {
+    return this.config[key];
+  }
+}
+```
+
+### Scoped
+
+New instance per request/session:
+
+```typescript
+@Provider({ scope: 'scoped' })
+class RequestLogger {
+  private logs: string[] = [];
+
+  log(message: string) {
+    this.logs.push(`[${new Date().toISOString()}] ${message}`);
+  }
+
+  getLogs() {
+    return this.logs;
+  }
+}
+```
+
+### Transient
+
+New instance every time it's injected:
+
+```typescript
+@Provider({ scope: 'transient' })
+class UniqueIdGenerator {
+  readonly id = crypto.randomUUID();
+}
+```
+
+## Using Providers
+
+### In Tools
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { UserService } from './user.service';
+
+@Tool({
+  name: 'get_user',
+  inputSchema: { userId: z.string() },
+})
+class GetUserTool extends ToolContext {
+  async execute(input: { userId: string }) {
+    const userService = this.get(UserService);
+    return userService.findById(input.userId);
+  }
+}
+```
+
+### In Resources
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { DataService } from './data.service';
+
+@Resource({ name: 'data', uri: 'data://all' })
+class DataResource extends ResourceContext {
+  async execute(uri: string) {
+    const dataService = this.get(DataService);
+    return { contents: [{ uri, text: JSON.stringify(dataService.getAll()) }] };
+  }
+}
+```
+
+### In Agents
+
+```typescript
+import { Agent, AgentContext } from '@frontmcp/sdk';
+import { AnalyticsService } from './analytics.service';
+
+@Agent({ name: 'analyst', llm: { adapter: 'openai', model: 'gpt-4' } })
+class AnalystAgent extends AgentContext {
+  async execute(input) {
+    const analytics = this.get(AnalyticsService);
+    // Use analytics in agent logic
+  }
+}
+```
+
+## Provider Dependencies
+
+Providers can depend on other providers:
+
+```typescript
+@Provider()
+class DatabaseService {
+  private pool: Pool;
+
+  constructor() {
+    this.pool = createPool(process.env.DATABASE_URL);
+  }
+
+  query(sql: string) {
+    return this.pool.query(sql);
+  }
+}
+
+@Provider()
+class UserRepository {
+  constructor(private db: DatabaseService) {}
+
+  async findById(id: string) {
+    const result = await this.db.query(`SELECT * FROM users WHERE id = $1`, [id]);
+    return result.rows[0];
+  }
+}
+```
+
+## Registration
+
+### In Apps
+
+```typescript
+@App({
+  name: 'my-app',
+  providers: [UserService, DatabaseService, UserRepository],
+  tools: [GetUserTool],
+})
+class MyApp {}
+```
+
+### In Server
+
+```typescript
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  providers: [ConfigService, LoggingService], // Shared across all apps
+})
+class Server {}
+```
+
+### In Plugins
+
+```typescript
+@Plugin({
+  name: 'cache-plugin',
+  providers: [CacheService],
+})
+class CachePlugin {}
+```
+
+## Optional Dependencies
+
+Use `tryGet()` for optional dependencies:
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute() {
+    // Required dependency (throws if not found)
+    const required = this.get(RequiredService);
+
+    // Optional dependency (returns undefined if not found)
+    const optional = this.tryGet(OptionalService);
+    if (optional) {
+      optional.doSomething();
+    }
+  }
+}
+```
+
+## Provider Tokens
+
+For interface-based injection, use tokens:
+
+```typescript
+import { Token } from '@frontmcp/sdk';
+
+// Define token
+export const CACHE_TOKEN = new Token<CacheInterface>('CacheService');
+
+// Interface
+export interface CacheInterface {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+}
+
+// Implementation
+@Provider()
+class RedisCacheService implements CacheInterface {
+  async get(key: string) { /* ... */ }
+  async set(key: string, value: string) { /* ... */ }
+}
+
+// Register with token
+@App({
+  name: 'app',
+  providers: [
+    { provide: CACHE_TOKEN, useClass: RedisCacheService },
+  ],
+})
+
+// Use with token
+class MyTool extends ToolContext {
+  async execute() {
+    const cache = this.get(CACHE_TOKEN);
+  }
+}
+```
+
+## Factory Providers
+
+Use factories for complex initialization:
+
+```typescript
+@App({
+  name: 'app',
+  providers: [
+    {
+      provide: DatabaseService,
+      useFactory: (config: ConfigService) => {
+        return new DatabaseService(config.get('DATABASE_URL'));
+      },
+      deps: [ConfigService],
+    },
+  ],
+})
+```
+
+## Value Providers
+
+Provide static values:
+
+```typescript
+export const API_URL_TOKEN = new Token<string>('API_URL');
+
+@App({
+  name: 'app',
+  providers: [
+    { provide: API_URL_TOKEN, useValue: 'https://api.example.com' },
+  ],
+})
+```
+
+## Full Example
+
+```typescript
+import { Provider, Tool, ToolContext, App, FrontMcp, Token } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Token for interface
+export const NOTIFICATION_TOKEN = new Token<NotificationService>('NotificationService');
+
+// Interface
+interface NotificationService {
+  send(to: string, message: string): Promise<void>;
+}
+
+// Provider implementations
+@Provider()
+class ConfigService {
+  private env = process.env;
+
+  get(key: string): string | undefined {
+    return this.env[key];
+  }
+
+  require(key: string): string {
+    const value = this.get(key);
+    if (!value) throw new Error(`Missing config: ${key}`);
+    return value;
+  }
+}
+
+@Provider()
+class EmailNotificationService implements NotificationService {
+  constructor(private config: ConfigService) {}
+
+  async send(to: string, message: string) {
+    const apiKey = this.config.require('EMAIL_API_KEY');
+    // Send email...
+    console.log(`Sending email to ${to}: ${message}`);
+  }
+}
+
+@Provider({ scope: 'scoped' })
+class RequestTracker {
+  private startTime = Date.now();
+  private events: string[] = [];
+
+  track(event: string) {
+    this.events.push(`[${Date.now() - this.startTime}ms] ${event}`);
+  }
+
+  getTimeline() {
+    return this.events;
+  }
+}
+
+// Tool using providers
+@Tool({
+  name: 'send_notification',
+  inputSchema: {
+    recipient: z.string(),
+    message: z.string(),
+  },
+})
+class SendNotificationTool extends ToolContext {
+  async execute(input) {
+    const tracker = this.get(RequestTracker);
+    tracker.track('Tool started');
+
+    const notification = this.get(NOTIFICATION_TOKEN);
+    await notification.send(input.recipient, input.message);
+
+    tracker.track('Notification sent');
+
+    return {
+      success: true,
+      timeline: tracker.getTimeline(),
+    };
+  }
+}
+
+@App({
+  name: 'notifications',
+  providers: [
+    ConfigService,
+    RequestTracker,
+    { provide: NOTIFICATION_TOKEN, useClass: EmailNotificationService },
+  ],
+  tools: [SendNotificationTool],
+})
+class NotificationsApp {}
+
+@FrontMcp({
+  info: { name: 'Notification Service', version: '1.0.0' },
+  apps: [NotificationsApp],
+})
+export default class NotificationServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="ProviderRegistry" icon="database" href="/frontmcp/sdk-reference/registries/provider-registry">
+    Provider registry API
+  </Card>
+  <Card title="@Plugin" icon="plug" href="/frontmcp/sdk-reference/decorators/plugin">
+    Create plugins
+  </Card>
+  <Card title="@App" icon="cube" href="/frontmcp/sdk-reference/decorators/app">
+    Application modules
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Define tools
+  </Card>
+</CardGroup>

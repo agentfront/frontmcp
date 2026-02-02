@@ -1,0 +1,374 @@
+---
+title: "Scope"
+description: "Scope provides access to all registries and services within a FrontMCP server. It's the central point for accessing tools, resources, prompts, agents, skills, and other registered components."
+icon: "layer-group"
+---
+
+## Class Definition
+
+```typescript
+export class Scope extends ScopeEntry {
+  readonly id: string;
+  readonly logger: FrontMcpLogger;
+  readonly entryPath: string;
+  readonly routeBase: string;
+  readonly ready: Promise<void>;
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Unique scope identifier |
+| `logger` | `FrontMcpLogger` | Scope-specific logger |
+| `entryPath` | `string` | HTTP entry path |
+| `routeBase` | `string` | Route prefix |
+| `ready` | `Promise<void>` | Initialization promise |
+| `metadata` | `ScopeMetadata` | Configuration metadata |
+
+## Registry Accessors
+
+### tools
+
+Get the tool registry.
+
+```typescript
+get tools(): ToolRegistry
+```
+
+```typescript
+const tools = scope.tools.getTools();
+const tool = scope.tools.findByName('my_tool');
+```
+
+### resources
+
+Get the resource registry.
+
+```typescript
+get resources(): ResourceRegistry
+```
+
+```typescript
+const resources = scope.resources.getResources();
+const templates = scope.resources.getResourceTemplates();
+const resource = scope.resources.findResourceForUri('config://app');
+```
+
+### prompts
+
+Get the prompt registry.
+
+```typescript
+get prompts(): PromptRegistry
+```
+
+```typescript
+const prompts = scope.prompts.getPrompts();
+const prompt = scope.prompts.findByName('research');
+```
+
+### agents
+
+Get the agent registry.
+
+```typescript
+get agents(): AgentRegistry
+```
+
+```typescript
+const agents = scope.agents.getAgents();
+const agent = scope.agents.findByName('research-agent');
+```
+
+### skills
+
+Get the skill registry.
+
+```typescript
+get skills(): SkillRegistry
+```
+
+```typescript
+const skills = scope.skills.getSkills();
+const searchResults = await scope.skills.search('code review', { topK: 5 });
+```
+
+### providers
+
+Get the provider registry.
+
+```typescript
+get providers(): ProviderRegistry
+```
+
+```typescript
+const service = scope.providers.get(ServiceToken);
+```
+
+### auth
+
+Get the primary auth provider.
+
+```typescript
+get auth(): FrontMcpAuth
+```
+
+### authProviders
+
+Get the auth registry.
+
+```typescript
+get authProviders(): AuthRegistry
+```
+
+### apps
+
+Get the app registry.
+
+```typescript
+get apps(): AppRegistry
+```
+
+### hooks
+
+Get the hook registry.
+
+```typescript
+get hooks(): HookRegistryInterface
+```
+
+### plugins
+
+Get the plugin registry (if configured).
+
+```typescript
+get plugins(): PluginRegistry | undefined
+```
+
+## Service Accessors
+
+### notifications
+
+Get the notification service.
+
+```typescript
+get notifications(): NotificationService
+```
+
+```typescript
+scope.notifications.on('tool-called', (event) => {
+  console.log('Tool called:', event.toolName);
+});
+```
+
+### elicitationStore
+
+Get the elicitation store.
+
+```typescript
+get elicitationStore(): ElicitationStore
+```
+
+### eventStore
+
+Get the event store (if configured).
+
+```typescript
+get eventStore(): EventStore | undefined
+```
+
+### skillSession
+
+Get the skill session manager (if skills exist).
+
+```typescript
+get skillSession(): SkillSessionManager | undefined
+```
+
+### toolUI
+
+Get the tool UI registry.
+
+```typescript
+get toolUI(): ToolUIRegistry
+```
+
+## Flow Execution
+
+### runFlow(name, input, deps?)
+
+Execute a named flow.
+
+```typescript
+runFlow<Name extends FlowName>(
+  name: Name,
+  input: FlowInputOf<Name>,
+  deps?: Map<Token, Type>
+): Promise<FlowOutputOf<Name> | undefined>
+```
+
+```typescript
+const result = await scope.runFlow('tools:call-tool', {
+  request: {
+    method: 'tools/call',
+    params: { name: 'my_tool', arguments: { input: 'test' } },
+  },
+  ctx: { authInfo },
+});
+```
+
+### runFlowForOutput(name, input, deps?)
+
+Execute a flow and assert output exists.
+
+```typescript
+runFlowForOutput<Name extends FlowName>(
+  name: Name,
+  input: FlowInputOf<Name>,
+  deps?: Map<Token, Type>
+): Promise<FlowOutputOf<Name>>
+```
+
+### registryFlows(...flows)
+
+Register additional flows.
+
+```typescript
+registryFlows(...flows: FlowType[]): Promise<void>
+```
+
+## Accessing Scope
+
+### In Tools/Resources/Agents
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute() {
+    // Access scope
+    const tools = this.scope.tools;
+    const resources = this.scope.resources;
+
+    // List other tools
+    const allTools = tools.getTools();
+
+    return { toolCount: allTools.length };
+  }
+}
+```
+
+### From FrontMcpInstance
+
+```typescript
+const instance = await FrontMcpInstance.createForGraph(config);
+const scopes = instance.getScopes();
+
+const scope = scopes[0];
+console.log('Tools:', scope.tools.getTools().length);
+```
+
+### From DirectClient
+
+The scope is internal to DirectClient, accessed through its methods:
+
+```typescript
+const client = await connect(config);
+const tools = await client.listTools(); // Uses scope.tools internally
+```
+
+## Usage Examples
+
+### Introspection
+
+```typescript
+const instance = await FrontMcpInstance.createForGraph(config);
+const [scope] = instance.getScopes();
+
+// List all tools
+scope.tools.getTools().forEach(tool => {
+  console.log(`Tool: ${tool.name}`);
+  console.log(`  Description: ${tool.description}`);
+  console.log(`  Input: ${JSON.stringify(tool.inputSchema)}`);
+});
+
+// List all resources
+scope.resources.getResources().forEach(resource => {
+  console.log(`Resource: ${resource.name} - ${resource.uri}`);
+});
+
+// List all skills
+scope.skills.getSkills().forEach(skill => {
+  console.log(`Skill: ${skill.name}`);
+  console.log(`  Tools: ${skill.tools.map(t => t.name).join(', ')}`);
+});
+```
+
+### Event Handling
+
+```typescript
+const scope = instance.getScopes()[0];
+
+// Subscribe to tool changes
+scope.tools.subscribe({}, (event) => {
+  console.log(`Tool ${event.kind}:`, event);
+});
+
+// Subscribe to notifications
+scope.notifications.on('progress', (event) => {
+  console.log(`Progress: ${event.progress}/${event.total}`);
+});
+```
+
+### Skill Sessions
+
+```typescript
+const scope = instance.getScopes()[0];
+
+if (scope.skillSession) {
+  // Get allowed tools for a session
+  const allowed = await scope.skillSession.getAllowedTools(sessionId);
+
+  // Check if tool is allowed
+  const canUse = await scope.skillSession.isToolAllowed(sessionId, 'my_tool');
+}
+```
+
+## Initialization Sequence
+
+The Scope initializes in this order:
+
+1. Providers
+2. Hooks
+3. Flows
+4. Transport Service
+5. Elicitation Store
+6. Auth Registry
+7. Apps Registry
+8. Plugins
+9. Tools Registry
+10. Tool UI Registry
+11. Resources Registry
+12. Prompts Registry
+13. Agents Registry
+14. Skills Registry + Session Manager
+15. Notification Service
+16. Additional Flows
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpInstance" icon="server" href="/frontmcp/sdk-reference/core/frontmcp-instance">
+    Server bootstrap
+  </Card>
+  <Card title="ToolRegistry" icon="wrench" href="/frontmcp/sdk-reference/registries/tool-registry">
+    Tool registry
+  </Card>
+  <Card title="ResourceRegistry" icon="file" href="/frontmcp/sdk-reference/registries/resource-registry">
+    Resource registry
+  </Card>
+  <Card title="SkillRegistry" icon="lightbulb" href="/frontmcp/sdk-reference/registries/skill-registry">
+    Skill registry
+  </Card>
+</CardGroup>

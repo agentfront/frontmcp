@@ -1,0 +1,327 @@
+---
+title: "ResourceContext"
+description: "ResourceContext is the base class for all resource implementations. It extends ExecutionContextBase and provides resource-specific features like URI handling and parameter extraction."
+icon: "file"
+---
+
+## Class Definition
+
+```typescript
+export abstract class ResourceContext<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends ExecutionContextBase<Out>
+```
+
+## Type Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `Params` | URI template parameters type |
+| `Out` | Output type |
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metadata` | `ResourceMetadata \| ResourceTemplateMetadata` | Resource metadata |
+| `uri` | `string` | The actual resource URI being read |
+| `params` | `Params` | Extracted URI template parameters |
+| `output` | `Out \| undefined` | Resource content (after execution) |
+| `resourceName` | `string` | Resource name |
+| `resourceId` | `string` | Resource ID |
+
+## Abstract Method
+
+### execute(uri, params)
+
+The main execution method that must be implemented.
+
+```typescript
+abstract execute(uri: string, params: Params): Promise<Out>
+```
+
+### Return Format
+
+Resources must return `ReadResourceResult`:
+
+```typescript
+interface ReadResourceResult {
+  contents: Array<{
+    uri: string;
+    mimeType?: string;
+    text?: string;   // Text content
+    blob?: string;   // Base64-encoded binary
+  }>;
+}
+```
+
+## Methods
+
+### respond(value)
+
+Set output and end execution immediately.
+
+```typescript
+respond(value: Out): never
+```
+
+```typescript
+async execute(uri: string, params: Params) {
+  const cached = await this.cache.get(uri);
+  if (cached) {
+    this.respond(cached); // Ends execution
+  }
+  // Continue with fetch...
+}
+```
+
+### outputHistory
+
+History of output changes during execution.
+
+```typescript
+get outputHistory(): ReadonlyArray<Out>
+```
+
+## Static Resource Example
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+
+@Resource({
+  name: 'app-config',
+  uri: 'config://app',
+  mimeType: 'application/json',
+  description: 'Application configuration',
+})
+class AppConfigResource extends ResourceContext {
+  async execute(uri: string) {
+    const config = this.get(ConfigService);
+
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          version: config.get('APP_VERSION'),
+          environment: config.get('NODE_ENV'),
+          features: config.getObject('FEATURES'),
+        }, null, 2),
+      }],
+    };
+  }
+}
+```
+
+## Template Resource Example
+
+```typescript
+import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+  description: 'User profile by ID',
+})
+class UserProfileResource extends ResourceContext<{ userId: string }> {
+  async execute(uri: string, params: { userId: string }) {
+    this.mark('fetching');
+
+    const userService = this.get(UserServiceToken);
+    const user = await userService.findById(params.userId);
+
+    if (!user) {
+      this.fail(new ResourceNotFoundError(uri));
+    }
+
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
+        }),
+      }],
+    };
+  }
+}
+```
+
+## Binary Content Example
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { readFile } from '@frontmcp/utils';
+
+@Resource({
+  name: 'logo',
+  uri: 'assets://logo.png',
+  mimeType: 'image/png',
+})
+class LogoResource extends ResourceContext {
+  async execute(uri: string) {
+    const logoPath = this.get(ConfigService).get('LOGO_PATH');
+    const buffer = await readFile(logoPath);
+
+    return {
+      contents: [{
+        uri,
+        mimeType: 'image/png',
+        blob: buffer.toString('base64'),
+      }],
+    };
+  }
+}
+```
+
+## Multiple Parameters Example
+
+```typescript
+import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+
+interface RepoFileParams {
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+}
+
+@ResourceTemplate({
+  name: 'github-file',
+  uriTemplate: 'github://{owner}/{repo}/{branch}/{path}',
+  mimeType: 'text/plain',
+  description: 'File from GitHub repository',
+})
+class GitHubFileResource extends ResourceContext<RepoFileParams> {
+  async execute(uri: string, params: RepoFileParams) {
+    const { owner, repo, branch, path } = params;
+
+    this.logger.info('Fetching GitHub file', { owner, repo, branch, path });
+
+    const response = await this.fetch(
+      `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        this.fail(new ResourceNotFoundError(uri));
+      }
+      this.fail(new ResourceReadError(uri, new Error(`HTTP ${response.status}`)));
+    }
+
+    const content = await response.text();
+    const mimeType = this.detectMimeType(path);
+
+    return {
+      contents: [{
+        uri,
+        mimeType,
+        text: content,
+      }],
+    };
+  }
+
+  private detectMimeType(path: string): string {
+    if (path.endsWith('.json')) return 'application/json';
+    if (path.endsWith('.md')) return 'text/markdown';
+    if (path.endsWith('.ts') || path.endsWith('.js')) return 'text/javascript';
+    return 'text/plain';
+  }
+}
+```
+
+## Full Example with Error Handling
+
+```typescript
+import { ResourceTemplate, ResourceContext, App, FrontMcp } from '@frontmcp/sdk';
+import { ResourceNotFoundError, ResourceReadError } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  name: 'document',
+  uriTemplate: 'docs://{category}/{documentId}',
+  title: 'Document',
+  description: 'Fetch documents by category and ID',
+  mimeType: 'application/json',
+})
+class DocumentResource extends ResourceContext<{ category: string; documentId: string }> {
+  async execute(uri: string, params: { category: string; documentId: string }) {
+    const { category, documentId } = params;
+
+    this.mark('validation');
+    if (!this.isValidCategory(category)) {
+      this.fail(new InvalidResourceUriError(uri, `Invalid category: ${category}`));
+    }
+
+    this.mark('fetching');
+    const docService = this.get(DocumentServiceToken);
+
+    try {
+      const doc = await docService.find(category, documentId);
+
+      if (!doc) {
+        this.fail(new ResourceNotFoundError(uri));
+      }
+
+      this.mark('serializing');
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify({
+            id: doc.id,
+            title: doc.title,
+            category,
+            content: doc.content,
+            metadata: {
+              author: doc.author,
+              createdAt: doc.createdAt,
+              updatedAt: doc.updatedAt,
+            },
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      this.logger.error('Failed to read document', { uri, error });
+      this.fail(new ResourceReadError(uri, error as Error));
+    }
+  }
+
+  private isValidCategory(category: string): boolean {
+    return ['guides', 'api', 'tutorials'].includes(category);
+  }
+}
+
+@App({
+  name: 'docs',
+  resources: [DocumentResource],
+})
+class DocsApp {}
+
+@FrontMcp({
+  info: { name: 'Documentation Server', version: '1.0.0' },
+  apps: [DocsApp],
+})
+export default class DocServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Resource" icon="file" href="/frontmcp/sdk-reference/decorators/resource">
+    Resource decorator
+  </Card>
+  <Card title="@ResourceTemplate" icon="file-code" href="/frontmcp/sdk-reference/decorators/resource-template">
+    Template decorator
+  </Card>
+  <Card title="ResourceRegistry" icon="database" href="/frontmcp/sdk-reference/registries/resource-registry">
+    Resource registry
+  </Card>
+  <Card title="Resource Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/resource-errors">
+    Resource errors
+  </Card>
+</CardGroup>

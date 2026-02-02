@@ -1,0 +1,370 @@
+---
+title: "@Agent"
+description: "The @Agent decorator defines an autonomous AI agent that uses an LLM to execute tasks with access to tools."
+icon: "robot"
+---
+
+## Basic Usage
+
+```typescript
+import { Agent, AgentContext, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'search_web',
+  inputSchema: { query: z.string() },
+})
+class SearchWebTool extends ToolContext {
+  async execute(input: { query: string }) {
+    return { results: ['Result 1', 'Result 2'] };
+  }
+}
+
+@Agent({
+  name: 'research-agent',
+  description: 'Researches topics using web search',
+  llm: {
+    adapter: 'openai',
+    model: 'gpt-4-turbo',
+    apiKey: { env: 'OPENAI_API_KEY' },
+  },
+  tools: [SearchWebTool],
+})
+export default class ResearchAgent extends AgentContext {
+  // Default behavior: runs agent loop automatically
+}
+```
+
+## Signature
+
+```typescript
+function Agent<InSchema, OutSchema>(
+  providedMetadata: AgentMetadata<InSchema, OutSchema>
+): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique agent identifier |
+| `llm` | `AgentLlmAdapterConfig` | LLM provider configuration |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `description` | `string` | Agent description |
+| `inputSchema` | `ZodShape` | Input validation schema |
+| `outputSchema` | `ZodType` | Output validation schema |
+| `tools` | `ToolType[]` | Tools available to the agent |
+| `systemInstructions` | `string` | System prompt for the agent |
+| `id` | `string` | Stable identifier |
+| `tags` | `string[]` | Categorization tags |
+
+### LLM Configuration
+
+```typescript
+interface AgentLlmAdapterConfig {
+  adapter: 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq' | string;
+  model: string;
+  apiKey?: string | { env: string } | { config: string };
+  temperature?: number;
+  maxTokens?: number;
+  // Provider-specific options...
+}
+```
+
+## LLM Providers
+
+### OpenAI
+
+```typescript
+@Agent({
+  name: 'assistant',
+  llm: {
+    adapter: 'openai',
+    model: 'gpt-4-turbo',
+    apiKey: { env: 'OPENAI_API_KEY' },
+    temperature: 0.7,
+  },
+})
+```
+
+### Anthropic (Claude)
+
+```typescript
+@Agent({
+  name: 'assistant',
+  llm: {
+    adapter: 'anthropic',
+    model: 'claude-3-opus-20240229',
+    apiKey: { env: 'ANTHROPIC_API_KEY' },
+  },
+})
+```
+
+### Google (Gemini)
+
+```typescript
+@Agent({
+  name: 'assistant',
+  llm: {
+    adapter: 'google',
+    model: 'gemini-pro',
+    apiKey: { env: 'GOOGLE_API_KEY' },
+  },
+})
+```
+
+## Agent Loop
+
+By default, agents run an automatic loop:
+
+1. Send input to LLM with available tools
+2. If LLM requests tool call, execute tool and return result
+3. Repeat until LLM returns final response
+4. Parse and return output
+
+```typescript
+@Agent({
+  name: 'task-agent',
+  llm: { adapter: 'openai', model: 'gpt-4' },
+  tools: [Tool1, Tool2],
+  systemInstructions: 'You are a helpful assistant.',
+})
+class TaskAgent extends AgentContext {
+  // No execute() override needed - uses default loop
+}
+```
+
+## Custom Execution
+
+Override `execute()` for custom behavior:
+
+```typescript
+@Agent({
+  name: 'custom-agent',
+  inputSchema: { task: z.string() },
+  outputSchema: z.object({ result: z.string() }),
+  llm: { adapter: 'openai', model: 'gpt-4' },
+})
+class CustomAgent extends AgentContext {
+  async execute(input: { task: string }) {
+    // Pre-processing
+    await this.notify('Starting task...', 'info');
+
+    // Custom validation
+    if (input.task.length < 10) {
+      return { result: 'Task too short' };
+    }
+
+    // Run default agent loop
+    const result = await super.execute(input);
+
+    // Post-processing
+    return {
+      result: `Completed: ${result}`,
+    };
+  }
+}
+```
+
+## Function-Based Alternative
+
+```typescript
+import { agent } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const researchAgent = agent({
+  name: 'research',
+  inputSchema: { topic: z.string() },
+  llm: { adapter: 'openai', model: 'gpt-4' },
+})((input, ctx) => {
+  // Custom execution logic
+  return { findings: '...' };
+});
+```
+
+## Context Methods
+
+### LLM Completion
+
+```typescript
+protected async completion(
+  prompt: AgentPrompt,
+  tools?: AgentToolDefinition[],
+  options?: AgentCompletionOptions
+): Promise<AgentCompletion>
+
+protected async *streamCompletion(
+  prompt: AgentPrompt,
+  tools?: AgentToolDefinition[]
+): AsyncGenerator<AgentCompletionChunk>
+```
+
+### Tool Execution
+
+```typescript
+protected async executeTool(
+  name: string,
+  args: Record<string, unknown>
+): Promise<unknown>
+
+protected async invokeAgent(
+  agentId: string,
+  input: unknown
+): Promise<unknown>
+```
+
+### Notifications
+
+```typescript
+protected async notify(
+  message: string | Record<string, unknown>,
+  level?: 'debug' | 'info' | 'warning' | 'error'
+): Promise<boolean>
+
+protected async progress(
+  progress: number,
+  total?: number,
+  message?: string
+): Promise<boolean>
+```
+
+### Elicitation
+
+```typescript
+protected async elicit<S extends ZodType>(
+  message: string,
+  requestedSchema: S,
+  options?: ElicitOptions
+): Promise<ElicitResult>
+```
+
+## Agent Visibility
+
+Agents can invoke other agents:
+
+```typescript
+@Agent({
+  name: 'orchestrator',
+  llm: { adapter: 'openai', model: 'gpt-4' },
+  tools: [ResearchAgent, WriterAgent], // Agents as tools
+})
+class OrchestratorAgent extends AgentContext {
+  async execute(input: { task: string }) {
+    // Can invoke sub-agents
+    const research = await this.invokeAgent('research-agent', { topic: input.task });
+    return research;
+  }
+}
+```
+
+## Full Example
+
+```typescript
+import { Agent, AgentContext, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Tools for the agent
+@Tool({
+  name: 'search_database',
+  inputSchema: { query: z.string(), table: z.string() },
+})
+class SearchDatabaseTool extends ToolContext {
+  async execute(input) {
+    const db = this.get(DatabaseToken);
+    return db.search(input.table, input.query);
+  }
+}
+
+@Tool({
+  name: 'create_report',
+  inputSchema: { title: z.string(), data: z.any() },
+})
+class CreateReportTool extends ToolContext {
+  async execute(input) {
+    return { reportId: 'rpt_123', title: input.title };
+  }
+}
+
+// Agent definition
+@Agent({
+  name: 'data-analyst',
+  description: 'Analyzes data and creates reports',
+  systemInstructions: `You are a data analyst. Use the available tools to:
+1. Search the database for relevant data
+2. Analyze the results
+3. Create a comprehensive report
+
+Always explain your reasoning before taking actions.`,
+  inputSchema: {
+    request: z.string().describe('Analysis request'),
+    tables: z.array(z.string()).describe('Tables to analyze'),
+  },
+  outputSchema: z.object({
+    reportId: z.string(),
+    summary: z.string(),
+  }),
+  llm: {
+    adapter: 'openai',
+    model: 'gpt-4-turbo',
+    apiKey: { env: 'OPENAI_API_KEY' },
+    temperature: 0.3,
+  },
+  tools: [SearchDatabaseTool, CreateReportTool],
+  tags: ['analytics', 'reports'],
+})
+class DataAnalystAgent extends AgentContext {
+  // Override for custom pre/post processing
+  async execute(input) {
+    await this.notify(`Starting analysis: ${input.request}`, 'info');
+    await this.progress(0, 100, 'Initializing...');
+
+    // Run the default agent loop
+    const result = await super.execute(input);
+
+    await this.progress(100, 100, 'Complete');
+    return result;
+  }
+
+  // Override tool execution for logging
+  protected async executeTool(name: string, args: Record<string, unknown>) {
+    this.logger.info(`Executing tool: ${name}`, { args });
+    return super.executeTool(name, args);
+  }
+}
+
+@App({
+  name: 'analytics',
+  agents: [DataAnalystAgent],
+  tools: [SearchDatabaseTool, CreateReportTool],
+})
+class AnalyticsApp {}
+
+@FrontMcp({
+  info: { name: 'Analytics Platform', version: '1.0.0' },
+  apps: [AnalyticsApp],
+})
+export default class AnalyticsPlatform {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="AgentContext" icon="code" href="/frontmcp/sdk-reference/contexts/agent-context">
+    Context class details
+  </Card>
+  <Card title="AgentRegistry" icon="database" href="/frontmcp/sdk-reference/registries/agent-registry">
+    Agent registry API
+  </Card>
+  <Card title="Agent Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/agent-errors">
+    Agent-related errors
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Define tools
+  </Card>
+</CardGroup>

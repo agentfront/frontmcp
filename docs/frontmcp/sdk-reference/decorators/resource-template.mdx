@@ -1,0 +1,231 @@
+---
+title: "@ResourceTemplate"
+description: "The @ResourceTemplate decorator defines a dynamic MCP resource with a URI template (RFC 6570) that extracts parameters from the requested URI."
+icon: "file-code"
+---
+
+## Basic Usage
+
+```typescript
+import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+  description: 'User profile by ID',
+})
+class UserProfileResource extends ResourceContext<{ userId: string }> {
+  async execute(uri: string, params: { userId: string }) {
+    const user = await this.get(UserService).findById(params.userId);
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify(user),
+      }],
+    };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function ResourceTemplate(providedMetadata: ResourceTemplateMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique resource identifier |
+| `uriTemplate` | `string` | RFC 6570 URI template |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `title` | `string` | Human-readable title |
+| `description` | `string` | Resource description |
+| `mimeType` | `string` | MIME type for all matching resources |
+| `icons` | `Icon[]` | Icons for display |
+
+## URI Template Syntax
+
+Templates follow RFC 6570 Level 1:
+
+```typescript
+// Simple parameter
+@ResourceTemplate({
+  name: 'file',
+  uriTemplate: 'file://{path}',
+})
+
+// Multiple parameters
+@ResourceTemplate({
+  name: 'repo-file',
+  uriTemplate: 'github://{owner}/{repo}/{branch}/{path}',
+})
+
+// With path prefix
+@ResourceTemplate({
+  name: 'api-resource',
+  uriTemplate: 'api://v1/resources/{resourceId}',
+})
+```
+
+## Parameter Extraction
+
+Parameters are extracted automatically and passed to `execute()`:
+
+```typescript
+@ResourceTemplate({
+  name: 'order-item',
+  uriTemplate: 'orders://{orderId}/items/{itemId}',
+})
+class OrderItemResource extends ResourceContext<{ orderId: string; itemId: string }> {
+  async execute(uri: string, params: { orderId: string; itemId: string }) {
+    console.log(params.orderId); // "123"
+    console.log(params.itemId);  // "456"
+    // When requested: orders://123/items/456
+  }
+}
+```
+
+## Function-Based Alternative
+
+```typescript
+import { resourceTemplate } from '@frontmcp/sdk';
+
+const userProfile = resourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+})((uri, params) => ({
+  contents: [{
+    uri,
+    mimeType: 'application/json',
+    text: JSON.stringify({ id: params.userId, name: 'John' }),
+  }],
+}));
+```
+
+## vs Static Resource
+
+| Feature | `@Resource` | `@ResourceTemplate` |
+|---------|-------------|---------------------|
+| URI | Fixed | Template with parameters |
+| Params | None | Extracted from URI |
+| Use case | Single resource | Collection/dynamic resources |
+
+```typescript
+// Static: single config file
+@Resource({
+  name: 'app-config',
+  uri: 'config://app',
+})
+
+// Template: any user's profile
+@ResourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+})
+```
+
+## Full Example
+
+```typescript
+import { ResourceTemplate, ResourceContext, App, FrontMcp } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  name: 'document',
+  uriTemplate: 'docs://{category}/{documentId}',
+  title: 'Document',
+  description: 'Fetch documents by category and ID',
+  mimeType: 'application/json',
+})
+class DocumentResource extends ResourceContext<{ category: string; documentId: string }> {
+  async execute(uri: string, params: { category: string; documentId: string }) {
+    this.mark('fetching');
+
+    const docService = this.get(DocumentService);
+    const doc = await docService.find(params.category, params.documentId);
+
+    if (!doc) {
+      this.fail(new ResourceNotFoundError(uri));
+    }
+
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          id: doc.id,
+          title: doc.title,
+          category: params.category,
+          content: doc.content,
+          updatedAt: doc.updatedAt,
+        }),
+      }],
+    };
+  }
+}
+
+@ResourceTemplate({
+  name: 'document-list',
+  uriTemplate: 'docs://{category}',
+  title: 'Document List',
+  description: 'List documents in a category',
+  mimeType: 'application/json',
+})
+class DocumentListResource extends ResourceContext<{ category: string }> {
+  async execute(uri: string, params: { category: string }) {
+    const docService = this.get(DocumentService);
+    const docs = await docService.listByCategory(params.category);
+
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          category: params.category,
+          documents: docs.map(d => ({ id: d.id, title: d.title })),
+          total: docs.length,
+        }),
+      }],
+    };
+  }
+}
+
+@App({
+  name: 'docs',
+  resources: [DocumentResource, DocumentListResource],
+})
+class DocsApp {}
+
+@FrontMcp({
+  info: { name: 'Document Server', version: '1.0.0' },
+  apps: [DocsApp],
+})
+export default class DocumentServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Resource" icon="file" href="/frontmcp/sdk-reference/decorators/resource">
+    Static resources
+  </Card>
+  <Card title="ResourceContext" icon="code" href="/frontmcp/sdk-reference/contexts/resource-context">
+    Context class details
+  </Card>
+  <Card title="ResourceRegistry" icon="database" href="/frontmcp/sdk-reference/registries/resource-registry">
+    Resource registry API
+  </Card>
+  <Card title="Resource Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/resource-errors">
+    Resource-related errors
+  </Card>
+</CardGroup>

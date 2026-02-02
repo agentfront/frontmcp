@@ -1,0 +1,329 @@
+---
+title: "ToolContext"
+description: "ToolContext is the base class for all tool implementations. It extends ExecutionContextBase and provides tool-specific features like notifications, progress reporting, and elicitation."
+icon: "wrench"
+---
+
+## Class Definition
+
+```typescript
+export abstract class ToolContext<
+  InSchema extends ToolInputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
+> extends ExecutionContextBase<Out>
+```
+
+## Type Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `InSchema` | Input schema type (Zod shape) |
+| `OutSchema` | Output schema type |
+| `In` | Inferred input type |
+| `Out` | Inferred output type |
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metadata` | `ToolMetadata` | Tool metadata (name, description, etc.) |
+| `input` | `In` | Parsed and validated input |
+| `output` | `Out \| undefined` | Tool output (after execution) |
+| `toolName` | `string` | Tool name |
+| `toolId` | `string` | Tool ID (or name if not specified) |
+| `platform` | `AIPlatformType` | Detected AI platform |
+| `clientInfo` | `ClientInfo \| undefined` | Client information |
+
+## Abstract Method
+
+### execute(input)
+
+The main execution method that must be implemented.
+
+```typescript
+abstract execute(input: In): Promise<Out>
+```
+
+```typescript
+@Tool({
+  name: 'my_tool',
+  inputSchema: { value: z.number() },
+  outputSchema: z.object({ result: z.number() }),
+})
+class MyTool extends ToolContext {
+  async execute(input: { value: number }) {
+    return { result: input.value * 2 };
+  }
+}
+```
+
+## Methods
+
+### Response Methods
+
+#### respond(value)
+
+Set output and end execution immediately.
+
+```typescript
+respond(value: Out): never
+```
+
+```typescript
+async execute(input) {
+  if (cached) {
+    this.respond(cached); // Ends execution here
+  }
+  // This code won't run if cached
+  return processInput(input);
+}
+```
+
+### Notification Methods (MCP 2025-11-25)
+
+#### notify(message, level?)
+
+Send a log message notification to the client.
+
+```typescript
+protected notify(
+  message: string | Record<string, unknown>,
+  level?: 'debug' | 'info' | 'warning' | 'error'
+): Promise<boolean>
+```
+
+```typescript
+await this.notify('Processing started', 'info');
+await this.notify({ step: 1, status: 'validating' }, 'debug');
+```
+
+#### progress(progress, total?, message?)
+
+Send a progress notification to the client.
+
+```typescript
+protected progress(
+  progress: number,
+  total?: number,
+  message?: string
+): Promise<boolean>
+```
+
+```typescript
+await this.progress(0, 100, 'Starting...');
+await this.progress(50, 100, 'Halfway done');
+await this.progress(100, 100, 'Complete');
+```
+
+### Elicitation Methods
+
+#### elicit\<S\>(message, requestedSchema, options?)
+
+Request interactive user input during execution.
+
+```typescript
+protected elicit<S extends ZodType>(
+  message: string,
+  requestedSchema: S,
+  options?: ElicitOptions
+): Promise<ElicitResult<z.infer<S>>>
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `mode` | `'form' \| 'url'` | Input mode |
+| `ttl` | `number` | Timeout in milliseconds |
+
+**Result:**
+
+```typescript
+interface ElicitResult<T> {
+  status: 'accept' | 'reject' | 'timeout';
+  content?: T;
+  validationErrors?: string[];
+}
+```
+
+**Usage:**
+
+```typescript
+async execute(input) {
+  const result = await this.elicit(
+    'Please confirm this action',
+    z.object({
+      confirmed: z.boolean(),
+      reason: z.string().optional(),
+    }),
+    { mode: 'form', ttl: 300000 }
+  );
+
+  if (result.status !== 'accept' || !result.content?.confirmed) {
+    return { cancelled: true };
+  }
+
+  // Proceed with action
+  return { success: true };
+}
+```
+
+### Platform Detection
+
+#### get platform
+
+Detect the AI platform making the request.
+
+```typescript
+get platform(): AIPlatformType
+```
+
+Values: `'openai' | 'claude' | 'gemini' | 'langchain' | 'vercel-ai' | 'unknown'`
+
+```typescript
+if (this.platform === 'claude') {
+  // Claude-specific formatting
+}
+```
+
+#### get clientInfo
+
+Get client information.
+
+```typescript
+get clientInfo(): ClientInfo | undefined
+```
+
+```typescript
+const client = this.clientInfo;
+if (client) {
+  console.log(client.name);    // 'claude'
+  console.log(client.version); // '1.0.0'
+}
+```
+
+### History
+
+#### inputHistory
+
+History of input changes during execution.
+
+```typescript
+get inputHistory(): ReadonlyArray<In>
+```
+
+#### outputHistory
+
+History of output changes during execution.
+
+```typescript
+get outputHistory(): ReadonlyArray<Out>
+```
+
+## Full Example
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const inputSchema = {
+  action: z.enum(['create', 'update', 'delete']),
+  resourceId: z.string(),
+  data: z.any().optional(),
+};
+
+const outputSchema = z.object({
+  success: z.boolean(),
+  resourceId: z.string(),
+  message: z.string(),
+});
+
+@Tool({
+  name: 'manage_resource',
+  description: 'Create, update, or delete a resource',
+  inputSchema,
+  outputSchema,
+  annotations: {
+    destructiveHint: true,
+  },
+})
+class ManageResourceTool extends ToolContext<
+  typeof inputSchema,
+  typeof outputSchema
+> {
+  async execute(input) {
+    // Log start
+    await this.notify(`Starting ${input.action} operation`, 'info');
+    await this.progress(0, 100, 'Initializing...');
+
+    // For destructive actions, confirm with user
+    if (input.action === 'delete') {
+      const confirmation = await this.elicit(
+        `Are you sure you want to delete resource ${input.resourceId}?`,
+        z.object({ confirmed: z.boolean() }),
+        { mode: 'form', ttl: 60000 }
+      );
+
+      if (confirmation.status !== 'accept' || !confirmation.content?.confirmed) {
+        return {
+          success: false,
+          resourceId: input.resourceId,
+          message: 'Delete cancelled by user',
+        };
+      }
+    }
+
+    await this.progress(25, 100, 'Validating...');
+
+    // Get service
+    const resourceService = this.get(ResourceServiceToken);
+
+    // Perform action
+    await this.progress(50, 100, `Executing ${input.action}...`);
+
+    let message: string;
+    switch (input.action) {
+      case 'create':
+        await resourceService.create(input.resourceId, input.data);
+        message = 'Resource created successfully';
+        break;
+      case 'update':
+        await resourceService.update(input.resourceId, input.data);
+        message = 'Resource updated successfully';
+        break;
+      case 'delete':
+        await resourceService.delete(input.resourceId);
+        message = 'Resource deleted successfully';
+        break;
+    }
+
+    await this.progress(100, 100, 'Complete');
+    await this.notify({ action: input.action, resourceId: input.resourceId }, 'info');
+
+    return {
+      success: true,
+      resourceId: input.resourceId,
+      message,
+    };
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Tool" icon="at" href="/frontmcp/sdk-reference/decorators/tool">
+    Tool decorator
+  </Card>
+  <Card title="ExecutionContextBase" icon="code" href="/frontmcp/sdk-reference/contexts/execution-context-base">
+    Base class
+  </Card>
+  <Card title="ToolRegistry" icon="database" href="/frontmcp/sdk-reference/registries/tool-registry">
+    Tool registry
+  </Card>
+  <Card title="Tool Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/tool-errors">
+    Tool errors
+  </Card>
+</CardGroup>

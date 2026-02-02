@@ -1,0 +1,144 @@
+---
+title: FrontMCP Overview
+sidebarTitle: Overview
+icon: book
+description: Core concepts and components for building FrontMCP servers
+---
+
+This section covers the essential building blocks for creating MCP servers with FrontMCP. Whether you're building a simple tool wrapper or a complex multi-app system, understanding these core concepts is key.
+
+## Core Components
+
+The building blocks of every FrontMCP server. These components define what your server exposes to AI clients.
+
+<CardGroup cols={3}>
+  <Card title="Server" icon="server" href="/frontmcp/servers/server">
+    Entry point, configuration, and composition modes for your MCP server
+  </Card>
+  <Card title="Apps" icon="grid-2" href="/frontmcp/servers/apps">
+    Container for grouping related tools, resources, and prompts with shared auth
+  </Card>
+  <Card title="Tools" icon="wrench" href="/frontmcp/servers/tools">
+    AI-callable functions with typed input/output schemas and validation
+  </Card>
+  <Card title="Resources" icon="database" href="/frontmcp/servers/resources">
+    Data endpoints for static content and dynamic templates
+  </Card>
+  <Card title="Prompts" icon="message" href="/frontmcp/servers/prompts">
+    Reusable prompt templates with argument interpolation
+  </Card>
+  <Card title="Agents" icon="robot" href="/frontmcp/servers/agents">
+    LLM-powered autonomous agents that can use tools and make decisions
+  </Card>
+  <Card title="Elicitation" icon="comment-dots" href="/frontmcp/servers/elicitation">
+    Request user input during tool or agent execution
+  </Card>
+  <Card title="Skills" icon="graduation-cap" href="/frontmcp/servers/skills">
+    HTTP-accessible instructions for Claude Code and other AI coding tools
+  </Card>
+  <Card title="Discovery" icon="compass" href="/frontmcp/servers/discovery">
+    Server, app, and tool discovery for multi-server environments
+  </Card>
+</CardGroup>
+
+## Context Classes
+
+Every tool, resource, prompt, agent, and skill runs within a context class. These provide access to dependency injection, logging, authentication, and more.
+
+<CardGroup cols={2}>
+  <Card title="Context Overview" icon="layer-group" href="/frontmcp/sdk-reference/contexts/overview">
+    Introduction to context classes and the execution model
+  </Card>
+  <Card title="ExecutionContextBase" icon="cube" href="/frontmcp/sdk-reference/contexts/execution-context-base">
+    Base class with DI, logging, auth, and shared functionality
+  </Card>
+  <Card title="ToolContext" icon="wrench" href="/frontmcp/sdk-reference/contexts/tool-context">
+    Context for tool execution with typed input/output
+  </Card>
+  <Card title="ResourceContext" icon="database" href="/frontmcp/sdk-reference/contexts/resource-context">
+    Context for resource reads with URI parameters
+  </Card>
+  <Card title="PromptContext" icon="message" href="/frontmcp/sdk-reference/contexts/prompt-context">
+    Context for prompt generation with arguments
+  </Card>
+  <Card title="AgentContext" icon="robot" href="/frontmcp/sdk-reference/contexts/agent-context">
+    Context for agent execution with tool access
+  </Card>
+  <Card title="SkillContext" icon="graduation-cap" href="/frontmcp/sdk-reference/contexts/skill-context">
+    Context for skill execution via HTTP
+  </Card>
+</CardGroup>
+
+## Authentication
+
+FrontMCP implements a flexible three-tier authentication system supporting public access, token pass-through, and full OAuth 2.1 orchestration.
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| **Public** | No auth required, anonymous sessions | Development, testing, public APIs |
+| **Transparent** | Pass-through tokens from external IdPs | Existing Auth0, Okta, Azure AD setups |
+| **Orchestrated** | Full OAuth 2.1 server (local or remote) | Multi-app, federated auth, progressive auth |
+
+<CardGroup cols={2}>
+  <Card title="Auth Overview" icon="shield-check" href="/frontmcp/authentication/overview">
+    Understanding the three-tier authentication system
+  </Card>
+  <Card title="Authorization Modes" icon="layer-group" href="/frontmcp/authentication/modes">
+    Deep dive into public, transparent, and orchestrated modes
+  </Card>
+  <Card title="Local OAuth" icon="house" href="/frontmcp/authentication/local">
+    Self-contained OAuth server with built-in user management
+  </Card>
+  <Card title="Remote OAuth" icon="cloud" href="/frontmcp/authentication/remote">
+    Proxy to external identity providers (Auth0, Okta, etc.)
+  </Card>
+  <Card title="Progressive Auth" icon="stairs" href="/frontmcp/authentication/progressive">
+    Request additional scopes during tool execution
+  </Card>
+  <Card title="CIMD" icon="fingerprint" href="/frontmcp/authentication/cimd">
+    Client-Initiated Mutual Disambiguation for multi-account scenarios
+  </Card>
+</CardGroup>
+
+## Deployment
+
+Options for running your FrontMCP server in development and production.
+
+| Target | Use Case | Session Storage |
+|--------|----------|-----------------|
+| **Local Dev** | Development and testing | In-memory |
+| **Production Build** | Long-running server | Redis or Vercel KV |
+| **Serverless** | Edge/Lambda deployments | External storage required |
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/frontmcp/deployment/local-dev-server">
+    Start the development server with hot reload
+  </Card>
+  <Card title="Production Build" icon="building" href="/frontmcp/deployment/production-build">
+    Build and run optimized production bundles
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/frontmcp/deployment/redis-setup">
+    Configure Redis for session and token storage
+  </Card>
+  <Card title="Vercel KV" icon="bolt" href="/frontmcp/deployment/vercel-kv">
+    Use Vercel KV as a Redis alternative
+  </Card>
+  <Card title="Serverless" icon="cloud" href="/frontmcp/deployment/serverless">
+    Deploy to serverless platforms (Vercel, AWS Lambda)
+  </Card>
+</CardGroup>
+
+## Where to Start
+
+<Tip>
+  **New to FrontMCP?** Start with [Server](/frontmcp/servers/server) to understand the entry point, then explore [Tools](/frontmcp/servers/tools) to see how AI-callable functions work. Once you're comfortable with the basics, dive into [Authentication](/frontmcp/authentication/overview) for securing your server.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/frontmcp/getting-started/quickstart">
+    Build your first FrontMCP server in minutes
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/frontmcp/sdk-reference/decorators/overview">
+    Full API documentation for decorators, classes, and registries
+  </Card>
+</CardGroup>

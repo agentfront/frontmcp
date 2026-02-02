@@ -1,0 +1,150 @@
+---
+title: "Decorators Overview"
+description: "FrontMCP uses TypeScript decorators to define MCP server components declaratively. All decorators follow a metadata-first design with Zod schema validation."
+icon: "at"
+---
+
+## Decorator Categories
+
+<CardGroup cols={2}>
+  <Card title="Server Decorators" icon="server">
+    - `@FrontMcp` - Bootstrap MCP server
+    - `@App` - Define application modules
+  </Card>
+  <Card title="Entry Decorators" icon="wrench">
+    - `@Tool` - Define MCP tools
+    - `@Resource` / `@ResourceTemplate` - Define resources
+    - `@Prompt` - Define prompt templates
+    - `@Agent` - Define autonomous agents
+    - `@Skill` - Define knowledge packages
+  </Card>
+  <Card title="Extension Decorators" icon="plug">
+    - `@Plugin` - Create plugins
+    - `@Provider` - Dependency injection
+    - `@Adapter` - Framework adapters
+  </Card>
+  <Card title="Hook Decorators" icon="hook">
+    - `@Stage` - Define flow stages
+    - `@Will` - Before-stage hooks
+    - `@Did` - After-stage hooks
+    - `@Around` - Wrap-stage hooks
+  </Card>
+</CardGroup>
+
+## Class-Based vs Function-Based
+
+Most entry decorators support both patterns:
+
+### Class-Based (Recommended for Complex Logic)
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'get_user',
+  description: 'Fetch user by ID',
+  inputSchema: { userId: z.string() },
+})
+class GetUserTool extends ToolContext {
+  async execute(input: { userId: string }) {
+    const db = this.get(DatabaseToken);
+    return db.findUser(input.userId);
+  }
+}
+```
+
+### Function-Based (Simpler Definitions)
+
+```typescript
+import { tool } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const getUserTool = tool({
+  name: 'get_user',
+  description: 'Fetch user by ID',
+  inputSchema: { userId: z.string() },
+})((input, ctx) => {
+  const db = ctx.get(DatabaseToken);
+  return db.findUser(input.userId);
+});
+```
+
+## Type Inference
+
+FrontMCP provides full type inference for inputs and outputs:
+
+```typescript
+import { Tool, ToolContext, ToolInputOf, ToolOutputOf } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const metadata = {
+  name: 'calculate',
+  inputSchema: { a: z.number(), b: z.number() },
+  outputSchema: z.object({ result: z.number() }),
+} as const;
+
+// Types are inferred automatically
+type Input = ToolInputOf<typeof metadata>;   // { a: number; b: number }
+type Output = ToolOutputOf<typeof metadata>; // { result: number }
+
+@Tool(metadata)
+class CalculateTool extends ToolContext<
+  typeof metadata.inputSchema,
+  typeof metadata.outputSchema
+> {
+  async execute(input: Input): Promise<Output> {
+    return { result: input.a + input.b };
+  }
+}
+```
+
+## Common Patterns
+
+### Metadata Properties
+
+All entry decorators share common metadata properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Required unique identifier |
+| `description` | `string` | Human-readable description |
+| `id` | `string` | Optional stable ID for tracking |
+| `tags` | `string[]` | Categorization tags |
+
+### Context Access
+
+All context classes provide:
+
+```typescript
+// Dependency injection
+const service = this.get(ServiceToken);
+const optional = this.tryGet(OptionalToken);
+
+// Scope access
+const tools = this.scope.tools;
+
+// Logging
+this.logger.info('Processing request');
+
+// Request context
+const ctx = this.context;
+const auth = this.getAuthInfo();
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="@FrontMcp" icon="rocket" href="/frontmcp/sdk-reference/decorators/frontmcp">
+    Bootstrap your MCP server
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Create MCP tools
+  </Card>
+  <Card title="@Resource" icon="file" href="/frontmcp/sdk-reference/decorators/resource">
+    Define resources
+  </Card>
+  <Card title="@Prompt" icon="message" href="/frontmcp/sdk-reference/decorators/prompt">
+    Create prompt templates
+  </Card>
+</CardGroup>

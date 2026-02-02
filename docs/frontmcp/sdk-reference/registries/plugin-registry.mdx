@@ -1,0 +1,199 @@
+---
+title: "PluginRegistry"
+description: "The PluginRegistry manages all plugins within a scope. Plugins extend FrontMCP functionality by providing tools, resources, prompts, skills, providers, and hooks."
+icon: "plug"
+---
+
+## Overview
+
+```typescript
+import { PluginRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const plugins = scope.plugins;
+
+// List all plugins
+const allPlugins = plugins.getPlugins();
+```
+
+## Methods
+
+### getPlugins()
+
+Get all registered plugins.
+
+```typescript
+getPlugins(): ReadonlyArray<PluginEntry>
+```
+
+**Example:**
+
+```typescript
+const plugins = registry.getPlugins();
+for (const plugin of plugins) {
+  console.log(`Plugin: ${plugin.name}`);
+}
+```
+
+## Plugin Architecture
+
+Plugins create nested registries for their components:
+
+```
+PluginRegistry
+├── pProviders    → Map<Token, ProviderDef>
+├── pPlugins      → Map<Token, PluginRegistry>  (nested plugins)
+├── pAdapters     → Map<Token, AdapterRegistry>
+├── pTools        → Map<Token, ToolRegistry>
+├── pResources    → Map<Token, ResourceRegistry>
+├── pPrompts      → Map<Token, PromptRegistry>
+└── pSkills       → Map<Token, SkillRegistry>
+```
+
+## Plugin Registration
+
+Plugins are registered via the `@FrontMcp` decorator:
+
+```typescript
+@FrontMcp({
+  name: 'my-server',
+  plugins: [
+    RememberPlugin,
+    CachePlugin,
+    MyCustomPlugin,
+  ],
+})
+class MyServer { }
+```
+
+Or via the `@Plugin` decorator for custom plugins:
+
+```typescript
+@Plugin({
+  name: 'my-plugin',
+  tools: [CustomTool],
+  providers: [CustomProvider],
+})
+class MyCustomPlugin { }
+```
+
+## Plugin Capabilities
+
+Plugins can provide:
+
+<CardGroup cols={2}>
+  <Card title="Tools" icon="wrench">
+    Additional MCP tools
+  </Card>
+  <Card title="Resources" icon="file">
+    Additional MCP resources
+  </Card>
+  <Card title="Prompts" icon="message">
+    Additional MCP prompts
+  </Card>
+  <Card title="Skills" icon="lightbulb">
+    Additional MCP skills
+  </Card>
+  <Card title="Providers" icon="syringe">
+    DI providers
+  </Card>
+  <Card title="Hooks" icon="plug">
+    Flow hooks
+  </Card>
+</CardGroup>
+
+## Hook Registration
+
+Plugins can register hooks that run during tool/resource/prompt flows:
+
+```typescript
+@Plugin({
+  name: 'audit-plugin',
+  hooks: [
+    {
+      flow: 'tools:call-tool',
+      stage: 'afterExecute',
+      handler: async (ctx) => {
+        await auditLog(ctx.toolName, ctx.result);
+      },
+    },
+  ],
+})
+class AuditPlugin { }
+```
+
+Hooks are registered with scope-aware targeting:
+- **App-scoped**: Hook applies only to the app's tools
+- **Server-scoped**: Hook applies to all tools in the server
+
+## Context Extensions
+
+Plugins can extend execution contexts with new properties:
+
+```typescript
+// In plugin
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly remember: RememberApi;
+  }
+}
+
+export function installRememberContextExtension(): void {
+  Object.defineProperty(ExecutionContextBase.prototype, 'remember', {
+    get: function() {
+      return this.get(RememberToken);
+    },
+  });
+}
+```
+
+Usage in tools:
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute() {
+    // Plugin-provided context extension
+    await this.remember.set('key', 'value');
+  }
+}
+```
+
+## Provider Merging
+
+Plugin providers are merged into both:
+- App registry (for app-scoped access)
+- Scope registry (for server-wide access)
+
+```typescript
+@Plugin({
+  name: 'cache-plugin',
+  providers: [
+    {
+      token: CacheToken,
+      useFactory: () => new RedisCache(),
+      scope: ProviderScope.SINGLETON,
+    },
+  ],
+})
+class CachePlugin { }
+```
+
+## Built-in Plugins
+
+FrontMCP includes official plugins:
+
+| Plugin | Description |
+|--------|-------------|
+| `CachePlugin` | Response caching with Redis/memory support |
+| `RememberPlugin` | Session memory storage |
+| `CodeCallPlugin` | Dynamic code execution |
+
+See the [Plugins documentation](/frontmcp/plugins/overview) for details.
+
+## Related
+
+- [Plugin Decorator](/frontmcp/sdk-reference/decorators/plugin)
+- [Creating Plugins](/frontmcp/plugins/creating-plugins)
+- [Official Plugins](/frontmcp/plugins/official/cache)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

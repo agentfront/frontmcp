@@ -1,0 +1,434 @@
+---
+title: Testing Your First Tool
+slug: guides/testing-your-first-tool
+description: Write end-to-end tests for your FrontMCP tools using @frontmcp/testing
+icon: flask
+---
+
+This guide walks you through writing your first end-to-end tests for FrontMCP tools. You'll learn how to set up the testing framework, write tests for tools, resources, and prompts, and run your test suite.
+
+<Info>
+**Prerequisites**:
+- A FrontMCP project with at least one tool ([see Your First Tool](/frontmcp/guides/your-first-tool))
+- Basic familiarity with Jest
+</Info>
+
+## What You'll Build
+
+A complete E2E test suite that:
+- Starts your MCP server automatically
+- Tests tool execution with various inputs
+- Validates error handling
+- Tests resources and prompts
+
+---
+
+## Step 1: Install the Testing Library
+
+<CodeGroup>
+```bash npm
+npm install -D @frontmcp/testing
+```
+
+```bash pnpm
+pnpm add -D @frontmcp/testing
+```
+
+```bash yarn
+yarn add -D @frontmcp/testing
+```
+</CodeGroup>
+
+---
+
+## Step 2: Configure Jest
+
+Create a Jest configuration file for E2E tests:
+
+```typescript title="jest.e2e.config.ts"
+import type { Config } from 'jest';
+
+const config: Config = {
+  displayName: 'e2e',
+  preset: '@frontmcp/testing/jest-preset',
+  testMatch: ['**/*.e2e.ts'],
+  testTimeout: 30000,
+};
+
+export default config;
+```
+
+Add a script to your `package.json`:
+
+```json title="package.json"
+{
+  "scripts": {
+    "test:e2e": "jest --config jest.e2e.config.ts"
+  }
+}
+```
+
+---
+
+## Step 3: Write Your First Test
+
+Create a test file next to your server entry point:
+
+```typescript title="src/main.e2e.ts"
+import { test, expect } from '@frontmcp/testing';
+
+// Configure the test to use your server
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+});
+
+test('server starts and lists tools', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+  expect(tools.length).toBeGreaterThan(0);
+});
+```
+
+Run your test:
+
+```bash
+npm run test:e2e
+```
+
+The testing library automatically:
+1. Starts your FrontMCP server
+2. Connects an MCP client
+3. Runs your test
+4. Cleans up after completion
+
+---
+
+## Step 4: Test Tool Execution
+
+### Testing Successful Execution
+
+```typescript
+test('add tool returns correct sum', async ({ mcp }) => {
+  const result = await mcp.tools.call('calculator:add', {
+    a: 5,
+    b: 3,
+  });
+
+  expect(result).toBeSuccessful();
+  expect(result.json()).toBe(8);
+});
+```
+
+### Testing Multiple Scenarios
+
+```typescript
+test.describe('Calculator Tools', () => {
+  test('add returns sum of two numbers', async ({ mcp }) => {
+    const result = await mcp.tools.call('calculator:add', { a: 10, b: 5 });
+    expect(result).toBeSuccessful();
+    expect(result.json()).toBe(15);
+  });
+
+  test('multiply returns product', async ({ mcp }) => {
+    const result = await mcp.tools.call('calculator:multiply', { a: 4, b: 7 });
+    expect(result).toBeSuccessful();
+    expect(result.json()).toBe(28);
+  });
+
+  test('divide handles division', async ({ mcp }) => {
+    const result = await mcp.tools.call('calculator:divide', { a: 20, b: 4 });
+    expect(result).toBeSuccessful();
+    expect(result.json()).toBe(5);
+  });
+});
+```
+
+### Testing Error Cases
+
+```typescript
+test('divide by zero returns error', async ({ mcp }) => {
+  const result = await mcp.tools.call('calculator:divide', {
+    a: 10,
+    b: 0,
+  });
+
+  expect(result).toBeError();
+});
+
+test('missing required input returns validation error', async ({ mcp }) => {
+  const result = await mcp.tools.call('calculator:add', {
+    a: 5,
+    // missing 'b' parameter
+  });
+
+  expect(result).toBeError(-32602); // Invalid params
+});
+```
+
+---
+
+## Step 5: Test Tool Discovery
+
+Verify your tools are properly registered:
+
+```typescript
+test('calculator app exposes expected tools', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+
+  expect(tools).toContainTool('calculator:add');
+  expect(tools).toContainTool('calculator:subtract');
+  expect(tools).toContainTool('calculator:multiply');
+  expect(tools).toContainTool('calculator:divide');
+});
+
+test('tools have proper descriptions', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+  const addTool = tools.find(t => t.name === 'calculator:add');
+
+  expect(addTool).toBeDefined();
+  expect(addTool?.description).toContain('Add');
+});
+```
+
+---
+
+## Step 6: Test Resources
+
+If your app has resources:
+
+```typescript
+test('expense policy resource is readable', async ({ mcp }) => {
+  const resources = await mcp.resources.list();
+  expect(resources).toContainResource('expense://policy');
+
+  const content = await mcp.resources.read('expense://policy');
+  expect(content).toHaveMimeType('text/markdown');
+  expect(content.text()).toContain('Expense Policy');
+});
+
+test('expense by ID resource template works', async ({ mcp }) => {
+  const templates = await mcp.resources.listTemplates();
+  expect(templates).toContainResourceTemplate('expense://expenses/{expenseId}');
+
+  const content = await mcp.resources.read('expense://expenses/123');
+  expect(content).toHaveMimeType('application/json');
+
+  const expense = content.json();
+  expect(expense.id).toBe('123');
+});
+```
+
+---
+
+## Step 7: Test Prompts
+
+If your app has prompts:
+
+```typescript
+test('expense report prompt is available', async ({ mcp }) => {
+  const prompts = await mcp.prompts.list();
+  expect(prompts).toContainPrompt('expense-report');
+});
+
+test('expense report prompt generates messages', async ({ mcp }) => {
+  const result = await mcp.prompts.get('expense-report', {
+    startDate: '2024-01-01',
+    endDate: '2024-01-31',
+    category: 'Travel',
+  });
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toHaveRole('user');
+  expect(result.messages[0]).toContainText('2024-01-01');
+  expect(result.messages[0]).toContainText('Travel');
+});
+```
+
+---
+
+## Step 8: Organize Your Tests
+
+Recommended file structure:
+
+```
+src/
+├── main.ts                    # Server entry
+├── main.e2e.ts               # Server-level tests
+└── apps/
+    └── calculator/
+        ├── index.ts           # App definition
+        └── calculator.e2e.ts  # App-specific tests
+```
+
+Use `test.describe()` to group related tests:
+
+```typescript title="calculator.e2e.ts"
+import { test, expect } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+});
+
+test.describe('Calculator App', () => {
+  test.describe('Basic Operations', () => {
+    test('add works', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:add', { a: 1, b: 2 });
+      expect(result.json()).toBe(3);
+    });
+
+    test('subtract works', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:subtract', { a: 5, b: 3 });
+      expect(result.json()).toBe(2);
+    });
+  });
+
+  test.describe('Advanced Operations', () => {
+    test('power works', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:pow', { base: 2, exp: 8 });
+      expect(result.json()).toBe(256);
+    });
+
+    test('sqrt works', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:sqrt', { n: 16 });
+      expect(result.json()).toBe(4);
+    });
+  });
+
+  test.describe('Error Handling', () => {
+    test('sqrt of negative returns error', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:sqrt', { n: -1 });
+      expect(result).toBeError();
+    });
+  });
+});
+```
+
+---
+
+## Complete Example
+
+Here's a complete test file:
+
+```typescript title="src/main.e2e.ts"
+import { test, expect } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+  logLevel: 'warn',
+});
+
+test.describe('MCP Server E2E Tests', () => {
+  test('server is running and healthy', async ({ mcp }) => {
+    expect(mcp.isConnected()).toBe(true);
+    expect(mcp.serverInfo.name).toBeDefined();
+  });
+
+  test.describe('Tools', () => {
+    test('lists all expected tools', async ({ mcp }) => {
+      const tools = await mcp.tools.list();
+
+      expect(tools).toContainTool('calculator:add');
+      expect(tools).toContainTool('calculator:multiply');
+    });
+
+    test('add tool computes correctly', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:add', { a: 100, b: 200 });
+
+      expect(result).toBeSuccessful();
+      expect(result.json()).toBe(300);
+    });
+
+    test('invalid input returns error', async ({ mcp }) => {
+      const result = await mcp.tools.call('calculator:add', {
+        a: 'not a number',
+        b: 5,
+      });
+
+      expect(result).toBeError(-32602);
+    });
+  });
+
+  test.describe('Resources', () => {
+    test('lists available resources', async ({ mcp }) => {
+      const resources = await mcp.resources.list();
+      expect(resources.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  test.describe('Prompts', () => {
+    test('lists available prompts', async ({ mcp }) => {
+      const prompts = await mcp.prompts.list();
+      expect(prompts.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+});
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive test names">
+    ```typescript
+    // Good - describes what's being tested
+    test('add tool returns sum of two positive numbers', async ({ mcp }) => {});
+
+    // Bad - too vague
+    test('add works', async ({ mcp }) => {});
+    ```
+  </Accordion>
+
+  <Accordion title="Test both success and error cases">
+    Always test:
+    - Happy path (valid inputs)
+    - Edge cases (zero, negative, empty)
+    - Error cases (invalid inputs, missing params)
+  </Accordion>
+
+  <Accordion title="Use custom matchers">
+    ```typescript
+    // Good - clear intent, better error messages
+    expect(result).toBeSuccessful();
+    expect(tools).toContainTool('my-tool');
+
+    // Bad - generic assertions
+    expect(result.isError).toBe(false);
+    expect(tools.some(t => t.name === 'my-tool')).toBe(true);
+    ```
+  </Accordion>
+
+  <Accordion title="Use port: 0 in CI">
+    Auto-select ports to avoid conflicts:
+    ```typescript
+    test.use({
+      server: './src/main.ts',
+      port: process.env.CI ? 0 : 3003,
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Test Fixtures" icon="puzzle-piece" href="/frontmcp/testing/fixtures">
+    Learn about all available test fixtures
+  </Card>
+
+  <Card title="Custom Matchers" icon="check-double" href="/frontmcp/testing/matchers">
+    Full reference for MCP-specific matchers
+  </Card>
+
+  <Card title="Auth Testing" icon="key" href="/frontmcp/testing/authentication">
+    Test authentication and authorization
+  </Card>
+
+  <Card title="HTTP Mocking" icon="globe" href="/frontmcp/testing/http-mocking">
+    Mock external API calls
+  </Card>
+</CardGroup>

@@ -1,0 +1,248 @@
+---
+title: "Errors Overview"
+description: "FrontMCP provides a comprehensive error hierarchy with MCP-compliant error codes for proper JSON-RPC error responses."
+icon: "triangle-exclamation"
+---
+
+## MCP Error Codes
+
+```typescript
+export const MCP_ERROR_CODES = {
+  UNAUTHORIZED: -32001,          // Missing credentials
+  RESOURCE_NOT_FOUND: -32002,    // Resource not found
+  FORBIDDEN: -32003,             // Invalid/insufficient credentials
+  INVALID_REQUEST: -32600,       // Invalid request
+  METHOD_NOT_FOUND: -32601,      // Method not found
+  INVALID_PARAMS: -32602,        // Invalid parameters
+  INTERNAL_ERROR: -32603,        // Internal server error
+  PARSE_ERROR: -32700,           // Parse error
+} as const;
+```
+
+## Error Hierarchy
+
+```
+McpError (abstract)
+├── PublicMcpError (safe to expose to clients)
+│   ├── ToolNotFoundError
+│   ├── ResourceNotFoundError
+│   ├── InvalidInputError
+│   ├── UnauthorizedError
+│   ├── RateLimitError
+│   └── ...
+│
+└── InternalMcpError (hide details from clients)
+    ├── ToolExecutionError
+    ├── ResourceReadError
+    ├── InvalidOutputError
+    └── ...
+```
+
+## Base Error Classes
+
+### McpError (Abstract)
+
+Base class for all MCP-related errors.
+
+```typescript
+abstract class McpError extends Error {
+  readonly errorId: string;           // Unique ID for tracking
+  abstract isPublic: boolean;         // Expose details to clients?
+  abstract statusCode: number;        // HTTP status code
+  abstract code: string;              // Error code
+
+  abstract getPublicMessage(): string;
+  getInternalMessage(): string;
+  toMcpError(isDevelopment?: boolean): McpErrorResponse;
+}
+```
+
+### PublicMcpError
+
+Errors safe to expose to clients (validation errors, not found, etc.).
+
+```typescript
+class PublicMcpError extends McpError {
+  readonly isPublic = true;
+
+  constructor(message: string, code?: string, statusCode?: number);
+}
+```
+
+### InternalMcpError
+
+Errors that should NOT expose details (server errors, unexpected failures).
+
+```typescript
+class InternalMcpError extends McpError {
+  readonly isPublic = false;
+  readonly statusCode = 500;
+
+  getPublicMessage(): string {
+    return `Internal FrontMCP error. Contact support with ID: ${this.errorId}`;
+  }
+}
+```
+
+## Error Categories
+
+<CardGroup cols={2}>
+  <Card title="Tool Errors" icon="wrench" href="/frontmcp/sdk-reference/errors/tool-errors">
+    ToolNotFoundError, ToolExecutionError
+  </Card>
+  <Card title="Resource Errors" icon="file" href="/frontmcp/sdk-reference/errors/resource-errors">
+    ResourceNotFoundError, ResourceReadError
+  </Card>
+  <Card title="Validation Errors" icon="check" href="/frontmcp/sdk-reference/errors/validation-errors">
+    InvalidInputError, InvalidOutputError
+  </Card>
+  <Card title="Auth Errors" icon="lock" href="/frontmcp/sdk-reference/errors/auth-errors">
+    UnauthorizedError, AuthorizationRequiredError
+  </Card>
+  <Card title="Agent Errors" icon="robot" href="/frontmcp/sdk-reference/errors/agent-errors">
+    AgentNotFoundError, AgentExecutionError
+  </Card>
+  <Card title="Rate Limit Errors" icon="gauge" href="/frontmcp/sdk-reference/errors/rate-limit-errors">
+    RateLimitError, QuotaExceededError
+  </Card>
+</CardGroup>
+
+## Usage Patterns
+
+### Throwing Errors
+
+```typescript
+import { ToolNotFoundError, InvalidInputError } from '@frontmcp/sdk';
+
+@Tool({ name: 'my_tool', inputSchema: { id: z.string() } })
+class MyTool extends ToolContext {
+  async execute(input: { id: string }) {
+    if (!input.id) {
+      throw new InvalidInputError('ID is required');
+    }
+
+    const item = await this.get(Service).find(input.id);
+    if (!item) {
+      throw new ToolNotFoundError('my_tool');
+    }
+
+    return item;
+  }
+}
+```
+
+### Using fail()
+
+```typescript
+@Tool({ name: 'my_tool', inputSchema: {} })
+class MyTool extends ToolContext {
+  async execute(input) {
+    if (!valid) {
+      this.fail(new InvalidInputError('Validation failed'));
+      // Never reaches here - fail() throws
+    }
+  }
+}
+```
+
+### Error with Details
+
+```typescript
+throw new InvalidInputError('Validation failed', {
+  field: 'email',
+  reason: 'Invalid format',
+});
+```
+
+### Custom toJsonRpcError
+
+Some errors override `toJsonRpcError()` for custom data:
+
+```typescript
+class ResourceNotFoundError extends PublicMcpError {
+  toJsonRpcError() {
+    return {
+      code: MCP_ERROR_CODES.RESOURCE_NOT_FOUND,
+      message: this.getPublicMessage(),
+      data: { uri: this.uri },
+    };
+  }
+}
+```
+
+## Error Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `errorId` | `string` | Unique ID for tracking (auto-generated) |
+| `isPublic` | `boolean` | Whether to expose message to clients |
+| `statusCode` | `number` | HTTP status code equivalent |
+| `code` | `string` | Error code for categorization |
+| `mcpErrorCode` | `number` | JSON-RPC error code (optional) |
+
+## Best Practices
+
+### Use Specific Error Classes
+
+```typescript
+// Good
+throw new ToolNotFoundError('my_tool');
+throw new InvalidInputError('Email is required');
+
+// Avoid
+throw new Error('Tool not found');
+```
+
+### Preserve Original Errors
+
+```typescript
+try {
+  await externalService.call();
+} catch (error) {
+  throw new ToolExecutionError('my_tool', error);
+}
+```
+
+### Don't Expose Internal Details
+
+```typescript
+// InternalMcpError hides message from clients
+throw new InternalMcpError('Database connection failed: timeout after 30s');
+// Client sees: "Internal FrontMCP error. Contact support with ID: err_abc123"
+```
+
+### Use Error IDs for Tracking
+
+```typescript
+try {
+  // operation
+} catch (error) {
+  if (error instanceof McpError) {
+    logger.error('Operation failed', {
+      errorId: error.errorId,
+      code: error.code,
+    });
+  }
+  throw error;
+}
+```
+
+## Import
+
+```typescript
+import {
+  MCP_ERROR_CODES,
+  McpError,
+  PublicMcpError,
+  InternalMcpError,
+  ToolNotFoundError,
+  ToolExecutionError,
+  ResourceNotFoundError,
+  ResourceReadError,
+  InvalidInputError,
+  InvalidOutputError,
+  UnauthorizedError,
+  RateLimitError,
+  // ... more
+} from '@frontmcp/sdk';
+```

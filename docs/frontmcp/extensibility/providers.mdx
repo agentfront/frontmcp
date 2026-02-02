@@ -1,0 +1,281 @@
+---
+title: Context Providers
+sidebarTitle: Providers
+slug: extensibility/providers
+icon: boxes
+---
+
+**Providers** are dependency-injected singletons (or scoped singletons) that your apps, tools, adapters, and plugins can use — e.g., config, DB pools, Redis clients, KMS, HTTP clients.
+
+They're declared with `@Provider()` and registered at **server** or **app** scope. Resolution is hierarchical: **tool → app → server**.
+
+<Info>
+  Provider metadata, records, and DI helpers remain available through `@frontmcp/sdk` as type-only exports, so your existing `@frontmcp/di` imports keep working while bundlers drop unused types. Enums such as `ProviderScope` and `ProviderKind` still expose their runtime values, so you can configure scopes the same way you always have.
+</Info>
+
+## Define a provider
+
+```ts
+import { Provider, ProviderScope } from '@frontmcp/sdk';
+
+@Provider({
+  name: 'DbProvider',
+  description: 'Postgres connection pool',
+  scope: ProviderScope.GLOBAL, // GLOBAL | CONTEXT
+})
+export class DbProvider {
+  /* create pool, expose query() etc. */
+}
+```
+
+### Scopes
+
+- **GLOBAL** (default): one instance per process/worker. Ideal for clients, pools, caches.
+- **CONTEXT**: one instance per request. Use for per-request state, tracing, or user-specific data.
+
+<Info>
+  Legacy scopes `SESSION` and `REQUEST` are deprecated and automatically normalized to `CONTEXT`.
+</Info>
+
+## Register providers
+
+**Server-level** providers (available to all apps):
+
+```ts
+@FrontMcp({
+  info: { name: 'Suite', version: '1.0.0' },
+  apps: [BillingApp, AnalyticsApp],
+  providers: [DbProvider, CacheProvider],
+})
+export default class Server {}
+```
+
+**App-level** providers (override or add on top of server-level):
+
+```ts
+@App({
+  name: 'Billing',
+  providers: [BillingConfigProvider],
+})
+export default class BillingApp {}
+```
+
+<Tip>
+  You can register **class**, **value**, or **factory** providers. Factories are useful for async initialization or
+  composing other providers.
+</Tip>
+
+## Using providers from tools/plugins
+
+FrontMCP resolves providers for your executors and hooks. Keep your tool logic pure; read side-effects (DB, queues, secrets) via providers.
+
+- Prefer **GLOBAL** for shared clients.
+- Use **CONTEXT** for request-scoped state or user-bound data.
+
+<Info>
+  Provider injection/consumption follows your runtime's DI rules. In general: register providers at the minimal scope
+  and let the framework resolve them for tools and hooks at execution time.
+</Info>
+
+---
+
+## FrontMcpContext
+
+Every HTTP request creates a `FrontMcpContext` that flows through the entire execution chain via AsyncLocalStorage. Access it via the `FRONTMCP_CONTEXT` token or the `context` getter.
+
+### In Tools/Resources/Prompts
+
+```ts
+import { Tool, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
+class MyTool {
+  async execute({ query }) {
+    // Via getter (recommended)
+    const ctx = this.context;
+
+    // Via DI
+    const ctx2 = this.get(FRONTMCP_CONTEXT);
+
+    console.log(ctx.requestId, ctx.traceContext.traceId);
+    return `Processed: ${query}`;
+  }
+}
+```
+
+### In CONTEXT-Scoped Providers
+
+CONTEXT-scoped providers can access the current context via factory injection:
+
+```ts
+import { ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+
+// Factory provider pattern
+const requestLoggerProvider = {
+  provide: 'RequestLogger',
+  scope: ProviderScope.CONTEXT,
+  factory: (ctx: FrontMcpContext) => ({
+    log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
+  }),
+  inject: [FRONTMCP_CONTEXT],
+};
+```
+
+### FrontMcpContext API
+
+| Property       | Type                             | Description                                       |
+| -------------- | -------------------------------- | ------------------------------------------------- |
+| `requestId`    | `string`                         | Unique request identifier (UUID v4)               |
+| `traceContext` | `TraceContext`                   | W3C Trace Context (traceId, parentId, traceFlags) |
+| `sessionId`    | `string`                         | MCP session identifier                            |
+| `authInfo`     | `Partial<AuthInfo>`              | Authentication information                        |
+| `scopeId`      | `string`                         | Current scope identifier                          |
+| `timestamp`    | `number`                         | Request start timestamp                           |
+| `metadata`     | `RequestMetadata`                | Headers, user-agent, client IP                    |
+| `transport`    | `TransportAccessor \| undefined` | Transport for elicit requests                     |
+
+| Method                | Description                             |
+| --------------------- | --------------------------------------- |
+| `mark(name)`          | Record timing mark                      |
+| `elapsed(from?, to?)` | Get elapsed time between marks          |
+| `set(key, value)`     | Store context-scoped data               |
+| `get(key)`            | Retrieve context-scoped data            |
+| `getLogger(parent)`   | Get child logger with context           |
+| `fetch(input, init?)` | Context-aware fetch with auto-injection |
+
+### Context-Aware Fetch
+
+Use `ctx.fetch()` to automatically inject headers into outgoing requests:
+
+```ts
+const ctx = this.context;
+
+// Auto-injects: Authorization, traceparent, x-request-id, custom headers
+const response = await ctx.fetch('https://api.example.com/data');
+```
+
+### Transport Access (Elicit)
+
+Access the transport for interactive prompts:
+
+```ts
+const ctx = this.context;
+
+if (ctx.transport?.supportsElicit) {
+  const result = await ctx.transport.elicit('Please confirm', schema);
+  console.log(result.action, result.content);
+}
+```
+
+<Tip>
+  See [Request Context](/docs/frontmcp/extensibility/request-context) for the complete guide including distributed tracing and migration from legacy APIs.
+</Tip>
+
+---
+
+## CONTEXT-Scoped Providers
+
+CONTEXT-scoped providers are created fresh for each request. They're ideal for per-request state, user-specific data, or request-scoped caching.
+
+### Accessing Session ID
+
+The session ID is available directly from the context:
+
+```ts
+import { Provider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+
+// Factory provider that uses session ID
+const sessionCacheProvider = {
+  provide: 'SessionCache',
+  scope: ProviderScope.CONTEXT,
+  factory: (ctx: FrontMcpContext, redis: RedisProvider) => {
+    const cacheKey = `cache:${ctx.sessionId}`;
+    return {
+      async get(key: string) {
+        return redis.get(`${cacheKey}:${key}`);
+      },
+      async set(key: string, value: unknown) {
+        return redis.set(`${cacheKey}:${key}`, value);
+      },
+    };
+  },
+  inject: [FRONTMCP_CONTEXT, RedisProvider],
+};
+```
+
+### Example: Context-Scoped Redis Provider
+
+```ts
+import { Provider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+
+const sessionRedisProvider = {
+  provide: 'SessionRedis',
+  scope: ProviderScope.CONTEXT,
+  factory: (ctx: FrontMcpContext, redis: RedisProvider) => {
+    const safeSid = ctx.sessionId.replace(/[:\s]/g, '_');
+    const prefix = `:session:${safeSid}:`;
+
+    return {
+      async setValue<T>(key: string, value: T, ttl?: number) {
+        await redis.setValue(`${prefix}${key}`, value, ttl);
+      },
+      async getValue<T>(key: string): Promise<T | undefined> {
+        return redis.getValue(`${prefix}${key}`);
+      },
+    };
+  },
+  inject: [FRONTMCP_CONTEXT, RedisProvider],
+};
+```
+
+### Multi-Pod Deployment Considerations
+
+<Warning>
+  CONTEXT-scoped providers are **per-request** - each request builds its own provider instances.
+  They are NOT shared across requests or pods.
+</Warning>
+
+When running behind a load balancer:
+
+- Each request builds its own provider instances
+- Transport state (MCP protocol) is shared via Redis (if configured)
+- For cross-pod session data, use Redis or another distributed store
+
+```ts
+// Good: Use Redis for data that must persist across requests
+const crossRequestDataProvider = {
+  provide: 'CrossRequestData',
+  scope: ProviderScope.CONTEXT,
+  factory: (ctx: FrontMcpContext, redis: RedisProvider) => ({
+    async setUserPreference(key: string, value: any) {
+      // Data is stored in Redis, accessible from any request/pod
+      await redis.setValue(`pref:${ctx.sessionId}:${key}`, value);
+    },
+    async getUserPreference(key: string) {
+      return redis.getValue(`pref:${ctx.sessionId}:${key}`);
+    },
+  }),
+  inject: [FRONTMCP_CONTEXT, RedisProvider],
+};
+```
+
+### Session Metadata
+
+Access additional session metadata (protocol, platform type) via the context:
+
+```ts
+@Tool({ name: 'session-info', inputSchema: {} })
+class SessionInfoTool {
+  async execute() {
+    const ctx = this.context;
+    const metadata = ctx.sessionMetadata;
+
+    return {
+      sessionId: ctx.sessionId,
+      protocol: metadata?.protocol,      // 'streamable-http', 'sse', etc.
+      platformType: metadata?.platform,  // 'openai', 'claude', etc.
+    };
+  }
+}
+```

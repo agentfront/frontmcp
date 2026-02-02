@@ -1,0 +1,231 @@
+---
+title: "@FrontMcp"
+description: "The @FrontMcp decorator is the entry point for creating an MCP server. It configures the server, registers apps, and manages the server lifecycle."
+icon: "rocket"
+---
+
+## Basic Usage
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+})
+export default class MyServer {}
+```
+
+## Signature
+
+```typescript
+function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `info` | `ServerInfoOptions` | Server metadata (name, version, description) |
+| `apps` | `AppType[]` | Array of app classes to register |
+
+### Server Configuration
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `serve` | `boolean` | `true` | Auto-start HTTP server |
+| `http` | `HttpOptionsInput` | - | HTTP server configuration |
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  serve: true,
+  http: {
+    port: 3000,
+    cors: { origin: '*' },
+    hostFactory: (config) => new ExpressHostAdapter(config),
+  },
+})
+```
+
+### Storage Configuration
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `redis` | `RedisOptionsInput` | Redis storage for sessions/state |
+| `pubsub` | `PubsubOptionsInput` | Pub/Sub for distributed events |
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  redis: {
+    provider: 'redis',
+    host: 'localhost',
+    port: 6379,
+    keyPrefix: 'mcp:',
+  },
+})
+```
+
+### Transport Configuration
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `transport` | `TransportOptionsInput` | Session lifecycle settings |
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  transport: {
+    distributedMode: true,
+    sessionTtl: 3600000, // 1 hour
+  },
+})
+```
+
+### Shared Components
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `providers` | `ProviderType[]` | Gateway-level providers |
+| `tools` | `ToolType[]` | Shared tools across all apps |
+| `resources` | `ResourceType[]` | Shared resources |
+| `skills` | `SkillType[]` | Shared skills |
+| `plugins` | `PluginType[]` | Server-level plugins |
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  providers: [ConfigService, LoggingService],
+  plugins: [RememberPlugin, CachePlugin],
+  tools: [HealthCheckTool],
+})
+```
+
+### Feature Configuration
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `logging` | `LoggingOptionsInput` | Logging configuration |
+| `pagination` | `PaginationOptions` | List operation pagination |
+| `elicitation` | `ElicitationOptionsInput` | Interactive user input |
+| `skillsConfig` | `SkillsConfigOptionsInput` | Skills HTTP endpoints |
+| `extApps` | `ExtAppsOptionsInput` | MCP Apps widget configuration |
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  logging: {
+    level: 'info',
+    transports: [{ type: 'console' }],
+  },
+  elicitation: {
+    enabled: true,
+    ttl: 300000, // 5 minutes
+  },
+  skillsConfig: {
+    enabled: true,
+    auth: 'api-key',
+    apiKeys: ['sk-xxx'],
+  },
+})
+```
+
+## Full Example
+
+```typescript
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { RememberPlugin } from '@frontmcp/plugins';
+import { z } from 'zod';
+
+@Tool({
+  name: 'greet',
+  inputSchema: { name: z.string() },
+})
+class GreetTool extends ToolContext {
+  async execute(input: { name: string }) {
+    return `Hello, ${input.name}!`;
+  }
+}
+
+@App({
+  name: 'main',
+  tools: [GreetTool],
+})
+class MainApp {}
+
+@FrontMcp({
+  info: {
+    name: 'Greeting Server',
+    version: '1.0.0',
+    description: 'A simple greeting MCP server',
+  },
+  apps: [MainApp],
+  serve: true,
+  http: { port: 3000 },
+  plugins: [RememberPlugin],
+  logging: { level: 'info' },
+})
+export default class GreetingServer {}
+```
+
+## Bootstrap Methods
+
+### HTTP Server
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+// Start HTTP server
+await FrontMcpInstance.bootstrap(config);
+```
+
+### Serverless Handler
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from '../src/server';
+
+// Export for Vercel/AWS Lambda
+export default FrontMcpInstance.createHandler(config);
+```
+
+### Stdio Transport
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+// Connect via stdio (for Claude Desktop)
+await FrontMcpInstance.runStdio(config);
+```
+
+### Direct Client
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+// Create direct programmatic access
+const server = await FrontMcpInstance.createDirect(config);
+const tools = await server.listTools();
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@App" icon="cube" href="/frontmcp/sdk-reference/decorators/app">
+    Define application modules
+  </Card>
+  <Card title="FrontMcpInstance" icon="server" href="/frontmcp/sdk-reference/core/frontmcp-instance">
+    Server lifecycle management
+  </Card>
+</CardGroup>

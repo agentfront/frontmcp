@@ -1,0 +1,457 @@
+---
+title: Prompts and Resources
+slug: guides/prompts-and-resources
+description: Create MCP prompts for LLM instructions and resources for data access
+icon: message
+---
+
+Beyond tools, FrontMCP supports **prompts** (reusable LLM instructions) and **resources** (data that LLMs can read). This guide shows you how to create and combine them with tools for powerful workflows.
+
+<Info>
+**Prerequisites**:
+- A working FrontMCP project ([see Installation](/frontmcp/getting-started/installation))
+- Understanding of basic tool creation ([see Your First Tool](/frontmcp/guides/your-first-tool))
+</Info>
+
+## What You'll Build
+
+An expense management app with:
+- A **prompt** that generates expense reports
+- A **resource template** that fetches expense details by ID
+- A **static resource** that returns expense policies
+
+---
+
+## Prompts
+
+Prompts provide pre-built instructions that LLMs can use. They're perfect for consistent formatting, complex workflows, or domain-specific guidance.
+
+### Creating a Basic Prompt
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'expense-report',
+  description: 'Generate an expense report summary for a given time period',
+  arguments: [
+    {
+      name: 'startDate',
+      description: 'Start date for the report (YYYY-MM-DD)',
+      required: true,
+    },
+    {
+      name: 'endDate',
+      description: 'End date for the report (YYYY-MM-DD)',
+      required: true,
+    },
+    {
+      name: 'category',
+      description: 'Optional expense category filter',
+      required: false,
+    },
+  ],
+})
+export default class ExpenseReportPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    const { startDate, endDate, category } = args;
+    const categoryFilter = category ? ` for category "${category}"` : '';
+
+    return {
+      description: `Expense report from ${startDate} to ${endDate}${categoryFilter}`,
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `Please generate an expense report summary for the period from ${startDate} to ${endDate}${categoryFilter}.
+
+Include the following information:
+1. Total expenses for the period
+2. Breakdown by category
+3. Top 5 largest expenses
+4. Comparison with previous period (if available)
+5. Any anomalies or unusual spending patterns
+
+Format the report in a clear, professional manner suitable for management review.`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+### Prompt Arguments
+
+Define the inputs your prompt accepts:
+
+```typescript
+arguments: [
+  {
+    name: 'startDate',
+    description: 'Start date (YYYY-MM-DD)',
+    required: true,  // Must be provided
+  },
+  {
+    name: 'format',
+    description: 'Output format',
+    required: false, // Optional
+  },
+]
+```
+
+### Prompt Return Value
+
+Prompts return an object with:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `description` | `string` | Human-readable summary of the prompt |
+| `messages` | `PromptMessage[]` | Array of messages to send to the LLM |
+
+Each message has:
+- `role`: `'user'` or `'assistant'`
+- `content`: Object with `type: 'text'` and `text: string`
+
+---
+
+## Resources
+
+Resources expose data that LLMs can read. There are two types:
+
+### Static Resources
+
+Fixed content at a specific URI:
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+
+@Resource({
+  name: 'expense-policy',
+  uri: 'expense://policy',
+  description: 'Company expense policy guidelines',
+  mimeType: 'text/markdown',
+})
+export default class ExpensePolicyResource extends ResourceContext {
+  async execute(): Promise<ReadResourceResult> {
+    return {
+      contents: [
+        {
+          uri: 'expense://policy',
+          mimeType: 'text/markdown',
+          text: `# Expense Policy
+
+## Eligible Expenses
+- Travel (flights, hotels, ground transportation)
+- Meals during business travel
+- Client entertainment (with prior approval)
+- Office supplies
+- Professional development
+
+## Limits
+- Meals: $75/day domestic, $100/day international
+- Hotels: Must use preferred vendors
+- Flights: Economy class for trips under 6 hours
+
+## Approval Requirements
+- Under $500: Manager approval
+- $500-$2000: Director approval
+- Over $2000: VP approval
+
+## Submission Deadline
+All expenses must be submitted within 30 days of incurrence.`,
+        },
+      ],
+    };
+  }
+}
+```
+
+### Resource Templates
+
+Dynamic resources with URI parameters:
+
+```typescript
+import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+
+type ExpenseParams = {
+  expenseId: string;
+};
+
+@ResourceTemplate({
+  name: 'expense-by-id',
+  uriTemplate: 'expense://expenses/{expenseId}',
+  description: 'Get expense details by ID',
+  mimeType: 'application/json',
+})
+export default class ExpenseByIdResource extends ResourceContext<ExpenseParams> {
+  async execute(uri: string, params: ExpenseParams): Promise<ReadResourceResult> {
+    const { expenseId } = params;
+
+    // In production, fetch from database
+    const expense = {
+      id: expenseId,
+      description: `Business expense #${expenseId}`,
+      amount: 150.00,
+      currency: 'USD',
+      category: 'Travel',
+      status: 'approved',
+      submittedBy: 'john.doe@company.com',
+      submittedAt: new Date().toISOString(),
+    };
+
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(expense, null, 2),
+        },
+      ],
+    };
+  }
+}
+```
+
+The `{expenseId}` in the URI template becomes a parameter passed to `execute()`.
+
+---
+
+## Combining Everything in an App
+
+Register prompts and resources alongside tools:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+
+// Tools
+import CreateExpenseTool from './tools/create-expense.tool';
+import GetExpenseTool from './tools/get-expense.tool';
+
+// Prompts
+import ExpenseReportPrompt from './prompts/expense-report.prompt';
+import CategorizeExpensePrompt from './prompts/categorize-expense.prompt';
+
+// Resources
+import ExpensePolicyResource from './resources/expense-policy.resource';
+import ExpenseByIdResource from './resources/expense-by-id.resource';
+import ExpenseCategoriesResource from './resources/expense-categories.resource';
+
+@App({
+  id: 'expense',
+  name: 'Expense Management App',
+  tools: [CreateExpenseTool, GetExpenseTool],
+  prompts: [ExpenseReportPrompt, CategorizeExpensePrompt],
+  resources: [ExpensePolicyResource, ExpenseByIdResource, ExpenseCategoriesResource],
+})
+export default class ExpenseApp {}
+```
+
+---
+
+## Example: Categorization Prompt
+
+Here's a prompt that helps LLMs categorize expenses:
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'categorize-expense',
+  description: 'Help categorize an expense based on its description',
+  arguments: [
+    {
+      name: 'description',
+      description: 'The expense description to categorize',
+      required: true,
+    },
+    {
+      name: 'amount',
+      description: 'The expense amount',
+      required: false,
+    },
+  ],
+})
+export default class CategorizeExpensePrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    const { description, amount } = args;
+    const amountContext = amount ? ` (Amount: $${amount})` : '';
+
+    return {
+      description: `Categorize expense: "${description}"`,
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `Please categorize the following expense${amountContext}:
+
+"${description}"
+
+Choose from these categories:
+- Travel (flights, hotels, transportation)
+- Meals (food and beverages)
+- Entertainment (client dinners, events)
+- Office Supplies (equipment, materials)
+- Software (subscriptions, licenses)
+- Professional Development (training, conferences)
+- Other
+
+Respond with:
+1. The recommended category
+2. A brief explanation for your choice
+3. Any flags if this expense might need special approval`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+---
+
+## Example: Categories Resource
+
+A static resource listing available categories:
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+
+@Resource({
+  name: 'expense-categories',
+  uri: 'expense://categories',
+  description: 'List of available expense categories',
+  mimeType: 'application/json',
+})
+export default class ExpenseCategoriesResource extends ResourceContext {
+  async execute(): Promise<ReadResourceResult> {
+    const categories = [
+      { id: 'travel', name: 'Travel', description: 'Flights, hotels, transportation' },
+      { id: 'meals', name: 'Meals', description: 'Food and beverages during business' },
+      { id: 'entertainment', name: 'Entertainment', description: 'Client dinners, events' },
+      { id: 'office', name: 'Office Supplies', description: 'Equipment and materials' },
+      { id: 'software', name: 'Software', description: 'Subscriptions and licenses' },
+      { id: 'training', name: 'Professional Development', description: 'Training, conferences' },
+    ];
+
+    return {
+      contents: [
+        {
+          uri: 'expense://categories',
+          mimeType: 'application/json',
+          text: JSON.stringify(categories, null, 2),
+        },
+      ],
+    };
+  }
+}
+```
+
+---
+
+## File Organization
+
+Recommended structure:
+
+```
+src/apps/expense/
+├── index.ts                    # App definition
+├── tools/
+│   ├── create-expense.tool.ts
+│   └── get-expense.tool.ts
+├── prompts/
+│   ├── index.ts                # Re-exports
+│   ├── expense-report.prompt.ts
+│   └── categorize-expense.prompt.ts
+└── resources/
+    ├── index.ts                # Re-exports
+    ├── expense-policy.resource.ts
+    ├── expense-by-id.resource.ts
+    └── expense-categories.resource.ts
+```
+
+Use barrel exports in `index.ts` files:
+
+```typescript
+// prompts/index.ts
+export { default as ExpenseReportPrompt } from './expense-report.prompt';
+export { default as CategorizeExpensePrompt } from './categorize-expense.prompt';
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use clear, descriptive names">
+    Names should indicate what the prompt/resource does:
+
+    ```typescript
+    // Good
+    name: 'expense-report'
+    name: 'categorize-expense'
+    uri: 'expense://expenses/{expenseId}'
+
+    // Bad
+    name: 'prompt1'
+    name: 'helper'
+    uri: 'data://item/{id}'
+    ```
+  </Accordion>
+
+  <Accordion title="Provide detailed descriptions">
+    Help LLMs understand when to use each prompt/resource:
+
+    ```typescript
+    description: 'Generate an expense report summary for a given time period, including totals, breakdowns, and anomaly detection'
+    ```
+  </Accordion>
+
+  <Accordion title="Use appropriate MIME types">
+    Match the content type:
+
+    - `text/markdown` for formatted text
+    - `application/json` for structured data
+    - `text/plain` for simple text
+  </Accordion>
+
+  <Accordion title="Validate URI template parameters">
+    Add validation in your execute method:
+
+    ```typescript
+    async execute(uri: string, params: { expenseId: string }) {
+      if (!params.expenseId || params.expenseId.length < 1) {
+        throw new Error('Invalid expense ID');
+      }
+      // ...
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Role-Based Authorization" icon="shield" href="/frontmcp/guides/role-based-authorization">
+    Control access to prompts and resources
+  </Card>
+
+  <Card title="Prompts Reference" icon="book" href="/frontmcp/servers/prompts">
+    Full @Prompt decorator documentation
+  </Card>
+
+  <Card title="Resources Reference" icon="database" href="/frontmcp/servers/resources">
+    Full @Resource decorator documentation
+  </Card>
+
+  <Card title="Testing" icon="flask" href="/frontmcp/testing/overview">
+    Test prompts and resources
+  </Card>
+</CardGroup>

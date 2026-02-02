@@ -1,0 +1,272 @@
+---
+title: "ToolRegistry"
+description: "The ToolRegistry manages all MCP tools within a scope. It provides methods for listing, finding, and subscribing to tool changes."
+icon: "wrench"
+---
+
+## Overview
+
+```typescript
+import { ToolRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const tools = scope.tools;
+
+// List all tools
+const allTools = tools.getTools();
+
+// Find a specific tool
+const tool = tools.findByName('my_tool');
+```
+
+## Methods
+
+### getTools()
+
+Get all tools (local + adopted).
+
+```typescript
+getTools(includeHidden?: boolean): ReadonlyArray<ToolEntry>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `includeHidden` | `boolean` | `false` | Include hidden tools in results |
+
+**Example:**
+
+```typescript
+// Get all visible tools
+const tools = registry.getTools();
+
+// Include hidden tools
+const allTools = registry.getTools(true);
+```
+
+### getToolsForListing()
+
+Get tools appropriate for MCP listing with elicitation support filtering.
+
+```typescript
+getToolsForListing(supportsElicitation?: boolean): ReadonlyArray<ToolEntry>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `supportsElicitation` | `boolean` | `false` | Whether client supports elicitation |
+
+**Example:**
+
+```typescript
+// For clients that support elicitation
+const tools = registry.getToolsForListing(true);
+
+// For clients that don't support elicitation
+const tools = registry.getToolsForListing(false);
+```
+
+### findByName()
+
+Find a tool by its base name.
+
+```typescript
+findByName(name: string): ToolEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const tool = registry.findByName('search');
+if (tool) {
+  console.log(`Found: ${tool.qualifiedId}`);
+}
+```
+
+### findByQualifiedName()
+
+Find a tool by its fully qualified name.
+
+```typescript
+findByQualifiedName(qualifiedName: string): ToolEntry | undefined
+```
+
+**Example:**
+
+```typescript
+// Find tool with owner prefix
+const tool = registry.findByQualifiedName('my-app:search');
+```
+
+### getExported()
+
+Lookup a tool by its exported (resolved) name.
+
+```typescript
+getExported(name: string, opts?: { ignoreCase?: boolean }): ToolEntry | undefined
+```
+
+**Example:**
+
+```typescript
+// Case-sensitive lookup
+const tool = registry.getExported('Search_Tool');
+
+// Case-insensitive lookup
+const tool = registry.getExported('search_tool', { ignoreCase: true });
+```
+
+### exportResolvedNames()
+
+Produce unique, conflict-aware exported names for all tools.
+
+```typescript
+exportResolvedNames(opts?: ExportResolvedNamesOptions): Map<string, ToolEntry>
+```
+
+**Example:**
+
+```typescript
+const exportedNames = registry.exportResolvedNames();
+for (const [name, tool] of exportedNames) {
+  console.log(`${name} → ${tool.qualifiedId}`);
+}
+// Output:
+// search → app1:search
+// app2_search → app2:search (conflict resolved with prefix)
+```
+
+### getInlineTools()
+
+Get tools defined inline in this registry (local only, not adopted).
+
+```typescript
+getInlineTools(): ReadonlyArray<ToolEntry>
+```
+
+### listAllInstances()
+
+List all tool instances (locals + adopted).
+
+```typescript
+listAllInstances(): ReadonlyArray<ToolEntry>
+```
+
+### listByOwner()
+
+List tools by owner path.
+
+```typescript
+listByOwner(ownerPath: string): ReadonlyArray<ToolEntry>
+```
+
+**Example:**
+
+```typescript
+// Get all tools owned by 'my-app'
+const appTools = registry.listByOwner('my-app');
+```
+
+### registerToolInstance()
+
+Register a pre-constructed ToolInstance directly.
+
+```typescript
+registerToolInstance(tool: ToolInstance): void
+```
+
+<Note>
+This is typically used internally for agent-scoped or remote tools.
+</Note>
+
+### subscribe()
+
+Subscribe to tool change events.
+
+```typescript
+subscribe(
+  opts: SubscribeOptions,
+  cb: (event: ToolChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+**Example:**
+
+```typescript
+const unsubscribe = registry.subscribe({}, (event) => {
+  console.log(`Tool ${event.kind}:`, event.entry?.name);
+});
+
+// Later: stop listening
+unsubscribe();
+```
+
+### getCapabilities()
+
+Get MCP capabilities for tools.
+
+```typescript
+getCapabilities(): { listChanged: boolean }
+```
+
+**Example:**
+
+```typescript
+const caps = registry.getCapabilities();
+// { listChanged: true }
+```
+
+### hasAny()
+
+Check if any tools exist in the registry.
+
+```typescript
+hasAny(): boolean
+```
+
+### adoptFromChild()
+
+Adopt tools from a child registry.
+
+```typescript
+adoptFromChild(child: ToolRegistry, childOwner: Owner): void
+```
+
+<Note>
+References are shared (not cloned). Changes in the child registry automatically propagate to the parent.
+</Note>
+
+## Change Events
+
+The registry emits events when tools are added, updated, or removed:
+
+```typescript
+interface ToolChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: ReadonlyArray<ToolEntry>;
+  entry?: ToolEntry;
+  sessionId?: string;
+  relatedRequestId?: string;
+}
+```
+
+## Indexes
+
+The registry maintains O(1) lookup indexes:
+
+| Index | Key | Description |
+|-------|-----|-------------|
+| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
+| `byName` | `name` | Base name lookup (may return multiple) |
+| `byOwnerAndName` | `owner:name` | Scoped name lookup |
+| `byProviderAndName` | `provider:name` | Provider-scoped lookup |
+| `byOwner` | `ownerPath` | All tools by owner |
+
+## Related
+
+- [Tool Decorator](/frontmcp/sdk-reference/decorators/tool)
+- [ToolContext](/frontmcp/sdk-reference/contexts/tool-context)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

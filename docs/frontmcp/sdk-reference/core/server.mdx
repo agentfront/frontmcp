@@ -1,0 +1,218 @@
+---
+title: "FrontMcpServer"
+description: "FrontMcpServer manages the HTTP server interface for FrontMCP. It supports multiple host adapters (Express, Fastify, etc.) and both server and serverless deployments."
+icon: "globe"
+---
+
+## Class Definition
+
+```typescript
+export class FrontMcpServerInstance extends FrontMcpServer {
+  config: HttpOptions;
+  host: HostServerAdapter;
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `config` | `HttpOptions` | HTTP configuration |
+| `host` | `HostServerAdapter` | Host adapter (Express, etc.) |
+
+## Methods
+
+### registerMiddleware(entryPath, handler)
+
+Register middleware at a specific entry path.
+
+```typescript
+registerMiddleware(entryPath: string, handler: ServerRequestHandler): void
+```
+
+### registerRoute(method, path, handler)
+
+Register an HTTP route.
+
+```typescript
+registerRoute(
+  method: HttpMethod,
+  path: string,
+  handler: ServerRequestHandler
+): void
+```
+
+### prepare()
+
+Prepare routes without starting the server.
+
+```typescript
+prepare(): void
+```
+
+- Registers `/health` endpoint automatically
+- Prepares all configured routes
+- Call before `getHandler()` for serverless
+
+### getHandler()
+
+Get the underlying HTTP handler for serverless export.
+
+```typescript
+getHandler(): unknown
+```
+
+Returns the host adapter's handler (e.g., Express app).
+
+### start()
+
+Start the HTTP server on the configured port.
+
+```typescript
+start(): void
+```
+
+## HttpOptions
+
+```typescript
+interface HttpOptions {
+  port?: number;                      // Server port (default: 3000)
+  host?: string;                      // Bind host (default: '0.0.0.0')
+  cors?: CorsOptions;                 // CORS configuration
+  hostFactory?: HostFactory;          // Custom host adapter
+  basePath?: string;                  // Base path prefix
+}
+```
+
+## Host Adapters
+
+### Default (Express)
+
+Express is the default host adapter:
+
+```typescript
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  http: { port: 3000 },
+  // Uses ExpressHostAdapter by default
+})
+```
+
+### Custom Host Factory
+
+Provide a custom host adapter:
+
+```typescript
+import { FastifyHostAdapter } from './adapters/fastify';
+
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  http: {
+    port: 3000,
+    hostFactory: (config) => new FastifyHostAdapter(config),
+  },
+})
+```
+
+### Host Adapter Interface
+
+```typescript
+export abstract class HostServerAdapter extends FrontMcpServer {
+  abstract prepare(): void;
+  abstract getHandler(): unknown;
+  abstract start(port: number): Promise<void> | void;
+}
+```
+
+## Usage Examples
+
+### Standard Deployment
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from './server';
+
+// bootstrap() handles server creation and start
+await FrontMcpInstance.bootstrap(config);
+```
+
+### Manual Server Access
+
+```typescript
+import { FrontMcpInstance, FrontMcpServer } from '@frontmcp/sdk';
+
+const instance = await FrontMcpInstance.createForGraph(config);
+await instance.ready;
+
+// Access server from providers
+const server = instance.providers.get(FrontMcpServer);
+
+// Register additional routes
+server.registerRoute('GET', '/custom', (req, res) => {
+  res.json({ custom: true });
+});
+
+// Start server
+server.start();
+```
+
+### Serverless Deployment
+
+```typescript
+// api/mcp.ts
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import config from '../src/server';
+
+// createHandler() prepares and returns the handler
+export default FrontMcpInstance.createHandler(config);
+```
+
+### Custom CORS
+
+```typescript
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  http: {
+    port: 3000,
+    cors: {
+      origin: ['https://app.example.com', 'http://localhost:3000'],
+      credentials: true,
+      methods: ['GET', 'POST', 'OPTIONS'],
+    },
+  },
+})
+```
+
+## Health Endpoint
+
+FrontMCP automatically registers a `/health` endpoint:
+
+```bash
+curl http://localhost:3000/health
+# {"status":"ok"}
+```
+
+This is useful for:
+- Load balancer health checks
+- Kubernetes liveness probes
+- Monitoring systems
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpInstance" icon="server" href="/frontmcp/sdk-reference/core/frontmcp-instance">
+    Server bootstrap
+  </Card>
+  <Card title="@FrontMcp" icon="at" href="/frontmcp/sdk-reference/decorators/frontmcp">
+    Server configuration
+  </Card>
+  <Card title="Serverless Deployment" icon="cloud" href="/frontmcp/deployment/serverless">
+    Serverless guide
+  </Card>
+  <Card title="Production Build" icon="rocket" href="/frontmcp/deployment/production-build">
+    Production deployment
+  </Card>
+</CardGroup>

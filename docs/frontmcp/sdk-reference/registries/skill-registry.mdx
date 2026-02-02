@@ -1,0 +1,314 @@
+---
+title: "SkillRegistry"
+description: "The SkillRegistry manages all MCP skills within a scope. Skills are reusable prompts/instructions that can be searched, loaded, and optionally synced to external storage."
+icon: "lightbulb"
+---
+
+## Overview
+
+```typescript
+import { SkillRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const skills = scope.skills;
+
+// List all skills
+const allSkills = skills.getSkills();
+
+// Search skills
+const results = await skills.search('data analysis');
+
+// Load a skill
+const skill = await skills.loadSkill('data-pipeline');
+```
+
+## Methods
+
+### getSkills()
+
+Get all skills with optional filtering.
+
+```typescript
+getSkills(options?: GetSkillsOptions): ReadonlyArray<SkillEntry>
+```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `includeHidden` | `boolean` | Include hidden skills |
+| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
+
+**Example:**
+
+```typescript
+// Get all visible skills
+const skills = registry.getSkills();
+
+// Get skills visible via HTTP
+const httpSkills = registry.getSkills({ visibility: 'http' });
+```
+
+### search()
+
+Search skills using TF-IDF text matching.
+
+```typescript
+search(query: string, options?: SearchOptions): Promise<SearchResult[]>
+```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `limit` | `number` | Maximum results to return |
+| `minScore` | `number` | Minimum relevance score |
+| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
+
+**Example:**
+
+```typescript
+const results = await registry.search('data analysis', {
+  limit: 10,
+  minScore: 0.5,
+});
+
+for (const result of results) {
+  console.log(`${result.skill.name}: ${result.score}`);
+}
+```
+
+### loadSkill()
+
+Load skill content by ID/name with tool validation.
+
+```typescript
+loadSkill(skillId: string): Promise<LoadedSkill>
+```
+
+**Example:**
+
+```typescript
+const skill = await registry.loadSkill('data-pipeline');
+console.log(skill.content); // Full skill content
+console.log(skill.tools);   // Validated tool references
+```
+
+### listSkills()
+
+List skills with pagination support.
+
+```typescript
+listSkills(options?: ListOptions): Promise<SkillListResult>
+```
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `offset` | `number` | Starting index |
+| `limit` | `number` | Maximum results |
+| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
+
+**Example:**
+
+```typescript
+const page = await registry.listSkills({
+  offset: 0,
+  limit: 20,
+});
+
+console.log(`Total: ${page.total}`);
+console.log(`Skills: ${page.items.length}`);
+```
+
+### count()
+
+Get total skill count.
+
+```typescript
+count(options?: CountOptions): Promise<number>
+```
+
+### findByName()
+
+Find a skill by its base name.
+
+```typescript
+findByName(name: string): SkillEntry | undefined
+```
+
+### findByQualifiedName()
+
+Find a skill by its fully qualified name.
+
+```typescript
+findByQualifiedName(qualifiedName: string): SkillEntry | undefined
+```
+
+### getInlineSkills()
+
+Get skills defined inline (local only).
+
+```typescript
+getInlineSkills(): ReadonlyArray<SkillEntry>
+```
+
+### validateAllTools()
+
+Validate all skills' tool references against the ToolRegistry.
+
+```typescript
+validateAllTools(): ValidationResult
+```
+
+**Example:**
+
+```typescript
+const result = registry.validateAllTools();
+if (!result.valid) {
+  for (const error of result.errors) {
+    console.error(`${error.skill}: Missing tool ${error.tool}`);
+  }
+}
+```
+
+### subscribe()
+
+Subscribe to skill change events.
+
+```typescript
+subscribe(
+  opts: SubscribeOptions,
+  cb: (event: SkillChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+### getCapabilities()
+
+Get MCP capabilities for skills.
+
+```typescript
+getCapabilities(): { listChanged: boolean }
+```
+
+### hasAny()
+
+Check if any skills exist.
+
+```typescript
+hasAny(): boolean
+```
+
+### adoptFromChild()
+
+Adopt skills from a child registry.
+
+```typescript
+adoptFromChild(child: SkillRegistry, childOwner: Owner): void
+```
+
+## External Storage
+
+Skills can be synced to external storage for persistence:
+
+### setExternalProvider()
+
+Configure an external storage provider.
+
+```typescript
+setExternalProvider(provider: ExternalSkillProviderBase): void
+```
+
+### syncToExternal()
+
+Sync local skills to external storage.
+
+```typescript
+syncToExternal(): Promise<SyncResult>
+```
+
+**Example:**
+
+```typescript
+// Configure Redis-based storage
+registry.setExternalProvider(new RedisSkillProvider(redisClient));
+
+// Sync skills
+const result = await registry.syncToExternal();
+console.log(`Synced ${result.count} skills`);
+```
+
+### hasExternalProvider()
+
+Check if external provider is configured.
+
+```typescript
+hasExternalProvider(): boolean
+```
+
+### getExternalProvider()
+
+Get the configured external provider.
+
+```typescript
+getExternalProvider(): ExternalSkillProviderBase | undefined
+```
+
+## Change Events
+
+```typescript
+interface SkillChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: ReadonlyArray<SkillEntry>;
+  entry?: SkillEntry;
+  sessionId?: string;
+  relatedRequestId?: string;
+}
+```
+
+## Skill Visibility
+
+Skills can have different visibility modes:
+
+| Visibility | Description |
+|------------|-------------|
+| `mcp` | Available only via MCP protocol |
+| `http` | Available only via HTTP API |
+| `both` | Available via both MCP and HTTP |
+
+```typescript
+@Skill({
+  name: 'internal-task',
+  visibility: 'mcp', // Only for MCP clients
+})
+class InternalTask extends SkillContext { }
+
+@Skill({
+  name: 'public-api',
+  visibility: 'http', // Only for HTTP clients
+})
+class PublicAPI extends SkillContext { }
+```
+
+## Tool Validation
+
+Skills can reference tools that must exist in the registry:
+
+```typescript
+@Skill({
+  name: 'data-pipeline',
+  tools: ['fetch_data', 'transform', 'save_results'],
+})
+class DataPipeline extends SkillContext { }
+```
+
+Validation modes:
+
+- **strict**: Fail if any tool is missing
+- **warn**: Log warning for missing tools
+- **ignore**: Skip validation
+
+## Related
+
+- [Skill Decorator](/frontmcp/sdk-reference/decorators/skill)
+- [SkillContext](/frontmcp/sdk-reference/contexts/skill-context)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

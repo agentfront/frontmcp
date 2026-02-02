@@ -1,0 +1,374 @@
+---
+title: Building Tool UI
+slug: guides/building-tool-ui
+description: Create rich HTML widgets for tool outputs using @frontmcp/ui components
+icon: palette
+---
+
+FrontMCP tools can render rich HTML widgets for display in OpenAI Apps, Claude Artifacts, and other UI-capable hosts. This guide shows you how to use the `@frontmcp/ui` library to build professional-looking tool outputs.
+
+<Info>
+**Prerequisites**:
+- A working FrontMCP tool ([see Your First Tool](/frontmcp/guides/your-first-tool))
+- Basic understanding of HTML/CSS
+</Info>
+
+## What You'll Build
+
+A weather tool that displays temperature, conditions, and other data in a styled card with badges and description lists.
+
+---
+
+## Step 1: Install the UI Package
+
+<CodeGroup>
+```bash npm
+npm install @frontmcp/ui
+```
+
+```bash pnpm
+pnpm add @frontmcp/ui
+```
+
+```bash yarn
+yarn add @frontmcp/ui
+```
+</CodeGroup>
+
+---
+
+## Step 2: Create a Tool with UI Template
+
+The `ui` property in the `@Tool` decorator lets you define a template function that renders HTML:
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, descriptionList, badge } from '@frontmcp/ui';
+import { z } from 'zod';
+
+const inputSchema = {
+  location: z.string().describe('City name or location'),
+  units: z.enum(['celsius', 'fahrenheit']).optional().describe('Temperature units'),
+};
+
+const outputSchema = z.object({
+  location: z.string(),
+  temperature: z.number(),
+  units: z.enum(['celsius', 'fahrenheit']),
+  conditions: z.string(),
+  humidity: z.number(),
+  windSpeed: z.number(),
+});
+
+@Tool({
+  name: 'get_weather',
+  description: 'Get current weather for a location',
+  inputSchema,
+  outputSchema,
+  ui: {
+    widgetDescription: 'Displays current weather conditions',
+    displayMode: 'inline',
+    servingMode: 'static',
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+      const tempSymbol = output.units === 'celsius' ? '°C' : '°F';
+
+      // Build weather details using descriptionList component
+      const weatherDetails = descriptionList(
+        [
+          { term: 'Humidity', description: `${output.humidity}%` },
+          { term: 'Wind Speed', description: `${output.windSpeed} km/h` },
+        ],
+        { layout: 'grid', className: 'mt-4' }
+      );
+
+      // Build condition badge
+      const conditionBadge = badge(helpers.escapeHtml(output.conditions), {
+        variant: output.conditions === 'sunny' ? 'success' : 'secondary',
+        size: 'md',
+      });
+
+      // Main content
+      const content = `
+        <div class="text-center py-6">
+          <div class="text-5xl font-light mb-2">
+            ${output.temperature}${tempSymbol}
+          </div>
+          <div class="flex justify-center">
+            ${conditionBadge}
+          </div>
+        </div>
+        ${weatherDetails}
+      `;
+
+      // Wrap in card component
+      return card(content, {
+        title: helpers.escapeHtml(output.location),
+        subtitle: 'Current Weather',
+        variant: 'elevated',
+        size: 'md',
+      });
+    },
+  },
+})
+export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input: { location: string; units?: 'celsius' | 'fahrenheit' }) {
+    // In production, call a real weather API
+    return {
+      location: input.location,
+      temperature: 22,
+      units: input.units || 'celsius',
+      conditions: 'sunny',
+      humidity: 55,
+      windSpeed: 10,
+    };
+  }
+}
+```
+
+---
+
+## UI Configuration Options
+
+<ParamField path="ui.widgetDescription" type="string">
+  Human-readable description of what the widget displays. Shown to users in UI-capable hosts.
+</ParamField>
+
+<ParamField path="ui.displayMode" type="'inline' | 'modal' | 'panel'">
+  How the widget should be displayed:
+  - `inline` - Rendered directly in the conversation
+  - `modal` - Opens in a modal dialog
+  - `panel` - Shows in a side panel
+</ParamField>
+
+<ParamField path="ui.servingMode" type="'static' | 'iframe'">
+  How the HTML is served:
+  - `static` - HTML string is returned directly
+  - `iframe` - Content is served via iframe URL
+</ParamField>
+
+<ParamField path="ui.template" type="function">
+  A function that receives the execution context and returns an HTML string.
+</ParamField>
+
+---
+
+## Available UI Components
+
+### Card
+
+Wrap content in a styled container:
+
+```typescript
+import { card } from '@frontmcp/ui';
+
+card('<p>Card content</p>', {
+  title: 'Card Title',
+  subtitle: 'Optional subtitle',
+  variant: 'elevated',  // 'default' | 'elevated' | 'outlined'
+  size: 'md',           // 'sm' | 'md' | 'lg'
+});
+```
+
+### Badge
+
+Display status or category labels:
+
+```typescript
+import { badge } from '@frontmcp/ui';
+
+badge('Active', {
+  variant: 'success',  // 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info'
+  size: 'md',          // 'sm' | 'md' | 'lg'
+});
+```
+
+### Description List
+
+Show key-value pairs:
+
+```typescript
+import { descriptionList } from '@frontmcp/ui';
+
+descriptionList([
+  { term: 'Status', description: 'Active' },
+  { term: 'Created', description: '2024-01-15' },
+  { term: 'Owner', description: 'john@example.com' },
+], {
+  layout: 'grid',      // 'stacked' | 'grid' | 'inline'
+  className: 'mt-4',
+});
+```
+
+### Button
+
+Create styled buttons:
+
+```typescript
+import { button } from '@frontmcp/ui';
+
+button('Submit', {
+  variant: 'primary',  // 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
+  type: 'submit',      // 'button' | 'submit' | 'reset'
+});
+```
+
+### Form and Input
+
+Build forms with validation:
+
+```typescript
+import { form, input, button } from '@frontmcp/ui';
+
+form(`
+  ${input({ name: 'email', label: 'Email', type: 'email', required: true })}
+  ${input({ name: 'message', label: 'Message', type: 'textarea' })}
+  ${button('Send', { type: 'submit', variant: 'primary' })}
+`, {
+  action: '/api/contact',
+  method: 'post',
+});
+```
+
+---
+
+## Template Context
+
+The template function receives a context object with:
+
+```typescript
+template: (ctx) => {
+  // Input that was passed to the tool
+  const { location, units } = ctx.input;
+
+  // Output from execute()
+  const { temperature, conditions } = ctx.output;
+
+  // Helper functions
+  const { escapeHtml, formatDate, formatNumber } = ctx.helpers;
+
+  // Always escape user-provided strings!
+  return `<p>${helpers.escapeHtml(location)}</p>`;
+}
+```
+
+### Available Helpers
+
+| Helper | Description |
+|--------|-------------|
+| `escapeHtml(str)` | Escape HTML entities to prevent XSS |
+| `formatDate(date)` | Format a date string |
+| `formatNumber(num, options)` | Format numbers with locale support |
+
+<Warning>
+Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.
+</Warning>
+
+---
+
+## Practical Example: Expense Summary
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, descriptionList, badge } from '@frontmcp/ui';
+import { z } from 'zod';
+
+@Tool({
+  name: 'expense_summary',
+  description: 'Get expense summary for a user',
+  inputSchema: { userId: z.string() },
+  outputSchema: z.object({
+    userName: z.string(),
+    totalExpenses: z.number(),
+    pendingCount: z.number(),
+    approvedCount: z.number(),
+    status: z.enum(['under_budget', 'at_budget', 'over_budget']),
+  }),
+  ui: {
+    widgetDescription: 'Expense summary dashboard',
+    displayMode: 'inline',
+    servingMode: 'static',
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+
+      const statusColors = {
+        under_budget: 'success',
+        at_budget: 'warning',
+        over_budget: 'error',
+      };
+
+      const statusBadge = badge(
+        output.status.replace('_', ' ').toUpperCase(),
+        { variant: statusColors[output.status], size: 'lg' }
+      );
+
+      const details = descriptionList([
+        { term: 'Total', description: helpers.formatNumber(output.totalExpenses, { style: 'currency', currency: 'USD' }) },
+        { term: 'Pending', description: String(output.pendingCount) },
+        { term: 'Approved', description: String(output.approvedCount) },
+      ], { layout: 'grid' });
+
+      return card(`
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold">${helpers.escapeHtml(output.userName)}</h3>
+          ${statusBadge}
+        </div>
+        ${details}
+      `, {
+        variant: 'elevated',
+        size: 'md',
+      });
+    },
+  },
+})
+export default class ExpenseSummaryTool extends ToolContext {
+  async execute(input: { userId: string }) {
+    // Fetch from database in production
+    return {
+      userName: 'John Doe',
+      totalExpenses: 1234.56,
+      pendingCount: 3,
+      approvedCount: 12,
+      status: 'under_budget' as const,
+    };
+  }
+}
+```
+
+---
+
+## Platform Detection
+
+Different platforms (OpenAI, Claude, browsers) have different capabilities. Use theme utilities to adapt:
+
+```typescript
+import { createTheme, canUseCdn, needsInlineScripts } from '@frontmcp/uipack/theme';
+
+// Claude Artifacts blocks external requests
+// Use inline scripts when needed
+if (needsInlineScripts(platform)) {
+  // Inline Tailwind CSS
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="UI Library Reference" icon="book" href="/frontmcp/guides/ui-library">
+    Complete UI component documentation
+  </Card>
+
+  <Card title="Tool Reference" icon="wrench" href="/frontmcp/servers/tools">
+    Full @Tool decorator options
+  </Card>
+
+  <Card title="CodeCall CRM Demo" icon="users" href="/frontmcp/guides/codecall-crm-demo">
+    See UI in a full application
+  </Card>
+
+  <Card title="Create Prompts" icon="message" href="/frontmcp/guides/prompts-and-resources">
+    Build prompts alongside tools
+  </Card>
+</CardGroup>

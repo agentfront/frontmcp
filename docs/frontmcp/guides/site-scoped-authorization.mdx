@@ -1,0 +1,526 @@
+---
+title: Site-Scoped Authorization
+slug: guides/site-scoped-authorization
+description: Implement multi-tenant authorization with site-based access control
+icon: building
+---
+
+Multi-tenant applications need to ensure users can only access data for their authorized sites or tenants. This guide shows you how to build a site-scoped authorization plugin that validates access before tool execution.
+
+<Info>
+**Prerequisites**:
+- Understanding of FrontMCP plugins ([see Create a Plugin](/frontmcp/guides/create-plugin))
+- Understanding of tool hooks ([see Customize Flow Stages](/frontmcp/guides/customize-flow-stages))
+</Info>
+
+## What You'll Build
+
+A site authorization plugin that:
+- Validates users can only access their authorized sites
+- Supports admin-only tools within sites
+- Works with tools that have a `siteId` input parameter
+
+---
+
+## Step 1: Define Types and Metadata Extension
+
+```typescript
+// plugins/site-authorization.types.ts
+
+declare global {
+  interface ExtendFrontMcpToolMetadata {
+    site?: {
+      /**
+       * Mark tool as site-scoped. If true, validates site access.
+       * Defaults to true if the tool input has a siteId field.
+       */
+      siteScoped?: boolean;
+
+      /**
+       * Require admin privileges for this tool.
+       */
+      adminRequired?: boolean;
+
+      /**
+       * Override the default field name for site ID.
+       * @default 'siteId'
+       */
+      siteIdFieldName?: string;
+    };
+  }
+}
+
+export interface SiteAuthorizationPluginOptions {
+  /**
+   * In demo mode, allow all requests if user has no site claims.
+   * @default true
+   */
+  demoAllowAllIfNoClaims?: boolean;
+
+  /**
+   * Default field name for site ID in tool input.
+   * @default 'siteId'
+   */
+  siteIdFieldName?: string;
+}
+```
+
+---
+
+## Step 2: Create the Site Authorization Plugin
+
+```typescript
+// plugins/site-authorization.plugin.ts
+import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { SiteAuthorizationPluginOptions } from './site-authorization.types';
+
+@Plugin({
+  name: 'site-authorization',
+  description: 'Validates site access and admin requirements for site-scoped tools',
+})
+export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthorizationPluginOptions> {
+  opts: SiteAuthorizationPluginOptions;
+
+  constructor(opts: SiteAuthorizationPluginOptions = {}) {
+    super();
+    this.opts = {
+      demoAllowAllIfNoClaims: opts.demoAllowAllIfNoClaims ?? true,
+      siteIdFieldName: opts.siteIdFieldName ?? 'siteId',
+    };
+  }
+
+  /**
+   * Hook runs BEFORE tool execution (priority 900 = high).
+   * Validates site access before any tool logic runs.
+   */
+  @ToolHook.Will('execute', { priority: 900 })
+  async validateSiteAccess(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const ctx = flowCtx.state.required.toolContext;
+    const input: Record<string, unknown> = ctx.input ?? {};
+    const meta = ctx.metadata;
+
+    // Determine the site ID field name
+    const siteField = meta.site?.siteIdFieldName || this.opts.siteIdFieldName || 'siteId';
+    const siteId = input[siteField] as string | undefined;
+
+    // Determine if this is a site-scoped tool
+    const siteScoped = meta.site?.siteScoped ?? (siteId !== undefined);
+    const adminRequired = meta.site?.adminRequired === true;
+
+    // If not site-scoped, allow execution
+    if (!siteScoped) {
+      return;
+    }
+
+    // Validate site ID is provided
+    if (!siteId || typeof siteId !== 'string' || siteId.length === 0) {
+      throw new Error(`Missing required ${siteField} for site-scoped operation`);
+    }
+
+    // Check user has access to this site
+    const allowedSites = this.getAllowedSites(ctx.authInfo);
+    if (allowedSites !== 'ALL' && !allowedSites.includes(siteId)) {
+      throw new Error(`Not authorized for site ${siteId}`);
+    }
+
+    // Check admin requirement
+    if (adminRequired && !this.isAdmin(ctx.authInfo)) {
+      throw new Error('Admin privileges required');
+    }
+  }
+
+  /**
+   * Extract allowed sites from user claims.
+   * Returns 'ALL' if user has no restrictions.
+   */
+  private getAllowedSites(authInfo: unknown): string[] | 'ALL' {
+    const user = this.extractUser(authInfo);
+    if (!user) {
+      return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
+    }
+
+    // Check for sites or tenants claim
+    const sites = user.sites || user.tenants;
+
+    if (!sites || (Array.isArray(sites) && sites.length === 0)) {
+      return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
+    }
+
+    if (Array.isArray(sites)) {
+      return sites.map(String);
+    }
+
+    if (typeof sites === 'string') {
+      return [sites];
+    }
+
+    return [];
+  }
+
+  /**
+   * Check if user has admin privileges.
+   */
+  private isAdmin(authInfo: unknown): boolean {
+    const user = this.extractUser(authInfo);
+    if (!user) {
+      return !!this.opts.demoAllowAllIfNoClaims;
+    }
+
+    if (user.isAdmin === true) {
+      return true;
+    }
+
+    const roles: string[] = Array.isArray(user.roles) ? user.roles : [];
+    return roles.includes('admin') || roles.includes('owner') || roles.includes('superadmin');
+  }
+
+  /**
+   * Safely extract user object from authInfo.
+   */
+  private extractUser(authInfo: unknown): Record<string, unknown> | null {
+    if (!authInfo || typeof authInfo !== 'object') return null;
+    const obj = authInfo as Record<string, unknown>;
+    if (!obj.user || typeof obj.user !== 'object') return null;
+    return obj.user as Record<string, unknown>;
+  }
+}
+```
+
+---
+
+## Step 3: Register the Plugin
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import SiteAuthorizationPlugin from './plugins/site-authorization.plugin';
+import ListEmployeesTool from './tools/list-employees.tool';
+import AdminAddEntryTool from './tools/admin-add-entry.tool';
+
+@App({
+  id: 'employee-time',
+  name: 'Employee Time Tracking',
+  plugins: [
+    SiteAuthorizationPlugin,
+    // or with options:
+    // SiteAuthorizationPlugin.init({
+    //   demoAllowAllIfNoClaims: false,
+    //   siteIdFieldName: 'tenantId',
+    // }),
+  ],
+  tools: [ListEmployeesTool, AdminAddEntryTool],
+})
+export default class EmployeeTimeApp {}
+```
+
+---
+
+## Step 4: Mark Tools as Site-Scoped
+
+### Basic Site-Scoped Tool
+
+Tools with a `siteId` input are automatically site-scoped:
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'list-employees',
+  description: 'List employees for a site',
+  inputSchema: {
+    siteId: z.string().describe('Site identifier'),
+    department: z.string().optional(),
+  },
+  // site.siteScoped is inferred from siteId being present
+})
+export default class ListEmployeesTool extends ToolContext {
+  async execute(input: { siteId: string; department?: string }) {
+    // Only runs if user has access to input.siteId
+    return { employees: [], siteId: input.siteId };
+  }
+}
+```
+
+### Admin-Only Site Tool
+
+```typescript
+@Tool({
+  name: 'admin-add-entry',
+  description: 'Admin: Add time entry for any employee',
+  inputSchema: {
+    siteId: z.string(),
+    employeeId: z.string(),
+    hours: z.number(),
+  },
+  site: {
+    adminRequired: true,  // Requires admin role
+  },
+})
+export default class AdminAddEntryTool extends ToolContext {
+  async execute(input: { siteId: string; employeeId: string; hours: number }) {
+    // Only runs if user is admin AND has access to siteId
+    return { success: true };
+  }
+}
+```
+
+### Custom Site Field Name
+
+```typescript
+@Tool({
+  name: 'list-locations',
+  description: 'List locations for a tenant',
+  inputSchema: {
+    tenantId: z.string(),  // Using tenantId instead of siteId
+  },
+  site: {
+    siteIdFieldName: 'tenantId',  // Override field name
+  },
+})
+export default class ListLocationsTool extends ToolContext {
+  async execute(input: { tenantId: string }) {
+    return { locations: [] };
+  }
+}
+```
+
+### Explicit Site Scoping
+
+Force site validation even without a siteId field:
+
+```typescript
+@Tool({
+  name: 'get-global-settings',
+  inputSchema: {
+    settingKey: z.string(),
+  },
+  site: {
+    siteScoped: false,  // Explicitly disable site scoping
+  },
+})
+export default class GetGlobalSettingsTool extends ToolContext {
+  // This tool is NOT site-scoped
+}
+```
+
+---
+
+## User Claims Structure
+
+The plugin expects user claims in this format:
+
+```typescript
+// In authInfo
+{
+  user: {
+    id: 'user-123',
+    email: 'user@example.com',
+
+    // Site access (either field works)
+    sites: ['site-A', 'site-B'],
+    // or
+    tenants: ['tenant-A', 'tenant-B'],
+
+    // Admin check (any of these)
+    isAdmin: true,
+    // or
+    roles: ['admin'],  // or 'owner', 'superadmin'
+  }
+}
+```
+
+---
+
+## How It Works
+
+<Steps>
+  <Step title="Tool execution requested">
+    Client calls a tool with input including `siteId`.
+  </Step>
+
+  <Step title="Will hook intercepts">
+    Before execution, `validateSiteAccess` hook runs at priority 900.
+  </Step>
+
+  <Step title="Extract site ID">
+    Plugin reads `siteId` from input (or custom field name).
+  </Step>
+
+  <Step title="Check user access">
+    Plugin extracts user's allowed sites from `authInfo.user.sites` or `authInfo.user.tenants`.
+  </Step>
+
+  <Step title="Validate access">
+    If site isn't in allowed list, throws error. If admin required, checks roles.
+  </Step>
+
+  <Step title="Execute or reject">
+    Tool executes only if validation passes.
+  </Step>
+</Steps>
+
+---
+
+## Combining with Role-Based Authorization
+
+You can use both plugins together:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import AuthorizationPlugin from './plugins/authorization.plugin';
+import SiteAuthorizationPlugin from './plugins/site-authorization.plugin';
+
+@App({
+  id: 'enterprise-app',
+  name: 'Enterprise App',
+  plugins: [
+    // Role-based: filters tool list
+    AuthorizationPlugin,
+    // Site-based: validates execution
+    SiteAuthorizationPlugin,
+  ],
+  tools: [/* ... */],
+})
+export default class EnterpriseApp {}
+```
+
+This gives you:
+1. **Role-based filtering** - Users only see tools for their roles
+2. **Site-based validation** - Users can only access their authorized sites
+
+---
+
+## Testing Site Authorization
+
+```typescript
+import { createTestingModule } from '@frontmcp/sdk/testing';
+import EmployeeTimeApp from './apps/employee-time';
+
+describe('Site Authorization', () => {
+  it('should allow access to authorized site', async () => {
+    const { scope } = await createTestingModule({
+      apps: [EmployeeTimeApp],
+    });
+
+    const result = await scope.callTool('employee-time:list-employees', {
+      siteId: 'site-A',
+    }, {
+      authInfo: {
+        user: { id: 'user-1', sites: ['site-A', 'site-B'] },
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('should deny access to unauthorized site', async () => {
+    const { scope } = await createTestingModule({
+      apps: [EmployeeTimeApp],
+    });
+
+    await expect(
+      scope.callTool('employee-time:list-employees', {
+        siteId: 'site-C',  // Not in user's sites
+      }, {
+        authInfo: {
+          user: { id: 'user-1', sites: ['site-A', 'site-B'] },
+        },
+      })
+    ).rejects.toThrow('Not authorized for site site-C');
+  });
+
+  it('should require admin for admin tools', async () => {
+    const { scope } = await createTestingModule({
+      apps: [EmployeeTimeApp],
+    });
+
+    await expect(
+      scope.callTool('employee-time:admin-add-entry', {
+        siteId: 'site-A',
+        employeeId: 'emp-1',
+        hours: 8,
+      }, {
+        authInfo: {
+          user: { id: 'user-1', sites: ['site-A'], roles: ['user'] },
+        },
+      })
+    ).rejects.toThrow('Admin privileges required');
+  });
+});
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always include siteId in tool inputs">
+    Make site context explicit in every site-scoped operation:
+
+    ```typescript
+    inputSchema: {
+      siteId: z.string().describe('Site identifier'),
+      // other fields...
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use demo mode carefully">
+    The `demoAllowAllIfNoClaims` option is convenient for development but should be disabled in production:
+
+    ```typescript
+    SiteAuthorizationPlugin.init({
+      demoAllowAllIfNoClaims: process.env.NODE_ENV !== 'production',
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Log authorization failures">
+    For security auditing, consider logging failed authorization attempts:
+
+    ```typescript
+    if (allowedSites !== 'ALL' && !allowedSites.includes(siteId)) {
+      this.logger?.warn('Site access denied', { userId, siteId, allowedSites });
+      throw new Error(`Not authorized for site ${siteId}`);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Consider caching site access">
+    For high-traffic applications, cache site access checks:
+
+    ```typescript
+    private siteAccessCache = new Map<string, Set<string>>();
+
+    private getAllowedSites(authInfo: unknown): string[] | 'ALL' {
+      const userId = this.getUserId(authInfo);
+      if (this.siteAccessCache.has(userId)) {
+        return [...this.siteAccessCache.get(userId)!];
+      }
+      // ... fetch and cache
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Role-Based Authorization" icon="shield" href="/frontmcp/guides/role-based-authorization">
+    Filter tools by user roles
+  </Card>
+
+  <Card title="Create a Plugin" icon="puzzle-piece" href="/frontmcp/guides/create-plugin">
+    Full plugin development guide
+  </Card>
+
+  <Card title="Customize Flow Stages" icon="diagram-project" href="/frontmcp/guides/customize-flow-stages">
+    Learn more about hooks
+  </Card>
+
+  <Card title="Authentication" icon="lock" href="/frontmcp/authentication/overview">
+    Configure authentication providers
+  </Card>
+</CardGroup>

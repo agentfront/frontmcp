@@ -1,0 +1,329 @@
+---
+title: "ProviderRegistry"
+description: "The ProviderRegistry manages dependency injection providers within a scope. It handles provider instantiation, scoping, and lifecycle management."
+icon: "syringe"
+---
+
+## Overview
+
+```typescript
+import { ProviderRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const providers = scope.providers;
+
+// Get a singleton provider
+const logger = providers.get(LoggerToken);
+
+// Get a scoped provider
+const service = providers.getScoped(ServiceToken, views);
+```
+
+## Methods
+
+### get()
+
+Get a DEFAULT-scoped (singleton) provider.
+
+```typescript
+get<T>(token: Token<T>): T
+```
+
+**Example:**
+
+```typescript
+const logger = registry.get(LoggerToken);
+const config = registry.get(ConfigToken);
+```
+
+### getScoped()
+
+Get a provider from given views (for session/request scoped providers).
+
+```typescript
+getScoped<T>(token: Token<T>, views: ProviderViews): T
+```
+
+**Example:**
+
+```typescript
+const views = registry.buildViews(sessionKey, contextProviders);
+const session = registry.getScoped(SessionToken, views);
+```
+
+### resolve()
+
+Lightweight synchronous resolver for app-scoped DI.
+
+```typescript
+resolve<T>(cls: Class<T>): T
+```
+
+**Example:**
+
+```typescript
+const service = registry.resolve(MyService);
+```
+
+### resolveBootstrapDep()
+
+Resolve a dependency usable during bootstrap phase.
+
+```typescript
+resolveBootstrapDep<T>(token: Token<T>): T
+```
+
+### getProviders()
+
+Get all provider entries.
+
+```typescript
+getProviders(): ReadonlyArray<ProviderEntry>
+```
+
+### buildViews()
+
+Build provider views for different scopes.
+
+```typescript
+buildViews(
+  sessionKey: string,
+  contextProviders?: Map<Token, unknown>
+): ProviderViews
+```
+
+**Example:**
+
+```typescript
+const views = registry.buildViews('session-123', new Map([
+  [RequestToken, currentRequest],
+]));
+```
+
+### addRegistry()
+
+Add a registry by type.
+
+```typescript
+addRegistry<T>(type: RegistryType, value: T): void
+```
+
+### getRegistries()
+
+Get registries by type.
+
+```typescript
+getRegistries<T>(type: RegistryType): T[]
+```
+
+### getHooksRegistry()
+
+Get the hooks registry.
+
+```typescript
+getHooksRegistry(): HookRegistry
+```
+
+### getScopeRegistry()
+
+Get the scope registry.
+
+```typescript
+getScopeRegistry(): ScopeRegistry
+```
+
+### mergeFromRegistry()
+
+Merge providers from another registry.
+
+```typescript
+mergeFromRegistry(providedBy: Token, exported: ProviderExport[]): void
+```
+
+### getProviderInfo()
+
+Get exported provider definitions.
+
+```typescript
+getProviderInfo(token: Token): ProviderDef | undefined
+```
+
+### injectProvider()
+
+Inject a provider value directly.
+
+```typescript
+injectProvider<T>(injected: InjectedProvider<T>): void
+```
+
+**Example:**
+
+```typescript
+registry.injectProvider({
+  token: ConfigToken,
+  value: { debug: true },
+});
+```
+
+### addDynamicProviders()
+
+Add providers dynamically at runtime.
+
+```typescript
+addDynamicProviders(dynamicProviders: DynamicProvider[]): void
+```
+
+## Session Management
+
+### cleanupSession()
+
+Clean up a specific session's provider cache.
+
+```typescript
+cleanupSession(sessionKey: string): void
+```
+
+### cleanupExpiredSessions()
+
+Clean up expired sessions from cache.
+
+```typescript
+cleanupExpiredSessions(): void
+```
+
+### startSessionCleanup()
+
+Start background session cleanup timer.
+
+```typescript
+startSessionCleanup(): void
+```
+
+### stopSessionCleanup()
+
+Stop background session cleanup timer.
+
+```typescript
+stopSessionCleanup(): void
+```
+
+### getSessionCacheStats()
+
+Get session cache statistics.
+
+```typescript
+getSessionCacheStats(): SessionCacheStats
+```
+
+### isSessionCacheEnabled()
+
+Check if session caching is enabled.
+
+```typescript
+isSessionCacheEnabled(): boolean
+```
+
+### dispose()
+
+Dispose registry and clean up all resources.
+
+```typescript
+dispose(): void
+```
+
+## Server/Scope Access
+
+### getActiveScope()
+
+Get the active scope.
+
+```typescript
+getActiveScope(): Scope
+```
+
+### getActiveServer()
+
+Get the active server.
+
+```typescript
+getActiveServer(): Server
+```
+
+## Provider Scopes
+
+FrontMCP supports multiple provider scopes:
+
+| Scope | Description | Lifecycle |
+|-------|-------------|-----------|
+| `SINGLETON` | Shared across all requests | Server lifetime |
+| `SESSION` | Per-session instance | Session lifetime |
+| `REQUEST` | Per-request instance | Request lifetime |
+| `CONTEXT` | Per-execution context | Context lifetime |
+
+<Note>
+In distributed/serverless mode, `SESSION` is normalized to `CONTEXT` to avoid stale instances.
+</Note>
+
+## Provider Views
+
+Provider views represent the hierarchy of available providers:
+
+```typescript
+interface ProviderViews {
+  singleton: Map<Token, unknown>;  // Server-wide singletons
+  session: Map<Token, unknown>;    // Session-scoped instances
+  context: Map<Token, unknown>;    // Context-scoped instances
+}
+```
+
+## Indexes
+
+| Index | Key | Description |
+|-------|-----|-------------|
+| `providedBy` | `Token` | Which registry provided each token |
+| `order` | `number` | Topological order for instantiation |
+| `registries` | `RegistryType` | Map of registries by kind |
+
+## Session Caching
+
+The registry implements LRU eviction and TTL-based session caching:
+
+```typescript
+// Session cache stats
+const stats = registry.getSessionCacheStats();
+console.log(`Active sessions: ${stats.activeCount}`);
+console.log(`Cache hits: ${stats.hits}`);
+console.log(`Cache misses: ${stats.misses}`);
+```
+
+## Provider Definition
+
+Providers are defined with:
+
+```typescript
+interface ProviderDef<T> {
+  token: Token<T>;                    // Injection token
+  useClass?: Class<T>;                // Class to instantiate
+  useFactory?: () => T | Promise<T>;  // Factory function
+  useValue?: T;                       // Direct value
+  scope?: ProviderScope;              // Lifecycle scope
+  deps?: Token[];                     // Dependencies
+}
+```
+
+**Example:**
+
+```typescript
+@Provider({
+  token: CacheToken,
+  useFactory: () => new RedisCache(),
+  scope: ProviderScope.SINGLETON,
+})
+class CacheProvider { }
+```
+
+## Related
+
+- [Provider Decorator](/frontmcp/sdk-reference/decorators/provider)
+- [Extensibility: Providers](/frontmcp/extensibility/providers)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

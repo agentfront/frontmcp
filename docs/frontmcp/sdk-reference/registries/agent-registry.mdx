@@ -1,0 +1,276 @@
+---
+title: "AgentRegistry"
+description: "The AgentRegistry manages all MCP agents within a scope. Agents are autonomous components that can be called as tools and have their own set of visible tools."
+icon: "robot"
+---
+
+## Overview
+
+```typescript
+import { AgentRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const agents = scope.agents;
+
+// List all agents
+const allAgents = agents.getAgents();
+
+// Find by ID
+const agent = agents.findById('research-agent');
+
+// Get agents as callable tools
+const agentTools = agents.getAgentsAsTools();
+```
+
+## Methods
+
+### getAgents()
+
+Get all agents (local + adopted).
+
+```typescript
+getAgents(includeHidden?: boolean): ReadonlyArray<AgentEntry>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `includeHidden` | `boolean` | `false` | Include hidden agents |
+
+**Example:**
+
+```typescript
+const agents = registry.getAgents();
+for (const agent of agents) {
+  console.log(`Agent: ${agent.id} - ${agent.description}`);
+}
+```
+
+### findById()
+
+Find an agent by its ID.
+
+```typescript
+findById(id: string): AgentEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const agent = registry.findById('research-agent');
+if (agent) {
+  console.log(`Found: ${agent.name}`);
+}
+```
+
+### findByName()
+
+Find an agent by its name.
+
+```typescript
+findByName(name: string): AgentEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const agent = registry.findByName('research');
+```
+
+### getVisibleAgentsFor()
+
+Get agents visible to a specific agent.
+
+```typescript
+getVisibleAgentsFor(agentId: string): ReadonlyArray<AgentEntry>
+```
+
+**Example:**
+
+```typescript
+// Get agents that 'orchestrator' can call
+const visibleAgents = registry.getVisibleAgentsFor('orchestrator');
+```
+
+### getAgentsAsTools()
+
+Get tool definitions for all agents.
+
+```typescript
+getAgentsAsTools(): ReadonlyArray<ToolDefinition>
+```
+
+Agents are automatically registered as tools so they can be called by other agents or the MCP client.
+
+**Example:**
+
+```typescript
+const agentTools = registry.getAgentsAsTools();
+// Each agent becomes a callable tool with its input schema
+```
+
+### getAgentToolsFor()
+
+Get tool definitions for agents visible to a specific agent.
+
+```typescript
+getAgentToolsFor(agentId: string): ReadonlyArray<ToolDefinition>
+```
+
+**Example:**
+
+```typescript
+// Get tools available to 'coordinator' agent
+const tools = registry.getAgentToolsFor('coordinator');
+```
+
+### getInlineAgents()
+
+Get only agents defined inline in this registry.
+
+```typescript
+getInlineAgents(): ReadonlyArray<AgentEntry>
+```
+
+### listAllInstances()
+
+List all agent instances (locals + adopted).
+
+```typescript
+listAllInstances(): ReadonlyArray<AgentEntry>
+```
+
+### subscribe()
+
+Subscribe to agent change events.
+
+```typescript
+subscribe(
+  opts: SubscribeOptions,
+  cb: (event: AgentChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+**Example:**
+
+```typescript
+const unsubscribe = registry.subscribe({}, (event) => {
+  console.log(`Agent ${event.kind}:`, event.entry?.id);
+});
+
+// Later
+unsubscribe();
+```
+
+### getCapabilities()
+
+Get MCP capabilities for agents.
+
+```typescript
+getCapabilities(): { listChanged: boolean }
+```
+
+### hasAny()
+
+Check if any agents exist.
+
+```typescript
+hasAny(): boolean
+```
+
+### adoptFromChild()
+
+Adopt agents from a child registry.
+
+```typescript
+adoptFromChild(child: AgentRegistry, childOwner: Owner): void
+```
+
+### removeChild()
+
+Remove a child registry and clean up subscriptions.
+
+```typescript
+removeChild(child: AgentRegistry): void
+```
+
+### dispose()
+
+Dispose registry and clean up all child subscriptions.
+
+```typescript
+dispose(): void
+```
+
+## Change Events
+
+```typescript
+interface AgentChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: ReadonlyArray<AgentEntry>;
+  entry?: AgentEntry;
+  sessionId?: string;
+  relatedRequestId?: string;
+}
+```
+
+## Indexes
+
+| Index | Key | Description |
+|-------|-----|-------------|
+| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
+| `byId` | `id` | Agent ID lookup (unique to AgentRegistry) |
+| `byName` | `name` | Base name lookup |
+| `byOwner` | `ownerPath` | All agents by owner |
+
+## Agent Visibility
+
+Agents can control which other agents they can see and call:
+
+```typescript
+@Agent({
+  id: 'coordinator',
+  name: 'Coordinator',
+  description: 'Coordinates research tasks',
+  visibleAgents: ['researcher', 'writer'], // Can only call these agents
+})
+class CoordinatorAgent extends AgentContext { }
+```
+
+Use `getVisibleAgentsFor()` to query visibility:
+
+```typescript
+const visible = registry.getVisibleAgentsFor('coordinator');
+// Returns only 'researcher' and 'writer' agents
+```
+
+## Agents as Tools
+
+Agents are automatically registered in the parent scope's ToolRegistry:
+
+```typescript
+@Agent({
+  id: 'research',
+  name: 'Research Agent',
+  inputSchema: z.object({
+    topic: z.string(),
+    depth: z.enum(['shallow', 'deep']),
+  }),
+})
+class ResearchAgent extends AgentContext { }
+
+// The agent becomes callable as a tool
+await client.callTool('research', {
+  topic: 'AI advancements',
+  depth: 'deep',
+});
+```
+
+## Related
+
+- [Agent Decorator](/frontmcp/sdk-reference/decorators/agent)
+- [AgentContext](/frontmcp/sdk-reference/contexts/agent-context)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

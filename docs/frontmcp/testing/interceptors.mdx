@@ -1,0 +1,441 @@
+---
+title: Mocking & Interception
+sidebarTitle: Interceptors
+slug: testing/interceptors
+icon: shuffle
+description: Mock and intercept MCP protocol requests and responses
+---
+
+The MCP interceptor system allows you to mock tool responses, modify requests, and simulate various conditions without calling the actual server implementation.
+
+---
+
+## When to Use Mocking
+
+Use MCP-level mocking when you want to:
+
+- Skip expensive tool operations in tests
+- Simulate error conditions
+- Test client behavior without server dependencies
+- Add latency to test timeout handling
+- Verify request parameters without side effects
+
+<Info>
+  For mocking **external HTTP calls** made by your tools, use [HTTP Mocking](/docs/frontmcp/testing/http-mocking) instead.
+</Info>
+
+---
+
+## Mock Registry
+
+The `mcp.mock` API provides a registry for mocking MCP responses.
+
+### Basic Usage
+
+```ts
+import { mockResponse } from '@frontmcp/testing';
+
+test('mock tool response', async ({ mcp }) => {
+  // Register a mock
+  const handle = mcp.mock.add({
+    method: 'tools/call',
+    params: { name: 'expensive-tool' },
+    response: mockResponse.toolResult([
+      { type: 'text', text: JSON.stringify({ result: 'mocked' }) },
+    ]),
+  });
+
+  // Call the tool - gets mocked response
+  const result = await mcp.tools.call('expensive-tool', { data: 'test' });
+  expect(result.json()).toEqual({ result: 'mocked' });
+
+  // Check mock was used
+  expect(handle.callCount()).toBe(1);
+
+  // Clean up
+  handle.remove();
+});
+```
+
+### Mock Options
+
+| Option     | Type     | Description                                           |
+| ---------- | -------- | ----------------------------------------------------- |
+| `method`   | `string` | MCP method to match (e.g., `'tools/call'`)            |
+| `params`   | `object` | Parameters to match (partial match)                   |
+| `response` | `object` | JSON-RPC response to return                           |
+| `times`    | `number` | Number of times to use this mock (default: unlimited) |
+| `delay`    | `number` | Delay in ms before responding                         |
+
+---
+
+## Convenience Methods
+
+### Mocking Tools
+
+```ts
+test('mock tool with convenience method', async ({ mcp }) => {
+  // Mock a successful tool response
+  mcp.mock.tool('my-tool', { success: true, data: 'mocked' });
+
+  const result = await mcp.tools.call('my-tool', { input: 'test' });
+  expect(result).toBeSuccessful();
+  expect(result.json()).toEqual({ success: true, data: 'mocked' });
+});
+
+test('mock tool error', async ({ mcp }) => {
+  // Mock a tool error
+  mcp.mock.toolError('failing-tool', -32603, 'Simulated failure');
+
+  const result = await mcp.tools.call('failing-tool', {});
+  expect(result).toBeError(-32603);
+});
+```
+
+### Mocking Resources
+
+```ts
+test('mock resource', async ({ mcp }) => {
+  // Mock with string content
+  mcp.mock.resource('config://settings', 'mock config data');
+
+  // Mock with structured content
+  mcp.mock.resource('data://users', {
+    text: JSON.stringify([{ id: 1, name: 'Mock User' }]),
+    mimeType: 'application/json',
+  });
+
+  const content = await mcp.resources.read('config://settings');
+  expect(content.text()).toBe('mock config data');
+});
+```
+
+### Clearing Mocks
+
+```ts
+test('clear mocks', async ({ mcp }) => {
+  mcp.mock.tool('tool-1', { data: 'mock1' });
+  mcp.mock.tool('tool-2', { data: 'mock2' });
+
+  // Clear all mocks
+  mcp.mock.clear();
+
+  // Now calls go to actual server
+  const result = await mcp.tools.call('tool-1', {});
+  // ... actual response
+});
+```
+
+---
+
+## Request Interceptors
+
+Intercept and modify outgoing requests before they reach the server.
+
+### Logging Requests
+
+```ts
+test('log all requests', async ({ mcp }) => {
+  const requests: any[] = [];
+
+  mcp.intercept.request((ctx) => {
+    requests.push({
+      method: ctx.request.method,
+      params: ctx.request.params,
+    });
+    return { action: 'passthrough' };
+  });
+
+  await mcp.tools.list();
+  await mcp.tools.call('my-tool', { input: 'test' });
+
+  expect(requests).toHaveLength(2);
+  expect(requests[0].method).toBe('tools/list');
+});
+```
+
+### Modifying Requests
+
+```ts
+test('inject params into requests', async ({ mcp }) => {
+  mcp.intercept.request((ctx) => {
+    if (ctx.request.method === 'tools/call') {
+      return {
+        action: 'modify',
+        request: {
+          ...ctx.request,
+          params: {
+            ...ctx.request.params,
+            arguments: {
+              ...ctx.request.params.arguments,
+              injectedParam: 'test-value',
+            },
+          },
+        },
+      };
+    }
+    return { action: 'passthrough' };
+  });
+
+  // Request will include injectedParam
+  await mcp.tools.call('my-tool', { input: 'test' });
+});
+```
+
+### Returning Mock Response
+
+```ts
+test('return mock from interceptor', async ({ mcp }) => {
+  mcp.intercept.request((ctx) => {
+    if (ctx.request.method === 'tools/list') {
+      return {
+        action: 'mock',
+        response: {
+          jsonrpc: '2.0',
+          id: ctx.request.id,
+          result: { tools: [{ name: 'fake-tool' }] },
+        },
+      };
+    }
+    return { action: 'passthrough' };
+  });
+
+  const tools = await mcp.tools.list();
+  expect(tools).toHaveLength(1);
+  expect(tools[0].name).toBe('fake-tool');
+});
+```
+
+### Failing Requests
+
+```ts
+test('fail specific requests', async ({ mcp }) => {
+  mcp.intercept.request((ctx) => {
+    if (ctx.meta.sessionId === undefined) {
+      return {
+        action: 'error',
+        error: new Error('Session required'),
+      };
+    }
+    return { action: 'passthrough' };
+  });
+});
+```
+
+### Interceptor Actions
+
+| Action        | Description                                   |
+| ------------- | --------------------------------------------- |
+| `passthrough` | Continue to server normally                   |
+| `modify`      | Modify the request before sending             |
+| `mock`        | Return a mock response without calling server |
+| `error`       | Throw an error                                |
+
+---
+
+## Response Interceptors
+
+Intercept and modify responses after they're received from the server.
+
+### Logging Responses
+
+```ts
+test('log response times', async ({ mcp }) => {
+  const timings: { method: string; duration: number }[] = [];
+
+  mcp.intercept.response((ctx) => {
+    timings.push({
+      method: ctx.request.method,
+      duration: ctx.durationMs,
+    });
+    return { action: 'passthrough' };
+  });
+
+  await mcp.tools.list();
+  await mcp.tools.call('my-tool', {});
+
+  console.log('Request timings:', timings);
+});
+```
+
+### Modifying Responses
+
+```ts
+test('add extra tool to list', async ({ mcp }) => {
+  mcp.intercept.response((ctx) => {
+    if (ctx.request.method === 'tools/list') {
+      const tools = ctx.response.result.tools || [];
+      return {
+        action: 'modify',
+        response: {
+          ...ctx.response,
+          result: {
+            tools: [
+              ...tools,
+              { name: 'injected-tool', description: 'Added by interceptor' },
+            ],
+          },
+        },
+      };
+    }
+    return { action: 'passthrough' };
+  });
+
+  const tools = await mcp.tools.list();
+  expect(tools).toContainTool('injected-tool');
+});
+```
+
+---
+
+## Convenience Helpers
+
+### Adding Latency
+
+```ts
+test('simulate slow responses', async ({ mcp }) => {
+  // Add 500ms delay to all requests
+  const removeDelay = mcp.intercept.delay(500);
+
+  const start = Date.now();
+  await mcp.tools.list();
+  const duration = Date.now() - start;
+
+  expect(duration).toBeGreaterThanOrEqual(500);
+
+  // Remove the delay
+  removeDelay();
+});
+```
+
+### Failing Specific Methods
+
+```ts
+test('simulate method failure', async ({ mcp }) => {
+  // Fail all resources/read calls
+  const removeFailure = mcp.intercept.failMethod(
+    'resources/read',
+    'Simulated storage failure'
+  );
+
+  await expect(mcp.resources.read('data://test'))
+    .rejects.toThrow('Simulated storage failure');
+
+  // Remove the failure
+  removeFailure();
+
+  // Now it works
+  const content = await mcp.resources.read('data://test');
+  expect(content).toBeDefined();
+});
+```
+
+---
+
+## Call Tracking
+
+Track how mocks are used:
+
+```ts
+test('verify mock calls', async ({ mcp }) => {
+  const handle = mcp.mock.tool('tracked-tool', { result: 'mock' });
+
+  // Make multiple calls
+  await mcp.tools.call('tracked-tool', { input: 'a' });
+  await mcp.tools.call('tracked-tool', { input: 'b' });
+
+  // Check call count
+  expect(handle.callCount()).toBe(2);
+
+  // Get all call details
+  const calls = handle.calls();
+  expect(calls[0].params.arguments.input).toBe('a');
+  expect(calls[1].params.arguments.input).toBe('b');
+});
+```
+
+---
+
+## One-Time Mocks
+
+Create mocks that only match a specific number of times:
+
+```ts
+test('simulate intermittent failure', async ({ mcp }) => {
+  // First call fails
+  mcp.mock.add({
+    method: 'tools/call',
+    params: { name: 'flaky-tool' },
+    response: mockResponse.error(-32603, 'Temporary failure'),
+    times: 1,
+  });
+
+  // Subsequent calls succeed
+  mcp.mock.add({
+    method: 'tools/call',
+    params: { name: 'flaky-tool' },
+    response: mockResponse.toolResult([
+      { type: 'text', text: '{"success": true}' },
+    ]),
+  });
+
+  // First call fails
+  const result1 = await mcp.tools.call('flaky-tool', {});
+  expect(result1).toBeError();
+
+  // Second call succeeds
+  const result2 = await mcp.tools.call('flaky-tool', {});
+  expect(result2).toBeSuccessful();
+});
+```
+
+---
+
+## mockResponse Helpers
+
+Pre-built response creators for common scenarios:
+
+```ts
+import { mockResponse } from '@frontmcp/testing';
+
+// Success responses
+mockResponse.success({ data: 'result' });
+mockResponse.toolResult([{ type: 'text', text: 'Hello' }]);
+mockResponse.toolsList([{ name: 'tool1' }, { name: 'tool2' }]);
+mockResponse.resourcesList([{ uri: 'file://a', name: 'A' }]);
+mockResponse.resourceRead([{ uri: 'file://a', text: 'content' }]);
+
+// Error responses
+mockResponse.error(-32603, 'Internal error');
+mockResponse.errors.methodNotFound('unknown');
+mockResponse.errors.resourceNotFound('file://missing');
+mockResponse.errors.invalidParams('Missing required field');
+mockResponse.errors.unauthorized();
+```
+
+---
+
+## Best Practices
+
+**Do:**
+
+- Mock expensive operations (external APIs, database calls)
+- Use `times: 1` to test retry logic
+- Clear mocks between tests if needed
+- Use convenience methods for simple cases
+
+**Don't:**
+
+- Mock everything - some tests should hit real code
+- Forget to remove interceptors after tests
+- Use mocking to hide bugs in your code
+- Over-engineer mock setups
+
+```ts
+// Good: Mock external dependency
+mcp.mock.tool('fetch-weather', { temp: 72 });
+
+// Bad: Mock internal logic you should test
+mcp.mock.tool('calculate-total', { total: 100 });
+// Better: Let calculate-total run and verify its logic
+```

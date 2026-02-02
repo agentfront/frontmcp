@@ -1,0 +1,336 @@
+---
+title: "@Prompt"
+description: "The @Prompt decorator defines an MCP prompt template that can be invoked by AI clients to generate structured prompts."
+icon: "message"
+---
+
+## Basic Usage
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'research-topic',
+  description: 'Research a topic thoroughly',
+  arguments: [
+    { name: 'topic', description: 'Topic to research', required: true },
+    { name: 'depth', description: 'Research depth', required: false },
+  ],
+})
+class ResearchPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    return {
+      description: `Research: ${args.topic}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please research the topic "${args.topic}" ${
+              args.depth ? `with ${args.depth} depth` : ''
+            }. Provide comprehensive information including key facts, history, and current relevance.`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Prompt(providedMetadata: PromptMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique prompt identifier |
+| `arguments` | `PromptArgument[]` | Prompt arguments |
+
+### Optional Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `title` | `string` | Human-readable title |
+| `description` | `string` | Prompt description |
+| `icons` | `Icon[]` | Icons for display |
+
+### Argument Definition
+
+```typescript
+interface PromptArgument {
+  name: string;         // Argument name
+  description?: string; // Argument description
+  required?: boolean;   // Whether required (default: false)
+}
+```
+
+## Return Format
+
+Prompts must return `GetPromptResult`:
+
+```typescript
+interface GetPromptResult {
+  description?: string;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: TextContent | ImageContent | EmbeddedResource;
+  }>;
+}
+```
+
+### Text Content
+
+```typescript
+{
+  role: 'user',
+  content: {
+    type: 'text',
+    text: 'Your prompt text here',
+  },
+}
+```
+
+### Image Content
+
+```typescript
+{
+  role: 'user',
+  content: {
+    type: 'image',
+    data: 'base64-encoded-image',
+    mimeType: 'image/png',
+  },
+}
+```
+
+### Embedded Resource
+
+```typescript
+{
+  role: 'user',
+  content: {
+    type: 'resource',
+    resource: {
+      uri: 'file://context.md',
+      text: 'Resource content',
+      mimeType: 'text/markdown',
+    },
+  },
+}
+```
+
+## Function-Based Alternative
+
+```typescript
+import { prompt } from '@frontmcp/sdk';
+
+const researchPrompt = prompt({
+  name: 'research-topic',
+  description: 'Research a topic',
+  arguments: [
+    { name: 'topic', required: true },
+  ],
+})((args, ctx) => ({
+  description: `Research: ${args.topic}`,
+  messages: [
+    {
+      role: 'user',
+      content: { type: 'text', text: `Research ${args.topic}` },
+    },
+  ],
+}));
+```
+
+## Multi-Message Prompts
+
+```typescript
+@Prompt({
+  name: 'code-review',
+  description: 'Review code with specific guidelines',
+  arguments: [
+    { name: 'code', required: true },
+    { name: 'language', required: true },
+  ],
+})
+class CodeReviewPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    return {
+      description: 'Code review prompt',
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `You are a ${args.language} expert code reviewer.`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: 'I understand. I will review the code for best practices, bugs, and improvements.',
+          },
+        },
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please review this code:\n\n\`\`\`${args.language}\n${args.code}\n\`\`\``,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+## Context Methods
+
+The `PromptContext` base class provides:
+
+```typescript
+async execute(args: Record<string, string>) {
+  // Dependency injection
+  const templateService = this.get(TemplateServiceToken);
+
+  // Access arguments
+  const topic = args.topic;
+
+  // Logging
+  this.logger.info('Building prompt', { args });
+
+  // Authentication
+  const auth = this.getAuthInfo();
+
+  // Error handling
+  if (!args.topic) {
+    this.fail(new Error('Topic is required'));
+  }
+
+  // Early return
+  this.respond({ description: '...', messages: [...] });
+}
+```
+
+## Full Example
+
+```typescript
+import { Prompt, PromptContext, App, FrontMcp } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'sql-query-builder',
+  title: 'SQL Query Builder',
+  description: 'Build SQL queries from natural language',
+  arguments: [
+    { name: 'request', description: 'Natural language query request', required: true },
+    { name: 'tables', description: 'Available table names (comma-separated)', required: true },
+    { name: 'dialect', description: 'SQL dialect (mysql, postgres, sqlite)', required: false },
+  ],
+})
+class SqlQueryBuilderPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    const dialect = args.dialect || 'postgres';
+    const tables = args.tables.split(',').map(t => t.trim());
+
+    return {
+      description: `SQL query for: ${args.request}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `You are an expert ${dialect} SQL developer. You have access to these tables: ${tables.join(', ')}.
+
+Generate a SQL query that accomplishes the following:
+${args.request}
+
+Requirements:
+- Use ${dialect} syntax
+- Include appropriate JOINs if needed
+- Add comments explaining complex parts
+- Optimize for readability
+
+Return only the SQL query with comments.`,
+          },
+        },
+      ],
+    };
+  }
+}
+
+@Prompt({
+  name: 'commit-message',
+  title: 'Git Commit Message',
+  description: 'Generate a commit message from changes',
+  arguments: [
+    { name: 'diff', description: 'Git diff output', required: true },
+    { name: 'style', description: 'Commit style (conventional, simple)', required: false },
+  ],
+})
+class CommitMessagePrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
+    const style = args.style || 'conventional';
+
+    const styleGuide = style === 'conventional'
+      ? 'Use conventional commit format: type(scope): description'
+      : 'Use a simple, descriptive format';
+
+    return {
+      description: 'Generate commit message',
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Analyze these code changes and generate a commit message.
+
+${styleGuide}
+
+Changes:
+\`\`\`diff
+${args.diff}
+\`\`\`
+
+Generate a concise, descriptive commit message.`,
+          },
+        },
+      ],
+    };
+  }
+}
+
+@App({
+  name: 'dev-prompts',
+  prompts: [SqlQueryBuilderPrompt, CommitMessagePrompt],
+})
+class DevPromptsApp {}
+
+@FrontMcp({
+  info: { name: 'Developer Prompts', version: '1.0.0' },
+  apps: [DevPromptsApp],
+})
+export default class DevPromptsServer {}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="PromptContext" icon="code" href="/frontmcp/sdk-reference/contexts/prompt-context">
+    Context class details
+  </Card>
+  <Card title="PromptRegistry" icon="database" href="/frontmcp/sdk-reference/registries/prompt-registry">
+    Prompt registry API
+  </Card>
+  <Card title="@Tool" icon="wrench" href="/frontmcp/sdk-reference/decorators/tool">
+    Define tools
+  </Card>
+  <Card title="@Agent" icon="robot" href="/frontmcp/sdk-reference/decorators/agent">
+    Define agents
+  </Card>
+</CardGroup>

@@ -1,0 +1,246 @@
+---
+title: "Context Classes Overview"
+description: "FrontMCP provides context classes that serve as the base for all entry types (tools, resources, prompts, agents, skills). These classes provide access to dependency injection, logging, authentication, and other services."
+icon: "layer-group"
+---
+
+## Class Hierarchy
+
+```
+ExecutionContextBase<Out>
+├── ToolContext<InSchema, OutSchema, In, Out>
+├── ResourceContext<Params, Out>
+├── AgentContext<InSchema, OutSchema, In, Out>
+└── SkillContext
+
+PromptContext (independent, similar interface)
+```
+
+## Common Features
+
+All context classes provide:
+
+### Dependency Injection
+
+```typescript
+// Required dependency (throws if not found)
+const service = this.get(ServiceToken);
+
+// Optional dependency (returns undefined if not found)
+const optional = this.tryGet(OptionalToken);
+```
+
+### Scope Access
+
+```typescript
+// Access registries
+const tools = this.scope.tools;
+const resources = this.scope.resources;
+const prompts = this.scope.prompts;
+const agents = this.scope.agents;
+const skills = this.scope.skills;
+```
+
+### Logging
+
+```typescript
+this.logger.debug('Debug message');
+this.logger.info('Info message');
+this.logger.warn('Warning message');
+this.logger.error('Error message');
+```
+
+### Authentication
+
+```typescript
+const auth = this.getAuthInfo();
+const user = auth.user;
+const token = auth.accessToken;
+```
+
+### Execution Tracking
+
+```typescript
+// Mark current stage (for debugging/profiling)
+this.mark('processing');
+this.mark('complete');
+```
+
+### Error Handling
+
+```typescript
+// Fail execution with error
+this.fail(new Error('Something went wrong'));
+
+// Access current error
+const error = this.error;
+```
+
+## Context-Specific Features
+
+<CardGroup cols={2}>
+  <Card title="ToolContext" icon="wrench" href="/frontmcp/sdk-reference/contexts/tool-context">
+    Notifications, progress, elicitation, platform detection
+  </Card>
+  <Card title="ResourceContext" icon="file" href="/frontmcp/sdk-reference/contexts/resource-context">
+    URI handling, parameter extraction
+  </Card>
+  <Card title="PromptContext" icon="message" href="/frontmcp/sdk-reference/contexts/prompt-context">
+    Argument handling, prompt building
+  </Card>
+  <Card title="AgentContext" icon="robot" href="/frontmcp/sdk-reference/contexts/agent-context">
+    LLM completion, tool execution, agent loop
+  </Card>
+  <Card title="SkillContext" icon="lightbulb" href="/frontmcp/sdk-reference/contexts/skill-context">
+    Instruction loading, skill building
+  </Card>
+  <Card title="ExecutionContextBase" icon="code" href="/frontmcp/sdk-reference/contexts/execution-context-base">
+    Base class with shared functionality
+  </Card>
+</CardGroup>
+
+## Context Extensions
+
+Plugins can extend all context classes with custom properties:
+
+```typescript
+// In RememberPlugin
+@Plugin({
+  name: 'remember',
+  contextExtensions: [
+    { property: 'remember', token: RememberAccessorToken },
+  ],
+})
+export class RememberPlugin {}
+
+// In any context
+class MyTool extends ToolContext {
+  async execute(input) {
+    // Access extended property
+    await this.remember.set('key', 'value');
+    const value = await this.remember.get('key');
+  }
+}
+```
+
+## Request Context
+
+All contexts can access the underlying request context:
+
+```typescript
+// Get request context (throws if not available)
+const ctx = this.context;
+
+// Properties available
+ctx.requestId;    // Unique request ID
+ctx.sessionId;    // Session ID
+ctx.scopeId;      // Scope ID
+ctx.timestamp;    // Request timestamp
+ctx.traceContext; // W3C trace context
+ctx.metadata;     // Request metadata
+
+// Context-scoped storage
+ctx.set('myKey', 'myValue');
+const value = ctx.get('myKey');
+
+// Timing
+ctx.mark('checkpoint1');
+const elapsed = ctx.elapsed('checkpoint1');
+```
+
+## HTTP Fetch
+
+All contexts provide context-aware fetch:
+
+```typescript
+async execute(input) {
+  // Auto-injects auth headers, trace context
+  const response = await this.fetch('https://api.example.com/data', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+
+  return response.json();
+}
+```
+
+## Configuration Access
+
+When ConfigPlugin is installed:
+
+```typescript
+async execute(input) {
+  // Typed access to environment variables
+  const apiKey = this.config.get('API_KEY');
+  const port = this.config.getNumber('PORT', 3000);
+  const debug = this.config.getBoolean('DEBUG', false);
+}
+```
+
+## Best Practices
+
+### Use Type Parameters
+
+```typescript
+@Tool({
+  name: 'my_tool',
+  inputSchema: { x: z.number() },
+  outputSchema: z.object({ result: z.number() }),
+})
+class MyTool extends ToolContext<
+  typeof inputSchema,
+  typeof outputSchema,
+  { x: number },
+  { result: number }
+> {
+  async execute(input: { x: number }): Promise<{ result: number }> {
+    return { result: input.x * 2 };
+  }
+}
+```
+
+### Handle Errors Gracefully
+
+```typescript
+async execute(input) {
+  try {
+    const result = await this.get(ServiceToken).process(input);
+    return result;
+  } catch (error) {
+    this.logger.error('Processing failed', { error });
+    this.fail(new ToolExecutionError('my_tool', error));
+  }
+}
+```
+
+### Use Stage Markers
+
+```typescript
+async execute(input) {
+  this.mark('validation');
+  await this.validate(input);
+
+  this.mark('processing');
+  const result = await this.process(input);
+
+  this.mark('complete');
+  return result;
+}
+```
+
+### Leverage Platform Detection
+
+```typescript
+async execute(input) {
+  const result = await this.process(input);
+
+  // Format differently based on platform
+  if (this.platform === 'claude') {
+    return formatForClaude(result);
+  } else if (this.platform === 'openai') {
+    return formatForOpenAI(result);
+  }
+
+  return result;
+}
+```
