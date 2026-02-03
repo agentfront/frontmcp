@@ -38,6 +38,8 @@ export interface ResolvedCodeCallVmOptions {
   disabledBuiltins: string[];
   disabledGlobals: string[];
   allowConsole: boolean;
+  maxSanitizeDepth: number;
+  maxSanitizeProperties: number;
 }
 
 /**

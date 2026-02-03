@@ -116,6 +116,8 @@ export default class EnclaveService {
       timeout: this.vmOptions.timeoutMs,
       maxToolCalls: this.vmOptions.maxSteps || 100,
       maxIterations: 10000,
+      maxSanitizeDepth: this.vmOptions.maxSanitizeDepth,
+      maxSanitizeProperties: this.vmOptions.maxSanitizeProperties,
       toolHandler,
       validate: true,
       transform: true,
