@@ -2,7 +2,7 @@ module.exports = {
   displayName: 'plugin-codecall',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  transformIgnorePatterns: ['node_modules/(?!(jose|enclave-vm)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(jose|@enclave-vm)/)'],
   moduleNameMapper: {
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
     '^@frontmcp/plugin-cache$': '<rootDir>/../plugin-cache/src/index.ts',

@@ -11,7 +11,7 @@
  * @packageDocumentation
  */
 
-import { Enclave, type CreateEnclaveOptions, type SecurityLevel } from 'enclave-vm';
+import { Enclave, type CreateEnclaveOptions, type SecurityLevel } from '@enclave-vm/core';
 import type { SecurityPolicy } from '../types';
 
 /**

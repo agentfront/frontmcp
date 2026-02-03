@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { Enclave, type ExecutionResult, type ToolHandler, type ReferenceSidecarOptions } from 'enclave-vm';
+import { Enclave, type ExecutionResult, type ToolHandler, type ReferenceSidecarOptions } from '@enclave-vm/core';
 import type CodeCallConfig from '../providers/code-call.config';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
