@@ -1,12 +1,6 @@
 name: Trigger External Docs Update
 
 on:
-  # Trigger on PR merge to release branches
-  pull_request:
-    types: [closed]
-    branches:
-      - "release/**"
-
   # Manual trigger
   workflow_dispatch:
     inputs:
