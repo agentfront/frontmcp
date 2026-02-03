@@ -172,6 +172,8 @@ export function buildInvalidRequestHeader(prmUrl: string, description?: string):
 /**
  * Parse a WWW-Authenticate header value
  *
+ * Uses character-by-character parsing to avoid ReDoS vulnerabilities.
+ *
  * @param header - The WWW-Authenticate header value
  * @returns Parsed header options
  */
@@ -183,13 +185,11 @@ export function parseWwwAuthenticate(header: string): WwwAuthenticateOptions {
     return result;
   }
 
-  // Extract parameters
+  // Extract parameters using safe character-by-character parsing
   const paramString = header.substring(6).trim();
-  const paramRegex = /(\w+)="([^"\\]*(?:\\.[^"\\]*)*)"/g;
-  let match: RegExpExecArray | null;
+  const params = parseQuotedParams(paramString);
 
-  while ((match = paramRegex.exec(paramString)) !== null) {
-    const [, key, value] = match;
+  for (const [key, value] of params) {
     const unescapedValue = unescapeQuotedString(value);
 
     switch (key.toLowerCase()) {
@@ -218,6 +218,78 @@ export function parseWwwAuthenticate(header: string): WwwAuthenticateOptions {
 }
 
 /**
+ * Parse key="value" pairs from a string using character-by-character parsing.
+ * This avoids ReDoS vulnerabilities from complex regex patterns.
+ */
+function parseQuotedParams(input: string): Array<[string, string]> {
+  const result: Array<[string, string]> = [];
+  let i = 0;
+  const len = input.length;
+
+  while (i < len) {
+    // Skip whitespace and commas
+    while (i < len && (input[i] === ' ' || input[i] === ',' || input[i] === '\t')) {
+      i++;
+    }
+    if (i >= len) break;
+
+    // Parse key (word characters)
+    const keyStart = i;
+    while (i < len && /\w/.test(input[i])) {
+      i++;
+    }
+    const key = input.slice(keyStart, i);
+    if (!key) break;
+
+    // Skip whitespace
+    while (i < len && (input[i] === ' ' || input[i] === '\t')) {
+      i++;
+    }
+
+    // Expect '='
+    if (i >= len || input[i] !== '=') {
+      // Skip to next comma or end
+      while (i < len && input[i] !== ',') i++;
+      continue;
+    }
+    i++; // skip '='
+
+    // Skip whitespace
+    while (i < len && (input[i] === ' ' || input[i] === '\t')) {
+      i++;
+    }
+
+    // Expect '"'
+    if (i >= len || input[i] !== '"') {
+      // Skip to next comma or end
+      while (i < len && input[i] !== ',') i++;
+      continue;
+    }
+    i++; // skip opening quote
+
+    // Parse value (handle escaped characters)
+    let value = '';
+    while (i < len && input[i] !== '"') {
+      if (input[i] === '\\' && i + 1 < len) {
+        // Escaped character
+        value += input[i + 1];
+        i += 2;
+      } else {
+        value += input[i];
+        i++;
+      }
+    }
+    if (i < len && input[i] === '"') {
+      i++; // skip closing quote
+    }
+
+    result.push([key, value]);
+  }
+
+  return result;
+}
+
+/**
  * Escape special characters for quoted-string per RFC 7230
  */
 function escapeQuotedString(value: string): string {
@@ -237,5 +309,10 @@ function unescapeQuotedString(value: string): string {
 function normalizePathSegment(path: string): string {
   if (!path || path === '/') return '';
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return normalized.replace(/\/+$/, '');
+  // Safe: Use character-by-character approach to trim trailing slashes
+  let end = normalized.length;
+  while (end > 0 && normalized[end - 1] === '/') {
+    end--;
+  }
+  return normalized.slice(0, end);
 }

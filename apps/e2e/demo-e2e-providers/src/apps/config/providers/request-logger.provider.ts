@@ -1,4 +1,5 @@
 import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+import { randomBytes } from '@frontmcp/utils';
 
 /**
  * Token for the RequestLoggerProvider
@@ -28,9 +29,16 @@ export interface RequestLoggerInfo {
 /**
  * Implementation class for RequestLogger
  */
+/**
+ * Generate a cryptographically secure random ID.
+ */
+function generateSecureId(prefix: string, bytes = 6): string {
+  return `${prefix}-${Buffer.from(randomBytes(bytes)).toString('hex')}`;
+}
+
 class RequestLoggerImpl implements RequestLogger {
   readonly createdAt = new Date();
-  readonly instanceId = `req-${Math.random().toString(36).substring(2, 10)}`;
+  readonly instanceId = generateSecureId('req');
   private logs: string[] = [];
 
   constructor(readonly requestId: string, readonly sessionId: string) {}
@@ -64,10 +72,10 @@ export const RequestLoggerProvider = AsyncProvider({
   scope: ProviderScope.CONTEXT,
   inject: () => [] as const,
   useFactory: async (): Promise<RequestLogger> => {
-    // Generate unique IDs for this request instance
+    // Generate unique IDs for this request instance using cryptographically secure randomness
     // In a real implementation, this would receive context from the tool
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const sessionId = `sess-${Math.random().toString(36).substring(2, 10)}`;
+    const requestId = `req-${Date.now()}-${Buffer.from(randomBytes(4)).toString('hex')}`;
+    const sessionId = generateSecureId('sess');
     return new RequestLoggerImpl(requestId, sessionId);
   },
 });

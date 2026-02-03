@@ -511,9 +511,18 @@ export const MCP_BRIDGE_RUNTIME = `
  * Useful for inline embedding in specific scenarios.
  */
 export function getMCPBridgeScript(): string {
-  // Extract the script content without the <script> tags
-  const match = MCP_BRIDGE_RUNTIME.match(/<script>([\s\S]*?)<\/script>/);
-  return match ? match[1].trim() : '';
+  // Extract the script content without the <script> tags using indexOf
+  // (safer than regex which can be vulnerable to ReDoS with nested quantifiers)
+  const openTag = '<script>';
+  const closeTag = '</script>';
+  const startIdx = MCP_BRIDGE_RUNTIME.indexOf(openTag);
+  const endIdx = MCP_BRIDGE_RUNTIME.lastIndexOf(closeTag);
+
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return '';
+  }
+
+  return MCP_BRIDGE_RUNTIME.slice(startIdx + openTag.length, endIdx).trim();
 }
 
 /**

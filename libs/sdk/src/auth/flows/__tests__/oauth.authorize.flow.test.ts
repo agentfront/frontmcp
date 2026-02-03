@@ -963,13 +963,75 @@ describe('OAuth Authorize Flow', () => {
   // ============================================
 
   describe('Invalid redirect_uri', () => {
+    /**
+     * Helper to validate redirect URIs safely.
+     * Only allows http: and https: schemes.
+     */
+    function isValidRedirectUri(uri: string): boolean {
+      try {
+        const url = new URL(uri);
+        // Only allow http and https schemes (case-insensitive via URL parsing)
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    }
+
     it('should reject non-URL redirect_uri', () => {
       expect(() => new URL('not-a-url')).toThrow();
+      expect(isValidRedirectUri('not-a-url')).toBe(false);
     });
 
-    it('should identify javascript: URI as malicious', () => {
-      const maliciousUri = 'javascript:alert(1)';
-      expect(maliciousUri.startsWith('javascript:')).toBe(true);
+    it('should identify javascript: URI as malicious (all case variations)', () => {
+      const maliciousUris = [
+        'javascript:alert(1)',
+        'JAVASCRIPT:alert(1)',
+        'JaVaScRiPt:alert(1)',
+        'javascript:void(0)',
+      ];
+
+      for (const uri of maliciousUris) {
+        // The URL class normalizes protocol to lowercase
+        const url = new URL(uri);
+        expect(url.protocol).toBe('javascript:');
+        expect(isValidRedirectUri(uri)).toBe(false);
+      }
+    });
+
+    it('should identify data: URI as malicious', () => {
+      const dataUris = [
+        'data:text/html,<script>alert(1)</script>',
+        'DATA:text/html,<script>alert(1)</script>',
+        'data:application/javascript,alert(1)',
+      ];
+
+      for (const uri of dataUris) {
+        expect(isValidRedirectUri(uri)).toBe(false);
+      }
+    });
+
+    it('should identify vbscript: URI as malicious', () => {
+      const vbUris = [
+        'vbscript:msgbox(1)',
+        'VBSCRIPT:msgbox(1)',
+      ];
+
+      for (const uri of vbUris) {
+        expect(isValidRedirectUri(uri)).toBe(false);
+      }
+    });
+
+    it('should accept valid http/https URIs', () => {
+      const validUris = [
+        'http://localhost:3000/callback',
+        'https://example.com/oauth/callback',
+        'HTTP://EXAMPLE.COM/CALLBACK',
+        'HTTPS://EXAMPLE.COM/CALLBACK',
+      ];
+
+      for (const uri of validUris) {
+        expect(isValidRedirectUri(uri)).toBe(true);
+      }
     });
   });
 });

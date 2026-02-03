@@ -9,6 +9,7 @@
 
 import type { RendererAdapter, RenderContext, RenderOptions, RenderResult } from './types';
 import type { UIType } from '../../types/ui-runtime';
+import { sanitizeHtmlContent } from '../sanitizer';
 
 /**
  * HTML Renderer Adapter.
@@ -59,7 +60,8 @@ export class HtmlRendererAdapter implements RendererAdapter {
   ): Promise<RenderResult> {
     try {
       const html = await this.render(content, context);
-      target.innerHTML = html;
+      // Sanitize HTML before inserting into DOM to prevent XSS
+      target.innerHTML = sanitizeHtmlContent(html);
 
       // Dispatch event to notify that content has been rendered
       target.dispatchEvent(

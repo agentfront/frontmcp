@@ -12,6 +12,22 @@ import type { DisplayMode } from '../types';
 import { BaseAdapter, DEFAULT_CAPABILITIES } from './base-adapter';
 
 /**
+ * Allowed Claude domains for security validation.
+ */
+const CLAUDE_DOMAINS = ['claude.ai', 'anthropic.com'];
+
+/**
+ * Check if a hostname is a valid Claude domain.
+ * Validates exact match or proper subdomain (prevents attacker.com/claude.ai attacks).
+ */
+function isValidClaudeDomain(hostname: string): boolean {
+  const lowerHost = hostname.toLowerCase();
+  return CLAUDE_DOMAINS.some(domain =>
+    lowerHost === domain || lowerHost.endsWith('.' + domain)
+  );
+}
+
+/**
  * Claude adapter for Anthropic's Claude AI.
  *
  * Features:
@@ -78,9 +94,9 @@ export class ClaudeAdapter extends BaseAdapter {
     if (win.__claudeArtifact) return true;
 
     // Check URL patterns for Claude (legacy only)
+    // Use proper domain validation to prevent subdomain attacks
     if (typeof location !== 'undefined') {
-      const href = location.href;
-      if (href.includes('claude.ai') || href.includes('anthropic.com')) {
+      if (isValidClaudeDomain(location.hostname)) {
         return true;
       }
     }

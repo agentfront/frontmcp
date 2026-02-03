@@ -1,5 +1,11 @@
 export function trimSlash(s: string) {
-  return (s ?? '').replace(/\/+$/, '');
+  // Safe: Use simple character-by-character approach to avoid ReDoS
+  const str = s ?? '';
+  let end = str.length;
+  while (end > 0 && str[end - 1] === '/') {
+    end--;
+  }
+  return str.slice(0, end);
 }
 export function normalizeIssuer(u?: string) {
   return trimSlash(String(u ?? ''));

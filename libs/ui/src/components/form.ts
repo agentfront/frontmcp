@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from '../layouts/base';
+import { sanitizeHtmlContent } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Input Types
@@ -41,7 +42,11 @@ export type InputState = 'default' | 'error' | 'success' | 'warning';
 // ============================================
 
 /**
- * Base input options
+ * Base input options.
+ *
+ * **Security Note**: The `iconBefore` and `iconAfter` parameters accept raw HTML.
+ * Do NOT pass untrusted user input without sanitization.
+ * Use the `sanitize` option to automatically sanitize icon content.
  */
 export interface InputOptions {
   /** Input type */
@@ -54,11 +59,11 @@ export interface InputOptions {
   value?: string;
   /** Placeholder text */
   placeholder?: string;
-  /** Label text */
+  /** Label text (will be HTML-escaped) */
   label?: string;
-  /** Helper text */
+  /** Helper text (will be HTML-escaped) */
   helper?: string;
-  /** Error message */
+  /** Error message (will be HTML-escaped) */
   error?: string;
   /** Input size */
   size?: InputSize;
@@ -84,10 +89,21 @@ export interface InputOptions {
   className?: string;
   /** Data attributes */
   data?: Record<string, string>;
-  /** Icon before input */
+  /**
+   * Icon before input (raw HTML, e.g., SVG).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   iconBefore?: string;
-  /** Icon after input */
+  /**
+   * Icon after input (raw HTML, e.g., SVG).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   iconAfter?: string;
+  /**
+   * If true, sanitizes icon HTML content to prevent XSS.
+   * @default false
+   */
+  sanitize?: boolean;
 }
 
 /**
@@ -234,11 +250,16 @@ export function input(options: InputOptions): string {
     data,
     iconBefore,
     iconAfter,
+    sanitize = false,
   } = options;
+
+  // Sanitize icon HTML content if requested
+  const safeIconBefore = sanitize && iconBefore ? sanitizeHtmlContent(iconBefore) : iconBefore;
+  const safeIconAfter = sanitize && iconAfter ? sanitizeHtmlContent(iconAfter) : iconAfter;
 
   const sizeClasses = getInputSizeClasses(size);
   const stateClasses = getInputStateClasses(state);
-  const hasIcon = iconBefore || iconAfter;
+  const hasIcon = safeIconBefore || safeIconAfter;
 
   const baseClasses = [
     'w-full rounded-lg border bg-white',
@@ -247,7 +268,7 @@ export function input(options: InputOptions): string {
     disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : '',
     sizeClasses,
     stateClasses,
-    hasIcon ? (iconBefore ? 'pl-10' : '') + (iconAfter ? ' pr-10' : '') : '',
+    hasIcon ? (safeIconBefore ? 'pl-10' : '') + (safeIconAfter ? ' pr-10' : '') : '',
     className,
   ]
     .filter(Boolean)
@@ -285,12 +306,12 @@ export function input(options: InputOptions): string {
 
   const errorHtml = error ? `<p class="mt-1.5 text-sm text-danger">${escapeHtml(error)}</p>` : '';
 
-  const iconBeforeHtml = iconBefore
-    ? `<span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">${iconBefore}</span>`
+  const iconBeforeHtml = safeIconBefore
+    ? `<span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">${safeIconBefore}</span>`
     : '';
 
-  const iconAfterHtml = iconAfter
-    ? `<span class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary">${iconAfter}</span>`
+  const iconAfterHtml = safeIconAfter
+    ? `<span class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary">${safeIconAfter}</span>`
     : '';
 
   const inputHtml = hasIcon

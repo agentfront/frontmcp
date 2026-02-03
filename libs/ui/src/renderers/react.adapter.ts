@@ -90,13 +90,25 @@ export class ReactRendererAdapter implements RendererAdapter {
     }
 
     if (typeof content === 'string') {
-      // Check for JSX patterns
-      return (
+      // Check for JSX patterns using safe substring checks instead of complex regex
+      // The original regex /function\s+\w+\s*\([^)]*\)\s*\{[\s\S]*return\s*[\s\S]*</ was vulnerable to ReDoS
+      if (
         content.includes('React.createElement') ||
         content.includes('jsx(') ||
-        content.includes('jsxs(') ||
-        /function\s+\w+\s*\([^)]*\)\s*\{[\s\S]*return\s*[\s\S]*</.test(content)
-      );
+        content.includes('jsxs(')
+      ) {
+        return true;
+      }
+      // Check for function pattern with return and JSX using a safer approach
+      // Look for 'function' followed by 'return' followed by '<' within reasonable distance
+      const funcIndex = content.indexOf('function');
+      if (funcIndex !== -1) {
+        const afterFunc = content.slice(funcIndex, Math.min(funcIndex + 2000, content.length));
+        if (afterFunc.includes('return') && afterFunc.includes('<')) {
+          return true;
+        }
+      }
+      return false;
     }
 
     return false;

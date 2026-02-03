@@ -397,3 +397,316 @@ export function detectPII(
     fields,
   };
 }
+
+// ============================================
+// HTML Sanitization
+// ============================================
+
+/**
+ * Event handler attributes to remove.
+ */
+const HTML_EVENT_HANDLERS = new Set([
+  'onabort', 'onafterprint', 'onauxclick', 'onbeforematch', 'onbeforeprint',
+  'onbeforetoggle', 'onbeforeunload', 'onblur', 'oncancel', 'oncanplay',
+  'oncanplaythrough', 'onchange', 'onclick', 'onclose', 'oncontextlost',
+  'oncontextmenu', 'oncontextrestored', 'oncopy', 'oncuechange', 'oncut',
+  'ondblclick', 'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover',
+  'ondragstart', 'ondrop', 'ondurationchange', 'onemptied', 'onended', 'onerror',
+  'onfocus', 'onformdata', 'onhashchange', 'oninput', 'oninvalid', 'onkeydown',
+  'onkeypress', 'onkeyup', 'onlanguagechange', 'onload', 'onloadeddata',
+  'onloadedmetadata', 'onloadstart', 'onmessage', 'onmessageerror', 'onmousedown',
+  'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover',
+  'onmouseup', 'onoffline', 'ononline', 'onpagehide', 'onpageshow', 'onpaste',
+  'onpause', 'onplay', 'onplaying', 'onpopstate', 'onprogress', 'onratechange',
+  'onrejectionhandled', 'onreset', 'onresize', 'onscroll', 'onscrollend',
+  'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
+  'onstalled', 'onstorage', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+  'onunhandledrejection', 'onunload', 'onvolumechange', 'onwaiting', 'onwheel',
+]);
+
+/**
+ * Tags to remove completely (including content).
+ */
+const HTML_DANGEROUS_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'applet', 'base']);
+
+/**
+ * Dangerous URL schemes.
+ */
+const HTML_DANGEROUS_SCHEMES = ['javascript:', 'data:', 'vbscript:'];
+
+/**
+ * Sanitize HTML content to prevent XSS attacks.
+ * Uses DOM-based sanitization when available (browser), falls back to regex-based approach.
+ *
+ * @param html - HTML string to sanitize
+ * @returns Sanitized HTML string
+ */
+export function sanitizeHtmlContent(html: string): string {
+  // In browser environment with DOMParser, use DOM-based sanitization
+  if (typeof DOMParser !== 'undefined' && typeof document !== 'undefined') {
+    return sanitizeHtmlViaDom(html);
+  }
+
+  // Fallback: Use character-by-character parsing (safer than regex)
+  return sanitizeHtmlViaParser(html);
+}
+
+/**
+ * DOM-based HTML sanitization (browser only).
+ */
+function sanitizeHtmlViaDom(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  // Remove dangerous tags
+  for (const tagName of HTML_DANGEROUS_TAGS) {
+    const elements = doc.querySelectorAll(tagName);
+    elements.forEach(el => el.remove());
+  }
+
+  // Remove dangerous attributes from all elements
+  const allElements = doc.querySelectorAll('*');
+  allElements.forEach(el => {
+    const attrsToRemove: string[] = [];
+
+    for (const attr of Array.from(el.attributes)) {
+      const nameLower = attr.name.toLowerCase();
+
+      // Remove event handlers
+      if (nameLower.startsWith('on') || HTML_EVENT_HANDLERS.has(nameLower)) {
+        attrsToRemove.push(attr.name);
+        continue;
+      }
+
+      // Check URL attributes for dangerous schemes
+      if (['href', 'src', 'action', 'formaction', 'data', 'poster', 'codebase'].includes(nameLower)) {
+        const valueLower = attr.value.toLowerCase().trim();
+        if (HTML_DANGEROUS_SCHEMES.some(scheme => valueLower.startsWith(scheme))) {
+          attrsToRemove.push(attr.name);
+        }
+      }
+
+      // Check style for dangerous values
+      if (nameLower === 'style') {
+        const styleLower = attr.value.toLowerCase();
+        if (styleLower.includes('expression(') || styleLower.includes('javascript:') || styleLower.includes('url(')) {
+          attrsToRemove.push(attr.name);
+        }
+      }
+    }
+
+    attrsToRemove.forEach(name => el.removeAttribute(name));
+  });
+
+  return doc.body.innerHTML;
+}
+
+/**
+ * Character-by-character HTML sanitization (for non-browser environments).
+ */
+function sanitizeHtmlViaParser(html: string): string {
+  const result: string[] = [];
+  let i = 0;
+  const len = html.length;
+
+  while (i < len) {
+    if (html[i] === '<') {
+      const tagEnd = findTagEnd(html, i);
+      if (tagEnd === -1) {
+        result.push(html[i]);
+        i++;
+        continue;
+      }
+
+      const tagContent = html.slice(i + 1, tagEnd);
+      const tagInfo = parseTagContent(tagContent);
+
+      if (!tagInfo) {
+        result.push(html[i]);
+        i++;
+        continue;
+      }
+
+      const { tagName, isClosing, isSelfClosing, attributes } = tagInfo;
+      const tagLower = tagName.toLowerCase();
+
+      // Skip dangerous tags
+      if (HTML_DANGEROUS_TAGS.has(tagLower)) {
+        if (!isClosing && !isSelfClosing) {
+          // Skip to closing tag
+          const closeTag = `</${tagLower}`;
+          const closeIdx = html.toLowerCase().indexOf(closeTag, tagEnd + 1);
+          if (closeIdx !== -1) {
+            const closeEnd = html.indexOf('>', closeIdx);
+            i = closeEnd !== -1 ? closeEnd + 1 : tagEnd + 1;
+          } else {
+            i = tagEnd + 1;
+          }
+        } else {
+          i = tagEnd + 1;
+        }
+        continue;
+      }
+
+      // Build sanitized tag
+      const safeAttrs = sanitizeAttributes(attributes);
+      if (isClosing) {
+        result.push(`</${tagName}>`);
+      } else if (isSelfClosing) {
+        result.push(`<${tagName}${safeAttrs} />`);
+      } else {
+        result.push(`<${tagName}${safeAttrs}>`);
+      }
+      i = tagEnd + 1;
+    } else {
+      result.push(html[i]);
+      i++;
+    }
+  }
+
+  return result.join('');
+}
+
+/**
+ * Find the closing '>' of a tag.
+ */
+function findTagEnd(html: string, start: number): number {
+  let i = start + 1;
+  let inQuote: string | null = null;
+
+  while (i < html.length) {
+    if (inQuote) {
+      if (html[i] === inQuote) inQuote = null;
+    } else {
+      if (html[i] === '"' || html[i] === "'") {
+        inQuote = html[i];
+      } else if (html[i] === '>') {
+        return i;
+      }
+    }
+    i++;
+  }
+
+  return -1;
+}
+
+/**
+ * Parse tag content to extract name and attributes.
+ */
+function parseTagContent(content: string): {
+  tagName: string;
+  isClosing: boolean;
+  isSelfClosing: boolean;
+  attributes: Array<{ name: string; value: string }>;
+} | null {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  let idx = 0;
+  const isClosing = trimmed[0] === '/';
+  if (isClosing) idx++;
+
+  // Skip whitespace
+  while (idx < trimmed.length && /\s/.test(trimmed[idx])) idx++;
+
+  // Parse tag name
+  const nameStart = idx;
+  while (idx < trimmed.length && /[a-zA-Z0-9]/.test(trimmed[idx])) idx++;
+  const tagName = trimmed.slice(nameStart, idx);
+
+  if (!tagName) return null;
+
+  // Check for self-closing
+  const isSelfClosing = trimmed.endsWith('/');
+
+  // Parse attributes
+  const attributes: Array<{ name: string; value: string }> = [];
+  const attrPart = isSelfClosing ? trimmed.slice(idx, -1) : trimmed.slice(idx);
+
+  let attrIdx = 0;
+  while (attrIdx < attrPart.length) {
+    // Skip whitespace
+    while (attrIdx < attrPart.length && /\s/.test(attrPart[attrIdx])) attrIdx++;
+    if (attrIdx >= attrPart.length) break;
+
+    // Parse attribute name
+    const attrNameStart = attrIdx;
+    while (attrIdx < attrPart.length && /[a-zA-Z0-9_-]/.test(attrPart[attrIdx])) attrIdx++;
+    const attrName = attrPart.slice(attrNameStart, attrIdx);
+
+    if (!attrName) {
+      attrIdx++;
+      continue;
+    }
+
+    // Skip whitespace
+    while (attrIdx < attrPart.length && /\s/.test(attrPart[attrIdx])) attrIdx++;
+
+    let attrValue = '';
+    if (attrIdx < attrPart.length && attrPart[attrIdx] === '=') {
+      attrIdx++; // skip '='
+
+      // Skip whitespace
+      while (attrIdx < attrPart.length && /\s/.test(attrPart[attrIdx])) attrIdx++;
+
+      // Parse value
+      if (attrIdx < attrPart.length && (attrPart[attrIdx] === '"' || attrPart[attrIdx] === "'")) {
+        const quote = attrPart[attrIdx];
+        attrIdx++; // skip opening quote
+        const valueStart = attrIdx;
+        while (attrIdx < attrPart.length && attrPart[attrIdx] !== quote) attrIdx++;
+        attrValue = attrPart.slice(valueStart, attrIdx);
+        if (attrIdx < attrPart.length) attrIdx++; // skip closing quote
+      } else {
+        const valueStart = attrIdx;
+        while (attrIdx < attrPart.length && !/\s/.test(attrPart[attrIdx])) attrIdx++;
+        attrValue = attrPart.slice(valueStart, attrIdx);
+      }
+    }
+
+    attributes.push({ name: attrName, value: attrValue });
+  }
+
+  return { tagName, isClosing, isSelfClosing, attributes };
+}
+
+/**
+ * Sanitize attributes, removing dangerous ones.
+ */
+function sanitizeAttributes(attributes: Array<{ name: string; value: string }>): string {
+  const safe: string[] = [];
+
+  for (const { name, value } of attributes) {
+    const nameLower = name.toLowerCase();
+
+    // Skip event handlers
+    if (nameLower.startsWith('on') || HTML_EVENT_HANDLERS.has(nameLower)) {
+      continue;
+    }
+
+    // Check URL attributes for dangerous schemes
+    if (['href', 'src', 'action', 'formaction', 'data', 'poster', 'codebase'].includes(nameLower)) {
+      const valueLower = value.toLowerCase().trim();
+      if (HTML_DANGEROUS_SCHEMES.some(scheme => valueLower.startsWith(scheme))) {
+        continue;
+      }
+    }
+
+    // Check style for dangerous values
+    if (nameLower === 'style') {
+      const styleLower = value.toLowerCase();
+      if (styleLower.includes('expression(') || styleLower.includes('javascript:') || styleLower.includes('url(')) {
+        continue;
+      }
+    }
+
+    // Escape value and add
+    const escapedValue = value
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    safe.push(` ${name}="${escapedValue}"`);
+  }
+
+  return safe.join('');
+}

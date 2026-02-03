@@ -193,7 +193,13 @@ export function base64urlEncode(data: Uint8Array): string {
   }
 
   // Convert to base64url: replace + with -, / with _, and remove padding
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // Safe: Use character-by-character approach to trim trailing '=' to avoid ReDoS
+  let result = base64.replace(/\+/g, '-').replace(/\//g, '_');
+  let end = result.length;
+  while (end > 0 && result[end - 1] === '=') {
+    end--;
+  }
+  return result.slice(0, end);
 }
 
 /**

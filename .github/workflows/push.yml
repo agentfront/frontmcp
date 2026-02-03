@@ -16,6 +16,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Minimal permissions for security (least-privilege principle)
+permissions:
+  contents: read
+
 jobs:
   # Shared setup job that other jobs can reference
   setup:

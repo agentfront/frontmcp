@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from '../layouts/base';
+import { sanitizeHtmlContent } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Card Types
@@ -21,20 +22,31 @@ export type CardVariant = 'default' | 'outlined' | 'elevated' | 'filled' | 'ghos
 export type CardSize = 'sm' | 'md' | 'lg';
 
 /**
- * Card component options
+ * Card component options.
+ *
+ * **Security Note**: The `headerActions`, `footer`, and `content` parameters accept raw HTML.
+ * Do NOT pass untrusted user input to these parameters without sanitization.
+ * Use `escapeHtml()` from `@frontmcp/ui/layouts` for text content, or use the
+ * `sanitize` option to automatically sanitize HTML content.
  */
 export interface CardOptions {
   /** Card variant */
   variant?: CardVariant;
   /** Card size (padding) */
   size?: CardSize;
-  /** Card title */
+  /** Card title (will be HTML-escaped) */
   title?: string;
-  /** Card subtitle/description */
+  /** Card subtitle/description (will be HTML-escaped) */
   subtitle?: string;
-  /** Header actions (HTML) */
+  /**
+   * Header actions (raw HTML).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   headerActions?: string;
-  /** Footer content (HTML) */
+  /**
+   * Footer content (raw HTML).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   footer?: string;
   /** Additional CSS classes */
   className?: string;
@@ -46,6 +58,12 @@ export interface CardOptions {
   clickable?: boolean;
   /** Click handler URL */
   href?: string;
+  /**
+   * If true, sanitizes HTML content to prevent XSS.
+   * Removes script tags, event handlers, and dangerous attributes.
+   * @default false
+   */
+  sanitize?: boolean;
 }
 
 // ============================================
@@ -89,7 +107,13 @@ function buildDataAttrs(data?: Record<string, string>): string {
 }
 
 /**
- * Build a card component
+ * Build a card component.
+ *
+ * @param content - Card body content (raw HTML).
+ *   **Warning**: Do not pass untrusted user input without sanitization.
+ *   Use the `sanitize: true` option to automatically sanitize content.
+ * @param options - Card options
+ * @returns HTML string for the card
  */
 export function card(content: string, options: CardOptions = {}): string {
   const {
@@ -104,7 +128,14 @@ export function card(content: string, options: CardOptions = {}): string {
     data,
     clickable = false,
     href,
+    sanitize = false,
   } = options;
+
+  // Sanitize raw HTML content if requested
+  // codeql[js/html-constructed-from-input]: content, headerActions, and footer are intentionally raw HTML for composability; sanitize option available
+  const safeContent = sanitize ? sanitizeHtmlContent(content) : content;
+  const safeHeaderActions = sanitize && headerActions ? sanitizeHtmlContent(headerActions) : headerActions;
+  const safeFooter = sanitize && footer ? sanitizeHtmlContent(footer) : footer;
 
   const variantClasses = getVariantClasses(variant);
   const sizeClasses = getSizeClasses(size);
@@ -115,32 +146,32 @@ export function card(content: string, options: CardOptions = {}): string {
   const idAttr = id ? `id="${escapeHtml(id)}"` : '';
 
   // Build header if title exists
-  const hasHeader = title || subtitle || headerActions;
+  const hasHeader = title || subtitle || safeHeaderActions;
   const headerHtml = hasHeader
     ? `<div class="flex items-start justify-between mb-4">
         <div>
           ${title ? `<h3 class="text-lg font-semibold text-text-primary">${escapeHtml(title)}</h3>` : ''}
           ${subtitle ? `<p class="text-sm text-text-secondary mt-1">${escapeHtml(subtitle)}</p>` : ''}
         </div>
-        ${headerActions ? `<div class="flex items-center gap-2">${headerActions}</div>` : ''}
+        ${safeHeaderActions ? `<div class="flex items-center gap-2">${safeHeaderActions}</div>` : ''}
       </div>`
     : '';
 
   // Build footer if exists
-  const footerHtml = footer ? `<div class="mt-4 pt-4 border-t border-divider">${footer}</div>` : '';
+  const footerHtml = safeFooter ? `<div class="mt-4 pt-4 border-t border-divider">${safeFooter}</div>` : '';
 
   // Wrap in anchor tag if href provided
   if (href) {
     return `<a href="${escapeHtml(href)}" class="${allClasses}" ${idAttr} ${dataAttrs}>
       ${headerHtml}
-      ${content}
+      ${safeContent}
       ${footerHtml}
     </a>`;
   }
 
   return `<div class="${allClasses}" ${idAttr} ${dataAttrs}>
     ${headerHtml}
-    ${content}
+    ${safeContent}
     ${footerHtml}
   </div>`;
 }
