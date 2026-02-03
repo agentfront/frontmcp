@@ -224,7 +224,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
 CodeCall uses the **AgentScript preset** - the most restrictive preset designed for LLM-generated code:
 
 ```ts
-import { createAgentScriptPreset } from 'ast-guard';
+import { createAgentScriptPreset } from '@enclave-vm/ast';
 
 const preset = createAgentScriptPreset({
   // Whitelist-only globals
@@ -396,7 +396,7 @@ The Scoring Gate supports pluggable scorers for different deployment scenarios:
 ### Configuration
 
 ```ts
-import { createEnclave } from 'enclave-vm';
+import { createEnclave } from '@enclave-vm/core';
 
 const enclave = createEnclave({
   scoringGate: {
@@ -515,7 +515,7 @@ Rules are evaluated in a specific order for efficiency:
 #### Extending with Custom Rules
 
 ```ts
-import { RuleBasedScorer, ScoringRule } from 'enclave-vm';
+import { RuleBasedScorer, ScoringRule } from '@enclave-vm/core';
 
 const customRule: ScoringRule = {
   id: 'CUSTOM_PII_ACCESS',
@@ -645,7 +645,7 @@ CodeCallPlugin.init({
 For environments requiring **OS-level memory isolation**, enable the Worker Pool Adapter:
 
 ```ts
-import { Enclave } from 'enclave-vm';
+import { Enclave } from '@enclave-vm/core';
 
 const enclave = new Enclave({
   adapter: 'worker_threads',  // Enable Worker Pool

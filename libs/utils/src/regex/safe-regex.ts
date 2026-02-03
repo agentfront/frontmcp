@@ -5,7 +5,7 @@
  * attacks by validating patterns and enforcing input length limits.
  */
 
-import { analyzeForReDoS, REDOS_THRESHOLDS } from 'ast-guard';
+import { analyzeForReDoS, REDOS_THRESHOLDS } from '@enclave-vm/ast';
 
 /**
  * Default maximum input length for safe regex operations.

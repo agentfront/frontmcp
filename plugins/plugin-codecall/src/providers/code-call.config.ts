@@ -84,6 +84,8 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
           'global',
           'globalThis',
         ],
+        maxSanitizeDepth: 10,
+        maxSanitizeProperties: 1000,
       };
 
     case 'balanced':
@@ -95,6 +97,8 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
         maxSteps: 10000,
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process', 'fetch'],
+        maxSanitizeDepth: 50,
+        maxSanitizeProperties: 5000,
       };
 
     case 'experimental':
@@ -106,6 +110,8 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
         maxSteps: 20000,
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process'],
+        maxSanitizeDepth: 100,
+        maxSanitizeProperties: 20000,
       };
 
     case 'secure':
@@ -127,6 +133,8 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
           'global',
           'globalThis',
         ],
+        maxSanitizeDepth: 50,
+        maxSanitizeProperties: 2000,
       };
   }
 }

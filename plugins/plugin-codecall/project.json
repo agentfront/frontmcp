@@ -28,7 +28,14 @@
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
-          "external": ["enclave-vm", "vectoriadb", "@frontmcp/sdk", "@frontmcp/plugin-cache", "zod", "reflect-metadata"]
+          "external": [
+            "@enclave-vm/core",
+            "vectoriadb",
+            "@frontmcp/sdk",
+            "@frontmcp/plugin-cache",
+            "zod",
+            "reflect-metadata"
+          ]
         }
       }
     },
@@ -47,7 +54,14 @@
         "platform": "node",
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },
-          "external": ["enclave-vm", "vectoriadb", "@frontmcp/sdk", "@frontmcp/plugin-cache", "zod", "reflect-metadata"]
+          "external": [
+            "@enclave-vm/core",
+            "vectoriadb",
+            "@frontmcp/sdk",
+            "@frontmcp/plugin-cache",
+            "zod",
+            "reflect-metadata"
+          ]
         }
       }
     },

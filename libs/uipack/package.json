@@ -62,7 +62,7 @@
   "dependencies": {
     "@frontmcp/utils": "0.8.0",
     "@swc/core": "^1.5.0",
-    "enclave-vm": "^2.7.0",
+    "@enclave-vm/core": "^2.10.1",
     "esbuild": "^0.27.1",
     "handlebars": "^4.7.8",
     "zod": "^4.0.0"

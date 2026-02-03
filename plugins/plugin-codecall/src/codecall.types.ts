@@ -100,6 +100,20 @@ export const codeCallVmOptionsSchema = z
      * Defaults vary by preset
      */
     allowConsole: z.boolean().optional(),
+
+    /**
+     * Maximum nesting depth for sanitized output values
+     * Prevents deeply nested objects from causing stack overflow
+     * @default varies by preset (secure: 50)
+     */
+    maxSanitizeDepth: z.number().positive().optional(),
+
+    /**
+     * Maximum properties per object in sanitized output values
+     * Limits array sizes and object keys in return values
+     * @default varies by preset (secure: 2000)
+     */
+    maxSanitizeProperties: z.number().positive().optional(),
   })
   .default(() => DEFAULT_VM_OPTIONS);
 
