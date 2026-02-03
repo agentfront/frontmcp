@@ -505,36 +505,45 @@ jobs:
 
       - name: Trigger docs sync
         if: ${{ needs.prepare.outputs.is_prerelease != 'true' }}
+        continue-on-error: true
+        uses: actions/github-script@v7
         env:
-          DOCS_REPO_PAT: ${{ secrets.DOCS_REPO_PAT }}
-        run: |
-          # Skip if no docs repo PAT configured
-          if [ -z "$DOCS_REPO_PAT" ]; then
-            echo "Docs repo PAT not configured, skipping docs sync"
-            exit 0
-          fi
+          VERSION: ${{ needs.prepare.outputs.version }}
+          VERSION_MINOR: ${{ needs.prepare.outputs.release_line }}
+        with:
+          github-token: ${{ secrets.DOCS_SYNC_TOKEN }}
+          script: |
+            const tag = `v${process.env.VERSION}`;
+            const versionMinor = process.env.VERSION_MINOR;
+            const sha = context.sha;
 
-          # Skip if no Card MDX was generated
-          if [ ! -s /tmp/card-mdx.txt ]; then
-            echo "No Card MDX generated, skipping docs sync"
-            exit 0
-          fi
+            console.log(`Triggering docs sync for frontmcp`);
+            console.log(`  Tag: ${tag}`);
+            console.log(`  SHA: ${sha}`);
+            console.log(`  Version minor: ${versionMinor}`);
 
-          VERSION="${{ needs.prepare.outputs.version }}"
-
-          # Trigger docs aggregator workflow with HTTP status capture
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $DOCS_REPO_PAT" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/agentfront/docs/dispatches \
-            -d "{\"event_type\":\"frontmcp-release\",\"client_payload\":{\"version\":\"$VERSION\",\"repo\":\"frontmcp\"}}")
-
-          if [ "$HTTP_CODE" -ne 204 ]; then
-            echo "::warning::Docs sync dispatch returned HTTP $HTTP_CODE (expected 204)"
-          fi
-
-          echo "Triggered docs sync for v$VERSION"
+            try {
+              await github.rest.repos.createDispatchEvent({
+                owner: 'agentfront',
+                repo: 'docs',
+                event_type: 'sync-docs',
+                client_payload: {
+                  repo: 'frontmcp',
+                  sha: sha,
+                  tag: tag,
+                  version_minor: versionMinor
+                }
+              });
+              console.log(`Successfully triggered docs sync for ${tag}`);
+            } catch (error) {
+              console.error(`Failed to trigger docs sync: ${error.message}`);
+              if (error.status === 404) {
+                console.error('Check that DOCS_SYNC_TOKEN has access to agentfront/docs');
+              } else if (error.status === 401) {
+                console.error('Check that DOCS_SYNC_TOKEN secret is set correctly');
+              }
+              // Don't fail the release for docs sync issues
+            }
 
       - name: Final summary
         run: |
