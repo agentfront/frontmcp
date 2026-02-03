@@ -168,61 +168,60 @@ jobs:
           fi
 
       - name: Trigger external docs repository
+        uses: actions/github-script@v7
         env:
-          DOCS_REPO_PAT: ${{ secrets.DOCS_REPO_PAT }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          DOCS_REPO: ${{ vars.DOCS_REPO || 'agentfront/docs' }}
+          SOURCE_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.context.outputs.version }}
+          VERSION_MINOR: ${{ steps.context.outputs.version_minor }}
+          RELEASE_BRANCH: ${{ steps.context.outputs.release_branch }}
+          SHA: ${{ steps.context.outputs.sha }}
+          IS_FIRST_UPDATE: ${{ steps.diff_base.outputs.is_first_update }}
+          DIFF_BASE: ${{ steps.diff_base.outputs.diff_base }}
+          CHANGES_COUNT: ${{ steps.changes.outputs.changes_count }}
+          TRIGGERED_BY: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.DOCS_SYNC_TOKEN }}
+          script: |
+            const docsRepo = process.env.DOCS_REPO;
+            const [owner, repo] = docsRepo.split('/');
 
-          # Check if PAT is configured
-          if [ -z "${DOCS_REPO_PAT:-}" ]; then
-            echo "::warning::DOCS_REPO_PAT secret is not configured. Skipping docs trigger."
-            echo "To enable cross-repo docs updates, add the DOCS_REPO_PAT secret."
-            exit 0
-          fi
+            console.log(`Triggering docs update in ${docsRepo}...`);
+            console.log(`  Source repo: ${process.env.SOURCE_REPO}`);
+            console.log(`  Version: ${process.env.VERSION}`);
+            console.log(`  SHA: ${process.env.SHA}`);
 
-          # Determine target repo (can be configured via variable)
-          DOCS_REPO="${{ vars.DOCS_REPO || 'agentfront/frontmcp-docs' }}"
-
-          echo "Triggering docs update in $DOCS_REPO..."
-
-          # Trigger workflow in external docs repo via repository_dispatch
-          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-            -X POST \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token $DOCS_REPO_PAT" \
-            "https://api.github.com/repos/${DOCS_REPO}/dispatches" \
-            -d @- <<EOF
-          {
-            "event_type": "docs-update",
-            "client_payload": {
-              "source_repo": "${{ github.repository }}",
-              "sha": "${{ steps.context.outputs.sha }}",
-              "version": "${{ steps.context.outputs.version }}",
-              "version_minor": "${{ steps.context.outputs.version_minor }}",
-              "release_branch": "${{ steps.context.outputs.release_branch }}",
-              "is_first_update": "${{ steps.diff_base.outputs.is_first_update }}",
-              "diff_base": "${{ steps.diff_base.outputs.diff_base }}",
-              "changes_count": "${{ steps.changes.outputs.changes_count }}",
-              "triggered_by": "${{ github.actor }}",
-              "run_id": "${{ github.run_id }}",
-              "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            try {
+              await github.rest.repos.createDispatchEvent({
+                owner,
+                repo,
+                event_type: 'docs-update',
+                client_payload: {
+                  source_repo: process.env.SOURCE_REPO,
+                  sha: process.env.SHA,
+                  version: process.env.VERSION,
+                  version_minor: process.env.VERSION_MINOR,
+                  release_branch: process.env.RELEASE_BRANCH,
+                  is_first_update: process.env.IS_FIRST_UPDATE === 'true',
+                  diff_base: process.env.DIFF_BASE,
+                  changes_count: parseInt(process.env.CHANGES_COUNT, 10) || 0,
+                  triggered_by: process.env.TRIGGERED_BY,
+                  run_id: process.env.RUN_ID,
+                  run_url: process.env.RUN_URL
+                }
+              });
+              console.log(`Successfully triggered docs update in ${docsRepo}`);
+            } catch (error) {
+              console.error(`Failed to trigger docs update: ${error.message}`);
+              if (error.status === 404) {
+                core.error(`Repository ${docsRepo} not found or DOCS_SYNC_TOKEN doesn't have access`);
+              } else if (error.status === 401) {
+                core.error('Check that DOCS_SYNC_TOKEN secret is set correctly');
+              }
+              throw error;
             }
-          }
-          EOF
-          )
-
-          if [ "$HTTP_STATUS" -eq 204 ]; then
-            echo "Successfully triggered docs update in $DOCS_REPO"
-          elif [ "$HTTP_STATUS" -eq 404 ]; then
-            echo "::error::Repository $DOCS_REPO not found or PAT doesn't have access"
-            [ -f /tmp/response.json ] && cat /tmp/response.json
-            exit 1
-          else
-            echo "::error::Failed to trigger docs update. HTTP status: $HTTP_STATUS"
-            [ -f /tmp/response.json ] && cat /tmp/response.json
-            exit 1
-          fi
 
       - name: Summary
         run: |
