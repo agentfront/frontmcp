@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/auth",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "FrontMCP Auth - Authentication, session management, and credential vault",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -51,7 +51,7 @@
     "zod": "^4.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "0.8.0",
+    "@frontmcp/utils": "0.8.1",
     "jose": "^6.0.0"
   },
   "devDependencies": {
