@@ -584,10 +584,12 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private respondWithError(errors: string[], redirectUri?: string, state?: string): void {
     const errorDescription = errors.join('; ');
 
-    // Try to redirect with error if we have a valid redirect_uri
+    // Try to redirect with error if we have a valid and safe redirect_uri
+    // Must validate against safeRedirectUriSchema to prevent open-redirect/XSS on error paths
     if (redirectUri) {
-      try {
-        const url = new URL(redirectUri);
+      const safe = safeRedirectUriSchema.safeParse(redirectUri);
+      if (safe.success) {
+        const url = new URL(safe.data);
         url.searchParams.set('error', 'invalid_request');
         url.searchParams.set('error_description', errorDescription);
         if (state) {
@@ -595,9 +597,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         }
         this.respond(httpRespond.redirect(url.toString()));
         return;
-      } catch {
-        // Invalid redirect_uri, fall through to error page
       }
+      // Unsafe redirect_uri (javascript:, data:, etc.), fall through to error page
     }
 
     this.respond(httpRespond.html(this.renderErrorPage('invalid_request', errorDescription), 400));
