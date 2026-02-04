@@ -942,7 +942,8 @@ describe('OAuth Authorize Flow', () => {
       const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
       const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
 
-      expectOAuthHtmlPage(output, { status: 400 });
+      // With valid redirect_uri, errors are redirected per OAuth 2.1 spec
+      expectOAuthRedirect(output, { error: 'invalid_request', errorContains: 'code_challenge' });
     });
 
     it('should reject challenge longer than 128 characters', () => {
