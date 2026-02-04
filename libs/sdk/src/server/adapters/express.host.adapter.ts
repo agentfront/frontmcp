@@ -19,7 +19,11 @@ export interface ExpressCorsOptions {
    * - A function that dynamically determines if an origin is allowed
    * @default false (CORS disabled by default for security)
    */
-  origin?: boolean | string | string[] | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void);
+  origin?:
+    | boolean
+    | string
+    | string[]
+    | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void);
 
   /**
    * Whether to allow credentials (cookies, authorization headers).
@@ -58,14 +62,17 @@ export class ExpressHostAdapter extends HostServerAdapter {
     this.app.use(express.urlencoded({ extended: true }));
 
     // Configure CORS with secure defaults
-    // By default, CORS is disabled (origin: false)
+    // CORS middleware is only enabled when an explicit origin is provided
+    // This prevents accidental enabling with { credentials: true } alone
     const corsOptions = options?.cors;
-    if (corsOptions !== undefined && corsOptions.origin !== false) {
-      this.app.use(cors({
-        origin: corsOptions.origin ?? false,
-        credentials: corsOptions.credentials ?? false,
-        maxAge: corsOptions.maxAge ?? 300,
-      }));
+    if (corsOptions?.origin !== undefined && corsOptions.origin !== false) {
+      this.app.use(
+        cors({
+          origin: corsOptions.origin,
+          credentials: corsOptions.credentials ?? false,
+          maxAge: corsOptions.maxAge ?? 300,
+        }),
+      );
     }
 
     // When creating the HTTP(S) server that hosts /mcp:

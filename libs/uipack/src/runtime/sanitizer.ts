@@ -526,9 +526,21 @@ export function sanitizeHtmlContent(html: string): string {
 }
 
 /**
+ * Maximum HTML length for parser-based sanitization (DoS prevention).
+ * Larger inputs are escaped rather than parsed to prevent performance degradation.
+ */
+const MAX_HTML_LENGTH = 500000;
+
+/**
  * Character-by-character HTML sanitization (for non-browser environments).
  */
 function sanitizeHtmlViaParser(html: string): string {
+  // Guard against DoS on extremely large inputs
+  if (html.length > MAX_HTML_LENGTH) {
+    // Return escaped version for safety rather than unsanitized HTML
+    return html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   const result: string[] = [];
   let i = 0;
   const len = html.length;
