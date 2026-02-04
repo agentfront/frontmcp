@@ -261,6 +261,8 @@ export function input(options: InputOptions): string {
   const stateClasses = getInputStateClasses(state);
   const hasIcon = safeIconBefore || safeIconAfter;
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
   const baseClasses = [
     'w-full rounded-lg border bg-white',
     'transition-colors duration-200',
@@ -269,7 +271,7 @@ export function input(options: InputOptions): string {
     sizeClasses,
     stateClasses,
     hasIcon ? (safeIconBefore ? 'pl-10' : '') + (safeIconAfter ? ' pr-10' : '') : '',
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -354,6 +356,8 @@ export function select(options: SelectOptions): string {
   const sizeClasses = getInputSizeClasses(size);
   const stateClasses = getInputStateClasses(state);
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
   const baseClasses = [
     'w-full rounded-lg border bg-white',
     'transition-colors duration-200',
@@ -361,7 +365,7 @@ export function select(options: SelectOptions): string {
     disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : '',
     sizeClasses,
     stateClasses,
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -437,6 +441,8 @@ export function textarea(options: TextareaOptions): string {
     both: 'resize',
   };
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
   const baseClasses = [
     'w-full rounded-lg border bg-white',
     'transition-colors duration-200',
@@ -445,7 +451,7 @@ export function textarea(options: TextareaOptions): string {
     sizeClasses,
     stateClasses,
     resizeClasses[resize],
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -506,7 +512,9 @@ export function checkbox(options: CheckboxOptions): string {
 
   const errorHtml = error ? `<p class="text-sm text-danger">${escapeHtml(error)}</p>` : '';
 
-  return `<div class="form-field ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="form-field ${safeClassName}">
     <label class="flex items-start gap-3 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}">
       <input
         type="checkbox"
@@ -566,7 +574,9 @@ export function radioGroup(options: RadioGroupOptions): string {
 
   const errorHtml = error ? `<p class="mt-1.5 text-sm text-danger">${escapeHtml(error)}</p>` : '';
 
-  return `<div class="form-field ${className}" role="radiogroup">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="form-field ${safeClassName}" role="radiogroup">
     ${labelHtml}
     <div class="${directionClasses}">
       ${radiosHtml}
@@ -628,7 +638,9 @@ export function formRow(fields: string[], options: { gap?: 'sm' | 'md' | 'lg'; c
   const { gap = 'md', className = '' } = options;
   const gapClasses = { sm: 'gap-2', md: 'gap-4', lg: 'gap-6' };
 
-  return `<div class="grid grid-cols-${fields.length} ${gapClasses[gap]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="grid grid-cols-${fields.length} ${gapClasses[gap]} ${safeClassName}">
     ${fields.join('\n')}
   </div>`;
 }
@@ -649,7 +661,9 @@ export function formSection(
       </div>`
     : '';
 
-  return `<div class="form-section ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="form-section ${safeClassName}">
     ${headerHtml}
     <div class="space-y-4">
       ${content}
@@ -673,7 +687,9 @@ export function formActions(
     between: 'justify-between',
   };
 
-  return `<div class="flex items-center gap-3 pt-4 ${alignClasses[align]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="flex items-center gap-3 pt-4 ${alignClasses[align]} ${safeClassName}">
     ${buttons.join('\n')}
   </div>`;
 }

@@ -53,22 +53,92 @@ export const htmlRenderer: ClientRenderer = {
  * Complete list per HTML5 spec.
  */
 const EVENT_HANDLERS = [
-  'onabort', 'onafterprint', 'onauxclick', 'onbeforematch', 'onbeforeprint',
-  'onbeforetoggle', 'onbeforeunload', 'onblur', 'oncancel', 'oncanplay',
-  'oncanplaythrough', 'onchange', 'onclick', 'onclose', 'oncontextlost',
-  'oncontextmenu', 'oncontextrestored', 'oncopy', 'oncuechange', 'oncut',
-  'ondblclick', 'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover',
-  'ondragstart', 'ondrop', 'ondurationchange', 'onemptied', 'onended', 'onerror',
-  'onfocus', 'onformdata', 'onhashchange', 'oninput', 'oninvalid', 'onkeydown',
-  'onkeypress', 'onkeyup', 'onlanguagechange', 'onload', 'onloadeddata',
-  'onloadedmetadata', 'onloadstart', 'onmessage', 'onmessageerror', 'onmousedown',
-  'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover',
-  'onmouseup', 'onoffline', 'ononline', 'onpagehide', 'onpageshow', 'onpaste',
-  'onpause', 'onplay', 'onplaying', 'onpopstate', 'onprogress', 'onratechange',
-  'onrejectionhandled', 'onreset', 'onresize', 'onscroll', 'onscrollend',
-  'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
-  'onstalled', 'onstorage', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
-  'onunhandledrejection', 'onunload', 'onvolumechange', 'onwaiting', 'onwheel',
+  'onabort',
+  'onafterprint',
+  'onauxclick',
+  'onbeforematch',
+  'onbeforeprint',
+  'onbeforetoggle',
+  'onbeforeunload',
+  'onblur',
+  'oncancel',
+  'oncanplay',
+  'oncanplaythrough',
+  'onchange',
+  'onclick',
+  'onclose',
+  'oncontextlost',
+  'oncontextmenu',
+  'oncontextrestored',
+  'oncopy',
+  'oncuechange',
+  'oncut',
+  'ondblclick',
+  'ondrag',
+  'ondragend',
+  'ondragenter',
+  'ondragleave',
+  'ondragover',
+  'ondragstart',
+  'ondrop',
+  'ondurationchange',
+  'onemptied',
+  'onended',
+  'onerror',
+  'onfocus',
+  'onformdata',
+  'onhashchange',
+  'oninput',
+  'oninvalid',
+  'onkeydown',
+  'onkeypress',
+  'onkeyup',
+  'onlanguagechange',
+  'onload',
+  'onloadeddata',
+  'onloadedmetadata',
+  'onloadstart',
+  'onmessage',
+  'onmessageerror',
+  'onmousedown',
+  'onmouseenter',
+  'onmouseleave',
+  'onmousemove',
+  'onmouseout',
+  'onmouseover',
+  'onmouseup',
+  'onoffline',
+  'ononline',
+  'onpagehide',
+  'onpageshow',
+  'onpaste',
+  'onpause',
+  'onplay',
+  'onplaying',
+  'onpopstate',
+  'onprogress',
+  'onratechange',
+  'onrejectionhandled',
+  'onreset',
+  'onresize',
+  'onscroll',
+  'onscrollend',
+  'onsecuritypolicyviolation',
+  'onseeked',
+  'onseeking',
+  'onselect',
+  'onslotchange',
+  'onstalled',
+  'onstorage',
+  'onsubmit',
+  'onsuspend',
+  'ontimeupdate',
+  'ontoggle',
+  'onunhandledrejection',
+  'onunload',
+  'onvolumechange',
+  'onwaiting',
+  'onwheel',
 ];
 
 /**
@@ -93,7 +163,7 @@ const DANGEROUS_SCHEMES = ['javascript', 'data', 'vbscript'];
  */
 export function sanitizeHtml(html: string): string {
   // First pass: decode HTML entities that might bypass detection
-  let decoded = decodeHtmlEntities(html);
+  const decoded = decodeHtmlEntities(html);
 
   // Parse and sanitize using safe character-by-character approach
   return parseAndSanitize(decoded);
@@ -101,16 +171,21 @@ export function sanitizeHtml(html: string): string {
 
 /**
  * Decode common HTML entities that could bypass sanitization.
+ * IMPORTANT: &amp; must be decoded LAST to prevent double-unescaping attacks.
+ * Otherwise, &amp;lt; would become &lt; then <, bypassing sanitization.
  */
 function decodeHtmlEntities(html: string): string {
-  return html
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'");
+  return (
+    html
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'")
+      // MUST be last to prevent double-unescaping (e.g., &amp;lt; -> &lt; -> <)
+      .replace(/&amp;/gi, '&')
+  );
 }
 
 /**
@@ -135,7 +210,7 @@ function parseAndSanitize(html: string): string {
           if (!isClosing && !isSelfClosing) {
             // Skip to closing tag
             const closeTag = `</${tagLower}`;
-            let closeIndex = html.toLowerCase().indexOf(closeTag, end);
+            const closeIndex = html.toLowerCase().indexOf(closeTag, end);
             if (closeIndex !== -1) {
               // Find the end of the closing tag
               const closeEnd = html.indexOf('>', closeIndex);
@@ -169,7 +244,10 @@ function parseAndSanitize(html: string): string {
 /**
  * Parse a single HTML tag and return its details.
  */
-function parseTag(html: string, start: number): { tag: string; end: number; isClosing: boolean; isSelfClosing: boolean } | null {
+function parseTag(
+  html: string,
+  start: number,
+): { tag: string; end: number; isClosing: boolean; isSelfClosing: boolean } | null {
   if (html[start] !== '<') return null;
 
   let i = start + 1;
@@ -312,7 +390,7 @@ function isAttributeSafe(name: string, value: string): boolean {
   }
 
   // Block known event handlers with entity encoding
-  if (EVENT_HANDLERS.some(h => nameLower === h)) {
+  if (EVENT_HANDLERS.some((h) => nameLower === h)) {
     return false;
   }
 
@@ -343,11 +421,7 @@ function isAttributeSafe(name: string, value: string): boolean {
  * Escape attribute value for safe inclusion.
  */
 function escapeAttrValue(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**

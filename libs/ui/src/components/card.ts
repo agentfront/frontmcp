@@ -141,7 +141,9 @@ export function card(content: string, options: CardOptions = {}): string {
   const sizeClasses = getSizeClasses(size);
   const clickableClasses = clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
 
-  const allClasses = [variantClasses, sizeClasses, clickableClasses, className].filter(Boolean).join(' ');
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  const allClasses = [variantClasses, sizeClasses, clickableClasses, safeClassName].filter(Boolean).join(' ');
   const dataAttrs = buildDataAttrs(data);
   const idAttr = id ? `id="${escapeHtml(id)}"` : '';
 
@@ -192,7 +194,9 @@ export function cardGroup(
   const gapClasses = { sm: 'gap-2', md: 'gap-4', lg: 'gap-6' };
   const directionClasses = direction === 'horizontal' ? 'flex flex-row flex-wrap' : 'flex flex-col';
 
-  return `<div class="${directionClasses} ${gapClasses[gap]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="${directionClasses} ${gapClasses[gap]} ${safeClassName}">
     ${cards.join('\n')}
   </div>`;
 }

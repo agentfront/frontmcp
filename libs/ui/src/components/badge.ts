@@ -116,6 +116,9 @@ export function badge(text: string, options: BadgeOptions = {}): string {
   // codeql[js/html-constructed-from-input]: icon is intentionally raw HTML for composability; sanitize option available
   const safeIcon = sanitize && icon ? sanitizeHtmlContent(icon) : icon;
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+
   // Dot badge (status indicator)
   if (dot) {
     const dotVariants: Record<BadgeVariant, string> = {
@@ -129,7 +132,7 @@ export function badge(text: string, options: BadgeOptions = {}): string {
       outline: 'border border-current',
     };
 
-    const dotClasses = ['inline-block rounded-full', getSizeClasses(size, true), dotVariants[variant], className]
+    const dotClasses = ['inline-block rounded-full', getSizeClasses(size, true), dotVariants[variant], safeClassName]
       .filter(Boolean)
       .join(' ');
 
@@ -144,7 +147,7 @@ export function badge(text: string, options: BadgeOptions = {}): string {
     pill ? 'rounded-full' : 'rounded-md',
     variantClasses,
     sizeClasses,
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -176,7 +179,9 @@ export function badgeGroup(badges: string[], options: { gap?: 'sm' | 'md' | 'lg'
   const { gap = 'sm', className = '' } = options;
   const gapClasses = { sm: 'gap-1', md: 'gap-2', lg: 'gap-3' };
 
-  return `<div class="inline-flex flex-wrap ${gapClasses[gap]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="inline-flex flex-wrap ${gapClasses[gap]} ${safeClassName}">
     ${badges.join('\n')}
   </div>`;
 }

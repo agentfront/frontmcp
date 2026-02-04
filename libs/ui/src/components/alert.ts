@@ -133,7 +133,9 @@ export function alert(message: string, options: AlertOptions = {}): string {
 
   const variantClasses = getVariantClasses(variant);
 
-  const baseClasses = ['rounded-lg border p-4', variantClasses.container, className].filter(Boolean).join(' ');
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  const baseClasses = ['rounded-lg border p-4', variantClasses.container, safeClassName].filter(Boolean).join(' ');
 
   const iconHtml = showIcon
     ? `<div class="flex-shrink-0 ${variantClasses.icon}">
@@ -248,8 +250,8 @@ export function toast(message: string, options: ToastOptions = {}): string {
   return `<div
     id="${escapeHtml(id)}"
     class="fixed ${positionClasses[position]} z-50 min-w-[300px] max-w-md rounded-lg border shadow-lg ${
-    variantClasses.container
-  } transition-all duration-300 transform"
+      variantClasses.container
+    } transition-all duration-300 transform"
     role="alert"
   >
     <div class="flex gap-3 p-4">
