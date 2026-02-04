@@ -10,6 +10,22 @@
 import { BaseAdapter, DEFAULT_CAPABILITIES } from './base-adapter';
 
 /**
+ * Allowed Gemini domains for security validation.
+ */
+const GEMINI_DOMAINS = ['gemini.google.com', 'bard.google.com'];
+
+/**
+ * Check if a hostname is a valid Gemini domain.
+ * Validates exact match or proper subdomain (prevents attacker.com/gemini.google.com attacks).
+ */
+function isValidGeminiDomain(hostname: string): boolean {
+  const lowerHost = hostname.toLowerCase();
+  return GEMINI_DOMAINS.some(domain =>
+    lowerHost === domain || lowerHost.endsWith('.' + domain)
+  );
+}
+
+/**
  * Gemini SDK global interface (simplified type).
  */
 interface GeminiSDK {
@@ -76,9 +92,9 @@ export class GeminiAdapter extends BaseAdapter {
     if (win.gemini) return true;
 
     // Check URL patterns for Gemini
+    // Use proper domain validation to prevent subdomain attacks
     if (typeof location !== 'undefined') {
-      const href = location.href;
-      if (href.includes('gemini.google.com') || href.includes('bard.google.com')) {
+      if (isValidGeminiDomain(location.hostname)) {
         return true;
       }
     }

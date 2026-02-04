@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from '../layouts/base';
+import { sanitizeHtmlContent } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Input Types
@@ -41,7 +42,11 @@ export type InputState = 'default' | 'error' | 'success' | 'warning';
 // ============================================
 
 /**
- * Base input options
+ * Base input options.
+ *
+ * **Security Note**: The `iconBefore` and `iconAfter` parameters accept raw HTML.
+ * Do NOT pass untrusted user input without sanitization.
+ * Use the `sanitize` option to automatically sanitize icon content.
  */
 export interface InputOptions {
   /** Input type */
@@ -54,11 +59,11 @@ export interface InputOptions {
   value?: string;
   /** Placeholder text */
   placeholder?: string;
-  /** Label text */
+  /** Label text (will be HTML-escaped) */
   label?: string;
-  /** Helper text */
+  /** Helper text (will be HTML-escaped) */
   helper?: string;
-  /** Error message */
+  /** Error message (will be HTML-escaped) */
   error?: string;
   /** Input size */
   size?: InputSize;
@@ -84,10 +89,21 @@ export interface InputOptions {
   className?: string;
   /** Data attributes */
   data?: Record<string, string>;
-  /** Icon before input */
+  /**
+   * Icon before input (raw HTML, e.g., SVG).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   iconBefore?: string;
-  /** Icon after input */
+  /**
+   * Icon after input (raw HTML, e.g., SVG).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   iconAfter?: string;
+  /**
+   * If true, sanitizes icon HTML content to prevent XSS.
+   * @default false
+   */
+  sanitize?: boolean;
 }
 
 /**
@@ -234,12 +250,19 @@ export function input(options: InputOptions): string {
     data,
     iconBefore,
     iconAfter,
+    sanitize = false,
   } = options;
+
+  // Sanitize icon HTML content if requested
+  const safeIconBefore = sanitize && iconBefore ? sanitizeHtmlContent(iconBefore) : iconBefore;
+  const safeIconAfter = sanitize && iconAfter ? sanitizeHtmlContent(iconAfter) : iconAfter;
 
   const sizeClasses = getInputSizeClasses(size);
   const stateClasses = getInputStateClasses(state);
-  const hasIcon = iconBefore || iconAfter;
+  const hasIcon = safeIconBefore || safeIconAfter;
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
   const baseClasses = [
     'w-full rounded-lg border bg-white',
     'transition-colors duration-200',
@@ -247,8 +270,8 @@ export function input(options: InputOptions): string {
     disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : '',
     sizeClasses,
     stateClasses,
-    hasIcon ? (iconBefore ? 'pl-10' : '') + (iconAfter ? ' pr-10' : '') : '',
-    className,
+    hasIcon ? (safeIconBefore ? 'pl-10' : '') + (safeIconAfter ? ' pr-10' : '') : '',
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -285,12 +308,12 @@ export function input(options: InputOptions): string {
 
   const errorHtml = error ? `<p class="mt-1.5 text-sm text-danger">${escapeHtml(error)}</p>` : '';
 
-  const iconBeforeHtml = iconBefore
-    ? `<span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">${iconBefore}</span>`
+  const iconBeforeHtml = safeIconBefore
+    ? `<span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">${safeIconBefore}</span>`
     : '';
 
-  const iconAfterHtml = iconAfter
-    ? `<span class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary">${iconAfter}</span>`
+  const iconAfterHtml = safeIconAfter
+    ? `<span class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary">${safeIconAfter}</span>`
     : '';
 
   const inputHtml = hasIcon
@@ -333,6 +356,8 @@ export function select(options: SelectOptions): string {
   const sizeClasses = getInputSizeClasses(size);
   const stateClasses = getInputStateClasses(state);
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
   const baseClasses = [
     'w-full rounded-lg border bg-white',
     'transition-colors duration-200',
@@ -340,7 +365,7 @@ export function select(options: SelectOptions): string {
     disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : '',
     sizeClasses,
     stateClasses,
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -416,6 +441,8 @@ export function textarea(options: TextareaOptions): string {
     both: 'resize',
   };
 
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
   const baseClasses = [
     'w-full rounded-lg border bg-white',
     'transition-colors duration-200',
@@ -424,7 +451,7 @@ export function textarea(options: TextareaOptions): string {
     sizeClasses,
     stateClasses,
     resizeClasses[resize],
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -485,7 +512,9 @@ export function checkbox(options: CheckboxOptions): string {
 
   const errorHtml = error ? `<p class="text-sm text-danger">${escapeHtml(error)}</p>` : '';
 
-  return `<div class="form-field ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="form-field ${safeClassName}">
     <label class="flex items-start gap-3 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}">
       <input
         type="checkbox"
@@ -545,7 +574,9 @@ export function radioGroup(options: RadioGroupOptions): string {
 
   const errorHtml = error ? `<p class="mt-1.5 text-sm text-danger">${escapeHtml(error)}</p>` : '';
 
-  return `<div class="form-field ${className}" role="radiogroup">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="form-field ${safeClassName}" role="radiogroup">
     ${labelHtml}
     <div class="${directionClasses}">
       ${radiosHtml}
@@ -601,13 +632,36 @@ export function form(content: string, options: FormOptions = {}): string {
 }
 
 /**
+ * Static mapping for Tailwind grid-cols classes.
+ * Tailwind CSS cannot detect dynamic class names at build time, so we use a static lookup.
+ */
+const GRID_COLS_MAP: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+  6: 'grid-cols-6',
+  7: 'grid-cols-7',
+  8: 'grid-cols-8',
+  9: 'grid-cols-9',
+  10: 'grid-cols-10',
+  11: 'grid-cols-11',
+  12: 'grid-cols-12',
+};
+
+/**
  * Build form row (for horizontal forms)
  */
 export function formRow(fields: string[], options: { gap?: 'sm' | 'md' | 'lg'; className?: string } = {}): string {
   const { gap = 'md', className = '' } = options;
   const gapClasses = { sm: 'gap-2', md: 'gap-4', lg: 'gap-6' };
+  // Use static mapping for Tailwind compatibility (falls back to grid-cols-1 for safety)
+  const gridCols = GRID_COLS_MAP[fields.length] ?? 'grid-cols-1';
 
-  return `<div class="grid grid-cols-${fields.length} ${gapClasses[gap]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="grid ${gridCols} ${gapClasses[gap]} ${safeClassName}">
     ${fields.join('\n')}
   </div>`;
 }
@@ -628,7 +682,9 @@ export function formSection(
       </div>`
     : '';
 
-  return `<div class="form-section ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="form-section ${safeClassName}">
     ${headerHtml}
     <div class="space-y-4">
       ${content}
@@ -652,7 +708,9 @@ export function formActions(
     between: 'justify-between',
   };
 
-  return `<div class="flex items-center gap-3 pt-4 ${alignClasses[align]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="flex items-center gap-3 pt-4 ${alignClasses[align]} ${safeClassName}">
     ${buttons.join('\n')}
   </div>`;
 }

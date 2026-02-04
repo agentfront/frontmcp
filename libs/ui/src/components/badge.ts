@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from '../layouts/base';
+import { sanitizeHtmlContent } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Badge Types
@@ -21,7 +22,12 @@ export type BadgeVariant = 'default' | 'primary' | 'secondary' | 'success' | 'wa
 export type BadgeSize = 'sm' | 'md' | 'lg';
 
 /**
- * Badge component options
+ * Badge component options.
+ *
+ * **Security Note**: The `icon` parameter accepts raw HTML.
+ * Do NOT pass untrusted user input to this parameter without sanitization.
+ * Use `escapeHtml()` from `@frontmcp/ui/layouts` for text content, or use the
+ * `sanitize` option to automatically sanitize HTML content.
  */
 export interface BadgeOptions {
   /** Badge variant */
@@ -30,7 +36,10 @@ export interface BadgeOptions {
   size?: BadgeSize;
   /** Rounded pill style */
   pill?: boolean;
-  /** Icon before text */
+  /**
+   * Icon before text (raw HTML).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   icon?: string;
   /** Dot indicator (no text) */
   dot?: boolean;
@@ -38,6 +47,12 @@ export interface BadgeOptions {
   className?: string;
   /** Removable badge */
   removable?: boolean;
+  /**
+   * If true, sanitizes HTML content to prevent XSS.
+   * Removes script tags, event handlers, and dangerous attributes.
+   * @default false
+   */
+  sanitize?: boolean;
 }
 
 // ============================================
@@ -94,7 +109,15 @@ export function badge(text: string, options: BadgeOptions = {}): string {
     dot = false,
     className = '',
     removable = false,
+    sanitize = false,
   } = options;
+
+  // Sanitize raw HTML content if requested
+  // codeql[js/html-constructed-from-input]: icon is intentionally raw HTML for composability; sanitize option available
+  const safeIcon = sanitize && icon ? sanitizeHtmlContent(icon) : icon;
+
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
 
   // Dot badge (status indicator)
   if (dot) {
@@ -109,7 +132,7 @@ export function badge(text: string, options: BadgeOptions = {}): string {
       outline: 'border border-current',
     };
 
-    const dotClasses = ['inline-block rounded-full', getSizeClasses(size, true), dotVariants[variant], className]
+    const dotClasses = ['inline-block rounded-full', getSizeClasses(size, true), dotVariants[variant], safeClassName]
       .filter(Boolean)
       .join(' ');
 
@@ -124,12 +147,12 @@ export function badge(text: string, options: BadgeOptions = {}): string {
     pill ? 'rounded-full' : 'rounded-md',
     variantClasses,
     sizeClasses,
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
 
-  const iconHtml = icon ? `<span class="mr-1">${icon}</span>` : '';
+  const iconHtml = safeIcon ? `<span class="mr-1">${safeIcon}</span>` : '';
 
   const removeHtml = removable
     ? `<button
@@ -156,7 +179,9 @@ export function badgeGroup(badges: string[], options: { gap?: 'sm' | 'md' | 'lg'
   const { gap = 'sm', className = '' } = options;
   const gapClasses = { sm: 'gap-1', md: 'gap-2', lg: 'gap-3' };
 
-  return `<div class="inline-flex flex-wrap ${gapClasses[gap]} ${className}">
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  return `<div class="inline-flex flex-wrap ${gapClasses[gap]} ${safeClassName}">
     ${badges.join('\n')}
   </div>`;
 }

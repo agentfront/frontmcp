@@ -5,16 +5,76 @@ import cors from 'cors';
 import { HostServerAdapter } from './base.host.adapter';
 import { HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from '../../common';
 
+/**
+ * CORS configuration options for ExpressHostAdapter.
+ */
+export interface ExpressCorsOptions {
+  /**
+   * Allowed origins. Can be:
+   * - `true` to reflect the request origin (allows all origins with credentials)
+   * - `false` to disable CORS
+   * - `'*'` to allow all origins (no credentials)
+   * - A string for a single origin
+   * - An array of strings for multiple origins
+   * - A function that dynamically determines if an origin is allowed
+   * @default false (CORS disabled by default for security)
+   */
+  origin?:
+    | boolean
+    | string
+    | string[]
+    | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void);
+
+  /**
+   * Whether to allow credentials (cookies, authorization headers).
+   * Cannot be used with `origin: '*'`.
+   * @default false
+   */
+  credentials?: boolean;
+
+  /**
+   * How long preflight results can be cached (in seconds).
+   * @default 300
+   */
+  maxAge?: number;
+}
+
+/**
+ * Options for ExpressHostAdapter.
+ */
+export interface ExpressHostAdapterOptions {
+  /**
+   * CORS configuration.
+   * For security, CORS is disabled by default.
+   * Enable it explicitly with appropriate origins.
+   */
+  cors?: ExpressCorsOptions;
+}
+
 export class ExpressHostAdapter extends HostServerAdapter {
   private app = express();
   private router = express.Router();
   private prepared = false;
 
-  constructor() {
+  constructor(options?: ExpressHostAdapterOptions) {
     super();
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
-    this.app.use(cors({ origin: '*', maxAge: 300 }));
+
+    // Configure CORS with secure defaults
+    // CORS middleware is only enabled when an explicit origin is provided
+    // This prevents accidental enabling with { credentials: true } alone
+    const corsOptions = options?.cors;
+    if (corsOptions?.origin !== undefined && corsOptions.origin !== false) {
+      this.app.use(
+        cors({
+          origin: corsOptions.origin,
+          credentials: corsOptions.credentials ?? false,
+          maxAge: corsOptions.maxAge ?? 300,
+        }),
+      );
+    }
+
     // When creating the HTTP(S) server that hosts /mcp:
     this.app.use((req, res, next) => {
       res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate');

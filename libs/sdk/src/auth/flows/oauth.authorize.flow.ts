@@ -85,12 +85,28 @@ const responseTypeSchema = z.literal('code', {
 });
 
 /**
+ * Validate that a URI uses only http or https scheme.
+ * Rejects dangerous schemes like javascript:, data:, vbscript:, etc.
+ */
+const safeRedirectUriSchema = z.url().refine(
+  (uri) => {
+    try {
+      const url = new URL(uri);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  },
+  { message: 'redirect_uri must use http or https scheme' },
+);
+
+/**
  * Validated OAuth authorization request for orchestrated mode
  */
 const oauthAuthorizeRequestSchema = z.object({
   response_type: responseTypeSchema,
   client_id: z.string().min(1, 'client_id is required'),
-  redirect_uri: z.string().url('redirect_uri must be a valid URL'),
+  redirect_uri: safeRedirectUriSchema,
   code_challenge: pkceChallengeSchema,
   code_challenge_method: codeChallengeMethodSchema.optional().default('S256'),
   scope: z.string().optional(),
@@ -102,7 +118,7 @@ const oauthAuthorizeRequestSchema = z.object({
  * Minimal request for anonymous/default provider mode
  */
 const anonymousAuthorizeRequestSchema = z.object({
-  redirect_uri: z.string().url('redirect_uri is required'),
+  redirect_uri: safeRedirectUriSchema,
   state: z.string().optional(),
 });
 
@@ -327,9 +343,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         }
       } catch (error) {
         // CIMD validation failed - respond with error
+        // Per OAuth 2.1 spec, do NOT redirect to unvalidated redirect_uri - show error page instead
+        // This prevents open-redirect attacks when CIMD validation fails
         const errorMessage = error instanceof Error ? error.message : 'CIMD validation failed';
         this.logger.warn(`CIMD validation failed for ${client_id}: ${errorMessage}`);
-        this.respondWithError([errorMessage], rawRedirectUri, rawState);
+        this.respondWithError([errorMessage], undefined, rawState);
         return;
       }
     }
@@ -568,10 +586,12 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private respondWithError(errors: string[], redirectUri?: string, state?: string): void {
     const errorDescription = errors.join('; ');
 
-    // Try to redirect with error if we have a valid redirect_uri
+    // Try to redirect with error if we have a valid and safe redirect_uri
+    // Must validate against safeRedirectUriSchema to prevent open-redirect/XSS on error paths
     if (redirectUri) {
-      try {
-        const url = new URL(redirectUri);
+      const safe = safeRedirectUriSchema.safeParse(redirectUri);
+      if (safe.success) {
+        const url = new URL(safe.data);
         url.searchParams.set('error', 'invalid_request');
         url.searchParams.set('error_description', errorDescription);
         if (state) {
@@ -579,9 +599,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         }
         this.respond(httpRespond.redirect(url.toString()));
         return;
-      } catch {
-        // Invalid redirect_uri, fall through to error page
       }
+      // Unsafe redirect_uri (javascript:, data:, etc.), fall through to error page
     }
 
     this.respond(httpRespond.html(this.renderErrorPage('invalid_request', errorDescription), 400));

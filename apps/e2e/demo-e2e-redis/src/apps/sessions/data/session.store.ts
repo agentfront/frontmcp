@@ -51,7 +51,14 @@ class SessionStore {
     const allKeys = Array.from(this.data.keys());
     if (!pattern) return allKeys;
 
-    const regex = new RegExp(pattern.replace('*', '.*'));
+    // Escape all regex special characters except *, then convert * to .*
+    const regex = new RegExp(
+      '^' +
+      pattern
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')  // Escape special chars
+        .replace(/\*/g, '.*') +  // Convert glob * to regex .*
+      '$'
+    );
     return allKeys.filter((k) => regex.test(k));
   }
 

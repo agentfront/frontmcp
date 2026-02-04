@@ -88,6 +88,8 @@ export {
   isIPv4,
   detectPIIType,
   redactPIIFromText,
+  // HTML sanitization
+  sanitizeHtmlContent,
 } from './sanitizer';
 
 // Renderer Runtime

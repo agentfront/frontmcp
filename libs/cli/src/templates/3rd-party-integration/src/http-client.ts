@@ -67,10 +67,17 @@ export class HttpClient {
     }
 
     if (this.ctx.logDebug) {
+      // Redact sensitive headers to prevent credential leakage in logs
+      const SENSITIVE_HEADERS = ['authorization', 'x-api-key', 'cookie', 'x-auth-token'];
+      const sanitizedHeaders = Object.fromEntries(
+        Object.entries(baseHeaders).map(([k, v]) =>
+          [k, SENSITIVE_HEADERS.includes(k.toLowerCase()) ? '[REDACTED]' : v]
+        )
+      );
       console.debug("[HttpClient] Request", {
         url: url.toString(),
         method: options.method,
-        headers: baseHeaders,
+        headers: sanitizedHeaders,
         body: options.bodyJson
       });
     }

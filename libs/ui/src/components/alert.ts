@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from '../layouts/base';
+import { sanitizeHtmlContent } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Alert Types
@@ -16,7 +17,12 @@ import { escapeHtml } from '../layouts/base';
 export type AlertVariant = 'info' | 'success' | 'warning' | 'danger' | 'neutral';
 
 /**
- * Alert component options
+ * Alert component options.
+ *
+ * **Security Note**: The `icon` and `actions` parameters accept raw HTML.
+ * Do NOT pass untrusted user input to these parameters without sanitization.
+ * Use `escapeHtml()` from `@frontmcp/ui/layouts` for text content, or use the
+ * `sanitize` option to automatically sanitize HTML content.
  */
 export interface AlertOptions {
   /** Alert variant */
@@ -25,7 +31,10 @@ export interface AlertOptions {
   title?: string;
   /** Show icon */
   showIcon?: boolean;
-  /** Custom icon (overrides default) */
+  /**
+   * Custom icon (overrides default, raw HTML).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   icon?: string;
   /** Dismissible alert */
   dismissible?: boolean;
@@ -33,8 +42,17 @@ export interface AlertOptions {
   className?: string;
   /** Alert ID */
   id?: string;
-  /** Actions (buttons) */
+  /**
+   * Actions (buttons, raw HTML).
+   * **Warning**: Do not pass untrusted user input without sanitization.
+   */
   actions?: string;
+  /**
+   * If true, sanitizes HTML content to prevent XSS.
+   * Removes script tags, event handlers, and dangerous attributes.
+   * @default false
+   */
+  sanitize?: boolean;
 }
 
 // ============================================
@@ -96,15 +114,32 @@ function getVariantClasses(variant: AlertVariant): { container: string; icon: st
  * Build an alert component
  */
 export function alert(message: string, options: AlertOptions = {}): string {
-  const { variant = 'info', title, showIcon = true, icon, dismissible = false, className = '', id, actions } = options;
+  const {
+    variant = 'info',
+    title,
+    showIcon = true,
+    icon,
+    dismissible = false,
+    className = '',
+    id,
+    actions,
+    sanitize = false,
+  } = options;
+
+  // Sanitize raw HTML content if requested
+  // codeql[js/html-constructed-from-input]: icon and actions are intentionally raw HTML for composability; sanitize option available
+  const safeIcon = sanitize && icon ? sanitizeHtmlContent(icon) : icon;
+  const safeActions = sanitize && actions ? sanitizeHtmlContent(actions) : actions;
 
   const variantClasses = getVariantClasses(variant);
 
-  const baseClasses = ['rounded-lg border p-4', variantClasses.container, className].filter(Boolean).join(' ');
+  // Escape className to prevent attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+  const baseClasses = ['rounded-lg border p-4', variantClasses.container, safeClassName].filter(Boolean).join(' ');
 
   const iconHtml = showIcon
     ? `<div class="flex-shrink-0 ${variantClasses.icon}">
-        ${icon || alertIcons[variant]}
+        ${safeIcon || alertIcons[variant]}
       </div>`
     : '';
 
@@ -123,7 +158,7 @@ export function alert(message: string, options: AlertOptions = {}): string {
       </button>`
     : '';
 
-  const actionsHtml = actions ? `<div class="mt-3">${actions}</div>` : '';
+  const actionsHtml = safeActions ? `<div class="mt-3">${safeActions}</div>` : '';
 
   const idAttr = id ? `id="${escapeHtml(id)}"` : '';
 
@@ -215,8 +250,8 @@ export function toast(message: string, options: ToastOptions = {}): string {
   return `<div
     id="${escapeHtml(id)}"
     class="fixed ${positionClasses[position]} z-50 min-w-[300px] max-w-md rounded-lg border shadow-lg ${
-    variantClasses.container
-  } transition-all duration-300 transform"
+      variantClasses.container
+    } transition-all duration-300 transform"
     role="alert"
   >
     <div class="flex gap-3 p-4">

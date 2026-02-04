@@ -7,6 +7,13 @@
 
 import React from 'react';
 import type { ClientRenderer, UniversalContent, RenderContext } from '../types';
+import { sanitizeHtmlContent } from '@frontmcp/uipack/runtime';
+
+/**
+ * Re-export sanitizeHtmlContent as sanitizeHtml for backward compatibility.
+ * Uses DOMPurify in browser environments for robust sanitization.
+ */
+export const sanitizeHtml = sanitizeHtmlContent;
 
 /**
  * HTML renderer implementation.
@@ -49,28 +56,8 @@ export const htmlRenderer: ClientRenderer = {
 };
 
 /**
- * Sanitize HTML string (basic XSS protection).
- * For production use, consider using a library like DOMPurify.
- *
- * @param html - HTML string to sanitize
- * @returns Sanitized HTML string
- */
-export function sanitizeHtml(html: string): string {
-  // Remove script tags
-  let sanitized = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-
-  // Remove event handlers
-  sanitized = sanitized.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '');
-  sanitized = sanitized.replace(/\s+on\w+\s*=\s*[^\s>]*/gi, '');
-
-  // Remove javascript: URLs
-  sanitized = sanitized.replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"');
-
-  return sanitized;
-}
-
-/**
  * Create a safe HTML renderer that sanitizes content.
+ * Uses DOMPurify in browser environments for robust protection against XSS.
  */
 export const safeHtmlRenderer: ClientRenderer = {
   type: 'html',
