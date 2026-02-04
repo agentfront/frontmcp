@@ -343,9 +343,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         }
       } catch (error) {
         // CIMD validation failed - respond with error
+        // Per OAuth 2.1 spec, do NOT redirect to unvalidated redirect_uri - show error page instead
+        // This prevents open-redirect attacks when CIMD validation fails
         const errorMessage = error instanceof Error ? error.message : 'CIMD validation failed';
         this.logger.warn(`CIMD validation failed for ${client_id}: ${errorMessage}`);
-        this.respondWithError([errorMessage], rawRedirectUri, rawState);
+        this.respondWithError([errorMessage], undefined, rawState);
         return;
       }
     }

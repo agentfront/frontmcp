@@ -169,9 +169,9 @@ function parseTag(
   // Skip whitespace after /
   while (i < len && (html[i] === ' ' || html[i] === '\t' || html[i] === '\n')) i++;
 
-  // Parse tag name
+  // Parse tag name (include hyphen for custom elements like <my-component>)
   const tagStart = i;
-  while (i < len && /[a-zA-Z0-9]/.test(html[i])) i++;
+  while (i < len && /[a-zA-Z0-9-]/.test(html[i])) i++;
   const tag = html.slice(tagStart, i);
 
   if (!tag) return null;

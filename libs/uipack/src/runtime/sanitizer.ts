@@ -633,9 +633,9 @@ function parseTagContent(content: string): {
   // Skip whitespace
   while (idx < trimmed.length && /\s/.test(trimmed[idx])) idx++;
 
-  // Parse tag name
+  // Parse tag name (include hyphen for custom elements like <my-component>)
   const nameStart = idx;
-  while (idx < trimmed.length && /[a-zA-Z0-9]/.test(trimmed[idx])) idx++;
+  while (idx < trimmed.length && /[a-zA-Z0-9-]/.test(trimmed[idx])) idx++;
   const tagName = trimmed.slice(nameStart, idx);
 
   if (!tagName) return null;
