@@ -16,7 +16,6 @@ import { InMemoryAuthorizationStore, generatePkceChallenge } from '@frontmcp/aut
 import {
   // Flow test utilities
   createMockScopeEntry,
-  createMockLogger,
   runFlowStages,
   flowScenarios,
   // OAuth test utilities
@@ -27,7 +26,6 @@ import {
   createIncrementalAuthRequest,
   createOAuthInput,
   invalidOAuthRequests,
-  parseOAuthRedirect,
   expectOAuthRedirect,
   expectOAuthHtmlPage,
 } from '../../../__test-utils__';
@@ -983,12 +981,7 @@ describe('OAuth Authorize Flow', () => {
     });
 
     it('should identify javascript: URI as malicious (all case variations)', () => {
-      const maliciousUris = [
-        'javascript:alert(1)',
-        'JAVASCRIPT:alert(1)',
-        'JaVaScRiPt:alert(1)',
-        'javascript:void(0)',
-      ];
+      const maliciousUris = ['javascript:alert(1)', 'JAVASCRIPT:alert(1)', 'JaVaScRiPt:alert(1)', 'javascript:void(0)'];
 
       for (const uri of maliciousUris) {
         // The URL class normalizes protocol to lowercase
@@ -1011,10 +1004,7 @@ describe('OAuth Authorize Flow', () => {
     });
 
     it('should identify vbscript: URI as malicious', () => {
-      const vbUris = [
-        'vbscript:msgbox(1)',
-        'VBSCRIPT:msgbox(1)',
-      ];
+      const vbUris = ['vbscript:msgbox(1)', 'VBSCRIPT:msgbox(1)'];
 
       for (const uri of vbUris) {
         expect(isValidRedirectUri(uri)).toBe(false);

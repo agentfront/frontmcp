@@ -49,99 +49,6 @@ export const htmlRenderer: ClientRenderer = {
 };
 
 /**
- * List of all HTML event handler attributes to remove.
- * Complete list per HTML5 spec.
- */
-const EVENT_HANDLERS = [
-  'onabort',
-  'onafterprint',
-  'onauxclick',
-  'onbeforematch',
-  'onbeforeprint',
-  'onbeforetoggle',
-  'onbeforeunload',
-  'onblur',
-  'oncancel',
-  'oncanplay',
-  'oncanplaythrough',
-  'onchange',
-  'onclick',
-  'onclose',
-  'oncontextlost',
-  'oncontextmenu',
-  'oncontextrestored',
-  'oncopy',
-  'oncuechange',
-  'oncut',
-  'ondblclick',
-  'ondrag',
-  'ondragend',
-  'ondragenter',
-  'ondragleave',
-  'ondragover',
-  'ondragstart',
-  'ondrop',
-  'ondurationchange',
-  'onemptied',
-  'onended',
-  'onerror',
-  'onfocus',
-  'onformdata',
-  'onhashchange',
-  'oninput',
-  'oninvalid',
-  'onkeydown',
-  'onkeypress',
-  'onkeyup',
-  'onlanguagechange',
-  'onload',
-  'onloadeddata',
-  'onloadedmetadata',
-  'onloadstart',
-  'onmessage',
-  'onmessageerror',
-  'onmousedown',
-  'onmouseenter',
-  'onmouseleave',
-  'onmousemove',
-  'onmouseout',
-  'onmouseover',
-  'onmouseup',
-  'onoffline',
-  'ononline',
-  'onpagehide',
-  'onpageshow',
-  'onpaste',
-  'onpause',
-  'onplay',
-  'onplaying',
-  'onpopstate',
-  'onprogress',
-  'onratechange',
-  'onrejectionhandled',
-  'onreset',
-  'onresize',
-  'onscroll',
-  'onscrollend',
-  'onsecuritypolicyviolation',
-  'onseeked',
-  'onseeking',
-  'onselect',
-  'onslotchange',
-  'onstalled',
-  'onstorage',
-  'onsubmit',
-  'onsuspend',
-  'ontimeupdate',
-  'ontoggle',
-  'onunhandledrejection',
-  'onunload',
-  'onvolumechange',
-  'onwaiting',
-  'onwheel',
-];
-
-/**
  * Dangerous tags to completely remove.
  */
 const DANGEROUS_TAGS = ['script', 'style', 'iframe', 'object', 'embed', 'applet', 'base'];
@@ -379,18 +286,36 @@ function parseAndSanitizeAttributes(attrStr: string): string {
 }
 
 /**
+ * Check if a URL inside a CSS url() function uses a dangerous scheme.
+ */
+function hasUnsafeUrlInStyle(styleValue: string): boolean {
+  const valueLower = styleValue.toLowerCase();
+
+  // Find all url(...) occurrences and check their content
+  const urlMatches = valueLower.matchAll(/url\s*\(\s*(['"]?)([^)'"]*)\1\s*\)/g);
+
+  for (const match of urlMatches) {
+    const urlContent = match[2].trim();
+    // Check for dangerous schemes inside the url()
+    for (const scheme of DANGEROUS_SCHEMES) {
+      if (urlContent.startsWith(scheme + ':') || urlContent.startsWith(scheme + ' :')) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if an attribute is safe to include.
  */
 function isAttributeSafe(name: string, value: string): boolean {
   const nameLower = name.toLowerCase();
 
-  // Block event handlers (including variations)
+  // Block event handlers (including variations like onclick, onload, etc.)
+  // This covers all "on*" attributes which are event handlers
   if (nameLower.startsWith('on')) {
-    return false;
-  }
-
-  // Block known event handlers with entity encoding
-  if (EVENT_HANDLERS.some((h) => nameLower === h)) {
     return false;
   }
 
@@ -409,7 +334,12 @@ function isAttributeSafe(name: string, value: string): boolean {
   // Block style attribute that could contain dangerous expressions
   if (nameLower === 'style') {
     const valueLower = value.toLowerCase();
-    if (valueLower.includes('expression(') || valueLower.includes('javascript:') || valueLower.includes('url(')) {
+    // Block expression() (IE-specific) and javascript: schemes
+    if (valueLower.includes('expression(') || valueLower.includes('javascript:')) {
+      return false;
+    }
+    // Only block url() if it contains dangerous schemes (allow safe url() for images, fonts, etc.)
+    if (hasUnsafeUrlInStyle(value)) {
       return false;
     }
   }

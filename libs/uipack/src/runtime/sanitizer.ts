@@ -35,6 +35,8 @@
  * ```
  */
 
+import DOMPurify from 'dompurify';
+
 /**
  * Redaction placeholder tokens
  */
@@ -506,77 +508,21 @@ const HTML_DANGEROUS_SCHEMES = ['javascript:', 'data:', 'vbscript:'];
 
 /**
  * Sanitize HTML content to prevent XSS attacks.
- * Uses DOM-based sanitization when available (browser), falls back to regex-based approach.
+ * Uses DOMPurify for robust sanitization when available (browser), falls back to parser-based approach.
  *
  * @param html - HTML string to sanitize
  * @returns Sanitized HTML string
  */
 export function sanitizeHtmlContent(html: string): string {
-  // In browser environment with DOMParser, use DOM-based sanitization
-  if (typeof DOMParser !== 'undefined' && typeof document !== 'undefined') {
-    return sanitizeHtmlViaDom(html);
+  // In browser environment with DOM available, use DOMPurify for robust sanitization
+  // DOMPurify handles edge cases like SVG, MathML, namespaced elements, browser-specific
+  // parsing quirks, and mutation XSS attacks
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    return DOMPurify.sanitize(html);
   }
 
-  // Fallback: Use character-by-character parsing (safer than regex)
+  // Fallback: Use character-by-character parsing in non-DOM environments
   return sanitizeHtmlViaParser(html);
-}
-
-/**
- * DOM-based HTML sanitization (browser only).
- *
- * Note: This function parses HTML, removes dangerous elements/attributes,
- * and returns the sanitized HTML. For production use with untrusted input,
- * consider using DOMPurify for more comprehensive sanitization.
- */
-function sanitizeHtmlViaDom(html: string): string {
-  // Parse as HTML - DOMParser doesn't execute scripts during parsing
-  // Note: HTML5 parser is error-tolerant and silently fixes malformed HTML
-  // (unlike XML mode which produces <parsererror> elements)
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-
-  // Remove dangerous tags
-  for (const tagName of HTML_DANGEROUS_TAGS) {
-    const elements = doc.querySelectorAll(tagName);
-    elements.forEach((el) => el.remove());
-  }
-
-  // Remove dangerous attributes from all elements
-  const allElements = doc.querySelectorAll('*');
-  allElements.forEach((el) => {
-    const attrsToRemove: string[] = [];
-
-    for (const attr of Array.from(el.attributes)) {
-      const nameLower = attr.name.toLowerCase();
-
-      // Remove event handlers
-      if (nameLower.startsWith('on') || HTML_EVENT_HANDLERS.has(nameLower)) {
-        attrsToRemove.push(attr.name);
-        continue;
-      }
-
-      // Check URL attributes for dangerous schemes
-      if (['href', 'src', 'action', 'formaction', 'data', 'poster', 'codebase'].includes(nameLower)) {
-        const valueLower = attr.value.toLowerCase().trim();
-        if (HTML_DANGEROUS_SCHEMES.some((scheme) => valueLower.startsWith(scheme))) {
-          attrsToRemove.push(attr.name);
-        }
-      }
-
-      // Check style for dangerous values
-      if (nameLower === 'style') {
-        const styleLower = attr.value.toLowerCase();
-        if (styleLower.includes('expression(') || styleLower.includes('javascript:') || styleLower.includes('url(')) {
-          attrsToRemove.push(attr.name);
-        }
-      }
-    }
-
-    attrsToRemove.forEach((name) => el.removeAttribute(name));
-  });
-
-  // Return sanitized HTML - safe because we've removed dangerous elements and attributes
-  // lgtm[js/xss-through-dom]: intentional HTML sanitization; dangerous elements/attributes removed above
-  return doc.body.innerHTML;
 }
 
 /**

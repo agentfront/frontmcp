@@ -85,12 +85,28 @@ const responseTypeSchema = z.literal('code', {
 });
 
 /**
+ * Validate that a URI uses only http or https scheme.
+ * Rejects dangerous schemes like javascript:, data:, vbscript:, etc.
+ */
+const safeRedirectUriSchema = z.url().refine(
+  (uri) => {
+    try {
+      const url = new URL(uri);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  },
+  { message: 'redirect_uri must use http or https scheme' },
+);
+
+/**
  * Validated OAuth authorization request for orchestrated mode
  */
 const oauthAuthorizeRequestSchema = z.object({
   response_type: responseTypeSchema,
   client_id: z.string().min(1, 'client_id is required'),
-  redirect_uri: z.string().url('redirect_uri must be a valid URL'),
+  redirect_uri: safeRedirectUriSchema,
   code_challenge: pkceChallengeSchema,
   code_challenge_method: codeChallengeMethodSchema.optional().default('S256'),
   scope: z.string().optional(),
@@ -102,7 +118,7 @@ const oauthAuthorizeRequestSchema = z.object({
  * Minimal request for anonymous/default provider mode
  */
 const anonymousAuthorizeRequestSchema = z.object({
-  redirect_uri: z.string().url('redirect_uri is required'),
+  redirect_uri: safeRedirectUriSchema,
   state: z.string().optional(),
 });
 
