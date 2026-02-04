@@ -632,15 +632,36 @@ export function form(content: string, options: FormOptions = {}): string {
 }
 
 /**
+ * Static mapping for Tailwind grid-cols classes.
+ * Tailwind CSS cannot detect dynamic class names at build time, so we use a static lookup.
+ */
+const GRID_COLS_MAP: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+  6: 'grid-cols-6',
+  7: 'grid-cols-7',
+  8: 'grid-cols-8',
+  9: 'grid-cols-9',
+  10: 'grid-cols-10',
+  11: 'grid-cols-11',
+  12: 'grid-cols-12',
+};
+
+/**
  * Build form row (for horizontal forms)
  */
 export function formRow(fields: string[], options: { gap?: 'sm' | 'md' | 'lg'; className?: string } = {}): string {
   const { gap = 'md', className = '' } = options;
   const gapClasses = { sm: 'gap-2', md: 'gap-4', lg: 'gap-6' };
+  // Use static mapping for Tailwind compatibility (falls back to grid-cols-1 for safety)
+  const gridCols = GRID_COLS_MAP[fields.length] ?? 'grid-cols-1';
 
   // Escape className to prevent attribute injection
   const safeClassName = className ? escapeHtml(className) : '';
-  return `<div class="grid grid-cols-${fields.length} ${gapClasses[gap]} ${safeClassName}">
+  return `<div class="grid ${gridCols} ${gapClasses[gap]} ${safeClassName}">
     ${fields.join('\n')}
   </div>`;
 }
