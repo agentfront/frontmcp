@@ -17,6 +17,8 @@ import type {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { DirectMcpServer, DirectCallOptions, DirectAuthContext, DirectRequestMetadata } from './direct.types';
+import type { ConnectOptions } from './client.types';
+import type { DirectClient } from './client.types';
 import type { Scope } from '../scope/scope.instance';
 import { FlowControl } from '../common';
 import { InternalMcpError } from '../errors';
@@ -178,6 +180,22 @@ export class DirectMcpServerImpl implements DirectMcpServer {
       { method: 'prompts/get', params: { name, arguments: args } },
       options,
     );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Client Connections
+  // ─────────────────────────────────────────────────────────────────
+
+  async connect(sessionIdOrOptions?: string | ConnectOptions): Promise<DirectClient> {
+    if (this._isDisposed) {
+      throw new InternalMcpError('DirectMcpServer has been disposed');
+    }
+
+    const options: ConnectOptions | undefined =
+      typeof sessionIdOrOptions === 'string' ? { session: { id: sessionIdOrOptions } } : sessionIdOrOptions;
+
+    const { DirectClientImpl } = await import('./direct-client.js');
+    return DirectClientImpl.create(this.scope, options);
   }
 
   // ─────────────────────────────────────────────────────────────────

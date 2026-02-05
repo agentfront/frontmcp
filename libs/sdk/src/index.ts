@@ -208,6 +208,10 @@ export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools
 // Direct MCP Server - legacy programmatic access without HTTP transport
 export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';
 
+// create() factory — flat-config direct server creation
+export { create, clearCreateCache } from './direct';
+export type { CreateConfig } from './direct';
+
 // In-memory server for MCP SDK Client integration
 export { createInMemoryServer } from './transport';
 export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
