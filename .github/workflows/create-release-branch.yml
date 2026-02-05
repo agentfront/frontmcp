@@ -33,6 +33,7 @@ jobs:
           MAJOR_VERSION: ${{ inputs.major_version }}
           MINOR_VERSION: ${{ inputs.minor_version }}
         run: |
+          set -euo pipefail
           if ! [[ "$MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
             echo "::error::Invalid major version: $MAJOR_VERSION. Must be a number."
             exit 1
@@ -45,16 +46,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.base_branch }}
           fetch-depth: 0
-
-      - name: Get Node version
-        id: node-version
-        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ steps.node-version.outputs.version }}
+          node-version-file: ".nvmrc"
           cache: "yarn"
           registry-url: "https://registry.npmjs.org/"
 
@@ -65,11 +63,11 @@ jobs:
 
       - name: Configure git user
         run: |
-          git config user.name "agentfront[bot]"
-          git config user.email "agentfront[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Determine branch and version
-        id: branch
+      - name: Check if branch already exists
+        id: check_branch
         shell: bash
         env:
           MAJOR: ${{ inputs.major_version }}
@@ -85,24 +83,6 @@ jobs:
           fi
 
           BRANCH="release/${MAJOR}.${MINOR}.x"
-          VERSION="${MAJOR}.${MINOR}.0"
-          RELEASE_LINE="${MAJOR}.${MINOR}"
-
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "release_line=$RELEASE_LINE" >> "$GITHUB_OUTPUT"
-          echo "base=$BASE" >> "$GITHUB_OUTPUT"
-
-          echo "Branch: $BRANCH"
-          echo "Initial version: $VERSION"
-          echo "Release line: $RELEASE_LINE"
-          echo "Base branch: $BASE"
-
-      - name: Check if branch already exists
-        shell: bash
-        run: |
-          set -euo pipefail
-          BRANCH="${{ steps.branch.outputs.branch }}"
 
           git fetch origin --tags
 
@@ -111,110 +91,87 @@ jobs:
             exit 1
           fi
 
+          echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Branch $BRANCH does not exist, proceeding..."
+
+      - name: Determine version
+        id: version
+        shell: bash
+        env:
+          MAJOR: ${{ inputs.major_version }}
+          MINOR: ${{ inputs.minor_version }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${MAJOR}.${MINOR}.0"
+          RELEASE_LINE="${MAJOR}.${MINOR}"
+
+          echo "initial_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_line=$RELEASE_LINE" >> "$GITHUB_OUTPUT"
+
+          echo "Initial version: $VERSION"
+          echo "Release line: $RELEASE_LINE"
 
       - name: Create release branch
         shell: bash
         run: |
           set -euo pipefail
 
-          BRANCH="${{ steps.branch.outputs.branch }}"
-          BASE="${{ steps.branch.outputs.base }}"
+          BRANCH="${{ steps.check_branch.outputs.branch_name }}"
+          BASE="${{ inputs.base_branch }}"
 
-          # Validate BASE is a real git ref (tags already fetched in previous step)
+          # Validate BASE is a real git ref (tags already fetched)
           if ! git rev-parse --verify "origin/$BASE" >/dev/null 2>&1; then
             echo "::error::Invalid base_branch: '$BASE' does not exist on remote"
             exit 1
           fi
 
           git fetch origin "$BASE"
-          git checkout -b "$BRANCH" "origin/$BASE"
+          git switch -c "$BRANCH" "origin/$BASE"
 
           echo "Created branch $BRANCH from $BASE"
-
-      - name: Get version context
-        id: versions
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Get last release tag for archival purposes
-          # Note: exclude pre-release tags (e.g., -rc/-beta) so new-minor detection
-          # doesn't get confused by pre-releases on the target minor.
-          # Wrap grep in command group to handle no matches gracefully under set -euo pipefail
-          LAST_TAG=$(
-            git tag --list "v*" --sort=-version:refname | {
-              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
-            } | head -n1 || echo ""
-          )
-          if [ -n "$LAST_TAG" ]; then
-            LAST_VERSION="${LAST_TAG#v}"
-            LAST_MINOR=$(echo "$LAST_VERSION" | awk -F. '{print $1"."$2}')
-          else
-            LAST_VERSION=""
-            LAST_MINOR=""
-          fi
-
-          NEXT_MINOR="${{ steps.branch.outputs.release_line }}"
-
-          echo "last_version=$LAST_VERSION" >> "$GITHUB_OUTPUT"
-          echo "last_minor=$LAST_MINOR" >> "$GITHUB_OUTPUT"
-          echo "next_minor=$NEXT_MINOR" >> "$GITHUB_OUTPUT"
-
-          echo "Last version: $LAST_VERSION (minor: $LAST_MINOR)"
-          echo "Next minor: $NEXT_MINOR"
 
       - name: Update package versions
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ steps.branch.outputs.version }}"
+          VERSION="${{ steps.version.outputs.initial_version }}"
 
           echo "Updating all synchronized libraries to v$VERSION..."
           npx nx release version "$VERSION" --git-tag=false --git-commit=false
 
-      - name: Create release docs base marker
-        shell: bash
-        run: |
-          # Store the SHA of the base branch for future diff calculations
-          # This allows trigger-docs-update.yml to calculate proper diffs
-          BASE_SHA=$(git rev-parse "origin/${{ steps.branch.outputs.base }}")
-          echo "$BASE_SHA" > .release-docs-base
-          echo "Created .release-docs-base marker with SHA: $BASE_SHA"
-
-      - name: Archive and publish docs (new minor version only)
+      - name: Update CHANGELOG.md files
         shell: bash
         run: |
           set -euo pipefail
+          VERSION="${{ steps.version.outputs.initial_version }}"
+          DATE=$(date -u +%Y-%m-%d)
 
-          LAST_MINOR="${{ steps.versions.outputs.last_minor }}"
-          NEXT_MINOR="${{ steps.versions.outputs.next_minor }}"
+          # Update [Unreleased] markers in all CHANGELOG.md files (no-op if marker absent)
+          for f in CHANGELOG.md libs/*/CHANGELOG.md plugins/*/CHANGELOG.md; do
+            [ -f "$f" ] || continue
+            if grep -q '## \[Unreleased\]' "$f"; then
+              sed -i "s/## \[Unreleased\]/## [${VERSION}] - ${DATE}/" "$f"
+              echo "Updated $f"
+            fi
+          done
 
-          if [ -z "$LAST_MINOR" ]; then
-            echo "No previous version to archive, skipping docs archival"
-            exit 0
-          fi
-
-          # Only archive and publish if this is a new minor version
-          if [ "$LAST_MINOR" = "$NEXT_MINOR" ]; then
-            echo "Same minor version ($NEXT_MINOR), skipping docs archival"
-            exit 0
-          fi
-
-          if [ -f "scripts/archive-and-publish-docs.mjs" ]; then
-            echo "Running archive and publish docs script..."
-            node scripts/archive-and-publish-docs.mjs "$LAST_MINOR" "$NEXT_MINOR"
-          else
-            echo "Archive docs script not found, skipping"
-          fi
+      - name: Create release docs base marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Store the current HEAD SHA for future diff calculations
+          SHA=$(git rev-parse HEAD)
+          echo "$SHA" > .release-docs-base
+          echo "Created .release-docs-base marker with SHA: $SHA"
 
       - name: Commit release preparation
         shell: bash
         run: |
           set -euo pipefail
 
-          VERSION="${{ steps.branch.outputs.version }}"
-          BRANCH="${{ steps.branch.outputs.branch }}"
+          VERSION="${{ steps.version.outputs.initial_version }}"
+          BRANCH="${{ steps.check_branch.outputs.branch_name }}"
 
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
@@ -224,7 +181,6 @@ jobs:
 
           - Set all synchronized libs to v$VERSION
           - Create .release-docs-base marker for docs diffing
-          - Archive previous docs (if new minor version)
 
           This is a long-lived release branch for the ${BRANCH#release/} series.
           Hotfixes and patches will be published from this branch.
@@ -241,7 +197,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BRANCH="${{ steps.branch.outputs.branch }}"
+          BRANCH="${{ steps.check_branch.outputs.branch_name }}"
 
           git push --set-upstream origin "$BRANCH"
           echo "Pushed branch $BRANCH"
@@ -252,13 +208,13 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Branch | \`${{ steps.branch.outputs.branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Initial version | \`${{ steps.branch.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Release line | \`${{ steps.branch.outputs.release_line }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Base branch | \`${{ steps.branch.outputs.base }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ steps.check_branch.outputs.branch_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Initial version | \`${{ steps.version.outputs.initial_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release line | \`${{ steps.version.outputs.release_line }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Base branch | \`${{ inputs.base_branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Next Steps" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "1. Open PRs targeting \`${{ steps.branch.outputs.branch }}\` for hotfixes" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Open PRs targeting \`${{ steps.check_branch.outputs.branch_name }}\` for hotfixes" >> "$GITHUB_STEP_SUMMARY"
           echo "2. Use **Publish Release** workflow to publish versions" >> "$GITHUB_STEP_SUMMARY"
           echo "3. Cherry-picks to main will be prompted automatically" >> "$GITHUB_STEP_SUMMARY"
