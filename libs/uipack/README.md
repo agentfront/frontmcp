@@ -1,98 +1,47 @@
 # @frontmcp/uipack
 
-React-free build utilities, theming, runtime helpers, and platform adapters for FrontMCP UI development. `@frontmcp/uipack` powers HTML string templates, cacheable widgets, and discovery metadata without pulling React or DOM libraries into your server.
+React-free build utilities, theming, runtime helpers, and platform adapters for FrontMCP UI development.
+
+[![NPM](https://img.shields.io/npm/v/@frontmcp/uipack.svg)](https://www.npmjs.com/package/@frontmcp/uipack)
 
 ## Package Split
 
-| Package            | Purpose                                                               | React Required        |
-| ------------------ | --------------------------------------------------------------------- | --------------------- |
-| `@frontmcp/uipack` | Themes, runtime helpers, build/render pipelines, validation, adapters | No                    |
-| `@frontmcp/ui`     | HTML/React components, layouts, widgets, web components               | Yes (peer dependency) |
+| Package            | Purpose                                                               | React Required |
+| ------------------ | --------------------------------------------------------------------- | -------------- |
+| `@frontmcp/uipack` | Themes, runtime helpers, build/render pipelines, validation, adapters | No             |
+| `@frontmcp/ui`     | HTML/React components, layouts, widgets, web components               | Yes (peer dep) |
 
-Install `@frontmcp/uipack` when you need HTML-first tooling, template validation, or platform adapters. Install `@frontmcp/ui` alongside it for ready-made components.
-
-## Installation
+## Install
 
 ```bash
 npm install @frontmcp/uipack
-# or
-yarn add @frontmcp/uipack
 ```
 
 ## Features
 
-- **Theme system** – Configure Tailwind-style palettes, fonts, and CDN assets, then inline or externalize scripts per platform.
-- **Build API** – Compile tool templates with esbuild/SWC, emit static widgets, and ship cached manifests for serverless environments.
-- **Build modes** – Choose static, dynamic, or hybrid rendering plus multi-platform bundler helpers so the same widget rehydrates on OpenAI, Claude, and Gemini.
-- **Runtime helpers** – Wrap HTML/React/MDX templates with CSP, sanitize user content, and expose MCP Bridge metadata.
-- **Platform adapters** – Generate OpenAI/Claude/Gemini discovery metadata, resolve serving modes, and understand host capabilities.
-- **Validation** – Extract schema paths, validate Handlebars templates, and render error boxes before code hits production.
-- **Bundler/cache** – File-system and Redis caches, transpile/render caches, and hashing utilities for incremental builds.
+- **Theme system** — Tailwind-style palettes, fonts, CDN assets, platform-aware inlining ([docs][docs-theme])
+- **Build API** — compile tool templates with esbuild/SWC, emit static widgets, cached manifests ([docs][docs-build])
+- **Build modes** — static, dynamic, or hybrid rendering; multi-platform bundler helpers ([docs][docs-build-modes])
+- **Runtime helpers** — wrap HTML/React/MDX with CSP, sanitize content, expose MCP Bridge metadata ([docs][docs-runtime])
+- **Platform adapters** — OpenAI/Claude/Gemini discovery metadata, serving modes, host capabilities ([docs][docs-adapters])
+- **Validation** — schema path extraction, Handlebars template validation, error boxes ([docs][docs-validation])
+- **Bundler/cache** — filesystem and Redis caches, transpile/render caches, hashing utilities ([docs][docs-bundler])
 
-## Quick Start
-
-### Theme + layout utilities
-
-```ts
-import { DEFAULT_THEME, createTheme, buildCdnScriptsFromTheme } from '@frontmcp/uipack/theme';
-
-const customTheme = createTheme({
-  name: 'brand',
-  colors: {
-    semantic: {
-      primary: '#0BA5EC',
-      secondary: '#6366F1',
-    },
-  },
-});
-
-const scripts = await buildCdnScriptsFromTheme(customTheme, { inline: true });
-```
-
-### Build tool UI HTML
+## Quick Example
 
 ```ts
 import { buildToolUI } from '@frontmcp/uipack/build';
 
 const result = await buildToolUI({
-  template: '<div>{{output.temperature}} °C</div>',
-  context: {
-    input: { location: 'London' },
-    output: { temperature: 18 },
-  },
+  template: '<div>{{output.temperature}} C</div>',
+  context: { input: { location: 'London' }, output: { temperature: 18 } },
   platform: 'openai',
 });
-
-console.log(result.html);
 ```
 
-### Wrap tool responses with MCP metadata
+> Full guide: [UI Overview][docs-overview]
 
-```ts
-import { wrapToolUI, createTemplateHelpers } from '@frontmcp/uipack/runtime';
-
-The helpers = createTemplateHelpers();
-const html = `<div>${helpers.escapeHtml(ctx.output.summary)}</div>`;
-
-const response = wrapToolUI({
-  html,
-  displayMode: 'inline',
-  servingMode: 'auto',
-  widgetDescription: 'Summarized status card',
-});
-```
-
-### Resolve platform capabilities
-
-```ts
-import { getPlatform, canUseCdn, needsInlineScripts } from '@frontmcp/uipack/theme';
-
-const claude = getPlatform('claude');
-const inline = needsInlineScripts(claude);
-const cdnOk = canUseCdn(claude);
-```
-
-## Entry points
+## Entry Points
 
 | Path                          | Purpose                                                  |
 | ----------------------------- | -------------------------------------------------------- |
@@ -107,45 +56,36 @@ const cdnOk = canUseCdn(claude);
 | `@frontmcp/uipack/types`      | Shared template/context types                            |
 | `@frontmcp/uipack/utils`      | Escaping, safe stringify, helper utilities               |
 
-## Template validation
+## Docs
 
-```ts
-import { validateTemplate } from '@frontmcp/uipack/validation';
-import { z } from 'zod';
+| Topic             | Link                            |
+| ----------------- | ------------------------------- |
+| Overview          | [UI Overview][docs-overview]    |
+| Theme system      | [Theming][docs-theme]           |
+| Build API         | [Build Tools][docs-build]       |
+| Build modes       | [Build Modes][docs-build-modes] |
+| Runtime helpers   | [Runtime][docs-runtime]         |
+| Platform adapters | [Adapters][docs-adapters]       |
+| Validation        | [Validation][docs-validation]   |
+| Bundler           | [Bundler][docs-bundler]         |
 
-const outputSchema = z.object({
-  temperature: z.number(),
-  city: z.string(),
-});
+## Related Packages
 
-const result = validateTemplate('<div>{{output.city}}</div>', outputSchema);
-if (!result valid) {
-  console.warn(result.errors);
-}
-```
-
-## Cache + bundler helpers
-
-```ts
-import { createFilesystemBuilder } from '@frontmcp/uipack/bundler/file-cache';
-
-const builder = await createFilesystemBuilder('.frontmcp-cache/builds');
-const manifest = await builder.build({ entry: './widgets/weather.tsx' });
-```
-
-## Development
-
-```bash
-yarn nx build uipack
-yarn nx test uipack
-```
-
-## Related packages
-
-- [`@frontmcp/ui`](../ui/README.md) – Component library that consumes these helpers
-- [`@frontmcp/sdk`](../sdk/README.md) – Core SDK and decorators
-- [`@frontmcp/testing`](../testing/README.md) – UI assertions for automated testing
+- [`@frontmcp/ui`](../ui) — React components that consume these helpers
+- [`@frontmcp/sdk`](../sdk) — core framework and decorators
+- [`@frontmcp/testing`](../testing) — UI assertions for automated testing
 
 ## License
 
-Apache-2.0
+Apache-2.0 — see [LICENSE](../../LICENSE).
+
+<!-- links -->
+
+[docs-overview]: https://docs.agentfront.dev/frontmcp/ui/overview
+[docs-theme]: https://docs.agentfront.dev/frontmcp/ui/theming
+[docs-build]: https://docs.agentfront.dev/frontmcp/ui/build-tools
+[docs-build-modes]: https://docs.agentfront.dev/frontmcp/ui/build-modes
+[docs-runtime]: https://docs.agentfront.dev/frontmcp/ui/runtime
+[docs-adapters]: https://docs.agentfront.dev/frontmcp/ui/adapters
+[docs-validation]: https://docs.agentfront.dev/frontmcp/ui/validation
+[docs-bundler]: https://docs.agentfront.dev/frontmcp/ui/bundler

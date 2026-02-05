@@ -1,110 +1,51 @@
 # @frontmcp/utils
 
-Shared utility functions for the FrontMCP ecosystem. Provides generic, protocol-neutral utilities for string manipulation, URI handling, path operations, content processing, and more.
+Shared utility functions for the FrontMCP ecosystem.
 
-## Installation
+[![NPM](https://img.shields.io/npm/v/@frontmcp/utils.svg)](https://www.npmjs.com/package/@frontmcp/utils)
+
+> **Internal package.** Used by `@frontmcp/sdk` and other `@frontmcp/*` libraries — most users do not need to install this directly.
+
+## Install
 
 ```bash
 npm install @frontmcp/utils
-# or
-yarn add @frontmcp/utils
 ```
 
 ## Features
 
-### Naming Utilities
+**Naming** — `splitWords`, `toCase`, `shortHash`, `ensureMaxLen`, `idFromString` for string manipulation and case conversion
 
-```typescript
-import { splitWords, toCase, shortHash, ensureMaxLen, idFromString } from '@frontmcp/utils';
+**URI** — `isValidMcpUri`, `extractUriScheme`, `parseUriTemplate`, `matchUriTemplate`, `expandUriTemplate` (RFC 3986 / RFC 6570)
 
-// Split strings into words (handles camelCase, PascalCase, delimiters)
-splitWords('myFunctionName'); // ['my', 'Function', 'Name']
+**Path** — `trimSlashes`, `joinPath` for URL path operations
 
-// Convert to different cases
-toCase(['my', 'function'], 'snake'); // 'my_function'
-toCase(['my', 'function'], 'kebab'); // 'my-function'
-toCase(['my', 'function'], 'camel'); // 'myFunction'
+**Content** — `sanitizeToJson`, `inferMimeType` for safe serialization and MIME detection
 
-// Generate short hashes
-shortHash('some-string'); // '6-char hex hash'
+**HTTP** — `validateBaseUrl` for URL validation and normalization
 
-// Truncate with hash for uniqueness
-ensureMaxLen('very-long-name-that-exceeds-limit', 20);
+**Crypto** — `sha256`, `sha256Hex`, `sha256Base64url`, `hkdfSha256`, `encryptAesGcm`, `decryptAesGcm`, `randomBytes`, `randomUUID`, `generateCodeVerifier`, `generateCodeChallenge`, `generatePkcePair`, `base64urlEncode`, `base64urlDecode` for cross-platform cryptography
 
-// Sanitize to valid ID
-idFromString('My Function Name!'); // 'My-Function-Name'
+**File system** — `readFile`, `writeFile`, `mkdir`, `stat`, `fileExists`, `readJSON`, `writeJSON`, `ensureDir`, `isDirEmpty`, `runCmd` and more — lazy-loaded for Node.js environments
+
+## Quick Example
+
+```ts
+import { matchUriTemplate, sha256Hex, fileExists } from '@frontmcp/utils';
+
+const params = matchUriTemplate('users/{id}/posts/{postId}', 'users/123/posts/456');
+// { id: '123', postId: '456' }
+
+const hash = sha256Hex('hello world');
+
+const exists = await fileExists('/path/to/file');
 ```
 
-### URI Utilities
+## Related Packages
 
-```typescript
-import {
-  isValidMcpUri,
-  extractUriScheme,
-  parseUriTemplate,
-  matchUriTemplate,
-  expandUriTemplate,
-} from '@frontmcp/utils';
-
-// Validate RFC 3986 URIs
-isValidMcpUri('https://example.com/resource'); // true
-isValidMcpUri('/path/without/scheme'); // false
-
-// Extract scheme
-extractUriScheme('https://example.com'); // 'https'
-
-// RFC 6570 URI Templates
-const params = matchUriTemplate('users/{userId}/posts/{postId}', 'users/123/posts/456');
-// { userId: '123', postId: '456' }
-
-expandUriTemplate('users/{userId}', { userId: '123' }); // 'users/123'
-```
-
-### Path Utilities
-
-```typescript
-import { trimSlashes, joinPath } from '@frontmcp/utils';
-
-trimSlashes('/path/to/resource/'); // 'path/to/resource'
-joinPath('api', 'v1', 'users'); // '/api/v1/users'
-```
-
-### Content Utilities
-
-```typescript
-import { sanitizeToJson, inferMimeType } from '@frontmcp/utils';
-
-// Sanitize values to JSON-safe objects
-sanitizeToJson({ date: new Date(), fn: () => {} }); // { date: '2024-01-01T00:00:00.000Z' }
-
-// Infer MIME type from extension
-inferMimeType('document.json'); // 'application/json'
-inferMimeType('image.png'); // 'image/png'
-```
-
-### HTTP Utilities
-
-```typescript
-import { validateBaseUrl } from '@frontmcp/utils';
-
-// Validate and normalize URLs
-const url = validateBaseUrl('https://api.example.com');
-// Throws for invalid URLs or unsupported protocols (file://, javascript:)
-```
-
-### File System Utilities
-
-```typescript
-import { fileExists, readJSON, writeJSON, ensureDir, isDirEmpty } from '@frontmcp/utils';
-
-// Async file operations
-await fileExists('/path/to/file');
-await readJSON<Config>('/path/to/config.json');
-await writeJSON('/path/to/output.json', { key: 'value' });
-await ensureDir('/path/to/directory');
-await isDirEmpty('/path/to/directory');
-```
+- [`@frontmcp/sdk`](../sdk) — core framework
+- [`@frontmcp/auth`](../auth) — uses crypto utilities for PKCE, encryption
 
 ## License
 
-Apache-2.0
+Apache-2.0 — see [LICENSE](../../LICENSE).

@@ -1,33 +1,63 @@
-# FrontMCP Adapters
+# @frontmcp/adapters
 
-This package contains adapters that extend FrontMCP servers with external capabilities by auto-generating, transforming,
-or delegating MCP tools.
+Adapters that extend FrontMCP servers by auto-generating MCP tools from external specifications.
 
-## Available adapters
+[![NPM](https://img.shields.io/npm/v/@frontmcp/adapters.svg)](https://www.npmjs.com/package/@frontmcp/adapters)
+
+## Install
+
+```bash
+npm install @frontmcp/adapters
+```
+
+## Available Adapters
 
 ### OpenAPI Adapter
 
-Generate MCP tools from an OpenAPI spec. Each operation becomes an MCP tool with strong input validation and automatic
-request/response handling.
-
-- Code: `libs/adapters/src/openapi`
-- README: `libs/adapters/src/openapi/README.md`
-- Demo usage: `apps/demo/src/apps/expenses/index.ts`
-- Example spec (used by the demo): https://frontmcp-test.proxy.beeceptor.com/openapi.json
-
-This adapter is powered by [`mcp-from-openapi`](https://www.npmjs.com/package/mcp-from-openapi) (external package),
-which handles parameter conflict resolution, multi-security schemes, and request mappers for you.
-
-Quick example:
+Generate MCP tools from an OpenAPI spec. Each operation becomes a tool with Zod input validation and automatic request/response handling.
 
 ```ts
+import { App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
 
-OpenapiAdapter.init({
-  name: 'backend:api',
-  url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
-  baseUrl: 'https://frontmcp-test.proxy.beeceptor.com',
-});
+@App({
+  id: 'my-app',
+  name: 'My App',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      url: 'https://api.example.com/openapi.json',
+      baseUrl: 'https://api.example.com',
+    }),
+  ],
+})
+export default class MyApp {}
 ```
 
-For detailed options and advanced usage, see the adapter README and the docs page `docs/adapters/openapi-adapter.mdx`.
+Powered by [`mcp-from-openapi`](https://www.npmjs.com/package/mcp-from-openapi) for parameter conflict resolution, multi-security schemes, and request mappers.
+
+> Full guide: [OpenAPI Adapter][docs-openapi]
+
+## Docs
+
+| Topic              | Link                               |
+| ------------------ | ---------------------------------- |
+| Adapters overview  | [Adapters Overview][docs-overview] |
+| OpenAPI adapter    | [OpenAPI Adapter][docs-openapi]    |
+| Step-by-step guide | [Add OpenAPI Adapter][docs-guide]  |
+
+## Related Packages
+
+- [`@frontmcp/sdk`](../sdk) — core framework
+- [`@frontmcp/testing`](../testing) — E2E testing for adapter-generated tools
+- [`mcp-from-openapi`](https://www.npmjs.com/package/mcp-from-openapi) — underlying OpenAPI-to-MCP engine
+
+## License
+
+Apache-2.0 — see [LICENSE](../../LICENSE).
+
+<!-- links -->
+
+[docs-overview]: https://docs.agentfront.dev/frontmcp/adapters/overview
+[docs-openapi]: https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter
+[docs-guide]: https://docs.agentfront.dev/frontmcp/guides/add-openapi-adapter
