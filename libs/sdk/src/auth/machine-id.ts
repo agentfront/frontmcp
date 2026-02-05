@@ -98,7 +98,7 @@ function saveMachineIdAsync(machineId: string): void {
  * - In production: Set MACHINE_ID env var for stability, or allow ephemeral generation
  * - For distributed systems: Use same MACHINE_ID for portability, or unique per-node for affinity
  */
-const MACHINE_ID = (() => {
+const machineId = (() => {
   // 1. Check env var (highest priority - supports Redis, K8s, etc.)
   const envMachineId = process.env['MACHINE_ID'];
   if (envMachineId) {
@@ -120,10 +120,24 @@ const MACHINE_ID = (() => {
   return newId;
 })();
 
+/** Process-wide override set by `create()` for session continuity */
+let machineIdOverride: string | undefined;
+
 /**
  * Get the current machine ID.
- * This value is stable for the lifetime of the process.
+ * Returns the override (if set via `setMachineIdOverride`) or the computed value.
  */
 export function getMachineId(): string {
-  return MACHINE_ID;
+  return machineIdOverride ?? machineId;
+}
+
+/**
+ * Set a process-wide machine ID override.
+ * Pass `undefined` to clear the override and revert to the computed value.
+ *
+ * This is used by `create()` to inject a stable machine ID for session continuity,
+ * especially when using Redis-backed sessions across process restarts.
+ */
+export function setMachineIdOverride(id: string | undefined): void {
+  machineIdOverride = id;
 }

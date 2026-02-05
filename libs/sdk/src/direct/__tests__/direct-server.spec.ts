@@ -14,6 +14,16 @@ jest.mock('@frontmcp/utils', () => ({
   bytesToHex: jest.fn(() => 'mock-hex'),
 }));
 
+// Mock DirectClientImpl for connect() tests
+const mockDirectClient = { close: jest.fn().mockResolvedValue(undefined) };
+const mockDirectClientCreate = jest.fn().mockResolvedValue(mockDirectClient);
+
+jest.mock('../direct-client', () => ({
+  DirectClientImpl: {
+    create: (...args: unknown[]) => mockDirectClientCreate(...args),
+  },
+}));
+
 /** Minimal Scope interface required by DirectMcpServerImpl */
 type MockScope = Pick<Scope, 'runFlowForOutput' | 'transportService'>;
 
@@ -264,6 +274,49 @@ describe('DirectMcpServerImpl', () => {
       const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
 
       await expect(server.listTools()).rejects.toThrow('Unexpected error');
+    });
+  });
+
+  describe('connect', () => {
+    it('should return a DirectClient', async () => {
+      const mockScope = createMockScope();
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
+
+      const client = await server.connect();
+
+      expect(client).toBe(mockDirectClient);
+      expect(mockDirectClientCreate).toHaveBeenCalledWith(mockScope, undefined);
+    });
+
+    it('should pass ConnectOptions through', async () => {
+      const mockScope = createMockScope();
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
+      const options = { session: { id: 'user-1' }, authToken: 'jwt' };
+
+      await server.connect(options);
+
+      expect(mockDirectClientCreate).toHaveBeenCalledWith(mockScope, options);
+    });
+
+    it('should convert string shorthand to ConnectOptions', async () => {
+      const mockScope = createMockScope();
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
+
+      await server.connect('user-2');
+
+      expect(mockDirectClientCreate).toHaveBeenCalledWith(mockScope, {
+        session: { id: 'user-2' },
+      });
+    });
+
+    it('should throw InternalMcpError after dispose', async () => {
+      const mockScope = createMockScope();
+      const server = new DirectMcpServerImpl(mockScope as unknown as Scope);
+
+      await server.dispose();
+
+      await expect(server.connect()).rejects.toThrow(InternalMcpError);
+      await expect(server.connect()).rejects.toThrow('DirectMcpServer has been disposed');
     });
   });
 

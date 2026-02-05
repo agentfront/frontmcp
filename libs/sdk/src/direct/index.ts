@@ -58,3 +58,10 @@ export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools
 export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct.types';
 
 export { DirectMcpServerImpl } from './direct-server';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// create() Factory — flat-config server creation
+// ─────────────────────────────────────────────────────────────────────────────
+
+export { create, clearCreateCache } from './create';
+export type { CreateConfig } from './create.types';

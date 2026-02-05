@@ -14,6 +14,7 @@ import type {
   GetPromptResult,
   ListResourceTemplatesResult,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { DirectClient, ConnectOptions } from './client.types';
 
 /**
  * Auth context for direct server invocation.
@@ -158,6 +159,19 @@ export interface DirectMcpServer {
    * @returns Prompt content with messages
    */
   getPrompt(name: string, args?: Record<string, string>, options?: DirectCallOptions): Promise<GetPromptResult>;
+
+  // ─────────────────────────────────────────────────────────────────
+  // Client Connections
+  // ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Connect a new MCP client to this server.
+   * Each client gets its own session and in-memory transport.
+   *
+   * @param sessionIdOrOptions - Session ID string (shorthand) or full ConnectOptions
+   * @returns Connected DirectClient instance
+   */
+  connect(sessionIdOrOptions?: string | ConnectOptions): Promise<DirectClient>;
 
   // ─────────────────────────────────────────────────────────────────
   // Lifecycle
