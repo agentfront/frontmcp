@@ -1,6 +1,6 @@
 {
   "name": "frontmcp",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "FrontMCP command line interface",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -35,7 +35,7 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@frontmcp/utils": "0.8.1",
+    "@frontmcp/utils": "0.9.0",
     "tslib": "^2.3.0",
     "@rspack/core": "^1.3.12"
   },

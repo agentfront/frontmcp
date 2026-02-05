@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/sdk",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "FrontMCP SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -73,10 +73,10 @@
     }
   },
   "dependencies": {
-    "@frontmcp/utils": "0.8.1",
-    "@frontmcp/di": "0.8.1",
-    "@frontmcp/uipack": "0.8.1",
-    "@frontmcp/auth": "0.8.1",
+    "@frontmcp/utils": "0.9.0",
+    "@frontmcp/di": "0.9.0",
+    "@frontmcp/uipack": "0.9.0",
+    "@frontmcp/auth": "0.9.0",
     "@modelcontextprotocol/sdk": "1.25.3",
     "@langchain/core": "^1.1.8",
     "@langchain/openai": "^1.2.0",
