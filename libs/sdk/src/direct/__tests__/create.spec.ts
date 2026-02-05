@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 import type { DirectMcpServer } from '../direct.types';
+import type { DirectClient } from '../client.types';
 import type { CreateConfig } from '../create.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,6 +12,8 @@ import type { CreateConfig } from '../create.types';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const mockDispose = jest.fn().mockResolvedValue(undefined);
+
+const mockClient = {} as unknown as DirectClient;
 
 const mockServer: DirectMcpServer = {
   ready: Promise.resolve(),
@@ -21,6 +24,7 @@ const mockServer: DirectMcpServer = {
   readResource: jest.fn().mockResolvedValue({ contents: [] }),
   listPrompts: jest.fn().mockResolvedValue({ prompts: [] }),
   getPrompt: jest.fn().mockResolvedValue({ messages: [] }),
+  connect: jest.fn().mockResolvedValue(mockClient),
   dispose: mockDispose,
 };
 

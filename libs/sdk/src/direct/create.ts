@@ -135,9 +135,11 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
   }
 
   const serverPromise = (async (): Promise<DirectMcpServer> => {
+    const machineIdWasSet = config.machineId !== undefined;
+
     try {
       // Apply machine ID override if provided
-      if (config.machineId !== undefined) {
+      if (machineIdWasSet) {
         const { setMachineIdOverride } = await import('../auth/machine-id.js');
         setMachineIdOverride(config.machineId);
       }
@@ -147,20 +149,30 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
       const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
       const server = await FrontMcpInstance.createDirect(fullConfig);
 
-      // Wrap dispose to auto-evict from cache
-      if (cacheKey) {
+      // Wrap dispose to auto-evict from cache and clear machineId override
+      if (cacheKey || machineIdWasSet) {
         const originalDispose = server.dispose.bind(server);
         server.dispose = async () => {
-          instanceCache.delete(cacheKey);
+          if (cacheKey) {
+            instanceCache.delete(cacheKey);
+          }
+          if (machineIdWasSet) {
+            const { setMachineIdOverride } = await import('../auth/machine-id.js');
+            setMachineIdOverride(undefined);
+          }
           return originalDispose();
         };
       }
 
       return server;
     } catch (error) {
-      // Evict failed init from cache
+      // Evict failed init from cache and clear machineId override
       if (cacheKey) {
         instanceCache.delete(cacheKey);
+      }
+      if (machineIdWasSet) {
+        const { setMachineIdOverride } = await import('../auth/machine-id.js');
+        setMachineIdOverride(undefined);
       }
       throw error;
     }
