@@ -25,4 +25,12 @@ export interface HttpOptionsInterface {
    * Can be a FrontMcpServer instance or a factory function.
    */
   hostFactory?: FrontMcpServer | ((config: HttpOptionsInterface) => FrontMcpServer);
+
+  /**
+   * Unix socket path for local-only server mode.
+   * When set, the server listens on a Unix socket instead of a TCP port.
+   * The entire HTTP feature set (streamable HTTP, SSE, elicitation, sessions)
+   * works unchanged over Unix sockets.
+   */
+  socketPath?: string;
 }

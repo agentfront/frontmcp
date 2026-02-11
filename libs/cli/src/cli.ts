@@ -13,6 +13,7 @@ import { runInspector } from './commands/inspector';
 import { runCreate } from './commands/create';
 import { runTemplate } from './commands/template';
 import { runTest } from './commands/test';
+import { runSocket } from './commands/socket';
 
 function showHelp(): void {
   console.log(`
@@ -30,6 +31,7 @@ ${c('bold', 'Commands')}
   inspector           Launch MCP Inspector (npx @modelcontextprotocol/inspector)
   create [name]       Scaffold a new FrontMCP project (interactive if name omitted)
   template <type>     Scaffold a template by type (e.g., "3rd-party-integration")
+  socket <entry>      Start Unix socket daemon for local MCP server
   help                Show this help message
 
 ${c('bold', 'Options')}
@@ -42,6 +44,11 @@ ${c('bold', 'Create Options')}
   --redis <setup>      Redis setup: docker, existing, none (node target only)
   --cicd               Enable GitHub Actions CI/CD
   --no-cicd            Disable GitHub Actions CI/CD
+
+${c('bold', 'Socket Options')}
+  -s, --socket <path>  Unix socket path (default: ~/.frontmcp/sockets/{app}.sock)
+  --db <path>          SQLite database path for persistence
+  -b, --background     Run as background daemon (detached process)
 
 ${c('bold', 'Test Options')}
   -i, --runInBand      Run tests sequentially (recommended for E2E)
@@ -61,6 +68,8 @@ ${c('bold', 'Examples')}
   npx frontmcp create my-mcp --yes             # Use defaults
   npx frontmcp create my-mcp --target vercel   # Vercel deployment
   npx frontmcp template marketplace-3rd-tools
+  frontmcp socket ./src/main.ts --socket /tmp/my-app.sock
+  frontmcp socket ./src/main.ts --socket /tmp/my-app.sock --db ~/.frontmcp/data/app.sqlite
 `);
 }
 
@@ -109,6 +118,9 @@ async function main(): Promise<void> {
       }
       case 'test':
         await runTest(parsed);
+        break;
+      case 'socket':
+        await runSocket(parsed);
         break;
       case 'help':
         showHelp();

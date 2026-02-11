@@ -12,6 +12,12 @@ export const httpOptionsSchema = z.object({
   // Using z.any() because hostFactory accepts FrontMcpServer | ((config) => FrontMcpServer)
   // which Zod cannot validate at runtime - type safety is enforced via TypeScript interface
   hostFactory: z.any().optional(),
+  /**
+   * Unix socket path for local-only server mode.
+   * When set, the server listens on a Unix socket instead of a TCP port.
+   * Express natively supports `app.listen('/path/to/file.sock')`.
+   */
+  socketPath: z.string().optional(),
 });
 
 /**

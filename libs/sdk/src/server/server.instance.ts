@@ -50,8 +50,8 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     return this.host.getHandler();
   }
 
-  start() {
+  async start() {
     this.prepare();
-    this.host.start(this.config.port);
+    await this.host.start(this.config.socketPath ?? this.config.port);
   }
 }

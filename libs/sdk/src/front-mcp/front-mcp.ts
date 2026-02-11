@@ -14,7 +14,8 @@ import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError } from '../errors';
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
+import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -40,12 +41,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await this.scopes.ready;
   }
 
-  start() {
+  async start() {
     const server = this.providers.get(FrontMcpServer);
     if (!server) {
       throw new Error('Server not found');
     }
-    server.start();
+    await server.start();
   }
 
   /**
@@ -67,7 +68,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(options);
     await frontMcp.ready;
 
-    frontMcp.start();
+    await frontMcp.start();
   }
 
   /**
@@ -190,6 +191,84 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * }
    * ```
    */
+  /**
+   * Runs the FrontMCP server on a Unix socket for local-only access.
+   *
+   * This enables a persistent background FrontMCP server accessible only via
+   * a Unix `.sock` file. The entire HTTP feature set (streamable HTTP, SSE,
+   * elicitation, sessions) works unchanged over Unix sockets.
+   *
+   * @example
+   * ```typescript
+   * import { FrontMcpInstance } from '@frontmcp/sdk';
+   * import MyServer from './my-server';
+   *
+   * const handle = await FrontMcpInstance.runUnixSocket({
+   *   ...MyServer,
+   *   socketPath: '/tmp/my-app.sock',
+   *   sqlite: { path: '~/.frontmcp/data/my-app.sqlite' },
+   * });
+   *
+   * // Later: graceful shutdown
+   * await handle.close();
+   * ```
+   */
+  public static async runUnixSocket(
+    options: FrontMcpConfigInput & {
+      socketPath: string;
+      sqlite?: SqliteOptionsInput;
+    },
+  ): Promise<{ close: () => Promise<void> }> {
+    const { socketPath, sqlite, ...configInput } = options;
+
+    // Parse config with HTTP enabled, overriding socketPath
+    const parsedConfig = frontMcpMetadataSchema.parse({
+      ...configInput,
+      http: {
+        ...((configInput.http as Record<string, unknown>) ?? {}),
+        socketPath,
+      },
+      // Merge sqlite config if provided
+      ...(sqlite ? { sqlite } : {}),
+    });
+
+    const frontMcp = new FrontMcpInstance(parsedConfig);
+    await frontMcp.ready;
+
+    await frontMcp.start();
+    console.log(`MCP server listening on unix://${socketPath}`);
+
+    // Cleanup function to remove socket file and signal handlers
+    const cleanup = async () => {
+      try {
+        if (await fileExists(socketPath)) {
+          await unlink(socketPath);
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+    };
+
+    // Register signal handlers for cleanup
+    const signalHandler = async () => {
+      process.removeListener('SIGINT', signalHandler);
+      process.removeListener('SIGTERM', signalHandler);
+      await cleanup();
+      process.exit(0);
+    };
+    process.on('SIGINT', signalHandler);
+    process.on('SIGTERM', signalHandler);
+
+    // Return handle for programmatic shutdown
+    const close = async () => {
+      process.removeListener('SIGINT', signalHandler);
+      process.removeListener('SIGTERM', signalHandler);
+      await cleanup();
+    };
+
+    return { close };
+  }
+
   public static async runStdio(options: FrontMcpConfigInput): Promise<void> {
     // Dynamically import to avoid bundling issues
     const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');

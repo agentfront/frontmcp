@@ -1,0 +1,297 @@
+---
+title: Unix Socket
+slug: deployment/unix-socket
+icon: plug-circle-bolt
+description: Run FrontMCP as a persistent local server over Unix domain sockets
+---
+
+Run your FrontMCP server over a Unix domain socket for local-only, persistent access — ideal for Claude Code integrations, background daemons, and local AI agents.
+
+<Info>
+Unix socket mode is best suited for:
+- **Local-only servers** that don't need network exposure
+- **Claude Code / Claude Desktop** integration via `socketPath`
+- **Background daemons** that persist across sessions
+- **Avoiding TCP port conflicts** on developer machines
+</Info>
+
+---
+
+## Quick Start (CLI)
+
+The `frontmcp socket` command starts a FrontMCP server listening on a Unix socket file.
+
+```bash
+# Start in foreground (default)
+frontmcp socket ./src/main.ts
+
+# Specify a custom socket path
+frontmcp socket ./src/main.ts --socket /tmp/my-app.sock
+
+# Enable SQLite storage for sessions and events
+frontmcp socket ./src/main.ts --db ~/.frontmcp/data/my-app.sqlite
+
+# Run as a background daemon
+frontmcp socket ./src/main.ts --background
+```
+
+### CLI Flags
+
+| Flag | Alias | Description |
+|------|-------|-------------|
+| `--socket <path>` | `-s` | Custom socket file path. Defaults to `~/.frontmcp/sockets/{app-name}.sock` |
+| `--db <path>` | | SQLite database path for persistent sessions and events |
+| `--background` | `-b` | Detach and run as a background daemon |
+
+<Tip>
+When no `--socket` path is given, the CLI automatically creates the socket at `~/.frontmcp/sockets/{app-name}.sock`, where `{app-name}` is derived from the parent directory of your entry file.
+</Tip>
+
+---
+
+## Programmatic API
+
+Use `FrontMcpInstance.runUnixSocket()` for full control from your own code.
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import { serverConfig } from './config';
+
+const handle = await FrontMcpInstance.runUnixSocket({
+  ...serverConfig,
+  socketPath: '/tmp/my-app.sock',
+  sqlite: {
+    path: '~/.frontmcp/data/my-app.sqlite',
+  },
+});
+
+// Later: graceful shutdown
+await handle.close();
+```
+
+The method signature:
+
+```typescript
+FrontMcpInstance.runUnixSocket(options: FrontMcpConfigInput & {
+  socketPath: string;
+  sqlite?: SqliteOptionsInput;
+}): Promise<{ close: () => Promise<void> }>
+```
+
+The full HTTP feature set — streamable HTTP, SSE, elicitation, sessions — works unchanged over Unix sockets. The only difference is the transport layer: a `.sock` file instead of a TCP port.
+
+---
+
+## SQLite Storage
+
+By default, Unix socket mode uses in-memory storage for sessions and events. For persistence across server restarts, configure SQLite.
+
+### Basic Configuration
+
+```typescript
+const handle = await FrontMcpInstance.runUnixSocket({
+  ...serverConfig,
+  socketPath: '/tmp/my-app.sock',
+  sqlite: {
+    path: '~/.frontmcp/data/my-app.sqlite',
+  },
+});
+```
+
+### With Encryption
+
+Enable at-rest encryption for stored values using AES-256-GCM:
+
+```typescript
+const handle = await FrontMcpInstance.runUnixSocket({
+  ...serverConfig,
+  socketPath: '/tmp/my-app.sock',
+  sqlite: {
+    path: '~/.frontmcp/data/my-app.sqlite',
+    encryption: {
+      secret: process.env.FRONTMCP_ENCRYPTION_SECRET!,
+    },
+  },
+});
+```
+
+### SQLite Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | `string` | *required* | Path to the `.sqlite` database file |
+| `encryption.secret` | `string` | — | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
+| `walMode` | `boolean` | `true` | Enable WAL mode for better read concurrency |
+| `ttlCleanupIntervalMs` | `number` | `60000` | Interval in ms for purging expired keys |
+
+---
+
+## Connecting to the Socket
+
+### curl
+
+```bash
+# Health check
+curl --unix-socket /tmp/my-app.sock http://localhost/health
+
+# Call the MCP endpoint
+curl --unix-socket /tmp/my-app.sock http://localhost/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+### Node.js (node:http)
+
+```typescript
+import http from 'node:http';
+
+const options = {
+  socketPath: '/tmp/my-app.sock',
+  path: '/mcp',
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+};
+
+const req = http.request(options, (res) => {
+  let data = '';
+  res.on('data', (chunk) => (data += chunk));
+  res.on('end', () => console.log(JSON.parse(data)));
+});
+
+req.write(JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list',
+}));
+req.end();
+```
+
+### Claude Desktop / Claude Code
+
+Point your MCP client config at the socket file:
+
+<CodeGroup>
+```json Claude Desktop (claude_desktop_config.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "transport": "http",
+      "url": "http://localhost/mcp",
+      "socketPath": "/tmp/my-app.sock"
+    }
+  }
+}
+```
+
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "transport": "http",
+      "url": "http://localhost/mcp",
+      "socketPath": "/tmp/my-app.sock"
+    }
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Socket Lifecycle
+
+### Permissions
+
+When the server starts listening, the socket file is set to permission mode `0o660` (owner and group read/write). This prevents other users on the machine from connecting.
+
+### Stale Socket Cleanup
+
+If a `.sock` file already exists when the server starts (e.g., from a previous crash), it is automatically removed before binding. This avoids `EADDRINUSE` errors.
+
+### Graceful Shutdown
+
+The server registers handlers for `SIGINT` and `SIGTERM`. On either signal:
+
+1. The socket file is removed
+2. The PID file (if running via CLI) is cleaned up
+3. The process exits cleanly
+
+```typescript
+// Programmatic shutdown
+const handle = await FrontMcpInstance.runUnixSocket({ ... });
+
+// When you're done:
+await handle.close();
+```
+
+### PID File (CLI Background Mode)
+
+When launched with `--background`, the CLI writes a PID file at `{socketPath}.pid` so you can manage the daemon:
+
+```bash
+# Check if running
+cat /tmp/my-app.sock.pid
+
+# Stop the daemon
+kill $(cat /tmp/my-app.sock.pid)
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Watch macOS path length limits">
+    macOS limits Unix socket paths to **104 bytes**. Keep your socket paths short. The default location `~/.frontmcp/sockets/{app}.sock` is designed to stay within this limit.
+
+    ```bash
+    # Good — short path
+    /tmp/my-app.sock
+
+    # Risky — may exceed 104 bytes on deep home directories
+    /Users/longusername/deeply/nested/project/path/.frontmcp/sockets/my-very-long-app-name.sock
+    ```
+  </Accordion>
+
+  <Accordion title="Use the default socket directory">
+    Let the CLI pick the default path (`~/.frontmcp/sockets/`) unless you have a specific reason to override. This keeps sockets organized and discoverable.
+  </Accordion>
+
+  <Accordion title="Prefer Unix sockets over localhost TCP for local-only servers">
+    Unix sockets provide natural access control via file permissions — no firewall rules needed. They also avoid port conflicts and have slightly lower latency than loopback TCP.
+  </Accordion>
+
+  <Accordion title="Clean up on crash">
+    The stale socket cleanup handles normal cases, but if your process is killed with `SIGKILL` (kill -9), the socket file may linger. Use the CLI's built-in cleanup or manually remove the file before restarting:
+
+    ```bash
+    rm -f /tmp/my-app.sock /tmp/my-app.sock.pid
+    ```
+  </Accordion>
+
+  <Accordion title="Use SQLite for persistence">
+    Without SQLite, all session data lives in memory and is lost on restart. If your use case requires sessions to survive restarts (e.g., a background daemon), enable SQLite storage with the `--db` flag or the `sqlite` config option.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Runtime Modes" icon="layer-group" href="/docs/frontmcp/deployment/runtime-modes">
+    Compare SDK, Server, and Handler deployment modes
+  </Card>
+
+  <Card title="DirectClient" icon="plug" href="/docs/frontmcp/deployment/direct-client">
+    Programmatic in-process access without any transport
+  </Card>
+
+  <Card title="Redis Setup" icon="database" href="/docs/frontmcp/deployment/redis-setup">
+    Configure Redis for distributed session storage
+  </Card>
+
+  <Card title="Production Build" icon="hammer" href="/docs/frontmcp/deployment/production-build">
+    Build and optimize for production deployment
+  </Card>
+</CardGroup>

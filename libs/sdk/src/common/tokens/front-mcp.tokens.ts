@@ -34,4 +34,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   skillsConfig: tokenFactory.meta('skillsConfig'),
   // ext-apps configuration
   extApps: tokenFactory.meta('extApps'),
+  // sqlite storage configuration
+  sqlite: tokenFactory.meta('sqlite'),
 };

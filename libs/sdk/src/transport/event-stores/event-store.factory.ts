@@ -8,7 +8,8 @@
  */
 
 import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { FrontMcpLogger, RedisOptionsInput } from '../../common';
+import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
+import { PublicMcpError } from '../../errors';
 
 /**
  * EventStore configuration for SSE resumability support.
@@ -25,9 +26,10 @@ export interface EventStoreConfig {
    * Storage provider type.
    * - 'memory': In-memory storage (single-node only)
    * - 'redis': Redis-backed storage (distributed)
+   * - 'sqlite': SQLite-backed storage (local persistence)
    * @default 'memory'
    */
-  provider?: 'memory' | 'redis';
+  provider?: 'memory' | 'redis' | 'sqlite';
 
   /**
    * Maximum number of events to store before eviction.
@@ -45,6 +47,11 @@ export interface EventStoreConfig {
    * Redis configuration (required if provider is 'redis').
    */
   redis?: RedisOptionsInput;
+
+  /**
+   * SQLite configuration (required if provider is 'sqlite').
+   */
+  sqlite?: SqliteOptionsInput;
 }
 
 /**
@@ -59,7 +66,7 @@ export interface EventStoreResult {
   /**
    * The type of storage backend used.
    */
-  type: 'memory' | 'redis' | 'disabled';
+  type: 'memory' | 'redis' | 'sqlite' | 'disabled';
 }
 
 /**
@@ -112,17 +119,47 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
   const maxEvents = config.maxEvents ?? 10000;
   const ttlMs = config.ttlMs ?? 300000;
 
+  if (provider === 'sqlite') {
+    if (!config.sqlite) {
+      throw new PublicMcpError(
+        'EventStore SQLite configuration required when provider is "sqlite". ' +
+          'Provide sqlite config: { provider: "sqlite", sqlite: { path: "..." } }',
+        'INVALID_PARAMS',
+      );
+    }
+
+    // Lazy-load SQLite EventStore
+
+    const { SqliteEventStore } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
+
+    logger?.info('[EventStoreFactory] Creating SQLite EventStore for resumability', {
+      maxEvents,
+      ttlMs,
+      path: config.sqlite.path,
+    });
+
+    return {
+      eventStore: new SqliteEventStore({
+        ...config.sqlite,
+        maxEvents,
+        ttlMs,
+      }),
+      type: 'sqlite',
+    };
+  }
+
   if (provider === 'redis') {
     if (!config.redis) {
-      throw new Error(
+      throw new PublicMcpError(
         'EventStore Redis configuration required when provider is "redis". ' +
           'Provide redis config: { provider: "redis", host: "...", port: ... }',
+        'INVALID_PARAMS',
       );
     }
 
     // Lazy-load Redis EventStore
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { RedisEventStore } = require('./redis.event-store');
+
+    const { RedisEventStore } = require('./redis.event-store') as typeof import('./redis.event-store');
 
     logger?.info('[EventStoreFactory] Creating Redis EventStore for resumability', {
       maxEvents,
@@ -140,8 +177,8 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
   }
 
   // Default: memory
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { MemoryEventStore } = require('./memory.event-store');
+
+  const { MemoryEventStore } = require('./memory.event-store') as typeof import('./memory.event-store');
 
   logger?.info('[EventStoreFactory] Creating in-memory EventStore for resumability', {
     maxEvents,

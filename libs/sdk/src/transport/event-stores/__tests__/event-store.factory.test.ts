@@ -1,5 +1,9 @@
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
 import { createEventStore } from '../event-store.factory';
 import { MemoryEventStore } from '../memory.event-store';
+import { PublicMcpError } from '../../../errors';
 
 describe('createEventStore', () => {
   describe('disabled configuration', () => {
@@ -51,14 +55,50 @@ describe('createEventStore', () => {
     });
   });
 
+  describe('sqlite provider', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-store-factory-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should throw PublicMcpError when sqlite provider is specified without sqlite config', () => {
+      expect(() =>
+        createEventStore({
+          enabled: true,
+          provider: 'sqlite',
+        }),
+      ).toThrow(PublicMcpError);
+    });
+
+    it('should create SqliteEventStore when valid sqlite config is provided', () => {
+      const dbPath = path.join(tmpDir, 'test-events.sqlite');
+      const result = createEventStore({
+        enabled: true,
+        provider: 'sqlite',
+        sqlite: { path: dbPath },
+      });
+
+      expect(result.eventStore).toBeDefined();
+      expect(result.type).toBe('sqlite');
+
+      // Clean up - close the store to release the DB file
+      (result.eventStore as any).close?.();
+    });
+  });
+
   describe('redis provider', () => {
-    it('should throw when redis provider is specified without redis config', () => {
+    it('should throw PublicMcpError when redis provider is specified without redis config', () => {
       expect(() =>
         createEventStore({
           enabled: true,
           provider: 'redis',
         }),
-      ).toThrow('EventStore Redis configuration required');
+      ).toThrow(PublicMcpError);
     });
 
     it('should create RedisEventStore when redis config is provided', () => {

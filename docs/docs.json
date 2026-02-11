@@ -131,9 +131,17 @@
                   "frontmcp/deployment/production-build",
                   "frontmcp/deployment/runtime-modes",
                   "frontmcp/deployment/direct-client",
-                  "frontmcp/deployment/redis-setup",
-                  "frontmcp/deployment/vercel-kv",
-                  "frontmcp/deployment/serverless"
+                  "frontmcp/deployment/unix-socket",
+                  "frontmcp/deployment/serverless",
+                  {
+                    "group": "Storage",
+                    "icon": "database",
+                    "pages": [
+                      "frontmcp/deployment/redis-setup",
+                      "frontmcp/deployment/sqlite-setup",
+                      "frontmcp/deployment/vercel-kv"
+                    ]
+                  }
                 ]
               }
             ]

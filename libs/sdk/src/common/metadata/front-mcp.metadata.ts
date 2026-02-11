@@ -24,6 +24,8 @@ import {
   skillsConfigOptionsSchema,
   ExtAppsOptionsInput,
   extAppsOptionsSchema,
+  SqliteOptionsInput,
+  sqliteOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -184,6 +186,13 @@ export interface FrontMcpBaseMetadata {
    * ```
    */
   extApps?: ExtAppsOptionsInput;
+
+  /**
+   * SQLite storage configuration for local-only deployments.
+   * Provides session, elicitation, and event persistence without Redis.
+   * Used by the Unix socket daemon mode and other local runtimes.
+   */
+  sqlite?: SqliteOptionsInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -204,6 +213,7 @@ export const frontMcpBaseSchema = z.object({
   elicitation: elicitationOptionsSchema.optional(),
   skillsConfig: skillsConfigOptionsSchema.optional(),
   extApps: extAppsOptionsSchema.optional(),
+  sqlite: sqliteOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

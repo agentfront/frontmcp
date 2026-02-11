@@ -13,7 +13,9 @@ export abstract class HostServerAdapter extends FrontMcpServer {
   abstract override getHandler(): unknown;
 
   /**
-   *  Start the server on the specified port
+   * Start the server on the specified port or Unix socket path.
+   * When a string is provided, the server listens on a Unix socket.
+   * When a number is provided, the server listens on a TCP port.
    */
-  abstract override start(port: number): Promise<void> | void;
+  abstract override start(portOrSocketPath: number | string): Promise<void> | void;
 }

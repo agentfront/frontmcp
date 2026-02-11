@@ -12,7 +12,7 @@
 
 import type { StorageConfig, RootStorage } from '@frontmcp/utils';
 import { createStorage, createMemoryStorage } from '@frontmcp/utils';
-import type { FrontMcpLogger, RedisOptionsInput } from '../../common';
+import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 import type { ElicitationStore } from './elicitation.store';
 import { StorageElicitationStore } from './storage-elicitation.store';
 import { EncryptedElicitationStore } from './encrypted-elicitation.store';
@@ -431,4 +431,44 @@ export function createElicitationStoreFromStorage(
   });
 
   return { store, type, storage, encrypted };
+}
+
+/**
+ * Create a SQLite-backed elicitation store for local-only deployments.
+ * Uses EventEmitter for single-process pub/sub (no distributed pub/sub needed).
+ *
+ * @param sqliteConfig - SQLite storage configuration
+ * @param storeOptions - Optional store configuration
+ * @returns A SQLite-backed elicitation store
+ *
+ * @example
+ * ```typescript
+ * const store = createSqliteElicitationStore(
+ *   { path: '~/.frontmcp/data/elicitation.sqlite' },
+ *   { logger },
+ * );
+ * ```
+ */
+export function createSqliteElicitationStore(
+  sqliteConfig: SqliteOptionsInput,
+  storeOptions: {
+    keyPrefix?: string;
+    logger?: FrontMcpLogger;
+  } = {},
+): ElicitationStore {
+  const { keyPrefix = 'mcp:elicit:', logger } = storeOptions;
+
+  // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
+
+  const { SqliteElicitationStore } = require('@frontmcp/storage-sqlite');
+
+  logger?.info('[ElicitationStoreFactory] Creating SQLite elicitation store', {
+    path: sqliteConfig.path,
+    keyPrefix,
+  });
+
+  return new SqliteElicitationStore({
+    ...sqliteConfig,
+    keyPrefix,
+  });
 }
