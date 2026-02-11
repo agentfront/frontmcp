@@ -1,0 +1,61 @@
+{
+  "name": "demo-e2e-unix-socket",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-unix-socket/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:unix-socket"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-unix-socket",
+        "main": "apps/e2e/demo-e2e-unix-socket/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-unix-socket/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-unix-socket/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-unix-socket/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-unix-socket"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-unix-socket/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-unix-socket-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-unix-socket/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-unix-socket"
+      }
+    }
+  }
+}

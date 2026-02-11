@@ -8,7 +8,8 @@ export type Command =
   | 'help'
   | 'template'
   | 'version'
-  | 'test';
+  | 'test'
+  | 'socket';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
 export type RedisSetupOption = 'docker' | 'existing' | 'none';
@@ -29,6 +30,10 @@ export interface ParsedArgs {
   target?: DeploymentAdapter;
   redis?: RedisSetupOption;
   cicd?: boolean;
+  // Socket command flags
+  socket?: string;
+  db?: string;
+  background?: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -52,6 +57,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
     else if (a === '--cicd') out.cicd = true;
     else if (a === '--no-cicd') out.cicd = false;
+    // Socket command flags
+    else if (a === '--socket' || a === '-s') out.socket = argv[++i];
+    else if (a === '--db') out.db = argv[++i];
+    else if (a === '--background' || a === '-b') out.background = true;
     else out._.push(a);
   }
   return out;

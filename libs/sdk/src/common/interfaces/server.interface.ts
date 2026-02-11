@@ -66,7 +66,9 @@ export abstract class FrontMcpServer {
   abstract getHandler(): unknown;
 
   /**
-   *  Start the server on the specified port
+   * Start the server on the specified port or Unix socket path.
+   * When a string is provided, the server listens on a Unix socket.
+   * When a number is provided, the server listens on a TCP port.
    */
-  abstract start(port?: number): Promise<void> | void;
+  abstract start(portOrSocketPath?: number | string): Promise<void> | void;
 }

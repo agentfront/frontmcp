@@ -121,12 +121,39 @@ export class ExpressHostAdapter extends HostServerAdapter {
     return this.app;
   }
 
-  start(port: number) {
+  start(portOrSocketPath: number | string) {
     this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
     server.headersTimeout = 0;
     server.keepAliveTimeout = 75_000;
-    server.listen(port, () => console.log(`MCP HTTP (Express) on ${port}`));
+
+    if (typeof portOrSocketPath === 'string') {
+      // Unix socket mode - clean up stale socket file before listening
+      this.cleanupStaleSocket(portOrSocketPath);
+      server.listen(portOrSocketPath, () => {
+        // Set socket file permissions (owner + group read/write)
+        try {
+          const fs = require('node:fs');
+          fs.chmodSync(portOrSocketPath, 0o660);
+        } catch {
+          // chmod may fail on some platforms, non-critical
+        }
+        console.log(`MCP HTTP (Express) on unix://${portOrSocketPath}`);
+      });
+    } else {
+      server.listen(portOrSocketPath, () => console.log(`MCP HTTP (Express) on ${portOrSocketPath}`));
+    }
+  }
+
+  private cleanupStaleSocket(socketPath: string): void {
+    try {
+      const fs = require('node:fs');
+      if (fs.existsSync(socketPath)) {
+        fs.unlinkSync(socketPath);
+      }
+    } catch {
+      // Ignore cleanup errors - listen will fail if socket is still in use
+    }
   }
 }

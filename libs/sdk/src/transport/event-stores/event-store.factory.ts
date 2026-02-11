@@ -8,7 +8,7 @@
  */
 
 import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { FrontMcpLogger, RedisOptionsInput } from '../../common';
+import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 
 /**
  * EventStore configuration for SSE resumability support.
@@ -25,9 +25,10 @@ export interface EventStoreConfig {
    * Storage provider type.
    * - 'memory': In-memory storage (single-node only)
    * - 'redis': Redis-backed storage (distributed)
+   * - 'sqlite': SQLite-backed storage (local persistence)
    * @default 'memory'
    */
-  provider?: 'memory' | 'redis';
+  provider?: 'memory' | 'redis' | 'sqlite';
 
   /**
    * Maximum number of events to store before eviction.
@@ -45,6 +46,11 @@ export interface EventStoreConfig {
    * Redis configuration (required if provider is 'redis').
    */
   redis?: RedisOptionsInput;
+
+  /**
+   * SQLite configuration (required if provider is 'sqlite').
+   */
+  sqlite?: SqliteOptionsInput;
 }
 
 /**
@@ -59,7 +65,7 @@ export interface EventStoreResult {
   /**
    * The type of storage backend used.
    */
-  type: 'memory' | 'redis' | 'disabled';
+  type: 'memory' | 'redis' | 'sqlite' | 'disabled';
 }
 
 /**
@@ -111,6 +117,34 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
   const provider = config.provider ?? 'memory';
   const maxEvents = config.maxEvents ?? 10000;
   const ttlMs = config.ttlMs ?? 300000;
+
+  if (provider === 'sqlite') {
+    if (!config.sqlite) {
+      throw new Error(
+        'EventStore SQLite configuration required when provider is "sqlite". ' +
+          'Provide sqlite config: { provider: "sqlite", sqlite: { path: "..." } }',
+      );
+    }
+
+    // Lazy-load SQLite EventStore
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { SqliteEventStore } = require('@frontmcp/storage-sqlite');
+
+    logger?.info('[EventStoreFactory] Creating SQLite EventStore for resumability', {
+      maxEvents,
+      ttlMs,
+      path: config.sqlite.path,
+    });
+
+    return {
+      eventStore: new SqliteEventStore({
+        ...config.sqlite,
+        maxEvents,
+        ttlMs,
+      }),
+      type: 'sqlite',
+    };
+  }
 
   if (provider === 'redis') {
     if (!config.redis) {

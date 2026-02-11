@@ -1,0 +1,238 @@
+---
+title: SQLite Setup
+slug: deployment/sqlite-setup
+icon: database
+description: Use SQLite for local session, elicitation, and event storage without external infrastructure
+---
+
+`@frontmcp/storage-sqlite` provides a local storage backend for FrontMCP using SQLite. It replaces Redis for single-process deployments where you need persistence without managing external infrastructure.
+
+<CardGroup cols={2}>
+  <Card title="Zero Infrastructure" icon="server">
+    No Redis or external database needed — just a local file
+  </Card>
+  <Card title="Persistent Sessions" icon="floppy-disk">
+    Sessions, elicitation state, and SSE events survive restarts
+  </Card>
+  <Card title="Optional Encryption" icon="lock">
+    AES-256-GCM at-rest encryption via HKDF-SHA256
+  </Card>
+  <Card title="WAL Mode" icon="bolt">
+    Write-Ahead Logging enabled by default for better read concurrency
+  </Card>
+</CardGroup>
+
+## When to Use SQLite
+
+| Use Case | SQLite | Redis |
+|----------|--------|-------|
+| Local-only / single-process | **Recommended** | Overkill |
+| Unix socket deployments | **Recommended** | Not needed |
+| Background daemons | **Recommended** | Not needed |
+| Multi-instance production | Not supported | **Required** |
+| Pub/Sub (resource subscriptions) | EventEmitter (single process) | **Required** for distributed |
+| Edge / serverless | Not supported | **Required** |
+
+<Info>
+SQLite is ideal for local-only deployments — Unix socket servers, CLI tools, and background daemons. For multi-instance production or serverless, use [Redis](/docs/frontmcp/deployment/redis-setup) or [Vercel KV](/docs/frontmcp/deployment/vercel-kv) instead.
+</Info>
+
+## Installation
+
+```bash
+npm install @frontmcp/storage-sqlite better-sqlite3
+# or
+yarn add @frontmcp/storage-sqlite better-sqlite3
+```
+
+<Warning>
+`better-sqlite3` is a native module and requires a C++ compiler. On most systems this is already available. If you run into build issues, see the [better-sqlite3 troubleshooting guide](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md).
+</Warning>
+
+## Quick Start
+
+### With Unix Socket (Recommended)
+
+The simplest way to use SQLite is via the `sqlite` option on `FrontMcpInstance.runUnixSocket()`:
+
+```typescript
+import { FrontMcpInstance } from '@frontmcp/sdk';
+import { serverConfig } from './config';
+
+const handle = await FrontMcpInstance.runUnixSocket({
+  ...serverConfig,
+  socketPath: '/tmp/my-app.sock',
+  sqlite: {
+    path: '~/.frontmcp/data/my-app.sqlite',
+  },
+});
+```
+
+Or via the CLI:
+
+```bash
+frontmcp socket ./src/main.ts --db ~/.frontmcp/data/my-app.sqlite
+```
+
+### With @FrontMcp Decorator
+
+```typescript
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  http: { port: 3001 },
+  sqlite: {
+    path: './data/my-app.sqlite',
+  },
+})
+export default class Server {}
+```
+
+## Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | `string` | *required* | Path to the `.sqlite` database file |
+| `encryption.secret` | `string` | — | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
+| `walMode` | `boolean` | `true` | Enable WAL mode for better read concurrency |
+| `ttlCleanupIntervalMs` | `number` | `60000` | Interval in ms for purging expired keys |
+
+## Encryption
+
+Enable at-rest encryption to protect stored session data. Keys are stored in plaintext (needed for lookups); only values are encrypted.
+
+```typescript
+sqlite: {
+  path: './data/my-app.sqlite',
+  encryption: {
+    secret: process.env.FRONTMCP_ENCRYPTION_SECRET!,
+  },
+}
+```
+
+The encryption pipeline:
+
+1. Your secret is run through **HKDF-SHA256** to derive a 256-bit key
+2. Each value is encrypted with **AES-256-GCM** using a random 96-bit IV
+3. Stored format: `base64url(iv):base64url(tag):base64url(ciphertext)`
+
+<Warning>
+If you lose the encryption secret, stored data becomes unrecoverable. Store the secret securely (environment variable, secrets manager) and keep a backup.
+</Warning>
+
+## Store Types
+
+`@frontmcp/storage-sqlite` provides three specialized stores, all built on a common `SqliteKvStore`:
+
+### Session Store
+
+Stores MCP session data with TTL support.
+
+```typescript
+import { SqliteSessionStore } from '@frontmcp/storage-sqlite';
+
+const sessions = new SqliteSessionStore({
+  path: './data/app.sqlite',
+  keyPrefix: 'mcp:session:',   // default
+  defaultTtlMs: 3600000,       // 1 hour (default)
+});
+
+await sessions.set('session-123', { user: { sub: 'user-1' } });
+const data = await sessions.get('session-123');
+```
+
+### Event Store
+
+Stores SSE events for resumability with max event limits and TTL-based eviction.
+
+```typescript
+import { SqliteEventStore } from '@frontmcp/storage-sqlite';
+
+const events = new SqliteEventStore({
+  path: './data/app.sqlite',
+  maxEvents: 10000,    // default
+  ttlMs: 300000,       // 5 minutes (default)
+});
+
+const eventId = await events.storeEvent('stream-1', { type: 'update' });
+```
+
+### Elicitation Store
+
+Stores pending elicitation requests with EventEmitter-based single-process pub/sub.
+
+```typescript
+import { SqliteElicitationStore } from '@frontmcp/storage-sqlite';
+
+const elicitation = new SqliteElicitationStore({
+  path: './data/app.sqlite',
+  keyPrefix: 'mcp:elicit:',   // default
+});
+```
+
+## Comparison: SQLite vs Redis vs Vercel KV
+
+| Feature | SQLite | Redis | Vercel KV |
+|---------|--------|-------|-----------|
+| **Infrastructure** | Local file | Server or managed service | Vercel-managed |
+| **Setup** | `npm install` | Docker / cloud setup | Dashboard toggle |
+| **Multi-instance** | Single process only | Full support | Full support |
+| **Pub/Sub** | EventEmitter (local) | Native Redis pub/sub | Not supported |
+| **Encryption** | Built-in AES-256-GCM | TLS in transit | TLS in transit |
+| **Edge Compatible** | No | No | Yes |
+| **Latency** | ~0ms (local file I/O) | ~1-5ms (TCP) | ~5-15ms (REST) |
+| **Best For** | Local daemons, CLI tools | Production servers | Vercel deployments |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Cannot find module 'better-sqlite3'">
+    **Cause**: The `better-sqlite3` native module is not installed.
+
+    **Solution**:
+    ```bash
+    npm install better-sqlite3
+    ```
+    If you're using yarn with PnP, you may need to add it as a dependency (not devDependency).
+  </Accordion>
+
+  <Accordion title="SQLITE_CANTOPEN: unable to open database file">
+    **Cause**: The parent directory for the SQLite file doesn't exist.
+
+    **Solution**: Ensure the directory exists before starting the server:
+    ```bash
+    mkdir -p ~/.frontmcp/data
+    ```
+  </Accordion>
+
+  <Accordion title="Database is locked">
+    **Cause**: Multiple processes are trying to write to the same SQLite file simultaneously.
+
+    **Solution**: SQLite is designed for single-process access. If you need multiple processes, use Redis instead. WAL mode (enabled by default) helps with read concurrency but doesn't solve multi-writer scenarios.
+  </Accordion>
+
+  <Accordion title="Encryption errors after changing the secret">
+    **Cause**: Existing data was encrypted with a different secret.
+
+    **Solution**: Either restore the original secret or delete the database file and let the server create a fresh one. There is no migration path between encryption keys.
+  </Accordion>
+</AccordionGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Unix Socket" icon="plug-circle-bolt" href="/docs/frontmcp/deployment/unix-socket">
+    Run FrontMCP as a persistent local server over Unix sockets
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/docs/frontmcp/deployment/redis-setup">
+    Configure Redis for multi-instance production deployments
+  </Card>
+  <Card title="Vercel KV" icon="bolt" href="/docs/frontmcp/deployment/vercel-kv">
+    Edge-compatible storage for Vercel deployments
+  </Card>
+  <Card title="Runtime Modes" icon="layer-group" href="/docs/frontmcp/deployment/runtime-modes">
+    Compare SDK, Server, and Handler deployment modes
+  </Card>
+</CardGroup>

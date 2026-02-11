@@ -2,7 +2,7 @@
  * Session Store Factory
  *
  * Factory functions for creating session stores based on configuration.
- * Supports Redis, Vercel KV providers.
+ * Supports Redis, Vercel KV, and SQLite providers.
  * Uses @frontmcp/utils storage adapters internally.
  */
 
@@ -14,6 +14,7 @@ import {
   type RedisProviderOptions,
   type VercelKvProviderOptions,
   type PubsubOptions,
+  type SqliteOptionsInput,
   isRedisProvider,
   isVercelKvProvider,
 } from '../../common';
@@ -148,6 +149,31 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
  * const pubsubStore = createPubsubStore({ host: 'localhost', port: 6379 });
  * ```
  */
+/**
+ * Create a SQLite session store for local-only deployments.
+ *
+ * @param options - SQLite storage configuration
+ * @param logger - Optional logger instance
+ * @returns A SQLite-backed session store
+ *
+ * @example
+ * ```typescript
+ * const store = createSqliteSessionStore({
+ *   path: '~/.frontmcp/data/sessions.sqlite',
+ *   encryption: { secret: 'my-secret' },
+ * });
+ * ```
+ */
+export function createSqliteSessionStore(options: SqliteOptionsInput, logger?: FrontMcpLogger): SessionStore {
+  // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SqliteSessionStore } = require('@frontmcp/storage-sqlite');
+
+  logger?.info('[SessionStoreFactory] Creating SQLite session store', { path: options.path });
+
+  return new SqliteSessionStore(options);
+}
+
 export function createPubsubStore(options: PubsubOptions): StorageAdapter {
   const redisOptions = options as RedisProviderOptions;
   return new RedisStorageAdapter({
