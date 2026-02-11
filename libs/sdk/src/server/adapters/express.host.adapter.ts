@@ -132,19 +132,29 @@ export class ExpressHostAdapter extends HostServerAdapter {
     if (typeof portOrSocketPath === 'string') {
       // Unix socket mode - clean up stale socket file before listening
       await this.cleanupStaleSocket(portOrSocketPath);
-      server.listen(portOrSocketPath, () => {
-        // Set socket file permissions (owner + group read/write)
-        // Using node:fs chmodSync directly - no chmod equivalent in @frontmcp/utils
-        try {
-          const fs = require('node:fs');
-          fs.chmodSync(portOrSocketPath, 0o660);
-        } catch {
-          // chmod may fail on some platforms, non-critical
-        }
-        console.log(`MCP HTTP (Express) on unix://${portOrSocketPath}`);
+      await new Promise<void>((resolve, reject) => {
+        server.on('error', reject);
+        server.listen(portOrSocketPath, () => {
+          // Set socket file permissions (owner + group read/write)
+          // Using node:fs chmodSync directly - no chmod equivalent in @frontmcp/utils
+          try {
+            const fs = require('node:fs');
+            fs.chmodSync(portOrSocketPath, 0o660);
+          } catch {
+            // chmod may fail on some platforms, non-critical
+          }
+          console.log(`MCP HTTP (Express) on unix://${portOrSocketPath}`);
+          resolve();
+        });
       });
     } else {
-      server.listen(portOrSocketPath, () => console.log(`MCP HTTP (Express) on ${portOrSocketPath}`));
+      await new Promise<void>((resolve, reject) => {
+        server.on('error', reject);
+        server.listen(portOrSocketPath, () => {
+          console.log(`MCP HTTP (Express) on ${portOrSocketPath}`);
+          resolve();
+        });
+      });
     }
   }
 

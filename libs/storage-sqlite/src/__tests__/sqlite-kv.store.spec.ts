@@ -79,16 +79,18 @@ describe('SqliteKvStore', () => {
   });
 
   describe('TTL', () => {
-    it('should expire keys after TTL', () => {
+    it('should expire keys after TTL', async () => {
       store.set('ttl1', 'value1', 1); // 1ms TTL
 
       // Wait for expiry
-      const start = Date.now();
-      while (Date.now() - start < 10) {
-        // busy wait
-      }
+      await new Promise((r) => setTimeout(r, 10));
 
       expect(store.get('ttl1')).toBeNull();
+    });
+
+    it('should treat ttlMs=0 as immediate expiry', () => {
+      store.set('zero-ttl', 'value1', 0);
+      expect(store.get('zero-ttl')).toBeNull();
     });
 
     it('should not expire keys without TTL', () => {
@@ -124,16 +126,13 @@ describe('SqliteKvStore', () => {
       expect(store.expire('nonexistent', 5000)).toBe(false);
     });
 
-    it('should purge expired keys', () => {
+    it('should purge expired keys', async () => {
       store.set('exp1', 'v1', 1);
       store.set('exp2', 'v2', 1);
       store.set('keep', 'v3');
 
       // Wait for expiry
-      const start = Date.now();
-      while (Date.now() - start < 10) {
-        // busy wait
-      }
+      await new Promise((r) => setTimeout(r, 10));
 
       const purged = store.purgeExpired();
       expect(purged).toBe(2);
@@ -160,14 +159,11 @@ describe('SqliteKvStore', () => {
       expect(keys.sort()).toEqual(['session:1', 'session:2']);
     });
 
-    it('should not include expired keys', () => {
+    it('should not include expired keys', async () => {
       store.set('active', 'v1');
       store.set('expired', 'v2', 1);
 
-      const start = Date.now();
-      while (Date.now() - start < 10) {
-        // busy wait
-      }
+      await new Promise((r) => setTimeout(r, 10));
 
       const keys = store.keys();
       expect(keys).toEqual(['active']);

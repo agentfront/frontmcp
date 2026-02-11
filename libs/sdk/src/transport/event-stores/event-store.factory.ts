@@ -130,7 +130,7 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
 
     // Lazy-load SQLite EventStore
 
-    const { SqliteEventStore } = require('@frontmcp/storage-sqlite');
+    const { SqliteEventStore } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
 
     logger?.info('[EventStoreFactory] Creating SQLite EventStore for resumability', {
       maxEvents,
@@ -159,7 +159,7 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
 
     // Lazy-load Redis EventStore
 
-    const { RedisEventStore } = require('./redis.event-store');
+    const { RedisEventStore } = require('./redis.event-store') as typeof import('./redis.event-store');
 
     logger?.info('[EventStoreFactory] Creating Redis EventStore for resumability', {
       maxEvents,
@@ -178,7 +178,7 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
 
   // Default: memory
 
-  const { MemoryEventStore } = require('./memory.event-store');
+  const { MemoryEventStore } = require('./memory.event-store') as typeof import('./memory.event-store');
 
   logger?.info('[EventStoreFactory] Creating in-memory EventStore for resumability', {
     maxEvents,

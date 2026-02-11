@@ -179,7 +179,8 @@ describe('Unix Socket Transport E2E', () => {
       const sessionId = client.getSessionId();
       expect(sessionId).toBeDefined();
       expect(typeof sessionId).toBe('string');
-      expect(sessionId!.length).toBeGreaterThan(0);
+      if (!sessionId) throw new Error('Expected sessionId to be defined');
+      expect(sessionId.length).toBeGreaterThan(0);
     });
   });
 

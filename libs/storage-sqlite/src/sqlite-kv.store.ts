@@ -9,6 +9,19 @@ import type Database from 'better-sqlite3';
 import { deriveEncryptionKey, encryptValue, decryptValue } from './encryption';
 import type { SqliteStorageOptions } from './sqlite.options';
 
+/** Bundled prepared statements - all-or-nothing initialization. */
+interface KvPreparedStatements {
+  get: Database.Statement;
+  set: Database.Statement;
+  del: Database.Statement;
+  has: Database.Statement;
+  keys: Database.Statement;
+  keysPattern: Database.Statement;
+  cleanup: Database.Statement;
+  ttl: Database.Statement;
+  expire: Database.Statement;
+}
+
 /**
  * SQLite-backed key-value store with TTL support and optional encryption.
  *
@@ -25,23 +38,18 @@ export class SqliteKvStore {
   private db: Database.Database;
   private encryptionKey: Uint8Array | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
-
-  // Prepared statements for performance
-  private stmtGet!: Database.Statement;
-  private stmtSet!: Database.Statement;
-  private stmtDel!: Database.Statement;
-  private stmtHas!: Database.Statement;
-  private stmtKeys!: Database.Statement;
-  private stmtKeysPattern!: Database.Statement;
-  private stmtCleanup!: Database.Statement;
-  private stmtTtl!: Database.Statement;
-  private stmtExpire!: Database.Statement;
+  private stmts: KvPreparedStatements | null = null;
 
   constructor(options: SqliteStorageOptions) {
     // Lazy require to avoid bundling when not used
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-    this.db = new BetterSqlite3(options.path);
+    try {
+      this.db = new BetterSqlite3(options.path);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`SqliteKvStore: failed to open database at "${options.path}": ${message}`);
+    }
 
     // Enable WAL mode for better concurrency
     if (options.walMode !== false) {
@@ -79,17 +87,27 @@ export class SqliteKvStore {
   }
 
   private prepareStatements(): void {
-    this.stmtGet = this.db.prepare('SELECT value, expires_at FROM kv WHERE key = ?');
-    this.stmtSet = this.db.prepare('INSERT OR REPLACE INTO kv (key, value, expires_at) VALUES (?, ?, ?)');
-    this.stmtDel = this.db.prepare('DELETE FROM kv WHERE key = ?');
-    this.stmtHas = this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)');
-    this.stmtKeys = this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)');
-    this.stmtKeysPattern = this.db.prepare(
-      'SELECT key FROM kv WHERE key LIKE ? AND (expires_at IS NULL OR expires_at > ?)',
-    );
-    this.stmtCleanup = this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?');
-    this.stmtTtl = this.db.prepare('SELECT expires_at FROM kv WHERE key = ?');
-    this.stmtExpire = this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ?');
+    this.stmts = {
+      get: this.db.prepare('SELECT value, expires_at FROM kv WHERE key = ?'),
+      set: this.db.prepare('INSERT OR REPLACE INTO kv (key, value, expires_at) VALUES (?, ?, ?)'),
+      del: this.db.prepare('DELETE FROM kv WHERE key = ?'),
+      has: this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
+      keys: this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)'),
+      keysPattern: this.db.prepare('SELECT key FROM kv WHERE key LIKE ? AND (expires_at IS NULL OR expires_at > ?)'),
+      cleanup: this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?'),
+      ttl: this.db.prepare('SELECT expires_at FROM kv WHERE key = ?'),
+      expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ?'),
+    };
+  }
+
+  /**
+   * Return prepared statements, throwing if not yet initialized.
+   */
+  private prepared(): KvPreparedStatements {
+    if (!this.stmts) {
+      throw new Error('SqliteKvStore: prepared statements not initialized. Was prepareStatements() called?');
+    }
+    return this.stmts;
   }
 
   /**
@@ -97,12 +115,13 @@ export class SqliteKvStore {
    * Returns null if key doesn't exist or is expired.
    */
   get(key: string): string | null {
-    const row = this.stmtGet.get(key) as { value: string; expires_at: number | null } | undefined;
+    const stmts = this.prepared();
+    const row = stmts.get.get(key) as { value: string; expires_at: number | null } | undefined;
     if (!row) return null;
 
     // Check TTL
     if (row.expires_at !== null && row.expires_at <= Date.now()) {
-      this.stmtDel.run(key);
+      stmts.del.run(key);
       return null;
     }
 
@@ -136,12 +155,12 @@ export class SqliteKvStore {
    * @param ttlMs - Time to live in milliseconds (optional)
    */
   set(key: string, value: string, ttlMs?: number): void {
-    const expiresAt = ttlMs ? Date.now() + ttlMs : null;
+    const expiresAt = ttlMs !== undefined ? Date.now() + ttlMs : null;
 
     // Encrypt value if encryption is enabled
     const storedValue = this.encryptionKey ? encryptValue(this.encryptionKey, value) : value;
 
-    this.stmtSet.run(key, storedValue, expiresAt);
+    this.prepared().set.run(key, storedValue, expiresAt);
   }
 
   /**
@@ -155,14 +174,14 @@ export class SqliteKvStore {
    * Delete a key.
    */
   del(key: string): void {
-    this.stmtDel.run(key);
+    this.prepared().del.run(key);
   }
 
   /**
    * Check if a key exists (and is not expired).
    */
   has(key: string): boolean {
-    const row = this.stmtHas.get(key, Date.now()) as { 1: number } | undefined;
+    const row = this.prepared().has.get(key, Date.now()) as { 1: number } | undefined;
     return row !== undefined;
   }
 
@@ -174,13 +193,14 @@ export class SqliteKvStore {
    * @returns Array of matching key strings
    */
   keys(pattern?: string): string[] {
+    const stmts = this.prepared();
     const now = Date.now();
     let rows: { key: string }[];
 
     if (pattern) {
-      rows = this.stmtKeysPattern.all(pattern, now) as { key: string }[];
+      rows = stmts.keysPattern.all(pattern, now) as { key: string }[];
     } else {
-      rows = this.stmtKeys.all(now) as { key: string }[];
+      rows = stmts.keys.all(now) as { key: string }[];
     }
 
     return rows.map((r) => r.key);
@@ -195,7 +215,7 @@ export class SqliteKvStore {
    */
   expire(key: string, ttlMs: number): boolean {
     const expiresAt = Date.now() + ttlMs;
-    const result = this.stmtExpire.run(expiresAt, key);
+    const result = this.prepared().expire.run(expiresAt, key);
     return result.changes > 0;
   }
 
@@ -205,13 +225,14 @@ export class SqliteKvStore {
    * @returns TTL in ms, -1 if no expiry, -2 if key doesn't exist
    */
   ttl(key: string): number {
-    const row = this.stmtTtl.get(key) as { expires_at: number | null } | undefined;
+    const stmts = this.prepared();
+    const row = stmts.ttl.get(key) as { expires_at: number | null } | undefined;
     if (!row) return -2;
     if (row.expires_at === null) return -1;
 
     const remaining = row.expires_at - Date.now();
     if (remaining <= 0) {
-      this.stmtDel.run(key);
+      stmts.del.run(key);
       return -2;
     }
 
@@ -223,7 +244,7 @@ export class SqliteKvStore {
    * Called periodically by the cleanup timer.
    */
   purgeExpired(): number {
-    const result = this.stmtCleanup.run(Date.now());
+    const result = this.prepared().cleanup.run(Date.now());
     return result.changes;
   }
 

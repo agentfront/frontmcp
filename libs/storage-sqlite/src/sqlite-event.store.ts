@@ -63,7 +63,12 @@ export class SqliteEventStore implements EventStoreInterface {
     // Lazy require
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
-    this.db = new BetterSqlite3(options.path);
+    try {
+      this.db = new BetterSqlite3(options.path);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`SqliteEventStore: failed to open database at "${options.path}": ${message}`);
+    }
 
     if (options.walMode !== false) {
       this.db.pragma('journal_mode = WAL');
