@@ -102,12 +102,12 @@ export abstract class ToolEntry<
     if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
         // Try Zod v4 import path first
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+
         const { z } = require('zod');
         let toJSONSchema: (schema: unknown) => Record<string, unknown>;
         try {
           // Zod v4: toJSONSchema is in 'zod/v4/core'
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+
           const zodV4 = require('zod/v4/core');
           toJSONSchema = zodV4.toJSONSchema;
         } catch {

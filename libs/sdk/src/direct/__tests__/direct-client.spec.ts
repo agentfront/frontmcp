@@ -73,7 +73,7 @@ jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
 }));
 
 // Import the mocked Client to use in tests for assertions
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 const { Client: MockClient } = require('@modelcontextprotocol/sdk/client/index.js');
 
 describe('DirectClientImpl', () => {

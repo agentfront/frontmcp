@@ -20,7 +20,7 @@ export default class SummarizeNotesPrompt extends PromptContext {
           role: 'user',
           content: {
             type: 'text',
-            text: `Please summarize the following notes:\n\n${notesList}`,
+            text: `Please summarize the following notes in ${format} format:\n\n${notesList}`,
           },
         },
       ],

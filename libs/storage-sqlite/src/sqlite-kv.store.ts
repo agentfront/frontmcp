@@ -120,7 +120,12 @@ export class SqliteKvStore {
   getJSON<T = unknown>(key: string): T | null {
     const value = this.get(key);
     if (value === null) return null;
-    return JSON.parse(value) as T;
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      // Return null if stored value is not valid JSON (e.g., corrupted or non-JSON string)
+      return null;
+    }
   }
 
   /**

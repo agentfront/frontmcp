@@ -75,7 +75,11 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
     }
 
     // Re-invoke frontmcp without --background flag
-    const child: ChildProcess = spawn(process.execPath, [__filename, ...args], {
+    const scriptPath = process.argv[1];
+    if (!scriptPath) {
+      throw new Error('Cannot determine script path from process.argv[1] for background spawn');
+    }
+    const child: ChildProcess = spawn(process.execPath, [scriptPath, ...args], {
       detached: true,
       stdio: 'ignore',
     });
@@ -100,11 +104,10 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
     env['FRONTMCP_SQLITE_PATH'] = dbPath;
   }
 
-  const pidFile = writePidFile(socketPath);
+  writePidFile(socketPath);
 
   const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', entry], {
     stdio: 'inherit',
-    shell: true,
     env,
   });
 

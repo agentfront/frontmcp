@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { HostServerAdapter } from './base.host.adapter';
 import { HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from '../../common';
+import { fileExists, unlink } from '@frontmcp/utils';
 
 /**
  * CORS configuration options for ExpressHostAdapter.
@@ -121,7 +122,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
     return this.app;
   }
 
-  start(portOrSocketPath: number | string) {
+  async start(portOrSocketPath: number | string) {
     this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
@@ -130,9 +131,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     if (typeof portOrSocketPath === 'string') {
       // Unix socket mode - clean up stale socket file before listening
-      this.cleanupStaleSocket(portOrSocketPath);
+      await this.cleanupStaleSocket(portOrSocketPath);
       server.listen(portOrSocketPath, () => {
         // Set socket file permissions (owner + group read/write)
+        // Using node:fs chmodSync directly - no chmod equivalent in @frontmcp/utils
         try {
           const fs = require('node:fs');
           fs.chmodSync(portOrSocketPath, 0o660);
@@ -146,11 +148,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
     }
   }
 
-  private cleanupStaleSocket(socketPath: string): void {
+  private async cleanupStaleSocket(socketPath: string): Promise<void> {
     try {
-      const fs = require('node:fs');
-      if (fs.existsSync(socketPath)) {
-        fs.unlinkSync(socketPath);
+      if (await fileExists(socketPath)) {
+        await unlink(socketPath);
       }
     } catch {
       // Ignore cleanup errors - listen will fail if socket is still in use

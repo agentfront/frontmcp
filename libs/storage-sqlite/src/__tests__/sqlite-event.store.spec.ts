@@ -127,6 +127,67 @@ describe('SqliteEventStore', () => {
     });
   });
 
+  describe('constructor options', () => {
+    it('should work with walMode disabled', async () => {
+      store.close();
+      cleanup(dbPath);
+      dbPath = tmpDbPath();
+      store = new SqliteEventStore({
+        path: dbPath,
+        walMode: false,
+        ttlCleanupIntervalMs: 0,
+        maxEvents: 100,
+        ttlMs: 300000,
+      });
+
+      const msg = { jsonrpc: '2.0', method: 'test' };
+      const id = await store.storeEvent('stream-1', msg);
+      expect(id).toBe('stream-1:1');
+    });
+
+    it('should start cleanup timer when interval is positive', () => {
+      store.close();
+      cleanup(dbPath);
+      dbPath = tmpDbPath();
+      store = new SqliteEventStore({
+        path: dbPath,
+        ttlCleanupIntervalMs: 60000,
+        maxEvents: 100,
+        ttlMs: 300000,
+      });
+
+      // Store should be functional
+      expect(store.size).toBe(0);
+    });
+  });
+
+  describe('counter rehydration', () => {
+    it('should continue IDs after store restart', async () => {
+      const msg = { jsonrpc: '2.0', method: 'test' };
+      await store.storeEvent('stream-1', msg);
+      await store.storeEvent('stream-1', msg);
+      const id3 = await store.storeEvent('stream-1', msg);
+      expect(id3).toBe('stream-1:3');
+
+      // Close and reopen the store with the same database
+      store.close();
+      store = new SqliteEventStore({
+        path: dbPath,
+        ttlCleanupIntervalMs: 0,
+        maxEvents: 100,
+        ttlMs: 300000,
+      });
+
+      // Next event should continue from counter 4, not restart at 1
+      const id4 = await store.storeEvent('stream-1', msg);
+      expect(id4).toBe('stream-1:4');
+
+      // A different stream should still start at 1
+      const idOther = await store.storeEvent('stream-2', msg);
+      expect(idOther).toBe('stream-2:1');
+    });
+  });
+
   describe('max events eviction', () => {
     it('should evict oldest events when exceeding max', async () => {
       store.close();

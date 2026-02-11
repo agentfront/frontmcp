@@ -111,7 +111,8 @@ describe('Unix Socket Transport E2E', () => {
       await startServer();
       expect(fs.existsSync(socketPath)).toBe(true);
 
-      await handle!.close();
+      if (!handle) throw new Error('Expected handle to be defined after startServer()');
+      await handle.close();
       handle = null;
 
       expect(fs.existsSync(socketPath)).toBe(false);
@@ -219,8 +220,8 @@ describe('Unix Socket Transport E2E', () => {
       expect(callResult.content.length).toBeGreaterThan(0);
 
       const textContent = callResult.content.find((c) => c.type === 'text');
-      expect(textContent).toBeDefined();
-      const parsed = JSON.parse(textContent!.text);
+      if (!textContent) throw new Error('Expected text content in create-note response');
+      const parsed = JSON.parse(textContent.text);
       expect(parsed.title).toBe('Socket Note');
       expect(parsed.content).toBe('Created via Unix socket');
       expect(parsed.id).toMatch(/^note-/);
@@ -247,7 +248,8 @@ describe('Unix Socket Transport E2E', () => {
       expect(result.error).toBeUndefined();
       const callResult = result.result as { content: Array<{ type: string; text: string }> };
       const textContent = callResult.content.find((c) => c.type === 'text');
-      const parsed = JSON.parse(textContent!.text);
+      if (!textContent) throw new Error('Expected text content in list-notes response');
+      const parsed = JSON.parse(textContent.text);
       expect(parsed.count).toBe(1);
       expect(parsed.notes).toHaveLength(1);
       expect(parsed.notes[0].title).toBe('Note 1');

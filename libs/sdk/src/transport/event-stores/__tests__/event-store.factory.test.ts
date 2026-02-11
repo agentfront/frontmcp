@@ -1,5 +1,6 @@
 import { createEventStore } from '../event-store.factory';
 import { MemoryEventStore } from '../memory.event-store';
+import { PublicMcpError } from '../../../errors';
 
 describe('createEventStore', () => {
   describe('disabled configuration', () => {
@@ -52,13 +53,13 @@ describe('createEventStore', () => {
   });
 
   describe('redis provider', () => {
-    it('should throw when redis provider is specified without redis config', () => {
+    it('should throw PublicMcpError when redis provider is specified without redis config', () => {
       expect(() =>
         createEventStore({
           enabled: true,
           provider: 'redis',
         }),
-      ).toThrow('EventStore Redis configuration required');
+      ).toThrow(PublicMcpError);
     });
 
     it('should create RedisEventStore when redis config is provided', () => {

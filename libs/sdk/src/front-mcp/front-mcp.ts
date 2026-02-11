@@ -14,7 +14,7 @@ import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError } from '../errors';
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
 import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 
 export class FrontMcpInstance implements FrontMcpInterface {
@@ -41,12 +41,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await this.scopes.ready;
   }
 
-  start() {
+  async start() {
     const server = this.providers.get(FrontMcpServer);
     if (!server) {
       throw new Error('Server not found');
     }
-    server.start();
+    await server.start();
   }
 
   /**
@@ -68,7 +68,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(options);
     await frontMcp.ready;
 
-    frontMcp.start();
+    await frontMcp.start();
   }
 
   /**
@@ -235,16 +235,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
-    frontMcp.start();
+    await frontMcp.start();
     console.log(`MCP server listening on unix://${socketPath}`);
 
-    // Return handle for programmatic shutdown
-    const close = async () => {
+    // Cleanup function to remove socket file and signal handlers
+    const cleanup = async () => {
       try {
-        // Clean up socket file
-        const fs = require('node:fs');
-        if (fs.existsSync(socketPath)) {
-          fs.unlinkSync(socketPath);
+        if (await fileExists(socketPath)) {
+          await unlink(socketPath);
         }
       } catch {
         // Ignore cleanup errors
@@ -253,11 +251,20 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     // Register signal handlers for cleanup
     const signalHandler = async () => {
-      await close();
+      process.removeListener('SIGINT', signalHandler);
+      process.removeListener('SIGTERM', signalHandler);
+      await cleanup();
       process.exit(0);
     };
     process.on('SIGINT', signalHandler);
     process.on('SIGTERM', signalHandler);
+
+    // Return handle for programmatic shutdown
+    const close = async () => {
+      process.removeListener('SIGINT', signalHandler);
+      process.removeListener('SIGTERM', signalHandler);
+      await cleanup();
+    };
 
     return { close };
   }

@@ -70,6 +70,12 @@ describe('SqliteKvStore', () => {
     it('should return null for non-existent JSON key', () => {
       expect(store.getJSON('nonexistent')).toBeNull();
     });
+
+    it('should return null for invalid JSON values', () => {
+      // Directly store a non-JSON string
+      store.set('invalid-json', 'not-json{');
+      expect(store.getJSON('invalid-json')).toBeNull();
+    });
   });
 
   describe('TTL', () => {

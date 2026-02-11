@@ -139,7 +139,7 @@ async function createRedisCache(
 
   if (provider === 'vercel-kv' || provider === '@vercel/kv') {
     // Lazy-load Vercel KV - use require for CommonJS compatibility
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const { kv } = require('@vercel/kv');
     return new RedisSkillHttpCache({
       getClient: async () => kv,
@@ -149,7 +149,7 @@ async function createRedisCache(
   }
 
   // Use ioredis for 'redis' provider - use require for CommonJS compatibility
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const Redis = require('ioredis');
   const client = new Redis({
     host: redis.host ?? 'localhost',

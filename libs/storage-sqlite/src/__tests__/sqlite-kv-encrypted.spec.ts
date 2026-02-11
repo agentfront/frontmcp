@@ -13,7 +13,7 @@ function cleanup(dbPath: string): void {
     const dir = path.dirname(dbPath);
     fs.rmSync(dir, { recursive: true, force: true });
   } catch {
-    // ignore
+    // Cleanup is best-effort; temp directories are reclaimed by the OS
   }
 }
 

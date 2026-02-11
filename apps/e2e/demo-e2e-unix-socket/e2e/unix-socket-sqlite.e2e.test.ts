@@ -113,7 +113,8 @@ describe('Unix Socket with SQLite E2E', () => {
 
     const callResult = createResult.result as { content: Array<{ type: string; text: string }> };
     const textContent = callResult.content.find((c) => c.type === 'text');
-    const created = JSON.parse(textContent!.text);
+    if (!textContent) throw new Error('Expected text content in create-note response');
+    const created = JSON.parse(textContent.text);
     expect(created.title).toBe('SQLite Note');
 
     // List notes to verify persistence
@@ -125,7 +126,8 @@ describe('Unix Socket with SQLite E2E', () => {
 
     const listContent = listResult.result as { content: Array<{ type: string; text: string }> };
     const listText = listContent.content.find((c) => c.type === 'text');
-    const listed = JSON.parse(listText!.text);
+    if (!listText) throw new Error('Expected text content in list-notes response');
+    const listed = JSON.parse(listText.text);
     expect(listed.count).toBe(1);
     expect(listed.notes[0].title).toBe('SQLite Note');
   });
