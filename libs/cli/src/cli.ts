@@ -22,9 +22,10 @@ ${c('bold', 'frontmcp')} — FrontMCP command line interface
 ${c('bold', 'Usage')}
   frontmcp <command> [options]
 
-${c('bold', 'Commands')}
+${c('bold', 'Development')}
   dev                 Start in development mode (tsx --watch <entry> + async type-check)
   build               Compile entry with TypeScript (tsc)
+  build --exec        Build distributable executable bundle (esbuild)
   test                Run E2E tests with auto-injected Jest configuration
   init                Create or fix a tsconfig.json suitable for FrontMCP
   doctor              Check Node/npm versions and tsconfig requirements
@@ -32,11 +33,48 @@ ${c('bold', 'Commands')}
   create [name]       Scaffold a new FrontMCP project (interactive if name omitted)
   template <type>     Scaffold a template by type (e.g., "3rd-party-integration")
   socket <entry>      Start Unix socket daemon for local MCP server
-  help                Show this help message
 
-${c('bold', 'Options')}
+${c('bold', 'Process Manager')}
+  start <name>        Start a named MCP server with supervisor
+  stop <name>         Stop a managed server (graceful by default)
+  restart <name>      Restart a managed server
+  status [name]       Show process status (detail if name given, table if omitted)
+  list                List all managed processes
+  logs <name>         Tail log output for a managed server
+  service <action>    Install/uninstall systemd/launchd service
+
+${c('bold', 'Package Manager')}
+  install <source>    Install an MCP app from npm, local path, or git
+  uninstall <name>    Remove an installed MCP app
+  configure <name>    Re-run setup questionnaire for an installed app
+
+${c('bold', 'General Options')}
+  -h, --help           Show this help message
   -o, --out-dir <dir>  Output directory (default: ./dist)
   -e, --entry <path>   Manually specify entry file path
+
+${c('bold', 'Build Options')}
+  --exec               Build distributable executable bundle
+  -a, --adapter <name> Deployment adapter: node, vercel, lambda, cloudflare
+
+${c('bold', 'Start Options')}
+  -e, --entry <path>   Entry file for the server
+  -p, --port <N>       Port number for the server
+  -s, --socket <path>  Unix socket path
+  --db <path>          SQLite database path
+  --max-restarts <N>   Maximum auto-restart attempts (default: 5)
+
+${c('bold', 'Stop Options')}
+  -f, --force          Force kill (SIGKILL instead of SIGTERM)
+
+${c('bold', 'Logs Options')}
+  -F, --follow         Follow log output (like tail -f)
+  -n, --lines <N>      Number of lines to show (default: 50)
+
+${c('bold', 'Install Options')}
+  --registry <url>     npm registry URL for private packages
+  -y, --yes            Silent mode (use defaults, skip questionnaire)
+  -p, --port <N>       Override default port
 
 ${c('bold', 'Create Options')}
   -y, --yes            Use defaults (non-interactive mode)
@@ -60,16 +98,17 @@ ${c('bold', 'Test Options')}
 ${c('bold', 'Examples')}
   frontmcp dev
   frontmcp build --out-dir build
+  frontmcp build --exec
   frontmcp test --runInBand
-  frontmcp init
-  frontmcp doctor
-  frontmcp inspector
-  npx frontmcp create                          # Interactive mode
-  npx frontmcp create my-mcp --yes             # Use defaults
-  npx frontmcp create my-mcp --target vercel   # Vercel deployment
-  npx frontmcp template marketplace-3rd-tools
-  frontmcp socket ./src/main.ts --socket /tmp/my-app.sock
-  frontmcp socket ./src/main.ts --socket /tmp/my-app.sock --db ~/.frontmcp/data/app.sqlite
+  frontmcp start my-app --entry ./src/main.ts --port 3005
+  frontmcp stop my-app
+  frontmcp logs my-app --follow
+  frontmcp service install my-app
+  frontmcp install @company/my-mcp --registry https://npm.company.com
+  frontmcp install ./my-local-app
+  frontmcp install github:user/repo
+  frontmcp configure my-app
+  frontmcp uninstall my-app
 `);
 }
 
@@ -122,6 +161,61 @@ async function main(): Promise<void> {
       case 'socket':
         await runSocket(parsed);
         break;
+
+      // Process Manager commands (dynamic imports)
+      case 'start': {
+        const { runStart } = await import('./commands/start');
+        await runStart(parsed);
+        break;
+      }
+      case 'stop': {
+        const { runStop } = await import('./commands/stop');
+        await runStop(parsed);
+        break;
+      }
+      case 'restart': {
+        const { runRestart } = await import('./commands/restart');
+        await runRestart(parsed);
+        break;
+      }
+      case 'status': {
+        const { runStatus } = await import('./commands/status');
+        await runStatus(parsed);
+        break;
+      }
+      case 'list': {
+        const { runList } = await import('./commands/list');
+        await runList(parsed);
+        break;
+      }
+      case 'logs': {
+        const { runLogs } = await import('./commands/logs');
+        await runLogs(parsed);
+        break;
+      }
+      case 'service': {
+        const { runService } = await import('./commands/service');
+        await runService(parsed);
+        break;
+      }
+
+      // Package Manager commands (dynamic imports)
+      case 'install': {
+        const { runInstall } = await import('./commands/install');
+        await runInstall(parsed);
+        break;
+      }
+      case 'uninstall': {
+        const { runUninstall } = await import('./commands/uninstall');
+        await runUninstall(parsed);
+        break;
+      }
+      case 'configure': {
+        const { runConfigure } = await import('./commands/configure');
+        await runConfigure(parsed);
+        break;
+      }
+
       case 'help':
         showHelp();
         break;

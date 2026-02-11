@@ -9,7 +9,19 @@ export type Command =
   | 'template'
   | 'version'
   | 'test'
-  | 'socket';
+  | 'socket'
+  // Process Manager commands
+  | 'start'
+  | 'stop'
+  | 'restart'
+  | 'status'
+  | 'list'
+  | 'logs'
+  | 'service'
+  // Package Manager commands
+  | 'install'
+  | 'uninstall'
+  | 'configure';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
 export type RedisSetupOption = 'docker' | 'existing' | 'none';
@@ -34,6 +46,16 @@ export interface ParsedArgs {
   socket?: string;
   db?: string;
   background?: boolean;
+  // Build --exec flag
+  exec?: boolean;
+  // Process Manager flags
+  port?: number;
+  force?: boolean;
+  maxRestarts?: number;
+  follow?: boolean;
+  lines?: number;
+  // Install flags
+  registry?: string;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -61,6 +83,23 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--socket' || a === '-s') out.socket = argv[++i];
     else if (a === '--db') out.db = argv[++i];
     else if (a === '--background' || a === '-b') out.background = true;
+    // Build --exec flag
+    else if (a === '--exec') out.exec = true;
+    // Process Manager flags
+    else if (a === '--port' || a === '-p') {
+      const parsed = parseInt(argv[++i], 10);
+      out.port = Number.isNaN(parsed) ? undefined : parsed;
+    } else if (a === '--force' || a === '-f') out.force = true;
+    else if (a === '--max-restarts') {
+      const parsed = parseInt(argv[++i], 10);
+      out.maxRestarts = Number.isNaN(parsed) ? undefined : parsed;
+    } else if (a === '--follow' || a === '-F') out.follow = true;
+    else if (a === '--lines' || a === '-n') {
+      const parsed = parseInt(argv[++i], 10);
+      out.lines = Number.isNaN(parsed) ? undefined : parsed;
+    }
+    // Install flags
+    else if (a === '--registry') out.registry = argv[++i];
     else out._.push(a);
   }
   return out;

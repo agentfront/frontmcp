@@ -100,6 +100,12 @@ async function generateAdapterFiles(
  * ```
  */
 export async function runBuild(opts: ParsedArgs): Promise<void> {
+  // Executable bundle build (esbuild single-file + scripts)
+  if (opts.exec) {
+    const { buildExec } = await import('./exec');
+    return buildExec(opts);
+  }
+
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
   const outDir = path.resolve(cwd, opts.outDir || 'dist');
