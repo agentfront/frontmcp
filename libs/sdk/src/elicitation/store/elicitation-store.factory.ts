@@ -459,7 +459,7 @@ export function createSqliteElicitationStore(
   const { keyPrefix = 'mcp:elicit:', logger } = storeOptions;
 
   // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { SqliteElicitationStore } = require('@frontmcp/storage-sqlite');
 
   logger?.info('[ElicitationStoreFactory] Creating SQLite elicitation store', {

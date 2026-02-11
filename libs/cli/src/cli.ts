@@ -100,6 +100,15 @@ ${c('bold', 'Examples')}
   frontmcp build --out-dir build
   frontmcp build --exec
   frontmcp test --runInBand
+  frontmcp init
+  frontmcp doctor
+  frontmcp inspector
+  npx frontmcp create                          # Interactive mode
+  npx frontmcp create my-mcp --yes             # Use defaults
+  npx frontmcp create my-mcp --target vercel   # Vercel deployment
+  npx frontmcp template marketplace-3rd-tools
+  frontmcp socket ./src/main.ts --socket /tmp/my-app.sock
+  frontmcp socket ./src/main.ts --socket /tmp/my-app.sock --db ~/.frontmcp/data/app.sqlite
   frontmcp start my-app --entry ./src/main.ts --port 3005
   frontmcp stop my-app
   frontmcp logs my-app --follow

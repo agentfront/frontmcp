@@ -31,6 +31,25 @@ function resolveDbPath(opts: ParsedArgs): string | undefined {
   return path.resolve(opts.db);
 }
 
+function writePidFile(socketPath: string): string {
+  const pidPath = socketPath + '.pid';
+  const fs = require('fs');
+  fs.writeFileSync(pidPath, String(process.pid), 'utf-8');
+  return pidPath;
+}
+
+function cleanupPidFile(socketPath: string): void {
+  const pidPath = socketPath + '.pid';
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(pidPath)) {
+      fs.unlinkSync(pidPath);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export async function runSocket(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry ?? opts._[1]);
@@ -48,45 +67,31 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
   }
 
   if (opts.background) {
-    // Background mode: delegate to ProcessManager
-    const appName = path.basename(path.dirname(entry));
-    console.log(`${c('gray', '[socket]')} starting via process manager...`);
+    // Background mode: spawn detached process
+    console.log(`${c('gray', '[socket]')} starting in background mode...`);
 
-    const pm = new ProcessManager();
-    try {
-      const info = await pm.start({
-        name: appName,
-        entry,
-        socket: true,
-        socketPath,
-        dbPath,
-      });
-
-      console.log(`${c('green', '[socket]')} daemon started (PID: ${info.pid})`);
-      console.log(`${c('gray', 'hint:')} test with: curl --unix-socket ${socketPath} http://localhost/health`);
-      console.log(`${c('gray', 'hint:')} stop with: frontmcp stop ${appName}`);
-    } catch (err) {
-      // Fallback to legacy background spawn if PM fails
-      console.log(`${c('yellow', '[socket]')} PM start failed, using legacy spawn...`);
-
-      const args = ['socket', entry, '--socket', socketPath];
-      if (dbPath) {
-        args.push('--db', dbPath);
-      }
-
-      const child: ChildProcess = spawn(process.execPath, [__filename, ...args], {
-        detached: true,
-        stdio: 'ignore',
-      });
-
-      child.unref();
-      console.log(`${c('green', '[socket]')} daemon started (PID: ${child.pid})`);
-      console.log(`${c('gray', 'hint:')} test with: curl --unix-socket ${socketPath} http://localhost/health`);
+    const args = ['socket', entry, '--socket', socketPath];
+    if (dbPath) {
+      args.push('--db', dbPath);
     }
+
+    // Re-invoke frontmcp without --background flag
+    const scriptPath = process.argv[1];
+    if (!scriptPath) {
+      throw new Error('Cannot determine script path from process.argv[1] for background spawn');
+    }
+    const child: ChildProcess = spawn(process.execPath, [scriptPath, ...args], {
+      detached: true,
+      stdio: 'ignore',
+    });
+
+    child.unref();
+    console.log(`${c('green', '[socket]')} daemon started (PID: ${child.pid})`);
+    console.log(`${c('gray', 'hint:')} test with: curl --unix-socket ${socketPath} http://localhost/health`);
     return;
   }
 
-  // Foreground mode: run directly via tsx (unchanged)
+  // Foreground mode: run directly via tsx
   console.log(`${c('gray', '[socket]')} starting in foreground mode...`);
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
   console.log(`${c('gray', 'hint:')} test with: curl --unix-socket ${socketPath} http://localhost/health`);
@@ -100,9 +105,10 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
     env['FRONTMCP_SQLITE_PATH'] = dbPath;
   }
 
+  writePidFile(socketPath);
+
   const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', entry], {
     stdio: 'inherit',
-    shell: true,
     env,
   });
 
@@ -112,6 +118,7 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
     } catch {
       // ignore
     }
+    cleanupPidFile(socketPath);
   };
 
   process.on('SIGINT', () => {
@@ -125,6 +132,7 @@ export async function runSocket(opts: ParsedArgs): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     app.on('close', () => {
+      cleanupPidFile(socketPath);
       resolve();
     });
     app.on('error', (err) => {

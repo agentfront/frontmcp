@@ -88,7 +88,7 @@ export class RedisEventStore implements EventStore {
       }
 
       // Use ioredis for 'redis' provider
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+
       const Redis = require('ioredis');
 
       // Extract connection config

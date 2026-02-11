@@ -166,7 +166,7 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
  */
 export function createSqliteSessionStore(options: SqliteOptionsInput, logger?: FrontMcpLogger): SessionStore {
   // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { SqliteSessionStore } = require('@frontmcp/storage-sqlite');
 
   logger?.info('[SessionStoreFactory] Creating SQLite session store', { path: options.path });
