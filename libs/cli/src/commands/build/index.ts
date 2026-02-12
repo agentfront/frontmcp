@@ -102,7 +102,7 @@ async function generateAdapterFiles(
 export async function runBuild(opts: ParsedArgs): Promise<void> {
   // Executable bundle build (esbuild single-file + scripts)
   if (opts.exec) {
-    const { buildExec } = await import('./exec');
+    const { buildExec } = await import('./exec/index.js');
     return buildExec(opts);
   }
 

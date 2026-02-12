@@ -173,54 +173,54 @@ async function main(): Promise<void> {
 
       // Process Manager commands (dynamic imports)
       case 'start': {
-        const { runStart } = await import('./commands/start');
+        const { runStart } = await import('./commands/start.js');
         await runStart(parsed);
         break;
       }
       case 'stop': {
-        const { runStop } = await import('./commands/stop');
+        const { runStop } = await import('./commands/stop.js');
         await runStop(parsed);
         break;
       }
       case 'restart': {
-        const { runRestart } = await import('./commands/restart');
+        const { runRestart } = await import('./commands/restart.js');
         await runRestart(parsed);
         break;
       }
       case 'status': {
-        const { runStatus } = await import('./commands/status');
+        const { runStatus } = await import('./commands/status.js');
         await runStatus(parsed);
         break;
       }
       case 'list': {
-        const { runList } = await import('./commands/list');
+        const { runList } = await import('./commands/list.js');
         await runList(parsed);
         break;
       }
       case 'logs': {
-        const { runLogs } = await import('./commands/logs');
+        const { runLogs } = await import('./commands/logs.js');
         await runLogs(parsed);
         break;
       }
       case 'service': {
-        const { runService } = await import('./commands/service');
+        const { runService } = await import('./commands/service.js');
         await runService(parsed);
         break;
       }
 
       // Package Manager commands (dynamic imports)
       case 'install': {
-        const { runInstall } = await import('./commands/install');
+        const { runInstall } = await import('./commands/install/index.js');
         await runInstall(parsed);
         break;
       }
       case 'uninstall': {
-        const { runUninstall } = await import('./commands/uninstall');
+        const { runUninstall } = await import('./commands/uninstall.js');
         await runUninstall(parsed);
         break;
       }
       case 'configure': {
-        const { runConfigure } = await import('./commands/configure');
+        const { runConfigure } = await import('./commands/configure.js');
         await runConfigure(parsed);
         break;
       }
