@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/ui",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "FrontMCP UI - React components and hooks for MCP applications",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -60,13 +60,13 @@
   "dependencies": {
     "@mdx-js/mdx": "^3.1.1",
     "@swc/core": "^1.5.0",
-    "esbuild": "^0.27.1",
+    "esbuild": "^0.27.3",
     "zod": "^4.0.0"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "@frontmcp/uipack": "0.8.1"
+    "@frontmcp/uipack": "0.9.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
