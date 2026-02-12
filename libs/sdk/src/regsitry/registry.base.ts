@@ -1,5 +1,5 @@
 import { Token } from '@frontmcp/di';
-import { RegistryKind, RegistryType } from '../common';
+import { RegistryKind } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 
 export type RegistryBuildMapResult<Record> = {

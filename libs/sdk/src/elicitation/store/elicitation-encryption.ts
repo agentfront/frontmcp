@@ -21,6 +21,7 @@ import {
   base64urlDecode,
   type EncBlob,
 } from '@frontmcp/utils';
+import { ElicitationSecretRequiredError } from '../../errors/auth-internal.errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -116,10 +117,7 @@ export async function deriveElicitationKey(sessionId: string, secret?: string): 
   const serverSecret = secret ?? getElicitationSecret();
 
   if (!serverSecret) {
-    throw new Error(
-      'Elicitation encryption requires a server secret. ' +
-        'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable.',
-    );
+    throw new ElicitationSecretRequiredError();
   }
 
   // Build IKM: serverSecret + sessionId

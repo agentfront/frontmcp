@@ -17,6 +17,7 @@ import {
   createEmptySessionState,
 } from './skill-session.types';
 import type { SkillSessionStore } from './skill-session-store.interface';
+import { SkillSessionError } from '../../errors';
 
 /**
  * Manages skill session state and tool authorization.
@@ -144,7 +145,7 @@ export class SkillSessionManager extends EventEmitter {
   ): SkillActivationResult {
     const session = this.getActiveSession();
     if (!session) {
-      throw new Error('Cannot activate skill: not running within a session context');
+      throw new SkillSessionError('activate', 'not running within a session context');
     }
 
     // Extract tool names from skill content
@@ -506,7 +507,7 @@ export class SkillSessionManager extends EventEmitter {
   approveToolForSession(toolName: string): void {
     const session = this.getActiveSession();
     if (!session || !session.activeSkillId) {
-      throw new Error('Cannot approve tool: no active skill session');
+      throw new SkillSessionError('approve tool', 'no active skill session');
     }
 
     session.approvedTools.add(toolName);
@@ -534,7 +535,7 @@ export class SkillSessionManager extends EventEmitter {
   denyToolForSession(toolName: string): void {
     const session = this.getActiveSession();
     if (!session || !session.activeSkillId) {
-      throw new Error('Cannot deny tool: no active skill session');
+      throw new SkillSessionError('deny tool', 'no active skill session');
     }
 
     session.deniedTools.add(toolName);
@@ -595,7 +596,7 @@ export class SkillSessionManager extends EventEmitter {
   setPolicyMode(mode: SkillPolicyMode): void {
     const session = this.getActiveSession();
     if (!session || !session.activeSkillId) {
-      throw new Error('Cannot set policy mode: no active skill session');
+      throw new SkillSessionError('set policy mode', 'no active skill session');
     }
 
     session.policyMode = mode;

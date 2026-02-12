@@ -15,6 +15,7 @@ import {
   getRequestBaseUrl,
   makeWellKnownPaths,
 } from '../../common';
+import { FlowInputMissingError } from '../../errors/sdk.errors';
 
 const inputSchema = httpInputSchema;
 
@@ -76,7 +77,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
   async parseInput() {
     const { request } = this.rawInput;
     const scope = this.scope;
-    if (!request) throw new Error('Request is undefined');
+    if (!request) throw new FlowInputMissingError('request', 'well-known:prm');
 
     const resource = computeResource(request, scope.entryPath, scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, scope.entryPath);

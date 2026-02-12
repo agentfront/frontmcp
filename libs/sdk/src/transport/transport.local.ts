@@ -6,6 +6,7 @@ import { rpcError } from './transport.error';
 import { LocalTransportAdapter, SupportedTransport } from './adapters/transport.local.adapter';
 import { ServerResponse } from '../common';
 import { Scope } from '../scope';
+import { MethodNotImplementedError, UnsupportedTransportTypeError } from '../errors/transport.errors';
 
 export class LocalTransporter implements Transporter {
   readonly type: TransportType;
@@ -14,7 +15,12 @@ export class LocalTransporter implements Transporter {
 
   private adapter: LocalTransportAdapter<SupportedTransport>;
 
-  constructor(scope: Scope, key: TransportKey, res: ServerResponse, private readonly onDispose?: () => void) {
+  constructor(
+    scope: Scope,
+    key: TransportKey,
+    res: ServerResponse,
+    private readonly onDispose?: () => void,
+  ) {
     this.type = key.type;
     this.tokenHash = key.tokenHash;
 
@@ -33,12 +39,12 @@ export class LocalTransporter implements Transporter {
         this.adapter = new TransportStreamableHttpAdapter(scope, key, onDispose ?? defaultOnDispose, res);
         break;
       default:
-        throw new Error(`Unsupported transport type: ${this.type}`);
+        throw new UnsupportedTransportTypeError(this.type);
     }
   }
 
   ping(timeoutMs?: number): Promise<boolean> {
-    throw new Error('Method not implemented.');
+    throw new MethodNotImplementedError('LocalTransporter', 'ping');
   }
 
   async handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {

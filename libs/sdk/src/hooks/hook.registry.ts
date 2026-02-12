@@ -15,6 +15,7 @@ import {
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
 import { HookInstance } from './hook.instance';
+import { UnsupportedHookOwnerKindError } from '../errors';
 
 export default class HookRegistry
   extends RegistryAbstract<HookEntry, HookRecord, HookType[]>
@@ -178,7 +179,7 @@ export default class HookRegistry
           return hookOwner.id === ownerId;
         default:
           // Fail fast on unknown owner kinds to catch misconfigurations
-          throw new Error(`Unsupported hook owner kind: ${hookOwner.kind}`);
+          throw new UnsupportedHookOwnerKindError(hookOwner.kind);
       }
     });
   }

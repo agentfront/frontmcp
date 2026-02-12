@@ -1,6 +1,7 @@
 import { Type, Token, ProviderKind, isClass, tokenName, getMetadata } from '@frontmcp/di';
 import { FrontMcpProviderTokens } from '../common';
 import type { ProviderMetadata, ProviderRecord, ProviderScope } from '../common';
+import { MissingProvideError, InvalidUseClassError, InvalidUseFactoryError, InvalidEntityError } from '../errors';
 
 /**
  * Shape for provider input items (used during normalization).
@@ -17,7 +18,6 @@ interface ProviderLike {
   scope?: ProviderScope;
   description?: string;
   id?: string;
-  // Nested metadata object
   metadata?: ProviderMetadata;
 }
 
@@ -65,7 +65,7 @@ export function normalizeProvider(item: Type | ProviderLike): ProviderRecord {
 
     if (!provide) {
       const name = providerItem.name ?? '[object]';
-      throw new Error(`Provider '${name}' is missing 'provide'.`);
+      throw new MissingProvideError('Provider', name);
     }
 
     // Extract metadata from both nested and top-level fields
@@ -73,7 +73,7 @@ export function normalizeProvider(item: Type | ProviderLike): ProviderRecord {
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(`'useClass' on provider '${tokenName(provide)}' must be a class.`);
+        throw new InvalidUseClassError('provider', tokenName(provide));
       }
       return {
         kind: ProviderKind.CLASS,
@@ -85,7 +85,7 @@ export function normalizeProvider(item: Type | ProviderLike): ProviderRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(`'useFactory' on provider '${tokenName(provide)}' must be a function.`);
+        throw new InvalidUseFactoryError('provider', tokenName(provide));
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -108,7 +108,7 @@ export function normalizeProvider(item: Type | ProviderLike): ProviderRecord {
   }
 
   const name = (item as ProviderLike)?.name ?? String(item);
-  throw new Error(`Invalid provider '${name}'. Expected a class or a provider object.`);
+  throw new InvalidEntityError('provider', name, 'a class or a provider object');
 }
 
 /**

@@ -34,6 +34,7 @@ import {
 } from '../session';
 import { TokenStore } from '../authorization/orchestrated.authorization';
 import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
+import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
@@ -144,7 +145,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    */
   private getInMemoryStore(): InMemoryAuthorizationStore {
     if (!(this.authorizationStore instanceof InMemoryAuthorizationStore)) {
-      throw new Error('LocalPrimaryAuth requires InMemoryAuthorizationStore for record creation methods');
+      throw new InMemoryStoreRequiredError('LocalPrimaryAuth record creation');
     }
     return this.authorizationStore;
   }

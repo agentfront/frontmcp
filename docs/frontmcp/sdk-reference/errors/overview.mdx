@@ -87,23 +87,50 @@ class InternalMcpError extends McpError {
 ## Error Categories
 
 <CardGroup cols={2}>
-  <Card title="Tool Errors" icon="wrench" href="/frontmcp/sdk-reference/errors/tool-errors">
-    ToolNotFoundError, ToolExecutionError
+  <Card title="Tool & Prompt Errors" icon="wrench" href="/frontmcp/sdk-reference/errors/tool-errors">
+    ToolNotFoundError, ToolExecutionError, PromptNotFoundError, PromptExecutionError
   </Card>
   <Card title="Resource Errors" icon="file" href="/frontmcp/sdk-reference/errors/resource-errors">
-    ResourceNotFoundError, ResourceReadError
+    ResourceNotFoundError, ResourceReadError, InvalidResourceUriError
   </Card>
   <Card title="Validation Errors" icon="check" href="/frontmcp/sdk-reference/errors/validation-errors">
-    InvalidInputError, InvalidOutputError
+    InvalidInputError, InvalidOutputError, InvalidMethodError, MissingPromptArgumentError
   </Card>
   <Card title="Auth Errors" icon="lock" href="/frontmcp/sdk-reference/errors/auth-errors">
-    UnauthorizedError, AuthorizationRequiredError
+    UnauthorizedError, AuthConfigurationError, SessionMissingError, AuthorizationRequiredError
   </Card>
   <Card title="Agent Errors" icon="robot" href="/frontmcp/sdk-reference/errors/agent-errors">
-    AgentNotFoundError, AgentExecutionError
+    AgentNotFoundError, AgentExecutionError, AgentLoopExceededError, AgentTimeoutError
   </Card>
   <Card title="Rate Limit Errors" icon="gauge" href="/frontmcp/sdk-reference/errors/rate-limit-errors">
     RateLimitError, QuotaExceededError
+  </Card>
+  <Card title="Transport Errors" icon="plug" href="/frontmcp/sdk-reference/errors/transport-errors">
+    TransportNotConnectedError, UnsupportedContentTypeError
+  </Card>
+  <Card title="Remote Errors" icon="tower-broadcast" href="/frontmcp/sdk-reference/errors/remote-errors">
+    RemoteConnectionError, RemoteTimeoutError, RemoteToolNotFoundError
+  </Card>
+  <Card title="Elicitation Errors" icon="comment-dots" href="/frontmcp/sdk-reference/errors/elicitation-errors">
+    ElicitationNotSupportedError, ElicitationTimeoutError, ElicitationFallbackRequired
+  </Card>
+  <Card title="Provider Errors" icon="cubes" href="/frontmcp/sdk-reference/errors/provider-errors">
+    ProviderNotRegisteredError, DependencyCycleError, ProviderConstructionError
+  </Card>
+  <Card title="Registry Errors" icon="database" href="/frontmcp/sdk-reference/errors/registry-errors">
+    RegistryDefinitionNotFoundError, FlowNotRegisteredError, EntryValidationError
+  </Card>
+  <Card title="Decorator Errors" icon="at" href="/frontmcp/sdk-reference/errors/decorator-errors">
+    InvalidDecoratorMetadataError, HookTargetNotDefinedError
+  </Card>
+  <Card title="Normalization Errors" icon="filter" href="/frontmcp/sdk-reference/errors/normalization-errors">
+    MissingProvideError, InvalidUseClassError, InvalidEntityError
+  </Card>
+  <Card title="SDK Errors" icon="gear" href="/frontmcp/sdk-reference/errors/sdk-errors">
+    FlowExitedWithoutOutputError, ServerNotFoundError, ConfigNotFoundError
+  </Card>
+  <Card title="Auth Internal Errors" icon="shield-halved" href="/frontmcp/sdk-reference/errors/auth-internal-errors">
+    EncryptionContextNotSetError, VaultLoadError, TokenLeakDetectedError
   </Card>
 </CardGroup>
 

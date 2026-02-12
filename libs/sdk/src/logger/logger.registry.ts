@@ -8,6 +8,7 @@ import { loggerDiscoveryDeps, normalizeLogger } from './logger.utils';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import { ConsoleLogTransportInstance } from './instances/instance.console-logger';
 import { GetTransports, LoggerInstance } from './instances/instance.logger';
+import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 
 export default class LoggerRegistry extends RegistryAbstract<LogTransportInterface, LoggerRecord, LogTransportType[]> {
   config: LoggingConfigType;
@@ -36,7 +37,7 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
       const deps = loggerDiscoveryDeps(rec).slice(1);
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`Logger ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new RegistryDependencyNotRegisteredError('Logger', tokenName(token), tokenName(d));
         }
         this.graph.get(token)!.add(d);
       }
@@ -76,7 +77,7 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
         const LocalAppClass = rec.provide;
         app = new LocalAppClass(this.config, ...depsInstances);
       } else {
-        throw Error('Invalid logger kind');
+        throw new InvalidRegistryKindError('logger', (rec as { kind?: string }).kind);
       }
 
       this.instances.set(token, app);

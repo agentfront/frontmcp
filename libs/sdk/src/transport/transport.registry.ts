@@ -13,6 +13,7 @@ import { RemoteTransporter } from './transport.remote';
 import { LocalTransporter } from './transport.local';
 import { ServerResponse, TransportPersistenceConfigInput } from '../common';
 import { Scope } from '../scope';
+import { TransportBusRequiredError, InvalidTransportSessionError } from '../errors/transport.errors';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
@@ -78,7 +79,7 @@ export class TransportService {
     this.distributed = false; // get from scope metadata
     this.bus = undefined; // get from scope metadata
     if (this.distributed && !this.bus) {
-      throw new Error('TransportRegistry: distributed=true requires a TransportBus implementation.');
+      throw new TransportBusRequiredError();
     }
 
     // Initialize session store if persistence is enabled (Redis or Vercel KV)
@@ -470,7 +471,7 @@ export class TransportService {
       }
     }
 
-    throw new Error('Invalid session: cannot destroy non-existent transporter.');
+    throw new InvalidTransportSessionError('Invalid session: cannot destroy non-existent transporter.');
   }
 
   /**

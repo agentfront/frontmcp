@@ -1,7 +1,6 @@
-// flows/flow.utils.ts
-
 import { Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
 import { FlowKind, FlowMetadata, FlowRecord, FlowType, FrontMcpFlowTokens } from '../common';
+import { InvalidEntityError } from '../errors';
 
 export function collectFlowMetadata(cls: FlowType): FlowMetadata<never> {
   return Object.entries(FrontMcpFlowTokens).reduce((metadata, [key, token]) => {
@@ -18,7 +17,7 @@ export function normalizeFlow(item: FlowType): FlowRecord {
     return { kind: FlowKind.CLASS_TOKEN, provide: item, metadata };
   }
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid flow '${name}'. Expected a class or a flow object.`);
+  throw new InvalidEntityError('flow', name, 'a class or a flow object');
 }
 
 /**

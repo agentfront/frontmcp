@@ -14,6 +14,7 @@ import { ProviderSnapshot } from '../session/session.types';
 import { encryptJson } from '../session/utils/session-id.utils';
 import { AuthMode } from '../../common';
 import { getMachineId } from '../machine-id';
+import { TokenLeakDetectedError } from '../../errors/auth-internal.errors';
 
 // Re-export getMachineId for backwards compatibility
 export { getMachineId } from '../machine-id';
@@ -244,13 +245,13 @@ export abstract class AuthorizationBase implements Authorization {
     const json = JSON.stringify(data);
     // Detect JWT pattern (header.payload.signature)
     if (/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.test(json)) {
-      throw new Error('SECURITY: Token detected in data - potential LLM context leak');
+      throw new TokenLeakDetectedError('JWT pattern detected in LLM context data');
     }
     // Detect sensitive field names
     const sensitiveFields = ['access_token', 'refresh_token', 'id_token', 'tokenEnc', 'secretRefId'];
     for (const field of sensitiveFields) {
       if (json.includes(`"${field}"`)) {
-        throw new Error(`SECURITY: Sensitive field "${field}" detected - potential leak`);
+        throw new TokenLeakDetectedError(`Sensitive field "${field}" found in data`);
       }
     }
   }

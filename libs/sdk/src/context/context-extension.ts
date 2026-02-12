@@ -26,6 +26,7 @@ import { Token } from '@frontmcp/di';
 import { ExecutionContextBase } from '../common/interfaces/execution-context.interface';
 import { PromptContext } from '../common/interfaces/prompt.interface';
 import type { ContextExtension } from '../common/metadata/plugin.metadata';
+import { ContextExtensionNotAvailableError } from '../errors';
 
 // Track installed extensions to avoid duplicates
 const installedExtensions = new Set<string>();
@@ -64,7 +65,7 @@ export function installContextExtensions(pluginName: string, extensions: Context
           return this.get(token as Token<unknown>);
         } catch (err) {
           // Preserve original error as cause for debugging
-          throw new Error(defaultErrorMessage, { cause: err });
+          throw new ContextExtensionNotAvailableError(defaultErrorMessage, err instanceof Error ? err : undefined);
         }
       },
       configurable: true,
@@ -79,7 +80,7 @@ export function installContextExtensions(pluginName: string, extensions: Context
             return this.get(token as Token<unknown>);
           } catch (err) {
             // Preserve original error as cause for debugging
-            throw new Error(defaultErrorMessage, { cause: err });
+            throw new ContextExtensionNotAvailableError(defaultErrorMessage, err instanceof Error ? err : undefined);
           }
         },
         configurable: true,

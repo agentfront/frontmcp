@@ -4,7 +4,7 @@ import ProviderRegistry from '../../provider/provider.registry';
 import ToolRegistry from '../../tool/tool.registry';
 import ResourceRegistry from '../../resource/resource.registry';
 import PromptRegistry from '../../prompt/prompt.registry';
-import AdapterRegistry from '../../adapter/adapter.regsitry';
+import AdapterRegistry from '../../adapter/adapter.registry';
 import PluginRegistry, { PluginScopeInfo } from '../../plugin/plugin.registry';
 import AgentRegistry from '../../agent/agent.registry';
 import SkillRegistry from '../../skill/skill.registry';

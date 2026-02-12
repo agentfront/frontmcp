@@ -1,0 +1,189 @@
+---
+title: "Auth Errors"
+description: "Errors for authentication failures, session issues, and authorization requirements."
+icon: "lock"
+---
+
+## Overview
+
+Auth errors are thrown when authentication or authorization fails at the request level. These are public errors that inform clients about what action is needed (re-authenticate, authorize an app, etc.). For internal auth infrastructure errors, see [Auth Internal Errors](/frontmcp/sdk-reference/errors/auth-internal-errors).
+
+## Error Reference
+
+### UnauthorizedError
+
+Thrown when a request is missing valid credentials.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `UNAUTHORIZED` |
+| `statusCode` | `number` | `401` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new UnauthorizedError(message?: string)
+```
+
+**Example:**
+
+```typescript
+import { UnauthorizedError } from '@frontmcp/sdk';
+
+throw new UnauthorizedError('Bearer token expired');
+```
+
+---
+
+### AuthConfigurationError
+
+Thrown when the authentication configuration is invalid (e.g., transparent mode on a parent with multiple child providers).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `AUTH_CONFIGURATION_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `true` |
+| `errors` | `string[]` | List of configuration errors |
+| `suggestion` | `string \| undefined` | How to fix the issue |
+
+```typescript
+new AuthConfigurationError(message: string, options?: {
+  errors?: string[];
+  suggestion?: string;
+})
+```
+
+**Example:**
+
+```typescript
+import { AuthConfigurationError } from '@frontmcp/sdk';
+
+throw new AuthConfigurationError('Invalid auth configuration', {
+  errors: ['Transparent mode requires exactly one child provider'],
+  suggestion: 'Set auth.mode to "orchestrated" when using multiple providers.',
+});
+```
+
+---
+
+### SessionMissingError
+
+Thrown when a request arrives without a valid session. This tells the client it needs to authenticate.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SESSION_MISSING` |
+| `statusCode` | `number` | `401` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new SessionMissingError(message?: string)
+```
+
+**Example:**
+
+```typescript
+import { SessionMissingError } from '@frontmcp/sdk';
+
+throw new SessionMissingError();
+// "Unauthorized: missing session"
+```
+
+---
+
+### UnsupportedClientVersionError
+
+Thrown when a client connects with an unsupported MCP protocol version.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `UNSUPPORTED_CLIENT_VERSION` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+| `clientVersion` | `string` | The version string from the client |
+
+```typescript
+new UnsupportedClientVersionError(version: string)
+
+// Factory method
+UnsupportedClientVersionError.fromVersion(version: string)
+```
+
+**Example:**
+
+```typescript
+import { UnsupportedClientVersionError } from '@frontmcp/sdk';
+
+throw UnsupportedClientVersionError.fromVersion('0.1.0');
+```
+
+---
+
+### AuthorizationRequiredError
+
+Thrown when a tool requires app-level authorization the user has not yet granted. Supports progressive/incremental authorization. Behavior depends on session mode:
+
+- **Stateful**: Returns an `auth_url` link for incremental authorization
+- **Stateless**: Returns an unauthorized error (user must re-authenticate)
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `AUTHORIZATION_REQUIRED` |
+| `statusCode` | `number` | `403` |
+| `isPublic` | `boolean` | `true` |
+| `appId` | `string` | App requiring authorization |
+| `toolId` | `string` | Tool that triggered the requirement |
+| `authUrl` | `string \| undefined` | Auth URL (stateful mode only) |
+| `requiredScopes` | `string[] \| undefined` | Scopes needed |
+| `sessionMode` | `'stateful' \| 'stateless'` | Session mode |
+| `supportsIncremental` | `boolean` | Whether incremental auth is available |
+| `elicitId` | `string \| undefined` | Elicit flow ID |
+| `vaultId` | `string \| undefined` | Vault ID for stateful sessions |
+| `pendingAuthId` | `string \| undefined` | Tracking ID |
+
+```typescript
+new AuthorizationRequiredError(params: {
+  appId: string;
+  toolId: string;
+  authUrl?: string;
+  requiredScopes?: string[];
+  message?: string;
+  sessionMode?: 'stateful' | 'stateless';
+  elicitId?: string;
+  vaultId?: string;
+  pendingAuthId?: string;
+})
+```
+
+**Methods:**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `toMcpError()` | MCP error with `_meta` | Includes authorization metadata for AI agents |
+| `toAuthorizationRequiredData()` | `AuthorizationRequiredData` | Structured data object |
+| `toElicitResponse()` | `ElicitResponse \| null` | Elicit response (stateful only) |
+| `canUseIncrementalAuth()` | `boolean` | Whether link-based auth is available |
+| `getUserFacingMessage()` | `string` | Message with auth link or re-auth instructions |
+
+**Example (stateful):**
+
+```typescript
+import { AuthorizationRequiredError } from '@frontmcp/sdk';
+
+throw new AuthorizationRequiredError({
+  appId: 'slack',
+  toolId: 'slack:send_message',
+  authUrl: '/oauth/authorize?app=slack',
+  sessionMode: 'stateful',
+});
+```
+
+**Example (stateless):**
+
+```typescript
+throw new AuthorizationRequiredError({
+  appId: 'slack',
+  toolId: 'slack:send_message',
+  sessionMode: 'stateless',
+});
+```

@@ -1,0 +1,114 @@
+---
+title: "Validation Errors"
+description: "Errors for input/output validation failures and method mismatches."
+icon: "check"
+---
+
+## Overview
+
+Validation errors are thrown when input parameters fail schema validation, when tool output doesn't match the expected schema, when an HTTP method doesn't match, or when a required prompt argument is missing.
+
+## Error Reference
+
+### InvalidInputError
+
+Thrown when input parameters fail Zod schema validation. This is a public error — validation details are included in the response to help clients fix their requests.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_INPUT` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+| `validationErrors` | `any` | Zod validation error details |
+
+```typescript
+new InvalidInputError(message?: string, validationErrors?: any)
+```
+
+**Example:**
+
+```typescript
+import { InvalidInputError } from '@frontmcp/sdk';
+
+throw new InvalidInputError('Validation failed', {
+  field: 'email',
+  reason: 'Invalid format',
+});
+```
+
+---
+
+### InvalidOutputError
+
+Thrown when a tool's output does not match the declared output schema. This is an internal error — schema details are not exposed to clients.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_OUTPUT` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidOutputError(errorId?: string)
+```
+
+If a custom `errorId` (e.g., a request ID) is provided, it is included in the public message for correlation. Otherwise, a generic message is returned.
+
+**Example:**
+
+```typescript
+import { InvalidOutputError } from '@frontmcp/sdk';
+
+throw new InvalidOutputError('req_abc123');
+// Client sees: "Output validation failed. Please contact support with error ID: req_abc123"
+```
+
+---
+
+### InvalidMethodError
+
+Thrown when a request uses the wrong HTTP method (e.g., GET instead of POST).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_METHOD` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new InvalidMethodError(method: string, expected: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidMethodError } from '@frontmcp/sdk';
+
+throw new InvalidMethodError('GET', 'POST');
+// "Invalid method "GET". Expected "POST""
+```
+
+---
+
+### MissingPromptArgumentError
+
+Thrown when a required prompt argument is not provided by the caller.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `MISSING_PROMPT_ARGUMENT` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new MissingPromptArgumentError(argName: string)
+```
+
+**Example:**
+
+```typescript
+import { MissingPromptArgumentError } from '@frontmcp/sdk';
+
+throw new MissingPromptArgumentError('topic');
+// "Missing required argument: topic"
+```

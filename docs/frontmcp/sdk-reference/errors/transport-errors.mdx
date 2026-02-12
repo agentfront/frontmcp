@@ -1,0 +1,165 @@
+---
+title: "Transport Errors"
+description: "Errors for transport layer failures including connection, session, and content type issues."
+icon: "plug"
+---
+
+## Overview
+
+Transport errors are thrown by the MCP transport layer — the component responsible for managing HTTP connections, sessions, and message framing. Most are internal errors except `UnsupportedContentTypeError`, which is a client-facing 400 error.
+
+## Error Reference
+
+### MethodNotImplementedError
+
+Thrown when calling an abstract or placeholder method that has not been implemented.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `METHOD_NOT_IMPLEMENTED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new MethodNotImplementedError(className?: string, methodName?: string)
+```
+
+**Example:**
+
+```typescript
+import { MethodNotImplementedError } from '@frontmcp/sdk';
+
+throw new MethodNotImplementedError('CustomTransport', 'send');
+// "CustomTransport.send() is not implemented"
+```
+
+---
+
+### UnsupportedTransportTypeError
+
+Thrown when an unsupported transport type is specified in configuration.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `UNSUPPORTED_TRANSPORT_TYPE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new UnsupportedTransportTypeError(transportType: string)
+```
+
+**Example:**
+
+```typescript
+import { UnsupportedTransportTypeError } from '@frontmcp/sdk';
+
+throw new UnsupportedTransportTypeError('websocket');
+// "Unsupported transport type: "websocket""
+```
+
+---
+
+### TransportBusRequiredError
+
+Thrown when a transport bus is required but not provided.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `TRANSPORT_BUS_REQUIRED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new TransportBusRequiredError()
+```
+
+---
+
+### InvalidTransportSessionError
+
+Thrown when a transport session is invalid or missing.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_TRANSPORT_SESSION` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidTransportSessionError(message: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidTransportSessionError } from '@frontmcp/sdk';
+
+throw new InvalidTransportSessionError('Session ID missing from request headers');
+```
+
+---
+
+### TransportNotConnectedError
+
+Thrown when an operation is attempted on a transport that is not connected.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `TRANSPORT_NOT_CONNECTED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new TransportNotConnectedError(context?: string)
+```
+
+**Example:**
+
+```typescript
+import { TransportNotConnectedError } from '@frontmcp/sdk';
+
+throw new TransportNotConnectedError('SSE channel closed');
+```
+
+---
+
+### TransportAlreadyStartedError
+
+Thrown when attempting to start a transport that is already running.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `TRANSPORT_ALREADY_STARTED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new TransportAlreadyStartedError(message?: string)
+```
+
+---
+
+### UnsupportedContentTypeError
+
+Thrown when a request uses an unsupported `Content-Type` header. This is a public error since it represents a client-side issue.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `UNSUPPORTED_CONTENT_TYPE` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+| `contentType` | `string` | The unsupported content type |
+
+```typescript
+new UnsupportedContentTypeError(contentType: string)
+```
+
+**Example:**
+
+```typescript
+import { UnsupportedContentTypeError } from '@frontmcp/sdk';
+
+throw new UnsupportedContentTypeError('text/xml');
+// "Unsupported content-type: text/xml"
+```

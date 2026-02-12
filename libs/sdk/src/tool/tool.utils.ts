@@ -1,5 +1,6 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
+import { InvalidEntityError } from '../errors';
 import {
   ToolMetadata,
   FrontMcpToolTokens,
@@ -65,7 +66,7 @@ export function normalizeTool(item: any): ToolRecord {
     return { kind: ToolKind.CLASS_TOKEN, provide: item as Type<ToolContext>, metadata };
   }
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid adapter '${name}'. Expected a class or a adapter object.`);
+  throw new InvalidEntityError('tool', name, 'a class or a tool object');
 }
 
 /**

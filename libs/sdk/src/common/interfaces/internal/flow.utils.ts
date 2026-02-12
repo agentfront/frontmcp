@@ -1,10 +1,11 @@
-import {z} from 'zod';
-import {FlowName} from '../../metadata';
+import { z } from 'zod';
+import { FlowName } from '../../metadata';
+import { InvokeStateMissingKeyError } from '../../../errors';
 
 type RequiredView<T> = { [K in keyof T]-?: Exclude<T[K], undefined> };
 type StateAccess<T> = { [K in keyof T]: T[K] | undefined } & { required: RequiredView<T> };
 
-type StateType<Name extends FlowName> = z.infer<ExtendFlows[Name]['state']>
+type StateType<Name extends FlowName> = z.infer<ExtendFlows[Name]['state']>;
 
 export type FlowStateOf<Name extends FlowName, T = StateType<Name>> = StateAccess<T> & {
   get<K extends keyof T>(key: K): T[K] | undefined;
@@ -20,7 +21,7 @@ export class FlowState {
   }
 
   static create<Name extends FlowName, T = StateType<Name>>(initial?: Partial<T>): FlowStateOf<Name> {
-    const data: Partial<T> = initial ? {...initial} : {};
+    const data: Partial<T> = initial ? { ...initial } : {};
 
     const api = {
       get<K extends keyof T>(key: K) {
@@ -29,7 +30,7 @@ export class FlowState {
       getOrThrow<K extends keyof T>(key: K, message?: string) {
         const val = data[key];
         if (val === undefined || val === null) {
-          throw new Error(message ?? `InvokeState: missing required key "${String(key)}"`);
+          throw message ? new Error(message) : new InvokeStateMissingKeyError(String(key));
         }
         return val as Exclude<T[K], undefined>;
       },
@@ -42,7 +43,7 @@ export class FlowState {
         return proxy as FlowStateOf<Name>;
       },
       snapshot() {
-        return {...data} as Readonly<Partial<T>>;
+        return { ...data } as Readonly<Partial<T>>;
       },
     };
 
@@ -50,7 +51,7 @@ export class FlowState {
       get(_t, prop: PropertyKey) {
         const val = (data as any)[prop];
         if (val === undefined || val === null) {
-          throw new Error(`InvokeState: missing required key "${String(prop)}"`);
+          throw new InvokeStateMissingKeyError(String(prop));
         }
         return val;
       },
@@ -62,7 +63,7 @@ export class FlowState {
         return Reflect.ownKeys(data as object);
       },
       getOwnPropertyDescriptor() {
-        return {enumerable: true, configurable: true};
+        return { enumerable: true, configurable: true };
       },
     });
 
@@ -86,9 +87,9 @@ export class FlowState {
       },
       getOwnPropertyDescriptor(_t, prop) {
         if (prop === 'required' || methodKeys.has(prop)) {
-          return {enumerable: false, configurable: true};
+          return { enumerable: false, configurable: true };
         }
-        return {enumerable: true, configurable: true};
+        return { enumerable: true, configurable: true };
       },
     });
 

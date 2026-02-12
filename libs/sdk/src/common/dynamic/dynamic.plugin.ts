@@ -2,6 +2,7 @@
 import { Reference } from '@frontmcp/di';
 import { PluginType, ProviderType } from '../interfaces';
 import { collectDynamicProviders, dedupePluginProviders } from './dynamic.utils';
+import { MethodNotImplementedError } from '../../errors/transport.errors';
 
 // InitOptions accepts input type (what users provide to init())
 type InitOptions<TInput> =
@@ -51,7 +52,7 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
   static dynamicProviders?(options: any): readonly ProviderType[];
 
   get<T>(token: Reference<T>): T {
-    throw new Error('Method not implemented.');
+    throw new MethodNotImplementedError('DynamicPlugin', 'get');
   }
 
   /**

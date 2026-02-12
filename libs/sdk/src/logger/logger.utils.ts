@@ -1,6 +1,7 @@
 import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
 import { FrontMcpLogTransportTokens, LogTransportMetadata, LogTransportType, LogTransportInterface } from '../common';
 import { LoggerKind, LoggerRecord } from './logger.types';
+import { InvalidEntityError } from '../errors';
 
 export function collectLoggerMetadata(cls: LogTransportType): LogTransportMetadata {
   return Object.entries(FrontMcpLogTransportTokens).reduce((metadata, [key, token]) => {
@@ -23,7 +24,7 @@ export function normalizeLogger(item: any): LoggerRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid app '${name}'. Expected a class or remote app config object.`);
+  throw new InvalidEntityError('logger', name, 'a class or a logger object');
 }
 
 /**

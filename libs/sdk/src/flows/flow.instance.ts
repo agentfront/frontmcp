@@ -1,6 +1,3 @@
-// noinspection ExceptionCaughtLocallyJS
-// flows/flow.instance.ts
-
 import 'reflect-metadata';
 import {
   FlowBase,
@@ -26,9 +23,8 @@ import { collectFlowHookMap, StageMap, cloneStageMap, mergeHookMetasIntoStageMap
 import { writeHttpResponse } from '../server/server.validation';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
-import { rpcError } from '../transport/transport.error';
 import { FrontMcpContextStorage, FRONTMCP_CONTEXT } from '../context';
-import { RequestContextNotAvailableError, InternalMcpError } from '../errors/mcp.error';
+import { RequestContextNotAvailableError, InternalMcpError } from '../errors';
 import { randomUUID } from '@frontmcp/utils';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';

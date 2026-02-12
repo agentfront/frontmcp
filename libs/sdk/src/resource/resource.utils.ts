@@ -16,6 +16,7 @@ import {
   ResourceEntry,
 } from '../common';
 import { ResourceTemplateType } from './resource.types';
+import { InvalidEntityError } from '../errors';
 
 /**
  * Collect metadata from a class decorated with @FrontMcpResource
@@ -76,7 +77,7 @@ export function normalizeResource(item: any): ResourceRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid resource '${name}'. Expected a class or a resource function.`);
+  throw new InvalidEntityError('resource', name, 'a class or a resource function');
 }
 
 /**
@@ -104,7 +105,7 @@ export function normalizeResourceTemplate(item: any): ResourceTemplateRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid resource template '${name}'. Expected a class or a resource template function.`);
+  throw new InvalidEntityError('resource template', name, 'a class or a resource template function');
 }
 
 /**

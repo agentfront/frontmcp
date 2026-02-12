@@ -19,6 +19,7 @@ import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import type { VercelKvProviderOptions } from '../../common/types/options/redis';
 import { signSession, verifyOrParseSession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
+import { SessionIdEmptyError } from '../../errors/auth-internal.errors';
 
 export interface VercelKvSessionConfig {
   /**
@@ -98,7 +99,7 @@ export class VercelKvSessionStore implements SessionStore {
    */
   private validateSessionId(sessionId: string): void {
     if (!sessionId || sessionId.trim() === '') {
-      throw new Error('[VercelKvSessionStore] sessionId cannot be empty');
+      throw new SessionIdEmptyError('VercelKvSessionStore');
     }
   }
 

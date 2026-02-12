@@ -18,6 +18,7 @@ import {
 import 'reflect-metadata';
 import { z } from 'zod';
 import { JwksService } from '@frontmcp/auth';
+import { OrchestratorJwksNotAvailableError } from '../../errors/auth-internal.errors';
 
 const inputSchema = httpInputSchema;
 
@@ -78,7 +79,7 @@ export default class WellKnownJwksFlow extends FlowBase<typeof name> {
     if (isOrchestrated) {
       const keysDoc = await jwksSvc.getPublicJwks();
       if (!keysDoc?.keys || !Array.isArray(keysDoc.keys)) {
-        throw new Error('orchestrator jwks not available');
+        throw new OrchestratorJwksNotAvailableError();
       }
       this.respond(httpRespond.json(keysDoc));
       return;

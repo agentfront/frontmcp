@@ -4,6 +4,7 @@ import { randomUUID } from '@frontmcp/utils';
 import { AuthorizationBase } from './authorization.class';
 import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
 import { AuthMode } from '../../common';
+import { TokenNotAvailableError } from '../../errors/auth-internal.errors';
 
 /**
  * Context for creating a PublicAuthorization
@@ -149,7 +150,7 @@ export class PublicAuthorization extends AuthorizationBase {
    * @throws Error always - anonymous users do not have provider tokens
    */
   async getToken(_providerId?: string): Promise<string> {
-    throw new Error(
+    throw new TokenNotAvailableError(
       'PublicAuthorization: Anonymous users cannot access provider tokens. ' +
         'Use transparent or orchestrated mode for token access.',
     );

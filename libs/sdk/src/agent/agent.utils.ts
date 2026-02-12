@@ -9,6 +9,7 @@ import {
   AgentKind,
 } from '../common';
 import { AgentConfigurationError } from '../errors/agent.errors';
+import { InvalidEntityError } from '../errors';
 
 // ============================================================================
 // Metadata Extraction
@@ -141,9 +142,10 @@ export function normalizeAgent(agent: AgentType): AgentRecord {
     }
   }
 
-  throw new Error(
-    'Invalid agent type. Expected class decorated with @Agent, ' +
-      'function created with agent(), or { useValue/useFactory, metadata } object.',
+  throw new InvalidEntityError(
+    'agent',
+    'type',
+    'class decorated with @Agent, function created with agent(), or { useValue/useFactory, metadata } object',
   );
 }
 

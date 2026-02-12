@@ -19,6 +19,7 @@ import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { buildParsedPromptResult } from './prompt.utils';
 import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { MissingPromptArgumentError, InvalidRegistryKindError } from '../errors';
 
 export class PromptInstance extends PromptEntry {
   private readonly _providers: ProviderRegistry;
@@ -88,7 +89,7 @@ export class PromptInstance extends PromptEntry {
       default:
         // Exhaustive check: TypeScript will error if a new PromptKind is added but not handled
         // The assertion below catches runtime cases that TypeScript can't detect
-        throw new Error(`Unhandled prompt kind: ${(record as { kind: string }).kind}`);
+        throw new InvalidRegistryKindError('prompt', (record as { kind: string }).kind);
     }
   }
 
@@ -105,7 +106,7 @@ export class PromptInstance extends PromptEntry {
     for (const argDef of argDefs) {
       const value = args?.[argDef.name];
       if (argDef.required && (value === undefined || value === null)) {
-        throw new Error(`Missing required argument: ${argDef.name}`);
+        throw new MissingPromptArgumentError(argDef.name);
       }
       if (value !== undefined) {
         result[argDef.name] = value;
@@ -147,7 +148,10 @@ export class PromptInstance extends PromptEntry {
  * Prompt context for function-decorated prompts.
  */
 class FunctionPromptContext extends PromptContext {
-  constructor(private readonly record: PromptFunctionTokenRecord, args: PromptCtorArgs) {
+  constructor(
+    private readonly record: PromptFunctionTokenRecord,
+    args: PromptCtorArgs,
+  ) {
     super(args);
   }
 

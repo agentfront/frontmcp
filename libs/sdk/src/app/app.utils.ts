@@ -10,6 +10,7 @@ import {
   AppEntry,
 } from '../common';
 import { AppLocalInstance } from './instances';
+import { MissingProvideError, InvalidEntityError } from '../errors';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {
   return Object.entries(FrontMcpLocalAppTokens).reduce((metadata, [key, token]) => {
@@ -68,7 +69,7 @@ export function normalizeApp(item: AppType): AppRecord {
     const { provide, useValue, ...metadata } = item as any;
     if (!provide) {
       const name = (item as any)?.name ?? JSON.stringify(item) ?? '[object]';
-      throw new Error(`App '${name}' is missing 'provide'.`);
+      throw new MissingProvideError('App', name);
     }
 
     if (useValue) {
@@ -81,7 +82,7 @@ export function normalizeApp(item: AppType): AppRecord {
     }
   }
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid app '${name}'. Expected a class or remote app config object.`);
+  throw new InvalidEntityError('app', name, 'a class or remote app config object');
 }
 
 /**

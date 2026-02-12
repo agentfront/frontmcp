@@ -13,6 +13,7 @@
 
 import { TokenStore } from '../authorization/orchestrated.authorization';
 import { encryptAesGcm, decryptAesGcm, randomBytes, hkdfSha256 } from '@frontmcp/utils';
+import { EncryptionKeyNotConfiguredError } from '../../errors/auth-internal.errors';
 
 /**
  * Internal token record structure
@@ -123,7 +124,7 @@ export class InMemoryOrchestratedTokenStore implements TokenStore {
    */
   private async deriveKeyForRecord(compositeKey: string): Promise<Uint8Array> {
     if (!this.encryptionKey) {
-      throw new Error('Encryption key not configured');
+      throw new EncryptionKeyNotConfiguredError();
     }
 
     // Check cache

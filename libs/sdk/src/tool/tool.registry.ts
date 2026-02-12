@@ -15,6 +15,7 @@ import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../scope';
 import { AppEntry } from '../common';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import { NameDisambiguationError, EntryValidationError } from '../errors';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -422,7 +423,7 @@ export default class ToolRegistry
         if (!pool.has(withN)) return withN;
         n++;
       }
-      throw new Error(`Failed to disambiguate name "${candidate}" after ${maxAttempts} attempts`);
+      throw new NameDisambiguationError(candidate, maxAttempts);
     }
   }
 
@@ -567,19 +568,19 @@ export default class ToolRegistry
     if (!this.isRegisterableTool(tool)) {
       // Provide specific error messages for debugging
       if (typeof tool.name !== 'string' || !tool.name) {
-        throw new Error('Tool instance is missing required name property');
+        throw new EntryValidationError('Tool', 'missing required name property');
       }
       const toolWithRecord = tool as { record?: { provide?: unknown; kind?: unknown; metadata?: unknown } };
       if (!toolWithRecord.record) {
-        throw new Error('Tool instance is missing required record property');
+        throw new EntryValidationError('Tool', 'missing required record property');
       }
       if (!toolWithRecord.record.provide) {
-        throw new Error('Tool instance is missing required record.provide property');
+        throw new EntryValidationError('Tool', 'missing required record.provide property');
       }
       if (!toolWithRecord.record.kind || !toolWithRecord.record.metadata) {
-        throw new Error('Tool instance is missing required record.kind or record.metadata');
+        throw new EntryValidationError('Tool', 'missing required record.kind or record.metadata');
       }
-      throw new Error('Tool instance validation failed');
+      throw new EntryValidationError('Tool', 'validation failed');
     }
 
     const token = tool.record.provide as Token;

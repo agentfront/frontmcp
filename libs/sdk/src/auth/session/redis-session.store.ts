@@ -11,6 +11,7 @@ import {
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { signSession, verifyOrParseSession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
+import { SessionIdEmptyError } from '../../errors/auth-internal.errors';
 
 /**
  * Extended Redis configuration with security options.
@@ -94,7 +95,7 @@ export class RedisSessionStore implements SessionStore {
    */
   private validateSessionId(sessionId: string): void {
     if (!sessionId || sessionId.trim() === '') {
-      throw new Error('[RedisSessionStore] sessionId cannot be empty');
+      throw new SessionIdEmptyError('RedisSessionStore');
     }
   }
 

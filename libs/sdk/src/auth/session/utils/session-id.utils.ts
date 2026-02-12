@@ -6,6 +6,7 @@ import { getTokenSignatureFingerprint } from './auth-token.utils';
 import { detectPlatformFromUserAgent } from '../../../notification/notification.service';
 import type { PlatformDetectionConfig } from '../../../common/types/options/session';
 import { getMachineId } from '../../machine-id';
+import { SessionSecretRequiredError } from '../../../errors/auth-internal.errors';
 
 // 5s TTL cache for decrypted headers
 const cache = new TinyTtlCache<string, SessionIdPayload>(5000);
@@ -31,10 +32,7 @@ function getKey(): Uint8Array {
   if (!secret) {
     // Fail fast in production - machine ID is not secure for production use
     if (nodeEnv === 'production') {
-      throw new Error(
-        '[SessionIdUtils] MCP_SESSION_SECRET is required in production. ' +
-          'Set the MCP_SESSION_SECRET environment variable to a secure random string.',
-      );
+      throw new SessionSecretRequiredError('session ID encryption');
     }
     // Development/test fallback - log warning
     console.warn(

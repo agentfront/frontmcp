@@ -1,0 +1,67 @@
+---
+title: "Rate Limit Errors"
+description: "Errors for rate limiting and quota enforcement."
+icon: "gauge"
+---
+
+## Overview
+
+Rate limit errors are thrown when a client exceeds request rate limits or usage quotas. Both are public errors that inform the client about the limitation.
+
+## Error Reference
+
+### RateLimitError
+
+Thrown when a client exceeds the configured request rate limit.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `RATE_LIMIT_EXCEEDED` |
+| `statusCode` | `number` | `429` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new RateLimitError(retryAfter?: number)
+```
+
+When `retryAfter` is provided, the message includes the number of seconds the client should wait before retrying.
+
+**Example:**
+
+```typescript
+import { RateLimitError } from '@frontmcp/sdk';
+
+throw new RateLimitError(60);
+// "Rate limit exceeded. Retry after 60 seconds"
+
+throw new RateLimitError();
+// "Rate limit exceeded"
+```
+
+---
+
+### QuotaExceededError
+
+Thrown when a client exceeds a usage quota (e.g., monthly API calls, storage).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `QUOTA_EXCEEDED` |
+| `statusCode` | `number` | `429` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new QuotaExceededError(quotaType?: string)
+```
+
+**Example:**
+
+```typescript
+import { QuotaExceededError } from '@frontmcp/sdk';
+
+throw new QuotaExceededError('monthly API calls');
+// "monthly API calls quota exceeded"
+
+throw new QuotaExceededError();
+// "usage quota exceeded"
+```

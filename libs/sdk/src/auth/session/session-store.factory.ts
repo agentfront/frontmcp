@@ -8,6 +8,7 @@
 
 import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
 import type { SessionStore } from './transport-session.types';
+import { VercelKvAsyncInitRequiredError } from '../../errors/sdk.errors';
 import {
   type FrontMcpLogger,
   type RedisOptions,
@@ -112,7 +113,9 @@ async function createVercelKvSessionStore(
  */
 export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpLogger): SessionStore {
   if (isVercelKvProvider(options)) {
-    throw new Error('Vercel KV session store requires async initialization. Use createSessionStore() instead.');
+    throw new VercelKvAsyncInitRequiredError(
+      'Vercel KV session store requires async initialization. Use createSessionStore() instead.',
+    );
   }
 
   // Redis only - synchronous creation

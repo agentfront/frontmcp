@@ -21,6 +21,7 @@ import {
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 import { randomUUID } from '@frontmcp/utils';
+import { SessionVerificationFailedError } from '../../errors';
 
 const plan = {
   pre: [
@@ -162,7 +163,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       const result = await this.scope.runFlow('session:verify', { request });
       if (!result) {
         this.logger.error(`[${this.requestId}] failed to verify session`);
-        throw new Error('Session verification failed');
+        throw new SessionVerificationFailedError();
       }
       this.state.set({
         verifyResult: result,

@@ -23,6 +23,18 @@ import {
   FrontMcpServer,
 } from '../common';
 import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
+import {
+  ProviderNotRegisteredError,
+  ProviderScopeMismatchError,
+  ProviderNotInstantiatedError,
+  DependencyCycleError,
+  ProviderConstructionError,
+  ProviderDependencyError,
+  ProviderScopedAccessError,
+  ProviderNotAvailableError,
+  PluginDependencyError,
+  InvalidDependencyScopeError,
+} from '../errors';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
@@ -112,18 +124,16 @@ export default class ProviderRegistry
   /** Resolve a DEFAULT-scoped dependency from the hierarchy, enforcing scope & instantiation. */
   private resolveDefaultFromHierarchy(token: Token): any {
     const found = this.lookupDefInHierarchy(token);
-    if (!found) throw new Error(`Cannot resolve token ${tokenName(token)}: not registered in hierarchy.`);
+    if (!found) throw new ProviderNotRegisteredError(tokenName(token), 'not registered in hierarchy');
     const { registry, rec } = found;
     const sc = registry.getProviderScope(rec);
     if (sc !== ProviderScope.GLOBAL) {
       const scName = ProviderScope[sc];
-      throw new Error(
-        `Dependency ${tokenName(token)} is scoped (${scName}) in ${registry.constructor.name}; cannot use as DEFAULT.`,
-      );
+      throw new ProviderScopeMismatchError(tokenName(token), scName, registry.constructor.name);
     }
     const inst = registry.instances.get(token);
     if (inst === undefined) {
-      throw new Error(`Dependency ${tokenName(token)} (DEFAULT) is not instantiated in ${registry.constructor.name}`);
+      throw new ProviderNotInstantiatedError(tokenName(token), 'DEFAULT', registry.constructor.name);
     }
     return inst;
   }
@@ -156,7 +166,7 @@ export default class ProviderRegistry
         const up = isLocal ? undefined : this.lookupDefInHierarchy(d);
 
         if (!isLocal && !up) {
-          throw new Error(
+          throw new ProviderDependencyError(
             `Provider ${tokenName(token)} depends on ${tokenName(d)}, which is not registered (local or parent).`,
           );
         }
@@ -165,7 +175,7 @@ export default class ProviderRegistry
         const depScope = isLocal ? this.getProviderScope(depRec) : up!.registry.getProviderScope(depRec);
 
         if (this.getProviderScope(rec) === ProviderScope.GLOBAL && depScope !== ProviderScope.GLOBAL) {
-          throw new Error(
+          throw new InvalidDependencyScopeError(
             `Invalid dependency: DEFAULT-scoped provider ${tokenName(
               token,
             )} cannot depend on scoped provider ${tokenName(d)}.`,
@@ -194,7 +204,7 @@ export default class ProviderRegistry
         if (c === GRAY) {
           const idx = path.findIndex((p) => p === dep);
           const cycle = [...path.slice(idx), dep].map((t) => tokenName(t)).join(' -> ');
-          throw new Error(`Dependency cycle detected: ${cycle}`);
+          throw new DependencyCycleError(cycle);
         }
         if (c === WHITE) dfs(dep);
       }
@@ -232,7 +242,7 @@ export default class ProviderRegistry
         const msg = e?.message ?? e;
         // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
         console.error(`Failed instantiating:`, msg);
-        throw new Error(`Failed constructing ${tokenName(token)}: ${msg}`);
+        throw new ProviderConstructionError(tokenName(token), e instanceof Error ? e : msg);
       }
     }
 
@@ -311,7 +321,7 @@ export default class ProviderRegistry
       const sc = this.getProviderScope(rec);
       if (sc === ProviderScope.GLOBAL) {
         if (!this.instances.has(t)) {
-          throw new Error(`Dependency ${tokenName(t)} (DEFAULT scope) is not instantiated`);
+          throw new ProviderNotInstantiatedError(tokenName(t), 'DEFAULT');
         }
         return this.instances.get(t);
       } else {
@@ -327,7 +337,7 @@ export default class ProviderRegistry
       if (sc === ProviderScope.GLOBAL) {
         const inst = up.registry.instances.get(t);
         if (inst === undefined) {
-          throw new Error(`Dependency ${tokenName(t)} (DEFAULT scope) is not instantiated in parent`);
+          throw new ProviderNotInstantiatedError(tokenName(t), 'DEFAULT', 'parent');
         }
         return inst;
       } else {
@@ -351,7 +361,7 @@ export default class ProviderRegistry
       return instance;
     }
 
-    throw new Error(`Cannot resolve token ${tokenName(t)}: not registered in hierarchy and not constructable.`);
+    throw new ProviderNotRegisteredError(tokenName(t), 'not registered in hierarchy and not constructable');
   }
 
   /** Build a single DEFAULT-scoped singleton (used by incremental instantiating). */
@@ -493,7 +503,7 @@ export default class ProviderRegistry
       const msg = e?.message ?? e;
       // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
       console.error(`Failed constructing:`, msg);
-      throw new Error(`Failed constructing (scoped) ${tokenName(token)}: ${msg}`);
+      throw new ProviderConstructionError(tokenName(token), e instanceof Error ? e : msg, 'scoped');
     }
   }
 
@@ -510,7 +520,7 @@ export default class ProviderRegistry
       const sc = this.getProviderScope(depRec);
       if (sc === ProviderScope.GLOBAL) {
         const v = this.instances.get(d);
-        if (v === undefined) throw new Error(`${tokenName(d)} (DEFAULT scope) is not instantiated`);
+        if (v === undefined) throw new ProviderNotInstantiatedError(tokenName(d), 'DEFAULT');
         return v;
       } else {
         await this.buildIntoStore(d, depRec, store, scopeKey);
@@ -524,7 +534,7 @@ export default class ProviderRegistry
       const sc = up.registry.getProviderScope(up.rec);
       if (sc === ProviderScope.GLOBAL) {
         const v = up.registry.instances.get(d);
-        if (v === undefined) throw new Error(`${tokenName(d)} (DEFAULT scope) is not instantiated in parent`);
+        if (v === undefined) throw new ProviderNotInstantiatedError(tokenName(d), 'DEFAULT', 'parent');
         return v;
       } else {
         await up.registry.buildIntoStore(d, up.rec, store, scopeKey);
@@ -532,7 +542,7 @@ export default class ProviderRegistry
       }
     }
 
-    throw new Error(`${tokenName(d)} is not instantiated`);
+    throw new ProviderNotInstantiatedError(tokenName(d));
   }
 
   get<T>(token: Token<T>): T {
@@ -541,13 +551,13 @@ export default class ProviderRegistry
     const rec = this.defs.get(token as any);
     if (rec && this.getProviderScope(rec) !== ProviderScope.GLOBAL) {
       const scName = ProviderScope[this.getProviderScope(rec)];
-      throw new Error(`Provider ${tokenName(token)} is scoped (${scName}). Use getScoped(token, key).`);
+      throw new ProviderScopedAccessError(tokenName(token), scName);
     }
 
     // bubble to parent
     if (this.providers) return this.providers.get<T>(token);
 
-    throw new Error(`Provider ${tokenName(token)} is not available in local or parent registries`);
+    throw new ProviderNotAvailableError(tokenName(token), 'not found in local or parent registries');
   }
 
   // noinspection JSUnusedGlobalSymbols
@@ -583,12 +593,13 @@ export default class ProviderRegistry
       const { registry, rec } = found;
       const sc = registry.getProviderScope(rec);
       if (sc !== ProviderScope.GLOBAL)
-        throw new Error(`Plugin dependency ${tokenName(t)} must be DEFAULT-scoped at bootstrap`);
+        throw new PluginDependencyError(`Plugin dependency ${tokenName(t)} must be DEFAULT-scoped at bootstrap`);
       const v = registry.instances.get(t);
-      if (v === undefined) throw new Error(`Plugin dependency ${tokenName(t)} (DEFAULT scope) is not instantiated`);
+      if (v === undefined)
+        throw new PluginDependencyError(`Plugin dependency ${tokenName(t)} (DEFAULT scope) is not instantiated`);
       return v;
     }
-    throw new Error(`Cannot resolve plugin dependency ${tokenName(t)} (local or parent)`);
+    throw new PluginDependencyError(`Cannot resolve plugin dependency ${tokenName(t)} (local or parent)`);
   }
 
   /** Lightweight, synchronous resolver for app-scoped DI.
@@ -605,14 +616,10 @@ export default class ProviderRegistry
       const sc = registry.getProviderScope(rec);
       if (sc !== ProviderScope.GLOBAL) {
         const scName = ProviderScope[sc];
-        throw new Error(
-          `Provider ${tokenName(cls)} is scoped (${scName}). Use getScoped(token, key) or buildViews(...).`,
-        );
+        throw new ProviderScopedAccessError(tokenName(cls), scName);
       }
       if (!registry.instances.has(cls)) {
-        throw new Error(
-          `Provider ${tokenName(cls)} (DEFAULT scope) is not instantiated. Call providers.instantiate() first.`,
-        );
+        throw new ProviderNotInstantiatedError(tokenName(cls), 'DEFAULT', 'Call providers.instantiate() first');
       }
       return registry.instances.get(cls) as T;
     }
@@ -632,8 +639,9 @@ export default class ProviderRegistry
     }
 
     // 3) Unsupported token type
-    throw new Error(
-      `Cannot resolve ${tokenName(cls)}: not a registered DEFAULT provider and not a constructable class.`,
+    throw new ProviderNotRegisteredError(
+      tokenName(cls),
+      'not a registered DEFAULT provider and not a constructable class',
     );
   }
 
@@ -665,10 +673,9 @@ export default class ProviderRegistry
     const def = this.defs.get(token);
     const instance = this.instances.get(token);
     if (!def || !instance)
-      throw new Error(
-        `Cannot get provider info for ${tokenName(
-          token,
-        )}: not a registered DEFAULT provider and not a constructable class.`,
+      throw new ProviderNotRegisteredError(
+        tokenName(token),
+        'not a registered DEFAULT provider and not a constructable class',
       );
     return {
       token,
@@ -1011,7 +1018,7 @@ export default class ProviderRegistry
     } catch (e: any) {
       const msg = e?.message ?? e;
       console.error(`Failed constructing (context-scoped):`, msg);
-      throw new Error(`Failed constructing (context-scoped) ${tokenName(token)}: ${msg}`);
+      throw new ProviderConstructionError(tokenName(token), e instanceof Error ? e : msg, 'context-scoped');
     }
   }
 
@@ -1034,7 +1041,7 @@ export default class ProviderRegistry
     if (rec) {
       const scope = this.getProviderScope(rec);
       if (scope === ProviderScope.GLOBAL) {
-        throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated`);
+        throw new ProviderNotInstantiatedError(tokenName(token), 'GLOBAL');
       } else {
         // CONTEXT scope - build into context store
         await this.buildIntoStoreWithViews(token, rec, contextStore, scopeKey, contextStore, globalStore);
@@ -1049,11 +1056,11 @@ export default class ProviderRegistry
       if (sc === ProviderScope.GLOBAL) {
         const v = up.registry.instances.get(token);
         if (v !== undefined) return v;
-        throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated in parent`);
+        throw new ProviderNotInstantiatedError(tokenName(token), 'GLOBAL', 'parent');
       }
     }
 
-    throw new Error(`Cannot resolve dependency ${tokenName(token)} from views`);
+    throw new ProviderDependencyError(`Cannot resolve dependency ${tokenName(token)} from views`);
   }
 
   /**
@@ -1072,6 +1079,6 @@ export default class ProviderRegistry
     // Check instances as fallback for global providers
     if (this.instances.has(token)) return this.instances.get(token) as T;
 
-    throw new Error(`Provider ${tokenName(token)} not found in views. Ensure it was built via buildViews().`);
+    throw new ProviderNotAvailableError(tokenName(token), 'not found in views. Ensure it was built via buildViews()');
   }
 }

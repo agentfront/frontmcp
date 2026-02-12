@@ -10,6 +10,7 @@
  */
 
 import { Token } from '@frontmcp/di';
+import { OrchestratedAuthNotAvailableError } from '../../errors/auth-internal.errors';
 
 /**
  * OrchestratedAuthAccessor - Runtime accessor for orchestrated authorization.
@@ -137,10 +138,7 @@ export class NullOrchestratedAuthAccessor implements OrchestratedAuthAccessor {
   readonly isAuthenticated = false;
 
   async getToken(providerId?: string): Promise<string> {
-    throw new Error(
-      'Orchestrated authorization not available. ' +
-        'Ensure your server is configured with orchestrated mode and the user is authenticated.',
-    );
+    throw new OrchestratedAuthNotAvailableError();
   }
 
   async tryGetToken(providerId?: string): Promise<string | null> {

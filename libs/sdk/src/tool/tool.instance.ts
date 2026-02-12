@@ -25,6 +25,7 @@ import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import { buildParsedToolResult } from './tool.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
+import { InvalidRegistryKindError } from '../errors';
 import { extendOutputSchemaForElicitation } from '../elicitation/helpers';
 
 /**
@@ -162,7 +163,7 @@ export class ToolInstance<
         return new FunctionToolContext<InSchema, OutSchema, In, Out>(this.record, toolCtorArgs);
       default:
         // TypeScript exhaustive check - catches deprecated REMOTE or unknown kinds
-        throw new Error(`Unhandled tool kind: ${(this.record as { kind: string }).kind}`);
+        throw new InvalidRegistryKindError('tool', (this.record as { kind: string }).kind);
     }
   }
 

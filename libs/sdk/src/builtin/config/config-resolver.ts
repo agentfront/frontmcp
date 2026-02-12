@@ -23,6 +23,7 @@
  */
 
 import type { ConfigService } from './providers/config.service';
+import { ConfigNotFoundError } from '../../errors';
 
 // ============================================================================
 // Types
@@ -224,7 +225,7 @@ export function createContextResolver(
       const fallbacks = generateFallbacks(path, context);
       const value = resolveWithFallbacks<T>(config, fallbacks);
       if (value === undefined) {
-        throw new Error(`Config "${path}" not found. Tried: ${fallbacks.join(', ')}`);
+        throw new ConfigNotFoundError(path, fallbacks);
       }
       return value;
     },
@@ -247,7 +248,7 @@ export function createDirectResolver(config: ConfigService<Record<string, unknow
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const value = config.get(path as any);
       if (value === undefined) {
-        throw new Error(`Config "${path}" not found`);
+        throw new ConfigNotFoundError(path);
       }
       return value as T;
     },

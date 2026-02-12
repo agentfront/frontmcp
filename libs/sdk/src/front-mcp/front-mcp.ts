@@ -13,7 +13,7 @@ import LoggerRegistry from '../logger/logger.registry';
 import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
-import { InternalMcpError } from '../errors';
+import { InternalMcpError, ServerNotFoundError } from '../errors';
 import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
 import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 
@@ -44,7 +44,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   async start() {
     const server = this.providers.get(FrontMcpServer);
     if (!server) {
-      throw new Error('Server not found');
+      throw new ServerNotFoundError();
     }
     await server.start();
   }
@@ -88,7 +88,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     const server = frontMcp.providers.get(FrontMcpServer);
     if (!server) {
-      throw new Error('Server not found');
+      throw new ServerNotFoundError();
     }
 
     server.prepare();

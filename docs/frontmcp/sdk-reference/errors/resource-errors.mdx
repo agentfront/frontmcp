@@ -1,0 +1,95 @@
+---
+title: "Resource Errors"
+description: "Errors thrown during resource lookup, reading, and URI validation."
+icon: "file"
+---
+
+## Overview
+
+Resource errors cover failures related to MCP resources — not found, read failures, and invalid URIs. `ResourceNotFoundError` includes a custom `toJsonRpcError()` method that returns an MCP-compliant JSON-RPC error with the resource URI.
+
+## Error Reference
+
+### ResourceNotFoundError
+
+Thrown when a requested resource URI does not match any registered resource.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `RESOURCE_NOT_FOUND` |
+| `statusCode` | `number` | `404` |
+| `isPublic` | `boolean` | `true` |
+| `uri` | `string` | The requested URI |
+| `mcpErrorCode` | `number` | `-32002` |
+
+```typescript
+new ResourceNotFoundError(uri: string)
+```
+
+**JSON-RPC format:**
+
+```typescript
+error.toJsonRpcError();
+// { code: -32002, message: "Resource not found: file:///missing.txt", data: { uri: "file:///missing.txt" } }
+```
+
+**Example:**
+
+```typescript
+import { ResourceNotFoundError } from '@frontmcp/sdk';
+
+throw new ResourceNotFoundError('file:///missing.txt');
+```
+
+---
+
+### ResourceReadError
+
+Thrown when reading a resource fails. This is an internal error — details are hidden from clients.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `RESOURCE_READ_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+| `originalError` | `Error \| undefined` | The underlying cause |
+
+```typescript
+new ResourceReadError(uri: string, originalError?: Error)
+```
+
+**Example:**
+
+```typescript
+import { ResourceReadError } from '@frontmcp/sdk';
+
+try {
+  const data = await fs.readFile(path);
+} catch (error) {
+  throw new ResourceReadError('file:///data.json', error);
+}
+```
+
+---
+
+### InvalidResourceUriError
+
+Thrown when a resource URI does not conform to RFC 3986 or is otherwise malformed.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_RESOURCE_URI` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+
+```typescript
+new InvalidResourceUriError(uri: string, reason?: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidResourceUriError } from '@frontmcp/sdk';
+
+throw new InvalidResourceUriError('no-scheme', 'URI must have a valid scheme');
+```

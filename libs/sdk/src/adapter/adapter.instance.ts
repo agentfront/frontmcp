@@ -1,17 +1,19 @@
 import { Ctor, Reference } from '@frontmcp/di';
-import { AdapterEntry, AdapterInterface, AdapterKind, AdapterRecord, FrontMcpLogger } from '../common';
+import { AdapterEntry, AdapterInterface, AdapterKind, AdapterRecord, EntryOwnerRef, FrontMcpLogger } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
+import { InvalidRegistryKindError } from '../errors';
 
 export class AdapterInstance extends AdapterEntry {
   readonly deps: Set<Reference>;
   readonly globalProviders: ProviderRegistry;
 
-  private tools: ToolRegistry;
-  private resources: ResourceRegistry;
-  private prompts: PromptRegistry;
+  private adapterTools!: ToolRegistry;
+  private adapterResources!: ResourceRegistry;
+  private adapterPrompts!: PromptRegistry;
+  private logger?: FrontMcpLogger;
 
   constructor(record: AdapterRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(record);
@@ -21,8 +23,28 @@ export class AdapterInstance extends AdapterEntry {
     this.ready = this.initialize();
   }
 
+  getTools(): ToolRegistry {
+    return this.adapterTools;
+  }
+
+  getResources(): ResourceRegistry {
+    return this.adapterResources;
+  }
+
+  getPrompts(): PromptRegistry {
+    return this.adapterPrompts;
+  }
+
   protected async initialize() {
+    try {
+      this.logger = this.globalProviders.get(FrontMcpLogger);
+    } catch {
+      // Logger not available - optional dependency
+    }
+
     const depsTokens = [...this.deps];
+    this.logger?.debug(`Resolving ${depsTokens.length} dependency(ies) for adapter`);
+
     const depsInstances = await Promise.all(depsTokens.map((t) => this.globalProviders.resolveBootstrapDep(t)));
     const rec = this.record;
     let adapter: AdapterInterface;
@@ -40,35 +62,41 @@ export class AdapterInstance extends AdapterEntry {
     } else if (rec.kind === AdapterKind.VALUE) {
       adapter = rec.useValue;
     } else {
-      throw Error('Invalid adapter kind');
+      throw new InvalidRegistryKindError('adapter', (rec as { kind?: string }).kind);
+    }
+
+    this.logger?.debug(`Adapter constructed (kind=${rec.kind})`);
+    if (adapter.options['description']) {
+      this.logger?.debug(`Adapter description: ${adapter.options['description']}`);
     }
 
     // Inject logger if adapter supports it
-    if (typeof adapter.setLogger === 'function') {
-      const logger = this.globalProviders.get(FrontMcpLogger);
-      adapter.setLogger(logger.child(`adapter:${adapter.options.name}`));
+    if (typeof adapter.setLogger === 'function' && this.logger) {
+      adapter.setLogger(this.logger.child(`adapter:${adapter.options.name}`));
     }
 
+    this.logger?.debug(`Fetching adapter response from "${adapter.options.name}"`);
     const result = await adapter.fetch();
 
-    this.tools = new ToolRegistry(this.globalProviders, result.tools ?? [], {
+    const toolCount = result.tools?.length ?? 0;
+    const resourceCount = result.resources?.length ?? 0;
+    const promptCount = result.prompts?.length ?? 0;
+    this.logger?.debug(
+      `Adapter "${adapter.options.name}" returned ${toolCount} tool(s), ${resourceCount} resource(s), ${promptCount} prompt(s)`,
+    );
+
+    const owner: EntryOwnerRef = {
       kind: 'adapter',
       id: `${adapter.options.name}`,
       ref: rec.provide,
-    });
+    };
 
-    // this.resources = new ResourceRegistry(this.globalProviders, result.resources ?? [], {
-    //   kind: 'adapter',
-    //   id: rec.metadata.id ?? rec.metadata.name,
-    //   ref: rec.provide,
-    // });
+    this.adapterTools = new ToolRegistry(this.globalProviders, result.tools ?? [], owner);
+    this.adapterResources = new ResourceRegistry(this.globalProviders, result.resources ?? [], owner);
+    this.adapterPrompts = new PromptRegistry(this.globalProviders, result.prompts ?? [], owner);
 
-    // this.prompts = new PromptRegistry(this.globalProviders, result.prompts ?? [], {
-    //   kind: 'adapter',
-    //   id: rec.metadata.id ?? rec.metadata.name,
-    //   ref: rec.provide,
-    // });
+    await Promise.all([this.adapterTools.ready, this.adapterResources.ready, this.adapterPrompts.ready]);
 
-    await this.tools.ready;
+    this.logger?.debug(`Adapter "${adapter.options.name}" registries initialized`);
   }
 }

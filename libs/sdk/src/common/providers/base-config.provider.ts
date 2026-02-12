@@ -1,5 +1,7 @@
 // file: libs/sdk/src/common/providers/base-config.provider.ts
 
+import { RequiredConfigUndefinedError } from '../../errors';
+
 /**
  * Type-safe dotted path builder for nested object access
  * Examples: 'vm.preset', 'embedding.strategy', 'directCalls.enabled'
@@ -20,8 +22,8 @@ export type PathValue<T, P extends string> = P extends `${infer Key}.${infer Res
     ? PathValue<T[Key], Rest>
     : never
   : P extends keyof T
-  ? T[P]
-  : never;
+    ? T[P]
+    : never;
 
 /**
  * Base configuration provider with type-safe path lookup and convict-like API
@@ -66,8 +68,8 @@ export abstract class BaseConfig<TConfig extends object> {
     return value !== undefined
       ? value
       : defaultValue !== undefined
-      ? defaultValue
-      : (undefined as PathValue<TConfig, P>);
+        ? defaultValue
+        : (undefined as PathValue<TConfig, P>);
   }
 
   /**
@@ -110,7 +112,7 @@ export abstract class BaseConfig<TConfig extends object> {
   getRequired<P extends DottedPath<TConfig>>(path: P): PathValue<TConfig, P> {
     const value = this.get(path);
     if (value === undefined) {
-      throw new Error(`Required configuration path "${path}" is undefined`);
+      throw new RequiredConfigUndefinedError(path as string);
     }
     return value;
   }

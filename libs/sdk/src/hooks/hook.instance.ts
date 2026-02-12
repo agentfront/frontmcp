@@ -11,6 +11,7 @@ import {
   ScopeEntry,
   Token,
 } from '../common';
+import { HookTargetNotDefinedError } from '../errors';
 
 export class HookInstance<
   Name extends FlowName,
@@ -34,7 +35,7 @@ export class HookInstance<
   async run(input: In, ctx: Ctx): Promise<void> {
     const { target, method } = this.metadata;
     if (!target) {
-      throw new Error(`Hook target is not defined for method "${method}". This is a bug in hook configuration.`);
+      throw new HookTargetNotDefinedError(method);
     }
     this.logger.verbose('start');
     await target[method](input, ctx);

@@ -17,6 +17,7 @@ import {
   makeWellKnownPaths,
   isOrchestratedMode,
 } from '../../common';
+import { FlowInputMissingError } from '../../errors/sdk.errors';
 
 const inputSchema = httpInputSchema;
 
@@ -101,7 +102,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
-    if (!request) throw new Error('Request is undefined');
+    if (!request) throw new FlowInputMissingError('request', 'well-known:oauth-authorization-server');
 
     const { metadata } = this.scope;
     const baseUrl = getRequestBaseUrl(request, this.scope.entryPath);

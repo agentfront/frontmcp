@@ -1,5 +1,6 @@
 import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
 import { AdapterMetadata, FrontMcpAdapterTokens, AdapterRecord, AdapterType, AdapterKind } from '../common';
+import { MissingProvideError, InvalidUseClassError, InvalidUseFactoryError, InvalidEntityError } from '../errors';
 
 export function collectAdapterMetadata(cls: AdapterType): AdapterMetadata {
   return Object.entries(FrontMcpAdapterTokens).reduce((metadata, [key, token]) => {
@@ -19,12 +20,12 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
 
     if (!provide) {
       const name = (item as any)?.name ?? '[object]';
-      throw new Error(`Adapter '${name}' is missing 'provide'.`);
+      throw new MissingProvideError('Adapter', name);
     }
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(`'useClass' on adapter '${tokenName(provide)}' must be a class.`);
+        throw new InvalidUseClassError('adapter', tokenName(provide));
       }
       return {
         kind: AdapterKind.CLASS,
@@ -36,7 +37,7 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(`'useFactory' on adapter '${tokenName(provide)}' must be a function.`);
+        throw new InvalidUseFactoryError('adapter', tokenName(provide));
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -60,7 +61,7 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid adapter '${name}'. Expected a class or an adapter object.`);
+  throw new InvalidEntityError('adapter', name, 'a class or an adapter object');
 }
 
 /**

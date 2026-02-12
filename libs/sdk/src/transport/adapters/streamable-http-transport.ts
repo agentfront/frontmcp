@@ -10,6 +10,7 @@
  */
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { InvalidTransportSessionError } from '../../errors/transport.errors';
 
 export interface StreamableHTTPServerTransportOptions {
   /**
@@ -110,7 +111,7 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
   setInitializationState(sessionId: string): void {
     // Validate sessionId
     if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
-      throw new Error('[RecreateableStreamableHTTPServerTransport] sessionId cannot be empty');
+      throw new InvalidTransportSessionError('[RecreateableStreamableHTTPServerTransport] sessionId cannot be empty');
     }
 
     // Access the internal WebStandardTransport
@@ -140,7 +141,7 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
     // Note: sessionId is only assigned during initialization request processing,
     // so it won't exist on a fresh transport - we're about to set it.
     if (!('_initialized' in webTransport)) {
-      throw new Error(
+      throw new InvalidTransportSessionError(
         '[RecreateableStreamableHTTPServerTransport] Expected _initialized field not found on internal transport. ' +
           'This may indicate an incompatible MCP SDK version.',
       );
