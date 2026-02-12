@@ -9,6 +9,7 @@
  * session recreation, avoiding the need to access private properties.
  */
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 export interface StreamableHTTPServerTransportOptions {
   /**
@@ -62,8 +63,16 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    */
   private _pendingInitState?: string;
 
+  /**
+   * Stored constructor options for recreating internal transports.
+   * MCP SDK 1.26.0 enforces single-use for stateless transports,
+   * so we need to create fresh instances for each request.
+   */
+  private readonly _constructorOptions: StreamableHTTPServerTransportOptions;
+
   constructor(options: StreamableHTTPServerTransportOptions = {}) {
     super(options);
+    this._constructorOptions = options;
   }
 
   /**
@@ -142,12 +151,30 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
   }
 
   /**
-   * Override handleRequest to apply any pending initialization state before processing.
-   * This handles the case where setInitializationState was called before _webStandardTransport
-   * was created (common in serverless cold start scenarios).
+   * Override handleRequest to:
+   * 1. Recreate the internal transport for stateless mode (MCP SDK 1.26.0 single-use guard)
+   * 2. Apply any pending initialization state before processing
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override async handleRequest(req: any, res: any, body?: any): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const oldWebTransport = (this as any)._webStandardTransport;
+
+    // MCP SDK 1.26.0 enforces single-use for stateless transports (no sessionIdGenerator).
+    // FrontMCP manages its own session lifecycle and reuses the adapter across requests.
+    // Create a fresh WebStandardStreamableHTTPServerTransport for each subsequent stateless
+    // request to align with the SDK's intended per-request transport lifecycle.
+    if (oldWebTransport && !oldWebTransport.sessionIdGenerator && oldWebTransport._hasHandledRequest) {
+      const fresh = new WebStandardStreamableHTTPServerTransport(this._constructorOptions);
+      // Transfer MCP Server connection handlers to the fresh transport
+      fresh.onmessage = oldWebTransport.onmessage;
+      fresh.onclose = oldWebTransport.onclose;
+      fresh.onerror = oldWebTransport.onerror;
+      await fresh.start();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this as any)._webStandardTransport = fresh;
+    }
+
     // Apply deferred initialization state before processing request
     if (this._pendingInitState) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

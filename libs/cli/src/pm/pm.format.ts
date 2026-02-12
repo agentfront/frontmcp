@@ -78,7 +78,7 @@ function padRight(str: string, width: number): string {
   return str + ' '.repeat(padding);
 }
 
-const ANSI_REGEX = new RegExp('\x1b\\[[0-9;]*m', 'g');
+const ANSI_REGEX = new RegExp('\\x1b\\[[0-9;]*m', 'g');
 
 function stripAnsi(str: string): string {
   return str.replace(ANSI_REGEX, '');
