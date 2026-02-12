@@ -78,6 +78,7 @@ function padRight(str: string, width: number): string {
   return str + ' '.repeat(padding);
 }
 
+// eslint-disable-next-line no-control-regex
 const ANSI_REGEX = new RegExp('\\x1b\\[[0-9;]*m', 'g');
 
 function stripAnsi(str: string): string {
