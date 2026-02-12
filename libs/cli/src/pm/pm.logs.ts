@@ -33,11 +33,11 @@ function rotateIfNeeded(filePath: string): void {
     if (stat.size < MAX_LOG_SIZE) return;
 
     // Shift existing rotated files
-    for (let i = MAX_ROTATED_FILES - 1; i >= 1; i--) {
+    for (let i = MAX_ROTATED_FILES; i >= 1; i--) {
       const from = `${filePath}.${i}`;
       const to = `${filePath}.${i + 1}`;
       if (fs.existsSync(from)) {
-        if (i === MAX_ROTATED_FILES - 1) {
+        if (i === MAX_ROTATED_FILES) {
           fs.unlinkSync(from);
         } else {
           fs.renameSync(from, to);
@@ -72,7 +72,7 @@ export function followLog(name: string, onLine: (line: string) => void): () => v
 
   let position = fs.statSync(filePath).size;
 
-  const watcher = fs.watchFile(filePath, { interval: 300 }, () => {
+  fs.watchFile(filePath, { interval: 300 }, () => {
     try {
       const stat = fs.statSync(filePath);
       if (stat.size <= position) {

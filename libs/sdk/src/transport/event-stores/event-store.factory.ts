@@ -129,7 +129,7 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
     }
 
     // Lazy-load SQLite EventStore
-    const { SqliteEventStore } = require('@frontmcp/storage-sqlite');
+    const { SqliteEventStore } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
 
     logger?.info('[EventStoreFactory] Creating SQLite EventStore for resumability', {
       maxEvents,

@@ -4,7 +4,6 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import * as fs from 'fs';
 import { StartOptions } from './pm.types';
 import { socketFilePath } from './pm.paths';
 import { createLogStreams } from './pm.logs';
@@ -108,7 +107,6 @@ export class Supervisor {
 
     const child = spawn('npx', ['-y', 'tsx', '--conditions', 'node', entry], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
       env,
       detached: false,
     });
@@ -122,9 +120,13 @@ export class Supervisor {
       child.stderr.pipe(logs.stderr);
     }
 
+    if (child.pid === undefined) {
+      throw new Error(`Failed to spawn process for "${name}": child PID is undefined`);
+    }
+
     // Write PID file
     writePidFile(name, {
-      pid: child.pid!,
+      pid: child.pid,
       name,
       entry,
       port,
@@ -167,6 +169,15 @@ export class Supervisor {
         logs.stderr.write(msg);
       } catch {
         // ignore
+      }
+
+      this.child = null;
+      this.stopHealthChecks();
+
+      if (this.running) {
+        this.scheduleRestart();
+      } else {
+        removePidFile(name);
       }
     });
   }

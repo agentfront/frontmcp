@@ -5,7 +5,6 @@ import { ParsedArgs } from '../args';
 import { c } from '../colors';
 import { resolveEntry } from '../utils/fs';
 import { loadDevEnv } from '../utils/env';
-import { ProcessManager } from '../pm';
 
 function ensureDir(dir: string): void {
   const fs = require('fs');

@@ -229,7 +229,12 @@ function validateAgainstSchema(value: string, schema: Record<string, unknown>): 
     return `Maximum length is ${schema.maxLength}`;
   }
   if (schema.pattern && typeof schema.pattern === 'string') {
-    const re = new RegExp(schema.pattern);
+    let re: RegExp;
+    try {
+      re = new RegExp(schema.pattern);
+    } catch {
+      return `Invalid pattern in schema: ${schema.pattern}`;
+    }
     if (!re.test(value)) return `Value must match pattern: ${schema.pattern}`;
   }
   if (schema.type === 'number' || schema.type === 'integer') {
@@ -313,7 +318,7 @@ function answersToEnv(answers: Record<string, string>, steps: ManifestSetupStep[
     const envName = step.env;
     // Quote values that contain special characters
     const needsQuotes = /[\s#"'\\]/.test(value) || value.includes('=');
-    const quotedValue = needsQuotes ? `"${value.replace(/"/g, '\\"')}"` : value;
+    const quotedValue = needsQuotes ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value;
 
     lines.push(`${envName}=${quotedValue}`);
   }

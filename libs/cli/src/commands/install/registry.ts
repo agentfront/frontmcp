@@ -43,7 +43,7 @@ export function unregisterApp(name: string): boolean {
 
 export function getRegisteredApp(name: string): FrontmcpRegistry['apps'][string] | null {
   const registry = readRegistry();
-  return registry.apps[name] || null;
+  return registry.apps[name] ?? null;
 }
 
 export function listRegisteredApps(): Array<{

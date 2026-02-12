@@ -20,8 +20,12 @@ export async function runUninstall(opts: ParsedArgs): Promise<void> {
   try {
     await pm.stop(name);
     console.log(`${c('cyan', '[uninstall]')} stopped running process.`);
-  } catch {
-    // Not running — that's fine
+  } catch (err: unknown) {
+    // Only ignore "not found" / "not running" errors
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('No process found') && !msg.includes('is not running')) {
+      throw err;
+    }
   }
 
   // Remove app directory

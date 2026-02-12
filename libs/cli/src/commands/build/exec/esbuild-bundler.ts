@@ -44,7 +44,7 @@ export async function bundleWithEsbuild(
     ...(config.esbuild?.external || []),
   ];
 
-  const result = await esbuild.build({
+  await esbuild.build({
     entryPoints: [entryPath],
     bundle: true,
     platform: 'node',

@@ -10,6 +10,9 @@ import { readPidFile } from './pm.pidfile';
 import { ensurePmDirs } from './pm.paths';
 
 export function detectPlatform(): ServicePlatform {
+  if (process.platform === 'win32') {
+    throw new Error('Windows is not supported for service management. Use Windows Task Scheduler or NSSM instead.');
+  }
   return process.platform === 'darwin' ? 'launchd' : 'systemd';
 }
 
@@ -60,7 +63,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${process.execPath} ${frontmcpBin} start ${name} --entry ${entry}
+ExecStart="${process.execPath}" "${frontmcpBin}" start ${name} --entry "${entry}"
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

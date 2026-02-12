@@ -33,7 +33,15 @@ describe('pm.health', () => {
   });
 
   it('should return unhealthy for a non-existent port', async () => {
-    const result = await checkHealth({ port: 59999, timeout: 1000 });
+    // Allocate a port dynamically, then close it to guarantee nothing is listening
+    const unusedPort = await new Promise<number>((resolve, reject) => {
+      const tmp = http.createServer();
+      tmp.listen(0, '127.0.0.1', () => {
+        const port = (tmp.address() as { port: number }).port;
+        tmp.close((err) => (err ? reject(err) : resolve(port)));
+      });
+    });
+    const result = await checkHealth({ port: unusedPort, timeout: 1000 });
     expect(result.healthy).toBe(false);
     expect(result.error).toBeDefined();
   });

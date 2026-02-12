@@ -14,14 +14,7 @@ jest.mock('../../../pm/pm.paths', () => ({
   },
 }));
 
-import {
-  readRegistry,
-  writeRegistry,
-  registerApp,
-  unregisterApp,
-  getRegisteredApp,
-  listRegisteredApps,
-} from '../registry';
+import { readRegistry, registerApp, unregisterApp, getRegisteredApp, listRegisteredApps } from '../registry';
 
 describe('install registry', () => {
   beforeAll(() => {
@@ -61,9 +54,9 @@ describe('install registry', () => {
       });
 
       const app = getRegisteredApp('test-app');
-      expect(app).not.toBeNull();
-      expect(app!.version).toBe('1.0.0');
-      expect(app!.storage).toBe('sqlite');
+      if (!app) throw new Error('Expected app to be registered');
+      expect(app.version).toBe('1.0.0');
+      expect(app.storage).toBe('sqlite');
     });
 
     it('should return null for non-existent app', () => {

@@ -62,9 +62,17 @@ export class ProcessManager {
     const targetPid = pidData.supervisorPid || pidData.pid;
 
     if (opts.force) {
-      process.kill(targetPid, 'SIGKILL');
+      try {
+        process.kill(targetPid, 'SIGKILL');
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+      }
     } else {
-      process.kill(targetPid, 'SIGTERM');
+      try {
+        process.kill(targetPid, 'SIGTERM');
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+      }
 
       // Wait for process to exit
       const timeout = opts.timeout ?? 10000;

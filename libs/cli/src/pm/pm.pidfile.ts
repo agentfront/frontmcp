@@ -3,7 +3,7 @@
  */
 
 import * as fs from 'fs';
-import { pidFilePath, ensurePmDirs } from './pm.paths';
+import { pidFilePath, ensurePmDirs, PM_DIRS } from './pm.paths';
 import { PidFileData } from './pm.types';
 
 export function writePidFile(name: string, data: PidFileData): string {
@@ -46,7 +46,7 @@ export function isProcessAlive(pid: number): boolean {
 
 export function listPidFiles(): PidFileData[] {
   ensurePmDirs();
-  const pidsDir = require('./pm.paths').PM_DIRS.pids;
+  const pidsDir = PM_DIRS.pids;
   try {
     const files = fs.readdirSync(pidsDir).filter((f: string) => f.endsWith('.pid'));
     const results: PidFileData[] = [];

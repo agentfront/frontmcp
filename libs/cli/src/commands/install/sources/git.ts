@@ -9,7 +9,8 @@ export async function fetchFromGit(url: string, tmpDir: string): Promise<string>
   // Normalize URL
   let gitUrl = url;
   if (gitUrl.startsWith('github:')) {
-    gitUrl = `https://github.com/${gitUrl.slice('github:'.length)}.git`;
+    const slug = gitUrl.slice('github:'.length).replace(/\.git$/i, '');
+    gitUrl = `https://github.com/${slug}.git`;
   }
   if (gitUrl.startsWith('git+')) {
     gitUrl = gitUrl.slice(4);

@@ -30,11 +30,11 @@ export async function runLogs(opts: ParsedArgs): Promise<void> {
     });
 
     await new Promise<void>((resolve) => {
-      process.on('SIGINT', () => {
+      process.once('SIGINT', () => {
         stop();
         resolve();
       });
-      process.on('SIGTERM', () => {
+      process.once('SIGTERM', () => {
         stop();
         resolve();
       });

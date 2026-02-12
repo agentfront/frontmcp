@@ -43,12 +43,12 @@ export async function runStart(opts: ParsedArgs): Promise<void> {
 
   // Keep the supervisor process alive
   await new Promise<void>((resolve) => {
-    process.on('SIGINT', async () => {
+    process.once('SIGINT', async () => {
       console.log(`\n${c('yellow', '[pm]')} stopping "${name}"...`);
       await pm.stop(name);
       resolve();
     });
-    process.on('SIGTERM', async () => {
+    process.once('SIGTERM', async () => {
       await pm.stop(name);
       resolve();
     });

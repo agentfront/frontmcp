@@ -3,6 +3,7 @@
  * All PM state lives under ~/.frontmcp/
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -43,7 +44,6 @@ export function registryPath(): string {
 }
 
 export function ensurePmDirs(): void {
-  const fs = require('fs');
   for (const dir of Object.values(PM_DIRS)) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
