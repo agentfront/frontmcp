@@ -3,6 +3,8 @@
  * @description Retry utilities with exponential backoff for resilient remote MCP operations
  */
 
+import { InvalidRetryOptionsError } from '../../errors/remote.errors';
+
 export interface RetryOptions {
   /** Maximum number of retry attempts (default: 3) */
   maxAttempts?: number;
@@ -67,7 +69,7 @@ export async function withRetry<T>(operation: () => Promise<T>, options: RetryOp
 
   // Validate maxAttempts to ensure type safety
   if (opts.maxAttempts < 1) {
-    throw new RangeError('maxAttempts must be at least 1');
+    throw new InvalidRetryOptionsError('maxAttempts', opts.maxAttempts, 'must be at least 1');
   }
 
   let lastError: Error | undefined;

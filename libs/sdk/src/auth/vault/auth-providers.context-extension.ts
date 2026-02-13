@@ -7,6 +7,7 @@
 
 import type { ContextExtension } from '../../common/metadata/plugin.metadata';
 import { AUTH_PROVIDERS_ACCESSOR, AuthProvidersAccessor } from './auth-providers.accessor';
+import { AuthProvidersNotConfiguredError } from '../../errors/auth-internal.errors';
 
 // ============================================
 // Module Augmentation
@@ -75,17 +76,13 @@ export const authProvidersContextExtension: ContextExtension = {
  *
  * @param ctx - Execution context
  * @returns AuthProvidersAccessor
- * @throws Error if AuthProviders not configured
+ * @throws AuthProvidersNotConfiguredError if AuthProviders not configured
  */
 export function getAuthProviders(ctx: { get: <T>(token: unknown) => T }): AuthProvidersAccessor {
   try {
     return ctx.get(AUTH_PROVIDERS_ACCESSOR);
   } catch (error) {
-    throw new Error(
-      'AuthProviders vault is not configured. ' +
-        'Ensure AuthProvidersVault is enabled in your FrontMcp configuration with registered providers.',
-      { cause: error },
-    );
+    throw new AuthProvidersNotConfiguredError();
   }
 }
 

@@ -7,6 +7,7 @@
  */
 
 import { Token } from '@frontmcp/di';
+import { CredentialProviderAlreadyRegisteredError } from '../../errors/auth-internal.errors';
 import type {
   Credential,
   CredentialProviderConfig,
@@ -50,11 +51,11 @@ export class AuthProvidersRegistry {
    * Register a credential provider
    *
    * @param config - Provider configuration
-   * @throws Error if provider with same name already registered
+   * @throws CredentialProviderAlreadyRegisteredError if provider with same name already registered
    */
   register<T extends Credential = Credential>(config: CredentialProviderConfig<T>): void {
     if (this.providers.has(config.name)) {
-      throw new Error(`Credential provider "${config.name}" is already registered`);
+      throw new CredentialProviderAlreadyRegisteredError(config.name);
     }
 
     const normalized = this.normalize(config);

@@ -7,6 +7,7 @@ import {
   AuthProviderRecord,
   AuthProviderKind,
 } from '../common';
+import { MissingProvideError, InvalidUseClassError, InvalidUseFactoryError, InvalidEntityError } from '../errors';
 
 export function collectAuthMetadata(cls: AuthProviderType): AuthProviderMetadata {
   return Object.entries(FrontMcpAuthProviderTokens).reduce((metadata, [key, token]) => {
@@ -27,12 +28,12 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
 
     if (!provide) {
       const name = (item as any)?.name ?? '[object]';
-      throw new Error(`Auth '${name}' is missing 'provide'.`);
+      throw new MissingProvideError('Auth', name);
     }
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(`'useClass' on auth '${tokenName(provide)}' must be a class.`);
+        throw new InvalidUseClassError('auth', tokenName(provide));
       }
       return {
         kind: AuthProviderKind.CLASS,
@@ -44,7 +45,7 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(`'useFactory' on auth '${tokenName(provide)}' must be a function.`);
+        throw new InvalidUseFactoryError('auth', tokenName(provide));
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -67,7 +68,7 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid auth '${name}'. Expected a class or a auth object.`);
+  throw new InvalidEntityError('auth', name, 'a class or an auth object');
 }
 
 /**

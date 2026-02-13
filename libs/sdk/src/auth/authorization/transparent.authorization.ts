@@ -5,6 +5,7 @@ import { AuthorizationBase } from './authorization.class';
 import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
 import { ProviderSnapshot } from '../session/session.types';
 import { AuthMode } from '../../common';
+import { TokenNotAvailableError } from '../../errors/auth-internal.errors';
 
 /**
  * Verified JWT payload from transparent auth provider
@@ -176,7 +177,7 @@ export class TransparentAuthorization extends AuthorizationBase {
    */
   async getToken(_providerId?: string): Promise<string> {
     if (!this.token) {
-      throw new Error('TransparentAuthorization: Token not available');
+      throw new TokenNotAvailableError('TransparentAuthorization: Token not available');
     }
     return this.token;
   }

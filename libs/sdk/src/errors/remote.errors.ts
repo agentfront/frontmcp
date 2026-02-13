@@ -332,3 +332,21 @@ export class RemoteNotConnectedError extends PublicMcpError {
     this.appId = appId;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// RETRY ERRORS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Error thrown when retry options are invalid (e.g., maxAttempts < 1).
+ */
+export class InvalidRetryOptionsError extends InternalMcpError {
+  readonly option: string;
+  readonly value: unknown;
+
+  constructor(option: string, value: unknown, reason: string) {
+    super(`Invalid retry option "${option}" (value: ${value}): ${reason}`, 'INVALID_RETRY_OPTIONS');
+    this.option = option;
+    this.value = value;
+  }
+}

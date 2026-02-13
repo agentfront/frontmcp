@@ -7,6 +7,7 @@ import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import { normalizeApp } from '../app/app.utils';
 import { normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps } from './scope.utils';
 import { Scope } from './scope.instance';
+import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {
   constructor(globalProviders: ProviderRegistry) {
@@ -72,7 +73,7 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`Scope ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new RegistryDependencyNotRegisteredError('Scope', tokenName(token), tokenName(d));
         }
         this.graph.get(token)!.add(d);
       }
@@ -92,7 +93,7 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
           scope = new rec.provide(rec, this.providers);
           break;
         default:
-          throw new Error(`Invalid scope kind ${rec}`);
+          throw new InvalidRegistryKindError('scope', String((rec as { kind: string }).kind));
       }
 
       await scope.ready;

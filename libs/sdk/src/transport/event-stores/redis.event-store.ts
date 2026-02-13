@@ -1,6 +1,7 @@
 import type { EventId, EventStore, StreamId } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import type { RedisOptionsInput } from '../../common';
+import { VercelKvNotSupportedError } from '../../errors/sdk.errors';
 
 export interface RedisEventStoreOptions {
   /**
@@ -81,9 +82,8 @@ export class RedisEventStore implements EventStore {
       if (provider === 'vercel-kv' || provider === '@vercel/kv') {
         // Vercel KV doesn't support Redis Streams (XADD/XRANGE)
         // Fall back to a simple key-value based approach
-        throw new Error(
-          'Vercel KV does not support Redis Streams which are required for EventStore. ' +
-            'Use standard Redis provider instead.',
+        throw new VercelKvNotSupportedError(
+          'Redis Streams (required for EventStore). Use standard Redis provider instead',
         );
       }
 

@@ -3,6 +3,7 @@
 import type { ProviderSnapshot, SessionMode } from '../session.types';
 import { TransportIdGenerator } from '../session.transport';
 import { Scope } from '../../../scope';
+import { ScopeDeniedError } from '../../../errors/auth-internal.errors';
 
 export interface BaseCreateCtx {
   id: string;
@@ -159,7 +160,7 @@ export class SessionView {
   }
 
   async getToken(providerId: string) {
-    if (!this.allow(providerId)) throw new Error(`scoped_denied:${providerId}`);
+    if (!this.allow(providerId)) throw new ScopeDeniedError(providerId);
     return this.parent.getToken(providerId);
   }
 

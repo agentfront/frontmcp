@@ -38,7 +38,6 @@ import type {
 
 import {
   RemoteConnectionError,
-  RemoteDisconnectError,
   RemoteTimeoutError,
   RemoteToolNotFoundError,
   RemoteResourceNotFoundError,
@@ -65,6 +64,12 @@ import {
   type HealthCheckOptions,
   type HealthStatus,
 } from './resilience';
+
+import {
+  MethodNotImplementedError,
+  UnsupportedTransportTypeError,
+  TransportNotConnectedError,
+} from '../errors/transport.errors';
 
 // Default retry options for self-healing
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -793,10 +798,10 @@ export class McpClientService {
       case 'npm':
       case 'esm':
         // TODO: Implement these transports
-        throw new Error(`Transport type "${transportType}" not yet implemented`);
+        throw new MethodNotImplementedError('McpClientService', `createTransport[${transportType}]`);
 
       default:
-        throw new Error(`Unknown transport type: ${transportType}`);
+        throw new UnsupportedTransportTypeError(transportType);
     }
   }
 
@@ -1063,7 +1068,7 @@ export class McpClientService {
     const checkFn = async () => {
       const connection = this.connections.get(appId);
       if (!connection || connection.status !== 'connected') {
-        throw new Error('Not connected');
+        throw new TransportNotConnectedError();
       }
       // Simple ping - list tools as a health check
       await connection.client.listTools();

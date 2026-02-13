@@ -52,7 +52,7 @@ export interface RateLimitResult {
  * const clientIp = getClientIp(req);
  * const result = rateLimiter.check(clientIp);
  * if (!result.allowed) {
- *   throw new Error(`Rate limit exceeded. Retry after ${result.retryAfterMs}ms`);
+ *   throw new RateLimitError(Math.ceil(result.retryAfterMs / 1000));
  * }
  * ```
  */

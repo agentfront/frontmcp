@@ -3,6 +3,7 @@
 import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
 import { PromptMetadata, FrontMcpPromptTokens, PromptType, PromptRecord, PromptKind, PromptEntry } from '../common';
 import { GetPromptResult, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
+import { InvalidEntityError } from '../errors';
 
 /**
  * Collect metadata from a class decorated with @FrontMcpPrompt
@@ -50,7 +51,7 @@ export function normalizePrompt(item: any): PromptRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid prompt '${name}'. Expected a class or a prompt function.`);
+  throw new InvalidEntityError('prompt', name, 'a class or a prompt function');
 }
 
 /**

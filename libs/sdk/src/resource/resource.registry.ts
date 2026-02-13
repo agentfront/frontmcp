@@ -32,6 +32,7 @@ import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
 import SubscribeResourceFlow from './flows/subscribe-resource.flow';
 import UnsubscribeResourceFlow from './flows/unsubscribe-resource.flow';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { NameDisambiguationError, EntryValidationError } from '../errors';
 
 export default class ResourceRegistry
   extends RegistryAbstract<
@@ -427,14 +428,14 @@ export default class ResourceRegistry
 
         // Children
         for (const c of children) {
-          const pre = cfg.prefixSource === 'provider' ? c.provider ?? c.ownerPath : c.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (c.provider ?? c.ownerPath) : c.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), c.row.instance);
         }
       } else {
         // Prefix everyone by source
         for (const r of group) {
-          const pre = cfg.prefixSource === 'provider' ? r.provider ?? r.ownerPath : r.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (r.provider ?? r.ownerPath) : r.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), r.row.instance);
         }
@@ -452,7 +453,7 @@ export default class ResourceRegistry
         if (!pool.has(withN)) return withN;
         n++;
       }
-      throw new Error(`Failed to disambiguate name "${candidate}" after ${maxAttempts} attempts`);
+      throw new NameDisambiguationError(candidate, maxAttempts);
     }
   }
 
@@ -599,13 +600,13 @@ export default class ResourceRegistry
 
     // Check for required properties that make it a valid registerable instance
     if (!instance.record || !instance.record.provide) {
-      throw new Error('Resource instance is missing required record.provide property');
+      throw new EntryValidationError('Resource', 'missing required record.provide property');
     }
     if (!instance.record.kind || !instance.record.metadata) {
-      throw new Error('Resource instance is missing required record.kind or record.metadata');
+      throw new EntryValidationError('Resource', 'missing required record.kind or record.metadata');
     }
     if (typeof instance.name !== 'string' || !instance.name) {
-      throw new Error('Resource instance is missing required name property');
+      throw new EntryValidationError('Resource', 'missing required name property');
     }
 
     const token = instance.record.provide as Token;

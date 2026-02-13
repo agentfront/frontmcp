@@ -1,17 +1,28 @@
 import 'reflect-metadata';
 import { Token, tokenName } from '@frontmcp/di';
-import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType } from '../common';
+import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType, FrontMcpLogger } from '../common';
 import { adapterDiscoveryDeps, normalizeAdapter } from './adapter.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AdapterInstance } from './adapter.instance';
+import { RegistryDefinitionNotFoundError, RegistryGraphEntryNotFoundError } from '../errors';
 
 export default class AdapterRegistry
   extends RegistryAbstract<AdapterInstance, AdapterRecord, AdapterType[]>
   implements AdapterRegistryInterface
 {
+  private logger?: FrontMcpLogger;
+
   constructor(providers: ProviderRegistry, list: AdapterType[]) {
-    super('AdapterRegistry', providers, list);
+    super('AdapterRegistry', providers, list, false);
+    try {
+      this.logger = providers.get(FrontMcpLogger);
+    } catch {
+      // Logger not available - optional dependency
+    }
+    this.logger?.debug(`AdapterRegistry: ${list.length} adapter(s) registered`);
+    this.buildGraph();
+    this.ready = this.initialize();
   }
 
   protected override buildMap(list: AdapterType[]): RegistryBuildMapResult<AdapterRecord> {
@@ -32,14 +43,20 @@ export default class AdapterRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new RegistryDefinitionNotFoundError('AdapterRegistry', tokenName(token));
+      }
       const deps = adapterDiscoveryDeps(rec);
 
       for (const d of deps) {
-        if (!this.providers.get(d)) {
-          throw new Error(`Adapter ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+        // providers.get(d) throws ProviderNotAvailableError if not found
+        this.providers.get(d);
+        const graphEntry = this.graph.get(token);
+        if (!graphEntry) {
+          throw new RegistryGraphEntryNotFoundError('AdapterRegistry', tokenName(token));
         }
-        this.graph.get(token)!.add(d);
+        graphEntry.add(d);
       }
     }
   }
@@ -48,8 +65,14 @@ export default class AdapterRegistry
   protected async initialize(): Promise<void> {
     const readyArr: Promise<void>[] = [];
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
-      const deps = this.graph.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new RegistryDefinitionNotFoundError('AdapterRegistry', tokenName(token));
+      }
+      const deps = this.graph.get(token);
+      if (!deps) {
+        throw new RegistryGraphEntryNotFoundError('AdapterRegistry', tokenName(token));
+      }
 
       const instance = new AdapterInstance(rec, deps, this.providers);
 
@@ -57,6 +80,7 @@ export default class AdapterRegistry
       readyArr.push(instance.ready);
     }
     await Promise.all(readyArr);
+    this.logger?.debug('AdapterRegistry: initialization complete');
   }
 
   getAdapters(): AdapterEntry[] {

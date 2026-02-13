@@ -1,5 +1,6 @@
 // dynamic-adapter.ts
 import { Reference, FrontMcpAdapterResponse, AdapterType, AdapterInterface } from '../interfaces';
+import { DynamicAdapterNameError } from '../../errors';
 
 // keep your original options union; just add optional `providers`
 type InitOptions<T> =
@@ -54,7 +55,7 @@ export abstract class DynamicAdapter<TOptions extends object> implements Adapter
 
     // Validate name is provided
     if (!adapterName || typeof adapterName !== 'string' || adapterName.trim() === '') {
-      throw new Error(
+      throw new DynamicAdapterNameError(
         `Adapter ${this.name}.init() requires a non-empty 'name' option. ` +
           `This name is used to uniquely identify the adapter instance.`,
       );
@@ -68,7 +69,7 @@ export abstract class DynamicAdapter<TOptions extends object> implements Adapter
     }
 
     if (namesForClass.has(adapterName)) {
-      throw new Error(
+      throw new DynamicAdapterNameError(
         `Duplicate adapter name '${adapterName}' for ${this.name}. ` +
           `Each adapter instance must have a unique name within the same adapter class. ` +
           `Already registered: [${[...namesForClass].join(', ')}]`,

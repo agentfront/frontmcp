@@ -1,0 +1,222 @@
+---
+title: "Provider Errors"
+description: "Errors for dependency injection, provider resolution, and scope management."
+icon: "cubes"
+---
+
+## Overview
+
+Provider errors are thrown by the FrontMCP dependency injection system. They cover unregistered providers, scope mismatches, construction failures, circular dependencies, and plugin dependency issues. All provider errors are internal errors.
+
+## Error Reference
+
+### ProviderNotRegisteredError
+
+Thrown when a provider token is not found in the registry.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_NOT_REGISTERED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ProviderNotRegisteredError(tokenName: string, context?: string)
+```
+
+**Example:**
+
+```typescript
+import { ProviderNotRegisteredError } from '@frontmcp/sdk';
+
+throw new ProviderNotRegisteredError('DatabaseService', 'ToolRegistry');
+// "Provider "DatabaseService" is not registered (ToolRegistry)"
+```
+
+---
+
+### ProviderScopeMismatchError
+
+Thrown when a provider's scope doesn't match the registry it's being resolved in.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_SCOPE_MISMATCH` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ProviderScopeMismatchError(tokenName: string, scopeName: string, registryName: string)
+```
+
+---
+
+### ProviderNotInstantiatedError
+
+Thrown when a provider is expected to be instantiated but hasn't been created yet.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_NOT_INSTANTIATED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ProviderNotInstantiatedError(tokenName: string, scope?: string, context?: string)
+```
+
+---
+
+### DependencyCycleError
+
+Thrown when a circular dependency is detected in the provider graph.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `DEPENDENCY_CYCLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new DependencyCycleError(cycle: string)
+```
+
+**Example:**
+
+```typescript
+import { DependencyCycleError } from '@frontmcp/sdk';
+
+throw new DependencyCycleError('A -> B -> C -> A');
+// "Circular dependency detected: A -> B -> C -> A"
+```
+
+---
+
+### ProviderConstructionError
+
+Thrown when constructing a provider instance fails.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_CONSTRUCTION_FAILED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+| `originalError` | `Error \| undefined` | The underlying cause |
+
+```typescript
+new ProviderConstructionError(tokenName: string, cause?: Error | string, qualifier?: string)
+```
+
+**Example:**
+
+```typescript
+import { ProviderConstructionError } from '@frontmcp/sdk';
+
+throw new ProviderConstructionError('DatabaseService', new Error('Connection refused'));
+// "Failed to construct provider "DatabaseService": Connection refused"
+```
+
+---
+
+### ProviderDependencyError
+
+Thrown when a provider dependency cannot be resolved.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_DEPENDENCY_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ProviderDependencyError(message: string)
+```
+
+---
+
+### ProviderScopedAccessError
+
+Thrown when a scoped provider is accessed from the wrong scope.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_SCOPED_ACCESS` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ProviderScopedAccessError(tokenName: string, scopeName: string)
+```
+
+**Example:**
+
+```typescript
+import { ProviderScopedAccessError } from '@frontmcp/sdk';
+
+throw new ProviderScopedAccessError('RequestLogger', 'global');
+// "Cannot access scoped provider "RequestLogger" from scope "global""
+```
+
+---
+
+### ProviderNotAvailableError
+
+Thrown when a provider is not available in the current context.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PROVIDER_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ProviderNotAvailableError(tokenName: string, context?: string)
+```
+
+---
+
+### PluginDependencyError
+
+Thrown when a plugin dependency cannot be resolved.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `PLUGIN_DEPENDENCY_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new PluginDependencyError(message: string)
+```
+
+---
+
+### InvalidDependencyScopeError
+
+Thrown when a dependency has an invalid scope configuration.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_DEPENDENCY_SCOPE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidDependencyScopeError(message: string)
+```
+
+---
+
+### InvalidPluginScopeError
+
+Thrown when a plugin with `scope='server'` is used in a standalone app, which is not allowed.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_PLUGIN_SCOPE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidPluginScopeError(message: string)
+```

@@ -16,6 +16,7 @@ import { AgentInputOf, AgentOutputOf } from '../decorators';
 import { AgentExecutionLoop, ToolExecutor } from '../../agent/agent-execution-loop';
 import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
 import { ZodType } from 'zod';
+import { AgentMethodNotAvailableError } from '../../errors';
 
 // Re-export AgentType for convenience (defined in agent.metadata.ts)
 export { AgentType };
@@ -425,7 +426,7 @@ export class AgentContext<
    */
   protected async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     // This will be implemented by AgentInstance which has access to ToolRegistry
-    throw new Error(`Tool execution not available. Tool: ${name}`);
+    throw new AgentMethodNotAvailableError('executeTool', name);
   }
 
   /**
@@ -436,7 +437,7 @@ export class AgentContext<
    */
   protected async invokeAgent(agentId: string, input: unknown): Promise<unknown> {
     // This will be implemented by AgentInstance which has access to AgentRegistry
-    throw new Error(`Agent invocation not available. Agent: ${agentId}`);
+    throw new AgentMethodNotAvailableError('invokeAgent', agentId);
   }
 
   // ============================================================================

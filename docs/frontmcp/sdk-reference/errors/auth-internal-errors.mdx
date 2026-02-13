@@ -1,0 +1,318 @@
+---
+title: "Auth Internal Errors"
+description: "Internal errors for encryption, vaults, token management, and session infrastructure."
+icon: "shield-halved"
+---
+
+## Overview
+
+Auth internal errors are thrown by the authentication infrastructure — encryption contexts, credential vaults, token stores, session management, and provider registration. All are internal errors that should never be exposed to clients. For public-facing auth errors, see [Auth Errors](/frontmcp/sdk-reference/errors/auth-errors).
+
+## Encryption Errors
+
+### EncryptionContextNotSetError
+
+Thrown when the encryption context is not set before an operation that requires it.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `ENCRYPTION_CONTEXT_NOT_SET` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new EncryptionContextNotSetError()
+```
+
+---
+
+### EncryptionKeyNotConfiguredError
+
+Thrown when the encryption key is not configured.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `ENCRYPTION_KEY_NOT_CONFIGURED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new EncryptionKeyNotConfiguredError()
+```
+
+## Vault Errors
+
+### VaultLoadError
+
+Thrown when loading a credential vault fails.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `VAULT_LOAD_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+| `originalError` | `Error \| undefined` | The underlying cause |
+
+```typescript
+new VaultLoadError(vaultId: string, originalError?: Error)
+```
+
+**Example:**
+
+```typescript
+import { VaultLoadError } from '@frontmcp/sdk';
+
+throw new VaultLoadError('user_123', new Error('Redis connection timeout'));
+// "Failed to load vault "user_123": Redis connection timeout"
+```
+
+---
+
+### VaultNotFoundError
+
+Thrown when a vault entity is not found.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `VAULT_NOT_FOUND` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new VaultNotFoundError(entityType: string, id: string)
+```
+
+**Example:**
+
+```typescript
+import { VaultNotFoundError } from '@frontmcp/sdk';
+
+throw new VaultNotFoundError('credential', 'slack_oauth');
+// "credential "slack_oauth" not found in vault"
+```
+
+## Token Errors
+
+### TokenNotAvailableError
+
+Thrown when a token is not available (e.g., expired or not yet obtained).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `TOKEN_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new TokenNotAvailableError(message: string)
+```
+
+---
+
+### TokenStoreRequiredError
+
+Thrown when a token store is required but not configured.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `TOKEN_STORE_REQUIRED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new TokenStoreRequiredError(context: string)
+```
+
+**Example:**
+
+```typescript
+import { TokenStoreRequiredError } from '@frontmcp/sdk';
+
+throw new TokenStoreRequiredError('orchestrated auth');
+// "Token store is required for orchestrated auth"
+```
+
+---
+
+### TokenLeakDetectedError
+
+Thrown when a potential token leak is detected (e.g., token appearing in logs or responses).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `TOKEN_LEAK_DETECTED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new TokenLeakDetectedError(detail: string)
+```
+
+## Provider & Registration Errors
+
+### NoProviderIdError
+
+Thrown when no provider ID is available during auth flow.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `NO_PROVIDER_ID` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new NoProviderIdError(message: string)
+```
+
+---
+
+### CredentialProviderAlreadyRegisteredError
+
+Thrown when attempting to register a credential provider that is already registered.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `CREDENTIAL_PROVIDER_ALREADY_REGISTERED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new CredentialProviderAlreadyRegisteredError(name: string)
+```
+
+---
+
+### AuthProvidersNotConfiguredError
+
+Thrown when auth providers are not configured.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `AUTH_PROVIDERS_NOT_CONFIGURED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new AuthProvidersNotConfiguredError()
+```
+
+---
+
+### OrchestratedAuthNotAvailableError
+
+Thrown when orchestrated auth is not available in the current context.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `ORCHESTRATED_AUTH_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new OrchestratedAuthNotAvailableError()
+```
+
+## Session Errors
+
+### SessionSecretRequiredError
+
+Thrown when a session secret is required but not configured.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SESSION_SECRET_REQUIRED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new SessionSecretRequiredError(component: string)
+```
+
+**Example:**
+
+```typescript
+import { SessionSecretRequiredError } from '@frontmcp/sdk';
+
+throw new SessionSecretRequiredError('session encryption');
+// "Session secret is required for session encryption"
+```
+
+---
+
+### SessionIdEmptyError
+
+Thrown when a session ID is empty.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SESSION_ID_EMPTY` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new SessionIdEmptyError(storeName: string)
+```
+
+---
+
+### ElicitationSecretRequiredError
+
+Thrown when the elicitation secret is required but not configured.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `ELICITATION_SECRET_REQUIRED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ElicitationSecretRequiredError()
+```
+
+## Scope & Access Errors
+
+### ScopeDeniedError
+
+Thrown when scope access is denied for a provider.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SCOPE_DENIED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ScopeDeniedError(providerId: string)
+```
+
+---
+
+### InMemoryStoreRequiredError
+
+Thrown when an in-memory store is required but not available.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INMEMORY_STORE_REQUIRED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InMemoryStoreRequiredError(component: string)
+```
+
+---
+
+### OrchestratorJwksNotAvailableError
+
+Thrown when the orchestrator JWKS endpoint is not available.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `ORCHESTRATOR_JWKS_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new OrchestratorJwksNotAvailableError()
+```

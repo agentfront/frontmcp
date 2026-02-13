@@ -5,6 +5,7 @@ import { appDiscoveryDeps, normalizeApp } from './app.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AppLocalInstance, AppRemoteInstance } from './instances';
+import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
   private readonly owner: EntryOwnerRef;
@@ -34,7 +35,7 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       const deps = appDiscoveryDeps(rec);
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`App ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new RegistryDependencyNotRegisteredError('App', tokenName(token), tokenName(d));
         }
         this.graph.get(token)!.add(d);
       }
@@ -53,8 +54,7 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       } else if (rec.kind === AppKind.REMOTE_VALUE) {
         app = new AppRemoteInstance(rec, this.providers);
       } else {
-        // TODO: use specific error class
-        throw Error('Invalid adapter kind');
+        throw new InvalidRegistryKindError('app', (rec as { kind?: string }).kind);
       }
 
       this.instances.set(token, app);

@@ -23,6 +23,7 @@ import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../scope';
+import { NameDisambiguationError, EntryValidationError } from '../errors';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
@@ -370,14 +371,14 @@ export default class PromptRegistry
 
         // Children
         for (const c of children) {
-          const pre = cfg.prefixSource === 'provider' ? c.provider ?? c.ownerPath : c.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (c.provider ?? c.ownerPath) : c.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), c.row.instance);
         }
       } else {
         // Prefix everyone by source
         for (const r of group) {
-          const pre = cfg.prefixSource === 'provider' ? r.provider ?? r.ownerPath : r.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? (r.provider ?? r.ownerPath) : r.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), r.row.instance);
         }
@@ -398,7 +399,7 @@ export default class PromptRegistry
         if (!pool.has(withN)) return withN;
         n++;
       }
-      throw new Error(`Failed to disambiguate name "${candidate}" after ${MAX_DISAMBIGUATE_ATTEMPTS} attempts`);
+      throw new NameDisambiguationError(candidate, MAX_DISAMBIGUATE_ATTEMPTS);
     }
   }
 
@@ -517,13 +518,13 @@ export default class PromptRegistry
 
     // Check for required properties that make it a valid registerable instance
     if (!instance.record || !instance.record.provide) {
-      throw new Error('Prompt instance is missing required record.provide property');
+      throw new EntryValidationError('Prompt', 'missing required record.provide property');
     }
     if (!instance.record.kind || !instance.record.metadata) {
-      throw new Error('Prompt instance is missing required record.kind or record.metadata');
+      throw new EntryValidationError('Prompt', 'missing required record.kind or record.metadata');
     }
     if (typeof instance.name !== 'string' || !instance.name) {
-      throw new Error('Prompt instance is missing required name property');
+      throw new EntryValidationError('Prompt', 'missing required name property');
     }
 
     const token = instance.record.provide as Token;

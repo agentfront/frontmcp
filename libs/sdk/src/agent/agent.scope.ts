@@ -19,12 +19,13 @@ import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PluginRegistry from '../plugin/plugin.registry';
-import AdapterRegistry from '../adapter/adapter.regsitry';
+import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from './agent.registry';
 import CallToolFlow from '../tool/flows/call-tool.flow';
 import { Scope } from '../scope';
 import { ToolInstance } from '../tool/tool.instance';
 import { normalizeTool } from '../tool/tool.utils';
+import { FlowExitedWithoutOutputError } from '../errors';
 
 /**
  * AgentScope provides an isolated, private scope for agent execution.
@@ -79,7 +80,12 @@ export class AgentScope {
   private agentHooks!: HookRegistry;
   private agentFlows!: FlowRegistry;
 
-  constructor(parentScope: Scope, agentId: string, private readonly metadata: AgentMetadata, agentToken: Token) {
+  constructor(
+    parentScope: Scope,
+    agentId: string,
+    private readonly metadata: AgentMetadata,
+    agentToken: Token,
+  ) {
     this.parentScope = parentScope;
     this.id = `agent:${agentId}`;
     this.entryPath = parentScope.entryPath;
@@ -276,10 +282,10 @@ export class AgentScope {
     deps?: Map<Token, Type>,
   ): Promise<FlowOutputOf<Name>> {
     const result = await this.agentFlows.runFlow(name, input, deps);
-    if (result) {
+    if (result !== undefined) {
       return result;
     }
-    throw new Error(`Flow exited without output`);
+    throw new FlowExitedWithoutOutputError();
   }
 }
 

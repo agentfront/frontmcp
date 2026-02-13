@@ -23,6 +23,7 @@ import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { matchUriTemplate, parseUriTemplate } from '@frontmcp/utils';
 import { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
+import { InvalidRegistryKindError } from '../errors';
 
 export class ResourceInstance<
   Params extends Record<string, string> = Record<string, string>,
@@ -144,7 +145,7 @@ export class ResourceInstance<
         return new FunctionResourceContext<Params, Out>(record as ResourceFunctionRecord, resourceCtorArgs);
       default:
         // This should be unreachable if all ResourceKind and ResourceTemplateKind values are handled
-        throw new Error(`Unhandled resource kind: ${(record as any).kind}`);
+        throw new InvalidRegistryKindError('resource', (record as any).kind);
     }
   }
 
@@ -200,7 +201,10 @@ class FunctionResourceContext<
   Params extends Record<string, string> = Record<string, string>,
   Out = unknown,
 > extends ResourceContext<Params, Out> {
-  constructor(private readonly record: ResourceFunctionRecord, args: ResourceCtorArgs<Params>) {
+  constructor(
+    private readonly record: ResourceFunctionRecord,
+    args: ResourceCtorArgs<Params>,
+  ) {
     super(args);
   }
 

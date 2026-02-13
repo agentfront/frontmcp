@@ -29,6 +29,7 @@ import PromptRegistry from '../prompt/prompt.registry';
 import AgentRegistry from '../agent/agent.registry';
 import SkillRegistry from '../skill/skill.registry';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
+import { FlowExitedWithoutOutputError } from '../errors';
 import { registerSkillCapabilities } from '../skill/skill-scope.helper';
 import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
 import { createSkillToolGuardHook } from '../skill/hooks';
@@ -629,6 +630,6 @@ export class Scope extends ScopeEntry {
     if (result) {
       return result;
     }
-    throw new Error(`flow exist without output`);
+    throw new FlowExitedWithoutOutputError();
   }
 }

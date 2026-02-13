@@ -17,6 +17,7 @@ import {
 } from '../common';
 import { SkillContent } from '../common/interfaces';
 import { readFile } from '@frontmcp/utils';
+import { InvalidSkillError, SkillInstructionFetchError, InvalidInstructionSourceError } from '../errors';
 
 /**
  * Collect skill metadata from a decorated class.
@@ -60,10 +61,7 @@ export function normalizeSkill(item: unknown): SkillRecord {
     const metadata = collectSkillMetadata(item as SkillType);
     if (!metadata.name) {
       const className = (item as object).constructor?.name ?? String(item);
-      throw new Error(
-        `Invalid skill class '${className}'. ` +
-          'Class must be decorated with @Skill decorator and have a name property.',
-      );
+      throw new InvalidSkillError(className, 'Class must be decorated with @Skill decorator and have a name property.');
     }
     return {
       kind: SkillKind.CLASS_TOKEN,
@@ -74,8 +72,9 @@ export function normalizeSkill(item: unknown): SkillRecord {
 
   // Invalid input
   const name = typeof item === 'object' && item !== null ? (item as Record<string, unknown>)['name'] : String(item);
-  throw new Error(
-    `Invalid skill '${name ?? 'unknown'}'. ` + 'Expected a class decorated with @Skill or a skill() helper result.',
+  throw new InvalidSkillError(
+    String(name ?? 'unknown'),
+    'Expected a class decorated with @Skill or a skill() helper result.',
   );
 }
 
@@ -147,14 +146,12 @@ export async function loadInstructions(source: SkillInstructionSource, basePath?
     // Fetch from URL
     const response = await fetch(source.url);
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch skill instructions from ${source.url}: ${response.status} ${response.statusText}`,
-      );
+      throw new SkillInstructionFetchError(source.url, response.status, response.statusText);
     }
     return response.text();
   }
 
-  throw new Error('Invalid instruction source: must be a string, { file: string }, or { url: string }');
+  throw new InvalidInstructionSourceError();
 }
 
 /**

@@ -280,7 +280,24 @@
           {
             "group": "Errors",
             "icon": "triangle-exclamation",
-            "pages": ["frontmcp/sdk-reference/errors/overview"]
+            "pages": [
+              "frontmcp/sdk-reference/errors/overview",
+              "frontmcp/sdk-reference/errors/tool-errors",
+              "frontmcp/sdk-reference/errors/resource-errors",
+              "frontmcp/sdk-reference/errors/validation-errors",
+              "frontmcp/sdk-reference/errors/auth-errors",
+              "frontmcp/sdk-reference/errors/agent-errors",
+              "frontmcp/sdk-reference/errors/rate-limit-errors",
+              "frontmcp/sdk-reference/errors/transport-errors",
+              "frontmcp/sdk-reference/errors/remote-errors",
+              "frontmcp/sdk-reference/errors/elicitation-errors",
+              "frontmcp/sdk-reference/errors/provider-errors",
+              "frontmcp/sdk-reference/errors/registry-errors",
+              "frontmcp/sdk-reference/errors/decorator-errors",
+              "frontmcp/sdk-reference/errors/normalization-errors",
+              "frontmcp/sdk-reference/errors/sdk-errors",
+              "frontmcp/sdk-reference/errors/auth-internal-errors"
+            ]
           }
         ]
       }

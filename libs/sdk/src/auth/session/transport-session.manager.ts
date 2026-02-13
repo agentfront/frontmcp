@@ -12,6 +12,7 @@ import {
 } from './transport-session.types';
 import { getMachineId } from '../authorization/authorization.class';
 import { RedisSessionStore } from './redis-session.store';
+import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
 
 /**
  * In-memory session store implementation
@@ -137,10 +138,7 @@ export class TransportSessionManager {
     const secret = config.encryptionSecret || process.env['MCP_SESSION_SECRET'];
     if (!secret) {
       if (process.env['NODE_ENV'] === 'production') {
-        throw new Error(
-          '[TransportSessionManager] MCP_SESSION_SECRET or encryptionSecret is required in production. ' +
-            'Set the MCP_SESSION_SECRET environment variable or provide encryptionSecret in config.',
-        );
+        throw new SessionSecretRequiredError('TransportSessionManager');
       }
       // Development fallback - NOT secure for production
       console.warn(

@@ -1,4 +1,5 @@
 import { NullOrchestratedAuthAccessor, OrchestratedAuthAccessorAdapter } from '../orchestrated.accessor';
+import { OrchestratedAuthNotAvailableError } from '../../../errors';
 
 describe('NullOrchestratedAuthAccessor', () => {
   let accessor: NullOrchestratedAuthAccessor;
@@ -27,11 +28,11 @@ describe('NullOrchestratedAuthAccessor', () => {
 
   describe('getToken', () => {
     it('should throw error', async () => {
-      await expect(accessor.getToken()).rejects.toThrow('Orchestrated authorization not available');
+      await expect(accessor.getToken()).rejects.toThrow(OrchestratedAuthNotAvailableError);
     });
 
     it('should throw error with providerId', async () => {
-      await expect(accessor.getToken('github')).rejects.toThrow('Orchestrated authorization not available');
+      await expect(accessor.getToken('github')).rejects.toThrow(OrchestratedAuthNotAvailableError);
     });
   });
 

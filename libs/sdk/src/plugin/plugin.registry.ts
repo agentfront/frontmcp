@@ -12,7 +12,7 @@ import {
 } from '../common';
 import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
-import AdapterRegistry from '../adapter/adapter.regsitry';
+import AdapterRegistry from '../adapter/adapter.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
@@ -21,8 +21,8 @@ import { normalizeProvider } from '../provider/provider.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { InvalidPluginScopeError } from '../errors';
-import { installContextExtensions } from '../context/context-extension';
+import { InvalidPluginScopeError, RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
+import { installContextExtensions } from '../context';
 
 /**
  * Scope information for plugin hook registration.
@@ -106,7 +106,7 @@ export default class PluginRegistry
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`Plugin ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new RegistryDependencyNotRegisteredError('Plugin', tokenName(token), tokenName(d));
         }
         this.graph.get(token)!.add(d);
       }
@@ -187,7 +187,7 @@ export default class PluginRegistry
       } else if (rec.kind === PluginKind.VALUE) {
         pluginInstance = (rec as any).useValue;
       } else {
-        throw Error('Invalid plugin kind');
+        throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);
       }
 
       // Determine the plugin's scope setting (defaults to 'app')

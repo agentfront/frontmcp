@@ -26,6 +26,7 @@
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { EncryptionContextNotSetError, VaultLoadError, VaultNotFoundError } from '../../errors/auth-internal.errors';
 import {
   VaultEncryption,
   EncryptedData,
@@ -37,7 +38,6 @@ import {
   VaultConsentRecord,
   VaultFederatedRecord,
   PendingIncrementalAuth,
-  authorizationVaultEntrySchema,
 } from '@frontmcp/auth';
 
 // ============================================
@@ -146,7 +146,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
       return asyncContext.key;
     }
 
-    throw new Error('Encryption context not set. Use runWithContext() before performing vault operations.');
+    throw new EncryptionContextNotSetError();
   }
 
   /**
@@ -246,7 +246,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
       return await this.toVaultEntry(redisEntry);
     } catch (error) {
       // Could be decryption failure (wrong key) or corrupt data
-      throw new Error(`Failed to load vault ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new VaultLoadError(id, error instanceof Error ? error : undefined);
     }
   }
 
@@ -299,7 +299,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
   async update(id: string, updates: Partial<AuthorizationVaultEntry>): Promise<void> {
     const entry = await this.loadEntry(id);
     if (!entry) {
-      throw new Error(`Vault entry not found: ${id}`);
+      throw new VaultNotFoundError('Vault entry', id);
     }
 
     Object.assign(entry, updates, { lastAccessAt: Date.now() });
@@ -344,7 +344,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
   ): Promise<PendingIncrementalAuth> {
     const entry = await this.loadEntry(vaultId);
     if (!entry) {
-      throw new Error(`Vault not found: ${vaultId}`);
+      throw new VaultNotFoundError('Vault', vaultId);
     }
 
     const now = Date.now();

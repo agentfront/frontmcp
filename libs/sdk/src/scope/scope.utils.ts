@@ -10,6 +10,7 @@ import {
 } from '../common';
 import { normalizeApp } from '../app/app.utils';
 import { Scope } from './scope.instance';
+import { ScopeConfigurationError } from '../errors';
 
 /**
  * Normalize a raw scope metadata list into useful maps/sets.
@@ -30,7 +31,7 @@ export function normalizeAppScope(
    */
   // noinspection PointlessBooleanExpressionJS
   if (metadata.splitByApp === true && appMetadata.standalone === 'includeInParent') {
-    throw new Error('standalone: includeInParent is not supported for splitByApp scope');
+    throw new ScopeConfigurationError('standalone: includeInParent is not supported for splitByApp scope');
   }
   const scopeId = appMetadata.id ?? appMetadata.name;
   const token: Token<AppType> = Symbol(scopeId);

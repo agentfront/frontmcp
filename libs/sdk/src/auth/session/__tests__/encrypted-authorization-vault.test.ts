@@ -5,6 +5,7 @@
  */
 import { EncryptedRedisVault, createEncryptedVault } from '../encrypted-authorization-vault';
 import { VaultEncryption, VaultKeyDerivationClaims, AppCredential, VaultConsentRecord } from '@frontmcp/auth';
+import { EncryptionContextNotSetError } from '../../../errors';
 
 /**
  * Mock Redis client for testing
@@ -72,7 +73,7 @@ describe('EncryptedRedisVault', () => {
           userSub: 'user-123',
           clientId: 'client-456',
         }),
-      ).rejects.toThrow('Encryption context not set');
+      ).rejects.toThrow(EncryptionContextNotSetError);
     });
 
     it('should work with runWithContext', async () => {

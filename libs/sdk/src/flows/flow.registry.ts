@@ -6,6 +6,7 @@ import { normalizeFlow } from './flow.utils';
 import { FlowInstance } from './flow.instance';
 import { FrontMcpContextStorage } from '../context';
 import { randomUUID } from '@frontmcp/utils';
+import { RegistryDependencyNotRegisteredError, FlowNotRegisteredError } from '../errors';
 
 export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName>, FlowRecord, FlowType[]> {
   constructor(providers: ProviderRegistry, list: FlowType[]) {
@@ -38,7 +39,7 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
           this.graph.get(token)!.add(ScopeEntry);
         } else {
           if (!this.providers.get(d)) {
-            throw new Error(`Flow ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+            throw new RegistryDependencyNotRegisteredError('Flow', tokenName(token), tokenName(d));
           }
           this.graph.get(token)!.add(d);
         }
@@ -85,7 +86,7 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
   ): Promise<FlowOutputOf<Name> | undefined> {
     const flow = this.instances.get(name);
     if (!flow) {
-      throw new Error(`Flow ${name} is not registered`);
+      throw new FlowNotRegisteredError(name);
     }
 
     // Get context storage for MCP flows (if not already in a context)

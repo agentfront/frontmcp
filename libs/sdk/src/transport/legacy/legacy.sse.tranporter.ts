@@ -6,6 +6,11 @@ import { URL } from 'url';
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { JSONRPCMessage, JSONRPCMessageSchema, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import {
+  TransportAlreadyStartedError,
+  TransportNotConnectedError,
+  UnsupportedContentTypeError,
+} from '../../errors/transport.errors';
 
 const MAXIMUM_MESSAGE_SIZE = '4mb';
 
@@ -52,7 +57,11 @@ export class SSEServerTransport implements Transport {
   /**
    * Creates a new SSE server transport, which will direct the client to POST messages to the relative or absolute URL identified by `_endpoint`.
    */
-  constructor(private _endpoint: string, private res: ServerResponse, options?: SSEServerTransportOptions) {
+  constructor(
+    private _endpoint: string,
+    private res: ServerResponse,
+    options?: SSEServerTransportOptions,
+  ) {
     this._sessionId = options?.sessionId ?? randomUUID();
     this._options = options || { enableDnsRebindingProtection: false };
   }
@@ -93,7 +102,7 @@ export class SSEServerTransport implements Transport {
    */
   async start(): Promise<void> {
     if (this._sseResponse) {
-      throw new Error(
+      throw new TransportAlreadyStartedError(
         'SSEServerTransport already started! If using Server class, note that connect() calls start() automatically.',
       );
     }
@@ -138,7 +147,7 @@ export class SSEServerTransport implements Transport {
     if (!this._sseResponse) {
       const message = 'SSE connection not established';
       res.writeHead(500).end(message);
-      throw new Error(message);
+      throw new TransportNotConnectedError(message);
     }
 
     // Validate request headers for DNS rebinding protection
@@ -156,7 +165,7 @@ export class SSEServerTransport implements Transport {
     try {
       const ct = contentType.parse(req.headers['content-type'] ?? '');
       if (ct.type !== 'application/json') {
-        throw new Error(`Unsupported content-type: ${ct.type}`);
+        throw new UnsupportedContentTypeError(ct.type);
       }
 
       body =
@@ -204,7 +213,7 @@ export class SSEServerTransport implements Transport {
 
   async send(message: JSONRPCMessage): Promise<void> {
     if (!this._sseResponse) {
-      throw new Error('Not connected');
+      throw new TransportNotConnectedError();
     }
 
     // Include event ID per MCP 2025-11-25 spec for client reconnection support

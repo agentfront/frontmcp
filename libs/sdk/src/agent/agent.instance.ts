@@ -23,7 +23,6 @@ import {
   AgentToolDefinition,
   ToolEntry,
   ToolMetadata,
-  ToolRecord,
 } from '../common';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
 import { ToolInstance } from '../tool/tool.instance';
@@ -35,7 +34,13 @@ import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { createAdapter, CreateAdapterOptions, ConfigResolver } from './adapters';
 import { ConfigService } from '../builtin/config';
 import type { CallToolRequest, Tool } from '@modelcontextprotocol/sdk/types.js';
-import { InvalidHookFlowError, AgentNotConfiguredError, AgentToolNotFoundError } from '../errors';
+import {
+  InvalidHookFlowError,
+  AgentNotConfiguredError,
+  AgentToolNotFoundError,
+  AgentConfigKeyNotFoundError,
+  AgentToolExecutionError,
+} from '../errors';
 import { agentToolName, isAgentVisibleToSwarm, canAgentSeeSwarm, getVisibleAgentIds } from './agent.utils';
 import { buildParsedToolResult, buildAgentToolDefinitions } from '../tool/tool.utils';
 import { ToolExecutor } from './agent-execution-loop';
@@ -119,7 +124,7 @@ export class AgentInstance<
     // Initialize input schema
     const schema: unknown = record.metadata.inputSchema;
     // Support both Zod objects and raw ZodRawShape
-    this.inputSchema = (schema instanceof z.ZodObject ? schema.shape : schema ?? {}) as InSchema;
+    this.inputSchema = (schema instanceof z.ZodObject ? schema.shape : (schema ?? {})) as InSchema;
 
     // Keep raw output schema
     this.outputSchema = record.metadata.outputSchema as OutSchema;
@@ -270,7 +275,7 @@ export class AgentInstance<
       get<T>(path: string): T {
         const value = getNestedValue(path);
         if (value === undefined) {
-          throw new Error(`Config key "${path}" not found`);
+          throw new AgentConfigKeyNotFoundError(path);
         }
         return value as T;
       },
@@ -630,9 +635,9 @@ export class AgentInstance<
     if (mcpResult.isError) {
       const errorContent = mcpResult.content?.[0];
       if (errorContent?.type === 'text') {
-        throw new Error((errorContent as TextContent).text);
+        throw new AgentToolExecutionError((errorContent as TextContent).text);
       }
-      throw new Error('Tool execution failed');
+      throw new AgentToolExecutionError('Tool execution failed');
     }
 
     // Prefer structuredContent (contains raw tool output)
@@ -749,7 +754,10 @@ class FunctionAgentContext<
   In = AgentInputOf<{ inputSchema: InSchema }>,
   Out = AgentOutputOf<{ outputSchema: OutSchema }>,
 > extends AgentContext<InSchema, OutSchema, In, Out> {
-  constructor(private readonly record: AgentFunctionTokenRecord, args: AgentCtorArgs<In>) {
+  constructor(
+    private readonly record: AgentFunctionTokenRecord,
+    args: AgentCtorArgs<In>,
+  ) {
     super(args);
   }
 

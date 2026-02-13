@@ -1,3 +1,5 @@
+import { ServerlessHandlerNotInitializedError } from '../errors';
+
 /**
  * Global handler registry for serverless deployments.
  * The @FrontMcp decorator stores the handler here when running in serverless mode.
@@ -53,9 +55,7 @@ export async function getServerlessHandlerAsync(): Promise<unknown> {
     return globalHandlerPromise;
   }
   if (!globalHandler) {
-    throw new Error(
-      'Serverless handler not initialized. Ensure @FrontMcp decorator ran and FRONTMCP_SERVERLESS=1 is set.',
-    );
+    throw new ServerlessHandlerNotInitializedError();
   }
   return globalHandler;
 }

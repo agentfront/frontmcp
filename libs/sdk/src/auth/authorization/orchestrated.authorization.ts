@@ -6,6 +6,7 @@ import { ProviderSnapshot } from '../session/session.types';
 import { EncryptedBlob } from '../session';
 import { AuthMode } from '../../common';
 import { deriveAuthorizationId } from '../utils';
+import { NoProviderIdError, TokenStoreRequiredError, TokenNotAvailableError } from '../../errors/auth-internal.errors';
 
 /**
  * Token store interface for orchestrated mode
@@ -301,20 +302,19 @@ export class OrchestratedAuthorization extends AuthorizationBase {
     const targetProviderId = providerId ?? this.primaryProviderId;
 
     if (!targetProviderId) {
-      throw new Error('OrchestratedAuthorization: No provider ID specified and no primary provider set');
+      throw new NoProviderIdError('OrchestratedAuthorization: No provider ID specified and no primary provider set');
     }
 
     if (!this.#tokenStore) {
-      throw new Error(
-        'OrchestratedAuthorization: Token store not configured. ' +
-          'Orchestrated mode requires a token store for secure token retrieval.',
-      );
+      throw new TokenStoreRequiredError('orchestrated token retrieval');
     }
 
     // Check if token exists
     const hasToken = await this.#tokenStore.hasTokens(this.id, targetProviderId);
     if (!hasToken) {
-      throw new Error(`OrchestratedAuthorization: No tokens available for provider "${targetProviderId}"`);
+      throw new TokenNotAvailableError(
+        `OrchestratedAuthorization: No tokens available for provider "${targetProviderId}"`,
+      );
     }
 
     // Get access token
@@ -338,14 +338,16 @@ export class OrchestratedAuthorization extends AuthorizationBase {
    */
   private async refreshAndGetToken(providerId: string): Promise<string> {
     if (!this.#tokenStore || !this.#onTokenRefresh) {
-      throw new Error(
+      throw new TokenNotAvailableError(
         `OrchestratedAuthorization: Token expired for provider "${providerId}" and refresh not available`,
       );
     }
 
     const refreshToken = await this.#tokenStore.getRefreshToken(this.id, providerId);
     if (!refreshToken) {
-      throw new Error(`OrchestratedAuthorization: No refresh token available for provider "${providerId}"`);
+      throw new TokenNotAvailableError(
+        `OrchestratedAuthorization: No refresh token available for provider "${providerId}"`,
+      );
     }
 
     // Perform refresh
@@ -394,7 +396,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
     },
   ): Promise<void> {
     if (!this.#tokenStore) {
-      throw new Error('OrchestratedAuthorization: Token store required to add providers');
+      throw new TokenStoreRequiredError('adding providers');
     }
 
     const expiresAt = tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined;
@@ -459,7 +461,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
     },
   ): Promise<void> {
     if (!this.#tokenStore) {
-      throw new Error('OrchestratedAuthorization: Token store required for progressive authorization');
+      throw new TokenStoreRequiredError('progressive authorization');
     }
 
     // Use app ID as provider ID for app-specific token storage

@@ -1,0 +1,443 @@
+---
+title: "SDK Errors"
+description: "General SDK errors for flows, configuration, skills, serverless, and runtime issues."
+icon: "gear"
+---
+
+## Overview
+
+SDK errors cover a broad range of internal failures across the FrontMCP SDK — flow execution, server configuration, skill management, serverless handlers, Vercel KV, and more. Most are internal errors except `MissingPromptArgumentError` (documented under [Validation Errors](/frontmcp/sdk-reference/errors/validation-errors)).
+
+## Flow Errors
+
+### FlowExitedWithoutOutputError
+
+Thrown when a flow completes all stages without producing output.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `FLOW_EXITED_WITHOUT_OUTPUT` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new FlowExitedWithoutOutputError()
+```
+
+---
+
+### FlowInputMissingError
+
+Thrown when a flow stage receives missing or undefined input.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `FLOW_INPUT_MISSING` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+| `field` | `string` | The missing field name |
+| `flowName` | `string \| undefined` | The flow that encountered the error |
+
+```typescript
+new FlowInputMissingError(field: string, flowName?: string)
+```
+
+**Example:**
+
+```typescript
+import { FlowInputMissingError } from '@frontmcp/sdk';
+
+throw new FlowInputMissingError('request', 'well-known.oauth');
+// "Flow "well-known.oauth" is missing required input: "request""
+```
+
+## Server & Configuration Errors
+
+### ServerNotFoundError
+
+Thrown when no MCP server is found.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SERVER_NOT_FOUND` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ServerNotFoundError()
+```
+
+---
+
+### ConfigNotFoundError
+
+Thrown when a configuration file is not found at the expected path.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `CONFIG_NOT_FOUND` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ConfigNotFoundError(path: string, triedPaths?: string[])
+```
+
+**Example:**
+
+```typescript
+import { ConfigNotFoundError } from '@frontmcp/sdk';
+
+throw new ConfigNotFoundError('frontmcp.config.ts', ['./frontmcp.config.ts', './config/frontmcp.ts']);
+```
+
+---
+
+### ScopeConfigurationError
+
+Thrown when the scope configuration is invalid.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SCOPE_CONFIGURATION_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ScopeConfigurationError(message: string)
+```
+
+---
+
+### RequiredConfigUndefinedError
+
+Thrown when a required configuration value is undefined.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `REQUIRED_CONFIG_UNDEFINED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new RequiredConfigUndefinedError(path: string)
+```
+
+**Example:**
+
+```typescript
+import { RequiredConfigUndefinedError } from '@frontmcp/sdk';
+
+throw new RequiredConfigUndefinedError('auth.secret');
+// "Required configuration path "auth.secret" is undefined"
+```
+
+## Session & Auth Errors
+
+### SessionVerificationFailedError
+
+Thrown when session verification fails.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SESSION_VERIFICATION_FAILED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new SessionVerificationFailedError()
+```
+
+## Context Errors
+
+### ContextExtensionNotAvailableError
+
+Thrown when a context extension (e.g., `this.remember`) is not available, typically because the required plugin is not installed.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `CONTEXT_EXTENSION_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+| `originalError` | `Error \| undefined` | The underlying cause |
+
+```typescript
+new ContextExtensionNotAvailableError(message: string, cause?: Error)
+```
+
+---
+
+### InvokeStateMissingKeyError
+
+Thrown when an invoke state key is missing during flow execution.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVOKE_STATE_MISSING_KEY` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvokeStateMissingKeyError(key: string)
+```
+
+## Skill Errors
+
+### SkillSessionError
+
+Thrown when a skill session operation fails.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SKILL_SESSION_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new SkillSessionError(operation: string, reason: string)
+```
+
+---
+
+### InvalidSkillError
+
+Thrown when a skill definition is invalid.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_SKILL` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidSkillError(name: string, details: string)
+```
+
+---
+
+### SkillInstructionFetchError
+
+Thrown when fetching remote skill instructions fails.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SKILL_INSTRUCTION_FETCH_FAILED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new SkillInstructionFetchError(url: string, status: number, statusText: string)
+```
+
+---
+
+### InvalidInstructionSourceError
+
+Thrown when an instruction source is invalid.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_INSTRUCTION_SOURCE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidInstructionSourceError()
+```
+
+## Serverless Errors
+
+### ServerlessHandlerNotInitializedError
+
+Thrown when a serverless handler is accessed before initialization.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SERVERLESS_HANDLER_NOT_INITIALIZED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new ServerlessHandlerNotInitializedError()
+```
+
+## Adapter Errors
+
+### DynamicAdapterNameError
+
+Thrown when a dynamic adapter has a name conflict.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `DYNAMIC_ADAPTER_NAME_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new DynamicAdapterNameError(message: string)
+```
+
+## Agent SDK Errors
+
+### AgentConfigKeyNotFoundError
+
+Thrown when an agent configuration key is not found.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `AGENT_CONFIG_KEY_NOT_FOUND` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new AgentConfigKeyNotFoundError(path: string)
+```
+
+---
+
+### AgentToolExecutionError
+
+Thrown when an agent's tool execution fails.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `AGENT_TOOL_EXECUTION_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new AgentToolExecutionError(message: string)
+```
+
+---
+
+### AgentMethodNotAvailableError
+
+Thrown when an agent method is not available.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `AGENT_METHOD_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new AgentMethodNotAvailableError(method: string, name: string)
+```
+
+## Internal Utility Errors
+
+### DependencyNotFoundError
+
+Thrown when a required dependency is not found in a registry during initialization.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `DEPENDENCY_NOT_FOUND` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new DependencyNotFoundError(registryName: string, dependencyName: string)
+```
+
+**Example:**
+
+```typescript
+import { DependencyNotFoundError } from '@frontmcp/sdk';
+
+throw new DependencyNotFoundError('AuthRegistry', 'SessionStore');
+// "Dependency "SessionStore" not found in AuthRegistry"
+```
+
+---
+
+### GenericServerError
+
+A general-purpose internal error wrapper. Used by `toMcpError()` to wrap unknown errors.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `SERVER_ERROR` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+| `originalError` | `Error \| undefined` | The underlying cause |
+
+```typescript
+new GenericServerError(message: string, originalError?: Error)
+```
+
+---
+
+### GlobalConfigNotFoundError
+
+Thrown when a plugin requires global configuration that is not defined in the `@FrontMcp` decorator.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `GLOBAL_CONFIG_NOT_FOUND` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `true` |
+| `pluginName` | `string` | The plugin that requires config |
+| `configKey` | `string` | The missing config key |
+
+```typescript
+new GlobalConfigNotFoundError(pluginName: string, configKey: string)
+```
+
+**Example:**
+
+```typescript
+import { GlobalConfigNotFoundError } from '@frontmcp/sdk';
+
+throw new GlobalConfigNotFoundError('RememberPlugin', 'redis');
+// 'Plugin "RememberPlugin" requires global "redis" configuration. Add "redis" to your @FrontMcp decorator options.'
+```
+
+---
+
+### RequestContextNotAvailableError
+
+Thrown when code attempts to access `RequestContext` outside a request scope (without `AsyncLocalStorage` context).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `REQUEST_CONTEXT_NOT_AVAILABLE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new RequestContextNotAvailableError(message?: string)
+```
+
+## Vercel KV Errors
+
+### VercelKvNotSupportedError
+
+Thrown when Vercel KV does not support a requested feature.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `VERCEL_KV_NOT_SUPPORTED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new VercelKvNotSupportedError(feature: string)
+```
+
+---
+
+### VercelKvAsyncInitRequiredError
+
+Thrown when Vercel KV is used before async initialization.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `VERCEL_KV_ASYNC_INIT_REQUIRED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new VercelKvAsyncInitRequiredError(message?: string)
+```

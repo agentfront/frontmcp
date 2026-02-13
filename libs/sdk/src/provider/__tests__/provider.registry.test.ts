@@ -5,13 +5,11 @@
 import 'reflect-metadata';
 import ProviderRegistry from '../provider.registry';
 import { ProviderScope } from '../../common/metadata';
-import { ProviderKind } from '../../common/records';
 import {
   TestService,
   DependentService,
   AsyncService,
   TEST_TOKEN,
-  ASYNC_TOKEN,
   FACTORY_TOKEN,
   createValueProvider,
   createFactoryProvider,
@@ -112,7 +110,10 @@ describe('ProviderRegistry', () => {
 
       @Injectable()
       class ServiceC {
-        constructor(public a: ServiceA, public b: ServiceB) {
+        constructor(
+          public a: ServiceA,
+          public b: ServiceB,
+        ) {
           initOrder.push('C');
         }
       }
@@ -163,7 +164,7 @@ describe('ProviderRegistry', () => {
           createClassProvider(ServiceA, { name: 'ServiceA' }),
           createClassProvider(ServiceB, { name: 'ServiceB' }),
         ]);
-      }).toThrow(/cycle/i);
+      }).toThrow(/circular dependency detected/i);
     });
 
     it('should detect circular dependencies in a chain of 3+ services', () => {
@@ -197,7 +198,7 @@ describe('ProviderRegistry', () => {
           createClassProvider(ServiceB, { name: 'ServiceB' }),
           createClassProvider(ServiceC, { name: 'ServiceC' }),
         ]);
-      }).toThrow(/cycle/i);
+      }).toThrow(/circular dependency detected/i);
     });
   });
 
@@ -374,7 +375,10 @@ describe('ProviderRegistry', () => {
 
       @Injectable()
       class Service3 {
-        constructor(public s1: Service1, public s2: Service2) {
+        constructor(
+          public s1: Service1,
+          public s2: Service2,
+        ) {
           initLog.push('Service3');
         }
       }

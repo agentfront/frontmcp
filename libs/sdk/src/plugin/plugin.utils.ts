@@ -1,5 +1,12 @@
 import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
 import { PluginMetadata, PluginType, FrontMcpPluginTokens, PluginRecord, PluginKind } from '../common';
+import {
+  MissingProvideError,
+  InvalidUseClassError,
+  InvalidUseFactoryError,
+  InvalidUseValueError,
+  InvalidEntityError,
+} from '../errors';
 
 export function collectPluginMetadata(cls: PluginType): PluginMetadata {
   return Object.entries(FrontMcpPluginTokens).reduce((metadata, [key, token]) => {
@@ -20,12 +27,12 @@ export function normalizePlugin(item: PluginType): PluginRecord {
 
     if (!provide) {
       const name = (item as any)?.name ?? '[object]';
-      throw new Error(`Plugin '${name}' is missing 'provide'.`);
+      throw new MissingProvideError('plugin', name);
     }
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(`'useClass' on plugin '${tokenName(provide)}' must be a class.`);
+        throw new InvalidUseClassError('plugin', tokenName(provide));
       }
       // Merge inline metadata with decorator metadata (inline takes precedence)
       // This ensures scope and other fields from inline config override decorators
@@ -41,7 +48,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(`'useFactory' on plugin '${tokenName(provide)}' must be a function.`);
+        throw new InvalidUseFactoryError('plugin', tokenName(provide));
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -55,7 +62,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
 
     if ('useValue' in item) {
       if (useValue === undefined || useValue === null) {
-        throw new Error(`'useValue' on plugin '${tokenName(provide)}' must be defined.`);
+        throw new InvalidUseValueError('plugin', tokenName(provide));
       }
       // Merge inline metadata with decorator metadata (inline takes precedence)
       const decoratorMetadata = collectPluginMetadata(useValue.constructor);
@@ -71,7 +78,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid plugin '${name}'. Expected a class or a plugin object.`);
+  throw new InvalidEntityError('plugin', name, 'a class or a plugin object');
 }
 
 /**

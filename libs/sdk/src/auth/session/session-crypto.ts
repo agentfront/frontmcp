@@ -18,6 +18,7 @@ import {
   type HmacSigningConfig,
 } from '@frontmcp/utils';
 import type { StoredSession } from './transport-session.types';
+import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
 
 /**
  * Signed session wrapper structure.
@@ -46,10 +47,7 @@ function getSigningSecret(config?: SessionSigningConfig): string {
 
   if (!secret) {
     if (process.env['NODE_ENV'] === 'production') {
-      throw new Error(
-        '[SessionCrypto] MCP_SESSION_SECRET is required in production for session signing. ' +
-          'Set this environment variable to a secure random string.',
-      );
+      throw new SessionSecretRequiredError('session signing');
     }
     // In development, warn but allow using a default
     console.warn('[SessionCrypto] MCP_SESSION_SECRET not set. Using insecure default for development only.');

@@ -112,4 +112,102 @@ export {
   // Configuration errors
   RemoteConfigurationError,
   RemoteNotConnectedError,
+  // Retry errors
+  InvalidRetryOptionsError,
 } from './remote.errors';
+
+// Export normalization errors
+export {
+  MissingProvideError,
+  InvalidUseClassError,
+  InvalidUseFactoryError,
+  InvalidUseValueError,
+  InvalidEntityError,
+} from './normalization.errors';
+
+// Export registry errors
+export {
+  RegistryDefinitionNotFoundError,
+  RegistryGraphEntryNotFoundError,
+  RegistryDependencyNotRegisteredError,
+  InvalidRegistryKindError,
+  NameDisambiguationError,
+  EntryValidationError,
+  FlowNotRegisteredError,
+  UnsupportedHookOwnerKindError,
+} from './registry.errors';
+
+// Export provider errors
+export {
+  ProviderNotRegisteredError,
+  ProviderScopeMismatchError,
+  ProviderNotInstantiatedError,
+  DependencyCycleError,
+  ProviderConstructionError,
+  ProviderDependencyError,
+  ProviderScopedAccessError,
+  ProviderNotAvailableError,
+  PluginDependencyError,
+  InvalidDependencyScopeError,
+} from './provider.errors';
+
+// Export decorator errors
+export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './decorator.errors';
+
+// Export transport errors
+export {
+  MethodNotImplementedError,
+  UnsupportedTransportTypeError,
+  TransportBusRequiredError,
+  InvalidTransportSessionError,
+  TransportNotConnectedError,
+  TransportAlreadyStartedError,
+  UnsupportedContentTypeError,
+} from './transport.errors';
+
+// Export auth internal errors
+export {
+  EncryptionContextNotSetError,
+  VaultLoadError,
+  VaultNotFoundError,
+  TokenNotAvailableError,
+  TokenStoreRequiredError,
+  NoProviderIdError,
+  TokenLeakDetectedError,
+  SessionSecretRequiredError,
+  CredentialProviderAlreadyRegisteredError,
+  AuthProvidersNotConfiguredError,
+  OrchestratedAuthNotAvailableError,
+  EncryptionKeyNotConfiguredError,
+  SessionIdEmptyError,
+  ElicitationSecretRequiredError,
+  ScopeDeniedError,
+  InMemoryStoreRequiredError,
+  OrchestratorJwksNotAvailableError,
+} from './auth-internal.errors';
+
+// Export SDK errors
+export {
+  FlowExitedWithoutOutputError,
+  ServerNotFoundError,
+  ConfigNotFoundError,
+  SessionVerificationFailedError,
+  ContextExtensionNotAvailableError,
+  ScopeConfigurationError,
+  InvokeStateMissingKeyError,
+  SkillSessionError,
+  InvalidSkillError,
+  SkillInstructionFetchError,
+  InvalidInstructionSourceError,
+  ServerlessHandlerNotInitializedError,
+  MissingPromptArgumentError,
+  DynamicAdapterNameError,
+  AgentConfigKeyNotFoundError,
+  AgentToolExecutionError,
+  AgentMethodNotAvailableError,
+  VercelKvNotSupportedError,
+  VercelKvAsyncInitRequiredError,
+  RequiredConfigUndefinedError,
+  RegistryNotInitializedError,
+  FlowInputMissingError,
+} from './sdk.errors';

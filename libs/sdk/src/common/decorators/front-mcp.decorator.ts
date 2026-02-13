@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
 import { InternalMcpError } from '../../errors/mcp.error';
+import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 
 // Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
 // Uses direct relative paths instead of require('@frontmcp/sdk') which would create
@@ -43,28 +44,19 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
   return (target: Function) => {
     const { error, data: metadata } = frontMcpMetadataSchema.safeParse(providedMetadata);
     if (error) {
-      if (error.format().apps) {
-        throw new Error(
-          `Invalid metadata provided to @FrontMcp { apps: [?] }: \n${JSON.stringify(error.format().apps, null, 2)}`,
-        );
+      const formatted = error.format();
+      if (formatted.apps) {
+        throw new InvalidDecoratorMetadataError('FrontMcp', 'apps', JSON.stringify(formatted.apps, null, 2));
       }
-      if (error.format().providers) {
-        throw new Error(
-          `Invalid metadata provided to @FrontMcp { providers: [?] }: \n${JSON.stringify(
-            error.format().providers,
-            null,
-            2,
-          )}`,
-        );
+      if (formatted.providers) {
+        throw new InvalidDecoratorMetadataError('FrontMcp', 'providers', JSON.stringify(formatted.providers, null, 2));
       }
-      const loggingFormat = error.format()['logging'] as Record<string, unknown> | undefined;
+      const loggingFormat = formatted['logging'] as Record<string, unknown> | undefined;
       if (loggingFormat?.['transports']) {
-        throw new Error(
-          `Invalid metadata provided to @FrontMcp { logging: { transports: [?] } }: \n${JSON.stringify(
-            loggingFormat['transports'],
-            null,
-            2,
-          )}`,
+        throw new InvalidDecoratorMetadataError(
+          'FrontMcp',
+          'logging.transports',
+          JSON.stringify(loggingFormat['transports'], null, 2),
         );
       }
       throw error;

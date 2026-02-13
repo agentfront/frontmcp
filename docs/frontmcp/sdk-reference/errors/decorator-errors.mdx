@@ -1,0 +1,59 @@
+---
+title: "Decorator Errors"
+description: "Errors for invalid decorator metadata and hook target definitions."
+icon: "at"
+---
+
+## Overview
+
+Decorator errors are thrown during class decoration when metadata validation fails or when hook targets reference methods that don't exist. Both are internal errors that indicate a developer configuration issue.
+
+## Error Reference
+
+### InvalidDecoratorMetadataError
+
+Thrown when a decorator (e.g., `@App`, `@Plugin`, `@FrontMcp`) receives invalid metadata for a specific field.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_DECORATOR_METADATA` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidDecoratorMetadataError(decoratorName: string, field: string, details: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidDecoratorMetadataError } from '@frontmcp/sdk';
+
+throw new InvalidDecoratorMetadataError('App', 'name', 'must be a non-empty string');
+// "@App invalid metadata for "name": must be a non-empty string"
+```
+
+---
+
+### HookTargetNotDefinedError
+
+Thrown when a hook references a target method that is not defined on the class.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `HOOK_TARGET_NOT_DEFINED` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new HookTargetNotDefinedError(method: string)
+```
+
+**Example:**
+
+```typescript
+import { HookTargetNotDefinedError } from '@frontmcp/sdk';
+
+throw new HookTargetNotDefinedError('onBeforeExecute');
+// "Hook target method "onBeforeExecute" is not defined"
+```

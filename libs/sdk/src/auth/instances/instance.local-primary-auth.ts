@@ -19,14 +19,8 @@ import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
 import OauthRegisterFlow from '../flows/oauth.register.flow';
 import OauthTokenFlow from '../flows/oauth.token.flow';
 import OauthCallbackFlow from '../flows/oauth.callback.flow';
-import {
-  JwksService,
-  AuthorizationStore,
-  InMemoryAuthorizationStore,
-  AuthorizationCodeRecord,
-  verifyPkce,
-} from '@frontmcp/auth';
-import { CimdService, CimdServiceToken } from '../cimd';
+import { JwksService, AuthorizationStore, InMemoryAuthorizationStore, verifyPkce } from '@frontmcp/auth';
+import { CimdService } from '../cimd';
 import {
   InMemoryOrchestratedTokenStore,
   InMemoryFederatedAuthSessionStore,
@@ -34,6 +28,7 @@ import {
 } from '../session';
 import { TokenStore } from '../authorization/orchestrated.authorization';
 import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
+import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
@@ -144,7 +139,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    */
   private getInMemoryStore(): InMemoryAuthorizationStore {
     if (!(this.authorizationStore instanceof InMemoryAuthorizationStore)) {
-      throw new Error('LocalPrimaryAuth requires InMemoryAuthorizationStore for record creation methods');
+      throw new InMemoryStoreRequiredError('LocalPrimaryAuth record creation');
     }
     return this.authorizationStore;
   }

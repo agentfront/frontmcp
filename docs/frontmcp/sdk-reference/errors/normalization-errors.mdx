@@ -1,0 +1,134 @@
+---
+title: "Normalization Errors"
+description: "Errors for invalid provider and entity definitions during normalization."
+icon: "filter"
+---
+
+## Overview
+
+Normalization errors are thrown during the normalization phase when provider or entity definitions have invalid shapes. This phase converts raw decorator metadata into normalized internal records. All normalization errors are internal errors.
+
+## Error Reference
+
+### MissingProvideError
+
+Thrown when a provider/entity definition is missing the `provide` token.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `MISSING_PROVIDE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new MissingProvideError(entityType: string, name: string)
+```
+
+**Example:**
+
+```typescript
+import { MissingProvideError } from '@frontmcp/sdk';
+
+throw new MissingProvideError('Provider', 'DatabaseService');
+// "Provider 'DatabaseService' is missing 'provide'."
+```
+
+---
+
+### InvalidUseClassError
+
+Thrown when `useClass` on a provider/entity is not a valid class (constructor function).
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_USE_CLASS` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidUseClassError(entityType: string, tokenName: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidUseClassError } from '@frontmcp/sdk';
+
+throw new InvalidUseClassError('Provider', 'DatabaseService');
+// "'useClass' on Provider 'DatabaseService' must be a class."
+```
+
+---
+
+### InvalidUseFactoryError
+
+Thrown when `useFactory` on a provider/entity is not a function.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_USE_FACTORY` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidUseFactoryError(entityType: string, tokenName: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidUseFactoryError } from '@frontmcp/sdk';
+
+throw new InvalidUseFactoryError('Provider', 'ConfigService');
+// "'useFactory' on Provider 'ConfigService' must be a function."
+```
+
+---
+
+### InvalidUseValueError
+
+Thrown when `useValue` on a provider/entity is `undefined`.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_USE_VALUE` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidUseValueError(entityType: string, tokenName: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidUseValueError } from '@frontmcp/sdk';
+
+throw new InvalidUseValueError('Provider', 'API_KEY');
+// "'useValue' on Provider 'API_KEY' must be defined."
+```
+
+---
+
+### InvalidEntityError
+
+Thrown when an entity (tool, resource, adapter, etc.) has an invalid shape.
+
+| Property | Type | Value |
+|----------|------|-------|
+| `code` | `string` | `INVALID_ENTITY` |
+| `statusCode` | `number` | `500` |
+| `isPublic` | `boolean` | `false` |
+
+```typescript
+new InvalidEntityError(entityType: string, name: string, expected: string)
+```
+
+**Example:**
+
+```typescript
+import { InvalidEntityError } from '@frontmcp/sdk';
+
+throw new InvalidEntityError('Tool', 'my_tool', 'a class extending ToolContext');
+// "Invalid Tool 'my_tool'. Expected a class extending ToolContext."
+```
