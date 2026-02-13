@@ -6,6 +6,7 @@
  */
 import { RedisSessionStore } from '../redis-session.store';
 import { StoredSession, TransportSession } from '../transport-session.types';
+import { SessionIdEmptyError } from '../../../errors';
 
 // Mock the RedisStorageAdapter from @frontmcp/utils
 const mockStorageAdapter = {
@@ -466,12 +467,10 @@ describe('RedisSessionStore', () => {
     });
 
     it('should reject empty sessionId', async () => {
-      await expect(store.get('')).rejects.toThrow('Session ID must not be empty (RedisSessionStore)');
-      await expect(store.set('', createValidStoredSession())).rejects.toThrow(
-        'Session ID must not be empty (RedisSessionStore)',
-      );
-      await expect(store.delete('')).rejects.toThrow('Session ID must not be empty (RedisSessionStore)');
-      await expect(store.exists('')).rejects.toThrow('Session ID must not be empty (RedisSessionStore)');
+      await expect(store.get('')).rejects.toThrow(SessionIdEmptyError);
+      await expect(store.set('', createValidStoredSession())).rejects.toThrow(SessionIdEmptyError);
+      await expect(store.delete('')).rejects.toThrow(SessionIdEmptyError);
+      await expect(store.exists('')).rejects.toThrow(SessionIdEmptyError);
     });
 
     it('should handle very long sessionId', async () => {

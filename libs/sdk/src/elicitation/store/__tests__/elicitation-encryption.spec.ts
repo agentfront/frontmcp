@@ -17,6 +17,7 @@ import {
   getElicitationSecret,
   isElicitationEncryptionAvailable,
 } from '../elicitation-encryption';
+import { ElicitationSecretRequiredError } from '../../../errors/auth-internal.errors';
 
 describe('elicitation-encryption', () => {
   const testSecret = 'test-server-secret-12345';
@@ -101,7 +102,7 @@ describe('elicitation-encryption', () => {
     });
 
     it('should throw when no secret is available', async () => {
-      await expect(deriveElicitationKey(testSessionId1)).rejects.toThrow('Elicitation secret is required');
+      await expect(deriveElicitationKey(testSessionId1)).rejects.toThrow(ElicitationSecretRequiredError);
     });
 
     it('should use env var when no secret is provided', async () => {
