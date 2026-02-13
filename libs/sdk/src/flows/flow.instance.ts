@@ -250,9 +250,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         FlowCtxOf<Name>
       >[]) ?? [];
 
-    // FlowClass generic type is erased at runtime, so we use FlowBase<any>
-    // to avoid complex type gymnastics while maintaining basic type safety
-    let context: FlowBase<any>;
     let contextReady = false;
 
     const materializeAndMerge = async (
@@ -290,7 +287,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     // Construct flow instance with merged dependencies (includes scoped providers)
 
-    context = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
+    // FlowClass generic type is erased at runtime, so we use FlowBase<any>
+    // to avoid complex type gymnastics while maintaining basic type safety
+    const context: FlowBase<any> = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
 
     // Now injections can materialize
     contextReady = true;
