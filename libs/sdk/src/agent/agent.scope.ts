@@ -282,7 +282,7 @@ export class AgentScope {
     deps?: Map<Token, Type>,
   ): Promise<FlowOutputOf<Name>> {
     const result = await this.agentFlows.runFlow(name, input, deps);
-    if (result) {
+    if (result !== undefined) {
       return result;
     }
     throw new FlowExitedWithoutOutputError();

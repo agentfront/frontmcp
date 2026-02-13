@@ -290,7 +290,7 @@ sequenceDiagram
 
 ## Module Structure
 
-```
+```text
 adapter/
   adapter.instance.ts    # AdapterInstance - lifecycle for a single adapter
   adapter.registry.ts    # AdapterRegistry - manages all adapters

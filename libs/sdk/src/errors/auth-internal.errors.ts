@@ -132,9 +132,9 @@ export class ElicitationSecretRequiredError extends InternalMcpError {
 /**
  * Thrown when scope access is denied for a provider.
  */
-export class ScopedDeniedError extends InternalMcpError {
+export class ScopeDeniedError extends InternalMcpError {
   constructor(providerId: string) {
-    super(`Scope access denied for provider "${providerId}"`, 'SCOPED_DENIED');
+    super(`Scope access denied for provider "${providerId}"`, 'SCOPE_DENIED');
   }
 }
 

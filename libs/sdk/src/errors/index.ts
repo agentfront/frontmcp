@@ -181,7 +181,7 @@ export {
   EncryptionKeyNotConfiguredError,
   SessionIdEmptyError,
   ElicitationSecretRequiredError,
-  ScopedDeniedError,
+  ScopeDeniedError,
   InMemoryStoreRequiredError,
   OrchestratorJwksNotAvailableError,
 } from './auth-internal.errors';
@@ -208,5 +208,6 @@ export {
   VercelKvNotSupportedError,
   VercelKvAsyncInitRequiredError,
   RequiredConfigUndefinedError,
+  RegistryNotInitializedError,
   FlowInputMissingError,
 } from './sdk.errors';

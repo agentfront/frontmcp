@@ -271,18 +271,18 @@ new ElicitationSecretRequiredError()
 
 ## Scope & Access Errors
 
-### ScopedDeniedError
+### ScopeDeniedError
 
 Thrown when scope access is denied for a provider.
 
 | Property | Type | Value |
 |----------|------|-------|
-| `code` | `string` | `SCOPED_DENIED` |
+| `code` | `string` | `SCOPE_DENIED` |
 | `statusCode` | `number` | `500` |
 | `isPublic` | `boolean` | `false` |
 
 ```typescript
-new ScopedDeniedError(providerId: string)
+new ScopeDeniedError(providerId: string)
 ```
 
 ---

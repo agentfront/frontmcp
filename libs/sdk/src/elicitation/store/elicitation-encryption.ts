@@ -111,7 +111,7 @@ export function isElicitationEncryptionAvailable(): boolean {
  * @param sessionId - The session ID to derive a key for
  * @param secret - Optional secret override (defaults to env var)
  * @returns 32-byte encryption key
- * @throws Error if no secret is available
+ * @throws ElicitationSecretRequiredError if no secret is available
  */
 export async function deriveElicitationKey(sessionId: string, secret?: string): Promise<Uint8Array> {
   const serverSecret = secret ?? getElicitationSecret();

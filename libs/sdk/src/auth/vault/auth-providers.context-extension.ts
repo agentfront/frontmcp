@@ -76,7 +76,7 @@ export const authProvidersContextExtension: ContextExtension = {
  *
  * @param ctx - Execution context
  * @returns AuthProvidersAccessor
- * @throws Error if AuthProviders not configured
+ * @throws AuthProvidersNotConfiguredError if AuthProviders not configured
  */
 export function getAuthProviders(ctx: { get: <T>(token: unknown) => T }): AuthProvidersAccessor {
   try {

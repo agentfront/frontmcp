@@ -68,7 +68,7 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new InvalidEntityError('auth', name, 'a class or a auth object');
+  throw new InvalidEntityError('auth', name, 'a class or an auth object');
 }
 
 /**

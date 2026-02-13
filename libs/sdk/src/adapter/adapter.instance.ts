@@ -4,15 +4,15 @@ import ProviderRegistry from '../provider/provider.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
-import { InvalidRegistryKindError } from '../errors';
+import { InvalidRegistryKindError, RegistryNotInitializedError } from '../errors';
 
 export class AdapterInstance extends AdapterEntry {
   readonly deps: Set<Reference>;
   readonly globalProviders: ProviderRegistry;
 
-  private adapterTools!: ToolRegistry;
-  private adapterResources!: ResourceRegistry;
-  private adapterPrompts!: PromptRegistry;
+  private adapterTools: ToolRegistry | null = null;
+  private adapterResources: ResourceRegistry | null = null;
+  private adapterPrompts: PromptRegistry | null = null;
   private logger?: FrontMcpLogger;
 
   constructor(record: AdapterRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
@@ -24,14 +24,17 @@ export class AdapterInstance extends AdapterEntry {
   }
 
   getTools(): ToolRegistry {
+    if (!this.adapterTools) throw new RegistryNotInitializedError('AdapterInstance', 'tools');
     return this.adapterTools;
   }
 
   getResources(): ResourceRegistry {
+    if (!this.adapterResources) throw new RegistryNotInitializedError('AdapterInstance', 'resources');
     return this.adapterResources;
   }
 
   getPrompts(): PromptRegistry {
+    if (!this.adapterPrompts) throw new RegistryNotInitializedError('AdapterInstance', 'prompts');
     return this.adapterPrompts;
   }
 

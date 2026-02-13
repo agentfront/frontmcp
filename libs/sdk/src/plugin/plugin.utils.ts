@@ -27,7 +27,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
 
     if (!provide) {
       const name = (item as any)?.name ?? '[object]';
-      throw new MissingProvideError('Plugin', name);
+      throw new MissingProvideError('plugin', name);
     }
 
     if (useClass) {

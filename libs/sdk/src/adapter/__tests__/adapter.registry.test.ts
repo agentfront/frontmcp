@@ -5,16 +5,22 @@
 import 'reflect-metadata';
 import AdapterRegistry from '../adapter.registry';
 import { AdapterInstance } from '../adapter.instance';
-import { AdapterInterface, FrontMcpAdapterResponse, FrontMcpLogger } from '../../common';
+import { AdapterInterface, FrontMcpAdapterResponse, FrontMcpLogger, AdapterKind } from '../../common';
 import { Adapter } from '../../common/decorators/adapter.decorator';
 import { createMockProviderRegistry, addProviderToMock } from '../../__test-utils__';
+import { GenericServerError } from '../../errors';
 
 // Track instances created
-let mockAdapterInstances: any[] = [];
+let mockAdapterInstances: unknown[] = [];
 
 jest.mock('../adapter.instance', () => {
   return {
-    AdapterInstance: jest.fn().mockImplementation(function (this: any, record: any, deps: any, providers: any) {
+    AdapterInstance: jest.fn().mockImplementation(function (
+      this: Record<string, unknown>,
+      record: unknown,
+      deps: unknown,
+      providers: unknown,
+    ) {
       this.record = record;
       this.deps = deps;
       this.globalProviders = providers;
@@ -134,7 +140,7 @@ describe('AdapterRegistry', () => {
 
       @Adapter({ name: 'DepAdapter' })
       class DepAdapter extends StubAdapter {
-        constructor(public dep: any) {
+        constructor(public dep: unknown) {
           super();
         }
       }
@@ -146,7 +152,7 @@ describe('AdapterRegistry', () => {
       const registry = new AdapterRegistry(mockProviders, [
         {
           provide: TOKEN,
-          useFactory: (dep: any) => new StubAdapter(),
+          useFactory: (_dep: unknown) => new StubAdapter(),
           inject: () => [DEP_TOKEN] as const,
           name: 'DepAdapter',
         },
@@ -159,25 +165,34 @@ describe('AdapterRegistry', () => {
     it('should throw for adapter with missing dependency', () => {
       const DEP_TOKEN = Symbol('MISSING_DEP');
 
+      // Override mock to throw for unknown tokens (matching real ProviderRegistry.get behavior)
+      const originalGet = (mockProviders.get as jest.Mock).getMockImplementation();
+      (mockProviders.get as jest.Mock).mockImplementation((token: unknown) => {
+        if (token === DEP_TOKEN) {
+          throw new Error(`Provider "${String(token)}" is not available`);
+        }
+        return originalGet?.(token);
+      });
+
       expect(() => {
         new AdapterRegistry(mockProviders, [
           {
             provide: Symbol('ADAPTER'),
-            useFactory: (dep: any) => new StubAdapter(),
+            useFactory: (_dep: unknown) => new StubAdapter(),
             inject: () => [DEP_TOKEN] as const,
             name: 'MissingDepAdapter',
           },
         ]);
-      }).toThrow(/depends on.*which is not registered/);
+      }).toThrow(/not available/);
     });
   });
 
   describe('Error propagation', () => {
     it('should reject ready if one adapter instance rejects', async () => {
-      const rejectError = new Error('Init failed');
+      const rejectError = new GenericServerError('Init failed');
 
       // Override mock to reject for one instance
-      (AdapterInstance as unknown as jest.Mock).mockImplementationOnce(function (this: any) {
+      (AdapterInstance as unknown as jest.Mock).mockImplementationOnce(function (this: Record<string, unknown>) {
         this.ready = Promise.reject(rejectError);
         mockAdapterInstances.push(this);
       });
@@ -227,7 +242,7 @@ describe('AdapterRegistry', () => {
           const token = [...this.tokens][0];
           if (token) {
             this.defs.set(token, {
-              kind: 'FACTORY' as any,
+              kind: AdapterKind.FACTORY,
               provide: token,
               inject: () => [DEP_TOKEN],
               useFactory: () => new StubAdapter(),

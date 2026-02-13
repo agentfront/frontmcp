@@ -194,6 +194,15 @@ export class RequiredConfigUndefinedError extends InternalMcpError {
 }
 
 /**
+ * Thrown when a registry is accessed before initialization.
+ */
+export class RegistryNotInitializedError extends InternalMcpError {
+  constructor(owner: string, registry: string) {
+    super(`${owner}: "${registry}" registry is not initialized`, 'REGISTRY_NOT_INITIALIZED');
+  }
+}
+
+/**
  * Thrown when a flow stage receives missing or undefined input
  * (e.g., `request` is undefined in a well-known flow's parseInput stage).
  */

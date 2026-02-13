@@ -147,7 +147,7 @@ export class PublicAuthorization extends AuthorizationBase {
   /**
    * Anonymous users cannot access provider tokens
    *
-   * @throws Error always - anonymous users do not have provider tokens
+   * @throws TokenNotAvailableError always - anonymous users do not have provider tokens
    */
   async getToken(_providerId?: string): Promise<string> {
     throw new TokenNotAvailableError(

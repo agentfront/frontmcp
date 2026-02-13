@@ -30,7 +30,9 @@ export class FlowState {
       getOrThrow<K extends keyof T>(key: K, message?: string) {
         const val = data[key];
         if (val === undefined || val === null) {
-          throw message ? new Error(message) : new InvokeStateMissingKeyError(String(key));
+          const err = new InvokeStateMissingKeyError(String(key));
+          if (message) err.message = message;
+          throw err;
         }
         return val as Exclude<T[K], undefined>;
       },

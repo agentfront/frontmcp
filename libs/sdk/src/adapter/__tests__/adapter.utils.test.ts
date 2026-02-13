@@ -87,7 +87,9 @@ describe('Adapter Utils', () => {
 
         expect(record.kind).toBe(AdapterKind.CLASS);
         expect(record.provide).toBe(TOKEN);
-        expect((record as any).useClass).toBe(TestImpl);
+        if (record.kind === AdapterKind.CLASS) {
+          expect(record.useClass).toBe(TestImpl);
+        }
       });
 
       it('should throw if useClass is not a class', () => {
@@ -96,7 +98,7 @@ describe('Adapter Utils', () => {
         expect(() =>
           normalizeAdapter({
             provide: TOKEN,
-            useClass: 'not a class' as any,
+            useClass: 'not a class' as unknown as new (...args: unknown[]) => unknown,
             name: 'BadAdapter',
           }),
         ).toThrow(/must be a class/);
@@ -117,13 +119,15 @@ describe('Adapter Utils', () => {
 
         expect(record.kind).toBe(AdapterKind.FACTORY);
         expect(record.provide).toBe(TOKEN);
-        expect((record as any).useFactory).toBe(factory);
+        if (record.kind === AdapterKind.FACTORY) {
+          expect(record.useFactory).toBe(factory);
+        }
       });
 
       it('should normalize with inject returning tokens', () => {
         const TOKEN = Symbol('ADAPTER');
         const DEP = Symbol('DEP');
-        const factory = (dep: any) => new StubAdapter();
+        const factory = (_dep: unknown) => new StubAdapter();
         const inject = () => [DEP];
 
         const record = normalizeAdapter({
@@ -134,7 +138,9 @@ describe('Adapter Utils', () => {
         });
 
         expect(record.kind).toBe(AdapterKind.FACTORY);
-        expect((record as any).inject).toBe(inject);
+        if (record.kind === AdapterKind.FACTORY) {
+          expect(record.inject).toBe(inject);
+        }
       });
 
       it('should default inject to empty if not a function', () => {
@@ -144,10 +150,12 @@ describe('Adapter Utils', () => {
         const record = normalizeAdapter({
           provide: TOKEN,
           useFactory: factory,
-        } as any);
+        } as unknown as Parameters<typeof normalizeAdapter>[0]);
 
         expect(record.kind).toBe(AdapterKind.FACTORY);
-        expect((record as any).inject()).toEqual([]);
+        if (record.kind === AdapterKind.FACTORY) {
+          expect(record.inject()).toEqual([]);
+        }
       });
 
       it('should throw if useFactory is not a function', () => {
@@ -156,7 +164,7 @@ describe('Adapter Utils', () => {
         expect(() =>
           normalizeAdapter({
             provide: TOKEN,
-            useFactory: 'not a function' as any,
+            useFactory: 'not a function' as unknown as (...args: unknown[]) => unknown,
             inject: () => [] as const,
             name: 'BadFactory',
           }),
@@ -177,7 +185,9 @@ describe('Adapter Utils', () => {
 
         expect(record.kind).toBe(AdapterKind.VALUE);
         expect(record.provide).toBe(TOKEN);
-        expect((record as any).useValue).toBe(value);
+        if (record.kind === AdapterKind.VALUE) {
+          expect(record.useValue).toBe(value);
+        }
       });
     });
 
@@ -186,20 +196,26 @@ describe('Adapter Utils', () => {
         expect(() =>
           normalizeAdapter({
             useValue: new StubAdapter(),
-          } as any),
+          } as unknown as Parameters<typeof normalizeAdapter>[0]),
         ).toThrow(/missing 'provide'/);
       });
 
       it('should throw for null input', () => {
-        expect(() => normalizeAdapter(null as any)).toThrow(/Invalid adapter/);
+        expect(() => normalizeAdapter(null as unknown as Parameters<typeof normalizeAdapter>[0])).toThrow(
+          /Invalid adapter/,
+        );
       });
 
       it('should throw for number input', () => {
-        expect(() => normalizeAdapter(123 as any)).toThrow(/Invalid adapter/);
+        expect(() => normalizeAdapter(123 as unknown as Parameters<typeof normalizeAdapter>[0])).toThrow(
+          /Invalid adapter/,
+        );
       });
 
       it('should throw for string input', () => {
-        expect(() => normalizeAdapter('string' as any)).toThrow(/Invalid adapter/);
+        expect(() => normalizeAdapter('string' as unknown as Parameters<typeof normalizeAdapter>[0])).toThrow(
+          /Invalid adapter/,
+        );
       });
 
       it('should throw for object with provide but no use* property', () => {
@@ -208,7 +224,7 @@ describe('Adapter Utils', () => {
         expect(() =>
           normalizeAdapter({
             provide: TOKEN,
-          } as any),
+          } as unknown as Parameters<typeof normalizeAdapter>[0]),
         ).toThrow(/Invalid adapter/);
       });
     });
@@ -234,7 +250,7 @@ describe('Adapter Utils', () => {
 
       const record = normalizeAdapter({
         provide: TOKEN,
-        useFactory: (d1: any, d2: any) => new StubAdapter(),
+        useFactory: (_d1: unknown, _d2: unknown) => new StubAdapter(),
         inject: () => [DEP1, DEP2],
         name: 'FactoryAdapter',
       });

@@ -5,11 +5,7 @@ import { adapterDiscoveryDeps, normalizeAdapter } from './adapter.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AdapterInstance } from './adapter.instance';
-import {
-  RegistryDefinitionNotFoundError,
-  RegistryGraphEntryNotFoundError,
-  RegistryDependencyNotRegisteredError,
-} from '../errors';
+import { RegistryDefinitionNotFoundError, RegistryGraphEntryNotFoundError } from '../errors';
 
 export default class AdapterRegistry
   extends RegistryAbstract<AdapterInstance, AdapterRecord, AdapterType[]>
@@ -54,9 +50,8 @@ export default class AdapterRegistry
       const deps = adapterDiscoveryDeps(rec);
 
       for (const d of deps) {
-        if (!this.providers.get(d)) {
-          throw new RegistryDependencyNotRegisteredError('Adapter', tokenName(token), tokenName(d));
-        }
+        // providers.get(d) throws ProviderNotAvailableError if not found
+        this.providers.get(d);
         const graphEntry = this.graph.get(token);
         if (!graphEntry) {
           throw new RegistryGraphEntryNotFoundError('AdapterRegistry', tokenName(token));

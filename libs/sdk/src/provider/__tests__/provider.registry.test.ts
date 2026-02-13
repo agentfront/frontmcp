@@ -5,13 +5,11 @@
 import 'reflect-metadata';
 import ProviderRegistry from '../provider.registry';
 import { ProviderScope } from '../../common/metadata';
-import { ProviderKind } from '../../common/records';
 import {
   TestService,
   DependentService,
   AsyncService,
   TEST_TOKEN,
-  ASYNC_TOKEN,
   FACTORY_TOKEN,
   createValueProvider,
   createFactoryProvider,
