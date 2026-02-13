@@ -289,7 +289,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     };
 
     // Construct flow instance with merged dependencies (includes scoped providers)
-    // eslint-disable-next-line prefer-const -- declaration must precede helper functions that close over context
+
     context = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
 
     // Now injections can materialize

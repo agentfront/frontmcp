@@ -23,7 +23,6 @@ import {
   AgentToolDefinition,
   ToolEntry,
   ToolMetadata,
-  ToolRecord,
 } from '../common';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
 import { ToolInstance } from '../tool/tool.instance';

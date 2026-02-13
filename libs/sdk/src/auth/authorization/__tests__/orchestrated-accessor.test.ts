@@ -27,11 +27,11 @@ describe('NullOrchestratedAuthAccessor', () => {
 
   describe('getToken', () => {
     it('should throw error', async () => {
-      await expect(accessor.getToken()).rejects.toThrow('Orchestrated authorization not available');
+      await expect(accessor.getToken()).rejects.toThrow('Orchestrated auth is not available');
     });
 
     it('should throw error with providerId', async () => {
-      await expect(accessor.getToken('github')).rejects.toThrow('Orchestrated authorization not available');
+      await expect(accessor.getToken('github')).rejects.toThrow('Orchestrated auth is not available');
     });
   });
 

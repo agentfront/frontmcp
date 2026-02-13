@@ -101,9 +101,7 @@ describe('elicitation-encryption', () => {
     });
 
     it('should throw when no secret is available', async () => {
-      await expect(deriveElicitationKey(testSessionId1)).rejects.toThrow(
-        'Elicitation encryption requires a server secret',
-      );
+      await expect(deriveElicitationKey(testSessionId1)).rejects.toThrow('Elicitation secret is required');
     });
 
     it('should use env var when no secret is provided', async () => {

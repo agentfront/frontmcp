@@ -38,7 +38,6 @@ import {
   VaultConsentRecord,
   VaultFederatedRecord,
   PendingIncrementalAuth,
-  authorizationVaultEntrySchema,
 } from '@frontmcp/auth';
 
 // ============================================

@@ -466,12 +466,12 @@ describe('RedisSessionStore', () => {
     });
 
     it('should reject empty sessionId', async () => {
-      await expect(store.get('')).rejects.toThrow('[RedisSessionStore] sessionId cannot be empty');
+      await expect(store.get('')).rejects.toThrow('Session ID must not be empty (RedisSessionStore)');
       await expect(store.set('', createValidStoredSession())).rejects.toThrow(
-        '[RedisSessionStore] sessionId cannot be empty',
+        'Session ID must not be empty (RedisSessionStore)',
       );
-      await expect(store.delete('')).rejects.toThrow('[RedisSessionStore] sessionId cannot be empty');
-      await expect(store.exists('')).rejects.toThrow('[RedisSessionStore] sessionId cannot be empty');
+      await expect(store.delete('')).rejects.toThrow('Session ID must not be empty (RedisSessionStore)');
+      await expect(store.exists('')).rejects.toThrow('Session ID must not be empty (RedisSessionStore)');
     });
 
     it('should handle very long sessionId', async () => {

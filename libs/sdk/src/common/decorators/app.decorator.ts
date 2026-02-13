@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { FrontMcpLocalAppTokens } from '../tokens';
 import { LocalAppMetadata, frontMcpLocalAppMetadataSchema } from '../metadata';
-import { InvalidDecoratorMetadataError } from '../../errors';
+import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 
 /**
  * Decorator that marks a class as a McpApp module and provides metadata

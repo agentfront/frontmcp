@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
 import { InternalMcpError } from '../../errors/mcp.error';
-import { InvalidDecoratorMetadataError } from '../../errors';
+import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 
 // Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
 // Uses direct relative paths instead of require('@frontmcp/sdk') which would create

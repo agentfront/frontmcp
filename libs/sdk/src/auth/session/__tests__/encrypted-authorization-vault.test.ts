@@ -72,7 +72,7 @@ describe('EncryptedRedisVault', () => {
           userSub: 'user-123',
           clientId: 'client-456',
         }),
-      ).rejects.toThrow('Encryption context not set');
+      ).rejects.toThrow('Encryption context is not set');
     });
 
     it('should work with runWithContext', async () => {

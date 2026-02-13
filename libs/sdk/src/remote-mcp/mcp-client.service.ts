@@ -38,7 +38,6 @@ import type {
 
 import {
   RemoteConnectionError,
-  RemoteDisconnectError,
   RemoteTimeoutError,
   RemoteToolNotFoundError,
   RemoteResourceNotFoundError,

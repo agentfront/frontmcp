@@ -210,7 +210,7 @@ describe('AdapterRegistry', () => {
       // Corrupt the defs map after buildMap but we can trigger buildGraph again
       registry.corruptDefs();
 
-      expect(() => registry.triggerBuildGraph()).toThrow(/no definition found for token/);
+      expect(() => registry.triggerBuildGraph()).toThrow(/Definition not found for token/);
     });
 
     it('should throw if graph map is corrupted during buildGraph', () => {
@@ -254,7 +254,7 @@ describe('AdapterRegistry', () => {
       registry.corruptGraph();
       registry.setDefsForGraphTest();
 
-      expect(() => registry.triggerBuildGraph()).toThrow(/no graph entry found for token/);
+      expect(() => registry.triggerBuildGraph()).toThrow(/Graph entry not found for token/);
     });
 
     it('should throw if defs map is corrupted during initialize', async () => {
@@ -275,7 +275,7 @@ describe('AdapterRegistry', () => {
       await registry.ready; // Let normal init complete
 
       registry.corruptDefs();
-      await expect(registry.triggerInitialize()).rejects.toThrow(/no definition found for token/);
+      await expect(registry.triggerInitialize()).rejects.toThrow(/Definition not found for token/);
     });
 
     it('should throw if graph map is corrupted during initialize', async () => {
@@ -296,7 +296,7 @@ describe('AdapterRegistry', () => {
       await registry.ready; // Let normal init complete
 
       registry.corruptGraph();
-      await expect(registry.triggerInitialize()).rejects.toThrow(/no graph entry found for token/);
+      await expect(registry.triggerInitialize()).rejects.toThrow(/Graph entry not found for token/);
     });
   });
 
