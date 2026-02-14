@@ -8,6 +8,7 @@
 import { CredentialCache } from '../credential-cache';
 import type { ResolvedCredential, CredentialScope } from '../auth-providers.types';
 import type { Credential } from '../../session';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 /**
  * Helper to create a mock ResolvedCredential for testing.
@@ -76,9 +77,9 @@ describe('CredentialCache', () => {
       cache.set('github', resolved);
 
       const result = cache.get('github');
-      expect(result).toBeDefined();
-      expect(result!.providerId).toBe('github');
-      expect(result!.credential).toEqual(resolved.credential);
+      assertDefined(result);
+      expect(result.providerId).toBe('github');
+      expect(result.credential).toEqual(resolved.credential);
       expect(cache.getStats().hits).toBe(1);
     });
 
@@ -148,21 +149,29 @@ describe('CredentialCache', () => {
       cache.set('openai', r2);
       cache.set('aws', r3);
 
-      expect(cache.get('github')!.providerId).toBe('github');
-      expect(cache.get('openai')!.scope).toBe('global');
-      expect(cache.get('aws')!.scope).toBe('session');
+      const github = cache.get('github');
+      assertDefined(github);
+      expect(github.providerId).toBe('github');
+      const openai = cache.get('openai');
+      assertDefined(openai);
+      expect(openai.scope).toBe('global');
+      const aws = cache.get('aws');
+      assertDefined(aws);
+      expect(aws.scope).toBe('session');
       expect(cache.size).toBe(3);
     });
 
     it('should overwrite an existing entry with the same key', () => {
       const original = mockResolved('github');
-      const updated = mockResolved('github', 'global');
+      const replacement = mockResolved('github', 'global');
 
       cache.set('github', original);
-      cache.set('github', updated);
+      cache.set('github', replacement);
 
       expect(cache.size).toBe(1);
-      expect(cache.get('github')!.scope).toBe('global');
+      const retrieved = cache.get('github');
+      assertDefined(retrieved);
+      expect(retrieved.scope).toBe('global');
     });
 
     it('should store entry with zero TTL (no TTL expiration)', () => {

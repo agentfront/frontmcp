@@ -137,8 +137,8 @@ describe('auth-token.utils', () => {
         picture: [],
       };
       const user = deriveTypedUser(claims as Record<string, unknown>);
-      expect(user.iss).toBeUndefined();
-      expect(user.sub).toBeUndefined();
+      expect(user.iss).toBe('');
+      expect(user.sub).toBe('');
       expect(user.exp).toBeUndefined();
       expect(user.iat).toBeUndefined();
       expect(user.aud).toBeUndefined();

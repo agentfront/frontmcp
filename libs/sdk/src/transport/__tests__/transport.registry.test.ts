@@ -21,7 +21,7 @@ jest.mock('../transport.local', () => ({
 }));
 
 jest.mock('@frontmcp/auth', () => {
-  const actual = jest.requireActual('@frontmcp/auth');
+  const actual = jest.requireActual<typeof import('@frontmcp/auth')>('@frontmcp/auth');
   return {
     ...actual,
     RedisSessionStore: jest.fn().mockImplementation(() => mockRedisSessionStore),

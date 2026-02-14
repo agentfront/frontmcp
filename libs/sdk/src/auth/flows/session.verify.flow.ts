@@ -23,6 +23,7 @@ import { JwksService, ProviderVerifyRef, VerifyResult } from '@frontmcp/auth';
 import { parseSessionHeader, decryptPublicSession } from '../session/utils/session-id.utils';
 import { encryptJson } from '@frontmcp/auth';
 import { getMachineId } from '@frontmcp/auth';
+import { randomUUID } from '@frontmcp/utils';
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
 
 const inputSchema = httpRequestInputSchema;
@@ -113,7 +114,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       const existingPayload = decryptPublicSession(sessionIdHeader);
       const user = existingPayload
         ? { sub: `anon:${existingPayload.iat * 1000}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') }
-        : { sub: `anon:${crypto.randomUUID()}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') };
+        : { sub: `anon:${randomUUID()}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') };
 
       const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
 
@@ -134,12 +135,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // Create new anonymous session
     const now = Date.now();
     const user = {
-      sub: `anon:${crypto.randomUUID()}`,
+      sub: `anon:${randomUUID()}`,
       iss: issuer,
       name: 'Anonymous',
       scope: scopes.join(' '),
     };
-    const uuid = crypto.randomUUID();
+    const uuid = randomUUID();
 
     // Detect platform from User-Agent header for UI rendering support
     const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;

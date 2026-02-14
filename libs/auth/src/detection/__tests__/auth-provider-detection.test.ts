@@ -2,7 +2,6 @@
  * Auth Provider Detection Tests
  */
 import type { AuthOptions } from '../../options/schema';
-import type { AuthProviderDetectionResult } from '../auth-provider-detection';
 import {
   deriveProviderId,
   detectAuthProviders,
@@ -10,6 +9,7 @@ import {
   getProviderScopes,
   getProviderApps,
 } from '../auth-provider-detection';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 // ============================================
 // Test Fixtures
@@ -158,8 +158,9 @@ describe('auth-provider-detection', () => {
       expect(result.parentProviderId).toBe('shared');
       // app was merged into the same provider entry
       const provider = result.providers.get('shared');
-      expect(provider!.appIds).toContain('__parent__');
-      expect(provider!.appIds).toContain('app1');
+      assertDefined(provider);
+      expect(provider.appIds).toContain('__parent__');
+      expect(provider.appIds).toContain('app1');
       // Same provider, but apps exist with parent => requiresOrchestration is true
       // because childProviderIds is empty (all merged), let's check
       expect(result.childProviderIds).toEqual([]);
@@ -192,8 +193,9 @@ describe('auth-provider-detection', () => {
       ];
       const result = detectAuthProviders(undefined, apps);
       const provider = result.providers.get('shared');
-      expect(provider!.scopes).toEqual(expect.arrayContaining(['read', 'write']));
-      expect(provider!.appIds).toEqual(['app1', 'app2']);
+      assertDefined(provider);
+      expect(provider.scopes).toEqual(expect.arrayContaining(['read', 'write']));
+      expect(provider.appIds).toEqual(['app1', 'app2']);
     });
 
     it('should skip apps without auth', () => {
@@ -210,9 +212,11 @@ describe('auth-provider-detection', () => {
       const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
       const result = detectAuthProviders(parent, apps);
       const parentProvider = result.providers.get('parent-iss');
-      expect(parentProvider!.isParentProvider).toBe(true);
+      assertDefined(parentProvider);
+      expect(parentProvider.isParentProvider).toBe(true);
       const childProvider = result.providers.get('auth_child_com');
-      expect(childProvider!.isParentProvider).toBe(false);
+      assertDefined(childProvider);
+      expect(childProvider.isParentProvider).toBe(false);
     });
 
     it('should produce validation error for transparent parent + multi providers', () => {
@@ -242,26 +246,30 @@ describe('auth-provider-detection', () => {
     it('should set providerUrl for transparent mode', () => {
       const result = detectAuthProviders(transparentAuth('https://auth.test.com'), []);
       const provider = result.providers.get('auth_test_com');
-      expect(provider!.providerUrl).toBe('https://auth.test.com');
+      assertDefined(provider);
+      expect(provider.providerUrl).toBe('https://auth.test.com');
     });
 
     it('should set providerUrl for orchestrated remote mode', () => {
       const result = detectAuthProviders(orchestratedRemote('https://auth.test.com'), []);
       const providerId = deriveProviderId(orchestratedRemote('https://auth.test.com'));
       const provider = result.providers.get(providerId);
-      expect(provider!.providerUrl).toBe('https://auth.test.com');
+      assertDefined(provider);
+      expect(provider.providerUrl).toBe('https://auth.test.com');
     });
 
     it('should set providerUrl as undefined for public mode', () => {
       const result = detectAuthProviders(publicAuth(), []);
       const provider = result.providers.get('public');
-      expect(provider!.providerUrl).toBeUndefined();
+      assertDefined(provider);
+      expect(provider.providerUrl).toBeUndefined();
     });
 
     it('should set providerUrl as undefined for orchestrated local mode', () => {
       const result = detectAuthProviders(orchestratedLocal(), []);
       const provider = result.providers.get('local');
-      expect(provider!.providerUrl).toBeUndefined();
+      assertDefined(provider);
+      expect(provider.providerUrl).toBeUndefined();
     });
 
     it('should extract scopes for orchestrated remote', () => {
@@ -269,7 +277,8 @@ describe('auth-provider-detection', () => {
       const result = detectAuthProviders(auth, []);
       const providerId = deriveProviderId(auth);
       const provider = result.providers.get(providerId);
-      expect(provider!.scopes).toEqual(['openid', 'profile']);
+      assertDefined(provider);
+      expect(provider.scopes).toEqual(['openid', 'profile']);
     });
   });
 

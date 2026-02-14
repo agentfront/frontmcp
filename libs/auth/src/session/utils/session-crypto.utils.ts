@@ -53,8 +53,9 @@ export function encryptJson(obj: unknown): string {
 }
 
 /**
- * Low-level decryption that returns the raw JSON payload or null.
- * Handles all crypto/parsing failures by returning null.
+ * Low-level decryption that returns the raw JSON payload or null if the
+ * session ID format is invalid. Crypto/parsing errors may throw; use
+ * {@link safeDecrypt} for a version that catches all errors and returns null.
  */
 export function decryptSessionJson(sessionId: string): unknown {
   const parts = sessionId.split('.');

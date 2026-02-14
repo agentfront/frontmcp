@@ -58,9 +58,6 @@ describe('TokenVault', () => {
     });
 
     it('should throw for key that is not Uint8Array', () => {
-      const notUint8: VaultKey = { kid: 'x', key: Buffer.alloc(32) as unknown as Uint8Array };
-      // Buffer IS a Uint8Array subclass, so this should actually work.
-      // Let's test a real non-Uint8Array instead.
       const badKey = { kid: 'y', key: new Array(32).fill(0) } as unknown as VaultKey;
 
       expect(() => new TokenVault([badKey])).toThrow('TokenVault key "y" must be a 32-byte Uint8Array');

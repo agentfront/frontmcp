@@ -1,5 +1,6 @@
 // session/utils/auth-token.utils.ts
 import { UserClaim } from '../../common/session.types';
+import { sha256Base64url } from '@frontmcp/utils';
 
 export function isJwt(token: string | undefined): boolean {
   if (!token) return false;
@@ -13,36 +14,35 @@ export function isJwt(token: string | undefined): boolean {
  */
 export function getTokenSignatureFingerprint(token: string): string {
   if (isJwt(token)) {
-    return token.split('.')[2]!;
+    const sig = token.split('.')[2];
+    if (sig) return sig;
   }
-  const crypto = require('crypto') as typeof import('crypto');
-  const digest = crypto.createHash('sha256').update(token).digest('base64');
-  return digest.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  return sha256Base64url(token);
 }
 
 /** Safely extracts a claim value if it matches the expected type */
 function extractClaimValue<T>(
-  claims: Record<string, any>,
+  claims: Record<string, unknown>,
   key: string,
-  validator: (value: any) => value is T,
+  validator: (value: unknown) => value is T,
 ): T | undefined {
   const value = claims[key];
   return validator(value) ? value : undefined;
 }
 
 /** Type guards for claim validation */
-const isString = (value: any): value is string => typeof value === 'string';
-const isNumber = (value: any): value is number => typeof value === 'number';
-const isStringOrStringArray = (value: any): value is string | string[] =>
+const isString = (value: unknown): value is string => typeof value === 'string';
+const isNumber = (value: unknown): value is number => typeof value === 'number';
+const isStringOrStringArray = (value: unknown): value is string | string[] =>
   typeof value === 'string' || Array.isArray(value);
 
 /** Best-effort typed user derivation from claims */
-export function deriveTypedUser(claims: Record<string, any>): UserClaim {
+export function deriveTypedUser(claims: Record<string, unknown>): UserClaim {
   return {
     ...claims,
-    iss: extractClaimValue(claims, 'iss', isString)!,
+    iss: extractClaimValue(claims, 'iss', isString) ?? '',
     sid: extractClaimValue(claims, 'sid', isString),
-    sub: extractClaimValue(claims, 'sub', isString)!,
+    sub: extractClaimValue(claims, 'sub', isString) ?? '',
     exp: extractClaimValue(claims, 'exp', isNumber),
     iat: extractClaimValue(claims, 'iat', isNumber),
     aud: extractClaimValue(claims, 'aud', isStringOrStringArray),

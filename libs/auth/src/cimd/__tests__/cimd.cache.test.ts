@@ -2,8 +2,9 @@
  * CIMD Cache Tests
  */
 import { extractCacheHeaders, parseCacheHeaders, InMemoryCimdCache, createCimdCache } from '../cimd.cache';
-import type { CimdCacheTtlConfig, CacheableHeaders, CimdCacheEntry } from '../cimd.cache';
+import type { CimdCacheTtlConfig } from '../cimd.cache';
 import type { ClientMetadataDocument } from '../cimd.types';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 // ============================================
 // Test Helpers
@@ -214,8 +215,8 @@ describe('InMemoryCimdCache', () => {
       await cache.set('client-1', doc, headers);
 
       const result = await cache.get('client-1');
-      expect(result).toBeDefined();
-      expect(result!.document).toEqual(doc);
+      assertDefined(result);
+      expect(result.document).toEqual(doc);
     });
 
     it('should return undefined for missing entry', async () => {
@@ -232,8 +233,9 @@ describe('InMemoryCimdCache', () => {
       await cache.set('client-1', doc, headers);
 
       const result = await cache.get('client-1');
-      expect(result!.etag).toBe('"abc"');
-      expect(result!.lastModified).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
+      assertDefined(result);
+      expect(result.etag).toBe('"abc"');
+      expect(result.lastModified).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
     });
 
     it('should store cachedAt timestamp', async () => {
@@ -242,7 +244,8 @@ describe('InMemoryCimdCache', () => {
       await cache.set('client-1', doc, headers);
 
       const result = await cache.get('client-1');
-      expect(result!.cachedAt).toBeGreaterThanOrEqual(now);
+      assertDefined(result);
+      expect(result.cachedAt).toBeGreaterThanOrEqual(now);
     });
   });
 
@@ -267,8 +270,8 @@ describe('InMemoryCimdCache', () => {
       jest.advanceTimersByTime(120_000);
 
       const result = await cache.getStale('client-1');
-      expect(result).toBeDefined();
-      expect(result!.document).toEqual(doc);
+      assertDefined(result);
+      expect(result.document).toEqual(doc);
     });
 
     it('should return undefined if never cached', async () => {
@@ -313,8 +316,9 @@ describe('InMemoryCimdCache', () => {
       await cache.revalidate('client-1', newHeaders);
 
       const entry = await cache.getStale('client-1');
-      expect(entry!.etag).toBe('"new"');
-      expect(entry!.lastModified).toBe('Thu, 02 Jan 2025 00:00:00 GMT');
+      assertDefined(entry);
+      expect(entry.etag).toBe('"new"');
+      expect(entry.lastModified).toBe('Thu, 02 Jan 2025 00:00:00 GMT');
     });
   });
 
@@ -345,8 +349,8 @@ describe('InMemoryCimdCache', () => {
       await cache.set('client-1', doc, headers);
 
       const conditional = await cache.getConditionalHeaders('client-1');
-      expect(conditional).toBeDefined();
-      expect(conditional!['If-None-Match']).toBe('"etag-value"');
+      assertDefined(conditional);
+      expect(conditional['If-None-Match']).toBe('"etag-value"');
     });
 
     it('should return lastModified as If-Modified-Since', async () => {
@@ -357,8 +361,8 @@ describe('InMemoryCimdCache', () => {
       await cache.set('client-1', doc, headers);
 
       const conditional = await cache.getConditionalHeaders('client-1');
-      expect(conditional).toBeDefined();
-      expect(conditional!['If-Modified-Since']).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
+      assertDefined(conditional);
+      expect(conditional['If-Modified-Since']).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
     });
 
     it('should return both etag and lastModified', async () => {
@@ -370,8 +374,9 @@ describe('InMemoryCimdCache', () => {
       await cache.set('client-1', doc, headers);
 
       const conditional = await cache.getConditionalHeaders('client-1');
-      expect(conditional!['If-None-Match']).toBe('"etag-123"');
-      expect(conditional!['If-Modified-Since']).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
+      assertDefined(conditional);
+      expect(conditional['If-None-Match']).toBe('"etag-123"');
+      expect(conditional['If-Modified-Since']).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
     });
 
     it('should return undefined for non-existent entry', async () => {

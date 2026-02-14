@@ -6,7 +6,7 @@
  * provider snapshot creation, and authorization ID derivation.
  */
 
-import { TokenNotAvailableError } from '../../errors/auth-internal.errors';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 // ---- Mocks ----
 
@@ -88,9 +88,10 @@ describe('TransparentAuthorization', () => {
 
     it('should set claims from payload', () => {
       const auth = TransparentAuthorization.fromVerifiedToken(createDefaultCtx());
-      expect(auth.claims).toBeDefined();
-      expect(auth.claims!['sub']).toBe('user-1');
-      expect(auth.claims!['iss']).toBe('https://auth.example.com');
+      const claims = auth.claims;
+      assertDefined(claims);
+      expect(claims['sub']).toBe('user-1');
+      expect(claims['iss']).toBe('https://auth.example.com');
     });
 
     it('should calculate expiresAt from exp claim (seconds to ms)', () => {
@@ -328,8 +329,8 @@ describe('TransparentAuthorization', () => {
     it('should include payload in provider snapshot', () => {
       const auth = TransparentAuthorization.fromVerifiedToken(createDefaultCtx());
       const snapshot = auth.authorizedProviders['auth0'];
-      expect(snapshot.payload).toBeDefined();
-      expect(snapshot.payload!['sub']).toBe('user-1');
+      assertDefined(snapshot.payload);
+      expect(snapshot.payload['sub']).toBe('user-1');
     });
 
     it('should set authorizedProviderIds to contain the providerId', () => {

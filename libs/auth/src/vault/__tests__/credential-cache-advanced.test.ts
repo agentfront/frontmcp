@@ -9,6 +9,7 @@
 import { CredentialCache } from '../credential-cache';
 import type { ResolvedCredential, CredentialScope } from '../auth-providers.types';
 import type { Credential } from '../../session';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 /**
  * Helper to create a mock ResolvedCredential for testing.
@@ -49,8 +50,8 @@ describe('CredentialCache - Advanced', () => {
       for (let i = 0; i < 100; i++) {
         cache.set('key', mockResolved(`version-${i}`));
         const result = cache.get('key');
-        expect(result).toBeDefined();
-        expect(result!.providerId).toBe(`version-${i}`);
+        assertDefined(result);
+        expect(result.providerId).toBe(`version-${i}`);
       }
 
       expect(cache.size).toBe(1);
@@ -69,8 +70,8 @@ describe('CredentialCache - Advanced', () => {
       // Get all keys in reverse order
       for (let i = keyCount - 1; i >= 0; i--) {
         const result = cache.get(`key-${i}`);
-        expect(result).toBeDefined();
-        expect(result!.providerId).toBe(`key-${i}`);
+        assertDefined(result);
+        expect(result.providerId).toBe(`key-${i}`);
       }
 
       expect(cache.size).toBe(keyCount);
@@ -371,7 +372,6 @@ describe('CredentialCache - Advanced', () => {
     it('should handle multiple TTL expirations at the exact same time', () => {
       const cache = new CredentialCache();
 
-      const now = Date.now();
       cache.set('a', mockResolved('a'), 5000);
       cache.set('b', mockResolved('b'), 5000);
       cache.set('c', mockResolved('c'), 5000);
@@ -428,7 +428,9 @@ describe('CredentialCache - Advanced', () => {
       cache.set('provider', mockResolved('provider', 'global'));
 
       expect(cache.size).toBe(1);
-      expect(cache.get('provider')!.scope).toBe('global');
+      const result = cache.get('provider');
+      assertDefined(result);
+      expect(result.scope).toBe('global');
     });
 
     it('should handle get after invalidateAll', () => {

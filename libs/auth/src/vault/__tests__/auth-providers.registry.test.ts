@@ -9,7 +9,6 @@
 import { AuthProvidersRegistry } from '../auth-providers.registry';
 import { CredentialProviderAlreadyRegisteredError } from '../../errors/auth-internal.errors';
 import type { CredentialProviderConfig, CredentialScope, LoadingStrategy } from '../auth-providers.types';
-import type { Credential } from '../../session';
 
 /**
  * Helper to create a minimal valid CredentialProviderConfig.

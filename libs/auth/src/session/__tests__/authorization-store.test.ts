@@ -13,17 +13,15 @@ import type {
   PendingAuthorizationRecord,
   RefreshTokenRecord,
 } from '../authorization.store';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
-// Mock @frontmcp/utils
+// Mock @frontmcp/utils - spread real module and only mock randomUUID
 jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
   let callCount = 0;
   return {
+    ...actual,
     randomUUID: jest.fn(() => `uuid-${++callCount}`),
-    sha256Base64url: jest.fn((input: string) => {
-      // Deterministic but different per input for testing
-      const crypto = require('crypto');
-      return crypto.createHash('sha256').update(input).digest('base64url');
-    }),
   };
 });
 
@@ -176,7 +174,8 @@ describe('InMemoryAuthorizationStore', () => {
       await store.storeAuthorizationCode(record);
       await store.markCodeUsed(record.code);
       const retrieved = await store.getAuthorizationCode(record.code);
-      expect(retrieved!.used).toBe(true);
+      assertDefined(retrieved);
+      expect(retrieved.used).toBe(true);
     });
 
     it('should silently ignore markCodeUsed for unknown code', async () => {
@@ -284,8 +283,8 @@ describe('InMemoryAuthorizationStore', () => {
 
       // New token is available with previousToken set
       const newRetrieved = await store.getRefreshToken(newRecord.token);
-      expect(newRetrieved).not.toBeNull();
-      expect(newRetrieved!.previousToken).toBe(oldRecord.token);
+      assertDefined(newRetrieved);
+      expect(newRetrieved.previousToken).toBe(oldRecord.token);
     });
   });
 
@@ -407,8 +406,10 @@ describe('InMemoryAuthorizationStore', () => {
           providerIds: ['google', 'github'],
         },
       });
-      expect(record.consent!.enabled).toBe(true);
-      expect(record.federatedLogin!.providerIds).toEqual(['google', 'github']);
+      assertDefined(record.consent);
+      expect(record.consent.enabled).toBe(true);
+      assertDefined(record.federatedLogin);
+      expect(record.federatedLogin.providerIds).toEqual(['google', 'github']);
     });
   });
 
