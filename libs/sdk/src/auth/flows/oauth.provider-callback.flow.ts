@@ -35,7 +35,6 @@ import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import {
   escapeHtml,
   type FederatedAuthSession,
-  type FederatedAuthSessionStore,
   type ProviderTokens,
   type ProviderUserInfo,
   completeCurrentProvider,

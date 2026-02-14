@@ -3,6 +3,8 @@ import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK
 import { bytesToHex, randomBytes, rsaVerify, createKeyPersistence, KeyPersistence } from '@frontmcp/utils';
 import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
+import type { AuthLogger } from '../common/auth-logger.interface';
+import { noopAuthLogger } from '../common/auth-logger.interface';
 
 // Warning message for weak RSA keys (shown only once per provider)
 const WEAK_KEY_WARNING = `
@@ -13,10 +15,11 @@ const WEAK_KEY_WARNING = `
 `;
 
 export class JwksService {
-  private readonly opts: Required<Omit<JwksServiceOptions, 'devKeyPersistence'>> & {
+  private readonly opts: Required<Omit<JwksServiceOptions, 'devKeyPersistence' | 'logger'>> & {
     devKeyPersistence?: JwksServiceOptions['devKeyPersistence'];
   };
 
+  private readonly logger: AuthLogger;
   private warnedProviders = new Set<string>();
 
   // Orchestrator signing material
@@ -38,6 +41,7 @@ export class JwksService {
   private keyPersistence?: KeyPersistence;
 
   constructor(opts?: JwksServiceOptions) {
+    this.logger = opts?.logger ?? noopAuthLogger;
     this.opts = {
       orchestratorAlg: opts?.orchestratorAlg ?? 'RS256',
       rotateDays: opts?.rotateDays ?? 30,
@@ -176,7 +180,7 @@ export class JwksService {
             }
           }
         }
-        console.log('failed to verify token for provider: ', p.id, e);
+        this.logger.debug('[JwksService] Failed to verify token for provider: %s', p.id, e);
         // try next provider
       }
     }
@@ -262,8 +266,8 @@ export class JwksService {
       // Emit warning (once per provider)
       if (!this.warnedProviders.has(provider.id)) {
         this.warnedProviders.add(provider.id);
-        console.warn(WEAK_KEY_WARNING);
-        console.warn(`    Provider: ${provider.id} (${provider.issuerUrl})`);
+        this.logger.warn(WEAK_KEY_WARNING);
+        this.logger.warn('    Provider: %s (%s)', provider.id, provider.issuerUrl);
       }
 
       return {
@@ -440,8 +444,10 @@ export class JwksService {
       if (loaded && now - loaded.createdAt <= maxAge) {
         // Validate algorithm matches config
         if (loaded.alg !== this.opts.orchestratorAlg) {
-          console.warn(
-            `[JwksService] Persisted key algorithm (${loaded.alg}) doesn't match config (${this.opts.orchestratorAlg}), generating new key`,
+          this.logger.warn(
+            "[JwksService] Persisted key algorithm (%s) doesn't match config (%s), generating new key",
+            loaded.alg,
+            this.opts.orchestratorAlg,
           );
         } else {
           // Reconstruct KeyObject from JWK
@@ -459,7 +465,10 @@ export class JwksService {
             };
             return;
           } catch (error) {
-            console.warn(`[JwksService] Failed to load persisted key: ${(error as Error).message}, generating new key`);
+            this.logger.warn(
+              '[JwksService] Failed to load persisted key: %s, generating new key',
+              (error as Error).message,
+            );
           }
         }
       }
@@ -482,7 +491,7 @@ export class JwksService {
           version: 1,
         });
       } catch (error) {
-        console.warn(`[JwksService] Failed to persist dev key: ${(error as Error).message}`);
+        this.logger.warn('[JwksService] Failed to persist dev key: %s', (error as Error).message);
       }
     }
   }

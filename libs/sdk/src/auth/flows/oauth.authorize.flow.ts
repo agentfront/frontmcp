@@ -44,7 +44,7 @@ import {
   type AppAuthCard,
   type ProviderCard,
 } from '@frontmcp/auth';
-import { CimdService, CimdServiceToken, clientMetadataDocumentSchema, type ClientMetadataDocument } from '../cimd';
+import { CimdService, clientMetadataDocumentSchema } from '../cimd';
 
 /**
  * Quick checklist (security & correctness)

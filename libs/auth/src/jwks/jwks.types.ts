@@ -1,5 +1,6 @@
 import { JSONWebKeySet } from 'jose';
 import { DevKeyPersistenceOptions } from './dev-key-persistence';
+import type { AuthLogger } from '../common/auth-logger.interface';
 
 export type JwksServiceOptions = {
   orchestratorAlg?: 'RS256' | 'ES256';
@@ -13,6 +14,8 @@ export type JwksServiceOptions = {
    * When enabled, keys are saved to a file and reloaded on server restart.
    */
   devKeyPersistence?: DevKeyPersistenceOptions;
+  /** Optional logger. If not provided, logging is disabled. */
+  logger?: AuthLogger;
 };
 
 export type { DevKeyPersistenceOptions };

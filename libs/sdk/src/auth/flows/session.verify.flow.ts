@@ -9,7 +9,6 @@ import {
   sessionIdSchema,
   httpRequestInputSchema,
   FlowPlan,
-  AuthOptions,
   isTransparentMode,
   isPublicMode,
   TransparentAuthOptions,
