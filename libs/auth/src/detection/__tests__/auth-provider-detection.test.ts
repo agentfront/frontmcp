@@ -223,8 +223,10 @@ describe('auth-provider-detection', () => {
       const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.other.com') }];
       const result = detectAuthProviders(parent, apps);
       expect(result.validationErrors.length).toBeGreaterThan(0);
-      expect(result.validationErrors[0]).toContain('transparent mode');
-      expect(result.validationErrors[0]).toContain('incompatible with multi-provider');
+      expect(result.validationErrors).toEqual(expect.arrayContaining([expect.stringContaining('transparent mode')]));
+      expect(result.validationErrors).toEqual(
+        expect.arrayContaining([expect.stringContaining('incompatible with multi-provider')]),
+      );
     });
 
     it('should produce warning for public parent + app providers', () => {
@@ -232,8 +234,8 @@ describe('auth-provider-detection', () => {
       const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];
       const result = detectAuthProviders(parent, apps);
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings[0]).toContain('public mode');
-      expect(result.warnings[0]).toContain('orchestrated mode');
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('public mode')]));
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('orchestrated mode')]));
     });
 
     it('should not produce warning for single public provider', () => {

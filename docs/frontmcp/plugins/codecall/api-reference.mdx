@@ -230,18 +230,21 @@ Get detailed schemas and documentation for specific tools.
     "annotations": {
       "readOnlyHint": true
     },
-    "usageExamples": [
+    "examples": [
       {
         "description": "List active users with pagination",
-        "code": "const result = await callTool('users:list', {\n  status: 'active',\n  limit: 50\n});\nreturn result.users;"
+        "input": { "status": "active", "limit": 50 },
+        "output": { "users": [], "total": 0, "hasMore": false }
       },
       {
         "description": "List admin users",
-        "code": "const result = await callTool('users:list', {\n  role: 'admin'\n});\nreturn result.users;"
+        "input": { "role": "admin" },
+        "output": { "users": [], "total": 0, "hasMore": false }
       },
       {
         "description": "List all users",
-        "code": "const result = await callTool('users:list', {});\nreturn result;"
+        "input": {},
+        "output": { "users": [], "total": 0, "hasMore": false }
       }
     ]
   }],

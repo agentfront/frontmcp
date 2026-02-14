@@ -241,7 +241,7 @@ describe('TokenVault', () => {
       vault.rotateTo(k2);
 
       // Old blob encrypted with old key won't decrypt anymore (key material changed)
-      await expect(vault.decrypt(blob)).rejects.toThrow();
+      await expect(vault.decrypt(blob)).rejects.toThrow(/decrypt|tag|authenticat/i);
 
       // New blob works
       const newBlob = await vault.encrypt('after');
