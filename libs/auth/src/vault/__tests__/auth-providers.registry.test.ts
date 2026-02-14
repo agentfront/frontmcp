@@ -9,6 +9,7 @@
 import { AuthProvidersRegistry } from '../auth-providers.registry';
 import { CredentialProviderAlreadyRegisteredError } from '../../errors/auth-internal.errors';
 import type { CredentialProviderConfig, CredentialScope, LoadingStrategy } from '../auth-providers.types';
+import { assertDefined } from '../../__test-utils__/assertion.helpers';
 
 /**
  * Helper to create a minimal valid CredentialProviderConfig.
@@ -59,9 +60,9 @@ describe('AuthProvidersRegistry', () => {
       r.register(makeProvider('test-prov'));
 
       const config = r.get('test-prov');
-      expect(config).toBeDefined();
+      assertDefined(config);
       // Should use the custom defaultCacheTtl since provider has no cacheTtl
-      expect(config!.cacheTtl).toBe(5000);
+      expect(config.cacheTtl).toBe(5000);
     });
 
     it('should register providers passed in options', () => {
@@ -77,7 +78,9 @@ describe('AuthProvidersRegistry', () => {
       const r = new AuthProvidersRegistry();
       r.register(makeProvider('test'));
 
-      expect(r.get('test')!.cacheTtl).toBe(3600000);
+      const config = r.get('test');
+      assertDefined(config);
+      expect(config.cacheTtl).toBe(3600000);
     });
   });
 
@@ -114,7 +117,8 @@ describe('AuthProvidersRegistry', () => {
     it('should normalize the config with defaults', () => {
       registry.register(makeProvider('normalized'));
 
-      const config = registry.get('normalized')!;
+      const config = registry.get('normalized');
+      assertDefined(config);
       expect(config.required).toBe(false);
       expect(config.cacheTtl).toBe(3600000);
       expect(config.scope).toBe('session');
@@ -133,7 +137,8 @@ describe('AuthProvidersRegistry', () => {
         }),
       );
 
-      const config = registry.get('explicit')!;
+      const config = registry.get('explicit');
+      assertDefined(config);
       expect(config.scope).toBe('global');
       expect(config.loading).toBe('eager');
       expect(config.cacheTtl).toBe(60000);
@@ -175,8 +180,8 @@ describe('AuthProvidersRegistry', () => {
       registry.register(makeProvider('github'));
 
       const config = registry.get('github');
-      expect(config).toBeDefined();
-      expect(config!.name).toBe('github');
+      assertDefined(config);
+      expect(config.name).toBe('github');
     });
 
     it('should return undefined for unregistered provider', () => {
@@ -187,7 +192,8 @@ describe('AuthProvidersRegistry', () => {
       const factoryFn = jest.fn().mockResolvedValue({ type: 'bearer', token: 'tok' });
       registry.register({ ...makeProvider('with-factory'), factory: factoryFn });
 
-      const config = registry.get('with-factory')!;
+      const config = registry.get('with-factory');
+      assertDefined(config);
       expect(config.factory).toBe(factoryFn);
     });
   });
@@ -427,35 +433,45 @@ describe('AuthProvidersRegistry', () => {
   describe('normalization', () => {
     it('should default required to false', () => {
       registry.register(makeProvider('test'));
-      expect(registry.get('test')!.required).toBe(false);
+      const config = registry.get('test');
+      assertDefined(config);
+      expect(config.required).toBe(false);
     });
 
     it('should apply defaultCacheTtl when provider has no cacheTtl', () => {
       const r = new AuthProvidersRegistry({ defaultCacheTtl: 120000 });
       r.register(makeProvider('no-ttl'));
 
-      expect(r.get('no-ttl')!.cacheTtl).toBe(120000);
+      const config = r.get('no-ttl');
+      assertDefined(config);
+      expect(config.cacheTtl).toBe(120000);
     });
 
     it('should preserve provider-specific cacheTtl over defaultCacheTtl', () => {
       const r = new AuthProvidersRegistry({ defaultCacheTtl: 120000 });
       r.register(makeProvider('custom-ttl', { cacheTtl: 30000 }));
 
-      expect(r.get('custom-ttl')!.cacheTtl).toBe(30000);
+      const config = r.get('custom-ttl');
+      assertDefined(config);
+      expect(config.cacheTtl).toBe(30000);
     });
 
     it('should preserve refresh function if provided', () => {
       const refreshFn = jest.fn().mockResolvedValue(null);
       registry.register({ ...makeProvider('with-refresh'), refresh: refreshFn });
 
-      expect(registry.get('with-refresh')!.refresh).toBe(refreshFn);
+      const config = registry.get('with-refresh');
+      assertDefined(config);
+      expect(config.refresh).toBe(refreshFn);
     });
 
     it('should preserve toHeaders function if provided', () => {
       const headersFn = jest.fn().mockReturnValue({ Authorization: 'Bearer tok' });
       registry.register({ ...makeProvider('with-headers'), toHeaders: headersFn });
 
-      expect(registry.get('with-headers')!.toHeaders).toBe(headersFn);
+      const config = registry.get('with-headers');
+      assertDefined(config);
+      expect(config.toHeaders).toBe(headersFn);
     });
   });
 });

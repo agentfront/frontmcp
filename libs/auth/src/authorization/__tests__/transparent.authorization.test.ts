@@ -27,6 +27,9 @@ jest.mock('../../machine-id', () => ({
 
 import { TransparentAuthorization } from '../transparent.authorization';
 import type { TransparentAuthorizationCreateCtx } from '../transparent.authorization';
+import { sha256Hex } from '@frontmcp/utils';
+
+const mockSha256Hex = sha256Hex as jest.MockedFunction<typeof sha256Hex>;
 
 // ---- Helpers ----
 
@@ -344,18 +347,16 @@ describe('TransparentAuthorization', () => {
   // ========================================
   describe('authorization ID derivation', () => {
     it('should use sha256Hex of the token signature part', () => {
-      const { sha256Hex } = require('@frontmcp/utils');
       TransparentAuthorization.fromVerifiedToken(createDefaultCtx());
       // The signature is the third part of the JWT
-      expect(sha256Hex).toHaveBeenCalledWith('signatureABC123');
+      expect(mockSha256Hex).toHaveBeenCalledWith('signatureABC123');
     });
 
     it('should use full token as fallback when no signature part', () => {
-      const { sha256Hex } = require('@frontmcp/utils');
       const tokenNoSig = 'just-a-token';
       TransparentAuthorization.fromVerifiedToken(createDefaultCtx({ token: tokenNoSig }));
       // When no third part, falls back to full token
-      expect(sha256Hex).toHaveBeenCalledWith(tokenNoSig);
+      expect(mockSha256Hex).toHaveBeenCalledWith(tokenNoSig);
     });
 
     it('should truncate to 16 characters', () => {

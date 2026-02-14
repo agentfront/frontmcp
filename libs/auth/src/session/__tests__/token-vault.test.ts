@@ -153,15 +153,14 @@ describe('TokenVault', () => {
   describe('encrypt with opts', () => {
     it('should include exp when provided', async () => {
       const vault = new TokenVault([makeKey('k')]);
+      const futureExp = Math.floor(Date.now() / 1000) + 7200;
 
-      const blob = await vault.encrypt('data', { exp: 1700000000 });
+      const blob = await vault.encrypt('data', { exp: futureExp });
 
-      expect(blob.exp).toBe(1700000000);
+      expect(blob.exp).toBe(futureExp);
 
-      // Should still decrypt fine (not expired yet if test runs before that time)
-      // We'll set a far-future exp to be safe
-      const blob2 = await vault.encrypt('data2', { exp: Math.floor(Date.now() / 1000) + 3600 });
-      expect(await vault.decrypt(blob2)).toBe('data2');
+      // Should decrypt fine since exp is in the future
+      expect(await vault.decrypt(blob)).toBe('data');
     });
 
     it('should include meta when provided', async () => {
@@ -313,13 +312,8 @@ describe('TokenVault', () => {
     it('should include kid in vault_unknown_kid error message', async () => {
       const vault = new TokenVault([makeKey('known')]);
 
-      const fakeBlob: EncBlob = {
-        alg: 'A256GCM',
-        kid: 'mysterious-kid',
-        iv: 'aaaa',
-        tag: 'bbbb',
-        data: 'cccc',
-      };
+      const realBlob = await vault.encrypt('data');
+      const fakeBlob: EncBlob = { ...realBlob, kid: 'mysterious-kid' };
 
       await expect(vault.decrypt(fakeBlob)).rejects.toThrow('vault_unknown_kid:mysterious-kid');
     });

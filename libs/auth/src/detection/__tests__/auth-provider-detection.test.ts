@@ -161,8 +161,7 @@ describe('auth-provider-detection', () => {
       assertDefined(provider);
       expect(provider.appIds).toContain('__parent__');
       expect(provider.appIds).toContain('app1');
-      // Same provider, but apps exist with parent => requiresOrchestration is true
-      // because childProviderIds is empty (all merged), let's check
+      // Same provider merged => childProviderIds is empty and requiresOrchestration is false
       expect(result.childProviderIds).toEqual([]);
       expect(result.requiresOrchestration).toBe(false);
     });
