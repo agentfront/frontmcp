@@ -7,27 +7,28 @@ import { SessionIdPayload, TransportProtocolType } from '../../../common';
 
 // Mock dependencies before importing the module under test
 const mockRandomUUID = jest.fn();
-const mockSha256 = jest.fn();
-const mockEncryptValue = jest.fn();
-const mockDecryptValue = jest.fn();
 
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
   randomUUID: () => mockRandomUUID(),
-  sha256: (data: Uint8Array) => mockSha256(data),
-  encryptValue: (obj: unknown, key: Uint8Array) => mockEncryptValue(obj, key),
-  decryptValue: (encrypted: any, key: Uint8Array) => mockDecryptValue(encrypted, key),
 }));
 
+// Mock @frontmcp/auth functions that session-id.utils.ts imports directly
+const mockEncryptJson = jest.fn();
+const mockSafeDecrypt = jest.fn();
 const mockGetMachineId = jest.fn();
-jest.mock('../../../auth/machine-id', () => ({
-  getMachineId: () => mockGetMachineId(),
-}));
-
 const mockGetTokenSignatureFingerprint = jest.fn();
-jest.mock('../utils/auth-token.utils', () => ({
-  getTokenSignatureFingerprint: (token: string) => mockGetTokenSignatureFingerprint(token),
-}));
+
+jest.mock('@frontmcp/auth', () => {
+  const actual = jest.requireActual('@frontmcp/auth');
+  return {
+    ...actual,
+    encryptJson: (...args: unknown[]) => mockEncryptJson(...args),
+    safeDecrypt: (...args: unknown[]) => mockSafeDecrypt(...args),
+    getMachineId: () => mockGetMachineId(),
+    getTokenSignatureFingerprint: (token: string) => mockGetTokenSignatureFingerprint(token),
+  };
+});
 
 const mockDetectPlatformFromUserAgent = jest.fn();
 jest.mock('../../../notification/notification.service', () => ({
@@ -38,7 +39,6 @@ jest.mock('../../../notification/notification.service', () => ({
 import {
   createSessionId,
   updateSessionPayload,
-  encryptJson,
   parseSessionHeader,
   decryptPublicSession,
   generateSessionCookie,
@@ -51,7 +51,6 @@ describe('session-id.utils', () => {
   const TEST_UUID = 'test-uuid-456';
   const TEST_AUTH_SIG = 'test-auth-sig-789';
   const TEST_TOKEN = 'test-token';
-  const TEST_KEY = new Uint8Array(32).fill(1);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -60,12 +59,8 @@ describe('session-id.utils', () => {
     mockRandomUUID.mockReturnValue(TEST_UUID);
     mockGetMachineId.mockReturnValue(TEST_NODE_ID);
     mockGetTokenSignatureFingerprint.mockReturnValue(TEST_AUTH_SIG);
-    mockSha256.mockReturnValue(TEST_KEY);
-    mockEncryptValue.mockReturnValue({
-      iv: 'test-iv',
-      tag: 'test-tag',
-      data: 'test-data',
-    });
+    mockEncryptJson.mockReturnValue('test-iv.test-tag.test-data');
+    mockSafeDecrypt.mockReturnValue(null);
     mockDetectPlatformFromUserAgent.mockReturnValue('unknown');
 
     // Reset environment variables
@@ -174,7 +169,7 @@ describe('session-id.utils', () => {
     it('should encrypt the payload and return encrypted ID', () => {
       const result = createSessionId('streamable-http', TEST_TOKEN);
 
-      expect(mockEncryptValue).toHaveBeenCalled();
+      expect(mockEncryptJson).toHaveBeenCalled();
       expect(result.id).toBe('test-iv.test-tag.test-data');
     });
 
@@ -228,7 +223,7 @@ describe('session-id.utils', () => {
 
     beforeEach(() => {
       // Setup decrypt to return valid payload
-      mockDecryptValue.mockReturnValue(mockValidPayload);
+      mockSafeDecrypt.mockReturnValue(mockValidPayload);
     });
 
     it('should update fields on existing session', () => {
@@ -282,7 +277,7 @@ describe('session-id.utils', () => {
     });
 
     it('should return false for non-existent session', () => {
-      mockDecryptValue.mockReturnValue(null);
+      mockSafeDecrypt.mockReturnValue(null);
 
       const result = updateSessionPayload('non-existent-session-id', {
         clientName: 'Test',
@@ -294,7 +289,7 @@ describe('session-id.utils', () => {
     it('should decrypt and update if not in cache', () => {
       // Don't create session first - force decryption path
       // The session ID format needs to be valid (3 parts separated by dots)
-      mockDecryptValue.mockReturnValue({ ...mockValidPayload });
+      mockSafeDecrypt.mockReturnValue({ ...mockValidPayload });
 
       const result = updateSessionPayload('iv-part.tag-part.data-part', {
         clientName: 'Decrypted Client',
@@ -303,7 +298,7 @@ describe('session-id.utils', () => {
       // Result depends on whether decryption succeeds
       // In a real scenario with proper encryption, this would work
       // For unit test with mocked decrypt, we verify the mock was called
-      expect(mockDecryptValue).toHaveBeenCalled();
+      expect(mockSafeDecrypt).toHaveBeenCalled();
     });
 
     it('should handle public session payloads', () => {
@@ -312,7 +307,7 @@ describe('session-id.utils', () => {
         authSig: 'public',
         isPublic: true,
       };
-      mockDecryptValue.mockReturnValue(publicPayload);
+      mockSafeDecrypt.mockReturnValue(publicPayload);
 
       // First access to populate cache via decryption
       const result = updateSessionPayload('public.session.id', {
@@ -320,32 +315,7 @@ describe('session-id.utils', () => {
       });
 
       // Verify decrypt was called (cache miss path)
-      expect(mockDecryptValue).toHaveBeenCalled();
-    });
-  });
-
-  // ============================================
-  // encryptJson Tests
-  // ============================================
-
-  describe('encryptJson', () => {
-    it('should return encrypted string in iv.tag.data format', () => {
-      mockEncryptValue.mockReturnValue({
-        iv: 'abc',
-        tag: 'def',
-        data: 'ghi',
-      });
-
-      const result = encryptJson({ test: 'data' });
-
-      expect(result).toBe('abc.def.ghi');
-    });
-
-    it('should call encryptValue with the object and derived key', () => {
-      const testObj = { foo: 'bar' };
-      encryptJson(testObj);
-
-      expect(mockEncryptValue).toHaveBeenCalledWith(testObj, expect.any(Uint8Array));
+      expect(mockSafeDecrypt).toHaveBeenCalled();
     });
   });
 
@@ -368,14 +338,14 @@ describe('session-id.utils', () => {
     });
 
     it('should return undefined for invalid session', () => {
-      mockDecryptValue.mockReturnValue(null);
+      mockSafeDecrypt.mockReturnValue(null);
 
       const result = parseSessionHeader('invalid-session', TEST_TOKEN);
       expect(result).toBeUndefined();
     });
 
     it('should return session when valid and signature matches', () => {
-      mockDecryptValue.mockReturnValue(mockValidPayload);
+      mockSafeDecrypt.mockReturnValue(mockValidPayload);
 
       const result = parseSessionHeader('valid-session.id.here', TEST_TOKEN);
 
@@ -386,7 +356,7 @@ describe('session-id.utils', () => {
     it('should return undefined when signature mismatches', () => {
       // Use a unique session ID that won't be in cache from other tests
       const uniqueSessionId = 'mismatch.session.unique';
-      mockDecryptValue.mockReturnValue({
+      mockSafeDecrypt.mockReturnValue({
         ...mockValidPayload,
         authSig: 'different-sig',
       });
@@ -410,14 +380,14 @@ describe('session-id.utils', () => {
     };
 
     it('should return null for invalid session', () => {
-      mockDecryptValue.mockReturnValue(null);
+      mockSafeDecrypt.mockReturnValue(null);
 
       const result = decryptPublicSession('invalid-session');
       expect(result).toBeNull();
     });
 
     it('should return payload for valid public session', () => {
-      mockDecryptValue.mockReturnValue(mockPublicPayload);
+      mockSafeDecrypt.mockReturnValue(mockPublicPayload);
 
       const result = decryptPublicSession('valid.public.session');
 
@@ -425,7 +395,7 @@ describe('session-id.utils', () => {
     });
 
     it('should return null when authSig is not public', () => {
-      mockDecryptValue.mockReturnValue({
+      mockSafeDecrypt.mockReturnValue({
         ...mockPublicPayload,
         authSig: 'not-public',
       });
@@ -435,7 +405,7 @@ describe('session-id.utils', () => {
     });
 
     it('should return null when isPublic is not true', () => {
-      mockDecryptValue.mockReturnValue({
+      mockSafeDecrypt.mockReturnValue({
         ...mockPublicPayload,
         isPublic: false,
       });
@@ -507,7 +477,7 @@ describe('session-id.utils', () => {
     });
 
     it('should return null for invalid session', () => {
-      mockDecryptValue.mockReturnValue(null);
+      mockSafeDecrypt.mockReturnValue(null);
 
       const result = getSessionClientInfo('invalid-session');
       expect(result).toBeNull();

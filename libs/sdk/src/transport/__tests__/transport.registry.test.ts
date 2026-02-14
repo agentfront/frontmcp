@@ -20,13 +20,14 @@ jest.mock('../transport.local', () => ({
   })),
 }));
 
-jest.mock('../../auth/session/redis-session.store', () => ({
-  RedisSessionStore: jest.fn().mockImplementation(() => mockRedisSessionStore),
-}));
-
-jest.mock('../../auth/authorization/authorization.class', () => ({
-  getMachineId: jest.fn().mockReturnValue('test-machine-id'),
-}));
+jest.mock('@frontmcp/auth', () => {
+  const actual = jest.requireActual('@frontmcp/auth');
+  return {
+    ...actual,
+    RedisSessionStore: jest.fn().mockImplementation(() => mockRedisSessionStore),
+    getMachineId: jest.fn().mockReturnValue('test-machine-id'),
+  };
+});
 
 // Mock the flows to prevent them from actually registering
 jest.mock('../flows/handle.streamable-http.flow', () => ({}));

@@ -48,10 +48,25 @@
     "node": ">=22.0.0"
   },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "ioredis": "^5.0.0",
+    "@vercel/kv": "^3.0.0",
+    "@frontmcp/storage-sqlite": "0.9.0"
+  },
+  "peerDependenciesMeta": {
+    "ioredis": {
+      "optional": true
+    },
+    "@vercel/kv": {
+      "optional": true
+    },
+    "@frontmcp/storage-sqlite": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@frontmcp/utils": "0.9.0",
+    "@frontmcp/di": "0.9.0",
     "jose": "^6.0.0"
   },
   "devDependencies": {

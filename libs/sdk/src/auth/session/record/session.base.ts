@@ -1,7 +1,7 @@
 // auth/session/record/session.base.ts
 
-import type { ProviderSnapshot, SessionMode } from '../session.types';
-import { TransportIdGenerator } from '../session.transport';
+import type { ProviderSnapshot, SessionMode } from '@frontmcp/auth';
+import { TransportIdGenerator } from '@frontmcp/auth';
 import { Scope } from '../../../scope';
 import { ScopeDeniedError } from '../../../errors/auth-internal.errors';
 

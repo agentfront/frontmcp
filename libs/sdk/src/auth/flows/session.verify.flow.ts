@@ -19,10 +19,11 @@ import {
 } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
+import { deriveTypedUser, extractBearerToken, isJwt } from '@frontmcp/auth';
 import { JwksService, ProviderVerifyRef, VerifyResult } from '@frontmcp/auth';
-import { parseSessionHeader, encryptJson, decryptPublicSession } from '../session/utils/session-id.utils';
-import { getMachineId } from '../authorization';
+import { parseSessionHeader, decryptPublicSession } from '../session/utils/session-id.utils';
+import { encryptJson } from '@frontmcp/auth';
+import { getMachineId } from '@frontmcp/auth';
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
 
 const inputSchema = httpRequestInputSchema;

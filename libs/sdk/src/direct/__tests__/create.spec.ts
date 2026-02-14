@@ -38,9 +38,13 @@ jest.mock('../../front-mcp/front-mcp', () => ({
 
 const mockSetMachineIdOverride = jest.fn();
 
-jest.mock('../../auth/machine-id', () => ({
-  setMachineIdOverride: (...args: unknown[]) => mockSetMachineIdOverride(...args),
-}));
+jest.mock('@frontmcp/auth', () => {
+  const actual = jest.requireActual('@frontmcp/auth');
+  return {
+    ...actual,
+    setMachineIdOverride: (...args: unknown[]) => mockSetMachineIdOverride(...args),
+  };
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
@@ -62,9 +66,13 @@ describe('create() factory', () => {
         createDirect: (...args: unknown[]) => mockCreateDirect(...args),
       },
     }));
-    jest.mock('../../auth/machine-id', () => ({
-      setMachineIdOverride: (...args: unknown[]) => mockSetMachineIdOverride(...args),
-    }));
+    jest.mock('@frontmcp/auth', () => {
+      const actual = jest.requireActual('@frontmcp/auth');
+      return {
+        ...actual,
+        setMachineIdOverride: (...args: unknown[]) => mockSetMachineIdOverride(...args),
+      };
+    });
 
     // Fresh import to get clean cache state
     const mod = await import('../create');

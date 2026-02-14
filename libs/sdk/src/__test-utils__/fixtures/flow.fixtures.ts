@@ -8,7 +8,7 @@
 
 import 'reflect-metadata';
 import { FlowControl, FlowMetadata, ScopeEntry, FrontMcpLogger, FrontMcpAuth } from '../../common';
-import { InMemoryAuthorizationStore, AuthorizationStore } from '../../auth/session';
+import { InMemoryAuthorizationStore, type AuthorizationStore } from '@frontmcp/auth';
 
 // ============================================
 // Types

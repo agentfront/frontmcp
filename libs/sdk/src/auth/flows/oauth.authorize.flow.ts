@@ -31,16 +31,19 @@ import {
 } from '../../common';
 import { z, ZodError } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { InMemoryAuthorizationStore, FederatedLoginStateRecord, ConsentStateRecord } from '../session';
-import { AuthProviderDetectionResult, DetectedAuthProvider } from '../detection';
 import {
+  InMemoryAuthorizationStore,
+  type FederatedLoginStateRecord,
+  type ConsentStateRecord,
+  type AuthProviderDetectionResult,
+  type DetectedAuthProvider,
   buildLoginPage,
   buildIncrementalAuthPage,
   buildFederatedLoginPage,
   escapeHtml,
   type AppAuthCard,
   type ProviderCard,
-} from '../ui';
+} from '@frontmcp/auth';
 import { CimdService, CimdServiceToken, clientMetadataDocumentSchema, type ClientMetadataDocument } from '../cimd';
 
 /**
@@ -682,7 +685,6 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       providers,
       clientName: clientId,
       pendingAuthId,
-      csrfToken: '', // No CSRF needed for GET form
       callbackPath,
     });
   }

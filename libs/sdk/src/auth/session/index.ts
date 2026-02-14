@@ -1,71 +1,32 @@
-// Transport session architecture
-export * from './transport-session.types';
+// auth/session/index.ts
+
+// Transport session manager
 export { TransportSessionManager, InMemorySessionStore } from './transport-session.manager';
-export { RedisSessionStore, RedisSessionStoreConfig } from './redis-session.store';
-export { VercelKvSessionStore, VercelKvSessionConfig } from './vercel-kv-session.store';
 
 // Session store factory
-export { createSessionStore, createSessionStoreSync, createPubsubStore } from './session-store.factory';
-
-// Session security utilities
 export {
-  SessionRateLimiter,
-  SessionRateLimiterConfig,
-  RateLimitResult,
-  defaultSessionRateLimiter,
-} from './session-rate-limiter';
+  createSessionStore,
+  createSessionStoreSync,
+  createPubsubStore,
+  createSqliteSessionStore,
+} from './session-store.factory';
 
+// Session service
+export { SessionService } from './session.service';
+
+// Session records
+export { Session, SessionView } from './record/session.base';
+export type { BaseCreateCtx, SessionUser, SessionClaims } from './record/session.base';
+export { McpSession } from './record/session.mcp';
+
+// Session ID utilities
 export {
-  signSession,
-  verifySession,
-  verifyOrParseSession,
-  isSignedSession,
-  SignedSession,
-  SessionSigningConfig,
-} from './session-crypto';
-
-// Authorization store for OAuth flows (re-exported from @frontmcp/auth)
-export {
-  // Classes
-  InMemoryAuthorizationStore,
-  RedisAuthorizationStore,
-  // Functions
-  verifyPkce,
-  generatePkceChallenge,
-  // Schemas
-  pkceChallengeSchema,
-  authorizationCodeRecordSchema,
-} from '@frontmcp/auth';
-export type {
-  AuthorizationStore,
-  PkceChallenge,
-  AuthorizationCodeRecord,
-  PendingAuthorizationRecord,
-  RefreshTokenRecord,
-  ConsentStateRecord,
-  FederatedLoginStateRecord,
-} from '@frontmcp/auth';
-
-// Orchestrated token store for upstream provider tokens
-export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from './orchestrated-token.store';
-
-// Federated auth session for multi-provider OAuth flows
-export {
-  InMemoryFederatedAuthSessionStore,
-  toSessionRecord,
-  fromSessionRecord,
-  isSessionComplete,
-  getNextProvider,
-  completeCurrentProvider,
-  startNextProvider,
-} from './federated-auth.session';
-export type {
-  FederatedAuthSession,
-  FederatedAuthSessionRecord,
-  FederatedAuthSessionStore,
-  FederatedAuthSessionCreateParams,
-  ProviderPkce,
-  ProviderTokens,
-  ProviderUserInfo,
-  CompletedProvider,
-} from './federated-auth.session';
+  createSessionId,
+  parseSessionHeader,
+  decryptPublicSession,
+  generateSessionCookie,
+  extractSessionFromCookie,
+  updateSessionPayload,
+  getSessionClientInfo,
+} from './utils/session-id.utils';
+export type { CreateSessionOptions } from './utils/session-id.utils';

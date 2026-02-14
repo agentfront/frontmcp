@@ -135,6 +135,63 @@ export {
   decryptAesGcm,
   // Utilities
   TinyTtlCache,
+  // Transport Session
+  transportProtocolSchema,
+  sseTransportStateSchema,
+  streamableHttpTransportStateSchema,
+  statefulHttpTransportStateSchema,
+  statelessHttpTransportStateSchema,
+  legacySseTransportStateSchema,
+  transportStateSchema,
+  transportSessionSchema,
+  sessionJwtPayloadSchema,
+  encryptedBlobSchema,
+  storedSessionSchema,
+  redisConfigSchema,
+  // Session Crypto
+  signSession,
+  verifySession,
+  isSignedSession,
+  verifyOrParseSession,
+  // Session Rate Limiter
+  SessionRateLimiter,
+  defaultSessionRateLimiter,
+  // Transport ID Generator
+  TransportIdGenerator,
+  // Session Utils
+  isJwt,
+  getTokenSignatureFingerprint,
+  deriveTypedUser,
+  extractBearerToken,
+  getKey,
+  encryptJson,
+  decryptSessionJson,
+  safeDecrypt,
+  resetCachedKey,
+  // Redis Session Store
+  RedisSessionStore,
+  // Vercel KV Session Store
+  VercelKvSessionStore,
+  // Orchestrated Token Store
+  InMemoryOrchestratedTokenStore,
+  // Federated Auth Session
+  InMemoryFederatedAuthSessionStore,
+  toSessionRecord,
+  fromSessionRecord,
+  createFederatedAuthSession,
+  isSessionComplete,
+  getNextProvider,
+  completeCurrentProvider,
+  startNextProvider,
+  // Encrypted Authorization Vault
+  redisVaultEntrySchema,
+  EncryptedRedisVault,
+  createEncryptedVault,
+  // Token Refresh
+  toEpochSeconds,
+  isSoonExpiring,
+  isSoonExpiringProvider,
+  tryJwtExp,
 } from './session';
 export type {
   // OAuth Authorization Store types
@@ -188,6 +245,58 @@ export type {
   StorageAuthorizationVaultOptions,
   // Crypto types (re-exported from @frontmcp/utils)
   EncryptedBlob,
+  // Transport Session types
+  TransportProtocol,
+  SessionStorageMode,
+  TransportSession,
+  TransportState,
+  SseTransportState,
+  StreamableHttpTransportState,
+  StatefulHttpTransportState,
+  StatelessHttpTransportState,
+  LegacySseTransportState,
+  SessionJwtPayload,
+  StatelessSessionJwtPayload,
+  StoredSession,
+  TransportEncryptedBlob,
+  SessionStore,
+  SessionStorageConfig,
+  RedisConfig,
+  SessionSecurityConfig,
+  // Session types
+  SessionMode,
+  ProviderEmbedMode,
+  SessionEncBlob,
+  ProviderSnapshot,
+  CreateSessionArgs,
+  // Session Crypto types
+  SignedSession,
+  SessionSigningConfig,
+  // Session Rate Limiter types
+  SessionRateLimiterConfig,
+  RateLimitResult,
+  // Redis Session Store types
+  RedisSessionStoreConfig,
+  // Vercel KV Session Store types
+  VercelKvSessionConfig,
+  // Orchestrated Token Store types
+  InMemoryOrchestratedTokenStoreOptions,
+  // Federated Auth Session types
+  ProviderPkce,
+  ProviderTokens,
+  ProviderUserInfo,
+  CompletedProvider,
+  FederatedAuthSession,
+  FederatedAuthSessionRecord,
+  FederatedAuthSessionStore,
+  FederatedAuthSessionCreateParams,
+  // Encrypted Authorization Vault types
+  RedisVaultEntry,
+  EncryptionContext,
+  // Token Refresh types
+  TokenRefreshCtx,
+  TokenRefreshResult,
+  TokenRefresher,
 } from './session';
 
 // ============================================
@@ -203,6 +312,7 @@ export {
   type AppAuthorizationRecord,
   type ProgressiveAuthState,
   type AuthorizationCreateCtx,
+  type Authorization,
   // Enums
   AppAuthState,
   // Schemas
@@ -214,7 +324,102 @@ export {
   appAuthStateSchema,
   appAuthorizationRecordSchema,
   progressiveAuthStateSchema,
+  // Base class
+  AuthorizationBase,
+  getMachineId,
+  // Mode-specific implementations
+  PublicAuthorization,
+  type PublicAuthorizationCreateCtx,
+  TransparentAuthorization,
+  type TransparentAuthorizationCreateCtx,
+  type TransparentVerifiedPayload,
+  OrchestratedAuthorization,
+  type OrchestratedAuthorizationCreateCtx,
+  type OrchestratedProviderState,
+  type OrchestratedTokenStore,
+  type TokenRefreshCallback,
+  // Orchestrated auth accessor
+  type OrchestratedAuthAccessor,
+  OrchestratedAuthAccessorAdapter,
+  NullOrchestratedAuthAccessor,
+  ORCHESTRATED_AUTH_ACCESSOR,
 } from './authorization';
+
+// ============================================
+// Common Types
+// ============================================
+export type { AuthLogger } from './common';
+export type { RawZodShape } from './common';
+export type { SessionUser } from './common';
+
+// Common JWT Types
+export { jwkParametersSchema, jwkSchema, jsonWebKeySetSchema } from './common';
+export type { JWKParameters, JWK, JSONWebKeySet } from './common';
+
+// Common Session Types
+export { aiPlatformTypeSchema, userClaimSchema, sessionIdPayloadSchema } from './common';
+export type { TransportProtocolType, AIPlatformType, UserClaim, SessionIdPayload } from './common';
+
+// ============================================
+// Errors Module
+// ============================================
+export {
+  AuthInternalError,
+  EncryptionContextNotSetError,
+  VaultLoadError,
+  VaultNotFoundError,
+  TokenNotAvailableError,
+  TokenStoreRequiredError,
+  NoProviderIdError,
+  TokenLeakDetectedError,
+  SessionSecretRequiredError,
+  CredentialProviderAlreadyRegisteredError,
+  AuthProvidersNotConfiguredError,
+  OrchestratedAuthNotAvailableError,
+  EncryptionKeyNotConfiguredError,
+  SessionIdEmptyError,
+  ElicitationSecretRequiredError,
+  ScopeDeniedError,
+  InMemoryStoreRequiredError,
+  OrchestratorJwksNotAvailableError,
+  AuthInvalidInputError,
+  CredentialStorageError,
+} from './errors';
+
+// ============================================
+// Options Module
+// ============================================
+export * from './options';
+
+// ============================================
+// Consent Module
+// ============================================
+export {
+  consentToolItemSchema,
+  consentSelectionSchema,
+  consentStateSchema,
+  federatedProviderItemSchema,
+  federatedLoginStateSchema,
+  federatedSelectionSchema,
+} from './consent';
+export type {
+  ConsentToolItem,
+  ConsentSelection,
+  ConsentState,
+  FederatedProviderItem,
+  FederatedLoginState,
+  FederatedSelection,
+} from './consent';
+
+// ============================================
+// Detection Module
+// ============================================
+export * from './detection';
+
+// ============================================
+// Machine ID Module
+// ============================================
+export { setMachineIdOverride } from './machine-id';
 
 // ============================================
 // Utils Module
@@ -233,6 +438,8 @@ export {
   createAudienceValidator,
   deriveExpectedAudience,
   AudienceValidator,
+  // Authorization ID
+  deriveAuthorizationId,
 } from './utils';
 export type {
   BearerErrorCode,
@@ -273,6 +480,21 @@ export {
   extractCredentialExpiry,
   // Cache
   CredentialCache,
+  // Accessor
+  type AuthProvidersAccessor,
+  AUTH_PROVIDERS_ACCESSOR,
+  AuthProvidersAccessorImpl,
+  // Registry
+  AuthProvidersRegistry,
+  AUTH_PROVIDERS_REGISTRY,
+  type NormalizedProviderConfig,
+  // Vault
+  AuthProvidersVault,
+  AUTH_PROVIDERS_VAULT,
+  // Credential Loaders
+  EagerCredentialLoader,
+  type EagerLoadResult,
+  LazyCredentialLoader,
 } from './vault';
 
 // ============================================

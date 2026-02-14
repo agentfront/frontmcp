@@ -1,11 +1,10 @@
 // common/types/options/auth/index.ts
-// Barrel export for auth options
+// Re-export all auth options from @frontmcp/auth
 
 // ============================================
 // EXPLICIT INTERFACES (for better autocomplete)
 // ============================================
 export type {
-  // Shared config interfaces
   PublicAccessConfig,
   LocalSigningConfig,
   RemoteProviderConfig,
@@ -17,7 +16,6 @@ export type {
   ConsentConfig,
   FederatedAuthConfig,
   IncrementalAuthConfig,
-  // Auth mode interfaces
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
   OrchestratedLocalOptionsInterface,
@@ -26,13 +24,12 @@ export type {
   AuthOptionsInterface,
   AuthMode,
   OrchestratedType,
-} from './interfaces';
+} from '@frontmcp/auth';
 
 // ============================================
 // SHARED SCHEMAS & TYPES
 // ============================================
 export {
-  // Schemas
   publicAccessConfigSchema,
   localSigningConfigSchema,
   remoteProviderConfigSchema,
@@ -42,50 +39,45 @@ export {
   consentConfigSchema,
   federatedAuthConfigSchema,
   incrementalAuthConfigSchema,
-} from './shared.schemas';
+} from '@frontmcp/auth';
 
-// Re-export shared schema types (these are the Zod-inferred types)
 export type {
-  PublicAccessConfig as PublicAccessConfigZod,
+  PublicAccessConfigZod,
   PublicAccessConfigInput,
-  LocalSigningConfig as LocalSigningConfigZod,
+  LocalSigningConfigZod,
   LocalSigningConfigInput,
-  RemoteProviderConfig as RemoteProviderConfigZod,
+  RemoteProviderConfigZod,
   RemoteProviderConfigInput,
-  TokenStorageConfig as TokenStorageConfigZod,
+  TokenStorageConfigZod,
   TokenStorageConfigInput,
-  TokenRefreshConfig as TokenRefreshConfigZod,
+  TokenRefreshConfigZod,
   TokenRefreshConfigInput,
-  SkippedAppBehavior as SkippedAppBehaviorZod,
-  ConsentConfig as ConsentConfigZod,
+  SkippedAppBehaviorZod,
+  ConsentConfigZod,
   ConsentConfigInput,
-  FederatedAuthConfig as FederatedAuthConfigZod,
+  FederatedAuthConfigZod,
   FederatedAuthConfigInput,
-  IncrementalAuthConfig as IncrementalAuthConfigZod,
+  IncrementalAuthConfigZod,
   IncrementalAuthConfigInput,
   RedisConfig,
-} from './shared.schemas';
+} from '@frontmcp/auth';
 
 // ============================================
 // PUBLIC MODE SCHEMA
 // ============================================
-export { publicAuthOptionsSchema } from './public.schema';
-export type { PublicAuthOptions, PublicAuthOptionsInput } from './public.schema';
+export { publicAuthOptionsSchema } from '@frontmcp/auth';
+export type { PublicAuthOptions, PublicAuthOptionsInput } from '@frontmcp/auth';
 
 // ============================================
 // TRANSPARENT MODE SCHEMA
 // ============================================
-export { transparentAuthOptionsSchema } from './transparent.schema';
-export type { TransparentAuthOptions, TransparentAuthOptionsInput } from './transparent.schema';
+export { transparentAuthOptionsSchema } from '@frontmcp/auth';
+export type { TransparentAuthOptions, TransparentAuthOptionsInput } from '@frontmcp/auth';
 
 // ============================================
 // ORCHESTRATED MODE SCHEMAS
 // ============================================
-export {
-  orchestratedLocalSchema,
-  orchestratedRemoteSchema,
-  orchestratedAuthOptionsSchema,
-} from './orchestrated.schema';
+export { orchestratedLocalSchema, orchestratedRemoteSchema, orchestratedAuthOptionsSchema } from '@frontmcp/auth';
 export type {
   OrchestratedLocalOptions,
   OrchestratedLocalOptionsInput,
@@ -93,20 +85,20 @@ export type {
   OrchestratedRemoteOptionsInput,
   OrchestratedAuthOptions,
   OrchestratedAuthOptionsInput,
-  OrchestratedType as OrchestratedTypeZod,
-} from './orchestrated.schema';
+  OrchestratedTypeZod,
+} from '@frontmcp/auth';
 
 // ============================================
 // UNIFIED AUTH SCHEMA
 // ============================================
-export { authOptionsSchema } from './schema';
-export type { AuthOptions, AuthOptionsInput, AuthMode as AuthModeZod } from './schema';
+export { authOptionsSchema } from '@frontmcp/auth';
+export type { AuthOptions, AuthOptionsInput, AuthModeZod } from '@frontmcp/auth';
 
 // ============================================
 // APP-LEVEL AUTH SCHEMA
 // ============================================
-export { appAuthOptionsSchema } from './app-auth.schema';
-export type { AppAuthOptions, AppAuthOptionsInput } from './app-auth.schema';
+export { appAuthOptionsSchema } from '@frontmcp/auth';
+export type { AppAuthOptions, AppAuthOptionsInput } from '@frontmcp/auth';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -119,4 +111,4 @@ export {
   isOrchestratedLocal,
   isOrchestratedRemote,
   allowsPublicAccess,
-} from './utils';
+} from '@frontmcp/auth';

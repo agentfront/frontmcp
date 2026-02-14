@@ -25,8 +25,8 @@ import {
   InMemoryOrchestratedTokenStore,
   InMemoryFederatedAuthSessionStore,
   type FederatedAuthSessionStore,
-} from '../session';
-import { TokenStore } from '../authorization/orchestrated.authorization';
+} from '@frontmcp/auth';
+import type { OrchestratedTokenStore as TokenStore } from '@frontmcp/auth';
 import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
 import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
 

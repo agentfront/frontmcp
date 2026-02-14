@@ -6,6 +6,8 @@
  */
 
 import { z } from 'zod';
+import type { ProviderSnapshot } from '../session/session.types';
+import type { TransportSession, TransportProtocol } from '../session/transport-session.types';
 
 // ============================================
 // Auth Mode
@@ -222,7 +224,7 @@ export const progressiveAuthStateSchema = z.object({
 // ============================================
 
 /**
- * Context for creating an authorization (portable version)
+ * Context for creating an authorization
  */
 export interface AuthorizationCreateCtx {
   /** Unique ID (typically token signature fingerprint) */
@@ -239,6 +241,10 @@ export interface AuthorizationCreateCtx {
   scopes?: string[];
   /** The original token (for transparent mode) */
   token?: string;
+  /** Authorized providers */
+  authorizedProviders?: Record<string, ProviderSnapshot>;
+  /** Authorized provider IDs */
+  authorizedProviderIds?: string[];
   /** Authorized apps */
   authorizedApps?: Record<string, { id: string; toolIds: string[] }>;
   /** Authorized app IDs */
@@ -253,4 +259,64 @@ export interface AuthorizationCreateCtx {
   authorizedPromptIds?: string[];
   /** Authorized resources */
   authorizedResources?: string[];
+}
+
+// ============================================
+// Authorization Interface
+// ============================================
+
+/**
+ * Authorization represents the authenticated user context.
+ * Created from JWT verification, independent of transport.
+ * One authorization can have multiple transport sessions.
+ */
+export interface Authorization {
+  /** Unique authorization ID (derived from token signature) */
+  readonly id: string;
+  /** Auth mode that created this authorization */
+  readonly mode: AuthMode;
+  /** Whether this is an anonymous/public authorization */
+  readonly isAnonymous: boolean;
+  /** User identity */
+  readonly user: AuthUser;
+  /** JWT claims */
+  readonly claims?: Record<string, unknown>;
+  /** Token expiration (epoch ms) */
+  readonly expiresAt?: number;
+  /** Granted scopes */
+  readonly scopes: string[];
+  /** Authorized providers (for orchestrated mode) */
+  readonly authorizedProviders: Record<string, ProviderSnapshot>;
+  /** Authorized provider IDs */
+  readonly authorizedProviderIds: string[];
+  /** Authorized apps */
+  readonly authorizedApps: Record<string, { id: string; toolIds: string[] }>;
+  /** Authorized app IDs */
+  readonly authorizedAppIds: string[];
+  /** Authorized tools */
+  readonly authorizedTools: Record<string, AuthorizedTool>;
+  /** Authorized tool IDs */
+  readonly authorizedToolIds: string[];
+  /** Authorized prompts */
+  readonly authorizedPrompts: Record<string, AuthorizedPrompt>;
+  /** Authorized prompt IDs */
+  readonly authorizedPromptIds: string[];
+  /** Authorized resources */
+  readonly authorizedResources: string[];
+  /** Get access token for a provider (orchestrated mode) */
+  getToken(providerId?: string): Promise<string>;
+  /** Create a new transport session for this authorization */
+  createTransportSession(protocol: TransportProtocol, fingerprint?: string): TransportSession;
+  /** Get existing transport session by ID */
+  getTransportSession(sessionId: string): TransportSession | undefined;
+  /** Check if a scope is granted */
+  hasScope(scope: string): boolean;
+  /** Check if all scopes are granted */
+  hasAllScopes(scopes: string[]): boolean;
+  /** Check if any scope is granted */
+  hasAnyScope(scopes: string[]): boolean;
+  /** Check if a tool is authorized */
+  canAccessTool(toolId: string): boolean;
+  /** Check if a prompt is authorized */
+  canAccessPrompt(promptId: string): boolean;
 }

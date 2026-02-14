@@ -140,7 +140,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
     try {
       // Apply machine ID override if provided
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await import('../auth/machine-id.js');
+        const { setMachineIdOverride } = await import('@frontmcp/auth');
         setMachineIdOverride(config.machineId);
       }
 
@@ -157,7 +157,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
             instanceCache.delete(cacheKey);
           }
           if (machineIdWasSet) {
-            const { setMachineIdOverride } = await import('../auth/machine-id.js');
+            const { setMachineIdOverride } = await import('@frontmcp/auth');
             setMachineIdOverride(undefined);
           }
           return originalDispose();
@@ -171,7 +171,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
         instanceCache.delete(cacheKey);
       }
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await import('../auth/machine-id.js');
+        const { setMachineIdOverride } = await import('@frontmcp/auth');
         setMachineIdOverride(undefined);
       }
       throw error;

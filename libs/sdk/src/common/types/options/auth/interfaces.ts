@@ -9,7 +9,7 @@
 // The typecheck.ts file will fail to compile if they get out of sync.
 
 import { JSONWebKeySet, JWK } from '../../auth';
-import type { RedisConfig } from '../../../../auth/session/transport-session.types';
+import type { RedisConfig } from '@frontmcp/auth';
 
 // ============================================
 // SHARED CONFIG INTERFACES

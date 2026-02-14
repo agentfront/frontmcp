@@ -14,8 +14,10 @@ import {
 } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
 import {
+  deriveTypedUser,
+  extractBearerToken,
+  isJwt,
   JwksService,
   ProviderVerifyRef,
   VerifyResult,
@@ -25,19 +27,20 @@ import {
   buildInsufficientScopeHeader,
   validateAudience,
   deriveExpectedAudience,
-} from '@frontmcp/auth';
-import type { JSONWebKeySet } from 'jose';
-import { deriveAuthorizationId } from '../utils';
-import {
+  deriveAuthorizationId,
   PublicAuthorization,
   TransparentAuthorization,
   OrchestratedAuthorization,
+  authUserSchema,
+  llmSafeAuthContextSchema,
+} from '@frontmcp/auth';
+import type {
   OrchestratedProviderState,
   Authorization,
   TransparentVerifiedPayload,
-  TokenStore,
-} from '../authorization';
-import { authUserSchema, llmSafeAuthContextSchema } from '../authorization';
+  OrchestratedTokenStore as TokenStore,
+} from '@frontmcp/auth';
+import type { JSONWebKeySet } from 'jose';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 // Input schema

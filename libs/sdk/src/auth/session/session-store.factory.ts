@@ -7,7 +7,7 @@
  */
 
 import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
-import type { SessionStore } from './transport-session.types';
+import type { SessionStore } from '@frontmcp/auth';
 import { VercelKvAsyncInitRequiredError } from '../../errors/sdk.errors';
 import {
   type FrontMcpLogger,
@@ -61,7 +61,7 @@ export async function createSessionStore(options: RedisOptions, logger?: FrontMc
  */
 async function createRedisSessionStore(options: RedisProviderOptions, logger?: FrontMcpLogger): Promise<SessionStore> {
   // Lazy require to avoid bundling ioredis when not used
-  const { RedisSessionStore } = require('./redis-session.store');
+  const { RedisSessionStore } = require('@frontmcp/auth');
 
   return new RedisSessionStore(
     {
@@ -85,7 +85,7 @@ async function createVercelKvSessionStore(
   logger?: FrontMcpLogger,
 ): Promise<SessionStore> {
   // Lazy require to avoid bundling @vercel/kv when not used
-  const { VercelKvSessionStore } = require('./vercel-kv-session.store');
+  const { VercelKvSessionStore } = require('@frontmcp/auth');
 
   const store = new VercelKvSessionStore(
     {
@@ -119,7 +119,7 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
   }
 
   // Redis only - synchronous creation
-  const { RedisSessionStore } = require('./redis-session.store');
+  const { RedisSessionStore } = require('@frontmcp/auth');
   const redisOptions = isRedisProvider(options) ? options : (options as RedisProviderOptions);
 
   return new RedisSessionStore(
