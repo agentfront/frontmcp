@@ -32,10 +32,9 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { escapeHtml } from '../ui';
 import {
+  escapeHtml,
   type FederatedAuthSession,
-  type FederatedAuthSessionStore,
   type ProviderTokens,
   type ProviderUserInfo,
   completeCurrentProvider,
@@ -43,7 +42,7 @@ import {
   isSessionComplete,
   getNextProvider,
   type ProviderPkce,
-} from '../session/federated-auth.session';
+} from '@frontmcp/auth';
 import { randomUUID, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
 import { InternalMcpError } from '../../errors';
 

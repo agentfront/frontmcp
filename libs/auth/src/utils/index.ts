@@ -20,3 +20,5 @@ export {
   AudienceValidator,
 } from './audience.validator';
 export type { AudienceValidationResult, AudienceValidatorOptions } from './audience.validator';
+
+export { deriveAuthorizationId } from './authorization-id.utils';

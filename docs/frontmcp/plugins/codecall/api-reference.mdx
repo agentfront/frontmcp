@@ -19,11 +19,11 @@ Search for tools by natural language query using semantic embeddings.
 {
   "tool": "codecall:search",
   "input": {
-    "query": "string (required) - Natural language search query",
+    "queries": ["string (required) - Natural language search queries"],
     "topK": "number (optional, default: 5) - Maximum results to return",
-    "filter": {
-      "appIds": ["string"] // (optional) - Limit to specific apps
-    }
+    "appIds": ["string (optional) - Limit to specific apps"],
+    "excludeToolNames": ["string (optional) - Tool names to exclude"],
+    "minRelevanceScore": "number (optional) - Minimum relevance score threshold"
   }
 }
 ```
@@ -37,10 +37,12 @@ Search for tools by natural language query using semantic embeddings.
       "name": "string - Tool name (e.g., 'users:list')",
       "appId": "string - Owning app ID",
       "description": "string - Tool description",
-      "score": "number - Relevance score (0-1)"
+      "relevanceScore": "number - Relevance score (0-1)",
+      "matchedQueries": ["string - Queries that matched this tool"]
     }
   ],
-  "totalIndexed": "number - Total tools in index"
+  "totalAvailableTools": "number - Total tools in index",
+  "warnings": ["string (optional) - Any warnings about the search"]
 }
 ```
 
@@ -51,7 +53,7 @@ Search for tools by natural language query using semantic embeddings.
   {
     "tool": "codecall:search",
     "input": {
-      "query": "get user profile information",
+      "queries": ["get user profile information"],
       "topK": 5
     }
   }
@@ -61,11 +63,9 @@ Search for tools by natural language query using semantic embeddings.
 {
   "tool": "codecall:search",
   "input": {
-    "query": "list all invoices",
+    "queries": ["list all invoices"],
     "topK": 10,
-    "filter": {
-      "appIds": ["billing", "payments"]
-    }
+    "appIds": ["billing", "payments"]
   }
 }
 ```
@@ -81,22 +81,25 @@ Search for tools by natural language query using semantic embeddings.
       "name": "users:getProfile",
       "appId": "user-service",
       "description": "Get user profile by ID with full details",
-      "score": 0.94
+      "relevanceScore": 0.94,
+      "matchedQueries": ["get user profile information"]
     },
     {
       "name": "users:list",
       "appId": "user-service",
       "description": "List all users with pagination and filtering",
-      "score": 0.78
+      "relevanceScore": 0.78,
+      "matchedQueries": ["get user profile information"]
     },
     {
       "name": "auth:whoami",
       "appId": "auth-service",
       "description": "Get current authenticated user info",
-      "score": 0.72
+      "relevanceScore": 0.72,
+      "matchedQueries": ["get user profile information"]
     }
   ],
-  "totalIndexed": 156
+  "totalAvailableTools": 156
 }
 ```
 
@@ -106,14 +109,13 @@ CodeCall supports two embedding strategies:
 
 | Strategy    | Description                        | Best For                              |
 | ----------- | ---------------------------------- | ------------------------------------- |
-| `tfidf`     | TF-IDF text matching (default)     | Fast, no model loading, works offline |
-| `embedding` | Semantic embeddings via VectoriaDB | Better relevance, requires model      |
+| `tfidf`  | TF-IDF text matching (default)     | Fast, no model loading, works offline |
+| `ml`     | Semantic embeddings via VectoriaDB | Better relevance, requires model      |
 
 ```ts
 CodeCallPlugin.init({
   embedding: {
-    strategy: 'tfidf',      // or 'embedding'
-    similarityThreshold: 0.3,
+    strategy: 'tfidf',  // or 'ml'
   },
 });
 ```
@@ -151,10 +153,11 @@ Get detailed schemas and documentation for specific tools.
         "idempotentHint": "boolean (optional)",
         "openWorldHint": "boolean (optional)"
       },
-      "usageExamples": [
+      "examples": [
         {
           "description": "string - Example description",
-          "code": "string - Example AgentScript code"
+          "input": { /* Example input arguments */ },
+          "output": { /* Expected output */ }
         }
       ]
     }
@@ -164,7 +167,7 @@ Get detailed schemas and documentation for specific tools.
 ```
 
 <Note>
-`usageExamples` returns up to 5 examples per tool. User-provided examples from the `@Tool` decorator take priority, with smart-generated examples filling remaining slots based on tool intent (create, list, get, update, delete, search).
+`examples` returns up to 5 examples per tool. User-provided examples from the `@Tool` decorator take priority, with smart-generated examples filling remaining slots based on tool intent (create, list, get, update, delete, search).
 </Note>
 
 ### Example
@@ -227,18 +230,21 @@ Get detailed schemas and documentation for specific tools.
     "annotations": {
       "readOnlyHint": true
     },
-    "usageExamples": [
+    "examples": [
       {
         "description": "List active users with pagination",
-        "code": "const result = await callTool('users:list', {\n  status: 'active',\n  limit: 50\n});\nreturn result.users;"
+        "input": { "status": "active", "limit": 50 },
+        "output": { "users": [], "total": 0, "hasMore": false }
       },
       {
         "description": "List admin users",
-        "code": "const result = await callTool('users:list', {\n  role: 'admin'\n});\nreturn result.users;"
+        "input": { "role": "admin" },
+        "output": { "users": [], "total": 0, "hasMore": false }
       },
       {
         "description": "List all users",
-        "code": "const result = await callTool('users:list', {});\nreturn result;"
+        "input": {},
+        "output": { "users": [], "total": 0, "hasMore": false }
       }
     ]
   }],
@@ -376,135 +382,9 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
 
 </CodeGroup>
 
-### AgentScript API
-
-Inside `codecall:execute` scripts, these functions are available:
-
-#### callTool(name, input, options?)
-
-Call a tool and get the result.
-
-```ts
-// Basic call
-const users = await callTool('users:list', { limit: 100 });
-
-// With error handling option
-const result = await callTool('users:get', { id: 'invalid' }, {
-  throwOnError: false  // Returns { success, data, error } instead of throwing
-});
-
-if (result.success) {
-  return result.data;
-} else {
-  return { error: result.error.message };
-}
-```
-
-**Options:**
-
-| Option         | Type      | Default | Description                            |
-| -------------- | --------- | ------- | -------------------------------------- |
-| `throwOnError` | `boolean` | `true`  | Throw on error or return result object |
-
-#### getTool(name)
-
-Get metadata about a tool (name, description, schemas).
-
-```ts
-const meta = getTool('users:list');
-console.log(meta.description);
-console.log(meta.inputSchema);
-```
-
-#### codecallContext
-
-Read-only context object passed in the request.
-
-```ts
-// Access context
-const tenantId = codecallContext.tenantId;
-const userId = codecallContext.userId;
-
-// Cannot modify
-codecallContext.tenantId = 'other'; // ❌ Throws error (frozen object)
-```
-
-#### console (if enabled)
-
-Standard console methods, captured in response logs.
-
-```ts
-console.log('Processing users...');
-console.warn('Large dataset detected');
-console.error('Validation failed');
-```
-
-<Note>
-  Console is only available if `vm.allowConsole: true` in plugin config. Logs are returned in the `logs` array of the
-  response.
-</Note>
-
-#### \_\_safe_parallel(fns, options?)
-
-Execute multiple async operations in parallel with controlled concurrency.
-
-```ts
-// Fetch multiple users in parallel
-const userIds = ['user-1', 'user-2', 'user-3', 'user-4', 'user-5'];
-
-const users = await __safe_parallel(
-  userIds.map(id => () => callTool('users:get', { id })),
-  { maxConcurrency: 3 }  // Max 3 concurrent requests
-);
-
-return users;  // Array of results in same order as input
-```
-
-**Options:**
-
-| Option           | Type     | Default | Max | Description               |
-| ---------------- | -------- | ------- | --- | ------------------------- |
-| `maxConcurrency` | `number` | 10      | 20  | Max concurrent operations |
-
-**Limits:**
-
-| Limit           | Value | Error                                                 |
-| --------------- | ----- | ----------------------------------------------------- |
-| Max array size  | 100   | `Cannot execute more than 100 operations in parallel` |
-| Max concurrency | 20    | Silently clamped                                      |
-
-**Error Handling:**
-
-```ts
-// If any operation fails, the entire parallel call fails
-try {
-  const results = await __safe_parallel([
-    () => callTool('users:get', { id: 'valid' }),
-    () => callTool('users:get', { id: 'invalid' }),  // Throws
-    () => callTool('users:get', { id: 'also-valid' }),
-  ]);
-} catch (error) {
-  // Error message: "1 of 3 parallel operations failed:
-  //   [1]: User not found"
-}
-```
-
-**Use Cases:**
-
-```ts
-// Batch fetching
-const ids = await callTool('users:listIds', { limit: 50 });
-const users = await __safe_parallel(
-  ids.map(id => () => callTool('users:get', { id }))
-);
-
-// Parallel aggregation
-const [orders, users, metrics] = await __safe_parallel([
-  () => callTool('orders:list', { status: 'pending' }),
-  () => callTool('users:list', { role: 'admin' }),
-  () => callTool('analytics:getMetrics', {}),
-]);
-```
+<Card title="AgentScript Guide" icon="scroll" href="/frontmcp/plugins/codecall/agentscript">
+  For the complete scripting API (`callTool`, `getTool`, `codecallContext`, `__safe_parallel`), error handling patterns, and best practices, see the dedicated AgentScript guide.
+</Card>
 
 ---
 
@@ -601,110 +481,11 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 | `TIMEOUT`                | `timeout`        | Exceeded time limit            | Optimize or increase timeout     |
 | `TOOL_EXECUTION_ERROR`   | `tool_error`     | Tool threw an error            | Check tool input                 |
 
-### Worker Pool Errors (when adapter='worker_threads')
-
-| Error Class                | Code                     | Description                         | Recovery                           |
-| -------------------------- | ------------------------ | ----------------------------------- | ---------------------------------- |
-| `WorkerTimeoutError`       | `WORKER_TIMEOUT`         | Execution exceeded watchdog timeout | Reduce script complexity           |
-| `WorkerMemoryError`        | `WORKER_MEMORY_EXCEEDED` | Worker exceeded memory limit        | Reduce data size or increase limit |
-| `WorkerCrashedError`       | `WORKER_CRASHED`         | Worker process crashed unexpectedly | Check for infinite recursion       |
-| `WorkerPoolDisposedError`  | `POOL_DISPOSED`          | Pool was shut down during execution | Restart the server                 |
-| `QueueFullError`           | `QUEUE_FULL`             | Execution queue at capacity         | Wait or scale up workers           |
-| `QueueTimeoutError`        | `QUEUE_TIMEOUT`          | Waited too long in queue            | Scale up workers                   |
-| `ExecutionAbortedError`    | `EXECUTION_ABORTED`      | Execution was cancelled             | N/A (intentional)                  |
-| `MessageFloodError`        | `MESSAGE_FLOOD`          | Rate limit exceeded                 | Reduce callTool frequency          |
-| `MessageValidationError`   | `MESSAGE_INVALID`        | Malformed message from worker       | Report as bug                      |
-| `MessageSizeError`         | `MESSAGE_TOO_LARGE`      | Message exceeded size limit         | Reduce result size                 |
-| `WorkerStartupError`       | `WORKER_STARTUP_FAILED`  | Worker failed to initialize         | Check system resources             |
-| `TooManyPendingCallsError` | `TOO_MANY_PENDING_CALLS` | Too many concurrent tool calls      | Use sequential calls               |
-
 ---
 
-## Error Handling Patterns
+## Error Handling
 
-### Basic Pattern: throwOnError
-
-```ts
-// Default: throws on error
-const users = await callTool('users:list', { limit: 100 });
-
-// Safe pattern: returns result object
-const result = await callTool('users:get', { id: 'maybe-invalid' }, {
-  throwOnError: false
-});
-
-if (result.success) {
-  return { user: result.data };
-} else {
-  return { error: result.error.message, fallback: 'default-user' };
-}
-```
-
-### Retry Pattern
-
-```ts
-async function retryTool(toolName, args, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const result = await callTool(toolName, args, { throwOnError: false });
-
-    if (result.success) {
-      return result.data;
-    }
-
-    // Don't retry non-transient errors
-    if (result.error.code === 'NOT_FOUND' || result.error.code === 'VALIDATION_ERROR') {
-      throw new Error(result.error.message);
-    }
-
-    // Last attempt - throw
-    if (attempt === maxRetries) {
-      throw new Error(`Failed after ${maxRetries} attempts: ${result.error.message}`);
-    }
-
-    console.warn(`Attempt ${attempt} failed, retrying...`);
-  }
-}
-
-// Usage
-const data = await retryTool('api:fetch', { url: '/data' });
-```
-
-### Fallback Pattern
-
-```ts
-// Try primary, fall back to secondary
-const result = await callTool('cache:get', { key: 'users' }, { throwOnError: false });
-
-const users = result.success
-  ? result.data
-  : await callTool('db:query', { table: 'users' });  // Fallback to DB
-
-return users;
-```
-
-### Partial Success Pattern
-
-```ts
-// Process items, collect both successes and failures
-const ids = ['id-1', 'id-2', 'id-3', 'id-4'];
-const results = { success: [], failed: [] };
-
-for (const id of ids) {
-  const result = await callTool('users:get', { id }, { throwOnError: false });
-
-  if (result.success) {
-    results.success.push(result.data);
-  } else {
-    results.failed.push({ id, error: result.error.message });
-  }
-}
-
-return {
-  users: results.success,
-  errors: results.failed,
-  successRate: results.success.length / ids.length,
-};
-```
+For error handling patterns including retry, fallback, and partial success strategies, see the [AgentScript Guide](/frontmcp/plugins/codecall/agentscript#error-handling-patterns).
 
 ---
 
@@ -805,12 +586,6 @@ CodeCallPlugin.init({
     preset: 'experimental',  // Longer timeouts, more iterations
     allowConsole: true,
   },
-
-  // Don't sanitize errors in development
-  sanitization: {
-    removeStackTraces: process.env.NODE_ENV === 'production',
-    removeFilePaths: process.env.NODE_ENV === 'production',
-  },
 });
 ```
 
@@ -820,6 +595,8 @@ CodeCallPlugin.init({
 
 ### Unit Testing AgentScript
 
+Use the Enclave library directly to test script execution in isolation:
+
 ```ts
 import { Enclave } from '@enclave-vm/core';
 
@@ -827,7 +604,7 @@ describe('AgentScript', () => {
   let enclave: Enclave;
 
   beforeEach(() => {
-    enclave = new Enclave({ securityLevel: 'STANDARD' });
+    enclave = new Enclave();
   });
 
   afterEach(() => {
@@ -857,13 +634,14 @@ describe('AgentScript', () => {
 });
 ```
 
-### Integration Testing with Mock Tools
+### Integration Testing
+
+For end-to-end tests, set up a FrontMCP app with CodeCallPlugin and invoke the meta-tools through your MCP test client:
 
 ```ts
 import { App, Tool, ToolContext } from '@frontmcp/sdk';
 import { CodeCallPlugin } from '@frontmcp/plugins';
 
-// Create test app with mock tools
 @App({ id: 'test-app', plugins: [CodeCallPlugin.init()] })
 class TestApp {
   @Tool({ name: 'users:list' })
@@ -875,19 +653,8 @@ class TestApp {
   }
 }
 
-describe('CodeCall Integration', () => {
-  it('should execute scripts with real tools', async () => {
-    const response = await callMcpTool('codecall:execute', {
-      script: `
-        const users = await callTool('users:list', {});
-        return users.map(u => u.name);
-      `,
-    });
-
-    expect(response.status).toBe('ok');
-    expect(response.result).toEqual(['Alice', 'Bob']);
-  });
-});
+// Use your MCP test client to call codecall:execute
+// and verify the response status and result
 ```
 
 ### Testing Security Rules
@@ -901,17 +668,6 @@ describe('Security', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('eval');
-  });
-
-  it('should block self-reference', async () => {
-    const result = await callMcpTool('codecall:execute', {
-      script: `
-        await callTool('codecall:execute', { script: 'return 1' });
-      `,
-    });
-
-    expect(result.status).toBe('illegal_access');
-    expect(result.error.code).toBe('SELF_REFERENCE_BLOCKED');
   });
 
   it('should enforce iteration limit', async () => {
@@ -949,41 +705,25 @@ jobs:
 
       # Run CodeCall-specific security tests
       - run: npm run test:security
-        env:
-          CODECALL_VM_PRESET: secure
 ```
 
 ---
-
-## Rate Limiting
-
-CodeCall meta-tools respect FrontMCP's rate limiting:
-
-```ts
-import { RateLimitPlugin } from '@frontmcp/plugins';
-
-@App({
-  plugins: [
-    CodeCallPlugin.init({ ... }),
-    RateLimitPlugin.init({
-      rules: [
-        { tool: 'codecall:execute', limit: 10, window: '1m' },
-        { tool: 'codecall:search', limit: 100, window: '1m' },
-      ],
-    }),
-  ],
-})
-```
 
 ---
 
 ## Related
 
 <CardGroup cols={2}>
-  <Card title="AgentScript Guide" icon="code" href="/docs/frontmcp/plugins/codecall/agentscript">
-    Learn the AgentScript language in depth
+  <Card title="AgentScript Guide" icon="scroll" href="/frontmcp/plugins/codecall/agentscript">
+    Complete scripting API, error handling, and best practices
   </Card>
-  <Card title="Configuration" icon="gear" href="/docs/frontmcp/plugins/codecall/configuration">
+  <Card title="Configuration" icon="gear" href="/frontmcp/plugins/codecall/configuration">
     Configure meta-tool behavior and limits
+  </Card>
+  <Card title="Security Model" icon="shield" href="/frontmcp/plugins/codecall/security">
+    How scripts are validated and sandboxed
+  </Card>
+  <Card title="Examples &amp; Recipes" icon="flask" href="/frontmcp/plugins/codecall/examples">
+    Real-world patterns using the meta-tools
   </Card>
 </CardGroup>

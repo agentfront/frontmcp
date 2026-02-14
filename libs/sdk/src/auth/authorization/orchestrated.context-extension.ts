@@ -11,9 +11,9 @@
 import type { ContextExtension } from '../../common/metadata/plugin.metadata';
 import {
   ORCHESTRATED_AUTH_ACCESSOR,
-  OrchestratedAuthAccessor,
+  type OrchestratedAuthAccessor,
   NullOrchestratedAuthAccessor,
-} from './orchestrated.accessor';
+} from '@frontmcp/auth';
 
 // ============================================
 // Module Augmentation

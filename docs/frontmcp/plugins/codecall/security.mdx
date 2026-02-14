@@ -5,7 +5,20 @@ description: Defense-in-depth security with AST validation, code transformation,
 icon: shield
 ---
 
-CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through **six security layers** before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
+<img
+  noZoom
+  className="hidden dark:block blog-full-image"
+  src="/assets/banners/codecall-plugin/security-layers.dark.png"
+  alt="CodeCall security layers"
+/>
+<img
+  noZoom
+  className="block dark:hidden blog-full-image"
+  src="/assets/banners/codecall-plugin/security-layers.light.png"
+  alt="CodeCall security layers"
+/>
+
+CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through **five security layers** before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
 
 <CardGroup cols={2}>
   <Card title="100+ Attack Vectors Blocked" icon="shield-check">
@@ -14,14 +27,8 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
   <Card title="Layer 0 Defense" icon="radar">
     Pre-Scanner catches attacks BEFORE parser execution - blocks parser-level DoS
   </Card>
-  <Card title="AI Scoring Gate" icon="brain">
-    Semantic analysis detects exfiltration patterns, bulk operations, and sensitive data access
-  </Card>
   <Card title="Zero Trust Runtime" icon="lock">
     Enclave sandbox with whitelist-only globals and resource limits
-  </Card>
-  <Card title="Worker Pool (Optional)" icon="server">
-    OS-level memory isolation via worker threads with hard halt capability
   </Card>
 </CardGroup>
 
@@ -29,7 +36,7 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
 
 ## Security Pipeline
 
-Every script goes through this 6-layer pipeline:
+Every script goes through this 5-layer pipeline:
 
 ```mermaid
 graph TD
@@ -47,19 +54,17 @@ graph TD
 
     L2["<div style='min-width:400px'><b>LAYER 2: CODE TRANSFORMATION</b><br/>- Wrap in async main function<br/>- Transform callTool -> proxied<br/>- Transform loops -> iteration-limited<br/>- Add resource tracking</div>"]
 
-    L3["<div style='min-width:400px'><b>LAYER 3: AI SCORING GATE (Enclave)</b><br/>- Semantic analysis via AST features<br/>- Exfiltration pattern detection<br/>- Sensitive field access tracking<br/>- Risk scoring</div>"]
+    L3["<div style='min-width:400px'><b>LAYER 3: RUNTIME SANDBOX (Enclave)</b><br/>- Node.js vm (prototype isolation)<br/>- Controlled globals (Math, JSON, etc.)<br/>- Timeout enforcement</div>"]
 
-    L4["<div style='min-width:400px'><b>LAYER 4: RUNTIME SANDBOX (Enclave)</b><br/>- Standard: Node.js vm (prototype isolation)<br/>- Optional: Worker Pool (OS-level)<br/>- Controlled globals (Math, JSON, etc.)<br/>- Timeout enforcement</div>"]
-
-    L5["<div style='min-width:400px'><b>LAYER 5: OUTPUT SANITIZATION</b><br/>- Remove stack traces<br/>- Scrub file paths<br/>- Truncate oversized outputs<br/>- Detect circular references</div>"]
+    L4["<div style='min-width:400px'><b>LAYER 4: OUTPUT SANITIZATION</b><br/>- Remove stack traces<br/>- Scrub file paths<br/>- Truncate oversized outputs<br/>- Detect circular references</div>"]
 
     Result["<div style='min-width:400px; text-align:center; font-weight:bold;'>SAFE RESULT</div>"]
 
     %% Connections
-    Input --> L0 --> L1 --> L2 --> L3 --> L4 --> L5 --> Result
+    Input --> L0 --> L1 --> L2 --> L3 --> L4 --> Result
 
     %% Apply Styles
-    class Input,L0,L1,L2,L3,L4,L5,Result terminal;
+    class Input,L0,L1,L2,L3,L4,Result terminal;
 ```
 
 ---
@@ -199,7 +204,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
   <Accordion title="Unicode/Trojan Source Attacks" icon="eye-slash">
     **Blocked:**
     - Bidirectional override characters (CVE-2021-42574)
-    - Homoglyph attacks (Cyrillic 'а' vs Latin 'a')
+    - Homoglyph attacks (Cyrillic 'a' vs Latin 'a')
     - Zero-width characters
     - Invisible formatting characters
 
@@ -223,30 +228,18 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
 
 CodeCall uses the **AgentScript preset** - the most restrictive preset designed for LLM-generated code:
 
-```ts
-import { createAgentScriptPreset } from '@enclave-vm/ast';
+The AgentScript preset enforces these rules:
 
-const preset = createAgentScriptPreset({
-  // Whitelist-only globals
-  allowedGlobals: [
-    'callTool', 'getTool', 'codecallContext',
-    'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date',
-    'console', // optional, controlled by allowConsole
-  ],
-
-  // Only bounded loops allowed
-  allowedLoops: {
-    allowFor: true,      // for (let i = 0; i < n; i++)
-    allowForOf: true,    // for (const x of array)
-    allowWhile: false,   // ❌ blocked
-    allowDoWhile: false, // ❌ blocked
-    allowForIn: false,   // ❌ blocked (prototype walking)
-  },
-
-  // Arrow functions only (no recursion)
-  allowArrowFunctions: true,
-});
-```
+| Rule | Setting | Rationale |
+| --- | --- | --- |
+| **Allowed globals** | `callTool`, `getTool`, `codecallContext`, `Math`, `JSON`, `Array`, `Object`, `String`, `Number`, `Date`, `console` (optional) | Whitelist-only access to safe built-ins |
+| **`for` loops** | Allowed | Bounded iteration with `maxIterations` enforcement |
+| **`for-of` loops** | Allowed | Bounded by array length + `maxIterations` |
+| **`while` loops** | Blocked | Unbounded — risk of infinite loops |
+| **`do-while` loops** | Blocked | Unbounded — risk of infinite loops |
+| **`for-in` loops** | Blocked | Walks prototype chain — security risk |
+| **Arrow functions** | Allowed | No recursion risk (anonymous) |
+| **Function declarations** | Blocked | Enables recursion and hoisting tricks |
 
 ### What's Allowed
 
@@ -328,230 +321,7 @@ let __safe_bypass = 123;
 
 ---
 
-## Layer 3: AI Scoring Gate (NEW)
-
-The **AI Scoring Gate** is a semantic security layer that analyzes code behavior patterns to detect sophisticated attacks that syntactic validation alone cannot catch. It runs after AST validation but before VM execution.
-
-### Why Semantic Analysis?
-
-AST validation catches structural threats (eval, prototype pollution), but some attacks are semantically valid code that behaves maliciously:
-
-- **Data exfiltration**: Fetch sensitive data, then send it externally
-- **Bulk data harvesting**: Request excessive limits to scrape data
-- **Credential theft**: Access password/token fields and export them
-- **Fan-out attacks**: Loop over results and call tools for each item
-
-The Scoring Gate uses **feature extraction** and **rule-based analysis** to assign risk scores to these behavioral patterns.
-
-### Detection Rules (8 Built-in)
-
-| Rule ID           | Score | Trigger                                              |
-| ----------------- | ----- | ---------------------------------------------------- |
-| `SENSITIVE_FIELD` | +35   | Access to password, token, secret, apiKey, SSN, etc. |
-| `EXCESSIVE_LIMIT` | +25   | Limit values > 10,000                                |
-| `WILDCARD_QUERY`  | +20   | Query patterns like `*` or `SELECT *`                |
-| `LOOP_TOOL_CALL`  | +25   | Tool calls inside loops (potential fan-out)          |
-| `EXFIL_PATTERN`   | +50   | Fetch→Send sequence (list data, then webhook/email)  |
-| `EXTREME_VALUE`   | +30   | Numeric values > 1,000,000                           |
-| `DYNAMIC_TOOL`    | +20   | Tool name from variable (not string literal)         |
-| `BULK_OPERATION`  | +15   | Tool names with bulk/batch/mass/all keywords         |
-
-### Risk Levels
-
-| Total Score | Risk Level | Default Action           |
-| ----------- | ---------- | ------------------------ |
-| 0-19        | `none`     | Allow                    |
-| 20-39       | `low`      | Allow                    |
-| 40-69       | `medium`   | **Warn** (configurable)  |
-| 70-89       | `high`     | **Block** (configurable) |
-| 90-100      | `critical` | **Block**                |
-
-### Example: Exfiltration Detection
-
-```js
-// This code triggers EXFIL_PATTERN + SENSITIVE_FIELD + EXCESSIVE_LIMIT
-const users = await callTool('users:list', {
-  limit: 100000,
-  fields: ['email', 'password', 'apiKey']
-});
-await callTool('webhooks:send', { data: users });
-
-// Score breakdown:
-// - SENSITIVE_FIELD: +35 (password, apiKey)
-// - EXCESSIVE_LIMIT: +25 (100000 > 10000)
-// - EXFIL_PATTERN: +50 (list → send)
-// Total: 110 → BLOCKED (critical risk)
-```
-
-### Scorer Modes
-
-The Scoring Gate supports pluggable scorers for different deployment scenarios:
-
-| Mode           | Latency | Description                                         |
-| -------------- | ------- | --------------------------------------------------- |
-| `disabled`     | ~0ms    | Pass-through, no scoring (for trusted environments) |
-| `rule-based`   | ~1ms    | Zero-dependency TypeScript rules (recommended)      |
-| `external-api` | ~100ms  | External scoring API for advanced ML models         |
-
-### Configuration
-
-```ts
-import { createEnclave } from '@enclave-vm/core';
-
-const enclave = createEnclave({
-  scoringGate: {
-    scorer: 'rule-based',    // 'disabled' | 'rule-based' | 'external-api'
-    blockThreshold: 70,      // Block if score >= 70
-    warnThreshold: 40,       // Warn if score >= 40
-    failOpen: true,          // Allow on scorer errors (production default)
-    cache: {
-      enabled: true,
-      ttlMs: 60000,          // Cache scores for 1 minute
-      maxEntries: 1000,
-    },
-  },
-});
-```
-
-### Fail-Open vs Fail-Closed
-
-| Mode              | Behavior                        | Use Case                                            |
-| ----------------- | ------------------------------- | --------------------------------------------------- |
-| `failOpen: true`  | Allow execution if scorer fails | **Production default** - availability over security |
-| `failOpen: false` | Block execution if scorer fails | High-security environments                          |
-
-### Scoring Result
-
-Every execution includes scoring metadata:
-
-```ts
-const result = await enclave.run(code, { tools });
-
-console.log(result.scoringResult);
-// {
-//   allowed: true,
-//   warned: true,
-//   totalScore: 45,
-//   riskLevel: 'medium',
-//   signals: [
-//     { id: 'EXCESSIVE_LIMIT', score: 25, message: 'Limit 15000 > 10000' },
-//     { id: 'WILDCARD_QUERY', score: 20, message: 'Wildcard query "*" detected' }
-//   ],
-//   latencyMs: 0.8,
-//   cached: false
-// }
-```
-
-### Caching
-
-The Scoring Gate uses an **LRU cache** with TTL to avoid re-scoring identical code:
-
-- Same code → same features → same score
-- Cache hit latency: ~0.01ms
-- Configurable TTL and max entries
-- Automatic pruning of expired entries
-
-### AI Scoring Gate Internals
-
-<Info>
-  This section is for security auditors and advanced users who need to understand how the Scoring Gate works internally.
-</Info>
-
-#### Feature Extraction
-
-The Scoring Gate extracts structured features from code for analysis:
-
-```ts
-interface ExtractedFeatures {
-  // Tool call metadata
-  toolCalls: Array<{
-    name: string;           // Tool name (literal or 'DYNAMIC')
-    argsPattern: string[];  // Argument keys/patterns
-    inLoop: boolean;        // Called inside a loop?
-    loopDepth: number;      // Nesting level
-  }>;
-
-  // Pattern signals
-  patterns: {
-    hasLoopedToolCalls: boolean;
-    hasNestedLoops: boolean;
-    maxLoopNesting: number;
-    totalIterations: number; // Estimated from literals
-  };
-
-  // Numeric signals
-  numerics: {
-    maxLimit: number;       // Largest limit/count value
-    totalStringLength: number;
-    fanOutRisk: number;     // Loop count × tool calls
-  };
-
-  // Sensitive data signals
-  sensitive: {
-    fieldsAccessed: string[];  // password, token, etc.
-    hasWildcard: boolean;
-    hasBulkOperation: boolean;
-  };
-
-  // Code metrics
-  metrics: {
-    hash: string;           // SHA-256 for caching
-    lineCount: number;
-    complexity: number;     // Cyclomatic complexity
-  };
-}
-```
-
-#### Rule Evaluation Order
-
-Rules are evaluated in a specific order for efficiency:
-
-1. **Quick reject** - Check for obvious red flags (excessive limits)
-2. **Pattern matching** - Detect exfiltration sequences
-3. **Sensitive field scan** - Check for credential access
-4. **Loop analysis** - Detect fan-out patterns
-5. **Final scoring** - Aggregate scores from all rules
-
-#### Extending with Custom Rules
-
-```ts
-import { RuleBasedScorer, ScoringRule } from '@enclave-vm/core';
-
-const customRule: ScoringRule = {
-  id: 'CUSTOM_PII_ACCESS',
-  evaluate: (features) => {
-    const piiFields = ['ssn', 'dob', 'address', 'phone'];
-    const accessed = features.sensitive.fieldsAccessed
-      .filter(f => piiFields.some(pii => f.includes(pii)));
-
-    if (accessed.length > 0) {
-      return {
-        score: accessed.length * 15,
-        description: `PII fields accessed: ${accessed.join(', ')}`,
-        level: accessed.length > 2 ? 'high' : 'medium',
-      };
-    }
-    return null;
-  },
-};
-
-const scorer = new RuleBasedScorer({
-  customRules: [customRule],
-});
-```
-
-#### Cache Configuration by Security Level
-
-| Level      | TTL  | Max Entries | Eviction   |
-| ---------- | ---- | ----------- | ---------- |
-| STRICT     | 30s  | 100         | Aggressive |
-| SECURE     | 60s  | 500         | Normal     |
-| STANDARD   | 300s | 1,000       | Lazy       |
-| PERMISSIVE | 600s | 5,000       | Lazy       |
-
----
-
-## Layer 4: Runtime Sandbox
+## Layer 3: Runtime Sandbox
 
 [Enclave](/docs/frontmcp/guides/enclave) executes transformed code in an isolated Node.js `vm` context.
 
@@ -640,183 +410,6 @@ CodeCallPlugin.init({
 });
 ```
 
-### Worker Pool Adapter (Optional)
-
-For environments requiring **OS-level memory isolation**, enable the Worker Pool Adapter:
-
-```ts
-import { Enclave } from '@enclave-vm/core';
-
-const enclave = new Enclave({
-  adapter: 'worker_threads',  // Enable Worker Pool
-  workerPoolConfig: {
-    minWorkers: 2,
-    maxWorkers: 8,
-    memoryLimitPerWorker: 256 * 1024 * 1024,  // 256MB
-  },
-});
-```
-
-#### Dual-Layer Sandbox
-
-When using Worker Pool, code runs in a **dual-layer sandbox**:
-
-```mermaid
-graph TD
-    %% 1. Define Styles
-    %% 'innerBox' is for the nested VM box (Bordered)
-    classDef innerBox fill:#fff,stroke:#333,stroke-width:1px,rx:0,ry:0,text-align:left,margin:0;
-
-    %% 'plainText' is for the list at the bottom (No Border, Transparent)
-    classDef plainText fill:none,stroke:none,text-align:left,font-size:14px;
-
-    %% 2. The Main Container (Worker Thread)
-    subgraph Worker ["<div style='font-size:16px; font-weight:bold; margin-bottom:5px;'>Worker Thread (OS-level isolation)</div>"]
-        direction TB
-
-        %% The Nested Box (VM)
-        VM["<div style='min-width:350px'><b>VM Context (prototype isolation)</b><br/>- Whitelist-only globals<br/>- __safe_* runtime functions</div>"]
-
-        %% The Loose Text Below (as a borderless node)
-        Details["<div style='min-width:350px; padding-left:5px'>- parentPort removed from globals<br/>- JSON-only message serialization<br/>- Hard halt via worker.terminate()</div>"]
-
-        %% Connect them invisibly so they stack
-        VM --- Details
-    end
-
-    %% 3. Apply Classes
-    class VM innerBox;
-    class Details plainText;
-
-    %% 4. Style the Subgraph (The Outer Box)
-    style Worker fill:#fff,stroke:#333,stroke-width:1px,rx:0,ry:0,color:#333
-
-    %% 5. Hide the connecting line
-    linkStyle 0 stroke-width:0px;
-```
-
-#### When to Use Worker Pool
-
-| Scenario                    | Recommendation                  |
-| --------------------------- | ------------------------------- |
-| Trusted internal scripts    | Standard VM (lower overhead)    |
-| Multi-tenant execution      | Worker Pool (OS isolation)      |
-| Untrusted AI-generated code | Worker Pool (hard halt)         |
-| Memory-sensitive workloads  | Worker Pool (per-worker limits) |
-
-#### Worker Pool Security Features
-
-| Feature                  | Protection                                    |
-| ------------------------ | --------------------------------------------- |
-| `worker.terminate()`     | Hard halt runaway scripts (VM timeout bypass) |
-| `--max-old-space-size`   | Per-worker memory limits                      |
-| JSON-only serialization  | Prevents structured clone gadget attacks      |
-| Dangerous global removal | parentPort, workerData inaccessible           |
-| Rate limiting            | Message flood protection                      |
-| Safe deserialize         | Prototype pollution prevention                |
-
-#### Worker Pool Configuration
-
-| Option                   | Default   | Description                |
-| ------------------------ | --------- | -------------------------- |
-| `minWorkers`             | 2         | Minimum warm workers       |
-| `maxWorkers`             | CPU count | Maximum concurrent workers |
-| `memoryLimitPerWorker`   | 128MB     | Per-worker memory limit    |
-| `maxMessagesPerSecond`   | 1000      | Rate limit per worker      |
-| `maxExecutionsPerWorker` | 1000      | Recycle after N executions |
-
-#### Worker Pool Presets
-
-| Level      | minWorkers | maxWorkers | memoryLimit | messagesPerSec |
-| ---------- | ---------- | ---------- | ----------- | -------------- |
-| STRICT     | 2          | 4          | 64MB        | 100            |
-| SECURE     | 2          | 8          | 128MB       | 500            |
-| STANDARD   | 2          | 16         | 256MB       | 1000           |
-| PERMISSIVE | 4          | 32         | 512MB       | 5000           |
-
-### Custom Globals Validation
-
-When providing custom globals to scripts via the `globals` config option, Enclave validates them to prevent security bypasses.
-
-#### Validation Rules
-
-| Rule               | Limit     | Blocked                                 |
-| ------------------ | --------- | --------------------------------------- |
-| No functions       | -         | Functions cannot be injected            |
-| No getters/setters | -         | Property traps blocked                  |
-| No symbols         | -         | Symbol-keyed properties stripped        |
-| No dangerous keys  | -         | `__proto__`, `constructor`, `prototype` |
-| Max nesting        | 10 levels | Deep objects rejected                   |
-
-#### Blocked Function Patterns
-
-Custom globals are scanned for dangerous function names in string values:
-
-```ts
-// These strings in globals trigger validation errors
-const DANGEROUS_PATTERNS = [
-  'eval',
-  'Function',
-  'require',
-  'import',
-  'process',
-  'global',
-  'globalThis',
-  'setTimeout',
-  'setInterval',
-  'setImmediate',
-];
-```
-
-#### Valid Custom Globals
-
-```ts
-CodeCallPlugin.init({
-  vm: {
-    globals: {
-      // ✅ Valid - primitive values
-      tenantId: 'tenant-123',
-      maxLimit: 1000,
-      isProduction: true,
-
-      // ✅ Valid - plain objects
-      config: {
-        apiVersion: 'v2',
-        features: ['search', 'export'],
-      },
-
-      // ✅ Valid - arrays
-      allowedRegions: ['us-east', 'eu-west'],
-    },
-  },
-});
-```
-
-#### Invalid Custom Globals
-
-```ts
-CodeCallPlugin.init({
-  vm: {
-    globals: {
-      // ❌ Invalid - functions are stripped
-      helper: (x) => x * 2,
-
-      // ❌ Invalid - getters rejected
-      computed: {
-        get value() { return Date.now(); },
-      },
-
-      // ❌ Invalid - dangerous keys rejected
-      __proto__: {},
-      constructor: {},
-
-      // ❌ Invalid - too deep (>10 levels)
-      deeply: { nested: { objects: { will: { be: { rejected: {} } } } } },
-    },
-  },
-});
-```
-
 ---
 
 ## Self-Reference Guard
@@ -857,116 +450,65 @@ assertNotSelfReference(toolName);  // Throws if codecall:* tool
 
 ---
 
-## Advanced Tool Access Control
+## Tool Access Control
 
-Beyond the Self-Reference Guard, CodeCall provides a comprehensive **Tool Access Control** system for fine-grained control over which tools scripts can invoke.
+Beyond the Self-Reference Guard, CodeCall controls which tools scripts can invoke through two configuration options.
 
-### Access Modes
+### includeTools Filter
 
-| Mode        | Behavior                                    | Use Case                        |
-| ----------- | ------------------------------------------- | ------------------------------- |
-| `whitelist` | Only explicitly allowed tools can be called | High-security, known toolset    |
-| `blacklist` | All tools allowed except explicitly blocked | Flexible with some restrictions |
-| `dynamic`   | Custom evaluator function decides per-call  | Complex authorization logic     |
-
-### Default Blacklist
-
-By default, CodeCall blocks these tool patterns:
-
-```ts
-const DEFAULT_BLACKLIST = [
-  'system:*',    // System administration tools
-  'internal:*',  // Internal/private tools
-  '__*',         // Internal implementation tools
-];
-```
-
-### Pattern Matching
-
-Tool access rules support **glob patterns** for flexible matching:
+The `includeTools` option on `CodeCallPlugin.init()` filters which tools are available to CodeCall at the global level:
 
 ```ts
 CodeCallPlugin.init({
-  toolAccess: {
-    mode: 'blacklist',
-    patterns: [
-      'admin:*',       // Block all admin tools
-      'users:delete',  // Block specific tool
-      '*:export',      // Block all export operations
-    ],
+  includeTools: (tool) => {
+    // Block admin tools
+    if (tool.name.startsWith('admin:')) return false;
+    // Block destructive tools
+    if (tool.metadata?.annotations?.destructiveHint) return false;
+    return true;
   },
 });
 ```
 
-**Supported patterns:**
+### Direct Invoke Allowlist
 
-- `*` - Matches any characters within a segment
-- `?` - Matches a single character
-- `prefix:*` - Matches all tools in a namespace
-
-<Warning>
-  Pattern matching includes ReDoS protection - patterns are validated and normalized to prevent denial-of-service attacks.
-</Warning>
-
-### Whitelist Mode
-
-For maximum security, use whitelist mode to explicitly allow only specific tools:
+For the `codecall:invoke` meta-tool, restrict which tools can be called directly:
 
 ```ts
 CodeCallPlugin.init({
-  toolAccess: {
-    mode: 'whitelist',
-    patterns: [
-      'users:list',
-      'users:get',
-      'orders:list',
-      // Only these 3 tools are accessible
-    ],
+  directCalls: {
+    enabled: true,
+    allowedTools: ['users:list', 'users:get', 'orders:list'],
   },
 });
 ```
 
-### Dynamic Access Control
+### Per-Tool Metadata
 
-For complex authorization (e.g., per-tenant, per-user, or context-based):
+Individual tools opt in or out via the `codecall` metadata field:
 
 ```ts
-CodeCallPlugin.init({
-  toolAccess: {
-    mode: 'dynamic',
-    evaluator: async (toolName, context) => {
-      // Check tenant permissions
-      const allowed = await checkPermission(
-        context.tenantId,
-        toolName
-      );
-      return {
-        allowed,
-        reason: allowed ? undefined : 'Tool not authorized for tenant',
-      };
-    },
+@Tool({
+  name: 'admin:deleteUser',
+  codecall: {
+    enabledInCodeCall: false,  // Not available in scripts
+    visibleInListTools: true,  // Still visible for direct use
   },
-});
+})
 ```
 
-### Call Depth Tracking
+### Default Blocked Patterns
 
-Tool access control tracks **call depth** to prevent indirect privilege escalation:
+Internally, the `ToolAccessControlService` blocks these patterns by default:
 
-```ts
-// Direct call from script
-await callTool('users:list', {});  // depth: 1
-
-// Tool calls another tool (if allowed)
-// Inside users:list:
-await callTool('cache:get', {});   // depth: 2
-```
-
-Maximum call depth is configurable (default: 10) to prevent deep call chains.
+- `system:*` - System administration tools
+- `internal:*` - Internal/private tools
+- `__*` - Internal implementation tools
+- `codecall:*` - Self-reference (via the Self-Reference Guard)
 
 ---
 
-## Layer 5: Output Sanitization
+## Layer 4: Output Sanitization
 
 All outputs are sanitized before returning to the client through two mechanisms: **Value Sanitization** (structure/content) and **Stack Trace Sanitization** (information leakage).
 
@@ -1116,10 +658,6 @@ CodeCall categorizes all errors for safe exposure:
 | Tool Not Found | `TOOL_NOT_FOUND`         | Tool name          | -                    |
 | Tool Error     | `TOOL_ERROR`             | Sanitized message  | -                    |
 | Runtime        | `RUNTIME_ERROR`          | Sanitized message  | -                    |
-| Worker Timeout | `WORKER_TIMEOUT`         | Duration           | Worker terminated    |
-| Worker Memory  | `WORKER_MEMORY_EXCEEDED` | Memory usage       | Worker recycled      |
-| Message Flood  | `MESSAGE_FLOOD_ERROR`    | Rate limit         | Worker terminated    |
-| Queue Full     | `QUEUE_FULL_ERROR`       | Queue size         | Request rejected     |
 
 ```json
 // Example error response
@@ -1145,13 +683,6 @@ Before deploying CodeCall to production:
     vm: { preset: 'secure' }
     ```
   </Step>
-  <Step title="Enable Audit Logging">
-    Monitor script execution, tool calls, and security events.
-    ```ts
-    // Subscribe to CodeCall events
-    scope.events.on('codecall:*', logEvent);
-    ```
-  </Step>
   <Step title="Configure Tool Allowlists">
     Limit which tools are accessible via CodeCall.
     ```ts
@@ -1159,21 +690,8 @@ Before deploying CodeCall to production:
     includeTools: (tool) => !tool.name.startsWith('admin:')  // global
     ```
   </Step>
-  <Step title="Remove Stack Traces">
-    Ensure sanitization is enabled (default).
-    ```ts
-    sanitization: { removeStackTraces: true, removeFilePaths: true }
-    ```
-  </Step>
-  <Step title="Configure AI Scoring Gate">
-    Enable rule-based scoring with appropriate thresholds.
-    ```ts
-    scoringGate: {
-      scorer: 'rule-based',
-      blockThreshold: 70,
-      warnThreshold: 40,
-    }
-    ```
+  <Step title="Verify Stack Trace Sanitization">
+    Output sanitization is enabled by default. Verify that error responses don't leak file paths or internal details in your staging environment.
   </Step>
   <Step title="Test Security Boundaries">
     Run the attack vector tests from ast-guard's security audit.
@@ -1194,10 +712,7 @@ Before deploying CodeCall to production:
     Isolated vm context with no access to Node.js APIs or globals
   </Card>
   <Card title="Data Exfiltration" icon="file-export">
-    AI Scoring Gate detects fetch→send patterns and sensitive data access
-  </Card>
-  <Card title="Bulk Data Harvesting" icon="database">
-    Scoring Gate flags excessive limits and bulk operations
+    Tool access control and iteration limits restrict data movement patterns
   </Card>
   <Card title="Prototype Pollution" icon="virus">
     Blocked at AST level and isolated at runtime
@@ -1213,9 +728,6 @@ Before deploying CodeCall to production:
   </Card>
   <Card title="Recursive Execution" icon="arrows-rotate">
     Self-reference guard blocks codecall:* tool calls
-  </Card>
-  <Card title="VM Timeout Bypass" icon="clock">
-    Worker Pool provides hard halt via worker.terminate() when VM timeout fails
   </Card>
 </CardGroup>
 
@@ -1247,7 +759,13 @@ Before deploying CodeCall to production:
   <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/enclave/blob/main/libs/ast-guard/docs/SECURITY-AUDIT.md">
     Full list of 100+ blocked attack vectors including Layer 0 Pre-Scanner
   </Card>
-  <Card title="Configuration" icon="gear" href="/docs/frontmcp/plugins/codecall/configuration">
+  <Card title="Configuration" icon="gear" href="/frontmcp/plugins/codecall/configuration">
     Complete configuration reference for security settings
+  </Card>
+  <Card title="AgentScript Guide" icon="scroll" href="/frontmcp/plugins/codecall/agentscript">
+    What's allowed and blocked in the scripting language
+  </Card>
+  <Card title="Production &amp; Scaling" icon="server" href="/frontmcp/plugins/codecall/production">
+    Security checklist and best practices for production
   </Card>
 </CardGroup>

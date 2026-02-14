@@ -55,7 +55,7 @@ describe('create() E2E', () => {
 
     // Reset caches and machine ID override
     const { clearCreateCache } = await import('../create');
-    const { setMachineIdOverride } = await import('../../auth/machine-id');
+    const { setMachineIdOverride } = await import('@frontmcp/auth');
     clearCreateCache();
     setMachineIdOverride(undefined);
   });
@@ -145,7 +145,7 @@ describe('create() E2E', () => {
 
   it('should support dispose and recreate with stable machineId', async () => {
     const { create } = await import('../create');
-    const { getMachineId } = await import('../../auth/machine-id');
+    const { getMachineId } = await import('@frontmcp/auth');
 
     // Create first server
     const srv1 = await create({

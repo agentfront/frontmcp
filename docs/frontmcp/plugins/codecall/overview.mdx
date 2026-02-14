@@ -1,7 +1,7 @@
 ---
 title: CodeCall Plugin
 sidebarTitle: Overview
-description: The next generation of MCP servers - orchestrate hundreds of tools through code instead of flooding the context window.
+description: Orchestrate hundreds of MCP tools through code instead of flooding the context window — the next generation of agentic tool management.
 icon: code
 ---
 
@@ -9,13 +9,13 @@ icon: code
 
 <img
   noZoom
-  className="blog-full-image dark-img"
+  className="hidden dark:block blog-full-image"
   src="/assets/banners/codecall-plugin/codecall-overview-dark.png"
   alt="CodeCall meta-API architecture"
 />
 <img
   noZoom
-  className="blog-full-image light-img"
+  className="block dark:hidden blog-full-image"
   src="/assets/banners/codecall-plugin/codecall-overview-light.png"
   alt="CodeCall meta-API architecture"
 />
@@ -40,6 +40,19 @@ icon: code
 ## The Problem: Tool Explosion
 
 As MCP servers grow, `list_tools` becomes unmanageable:
+
+<img
+  noZoom
+  className="hidden dark:block blog-full-image"
+  src="/assets/banners/codecall-plugin/early-day-vs-today.dark.png"
+  alt="Early days vs today - tool explosion"
+/>
+<img
+  noZoom
+  className="block dark:hidden blog-full-image"
+  src="/assets/banners/codecall-plugin/early-day-vs-today.light.png"
+  alt="Early days vs today - tool explosion"
+/>
 
 <Steps>
   <Step title="Early Days" icon="seedling">
@@ -103,6 +116,8 @@ sequenceDiagram
 
 ## Quick Start
 
+Get CodeCall running in 5 minutes:
+
 <CodeGroup>
 ```bash npm
 npm install @frontmcp/plugins
@@ -115,56 +130,9 @@ yarn add @frontmcp/plugins
 ```
 </CodeGroup>
 
-```ts title="src/app.ts"
-import { App, Tool, ToolContext } from '@frontmcp/sdk';
-import { CodeCallPlugin } from '@frontmcp/plugins';
-
-@Tool({
-  name: 'users:list',
-  description: 'List users with optional filtering',
-  codecall: {
-    enabledInCodeCall: true,     // Available in CodeCall scripts
-    visibleInListTools: false,   // Hidden from standard list_tools
-  },
-})
-class ListUsersTool extends ToolContext {
-  async execute(input: { status?: string; limit?: number }) {
-    // Your implementation
-    return { users: [/* ... */] };
-  }
-}
-
-@App({
-  id: 'my-app',
-  name: 'My Application',
-  tools: [ListUsersTool],
-  plugins: [
-    CodeCallPlugin.init({
-      mode: 'codecall_only',  // Recommended for large toolsets
-      vm: {
-        preset: 'secure',     // Bank-grade security defaults
-      },
-      embedding: {
-        strategy: 'tfidf',    // Fast, no external API needed
-      },
-    }),
-  ],
-})
-export default class MyApp {}
-```
-
-Now your MCP client sees only 4 tools instead of potentially hundreds:
-
-```json
-{
-  "tools": [
-    { "name": "codecall:search", "description": "Search for tools..." },
-    { "name": "codecall:describe", "description": "Get tool schemas..." },
-    { "name": "codecall:execute", "description": "Execute JavaScript plan..." },
-    { "name": "codecall:invoke", "description": "Direct tool invocation..." }
-  ]
-}
-```
+<Card title="Quick Start Guide" icon="rocket" href="/frontmcp/plugins/codecall/quickstart">
+  Step-by-step guide from install to first execution
+</Card>
 
 ---
 
@@ -262,25 +230,37 @@ CodeCall is built on three battle-tested FrontMCP libraries:
 
 Every script goes through this 6-layer pipeline:
 
-<img noZoom className="blog-full-image light-img" src="/assets/banners/codecall-plugin/security-layers.light.png" />
-<img noZoom className="blog-full-image dark-img" src="/assets/banners/codecall-plugin/security-layers.dark.png" />
+<img noZoom className="block dark:hidden blog-full-image" src="/assets/banners/codecall-plugin/security-layers.light.png" />
+<img noZoom className="hidden dark:block blog-full-image" src="/assets/banners/codecall-plugin/security-layers.dark.png" />
 
 ---
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Security Model" icon="shield" href="/docs/frontmcp/plugins/codecall/security">
-    Deep dive into defense-in-depth security, AST validation rules, and sandbox configuration
+  <Card title="Quick Start" icon="rocket" href="/frontmcp/plugins/codecall/quickstart">
+    Install, configure, and execute your first CodeCall script in 5 minutes
   </Card>
-  <Card title="API Reference" icon="book" href="/docs/frontmcp/plugins/codecall/api-reference">
+  <Card title="AgentScript Guide" icon="scroll" href="/frontmcp/plugins/codecall/agentscript">
+    Learn the AgentScript language: APIs, allowed syntax, and error handling patterns
+  </Card>
+  <Card title="API Reference" icon="book" href="/frontmcp/plugins/codecall/api-reference">
     Complete reference for all 4 meta-tools with examples and response schemas
   </Card>
-  <Card title="Configuration" icon="gear" href="/docs/frontmcp/plugins/codecall/configuration">
+  <Card title="Configuration" icon="gear" href="/frontmcp/plugins/codecall/configuration">
     Tool visibility modes, VM presets, embedding strategies, and per-tool metadata
   </Card>
-  <Card title="Production Scaling" icon="server" href="/docs/frontmcp/plugins/codecall/scaling">
-    Performance tuning, monitoring, and deployment best practices
+  <Card title="Security Model" icon="shield" href="/frontmcp/plugins/codecall/security">
+    Deep dive into defense-in-depth security, AST validation rules, and sandbox configuration
+  </Card>
+  <Card title="Production &amp; Scaling" icon="server" href="/frontmcp/plugins/codecall/production">
+    Performance tuning, monitoring, multi-tenancy, and deployment best practices
+  </Card>
+  <Card title="Examples &amp; Recipes" icon="flask" href="/frontmcp/plugins/codecall/examples">
+    Real-world patterns: CRM, ETL, batch processing, and error-resilient workflows
+  </Card>
+  <Card title="CRM Demo" icon="users" href="/frontmcp/guides/codecall-crm-demo">
+    Explore the multi-tool CRM sample app that showcases CodeCall in action
   </Card>
 </CardGroup>
 

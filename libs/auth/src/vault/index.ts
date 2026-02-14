@@ -38,3 +38,20 @@ export { extractCredentialExpiry } from './credential-helpers';
 
 // Cache
 export { CredentialCache, type CacheStats } from './credential-cache';
+
+// Accessor
+export type { AuthProvidersAccessor } from './auth-providers.accessor';
+export { AUTH_PROVIDERS_ACCESSOR } from './auth-providers.accessor';
+export { AuthProvidersAccessorImpl } from './auth-providers.accessor.impl';
+
+// Registry
+export { AuthProvidersRegistry, AUTH_PROVIDERS_REGISTRY } from './auth-providers.registry';
+export type { NormalizedProviderConfig } from './auth-providers.registry';
+
+// Vault
+export { AuthProvidersVault, AUTH_PROVIDERS_VAULT } from './auth-providers.vault';
+
+// Credential Loaders
+export { EagerCredentialLoader } from './credential-loaders/eager-loader';
+export type { EagerLoadResult } from './credential-loaders/eager-loader';
+export { LazyCredentialLoader } from './credential-loaders/lazy-loader';

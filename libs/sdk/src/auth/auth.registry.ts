@@ -27,7 +27,7 @@ import {
 import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
 import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
-import { detectAuthProviders, AuthProviderDetectionResult, AppAuthInfo } from './detection';
+import { detectAuthProviders, type AuthProviderDetectionResult, type AppAuthInfo } from '@frontmcp/auth';
 import { DependencyNotFoundError, AuthConfigurationError } from '../errors';
 import { installContextExtensions } from '../context/context-extension';
 import { orchestratedAuthContextExtension } from './authorization/orchestrated.context-extension';

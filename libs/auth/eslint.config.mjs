@@ -9,6 +9,11 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
+          ignoredDependencies: [
+            '@vercel/kv', // Optional: lazy-required in vercel-kv-session.store.ts
+            '@frontmcp/storage-sqlite', // Optional: lazy-required in session-store.factory
+            'jose', // Used via dynamic require in token verification
+          ],
         },
       ],
     },

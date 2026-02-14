@@ -1,6 +1,6 @@
 // auth/session/session.service.ts
 import { Scope } from '../../scope';
-import { CreateSessionArgs } from './session.types';
+import type { CreateSessionArgs } from '@frontmcp/auth';
 import { McpSession } from './record/session.mcp';
 
 export class SessionService {
@@ -40,7 +40,7 @@ export class SessionService {
     }
 
     // Providers snapshot - only derive the missing piece, not both
-    let authorizedProviders: Record<string, import('./session.types').ProviderSnapshot> | undefined =
+    let authorizedProviders: Record<string, import('@frontmcp/auth').ProviderSnapshot> | undefined =
       args.authorizedProviders;
     let authorizedProviderIds: string[] | undefined = args.authorizedProviderIds;
 
@@ -52,7 +52,7 @@ export class SessionService {
     // If authorizedProviders is missing, build from primary/claims
     if (!authorizedProviders) {
       const expClaim = args.claims && typeof args.claims['exp'] === 'number' ? Number(args.claims['exp']) : undefined;
-      const providerSnapshot: import('./session.types').ProviderSnapshot = {
+      const providerSnapshot: import('@frontmcp/auth').ProviderSnapshot = {
         id: primary.id,
         exp: expClaim,
         payload: args.claims ?? {},

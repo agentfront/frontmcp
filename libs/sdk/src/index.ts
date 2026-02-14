@@ -270,4 +270,4 @@ export type {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Orchestrated token store for upstream provider tokens
-export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from './auth/session';
+export { InMemoryOrchestratedTokenStore, type InMemoryOrchestratedTokenStoreOptions } from '@frontmcp/auth';

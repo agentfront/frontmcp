@@ -25,8 +25,7 @@ import {
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { randomUUID, sha256Hex, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
-import { escapeHtml } from '../ui';
-import { startNextProvider, createFederatedAuthSession, type ProviderPkce } from '../session/federated-auth.session';
+import { escapeHtml, startNextProvider, createFederatedAuthSession, type ProviderPkce } from '@frontmcp/auth';
 
 const inputSchema = httpInputSchema;
 

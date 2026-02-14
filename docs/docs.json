@@ -81,7 +81,6 @@
               "frontmcp/fundamentals/overview",
               {
                 "group": "Core Components",
-                "icon": "cube",
                 "pages": [
                   "frontmcp/servers/server",
                   "frontmcp/servers/apps",
@@ -96,7 +95,6 @@
               },
               {
                 "group": "Context Classes",
-                "icon": "layer-group",
                 "pages": [
                   "frontmcp/sdk-reference/contexts/overview",
                   "frontmcp/sdk-reference/contexts/execution-context-base",
@@ -109,7 +107,6 @@
               },
               {
                 "group": "Authentication",
-                "icon": "shield-check",
                 "pages": [
                   "frontmcp/authentication/overview",
                   "frontmcp/authentication/modes",
@@ -125,7 +122,6 @@
               },
               {
                 "group": "Deployment",
-                "icon": "rocket",
                 "pages": [
                   "frontmcp/deployment/local-dev-server",
                   "frontmcp/deployment/production-build",
@@ -135,7 +131,6 @@
                   "frontmcp/deployment/serverless",
                   {
                     "group": "Storage",
-                    "icon": "database",
                     "pages": [
                       "frontmcp/deployment/redis-setup",
                       "frontmcp/deployment/sqlite-setup",
@@ -154,19 +149,29 @@
               "frontmcp/extensibility/logging",
               {
                 "group": "Plugins",
-                "icon": "plug",
                 "pages": [
                   "frontmcp/plugins/overview",
                   "frontmcp/plugins/introduction",
                   "frontmcp/plugins/creating-plugins",
                   "frontmcp/plugins/official/cache",
                   "frontmcp/plugins/official/remember",
-                  "frontmcp/plugins/official/codecall"
+                  {
+                    "group": "CodeCall",
+                    "pages": [
+                      "frontmcp/plugins/codecall/overview",
+                      "frontmcp/plugins/codecall/quickstart",
+                      "frontmcp/plugins/codecall/agentscript",
+                      "frontmcp/plugins/codecall/api-reference",
+                      "frontmcp/plugins/codecall/configuration",
+                      "frontmcp/plugins/codecall/security",
+                      "frontmcp/plugins/codecall/production",
+                      "frontmcp/plugins/codecall/examples"
+                    ]
+                  }
                 ]
               },
               {
                 "group": "Adapters",
-                "icon": "arrows-rotate",
                 "pages": ["frontmcp/adapters/overview", "frontmcp/adapters/openapi-adapter"]
               }
             ]
@@ -188,7 +193,6 @@
             "pages": [
               {
                 "group": "Quick Start",
-                "icon": "rocket",
                 "pages": [
                   "frontmcp/guides/your-first-tool",
                   "frontmcp/guides/add-openapi-adapter",
@@ -197,7 +201,6 @@
               },
               {
                 "group": "Building Features",
-                "icon": "hammer",
                 "pages": [
                   "frontmcp/guides/create-plugin",
                   "frontmcp/guides/customize-flow-stages",
@@ -207,7 +210,6 @@
               },
               {
                 "group": "Advanced Patterns",
-                "icon": "graduation-cap",
                 "pages": [
                   "frontmcp/guides/role-based-authorization",
                   "frontmcp/guides/site-scoped-authorization",
@@ -217,7 +219,6 @@
               },
               {
                 "group": "Testing",
-                "icon": "flask",
                 "pages": [
                   "frontmcp/guides/testing-your-first-tool",
                   "frontmcp/guides/testing-openapi-adapter",
@@ -235,7 +236,6 @@
         "groups": [
           {
             "group": "Decorators",
-            "icon": "at",
             "pages": [
               "frontmcp/sdk-reference/decorators/overview",
               "frontmcp/sdk-reference/decorators/frontmcp",
@@ -253,7 +253,6 @@
           },
           {
             "group": "Core Classes",
-            "icon": "cube",
             "pages": [
               "frontmcp/sdk-reference/core/frontmcp-instance",
               "frontmcp/sdk-reference/core/scope",
@@ -263,7 +262,6 @@
           },
           {
             "group": "Registries",
-            "icon": "database",
             "pages": [
               "frontmcp/sdk-reference/registries/overview",
               "frontmcp/sdk-reference/registries/tool-registry",
@@ -279,7 +277,6 @@
           },
           {
             "group": "Errors",
-            "icon": "triangle-exclamation",
             "pages": [
               "frontmcp/sdk-reference/errors/overview",
               "frontmcp/sdk-reference/errors/tool-errors",
@@ -302,5 +299,15 @@
         ]
       }
     ]
-  }
+  },
+  "redirects": [
+    {
+      "source": "/frontmcp/plugins/official/codecall",
+      "destination": "/frontmcp/plugins/codecall/overview"
+    },
+    {
+      "source": "/frontmcp/plugins/codecall/scaling",
+      "destination": "/frontmcp/plugins/codecall/production"
+    }
+  ]
 }

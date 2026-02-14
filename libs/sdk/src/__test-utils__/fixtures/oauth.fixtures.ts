@@ -6,7 +6,7 @@
  * request parameter builders, and common OAuth scenarios.
  */
 
-import { generatePkceChallenge, PkceChallenge } from '../../auth/session';
+import { generatePkceChallenge, type PkceChallenge } from '@frontmcp/auth';
 import { createMockHttpRequest } from './flow.fixtures';
 
 // ============================================

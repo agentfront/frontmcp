@@ -97,8 +97,74 @@ export {
   type EncryptedBlob,
 } from '@frontmcp/utils';
 
-// Utilities
-export { TinyTtlCache } from './utils';
+// Transport Session Types
+export {
+  transportProtocolSchema,
+  sseTransportStateSchema,
+  streamableHttpTransportStateSchema,
+  statefulHttpTransportStateSchema,
+  statelessHttpTransportStateSchema,
+  legacySseTransportStateSchema,
+  transportStateSchema,
+  transportSessionSchema,
+  sessionJwtPayloadSchema,
+  encryptedBlobSchema,
+  storedSessionSchema,
+  redisConfigSchema,
+} from './transport-session.types';
+export type {
+  TransportProtocol,
+  SessionStorageMode,
+  TransportSession,
+  TransportState,
+  SseTransportState,
+  StreamableHttpTransportState,
+  StatefulHttpTransportState,
+  StatelessHttpTransportState,
+  LegacySseTransportState,
+  SessionJwtPayload,
+  StatelessSessionJwtPayload,
+  StoredSession,
+  EncryptedBlob as TransportEncryptedBlob,
+  SessionStore,
+  SessionStorageConfig,
+  RedisConfig,
+  SessionSecurityConfig,
+} from './transport-session.types';
+
+// Session Types (provider snapshots, create args)
+export type {
+  SessionMode,
+  ProviderEmbedMode,
+  EncBlob as SessionEncBlob,
+  ProviderSnapshot,
+  CreateSessionArgs,
+} from './session.types';
+
+// Session Crypto (signing/verification)
+export { signSession, verifySession, isSignedSession, verifyOrParseSession } from './session-crypto';
+export type { SignedSession, SessionSigningConfig } from './session-crypto';
+
+// Session Rate Limiter
+export { SessionRateLimiter, defaultSessionRateLimiter } from './session-rate-limiter';
+export type { SessionRateLimiterConfig, RateLimitResult } from './session-rate-limiter';
+
+// Transport ID Generator
+export { TransportIdGenerator } from './session.transport';
+
+// Session Utilities (auth-token, session-crypto)
+export {
+  isJwt,
+  getTokenSignatureFingerprint,
+  deriveTypedUser,
+  extractBearerToken,
+  getKey,
+  encryptJson,
+  decryptSessionJson,
+  safeDecrypt,
+  resetCachedKey,
+  TinyTtlCache,
+} from './utils';
 
 // Storage-backed implementations (using @frontmcp/utils/storage)
 export {
@@ -123,3 +189,45 @@ export type {
   StorageAuthorizationVaultOptions,
   InMemoryAuthorizationVaultOptions,
 } from './storage';
+
+// Redis Session Store
+export { RedisSessionStore } from './redis-session.store';
+export type { RedisSessionStoreConfig } from './redis-session.store';
+
+// Vercel KV Session Store
+export { VercelKvSessionStore } from './vercel-kv-session.store';
+export type { VercelKvSessionConfig } from './vercel-kv-session.store';
+
+// Orchestrated Token Store
+export { InMemoryOrchestratedTokenStore } from './orchestrated-token.store';
+export type { InMemoryOrchestratedTokenStoreOptions } from './orchestrated-token.store';
+
+// Federated Auth Session
+export {
+  InMemoryFederatedAuthSessionStore,
+  toSessionRecord,
+  fromSessionRecord,
+  createFederatedAuthSession,
+  isSessionComplete,
+  getNextProvider,
+  completeCurrentProvider,
+  startNextProvider,
+} from './federated-auth.session';
+export type {
+  ProviderPkce,
+  ProviderTokens,
+  ProviderUserInfo,
+  CompletedProvider,
+  FederatedAuthSession,
+  FederatedAuthSessionRecord,
+  FederatedAuthSessionStore,
+  FederatedAuthSessionCreateParams,
+} from './federated-auth.session';
+
+// Encrypted Authorization Vault
+export { redisVaultEntrySchema, EncryptedRedisVault, createEncryptedVault } from './encrypted-authorization-vault';
+export type { RedisVaultEntry, EncryptionContext } from './encrypted-authorization-vault';
+
+// Token Refresh
+export { toEpochSeconds, isSoonExpiring, isSoonExpiringProvider, tryJwtExp } from './token.refresh';
+export type { TokenRefreshCtx, TokenRefreshResult, TokenRefresher } from './token.refresh';

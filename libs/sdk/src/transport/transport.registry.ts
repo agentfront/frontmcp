@@ -17,10 +17,11 @@ import { TransportBusRequiredError, InvalidTransportSessionError } from '../erro
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
-import { StoredSession, createSessionStore } from '../auth/session';
-import type { SessionStore } from '../auth/session';
+import type { StoredSession } from '@frontmcp/auth';
+import { createSessionStore } from '../auth/session/session-store.factory';
+import type { SessionStore } from '@frontmcp/auth';
 import type { RedisOptions } from '../common/types/options/redis';
-import { getMachineId } from '../auth/authorization/authorization.class';
+import { getMachineId } from '@frontmcp/auth';
 
 export class TransportService {
   readonly ready: Promise<void>;

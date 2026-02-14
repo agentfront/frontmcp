@@ -26,7 +26,7 @@ export default [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '@frontmcp/sdk', '@frontmcp/uipack', '@frontmcp/uipack/*'],
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '@frontmcp/sdk', '@frontmcp/auth', '@frontmcp/utils', '@frontmcp/uipack', '@frontmcp/uipack/*'],
           depConstraints: [
             {
               sourceTag: '*',

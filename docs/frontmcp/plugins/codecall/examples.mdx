@@ -1,0 +1,517 @@
+---
+title: Examples & Recipes
+sidebarTitle: Examples
+description: Real-world CodeCall patterns - CRM workflows, ETL pipelines, batch processing, and error-resilient scripts.
+icon: flask
+---
+
+Practical recipes showing how to use CodeCall's meta-tools for common real-world scenarios. Each example includes the full AgentScript code and expected output.
+
+<Note>
+  These examples assume tools are registered and available via CodeCall. See the [Quick Start](/frontmcp/plugins/codecall/quickstart) for setup instructions.
+</Note>
+
+---
+
+## CRM: Multi-Tool CRUD
+
+Combine user and activity tools to build a complete CRM workflow. Based on the [CRM Demo](/frontmcp/guides/codecall-crm-demo).
+
+### App Wiring
+
+```ts title="src/app.ts"
+@App({
+  plugins: [
+    CodeCallPlugin.init({
+      mode: 'codecall_only',
+      topK: 10,
+    }),
+  ],
+  tools: [
+    UsersListTool, UsersGetTool, UsersCreateTool,
+    UsersUpdateTool, UsersDeleteTool,
+    ActivitiesListTool, ActivitiesLogTool, ActivitiesStatsTool,
+  ],
+})
+export class CrmApp {}
+```
+
+### Tool Catalog
+
+| Tool | Description |
+|------|-------------|
+| `users:list` | Filter users by status/role with pagination |
+| `users:get` | Fetch profile by ID or email |
+| `users:create` | Create new user with validation |
+| `users:update` | Patch name, role, status, or last login |
+| `users:delete` | Remove a user |
+| `activities:list` | Recent activities with user/type filters |
+| `activities:log` | Append activity, auto-update lastLoginAt |
+| `activities:stats` | Activity counts grouped by type |
+
+### Script: Active Admin Dashboard
+
+This script fetches all active administrators, pulls their recent activity in parallel, and returns a summary object suitable for rendering in a dashboard UI.
+
+```js
+// Fetch active admins and their recent activity
+const users = await callTool('users:list', { status: 'active', role: 'admin' });
+const stats = await callTool('activities:stats', {});
+
+const adminDetails = await __safe_parallel(
+  users.users.map(u => () => callTool('activities:list', {
+    userId: u.id,
+    limit: 5,
+  }))
+);
+
+return {
+  adminCount: users.users.length,
+  admins: users.users.map((u, i) => ({
+    name: u.name,
+    email: u.email,
+    recentActivity: adminDetails[i].activities.length,
+  })),
+  activityStats: stats,
+};
+```
+
+### Script: Create User and Log Activity
+
+A common pattern is to create a record and immediately log a related activity. This script chains two sequential tool calls.
+
+```js
+// Create a new user
+const newUser = await callTool('users:create', {
+  name: codecallContext.userName,
+  email: codecallContext.userEmail,
+  role: 'member',
+  status: 'active',
+});
+
+// Log the creation activity
+await callTool('activities:log', {
+  userId: newUser.id,
+  type: 'account_created',
+  metadata: { createdBy: 'system' },
+});
+
+return {
+  message: 'User created successfully',
+  user: { id: newUser.id, name: newUser.name, email: newUser.email },
+};
+```
+
+---
+
+## Data Pipeline: ETL with Filtering
+
+Fetch data from multiple sources, join, filter, and return a clean result. This pattern is especially powerful because the join and filtering logic runs inside the MCP server, keeping token usage low.
+
+```js
+// Fetch users and their orders in parallel
+const [users, orders] = await __safe_parallel([
+  () => callTool('users:list', { status: 'active', limit: 100 }),
+  () => callTool('orders:list', { status: 'pending', limit: 500 }),
+]);
+
+// Join orders with user data
+const userMap = {};
+for (const u of users.users) {
+  userMap[u.id] = u;
+}
+
+const enrichedOrders = orders.orders
+  .filter(o => userMap[o.userId])
+  .map(o => ({
+    orderId: o.id,
+    amount: o.amount,
+    userName: userMap[o.userId].name,
+    userEmail: userMap[o.userId].email,
+  }));
+
+// Filter high-value orders
+const highValue = enrichedOrders.filter(o => o.amount > 100);
+
+return {
+  totalOrders: orders.orders.length,
+  enrichedCount: enrichedOrders.length,
+  highValueOrders: highValue,
+  totalHighValueAmount: highValue.reduce((sum, o) => sum + o.amount, 0),
+};
+```
+
+<Tip>
+  The join and filter happen **inside the MCP server**, not in the LLM context. This saves thousands of tokens compared to returning raw data to the model.
+</Tip>
+
+---
+
+## Batch Processing with Parallel Execution
+
+Process a list of items in parallel with controlled concurrency. The `maxConcurrency` option prevents overwhelming downstream services with too many simultaneous requests.
+
+```js
+// Get all pending tasks
+const tasks = await callTool('tasks:list', { status: 'pending', limit: 50 });
+
+// Process each task in parallel (max 5 concurrent)
+const results = await __safe_parallel(
+  tasks.items.map(task => () =>
+    callTool('tasks:process', { id: task.id }, { throwOnError: false })
+  ),
+  { maxConcurrency: 5 }
+);
+
+// Separate successes and failures
+const processed = [];
+const failed = [];
+
+for (let i = 0; i < results.length; i++) {
+  if (results[i].success) {
+    processed.push({ id: tasks.items[i].id, result: results[i].data });
+  } else {
+    failed.push({ id: tasks.items[i].id, error: results[i].error.message });
+  }
+}
+
+return {
+  total: tasks.items.length,
+  processed: processed.length,
+  failed: failed.length,
+  failures: failed,
+};
+```
+
+<Warning>
+  `__safe_parallel` has a maximum of 100 operations. For larger batches, paginate and process in chunks.
+</Warning>
+
+### Chunked Batch Processing
+
+When your batch exceeds the 100-operation limit, split the work into pages and process each page sequentially while running items within each page in parallel.
+
+```js
+const PAGE_SIZE = 50;
+const MAX_PAGES = 20;  // Bounded upper limit
+let allResults = [];
+
+for (let page = 0; page < MAX_PAGES; page++) {
+  const batch = await callTool('tasks:list', {
+    status: 'pending',
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  });
+
+  if (batch.items.length === 0) break;
+
+  const results = await __safe_parallel(
+    batch.items.map(task => () =>
+      callTool('tasks:process', { id: task.id }, { throwOnError: false })
+    ),
+    { maxConcurrency: 10 }
+  );
+
+  allResults = allResults.concat(results);
+  if (batch.items.length < PAGE_SIZE) break;
+}
+
+return {
+  totalProcessed: allResults.length,
+  succeeded: allResults.filter(r => r.success).length,
+  failed: allResults.filter(r => !r.success).length,
+};
+```
+
+---
+
+## Aggregation Dashboard
+
+Pull data from multiple services and combine into a single dashboard object. This pattern reduces multiple LLM round-trips into a single `codecall:execute` call.
+
+```js
+// Fetch all dashboard data in parallel
+const [
+  userStats,
+  orderStats,
+  revenueData,
+  supportTickets,
+] = await __safe_parallel([
+  () => callTool('analytics:userStats', { period: '30d' }),
+  () => callTool('analytics:orderStats', { period: '30d' }),
+  () => callTool('billing:revenue', { period: '30d' }),
+  () => callTool('support:openTickets', {}),
+]);
+
+return {
+  dashboard: {
+    users: {
+      total: userStats.total,
+      active: userStats.active,
+      newThisMonth: userStats.newThisMonth,
+      growthRate: `${((userStats.newThisMonth / userStats.total) * 100).toFixed(1)}%`,
+    },
+    orders: {
+      total: orderStats.total,
+      pending: orderStats.pending,
+      averageValue: orderStats.averageValue,
+    },
+    revenue: {
+      total: revenueData.total,
+      mrr: revenueData.mrr,
+      currency: revenueData.currency,
+    },
+    support: {
+      openTickets: supportTickets.count,
+      avgResponseTime: supportTickets.avgResponseTimeHours,
+    },
+  },
+  generatedAt: new Date().toISOString(),
+};
+```
+
+---
+
+## Error-Resilient Workflow
+
+Combine retry, fallback, and partial success patterns for a robust workflow. This recipe demonstrates three resilience techniques:
+
+1. **Retry with backoff** -- automatically retry transient failures while skipping validation errors.
+2. **Cache-then-database fallback** -- try a fast cache first, fall back to a slower source on miss.
+3. **Partial success collection** -- gather results from multiple channels, continuing even if some fail.
+
+```js
+// Helper: retry with backoff
+const retry = async (toolName, args, maxAttempts = 3) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const result = await callTool(toolName, args, { throwOnError: false });
+    if (result.success) return result.data;
+
+    // Don't retry validation errors
+    if (result.error.code === 'VALIDATION_ERROR') {
+      return { error: result.error.message };
+    }
+
+    if (attempt === maxAttempts) {
+      return { error: `Failed after ${maxAttempts} attempts: ${result.error.message}` };
+    }
+    console.warn(`${toolName} attempt ${attempt} failed, retrying...`);
+  }
+};
+
+// Fetch user with retry
+const user = await retry('users:get', { id: codecallContext.userId });
+if (user.error) return { error: user.error };
+
+// Try cache first, fall back to database
+const prefsResult = await callTool('cache:get', { key: `prefs:${user.id}` }, {
+  throwOnError: false,
+});
+const prefs = prefsResult.success
+  ? prefsResult.data
+  : await callTool('db:getUserPreferences', { userId: user.id });
+
+// Collect notifications (partial success OK)
+const channels = ['email', 'sms', 'push'];
+const notifications = [];
+
+for (const channel of channels) {
+  const result = await callTool('notifications:pending', {
+    userId: user.id,
+    channel,
+  }, { throwOnError: false });
+
+  if (result.success) {
+    notifications.push(...result.data.items.map(n => ({ ...n, channel })));
+  } else {
+    console.warn(`Failed to fetch ${channel} notifications: ${result.error.message}`);
+  }
+}
+
+return {
+  user: { name: user.name, email: user.email },
+  preferences: prefs,
+  notifications,
+  notificationChannelsAvailable: channels.length,
+};
+```
+
+---
+
+## Conditional Tool Selection
+
+Branching logic based on tool results, running entirely server-side. The LLM calls `codecall:search` separately to discover tools, then writes a script that handles different cases.
+
+```js
+// Get user and decide next action based on status
+const user = await callTool('users:get', { id: codecallContext.targetUserId });
+
+let action;
+if (user.status === 'pending') {
+  // Send welcome email
+  action = await callTool('email:send', {
+    to: user.email,
+    template: 'welcome',
+  }, { throwOnError: false });
+} else if (user.status === 'inactive') {
+  // Check last login
+  const activity = await callTool('activities:list', {
+    userId: user.id,
+    type: 'login',
+    limit: 1,
+  });
+
+  if (activity.activities.length === 0) {
+    action = await callTool('email:send', {
+      to: user.email,
+      template: 'reactivation',
+    }, { throwOnError: false });
+  } else {
+    action = { skipped: true, reason: 'User has recent login activity' };
+  }
+} else {
+  action = { skipped: true, reason: `User status is ${user.status}` };
+}
+
+return {
+  user: { id: user.id, name: user.name, status: user.status },
+  actionTaken: action,
+};
+```
+
+---
+
+## Data Validation and Cleanup
+
+Use AgentScript to validate records in bulk and flag or fix inconsistencies before they reach downstream consumers.
+
+```js
+// Pull all contacts that were modified in the last 24 hours
+const contacts = await callTool('contacts:list', {
+  modifiedSince: new Date(Date.now() - 86400000).toISOString(),
+  limit: 200,
+});
+
+const issues = [];
+const fixed = [];
+
+for (const contact of contacts.items) {
+  const problems = [];
+
+  // Check for missing email
+  if (!contact.email || contact.email.trim() === '') {
+    problems.push('missing_email');
+  }
+
+  // Check for duplicate phone formatting
+  if (contact.phone && !contact.phone.startsWith('+')) {
+    // Attempt to normalize the phone number
+    const updated = await callTool('contacts:update', {
+      id: contact.id,
+      phone: `+1${contact.phone.replace(/\D/g, '')}`,
+    }, { throwOnError: false });
+
+    if (updated.success) {
+      fixed.push({ id: contact.id, field: 'phone' });
+    } else {
+      problems.push('phone_format_unfixable');
+    }
+  }
+
+  if (problems.length > 0) {
+    issues.push({ id: contact.id, name: contact.name, problems });
+  }
+}
+
+return {
+  scanned: contacts.items.length,
+  issuesFound: issues.length,
+  autoFixed: fixed.length,
+  remainingIssues: issues,
+};
+```
+
+<Tip>
+  Validation scripts make excellent scheduled workflows. Pair them with a cron-triggered prompt to run nightly data quality checks.
+</Tip>
+
+---
+
+## Common Patterns Reference
+
+These short snippets illustrate patterns you can reuse across any recipe.
+
+### Sequential Chain
+
+When one call depends on the output of a previous call, use plain `await`:
+
+```js
+const org = await callTool('orgs:get', { id: codecallContext.orgId });
+const members = await callTool('orgs:members', { orgId: org.id, limit: 50 });
+return { orgName: org.name, memberCount: members.total };
+```
+
+### Fan-Out / Fan-In
+
+Dispatch multiple independent calls, then combine the results:
+
+```js
+const ids = ['id-1', 'id-2', 'id-3', 'id-4'];
+const details = await __safe_parallel(
+  ids.map(id => () => callTool('items:get', { id }))
+);
+return { items: details };
+```
+
+### Guard Clause
+
+Exit early when preconditions are not met:
+
+```js
+const user = await callTool('users:get', { id: codecallContext.userId });
+if (user.role !== 'admin') {
+  return { error: 'Only admins can perform this action' };
+}
+// ... continue with admin-only logic
+```
+
+### Accumulator Loop
+
+Build up a result across multiple pages of data:
+
+```js
+let allItems = [];
+let cursor = null;
+const MAX_PAGES = 20;  // Bounded upper limit
+
+for (let page = 0; page < MAX_PAGES; page++) {
+  const result = await callTool('items:list', {
+    cursor,
+    limit: 100,
+  });
+  allItems = allItems.concat(result.items);
+  cursor = result.nextCursor;
+  if (!cursor) break;
+}
+
+return { totalItems: allItems.length, items: allItems };
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="AgentScript Guide" icon="scroll" href="/frontmcp/plugins/codecall/agentscript">
+    Master the scripting language: APIs, patterns, and best practices
+  </Card>
+  <Card title="Configuration" icon="gear" href="/frontmcp/plugins/codecall/configuration">
+    Tool visibility modes, VM presets, and embedding strategies
+  </Card>
+  <Card title="Security Model" icon="shield" href="/frontmcp/plugins/codecall/security">
+    How scripts are validated and sandboxed
+  </Card>
+  <Card title="CRM Demo Guide" icon="users" href="/frontmcp/guides/codecall-crm-demo">
+    Run the full CRM reference app locally
+  </Card>
+</CardGroup>

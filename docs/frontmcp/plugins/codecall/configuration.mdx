@@ -5,6 +5,19 @@ description: Complete configuration reference for CodeCall plugin - modes, VM pr
 icon: gear
 ---
 
+<img
+  noZoom
+  className="hidden dark:block blog-full-image"
+  src="/assets/banners/codecall-plugin/code-call-options.dark.png"
+  alt="CodeCall configuration options"
+/>
+<img
+  noZoom
+  className="block dark:hidden blog-full-image"
+  src="/assets/banners/codecall-plugin/code-call-options.light.png"
+  alt="CodeCall configuration options"
+/>
+
 This page covers all configuration options for the CodeCall plugin, from quick presets to fine-grained control.
 
 ---
@@ -317,44 +330,6 @@ CodeCallPlugin.init({
   </Tab>
 </Tabs>
 
-### Worker Pool Configuration (Advanced)
-
-For OS-level memory isolation, configure the Worker Pool adapter:
-
-```ts
-CodeCallPlugin.init({
-  vm: {
-    preset: 'secure',
-    adapter: 'worker_threads',  // Enable Worker Pool
-
-    workerPool: {
-      minWorkers: 2,              // Minimum warm workers
-      maxWorkers: 8,              // Maximum concurrent workers
-      memoryLimitPerWorker: 128 * 1024 * 1024,  // 128MB per worker
-      maxExecutionsPerWorker: 500,  // Recycle after N executions
-      maxMessagesPerSecond: 500,    // Rate limit per worker
-      maxPendingToolCalls: 50,      // Max concurrent tool calls
-      idleTimeoutMs: 30000,         // Release idle workers after 30s
-      queueTimeoutMs: 20000,        // Max queue wait time
-      maxQueueSize: 50,             // Max pending executions
-    },
-  },
-});
-```
-
-#### Worker Pool Presets by Security Level
-
-| Config                 | STRICT | SECURE | STANDARD | PERMISSIVE |
-| ---------------------- | ------ | ------ | -------- | ---------- |
-| minWorkers             | 2      | 2      | 2        | 4          |
-| maxWorkers             | 4      | 8      | 16       | 32         |
-| memoryLimitPerWorker   | 64MB   | 128MB  | 256MB    | 512MB      |
-| maxExecutionsPerWorker | 100    | 500    | 1,000    | 5,000      |
-| maxMessagesPerSecond   | 100    | 500    | 1,000    | 5,000      |
-| maxPendingToolCalls    | 10     | 50     | 100      | 1,000      |
-| maxQueueSize           | 20     | 50     | 100      | 500        |
-| maxMessageSizeBytes    | 1MB    | 4MB    | 16MB     | 64MB       |
-
 ### Reference Sidecar Configuration (Pass-by-Reference)
 
 The Reference Sidecar handles large data transfer between scripts and tools. Instead of passing full data through the VM, large values are stored externally with reference IDs.
@@ -363,16 +338,16 @@ The Reference Sidecar handles large data transfer between scripts and tools. Ins
 CodeCallPlugin.init({
   vm: {
     preset: 'secure',
+  },
 
-    sidecar: {
-      maxTotalSize: 64 * 1024 * 1024,     // 64MB total storage
-      maxReferenceSize: 16 * 1024 * 1024,  // 16MB per reference
-      extractionThreshold: 256 * 1024,     // Extract strings > 256KB
-      maxResolvedSize: 32 * 1024 * 1024,   // 32MB max when resolving
-      maxReferenceCount: 100,              // Max 100 references
-      maxResolutionDepth: 10,              // Max nesting depth
-      allowComposites: false,              // Block reference concatenation
-    },
+  sidecar: {
+    maxTotalSize: 64 * 1024 * 1024,     // 64MB total storage
+    maxReferenceSize: 16 * 1024 * 1024,  // 16MB per reference
+    extractionThreshold: 256 * 1024,     // Extract strings > 256KB
+    maxResolvedSize: 32 * 1024 * 1024,   // 32MB max when resolving
+    maxReferenceCount: 100,              // Max 100 references
+    maxResolutionDepth: 10,              // Max nesting depth
+    allowComposites: false,              // Block reference concatenation
   },
 });
 ```
@@ -422,12 +397,9 @@ Configure how tools are indexed for search:
 CodeCallPlugin.init({
   embedding: {
     // Search strategy
-    strategy: 'tfidf' | 'embedding',
+    strategy: 'tfidf' | 'ml',
 
-    // TF-IDF specific
-    similarityThreshold: 0.3,
-
-    // Embedding specific (requires VectoriaDB)
+    // ML specific (requires VectoriaDB)
     modelName: 'Xenova/all-MiniLM-L6-v2',
     cacheDir: './.cache/transformers',
   },
@@ -436,17 +408,16 @@ CodeCallPlugin.init({
 
 ### Strategy Comparison
 
-| Strategy    | Speed   | Relevance | Setup          | Best For                |
-| ----------- | ------- | --------- | -------------- | ----------------------- |
-| `tfidf`     | ⚡ Fast | Good      | None           | Most use cases, offline |
-| `embedding` | Slower  | Better    | Model download | Large toolsets (100+)   |
+| Strategy | Speed   | Relevance | Setup          | Best For                |
+| -------- | ------- | --------- | -------------- | ----------------------- |
+| `tfidf`  | ⚡ Fast | Good      | None           | Most use cases, offline |
+| `ml`     | Slower  | Better    | Model download | Large toolsets (100+)   |
 
 ### TF-IDF Configuration
 
 ```ts
 embedding: {
   strategy: 'tfidf',
-  similarityThreshold: 0.3,  // Minimum score to include in results
 }
 ```
 
@@ -456,11 +427,11 @@ TF-IDF extracts searchable text from:
 - Description (weighted 3x)
 - Key terms from description (4+ characters, no stop words)
 
-### Embedding Configuration
+### ML Configuration
 
 ```ts
 embedding: {
-  strategy: 'embedding',
+  strategy: 'ml',
   modelName: 'Xenova/all-MiniLM-L6-v2',  // Default
   cacheDir: './.cache/transformers',
   useHNSW: true,  // For large toolsets (1000+)
@@ -468,75 +439,8 @@ embedding: {
 ```
 
 <Note>
-  Embedding strategy uses [VectoriaDB](/docs/frontmcp/guides/vectoriadb) internally. The model (~22MB) is downloaded on first use and cached locally.
+  ML strategy uses [VectoriaDB](/docs/frontmcp/guides/vectoriadb) internally. The model (~22MB) is downloaded on first use and cached locally.
 </Note>
-
-### Tool Search Tuning
-
-Fine-tune how `codecall:search` finds and ranks tools:
-
-```ts
-CodeCallPlugin.init({
-  embedding: {
-    strategy: 'tfidf',
-
-    search: {
-      // Term weighting (higher = more important)
-      weights: {
-        name: 2.0,         // Tool name matches
-        description: 3.0,  // Description matches (most important)
-        tags: 2.0,         // Tag matches
-      },
-
-      // Stop words to ignore during tokenization
-      stopWords: ['the', 'a', 'an', 'is', 'are', 'to', 'for'],
-
-      // Minimum score to include in results
-      minScore: 0.25,
-
-      // Maximum results to return
-      maxResults: 10,
-    },
-  },
-});
-```
-
-#### Scoring Mechanics
-
-When a user searches for "list users", the scoring works:
-
-```
-Tool: users:list
-- Name match "users" + "list": 2.0 × 2 = 4.0
-- Description "List all users in the system": 3.0 × 3 = 9.0
-- Tags ["users", "list", "admin"]: 2.0 × 2 = 4.0
-- Total: 17.0 (normalized)
-```
-
-#### Optimizing for Large Toolsets (100+)
-
-For large toolsets, consider these optimizations:
-
-```ts
-CodeCallPlugin.init({
-  embedding: {
-    strategy: 'embedding',  // Better semantic matching
-
-    search: {
-      // Pre-filter by namespace before semantic search
-      prefixFilter: true,
-
-      // Use approximate nearest neighbor for speed
-      useHNSW: true,
-      hnswEfConstruction: 200,  // Index quality
-      hnswEfSearch: 100,        // Search quality vs speed
-
-      // Batch indexing for startup performance
-      batchSize: 100,
-    },
-  },
-});
-```
 
 ---
 
@@ -552,9 +456,6 @@ CodeCallPlugin.init({
 
     // Optional: restrict to specific tools
     allowedTools: ['users:getById', 'billing:getInvoice'],
-
-    // Optional: timeout for direct calls (default: 30s)
-    timeoutMs: 30000,
   },
 });
 ```
@@ -581,10 +482,9 @@ codecall:execute (VM)
 ├─ Pre-scan: ~0.5ms
 ├─ AST validation: ~1-2ms
 ├─ Code transformation: ~0.5ms
-├─ AI scoring: ~1ms (if enabled)
 ├─ VM execution: ~1-2ms
 ├─ Tool execution: ~varies
-└─ Total overhead: ~4-6ms
+└─ Total overhead: ~3-5ms
 ```
 
 ### Error Response Format
@@ -604,7 +504,7 @@ codecall:execute (VM)
 ### Security Considerations
 
 <Warning>
-  Direct invocation bypasses the AI Scoring Gate. Only enable for tools you trust completely.
+  Direct invocation bypasses VM security validation. Only enable for tools you trust completely.
 </Warning>
 
 - **allowedTools**: Always specify an explicit allowlist in production
@@ -644,7 +544,6 @@ import { CodeCallPlugin } from '@frontmcp/plugins';
       // Fast TF-IDF search
       embedding: {
         strategy: 'tfidf',
-        similarityThreshold: 0.25,
       },
 
       // Enable direct invocation for simple calls
@@ -656,23 +555,6 @@ import { CodeCallPlugin } from '@frontmcp/plugins';
   ],
 })
 export default class MyApp {}
-```
-
----
-
-## Environment Variables
-
-Override configuration via environment variables:
-
-| Variable                      | Overrides            | Example         |
-| ----------------------------- | -------------------- | --------------- |
-| `CODECALL_VM_TIMEOUT`         | `vm.timeoutMs`       | `5000`          |
-| `CODECALL_VM_PRESET`          | `vm.preset`          | `secure`        |
-| `CODECALL_EMBEDDING_STRATEGY` | `embedding.strategy` | `tfidf`         |
-| `CODECALL_MODE`               | `mode`               | `codecall_only` |
-
-```bash
-CODECALL_VM_TIMEOUT=10000 CODECALL_MODE=codecall_opt_in npm start
 ```
 
 ---
@@ -723,7 +605,13 @@ CODECALL_VM_TIMEOUT=10000 CODECALL_MODE=codecall_opt_in npm start
   <Card title="Security Model" icon="shield" href="/docs/frontmcp/plugins/codecall/security">
     Security implications of configuration choices
   </Card>
-  <Card title="Production Scaling" icon="server" href="/docs/frontmcp/plugins/codecall/scaling">
+  <Card title="Production &amp; Scaling" icon="server" href="/docs/frontmcp/plugins/codecall/production">
     Performance tuning and monitoring
+  </Card>
+  <Card title="AgentScript Guide" icon="scroll" href="/docs/frontmcp/plugins/codecall/agentscript">
+    Scripting language reference and best practices
+  </Card>
+  <Card title="API Reference" icon="book" href="/docs/frontmcp/plugins/codecall/api-reference">
+    Complete meta-tool schemas and examples
   </Card>
 </CardGroup>

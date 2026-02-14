@@ -1,0 +1,23 @@
+export { AuthInternalError } from './auth-internal.error';
+export {
+  EncryptionContextNotSetError,
+  VaultLoadError,
+  VaultNotFoundError,
+  TokenNotAvailableError,
+  TokenStoreRequiredError,
+  NoProviderIdError,
+  TokenLeakDetectedError,
+  SessionSecretRequiredError,
+  CredentialProviderAlreadyRegisteredError,
+  AuthProvidersNotConfiguredError,
+  OrchestratedAuthNotAvailableError,
+  EncryptionKeyNotConfiguredError,
+  SessionIdEmptyError,
+  ElicitationSecretRequiredError,
+  ScopeDeniedError,
+  InMemoryStoreRequiredError,
+  OrchestratorJwksNotAvailableError,
+  AuthInvalidInputError,
+  CredentialStorageError,
+  AuthFlowError,
+} from './auth-internal.errors';

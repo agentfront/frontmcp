@@ -6,7 +6,7 @@
  */
 
 import type { ContextExtension } from '../../common/metadata/plugin.metadata';
-import { AUTH_PROVIDERS_ACCESSOR, AuthProvidersAccessor } from './auth-providers.accessor';
+import { AUTH_PROVIDERS_ACCESSOR, type AuthProvidersAccessor } from '@frontmcp/auth';
 import { AuthProvidersNotConfiguredError } from '../../errors/auth-internal.errors';
 
 // ============================================
