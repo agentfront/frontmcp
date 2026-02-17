@@ -75,11 +75,11 @@ if (fs.existsSync(esmDir)) {
   // Adjust paths: ESM files stay relative (./), CJS/types go up one level (../)
   const adjustForEsm = (v) => {
     if (typeof v !== 'string') return v;
-    // ESM files (.mjs) stay relative - they're in this folder
-    if (v.endsWith('.mjs')) {
+    // ESM files in the esm/ folder stay relative - they're in this folder
+    if (v.endsWith('.mjs') && v.startsWith('./esm/')) {
       return v.replace('./esm/', './');
     }
-    // CJS/types files go up one level to parent dist folder
+    // All other files (CJS, types, browser builds) go up one level to parent dist folder
     if (v.startsWith('./')) {
       return '..' + v.slice(1);
     }

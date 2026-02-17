@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@frontmcp/react": ["../../../libs/react/src/index.ts"],
+      "@frontmcp/react/router": ["../../../libs/react/src/router/index.ts"],
+      "@frontmcp/react/ai": ["../../../libs/react/src/ai/index.ts"],
+      "@frontmcp/sdk": ["../../../libs/sdk/src/browser.ts"],
+      "@frontmcp/sdk/*": ["../../../libs/sdk/src/*"],
+      "@frontmcp/adapters/openapi": ["../../../libs/adapters/src/openapi/index.ts"],
+      "@frontmcp/plugin-store": ["../../../plugins/plugin-store/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

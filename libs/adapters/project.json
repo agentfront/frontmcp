@@ -74,9 +74,36 @@
         }
       }
     },
+    "build-browser": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/adapters/dist/browser",
+        "main": "libs/adapters/src/browser.ts",
+        "tsConfig": "libs/adapters/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": true,
+        "platform": "browser",
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "alias": {
+            "fs/promises": "@frontmcp/sdk/browser/shims/fs",
+            "fs": "@frontmcp/sdk/browser/shims/fs",
+            "path": "@frontmcp/sdk/browser/shims/path",
+            "node:fs": "@frontmcp/sdk/browser/shims/fs",
+            "node:fs/promises": "@frontmcp/sdk/browser/shims/fs",
+            "node:path": "@frontmcp/sdk/browser/shims/path"
+          },
+          "external": ["@frontmcp/sdk", "@frontmcp/sdk/*", "zod"]
+        }
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/adapters/dist/package.json"
       }

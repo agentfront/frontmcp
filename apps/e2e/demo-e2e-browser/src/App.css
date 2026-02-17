@@ -1,0 +1,633 @@
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --accent: #00d4ff;
+  --accent-dim: #0097b8;
+  --text: #e0e0e0;
+  --text-muted: #8892a4;
+  --success: #00e676;
+  --error: #ff5252;
+  --warning: #ffab40;
+  --border: #2a3a5e;
+  --radius: 8px;
+  --sidebar-width: 260px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────────────────── */
+
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-header h1 {
+  font-size: 1.1rem;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 0.5rem 0;
+}
+
+.nav-section {
+  margin-bottom: 0.5rem;
+}
+
+.nav-section-title {
+  padding: 0.5rem 1rem 0.25rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.nav-link {
+  display: block;
+  padding: 0.4rem 1rem;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: all 0.1s;
+  border-left: 3px solid transparent;
+}
+
+.nav-link:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+
+.nav-link.active {
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* McpNavigation styling */
+.sidebar-nav nav {
+  padding: 0;
+}
+
+.sidebar-nav nav h4 {
+  padding: 0.4rem 1rem 0.2rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.sidebar-nav nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-nav nav li a {
+  display: block;
+  padding: 0.35rem 1rem 0.35rem 1.5rem;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: all 0.1s;
+}
+
+.sidebar-nav nav li a:hover {
+  color: var(--accent);
+  background: var(--bg-tertiary);
+}
+
+/* ─── Main Content ───────────────────────────────────────────────────────── */
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+/* ─── Pages ──────────────────────────────────────────────────────────────── */
+
+.page {
+  padding: 1.5rem 2rem;
+  max-width: 960px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.page-header h2 {
+  font-size: 1.25rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.page-description {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+/* ─── Sections ───────────────────────────────────────────────────────────── */
+
+.section {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.section h3 {
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* ─── Stats Grid ─────────────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+/* ─── Feature Grid ───────────────────────────────────────────────────────── */
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.feature-card {
+  display: block;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.15s;
+}
+
+.feature-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-tertiary);
+}
+
+.feature-card h3 {
+  color: var(--accent);
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+}
+
+.feature-card p {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+/* ─── Status Badge ───────────────────────────────────────────────────────── */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+}
+
+.status-badge .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-badge.connecting .dot {
+  background: var(--warning);
+}
+.status-badge.connected .dot {
+  background: var(--success);
+}
+.status-badge.error .dot {
+  background: var(--error);
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+
+button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: white;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.button-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ─── Form Elements ──────────────────────────────────────────────────────── */
+
+.form-group {
+  margin-bottom: 0.75rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.form-group textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.form-group .field-type {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+/* ─── Hook Demo ──────────────────────────────────────────────────────────── */
+
+.hook-demo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.hook-input,
+.hook-state {
+  min-width: 0;
+}
+
+.hook-state h4 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hook-state pre {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  font-size: 0.78rem;
+  overflow: auto;
+  max-height: 300px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* ─── Info Rows ──────────────────────────────────────────────────────────── */
+
+.info-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.info-label {
+  color: var(--text-muted);
+  min-width: 80px;
+}
+
+.info-value {
+  color: var(--text);
+}
+
+/* ─── Timeline ───────────────────────────────────────────────────────────── */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.timeline-entry {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  background: var(--bg-primary);
+}
+
+.timeline-time {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+}
+
+.timeline-status {
+  font-weight: 500;
+}
+
+.status-idle {
+  color: var(--text-muted);
+}
+.status-connecting {
+  color: var(--warning);
+}
+.status-connected {
+  color: var(--success);
+}
+.status-error {
+  color: var(--error);
+}
+
+/* ─── Registry List ──────────────────────────────────────────────────────── */
+
+.registry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.registry-entry {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.registry-name {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.registry-uri {
+  color: var(--text-muted);
+  font-family: monospace;
+  font-size: 0.78rem;
+}
+
+/* ─── Tree Editor ────────────────────────────────────────────────────────── */
+
+.tree-editor {
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  background: var(--bg-primary);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.78rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.tree-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ─── Renderer Output ────────────────────────────────────────────────────── */
+
+.renderer-output {
+  padding: 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 80px;
+}
+
+.renderer-output > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* ─── Output Log ─────────────────────────────────────────────────────────── */
+
+.output-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  margin-top: 1rem;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.output-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.log-entry {
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+}
+
+.log-entry.success {
+  background: rgba(0, 230, 118, 0.08);
+}
+.log-entry.error {
+  background: rgba(255, 82, 82, 0.08);
+}
+
+.log-entry .log-time {
+  color: var(--text-muted);
+  margin-right: 0.5rem;
+}
+
+.log-entry .log-op {
+  color: var(--accent);
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.log-entry.error .log-op {
+  color: var(--error);
+}
+
+.log-entry .log-data {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────────── */
+
+.text-muted {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.error-text {
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+/* ─── OutputDisplay / ResourceViewer overrides ───────────────────────────── */
+
+[data-testid='output-display'],
+[data-testid='resource-viewer'] pre {
+  background: var(--bg-primary);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.78rem;
+}
+
+[data-testid='output-loading'],
+[data-testid='resource-loading'] {
+  color: var(--warning);
+}
+
+[data-testid='output-error'],
+[data-testid='resource-error'] {
+  color: var(--error) !important;
+}
+
+[data-testid='resource-viewer'] > div > div:first-child {
+  color: var(--text-muted) !important;
+}

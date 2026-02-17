@@ -41,6 +41,10 @@
     },
     "./openapi": {
       "development": "./src/openapi/index.ts",
+      "browser": {
+        "types": "./dist/openapi/index.d.ts",
+        "default": "./dist/browser/browser.mjs"
+      },
       "require": {
         "types": "./dist/openapi/index.d.ts",
         "default": "./dist/openapi/index.js"

@@ -33,6 +33,10 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
+      "browser": {
+        "import": "./dist/browser/browser.mjs",
+        "default": "./dist/browser/browser.js"
+      },
       "development": "./src/index.ts",
       "require": {
         "types": "./dist/index.d.ts",
@@ -42,6 +46,10 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/esm/index.mjs"
       }
+    },
+    "./browser": {
+      "import": "./dist/browser/browser.mjs",
+      "default": "./dist/browser/browser.js"
     }
   },
   "dependencies": {
