@@ -1,7 +1,7 @@
 // dynamic-plugin.ts
 import { Reference } from '@frontmcp/di';
-import { PluginType, ProviderType } from '../interfaces';
-import { collectDynamicProviders, dedupePluginProviders } from './dynamic.utils';
+import { PluginType, ProviderType, ResourceType } from '../interfaces';
+import { collectDynamicProviders, collectDynamicResources, dedupePluginProviders } from './dynamic.utils';
 import { MethodNotImplementedError } from '../../errors/transport.errors';
 
 // InitOptions accepts input type (what users provide to init())
@@ -16,16 +16,18 @@ type InitOptions<TInput> =
 type PluginClassWithOptions<TInput, TOptions> = {
   new (...args: any[]): any;
   prototype: { __options_brand?: TOptions; __options_input_brand?: TInput };
-  // optional hook contributed by plugin authors
+  // optional hooks contributed by plugin authors
   dynamicProviders?: (options: TInput) => readonly ProviderType[];
+  dynamicResources?: (options: TInput) => readonly ResourceType[];
 };
 
-type ValueMcpPlugin<T> = { provide: any; useValue: T; providers?: ProviderType[] };
+type ValueMcpPlugin<T> = { provide: any; useValue: T; providers?: ProviderType[]; resources?: ResourceType[] };
 type FactoryMcpPlugin<T> = { provide: any; inject: () => readonly Reference<any>[]; useFactory: (...args: any[]) => T };
 
 type PluginReturn<T> = (ValueMcpPlugin<T> | FactoryMcpPlugin<T>) &
   PluginType & {
     providers?: readonly ProviderType[];
+    resources?: readonly ResourceType[];
   };
 
 /**
@@ -50,6 +52,12 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
    * @param options
    */
   static dynamicProviders?(options: any): readonly ProviderType[];
+
+  /**
+   * Optional hook to contribute resources to the plugin.
+   * @param options
+   */
+  static dynamicResources?(options: any): readonly ResourceType[];
 
   get<T>(token: Reference<T>): T {
     throw new MethodNotImplementedError('DynamicPlugin', 'get');
@@ -78,11 +86,13 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
 
     const dyn = collectDynamicProviders(this, typedOptions);
     const mergedProviders = dedupePluginProviders([...(dyn ?? []), ...(extraProviders ?? [])]);
+    const dynResources = collectDynamicResources(this, typedOptions);
     return {
       ...typedOptions,
       provide: this,
       useValue: new this(options),
       providers: mergedProviders,
+      resources: dynResources.length > 0 ? dynResources : undefined,
     };
   }
 }

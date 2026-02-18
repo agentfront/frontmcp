@@ -95,7 +95,11 @@
             "path": "@frontmcp/sdk/browser/shims/path",
             "node:fs": "@frontmcp/sdk/browser/shims/fs",
             "node:fs/promises": "@frontmcp/sdk/browser/shims/fs",
-            "node:path": "@frontmcp/sdk/browser/shims/path"
+            "node:path": "@frontmcp/sdk/browser/shims/path",
+            "node:crypto": "@frontmcp/sdk/browser/shims/crypto",
+            "crypto": "@frontmcp/sdk/browser/shims/crypto",
+            "node:util": "@frontmcp/sdk/browser/shims/empty",
+            "util": "@frontmcp/sdk/browser/shims/empty"
           },
           "external": ["@frontmcp/sdk", "@frontmcp/sdk/*", "zod"]
         }

@@ -19,7 +19,6 @@ import { generateStoreResourceTemplates } from './store.resources';
  *
  * const server = await ServerRegistry.create('demo', {
  *   plugins: [StorePlugin.init({ stores: { counter: counterStore } })],
- *   resources: StorePlugin.createResources({ counter: counterStore }),
  * });
  * ```
  */
@@ -67,8 +66,16 @@ export default class StorePlugin extends DynamicPlugin<StorePluginOptions> {
   };
 
   /**
+   * Dynamic resources — injects store resource templates automatically.
+   * Templates resolve StoreRegistry via DI at execution time.
+   */
+  static override dynamicResources = (_options: StorePluginOptions): ResourceType[] => {
+    return generateStoreResourceTemplates() as unknown as ResourceType[];
+  };
+
+  /**
    * Create resource template classes for the given stores.
-   * Pass the result to the `resources` array in your server config.
+   * @deprecated Use `StorePlugin.init({ stores })` — resources are injected automatically via dynamicResources.
    */
   static createResources(stores: Record<string, unknown>): ResourceType[] {
     const registry = new StoreRegistry(stores as Record<string, import('./store.types').StoreAdapter>);

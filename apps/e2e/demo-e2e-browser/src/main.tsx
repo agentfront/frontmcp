@@ -35,14 +35,12 @@ async function bootstrap() {
     staticAuth: { jwt: 'demo-bearer-token' },
   });
 
-  // Store plugin resources
   const stores = { counter: counterStore, todos: todoStore };
-  const storeResources = StorePlugin.createResources(stores);
 
   const server = await ServerRegistry.create('demo', {
     info: { name: 'browser-demo-react', version: '1.0.0' },
     tools: [GreetTool, CalculateTool, RandomNumberTool, ReadDomTool],
-    resources: [AppInfoResource, NoteResource, ...storeResources],
+    resources: [AppInfoResource, NoteResource],
     prompts: [SummarizePrompt, CodeReviewPrompt],
     plugins: [StorePlugin.init({ stores })],
     adapters: [petStoreAdapter, beeceptorAdapter],

@@ -1,6 +1,7 @@
 import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import type { StoreRegistry } from './providers/store-registry.provider';
+import { StoreRegistryToken } from './store.symbols';
 
 /**
  * Build a state:// URI from store name and path segments.
@@ -13,10 +14,15 @@ function buildUri(store: string, path: string[]): string {
 /**
  * Generate resource template classes for state:// URIs at depths 0-4.
  *
- * Since MCP URI template params only capture a single path segment,
- * we register templates at each depth level.
+ * When called without arguments (via dynamicResources), templates resolve
+ * StoreRegistry via DI (this.get(StoreRegistryToken)).
+ *
+ * When called with a registry (legacy createResources path), templates
+ * use the provided closure-based registry.
  */
-export function generateStoreResourceTemplates(registry: StoreRegistry): Array<new (...args: unknown[]) => unknown> {
+export function generateStoreResourceTemplates(
+  registryOverride?: StoreRegistry,
+): Array<new (...args: unknown[]) => unknown> {
   const templates: Array<new (...args: unknown[]) => unknown> = [];
 
   // Depth 0: state://{store}
@@ -27,6 +33,7 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
   })
   class StoreRootResource extends ResourceContext<{ store: string }> {
     async execute(uri: string, params: { store: string }): Promise<ReadResourceResult> {
+      const registry = registryOverride ?? this.get(StoreRegistryToken);
       const storeAdapter = registry.get(params.store);
       if (!storeAdapter) throw new Error(`Store '${params.store}' not found`);
       return {
@@ -46,6 +53,7 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     async execute(_uri: string, params: { store: string; p1: string }): Promise<ReadResourceResult> {
       const { store, p1 } = params;
       const path = [p1];
+      const registry = registryOverride ?? this.get(StoreRegistryToken);
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
@@ -64,6 +72,7 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     async execute(_uri: string, params: { store: string; p1: string; p2: string }): Promise<ReadResourceResult> {
       const { store, p1, p2 } = params;
       const path = [p1, p2];
+      const registry = registryOverride ?? this.get(StoreRegistryToken);
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
@@ -85,6 +94,7 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     ): Promise<ReadResourceResult> {
       const { store, p1, p2, p3 } = params;
       const path = [p1, p2, p3];
+      const registry = registryOverride ?? this.get(StoreRegistryToken);
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
@@ -112,6 +122,7 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     ): Promise<ReadResourceResult> {
       const { store, p1, p2, p3, p4 } = params;
       const path = [p1, p2, p3, p4];
+      const registry = registryOverride ?? this.get(StoreRegistryToken);
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
