@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { useFrontMcp } from '@frontmcp/react';
-import { McpRoutes, McpNavigation } from '@frontmcp/react/router';
+import { McpNavigation, ToolRoute, ResourceRoute, PromptRoute } from '@frontmcp/react/router';
 import { StatusBadge } from './components/StatusBadge';
 import { HomePage } from './pages/HomePage';
 import { LifecyclePage } from './pages/LifecyclePage';
@@ -68,8 +68,10 @@ export function App() {
           <Route path="/dom" element={<DomPage />} />
           <Route path="/renderer" element={<RendererPage />} />
           <Route path="/components" element={<ComponentsPage />} />
+          <Route path="/mcp/tools/:name" element={<ToolRoute />} />
+          <Route path="/mcp/resources/*" element={<ResourceRoute />} />
+          <Route path="/mcp/prompts/:name" element={<PromptRoute />} />
         </Routes>
-        <McpRoutes basePath="/mcp" />
       </main>
     </div>
   );

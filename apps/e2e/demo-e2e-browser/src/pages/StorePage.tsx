@@ -1,4 +1,6 @@
-import { useStoreResource, useCallTool } from '@frontmcp/react';
+import { useEffect } from 'react';
+import { useStoreResource } from '@frontmcp/react';
+import { counterStore, todoStore } from '../stores/demo-store';
 
 export function StorePage() {
   return (
@@ -16,23 +18,22 @@ export function StorePage() {
 
 function CounterSection() {
   const { data, loading, error, refetch } = useStoreResource('state://counter');
-  const [callSetState, setStateResult] = useCallTool('set_state');
+
+  // Subscribe to Valtio store changes and refetch MCP resource
+  useEffect(() => counterStore.subscribe(() => refetch()), [refetch]);
 
   const count = (data as Record<string, unknown>)?.count ?? 0;
 
-  const increment = async () => {
-    await callSetState({ store: 'counter', path: ['count'], value: (count as number) + 1 });
-    refetch();
+  const increment = () => {
+    counterStore.setState(['count'], (count as number) + 1);
   };
 
-  const decrement = async () => {
-    await callSetState({ store: 'counter', path: ['count'], value: (count as number) - 1 });
-    refetch();
+  const decrement = () => {
+    counterStore.setState(['count'], (count as number) - 1);
   };
 
-  const reset = async () => {
-    await callSetState({ store: 'counter', path: ['count'], value: 0 });
-    refetch();
+  const reset = () => {
+    counterStore.setState(['count'], 0);
   };
 
   return (
@@ -56,7 +57,6 @@ function CounterSection() {
             <button onClick={reset}>Reset</button>
           </div>
           {error && <p style={{ color: 'red' }}>Error: {error.message}</p>}
-          {setStateResult.error && <p style={{ color: 'red' }}>Set error: {setStateResult.error.message}</p>}
         </div>
         <div className="hook-state">
           <h4>Full State</h4>
@@ -69,19 +69,16 @@ function CounterSection() {
 
 function TodoSection() {
   const { data, loading, error, refetch } = useStoreResource('state://todos');
-  const [callSetState] = useCallTool('set_state');
+
+  // Subscribe to Valtio store changes and refetch MCP resource
+  useEffect(() => todoStore.subscribe(() => refetch()), [refetch]);
 
   const todos = data as { items?: Array<{ id: number; text: string; done: boolean }>; filter?: string } | null;
 
-  const toggleTodo = async (index: number) => {
+  const toggleTodo = (index: number) => {
     if (!todos?.items) return;
     const item = todos.items[index];
-    await callSetState({
-      store: 'todos',
-      path: ['items', `[${index}]`, 'done'],
-      value: !item.done,
-    });
-    refetch();
+    todoStore.setState(['items', `[${index}]`, 'done'], !item.done);
   };
 
   return (

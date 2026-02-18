@@ -1,4 +1,4 @@
-import { DynamicPlugin, Plugin, ProviderType } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ProviderType, ResourceType } from '@frontmcp/sdk';
 import type { StorePluginOptions } from './store.types';
 import { StoreRegistryToken, StoreAccessorToken } from './store.symbols';
 import { StoreRegistry } from './providers/store-registry.provider';
@@ -70,8 +70,8 @@ export default class StorePlugin extends DynamicPlugin<StorePluginOptions> {
    * Create resource template classes for the given stores.
    * Pass the result to the `resources` array in your server config.
    */
-  static createResources(stores: Record<string, unknown>): Array<new (...args: unknown[]) => unknown> {
+  static createResources(stores: Record<string, unknown>): ResourceType[] {
     const registry = new StoreRegistry(stores as Record<string, import('./store.types').StoreAdapter>);
-    return generateStoreResourceTemplates(registry);
+    return generateStoreResourceTemplates(registry) as unknown as ResourceType[];
   }
 }

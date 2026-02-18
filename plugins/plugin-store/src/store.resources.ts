@@ -25,12 +25,12 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     name: 'Store State (root)',
     description: 'Read full store state',
   })
-  class StoreRootResource extends ResourceContext {
-    async read({ store }: { store: string }): Promise<ReadResourceResult> {
-      const storeAdapter = registry.get(store);
-      if (!storeAdapter) throw new Error(`Store '${store}' not found`);
+  class StoreRootResource extends ResourceContext<{ store: string }> {
+    async execute(uri: string, params: { store: string }): Promise<ReadResourceResult> {
+      const storeAdapter = registry.get(params.store);
+      if (!storeAdapter) throw new Error(`Store '${params.store}' not found`);
       return {
-        contents: [{ uri: `state://${store}`, text: JSON.stringify(storeAdapter.getState()) }],
+        contents: [{ uri, text: JSON.stringify(storeAdapter.getState()) }],
       };
     }
   }
@@ -42,9 +42,9 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     name: 'Store State (depth 1)',
     description: 'Read store state at depth 1',
   })
-  class StoreDepth1Resource extends ResourceContext {
-    async read(args: Record<string, string>): Promise<ReadResourceResult> {
-      const { store, p1 } = args;
+  class StoreDepth1Resource extends ResourceContext<{ store: string; p1: string }> {
+    async execute(_uri: string, params: { store: string; p1: string }): Promise<ReadResourceResult> {
+      const { store, p1 } = params;
       const path = [p1];
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
@@ -60,9 +60,9 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     name: 'Store State (depth 2)',
     description: 'Read store state at depth 2',
   })
-  class StoreDepth2Resource extends ResourceContext {
-    async read(args: Record<string, string>): Promise<ReadResourceResult> {
-      const { store, p1, p2 } = args;
+  class StoreDepth2Resource extends ResourceContext<{ store: string; p1: string; p2: string }> {
+    async execute(_uri: string, params: { store: string; p1: string; p2: string }): Promise<ReadResourceResult> {
+      const { store, p1, p2 } = params;
       const path = [p1, p2];
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
@@ -78,9 +78,12 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     name: 'Store State (depth 3)',
     description: 'Read store state at depth 3',
   })
-  class StoreDepth3Resource extends ResourceContext {
-    async read(args: Record<string, string>): Promise<ReadResourceResult> {
-      const { store, p1, p2, p3 } = args;
+  class StoreDepth3Resource extends ResourceContext<{ store: string; p1: string; p2: string; p3: string }> {
+    async execute(
+      _uri: string,
+      params: { store: string; p1: string; p2: string; p3: string },
+    ): Promise<ReadResourceResult> {
+      const { store, p1, p2, p3 } = params;
       const path = [p1, p2, p3];
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
@@ -96,9 +99,18 @@ export function generateStoreResourceTemplates(registry: StoreRegistry): Array<n
     name: 'Store State (depth 4)',
     description: 'Read store state at depth 4',
   })
-  class StoreDepth4Resource extends ResourceContext {
-    async read(args: Record<string, string>): Promise<ReadResourceResult> {
-      const { store, p1, p2, p3, p4 } = args;
+  class StoreDepth4Resource extends ResourceContext<{
+    store: string;
+    p1: string;
+    p2: string;
+    p3: string;
+    p4: string;
+  }> {
+    async execute(
+      _uri: string,
+      params: { store: string; p1: string; p2: string; p3: string; p4: string },
+    ): Promise<ReadResourceResult> {
+      const { store, p1, p2, p3, p4 } = params;
       const path = [p1, p2, p3, p4];
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);

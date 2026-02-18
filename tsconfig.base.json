@@ -33,6 +33,7 @@
       "@frontmcp/plugin-codecall": ["plugins/plugin-codecall/src/index.ts"],
       "@frontmcp/plugin-dashboard": ["plugins/plugin-dashboard/src/index.ts"],
       "@frontmcp/plugin-remember": ["plugins/plugin-remember/src/index.ts"],
+      "@frontmcp/plugin-store": ["plugins/plugin-store/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "@frontmcp/uipack": ["libs/uipack/src/index.ts"],

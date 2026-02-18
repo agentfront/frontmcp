@@ -1,8 +1,11 @@
+import { Buffer } from 'buffer';
+globalThis.Buffer = Buffer;
+
 import 'reflect-metadata';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { FrontMcpProvider, ServerRegistry } from '@frontmcp/react';
-import { OpenapiAdapter } from '@frontmcp/adapters/openapi';
+import OpenapiAdapter from '@frontmcp/adapters/openapi';
 import StorePlugin from '@frontmcp/plugin-store';
 import { App } from './App';
 import { GreetTool, CalculateTool, RandomNumberTool } from './entries/tools';
@@ -15,13 +18,21 @@ import petStoreSpec from './specs/petstore.json';
 
 async function bootstrap() {
   // OpenAPI adapter for PetStore
-  const petStoreAdapter = new OpenapiAdapter({
+  const petStoreAdapter = OpenapiAdapter.init({
     name: 'petstore',
     baseUrl: 'https://petstore3.swagger.io/api/v3',
     spec: petStoreSpec,
     generateOptions: {
       includeSecurityInInput: true,
     },
+  });
+
+  // OpenAPI adapter from URL
+  const beeceptorAdapter = OpenapiAdapter.init({
+    name: 'beeceptor',
+    url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
+    baseUrl: 'https://frontmcp-test.proxy.beeceptor.com',
+    staticAuth: { jwt: 'demo-bearer-token' },
   });
 
   // Store plugin resources
@@ -34,7 +45,7 @@ async function bootstrap() {
     resources: [AppInfoResource, NoteResource, ...storeResources],
     prompts: [SummarizePrompt, CodeReviewPrompt],
     plugins: [StorePlugin.init({ stores })],
-    adapters: [petStoreAdapter],
+    adapters: [petStoreAdapter, beeceptorAdapter],
     machineId: 'browser-demo-react-' + Date.now(),
   });
 
