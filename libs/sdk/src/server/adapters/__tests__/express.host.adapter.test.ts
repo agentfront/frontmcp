@@ -29,6 +29,7 @@ jest.mock('cors', () => {
 });
 
 import { ExpressHostAdapter } from '../express.host.adapter';
+import * as http from 'node:http';
 
 describe('ExpressHostAdapter', () => {
   beforeEach(() => {
@@ -126,7 +127,6 @@ describe('ExpressHostAdapter', () => {
 
   describe('response headers', () => {
     it('should expose Mcp-Session-Id in Access-Control-Expose-Headers when CORS is enabled', async () => {
-      const http = require('node:http');
       const adapter = new ExpressHostAdapter({ cors: { origin: true } });
       adapter.registerRoute('GET', '/test', (_req: unknown, res: any) => {
         res.status(200).json({ ok: true });
@@ -151,7 +151,6 @@ describe('ExpressHostAdapter', () => {
     });
 
     it('should not set Access-Control-Expose-Headers when CORS is disabled', async () => {
-      const http = require('node:http');
       const adapter = new ExpressHostAdapter();
       adapter.registerRoute('GET', '/test', (_req: unknown, res: any) => {
         res.status(200).json({ ok: true });

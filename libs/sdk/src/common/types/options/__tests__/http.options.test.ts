@@ -84,6 +84,10 @@ describe('httpOptionsSchema', () => {
     it('should reject cors with non-number maxAge', () => {
       expect(() => httpOptionsSchema.parse({ cors: { maxAge: 'not-a-number' } })).toThrow();
     });
+
+    it('should reject cors with numeric origin', () => {
+      expect(() => httpOptionsSchema.parse({ cors: { origin: 42 } })).toThrow();
+    });
   });
 
   describe('full config', () => {
