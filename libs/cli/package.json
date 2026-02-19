@@ -44,6 +44,6 @@
     "typescript": "^5.5.3",
     "tsx": "^4.20.6",
     "@types/node": "^24.0.0",
-    "@modelcontextprotocol/inspector": "^0.18.0"
+    "@modelcontextprotocol/inspector": "^0.20.0"
   }
 }

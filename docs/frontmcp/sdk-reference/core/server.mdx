@@ -76,11 +76,11 @@ start(): void
 
 ```typescript
 interface HttpOptions {
-  port?: number;                      // Server port (default: 3000)
-  host?: string;                      // Bind host (default: '0.0.0.0')
-  cors?: CorsOptions;                 // CORS configuration
+  port?: number;                      // default 3001
+  entryPath?: string;                 // MCP JSON-RPC entry path (default: '')
   hostFactory?: HostFactory;          // Custom host adapter
-  basePath?: string;                  // Base path prefix
+  socketPath?: string;                // Unix socket path (overrides port)
+  cors?: CorsOptions | false;         // CORS config (default: permissive with built-in adapter)
 }
 ```
 
@@ -94,7 +94,7 @@ Express is the default host adapter:
 @FrontMcp({
   info: { name: 'Server', version: '1.0.0' },
   apps: [MyApp],
-  http: { port: 3000 },
+  http: { port: 3001 },
   // Uses ExpressHostAdapter by default
 })
 ```
@@ -176,11 +176,11 @@ export default FrontMcpInstance.createHandler(config);
   info: { name: 'Server', version: '1.0.0' },
   apps: [MyApp],
   http: {
-    port: 3000,
+    port: 3001,
     cors: {
       origin: ['https://app.example.com', 'http://localhost:3000'],
       credentials: true,
-      methods: ['GET', 'POST', 'OPTIONS'],
+      maxAge: 86400,
     },
   },
 })
@@ -191,7 +191,7 @@ export default FrontMcpInstance.createHandler(config);
 FrontMCP automatically registers a `/health` endpoint:
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 # {"status":"ok"}
 ```
 
