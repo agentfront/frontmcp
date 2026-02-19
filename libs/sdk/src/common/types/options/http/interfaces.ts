@@ -4,6 +4,35 @@
 import { FrontMcpServer } from '../../../interfaces';
 
 /**
+ * Framework-agnostic CORS configuration options.
+ */
+export interface CorsOptions {
+  /**
+   * Allowed origins. Can be:
+   * - `true` to reflect the request origin (allows all origins with credentials)
+   * - A string for a single origin
+   * - An array of strings for multiple origins
+   * - A function that dynamically determines if an origin is allowed
+   */
+  origin?:
+    | boolean
+    | string
+    | string[]
+    | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void);
+
+  /**
+   * Whether to allow credentials (cookies, authorization headers).
+   * @default false
+   */
+  credentials?: boolean;
+
+  /**
+   * How long preflight results can be cached (in seconds).
+   */
+  maxAge?: number;
+}
+
+/**
  * HTTP server configuration options.
  */
 export interface HttpOptionsInterface {
@@ -33,4 +62,12 @@ export interface HttpOptionsInterface {
    * works unchanged over Unix sockets.
    */
   socketPath?: string;
+
+  /**
+   * CORS configuration.
+   * - `undefined` (default): permissive CORS enabled (all origins, no credentials)
+   * - `false`: CORS disabled entirely
+   * - `CorsOptions`: custom CORS configuration
+   */
+  cors?: CorsOptions | false;
 }

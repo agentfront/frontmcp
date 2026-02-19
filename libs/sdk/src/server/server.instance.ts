@@ -1,6 +1,8 @@
-import { FrontMcpServer, HttpOptions, HttpMethod, ServerRequestHandler } from '../common';
+import { FrontMcpServer, HttpOptions, HttpMethod, ServerRequestHandler, CorsOptions } from '../common';
 import { ExpressHostAdapter } from './adapters/express.host.adapter';
 import { HostServerAdapter } from './adapters/base.host.adapter';
+
+const DEFAULT_CORS: CorsOptions = { origin: true, credentials: false };
 
 export class FrontMcpServerInstance extends FrontMcpServer {
   config: HttpOptions;
@@ -20,7 +22,8 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     } else if (this.config.hostFactory !== undefined) {
       this.host = this.config.hostFactory;
     } else {
-      this.host = new ExpressHostAdapter();
+      const corsConfig = this.config.cors === false ? undefined : (this.config.cors ?? DEFAULT_CORS);
+      this.host = new ExpressHostAdapter(corsConfig ? { cors: corsConfig } : undefined);
     }
   }
 
