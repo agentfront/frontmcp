@@ -2,6 +2,9 @@
 // Zod schema for HTTP configuration
 
 import { z } from 'zod';
+import type { CorsOptions } from './interfaces';
+
+type CorsOriginCallback = Extract<CorsOptions['origin'], Function>;
 
 /**
  * CORS options Zod schema.
@@ -9,7 +12,12 @@ import { z } from 'zod';
  */
 const corsOptionsSchema = z.object({
   origin: z
-    .union([z.boolean(), z.string(), z.array(z.string()), z.custom<Function>((val) => typeof val === 'function')])
+    .union([
+      z.boolean(),
+      z.string(),
+      z.array(z.string()),
+      z.custom<CorsOriginCallback>((val) => typeof val === 'function'),
+    ])
     .optional(),
   credentials: z.boolean().optional(),
   maxAge: z.number().optional(),
