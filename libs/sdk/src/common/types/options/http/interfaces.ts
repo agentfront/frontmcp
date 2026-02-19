@@ -65,7 +65,7 @@ export interface HttpOptionsInterface {
 
   /**
    * CORS configuration.
-   * - `undefined` (default): permissive CORS enabled (all origins, credentials allowed)
+   * - `undefined` (default): permissive CORS enabled (all origins, no credentials)
    * - `false`: CORS disabled entirely
    * - `CorsOptions`: custom CORS configuration
    */

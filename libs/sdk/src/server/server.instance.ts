@@ -2,7 +2,7 @@ import { FrontMcpServer, HttpOptions, HttpMethod, ServerRequestHandler, CorsOpti
 import { ExpressHostAdapter } from './adapters/express.host.adapter';
 import { HostServerAdapter } from './adapters/base.host.adapter';
 
-const DEFAULT_CORS: CorsOptions = { origin: true, credentials: true };
+const DEFAULT_CORS: CorsOptions = { origin: true, credentials: false };
 
 export class FrontMcpServerInstance extends FrontMcpServer {
   config: HttpOptions;

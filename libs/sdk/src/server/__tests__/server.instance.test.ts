@@ -37,7 +37,7 @@ describe('FrontMcpServerInstance', () => {
 
       expect(capturedAdapterArgs).toHaveLength(1);
       expect(capturedAdapterArgs[0]).toEqual({
-        cors: { origin: true, credentials: true },
+        cors: { origin: true, credentials: false },
       });
     });
 

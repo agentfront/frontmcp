@@ -5,11 +5,12 @@ import { z } from 'zod';
 
 /**
  * CORS options Zod schema.
- * Uses z.any() for origin because it accepts boolean | string | string[] | function
- * which Zod cannot validate at runtime - type safety is enforced via TypeScript interface.
+ * Origin accepts boolean, string, string array, or a callback function.
  */
 const corsOptionsSchema = z.object({
-  origin: z.any().optional(),
+  origin: z
+    .union([z.boolean(), z.string(), z.array(z.string()), z.custom<Function>((val) => typeof val === 'function')])
+    .optional(),
   credentials: z.boolean().optional(),
   maxAge: z.number().optional(),
 });
@@ -31,7 +32,7 @@ export const httpOptionsSchema = z.object({
   socketPath: z.string().optional(),
   /**
    * CORS configuration.
-   * - undefined (default): permissive CORS (all origins, credentials)
+   * - undefined (default): permissive CORS (all origins, no credentials)
    * - false: CORS disabled
    * - CorsOptions object: custom CORS config
    */
