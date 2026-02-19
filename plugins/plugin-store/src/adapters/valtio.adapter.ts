@@ -1,6 +1,10 @@
 import { proxy, snapshot, subscribe } from 'valtio/vanilla';
 import type { StoreAdapter } from '../store.types';
 
+function isSafeKey(key: string): boolean {
+  return key !== '__proto__' && key !== 'constructor' && key !== 'prototype';
+}
+
 /**
  * Get a nested value from an object using a path array.
  * Supports array index notation: `[0]`, `[1]`, etc.
@@ -19,6 +23,7 @@ function getNestedValue(obj: unknown, path: string[]): unknown {
         return undefined;
       }
     } else {
+      if (!isSafeKey(segment)) return undefined;
       current = (current as Record<string, unknown>)[segment];
     }
   }
@@ -46,6 +51,7 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
         current = (current as unknown as unknown[])[index] as Record<string, unknown>;
       }
     } else {
+      if (!isSafeKey(segment)) return;
       if (current[segment] === undefined || current[segment] === null) {
         current[segment] = {};
       }
@@ -61,6 +67,7 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
       (current as unknown as unknown[])[index] = value;
     }
   } else {
+    if (!isSafeKey(lastSegment)) return;
     current[lastSegment] = value;
   }
 }

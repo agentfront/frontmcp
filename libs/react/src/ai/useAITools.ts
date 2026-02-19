@@ -20,6 +20,7 @@ export function useAITools<P extends LLMPlatform>(platform: P): UseAIToolsResult
 
   useEffect(() => {
     if (status !== 'connected' || toolInfos.length === 0) {
+      setFormattedTools(null);
       setLoading(status !== 'connected' && status !== 'error');
       return;
     }

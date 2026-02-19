@@ -34,6 +34,7 @@
     "./package.json": "./package.json",
     ".": {
       "browser": {
+        "types": "./dist/index.d.ts",
         "import": "./dist/browser/browser.mjs",
         "default": "./dist/browser/browser.js"
       },
@@ -48,6 +49,7 @@
       }
     },
     "./browser": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/browser/browser.mjs",
       "default": "./dist/browser/browser.js"
     }

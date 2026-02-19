@@ -4,6 +4,14 @@ import type { StoreRegistry } from './providers/store-registry.provider';
 import { StoreRegistryToken } from './store.symbols';
 
 /**
+ * Safely serialize a value to a JSON string.
+ * Handles `undefined` which `JSON.stringify` returns as `undefined` (not a string).
+ */
+function serializeState(value: unknown): string {
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
  * Build a state:// URI from store name and path segments.
  */
 function buildUri(store: string, path: string[]): string {
@@ -37,7 +45,7 @@ export function generateStoreResourceTemplates(
       const storeAdapter = registry.get(params.store);
       if (!storeAdapter) throw new Error(`Store '${params.store}' not found`);
       return {
-        contents: [{ uri: buildUri(params.store, []), text: JSON.stringify(storeAdapter.getState()) }],
+        contents: [{ uri: buildUri(params.store, []), text: serializeState(storeAdapter.getState()) }],
       };
     }
   }
@@ -57,7 +65,7 @@ export function generateStoreResourceTemplates(
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
-      return { contents: [{ uri: buildUri(store, path), text: JSON.stringify(value) }] };
+      return { contents: [{ uri: buildUri(store, path), text: serializeState(value) }] };
     }
   }
   templates.push(StoreDepth1Resource as unknown as new (...args: unknown[]) => unknown);
@@ -76,7 +84,7 @@ export function generateStoreResourceTemplates(
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
-      return { contents: [{ uri: buildUri(store, path), text: JSON.stringify(value) }] };
+      return { contents: [{ uri: buildUri(store, path), text: serializeState(value) }] };
     }
   }
   templates.push(StoreDepth2Resource as unknown as new (...args: unknown[]) => unknown);
@@ -98,7 +106,7 @@ export function generateStoreResourceTemplates(
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
-      return { contents: [{ uri: buildUri(store, path), text: JSON.stringify(value) }] };
+      return { contents: [{ uri: buildUri(store, path), text: serializeState(value) }] };
     }
   }
   templates.push(StoreDepth3Resource as unknown as new (...args: unknown[]) => unknown);
@@ -126,7 +134,7 @@ export function generateStoreResourceTemplates(
       const storeAdapter = registry.get(store);
       if (!storeAdapter) throw new Error(`Store '${store}' not found`);
       const value = storeAdapter.getState(path);
-      return { contents: [{ uri: buildUri(store, path), text: JSON.stringify(value) }] };
+      return { contents: [{ uri: buildUri(store, path), text: serializeState(value) }] };
     }
   }
   templates.push(StoreDepth4Resource as unknown as new (...args: unknown[]) => unknown);

@@ -10,7 +10,12 @@ import type { ResourceContent } from '../components/ResourceViewer';
 
 export function ResourceRoute(): React.ReactElement {
   const { '*': rawUri } = useParams();
-  const uri = rawUri ? decodeURIComponent(rawUri) : '';
+  let uri = rawUri ?? '';
+  try {
+    uri = decodeURIComponent(uri);
+  } catch {
+    // malformed percent-encoding — use raw value
+  }
   const state = useReadResource(uri) as {
     data: { contents?: ResourceContent[] } | null;
     loading: boolean;

@@ -21,7 +21,9 @@ export function dirname(p: string): string {
   const normalized = p.replace(/\/+$/, '');
   const parts = normalized.split('/');
   parts.pop();
-  return parts.join('/') || '.';
+  const result = parts.join('/');
+  if (result === '' && p.startsWith('/')) return '/';
+  return result || '.';
 }
 
 export function extname(p: string): string {

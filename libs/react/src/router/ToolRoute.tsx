@@ -10,9 +10,15 @@ import { ToolForm } from '../components/ToolForm';
 import { OutputDisplay } from '../components/OutputDisplay';
 
 export function ToolRoute(): React.ReactElement {
-  const { name } = useParams<{ name: string }>();
+  const { name: rawName } = useParams<{ name: string }>();
+  let name = rawName ?? '';
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // malformed percent-encoding — use raw value
+  }
   const { tools } = useFrontMcp();
-  const [callTool, state] = useCallTool(name ?? '');
+  const [callTool, state] = useCallTool(name);
   const [output, setOutput] = useState<unknown>(null);
 
   const tool = tools.find((t) => t.name === name);

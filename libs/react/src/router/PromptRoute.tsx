@@ -10,9 +10,15 @@ import { PromptForm } from '../components/PromptForm';
 import { OutputDisplay } from '../components/OutputDisplay';
 
 export function PromptRoute(): React.ReactElement {
-  const { name } = useParams<{ name: string }>();
+  const { name: rawName } = useParams<{ name: string }>();
+  let name = rawName ?? '';
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // malformed percent-encoding — use raw value
+  }
   const { prompts } = useFrontMcp();
-  const [getPrompt, state] = useGetPrompt(name ?? '');
+  const [getPrompt, state] = useGetPrompt(name);
   const [output, setOutput] = useState<unknown>(null);
 
   const prompt = prompts.find((p) => p.name === name);

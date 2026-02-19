@@ -10,14 +10,15 @@ export function StyledField({
   value,
   onChange,
 }: FieldRenderProps): React.ReactElement {
+  const fieldId = `field-${name}`;
   return (
     <div className="form-group" key={name}>
-      <label>
+      <label htmlFor={fieldId}>
         {name}
         {required ? ' *' : ''} {type !== 'string' && <span className="field-type">{type}</span>}
       </label>
       {enumValues ? (
-        <select value={value || enumValues[0] || ''} onChange={(e) => onChange(e.target.value)}>
+        <select id={fieldId} value={value ?? enumValues[0] ?? ''} onChange={(e) => onChange(e.target.value)}>
           {enumValues.map((v) => (
             <option key={v} value={v}>
               {v}
@@ -26,6 +27,7 @@ export function StyledField({
         </select>
       ) : type === 'number' || type === 'integer' ? (
         <input
+          id={fieldId}
           type="number"
           step={type === 'integer' ? '1' : 'any'}
           placeholder={description ?? ''}
@@ -35,6 +37,7 @@ export function StyledField({
         />
       ) : name === 'text' || name === 'code' || name === 'content' ? (
         <textarea
+          id={fieldId}
           placeholder={description ?? ''}
           required={required}
           value={value}
@@ -42,6 +45,7 @@ export function StyledField({
         />
       ) : (
         <input
+          id={fieldId}
           type="text"
           placeholder={description ?? ''}
           required={required}

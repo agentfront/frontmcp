@@ -44,7 +44,6 @@ test.describe('Navigation', () => {
     // Find and click the first tool link in McpNavigation
     const mcpNav = page.locator('.sidebar-nav').locator('nav');
     const toolLink = mcpNav.locator('a').first();
-    const linkText = await toolLink.textContent();
     await toolLink.click();
 
     // Should navigate to an MCP route page

@@ -32,7 +32,7 @@ export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.
             React.createElement(
               'li',
               { key: t.name },
-              React.createElement(Link, { to: `${basePath}/tools/${t.name}` }, t.name),
+              React.createElement(Link, { to: `${basePath}/tools/${encodeURIComponent(t.name)}` }, t.name),
             ),
           ),
         ),
@@ -66,7 +66,7 @@ export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.
             React.createElement(
               'li',
               { key: p.name },
-              React.createElement(Link, { to: `${basePath}/prompts/${p.name}` }, p.name),
+              React.createElement(Link, { to: `${basePath}/prompts/${encodeURIComponent(p.name)}` }, p.name),
             ),
           ),
         ),
