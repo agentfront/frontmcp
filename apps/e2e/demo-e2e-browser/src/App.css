@@ -631,3 +631,143 @@ button.primary:hover:not(:disabled) {
 [data-testid='resource-viewer'] > div > div:first-child {
   color: var(--text-muted) !important;
 }
+
+/* ─── Server Selector ───────────────────────────────────────────────────── */
+
+.sidebar-server-section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.server-selector select {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.server-selector select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ─── Server Card Grid ──────────────────────────────────────────────────── */
+
+.server-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.server-card {
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.server-card.active {
+  border-color: var(--accent);
+}
+
+.server-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.server-card-header h3 {
+  font-size: 1rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.active-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--accent-dim);
+  color: white;
+}
+
+.server-card-body {
+  margin-bottom: 0.75rem;
+}
+
+.server-card-stats {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.server-card-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.server-card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ─── Server Builder ────────────────────────────────────────────────────── */
+
+.builder-section {
+  margin-bottom: 1.5rem;
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.5rem;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.checkbox-item:hover {
+  border-color: var(--accent-dim);
+}
+
+.checkbox-item input[type='checkbox'] {
+  margin-top: 0.15rem;
+  accent-color: var(--accent);
+}
+
+.checkbox-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.checkbox-label strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.checkbox-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}

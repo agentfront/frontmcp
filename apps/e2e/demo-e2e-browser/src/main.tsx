@@ -4,7 +4,7 @@ globalThis.Buffer = Buffer;
 import 'reflect-metadata';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { FrontMcpProvider, ServerRegistry } from '@frontmcp/react';
+import { ServerRegistry } from '@frontmcp/react';
 import OpenapiAdapter from '@frontmcp/adapters/openapi';
 import StorePlugin from '@frontmcp/plugin-store';
 import { App } from './App';
@@ -14,6 +14,8 @@ import { AppInfoResource, NoteResource } from './entries/resources';
 import { SummarizePrompt, CodeReviewPrompt } from './entries/prompts';
 import { demoComponents } from './registry/demo-components';
 import { counterStore, todoStore } from './stores/demo-store';
+import { ServerManagerProvider } from './context/ServerManagerProvider';
+import type { ManagedServer } from './context/ServerManagerContext';
 import petStoreSpec from './specs/petstore.json';
 
 async function bootstrap() {
@@ -47,12 +49,25 @@ async function bootstrap() {
     machineId: 'browser-demo-react-' + Date.now(),
   });
 
+  const demoManaged: ManagedServer = {
+    id: 'demo',
+    name: 'Demo Server',
+    server,
+    config: {
+      toolIds: ['greet', 'calculate', 'random_number', 'read_dom'],
+      resourceIds: ['app-info', 'note'],
+      promptIds: ['summarize', 'code_review'],
+      hasStorePlugin: true,
+    },
+    createdAt: Date.now(),
+  };
+
   const root = createRoot(document.getElementById('root')!);
   root.render(
     <BrowserRouter>
-      <FrontMcpProvider server={server} components={demoComponents} autoConnect>
-        <App />
-      </FrontMcpProvider>
+      <ServerManagerProvider initialServers={[demoManaged]} defaultActiveId="demo">
+        <App components={demoComponents} />
+      </ServerManagerProvider>
     </BrowserRouter>,
   );
 }

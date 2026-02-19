@@ -9,7 +9,7 @@ const statusLabels: Record<FrontMcpStatus, string> = {
 
 export function StatusBadge({ status }: { status: FrontMcpStatus }) {
   return (
-    <div className={`status-badge ${status}`}>
+    <div className={`status-badge ${status}`} data-testid="status-badge" data-status={status}>
       <span className="dot" />
       <span>{statusLabels[status]}</span>
     </div>

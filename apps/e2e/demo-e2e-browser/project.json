@@ -18,6 +18,19 @@
       "options": {
         "outputPath": "dist/apps/e2e/demo-e2e-browser"
       }
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --config=apps/e2e/demo-e2e-browser/playwright.config.ts"
+      },
+      "dependsOn": ["build"]
+    },
+    "e2e:ui": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --config=apps/e2e/demo-e2e-browser/playwright.config.ts --ui"
+      }
     }
   }
 }

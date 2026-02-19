@@ -11,20 +11,20 @@ export function HomePage() {
         <StatusBadge status={status} />
       </div>
 
-      <div className="stat-grid">
-        <div className="stat-card">
+      <div className="stat-grid" data-testid="stat-grid">
+        <div className="stat-card" data-testid="stat-tools">
           <div className="stat-value">{tools.length}</div>
           <div className="stat-label">Tools</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="stat-resources">
           <div className="stat-value">{resources.length}</div>
           <div className="stat-label">Resources</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="stat-templates">
           <div className="stat-value">{resourceTemplates.length}</div>
           <div className="stat-label">Templates</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="stat-prompts">
           <div className="stat-value">{prompts.length}</div>
           <div className="stat-label">Prompts</div>
         </div>
