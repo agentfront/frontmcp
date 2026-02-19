@@ -286,76 +286,6 @@ const TEMPLATE_TSCONFIG_E2E = `
 }
 `;
 
-const TEMPLATE_DOCKER_COMPOSE = `
-version: '3.8'
-
-services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - '6379:6379'
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - '\${PORT:-3000}:3000'
-    environment:
-      - NODE_ENV=\${NODE_ENV:-development}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./src:/app/src
-    command: npm run dev
-
-volumes:
-  redis-data:
-`;
-
-const TEMPLATE_DOCKERFILE = `
-# Build stage
-FROM node:22-alpine AS builder
-
-WORKDIR /app
-
-# Install all dependencies (including devDependencies for build)
-COPY package*.json ./
-RUN npm ci
-
-# Copy source and build
-COPY . .
-RUN npm run build
-
-# Production stage
-FROM node:22-alpine AS runner
-
-WORKDIR /app
-ENV NODE_ENV=production
-
-# Install production dependencies only
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy built artifacts from builder
-COPY --from=builder /app/dist ./dist
-
-EXPOSE 3000
-
-CMD ["node", "dist/main.js"]
-`;
-
 const TEMPLATE_ENV_EXAMPLE = `
 # Application
 PORT=3000
@@ -544,7 +474,7 @@ services:
 
   app:
     build:
-      context: .
+      context: ..
       dockerfile: ci/Dockerfile
     ports:
       - '\${PORT:-3000}:3000'
@@ -556,7 +486,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./src:/app/src
+      - ../src:/app/src
     command: npm run dev
 
 volumes:
@@ -569,14 +499,14 @@ version: '3.8'
 services:
   app:
     build:
-      context: .
+      context: ..
       dockerfile: ci/Dockerfile
     ports:
       - '\${PORT:-3000}:3000'
     environment:
       - NODE_ENV=\${NODE_ENV:-development}
     volumes:
-      - ./src:/app/src
+      - ../src:/app/src
     command: npm run dev
 `;
 
@@ -1053,10 +983,10 @@ This project includes GitHub Actions workflows:
       deploymentTarget === 'node'
         ? 'GitHub Container Registry'
         : deploymentTarget === 'vercel'
-        ? 'Vercel'
-        : deploymentTarget === 'lambda'
-        ? 'AWS Lambda'
-        : 'Cloudflare Workers'
+          ? 'Vercel'
+          : deploymentTarget === 'lambda'
+            ? 'AWS Lambda'
+            : 'Cloudflare Workers'
     }
 
 ### Required Secrets
