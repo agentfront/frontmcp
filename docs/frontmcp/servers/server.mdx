@@ -167,7 +167,7 @@ CORS is configured via the `http.cors` option. It supports three modes:
 
 | Value          | Behavior                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------ |
-| `undefined`    | **Default** — permissive CORS enabled (`origin: true`, `credentials: true`)                |
+| `undefined`    | **Default** — permissive CORS enabled (`origin: true`, `credentials: false`)                |
 | `false`        | CORS disabled entirely (no CORS headers are sent)                                          |
 | `CorsOptions`  | Custom CORS configuration                                                                  |
 
@@ -190,7 +190,7 @@ interface CorsOptions {
 | `maxAge`      | `number`                                         | —         | How long (in seconds) browsers may cache preflight responses   |
 
 <Warning>
-The permissive default (`origin: true`, `credentials: true`) only applies when using the **built-in Express adapter** (i.e. no `hostFactory`). When a custom `hostFactory` is provided, the factory receives the full `http` config (including `cors`) but is responsible for applying CORS itself — FrontMCP does not install CORS middleware automatically.
+The permissive default (`origin: true`, `credentials: false`) only applies when using the **built-in Express adapter** (i.e. no `hostFactory`). When a custom `hostFactory` is provided, the factory receives the full `http` config (including `cors`) but is responsible for applying CORS itself — FrontMCP does not install CORS middleware automatically.
 </Warning>
 
 <Tip>
@@ -205,7 +205,7 @@ FrontMCP automatically adds `Mcp-Session-Id` (alongside `WWW-Authenticate`) to t
 ```ts Default (permissive)
 @FrontMcp({
   http: { port: 3001 },
-  // cors is undefined → permissive CORS (origin: true, credentials: true)
+  // cors is undefined → permissive CORS (origin: true, credentials: false)
 })
 ```
 
