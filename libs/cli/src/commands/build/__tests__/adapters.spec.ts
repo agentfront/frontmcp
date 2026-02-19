@@ -35,6 +35,24 @@ describe('Build Adapters', () => {
     });
   });
 
+  describe('nodeAdapter Docker compatibility', () => {
+    it('should not generate a setup template', () => {
+      expect(nodeAdapter.getSetupTemplate).toBeUndefined();
+    });
+
+    it('should not have a config file or post-bundle hook', () => {
+      expect(nodeAdapter.configFileName).toBeUndefined();
+      expect(nodeAdapter.getConfig).toBeUndefined();
+      expect(nodeAdapter.postBundle).toBeUndefined();
+      expect(nodeAdapter.bundleOutput).toBeUndefined();
+    });
+
+    it('should produce no wrapper regardless of entry path', () => {
+      expect(nodeAdapter.getEntryTemplate('./main.js')).toBe('');
+      expect(nodeAdapter.getEntryTemplate('./dist/main.js')).toBe('');
+    });
+  });
+
   describe('lambdaAdapter', () => {
     it('should have esnext module format', () => {
       expect(lambdaAdapter.moduleFormat).toBe('esnext');
