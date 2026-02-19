@@ -61,6 +61,7 @@ export function useStoreResource(uri: string): UseStoreResourceReturn {
 
   useEffect(() => {
     if (status !== 'connected' || !client) return;
+    let cancelled = false;
 
     // Initial fetch
     setState((prev) => ({ ...prev, loading: true }));
@@ -76,6 +77,11 @@ export function useStoreResource(uri: string): UseStoreResourceReturn {
         // subscription may not be supported — still works with manual refetch
       }
 
+      if (cancelled) {
+        client.unsubscribeResource(uri).catch(() => {});
+        return;
+      }
+
       unsubNotification = client.onResourceUpdated((updatedUri: string) => {
         if (updatedUri === uriRef.current) {
           fetchResource();
@@ -84,6 +90,7 @@ export function useStoreResource(uri: string): UseStoreResourceReturn {
     })();
 
     return () => {
+      cancelled = true;
       unsubNotification?.();
       client.unsubscribeResource(uri).catch(() => {});
     };

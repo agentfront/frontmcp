@@ -26,14 +26,26 @@ import { create } from './create';
 
 export class ServerRegistry {
   private static servers = new Map<string, DirectMcpServer>();
+  private static pending = new Map<string, Promise<DirectMcpServer>>();
 
   /** Create and register a server. Returns existing if name is already registered. */
   static async create(name: string, config: CreateConfig): Promise<DirectMcpServer> {
     const existing = ServerRegistry.servers.get(name);
     if (existing) return existing;
-    const server = await create(config);
-    ServerRegistry.servers.set(name, server);
-    return server;
+
+    const inflight = ServerRegistry.pending.get(name);
+    if (inflight) return inflight;
+
+    const promise = create(config)
+      .then((server) => {
+        ServerRegistry.servers.set(name, server);
+        return server;
+      })
+      .finally(() => {
+        ServerRegistry.pending.delete(name);
+      });
+    ServerRegistry.pending.set(name, promise);
+    return promise;
   }
 
   /** Get a registered server by name. */
@@ -50,18 +62,16 @@ export class ServerRegistry {
   static async dispose(name: string): Promise<void> {
     const server = ServerRegistry.servers.get(name);
     if (server) {
-      await server.dispose();
       ServerRegistry.servers.delete(name);
+      await server.dispose();
     }
   }
 
   /** Dispose all registered servers. */
   static async disposeAll(): Promise<void> {
-    const promises = Array.from(ServerRegistry.servers.entries()).map(async ([name, server]) => {
-      await server.dispose();
-      ServerRegistry.servers.delete(name);
-    });
-    await Promise.all(promises);
+    const entries = Array.from(ServerRegistry.servers.entries());
+    ServerRegistry.servers.clear();
+    await Promise.allSettled(entries.map(([, server]) => server.dispose()));
   }
 
   /** List all registered server names. */

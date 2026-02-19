@@ -9,8 +9,10 @@
  * Any store that implements this interface can be used with StorePlugin.
  */
 export interface StoreAdapter<T = unknown> {
-  /** Get full state or nested value at path */
-  getState(path?: string[]): T;
+  /** Get full state */
+  getState(): T;
+  /** Get nested value at path */
+  getState(path: string[]): unknown;
   /** Set value at path. Empty path = replace root. */
   setState(path: string[], value: unknown): void;
   /** Subscribe to changes. Returns unsubscribe function. */

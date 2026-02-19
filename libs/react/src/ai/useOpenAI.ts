@@ -24,7 +24,16 @@ export function useOpenAITools(): UseOpenAIToolsResult {
     ): Promise<Array<{ role: 'tool'; tool_call_id: string; content: string }>> => {
       const results = await Promise.all(
         toolCalls.map(async (tc) => {
-          const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+          let args: Record<string, unknown>;
+          try {
+            args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+          } catch {
+            return {
+              role: 'tool' as const,
+              tool_call_id: tc.id,
+              content: JSON.stringify({ error: `Invalid JSON in tool call arguments for "${tc.function.name}"` }),
+            };
+          }
           const result = await callTool(tc.function.name, args);
           return {
             role: 'tool' as const,

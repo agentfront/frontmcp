@@ -62,7 +62,9 @@ async function bootstrap() {
     createdAt: Date.now(),
   };
 
-  const root = createRoot(document.getElementById('root')!);
+  const rootEl = document.getElementById('root');
+  if (!rootEl) throw new Error('Root element with id "root" not found in document');
+  const root = createRoot(rootEl);
   root.render(
     <BrowserRouter>
       <ServerManagerProvider initialServers={[demoManaged]} defaultActiveId="demo">

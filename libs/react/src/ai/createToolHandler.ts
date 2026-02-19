@@ -21,7 +21,7 @@ export function createToolCallHandler(server: DirectMcpServer, platform: LLMPlat
   return {
     callTool: async (name: string, args?: Record<string, unknown>): Promise<FormattedToolResult> => {
       const rawResult = await server.callTool(name, args);
-      return formatResultForPlatform(rawResult as Parameters<typeof formatResultForPlatform>[0], platform);
+      return formatResultForPlatform(rawResult, platform);
     },
   };
 }

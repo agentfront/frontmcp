@@ -79,11 +79,11 @@ export function createValtioStore<T extends object>(initialState: T): StoreAdapt
   const state = proxy(initialState);
 
   return {
-    getState(path?: string[]) {
+    getState: ((path?: string[]) => {
       const snap = snapshot(state) as T;
       if (!path || path.length === 0) return snap;
-      return getNestedValue(snap, path) as T;
-    },
+      return getNestedValue(snap, path);
+    }) as StoreAdapter<T>['getState'],
     setState(path: string[], value: unknown) {
       if (path.length === 0) {
         // Replace root — copy all keys

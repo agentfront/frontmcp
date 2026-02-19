@@ -153,7 +153,7 @@
       "dependsOn": ["build-browser-esm"],
       "outputs": ["{workspaceRoot}/libs/sdk/dist/browser/browser.js"],
       "options": {
-        "command": "node scripts/build-browser-umd.mjs libs/sdk/src/browser.ts libs/sdk/dist/browser/browser.js FrontMCP --external=zod --external=reflect-metadata --alias:@frontmcp/auth=./libs/auth/src/index.ts"
+        "command": "node scripts/build-browser-umd.mjs libs/sdk/src/browser.ts libs/sdk/dist/browser/browser.js FrontMCP --external=zod --external=reflect-metadata --alias:@frontmcp/auth=./libs/auth/src/browser.ts"
       }
     },
     "build": {

@@ -32,7 +32,7 @@ export class StoreRegistry {
   getState(storeName: string, path?: string[]): unknown {
     const store = this.stores.get(storeName);
     if (!store) throw new Error(`Store '${storeName}' not found`);
-    return store.getState(path);
+    return path ? store.getState(path) : store.getState();
   }
 
   setState(storeName: string, path: string[], value: unknown): void {

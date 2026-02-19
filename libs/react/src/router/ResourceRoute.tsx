@@ -9,8 +9,9 @@ import { ResourceViewer } from '../components/ResourceViewer';
 import type { ResourceContent } from '../components/ResourceViewer';
 
 export function ResourceRoute(): React.ReactElement {
-  const { '*': uri } = useParams();
-  const state = useReadResource(uri ?? '') as {
+  const { '*': rawUri } = useParams();
+  const uri = rawUri ? decodeURIComponent(rawUri) : '';
+  const state = useReadResource(uri) as {
     data: { contents?: ResourceContent[] } | null;
     loading: boolean;
     error: Error | null;

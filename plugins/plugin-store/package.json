@@ -56,7 +56,7 @@
   "dependencies": {
     "valtio": "^2.3.0",
     "@frontmcp/sdk": "0.9.0",
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.26.0"
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"

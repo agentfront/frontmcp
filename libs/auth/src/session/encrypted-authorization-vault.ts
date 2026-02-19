@@ -98,34 +98,40 @@ interface ContextStorageLike<T> {
  * Stack-based context storage for browser environments.
  */
 class StackContextStorage<T> implements ContextStorageLike<T> {
-  private readonly stack: T[] = [];
+  private readonly stack: (T | undefined)[] = [];
 
   run<R>(store: T, fn: () => R): R {
-    this.stack.push(store);
+    const index = this.stack.length;
+    this.stack[index] = store;
     try {
       const result = fn();
       if (result instanceof Promise) {
         return result.then(
           (value: unknown) => {
-            this.stack.pop();
+            this.stack[index] = undefined;
             return value;
           },
           (error: unknown) => {
-            this.stack.pop();
+            this.stack[index] = undefined;
             throw error;
           },
         ) as R;
       }
-      this.stack.pop();
+      this.stack[index] = undefined;
       return result;
     } catch (error) {
-      this.stack.pop();
+      this.stack[index] = undefined;
       throw error;
     }
   }
 
   getStore(): T | undefined {
-    return this.stack.length > 0 ? this.stack[this.stack.length - 1] : undefined;
+    for (let i = this.stack.length - 1; i >= 0; i--) {
+      if (this.stack[i] !== undefined) {
+        return this.stack[i];
+      }
+    }
+    return undefined;
   }
 }
 

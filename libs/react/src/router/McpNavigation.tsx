@@ -49,7 +49,7 @@ export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.
             React.createElement(
               'li',
               { key: r.uri },
-              React.createElement(Link, { to: `${basePath}/resources/${r.uri}` }, r.name ?? r.uri),
+              React.createElement(Link, { to: `${basePath}/resources/${encodeURIComponent(r.uri)}` }, r.name ?? r.uri),
             ),
           ),
         ),

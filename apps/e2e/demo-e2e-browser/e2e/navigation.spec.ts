@@ -47,12 +47,10 @@ test.describe('Navigation', () => {
     const linkText = await toolLink.textContent();
     await toolLink.click();
 
-    // Should navigate to a tool route page
-    await expect(page.url()).toContain('/mcp/');
+    // Should navigate to an MCP route page
+    await expect(page).toHaveURL(/\/mcp\//);
 
     // Page should have content
     await expect(page.locator('.main-content')).not.toBeEmpty();
-    // Verify the text of the link is visible somewhere on the page or in URL
-    expect(linkText).toBeTruthy();
   });
 });

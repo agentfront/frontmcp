@@ -49,7 +49,8 @@ test.describe('Server Builder', () => {
     const selector = page.locator('[data-testid="server-select"]');
     const demoOption = selector.locator('option', { hasText: 'Demo Server' });
     const demoValue = await demoOption.getAttribute('value');
-    await selector.selectOption(demoValue!);
+    if (!demoValue) throw new Error('Demo Server option has no value attribute');
+    await selector.selectOption(demoValue);
 
     // Wait for reconnection
     await expect(page.locator('aside [data-testid="status-badge"]')).toHaveAttribute('data-status', 'connected', {

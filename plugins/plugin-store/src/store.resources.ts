@@ -32,12 +32,12 @@ export function generateStoreResourceTemplates(
     description: 'Read full store state',
   })
   class StoreRootResource extends ResourceContext<{ store: string }> {
-    async execute(uri: string, params: { store: string }): Promise<ReadResourceResult> {
+    async execute(_uri: string, params: { store: string }): Promise<ReadResourceResult> {
       const registry = registryOverride ?? this.get(StoreRegistryToken);
       const storeAdapter = registry.get(params.store);
       if (!storeAdapter) throw new Error(`Store '${params.store}' not found`);
       return {
-        contents: [{ uri, text: JSON.stringify(storeAdapter.getState()) }],
+        contents: [{ uri: buildUri(params.store, []), text: JSON.stringify(storeAdapter.getState()) }],
       };
     }
   }

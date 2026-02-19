@@ -673,7 +673,7 @@
           }
         }
 
-        entry.innerHTML = `<span class="log-time">${time}</span><span class="log-op">${op}</span><span class="log-data">${escapeHtml(dataStr)}</span>`;
+        entry.innerHTML = `<span class="log-time">${time}</span><span class="log-op">${escapeHtml(op)}</span><span class="log-data">${escapeHtml(dataStr)}</span>`;
         dom.outputLog.appendChild(entry);
         dom.outputLog.scrollTop = dom.outputLog.scrollHeight;
       }

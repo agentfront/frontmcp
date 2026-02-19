@@ -9,7 +9,8 @@ export function join(...segments: string[]): string {
 }
 
 export function basename(p: string, ext?: string): string {
-  const base = p.split('/').pop() ?? p;
+  const normalized = p.replace(/\/+$/, '');
+  const base = normalized.split('/').pop() ?? normalized;
   if (ext && base.endsWith(ext)) {
     return base.slice(0, -ext.length);
   }
@@ -17,7 +18,8 @@ export function basename(p: string, ext?: string): string {
 }
 
 export function dirname(p: string): string {
-  const parts = p.split('/');
+  const normalized = p.replace(/\/+$/, '');
+  const parts = normalized.split('/');
   parts.pop();
   return parts.join('/') || '.';
 }

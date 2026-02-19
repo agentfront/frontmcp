@@ -44,14 +44,18 @@ export function PromptForm({
       const value = values[arg.name] ?? '';
 
       if (renderField) {
-        return renderField({
-          name: arg.name,
-          type: 'string',
-          required: arg.required ?? false,
-          description: arg.description,
-          value,
-          onChange: (v: string) => handleChange(arg.name, v),
-        });
+        return React.createElement(
+          React.Fragment,
+          { key: arg.name },
+          renderField({
+            name: arg.name,
+            type: 'string',
+            required: arg.required ?? false,
+            description: arg.description,
+            value,
+            onChange: (v: string) => handleChange(arg.name, v),
+          }),
+        );
       }
 
       return React.createElement(

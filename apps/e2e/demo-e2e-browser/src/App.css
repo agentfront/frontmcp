@@ -399,7 +399,7 @@ button.primary:hover:not(:disabled) {
   overflow: auto;
   max-height: 300px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: break-word;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
 
@@ -590,7 +590,7 @@ button.primary:hover:not(:disabled) {
 .log-entry .log-data {
   color: var(--text);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* ─── Utilities ──────────────────────────────────────────────────────────── */

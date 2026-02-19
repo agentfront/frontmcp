@@ -49,7 +49,7 @@ export function readDomById(id: string): DomResourceResult {
     contents: [
       {
         uri: `dom://byId/${id}`,
-        mimeType: 'text/html',
+        mimeType: 'application/json',
         text: JSON.stringify({
           outerHTML: el.outerHTML,
           textContent: el.textContent ?? '',

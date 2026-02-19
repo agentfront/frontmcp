@@ -80,3 +80,4 @@ perf-results/
 # Playwright
 test-results/
 playwright-report/
+/test-results/

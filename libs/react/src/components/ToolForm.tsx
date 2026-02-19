@@ -32,6 +32,7 @@ export function ToolForm({
       const args: Record<string, unknown> = {};
       for (const [key, prop] of Object.entries(properties)) {
         const raw = values[key] ?? '';
+        if (!required.includes(key) && raw === '') continue;
         if (prop['type'] === 'number' || prop['type'] === 'integer') {
           args[key] = Number(raw);
         } else if (prop['type'] === 'boolean') {
@@ -59,15 +60,19 @@ export function ToolForm({
       const value = values[key] ?? '';
 
       if (renderField) {
-        return renderField({
-          name: key,
-          type: fieldType,
-          required: isRequired,
-          description: prop['description'] as string | undefined,
-          enumValues,
-          value,
-          onChange: (v: string) => handleChange(key, v),
-        });
+        return React.createElement(
+          React.Fragment,
+          { key },
+          renderField({
+            name: key,
+            type: fieldType,
+            required: isRequired,
+            description: prop['description'] as string | undefined,
+            enumValues,
+            value,
+            onChange: (v: string) => handleChange(key, v),
+          }),
+        );
       }
 
       return React.createElement(

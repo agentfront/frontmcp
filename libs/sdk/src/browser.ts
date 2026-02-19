@@ -173,8 +173,7 @@ export {
   getNestedValue,
   extractSchemaPaths,
   mapEnvToNestedConfig,
-  // Config loader (pure)
-  loadConfig,
+  // Config utilities (pure)
   deepMerge,
 } from './builtin/config';
 export type {
