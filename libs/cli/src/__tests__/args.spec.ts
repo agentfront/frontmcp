@@ -69,6 +69,28 @@ describe('parseArgs', () => {
     });
   });
 
+  describe('--pm flag', () => {
+    it('should parse --pm with npm value', () => {
+      const result = parseArgs(['create', '--pm', 'npm']);
+      expect(result.pm).toBe('npm');
+    });
+
+    it('should parse --pm with yarn value', () => {
+      const result = parseArgs(['create', '--pm', 'yarn']);
+      expect(result.pm).toBe('yarn');
+    });
+
+    it('should parse --pm with pnpm value', () => {
+      const result = parseArgs(['create', '--pm', 'pnpm']);
+      expect(result.pm).toBe('pnpm');
+    });
+
+    it('should not set pm when flag is absent', () => {
+      const result = parseArgs(['create']);
+      expect(result.pm).toBeUndefined();
+    });
+  });
+
   describe('--cicd / --no-cicd flags', () => {
     it('should parse --cicd flag as true', () => {
       const result = parseArgs(['create', '--cicd']);

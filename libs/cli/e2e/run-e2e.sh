@@ -16,15 +16,49 @@ VERDACCIO_URL="http://localhost:$VERDACCIO_PORT"
 TEST_DIR=$(mktemp -d)
 VERDACCIO_PID=""
 
+# Detect Docker availability and registry host for Docker-in-Docker access
+DOCKER_AVAILABLE=false
+DOCKER_REGISTRY_HOST="host.docker.internal"
+if DOCKER_INFO_OUTPUT=$(docker info 2>/dev/null); then
+  DOCKER_AVAILABLE=true
+  # On Linux (non-Docker-Desktop), use bridge gateway
+  if [ "$(uname)" = "Linux" ] && ! echo "$DOCKER_INFO_OUTPUT" | grep -q "Desktop"; then
+    DOCKER_REGISTRY_HOST="172.17.0.1"
+  fi
+fi
+
 cleanup() {
   echo "🧹 Cleaning up..."
   if [ -n "$VERDACCIO_PID" ]; then
-    kill $VERDACCIO_PID 2>/dev/null || true
+    kill "$VERDACCIO_PID" 2>/dev/null || true
+  fi
+  # Remove Docker images created during E2E tests
+  if [ "$DOCKER_AVAILABLE" = "true" ]; then
+    for img_pattern in "test-npm-docker*" "test-yarn-docker*"; do
+      images=$(docker images -q "$img_pattern" 2>/dev/null)
+      if [ -n "$images" ]; then
+        docker rmi $images 2>/dev/null || true
+      fi
+    done
   fi
   rm -rf "$TEST_DIR"
   rm -rf "$E2E_DIR/storage"
   rm -f "$ROOT_DIR/.npmrc.e2e"
   echo "✅ Cleanup complete"
+}
+
+# Patch a Dockerfile to also copy registry config so Docker build can reach Verdaccio
+patch_dockerfile_for_registry() {
+  local dockerfile="$1"
+  local config_file="$2"  # .npmrc or .yarnrc
+  # Insert COPY for registry config before each lockfile COPY line (portable sed)
+  sed -i.bak "s|^COPY package|COPY ${config_file}* ./\\
+COPY package|" "$dockerfile"
+  rm -f "${dockerfile}.bak"
+  # Verify the patch was applied
+  if ! grep -q "COPY ${config_file}" "$dockerfile"; then
+    echo "  ⚠️  patch_dockerfile_for_registry: no COPY package line found in $dockerfile"
+  fi
 }
 
 trap cleanup EXIT
@@ -299,6 +333,78 @@ if [ "${RUN_GENERATED_E2E:-false}" = "true" ]; then
     echo "  ❌ Generated e2e tests failed"
     exit 1
   fi
+fi
+
+# Test 11: Create npm project, install deps, and build Docker image
+if [ "$DOCKER_AVAILABLE" = "true" ]; then
+  echo ""
+  echo "Test 11: Create npm project + Docker build"
+  cd "$TEST_DIR"
+  npx --registry "$VERDACCIO_URL" frontmcp create test-npm-docker --yes --pm npm
+
+  if [ ! -d "test-npm-docker" ] || [ ! -f "test-npm-docker/package.json" ]; then
+    echo "  ❌ Failed to create test-npm-docker project"
+    exit 1
+  fi
+  cd test-npm-docker
+
+  # Configure registry for both host install and Docker build
+  echo "registry=$VERDACCIO_URL" > .npmrc
+  if ! npm install --registry "$VERDACCIO_URL"; then
+    echo "  ❌ npm install failed"
+    exit 1
+  fi
+  echo "  ✅ npm install succeeded"
+
+  # Patch Dockerfile so Docker build can reach Verdaccio via host.docker.internal
+  echo "registry=http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}/" > .npmrc
+  patch_dockerfile_for_registry ci/Dockerfile .npmrc
+
+  if ! npm run docker:build; then
+    echo "  ❌ npm docker:build failed"
+    exit 1
+  fi
+  echo "  ✅ npm docker:build succeeded"
+  cd "$TEST_DIR"
+else
+  echo ""
+  echo "Test 11: ⏭️  Skipped (Docker not available)"
+fi
+
+# Test 12: Create yarn project, install deps, and build Docker image
+if [ "$DOCKER_AVAILABLE" = "true" ]; then
+  echo ""
+  echo "Test 12: Create yarn project + Docker build"
+  cd "$TEST_DIR"
+  npx --registry "$VERDACCIO_URL" frontmcp create test-yarn-docker --yes --pm yarn
+
+  if [ ! -d "test-yarn-docker" ] || [ ! -f "test-yarn-docker/package.json" ]; then
+    echo "  ❌ Failed to create test-yarn-docker project"
+    exit 1
+  fi
+  cd test-yarn-docker
+
+  # Configure registry for host install (Yarn Classic reads .npmrc)
+  echo "registry=$VERDACCIO_URL" > .npmrc
+  if ! yarn install --registry "$VERDACCIO_URL"; then
+    echo "  ❌ yarn install failed"
+    exit 1
+  fi
+  echo "  ✅ yarn install succeeded"
+
+  # Patch Dockerfile so Docker build can reach Verdaccio via host.docker.internal
+  echo "registry=http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}/" > .npmrc
+  patch_dockerfile_for_registry ci/Dockerfile .npmrc
+
+  if ! yarn docker:build; then
+    echo "  ❌ yarn docker:build failed"
+    exit 1
+  fi
+  echo "  ✅ yarn docker:build succeeded"
+  cd "$TEST_DIR"
+else
+  echo ""
+  echo "Test 12: ⏭️  Skipped (Docker not available)"
 fi
 
 echo ""

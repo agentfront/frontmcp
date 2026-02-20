@@ -174,7 +174,6 @@ describe('runCreate', () => {
       const content = readFileSync(composePath, 'utf8');
 
       expect(content).toContain('context: ..');
-      expect(content).toContain('../src:/app/src');
       expect(content).not.toMatch(/context:\s*\.(\s|$)/);
     });
   });
@@ -219,8 +218,8 @@ describe('runCreate', () => {
         expect(content).toContain('AS runner');
 
         // Base image
-        expect(content).toContain('FROM node:22-alpine AS builder');
-        expect(content).toContain('FROM node:22-alpine AS runner');
+        expect(content).toContain('FROM node:24-alpine AS builder');
+        expect(content).toContain('FROM node:24-alpine AS runner');
 
         // Builder stage
         expect(content).toContain('RUN npm ci');
@@ -253,14 +252,20 @@ describe('runCreate', () => {
         // App service
         expect(content).toContain('context: ..');
         expect(content).toContain('dockerfile: ci/Dockerfile');
-        expect(content).toContain('../src:/app/src');
         expect(content).toContain('${PORT:-3000}:3000');
-        expect(content).toContain('command: npm run dev');
+
+        // No source mounting or dev command override in production-oriented compose
+        expect(content).not.toContain('../src:/app/src');
+        expect(content).not.toMatch(/command:.*run\s+dev/);
+
+        // No deprecated version field
+        expect(content).not.toMatch(/^version:/m);
 
         // Dependencies
         expect(content).toContain('condition: service_healthy');
 
         // Environment
+        expect(content).toContain('PORT=${PORT:-3000}');
         expect(content).toContain('REDIS_HOST=redis');
         expect(content).toContain('REDIS_PORT=6379');
       });
@@ -275,7 +280,8 @@ describe('runCreate', () => {
         expect(content).toContain('app:');
         expect(content).toContain('context: ..');
         expect(content).toContain('dockerfile: ci/Dockerfile');
-        expect(content).toContain('../src:/app/src');
+        expect(content).not.toContain('../src:/app/src');
+        expect(content).not.toMatch(/command:.*run\s+dev/);
 
         expect(content).not.toContain('image: redis');
         expect(content).not.toContain('depends_on:');
@@ -372,6 +378,96 @@ describe('runCreate', () => {
         expect(pkgJson.scripts['docker:up']).toBeUndefined();
         expect(pkgJson.scripts['docker:down']).toBeUndefined();
         expect(pkgJson.scripts['docker:build']).toBeUndefined();
+      });
+    });
+  });
+
+  describe('package manager support', () => {
+    beforeEach(() => {
+      jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    });
+
+    it('should default to npm package manager', async () => {
+      await runCreate('default-pm-app', { yes: true, target: 'node' });
+
+      expect(consoleLogs.some((log) => log.includes('Package manager: npm'))).toBe(true);
+    });
+
+    describe('Dockerfile per package manager', () => {
+      it('should generate npm Dockerfile with npm ci', async () => {
+        await runCreate('npm-docker', { yes: true, target: 'node', pm: 'npm' });
+
+        const content = readFileSync(path.join(tempDir, 'npm-docker', 'ci', 'Dockerfile'), 'utf8');
+        expect(content).toContain('RUN npm ci');
+        expect(content).toContain('COPY package*.json package-lock.json* ./');
+        expect(content).toContain('RUN npm run build');
+        expect(content).not.toContain('corepack');
+      });
+
+      it('should generate yarn Dockerfile with yarn install --frozen-lockfile', async () => {
+        await runCreate('yarn-docker', { yes: true, target: 'node', pm: 'yarn' });
+
+        const content = readFileSync(path.join(tempDir, 'yarn-docker', 'ci', 'Dockerfile'), 'utf8');
+        expect(content).toContain('RUN yarn install --frozen-lockfile');
+        expect(content).toContain('COPY package.json yarn.lock* ./');
+        expect(content).toContain('RUN yarn build');
+        expect(content).not.toContain('corepack');
+      });
+
+      it('should generate pnpm Dockerfile with corepack enable and pnpm install', async () => {
+        await runCreate('pnpm-docker', { yes: true, target: 'node', pm: 'pnpm' });
+
+        const content = readFileSync(path.join(tempDir, 'pnpm-docker', 'ci', 'Dockerfile'), 'utf8');
+        expect(content).toContain('RUN corepack enable');
+        expect(content).toContain('RUN pnpm install --frozen-lockfile');
+        expect(content).toContain('COPY package.json pnpm-lock.yaml* ./');
+        expect(content).toContain('RUN pnpm run build');
+      });
+    });
+
+    describe('GitHub Actions per package manager', () => {
+      it('should generate CI workflow with yarn cache', async () => {
+        await runCreate('yarn-ci', { yes: true, target: 'node', pm: 'yarn', cicd: true });
+
+        const content = readFileSync(path.join(tempDir, 'yarn-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
+        expect(content).toContain("cache: 'yarn'");
+        expect(content).toContain('yarn install --frozen-lockfile');
+        expect(content).toContain("node-version: '24'");
+      });
+
+      it('should generate CI workflow with pnpm setup action', async () => {
+        await runCreate('pnpm-ci', { yes: true, target: 'node', pm: 'pnpm', cicd: true });
+
+        const content = readFileSync(path.join(tempDir, 'pnpm-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
+        expect(content).toContain('pnpm/action-setup@v4');
+        expect(content).toContain("cache: 'pnpm'");
+        expect(content).toContain('pnpm install --frozen-lockfile');
+      });
+    });
+
+    describe('package.json engines per package manager', () => {
+      it('should set node>=24 and npm>=10 for npm', async () => {
+        await runCreate('npm-engines', { yes: true, pm: 'npm' });
+
+        const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'npm-engines', 'package.json'), 'utf8'));
+        expect(pkgJson.engines.node).toBe('>=24');
+        expect(pkgJson.engines.npm).toBe('>=10');
+      });
+
+      it('should set only node>=24 for yarn (no npm engine)', async () => {
+        await runCreate('yarn-engines', { yes: true, pm: 'yarn' });
+
+        const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'yarn-engines', 'package.json'), 'utf8'));
+        expect(pkgJson.engines.node).toBe('>=24');
+        expect(pkgJson.engines.npm).toBeUndefined();
+      });
+
+      it('should set only node>=24 for pnpm (no npm engine)', async () => {
+        await runCreate('pnpm-engines', { yes: true, pm: 'pnpm' });
+
+        const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'pnpm-engines', 'package.json'), 'utf8'));
+        expect(pkgJson.engines.node).toBe('>=24');
+        expect(pkgJson.engines.npm).toBeUndefined();
       });
     });
   });
