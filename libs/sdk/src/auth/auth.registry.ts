@@ -36,9 +36,7 @@ import { orchestratedAuthContextExtension } from './authorization/orchestrated.c
  * Default auth options when none provided - public mode with all tools open
  */
 const DEFAULT_AUTH_OPTIONS: AuthOptionsInput = {
-  mode: 'orchestrated',
-  type: 'local',
-  allowDefaultPublic: true,
+  mode: 'public',
 };
 
 export class AuthRegistry
