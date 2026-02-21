@@ -35,10 +35,7 @@ cleanup() {
   # Remove Docker images created during E2E tests
   if [ "$DOCKER_AVAILABLE" = "true" ]; then
     for img_pattern in "test-npm-docker*" "test-yarn-docker*"; do
-      images=$(docker images -q "$img_pattern" 2>/dev/null)
-      if [ -n "$images" ]; then
-        docker rmi $images 2>/dev/null || true
-      fi
+      docker images -q "$img_pattern" 2>/dev/null | xargs -r docker rmi 2>/dev/null || true
     done
   fi
   rm -rf "$TEST_DIR"

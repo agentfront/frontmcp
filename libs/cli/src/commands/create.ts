@@ -37,6 +37,7 @@ interface PmConfig {
   run: string;
   userInstall: string;
   ghCache: string;
+  ghInstallCmd: string;
   engines: { node: string; npm?: string };
 }
 
@@ -48,6 +49,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     run: 'npm run',
     userInstall: 'npm install',
     ghCache: 'npm',
+    ghInstallCmd: 'npm ci',
     engines: { node: '>=24', npm: '>=10' },
   },
   yarn: {
@@ -57,6 +59,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     run: 'yarn',
     userInstall: 'yarn install',
     ghCache: 'yarn',
+    ghInstallCmd: 'yarn install --frozen-lockfile',
     engines: { node: '>=24' },
   },
   pnpm: {
@@ -66,6 +69,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     run: 'pnpm run',
     userInstall: 'pnpm install',
     ghCache: 'pnpm',
+    ghInstallCmd: 'pnpm install --frozen-lockfile',
     engines: { node: '>=24' },
   },
 };
@@ -617,7 +621,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
           cache: '${cfg.ghCache}'
 
       - name: Install dependencies
-        run: ${cfg.installAll.replace('RUN ', '')}`;
+        run: ${cfg.ghInstallCmd}`;
   }
   return `
       - name: Setup Node.js
@@ -627,7 +631,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
           cache: '${cfg.ghCache}'
 
       - name: Install dependencies
-        run: ${cfg.installAll.replace('RUN ', '')}`;
+        run: ${cfg.ghInstallCmd}`;
 }
 
 function generateGhCi(pm: PackageManager): string {
