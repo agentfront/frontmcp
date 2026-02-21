@@ -231,8 +231,8 @@ describe('runCreate', () => {
         expect(content).toContain('AS runner');
 
         // Base image
-        expect(content).toContain('FROM node:24-alpine AS builder');
-        expect(content).toContain('FROM node:24-alpine AS runner');
+        expect(content).toContain('FROM node:24-slim AS builder');
+        expect(content).toContain('FROM node:24-slim AS runner');
 
         // Builder stage
         expect(content).toContain('RUN npm ci');

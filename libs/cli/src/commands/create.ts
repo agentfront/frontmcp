@@ -455,7 +455,7 @@ function generateDockerfile(pm: PackageManager): string {
   const corepack = pm !== 'npm' ? '\nRUN corepack enable\n' : '';
   return `
 # Build stage
-FROM node:24-alpine AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /app
 ${corepack}
@@ -471,7 +471,7 @@ RUN ${cfg.run} build
 ${cfg.pruneDevDeps}
 
 # Production stage
-FROM node:24-alpine AS runner
+FROM node:24-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
