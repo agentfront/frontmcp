@@ -1138,7 +1138,7 @@
   dependencies:
     tslib "^2.4.0"
 
-"@enclave-vm/ast@2.11.0", "@enclave-vm/ast@^2.10.1", "@enclave-vm/ast@^2.11.0":
+"@enclave-vm/ast@2.11.0", "@enclave-vm/ast@^2.11.0":
   version "2.11.0"
   resolved "https://registry.yarnpkg.com/@enclave-vm/ast/-/ast-2.11.0.tgz#b36fcbd1398bc259d1a011ce3a44af8a22c1975f"
   integrity sha512-xK6RJDCTdAg2ypFIasfK4qBL9vzND7NbOhH/WXNnODZwAnorSfVVV4okvh5D3hecVVu9TVEt96Clc7sm1hWJvQ==
@@ -1392,16 +1392,6 @@
   version "0.2.10"
   resolved "https://registry.yarnpkg.com/@floating-ui/utils/-/utils-0.2.10.tgz#a2a1e3812d14525f725d011a73eceb41fef5bc1c"
   integrity sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==
-
-"@frontmcp/utils@0.11.1":
-  version "0.11.1"
-  resolved "https://registry.yarnpkg.com/@frontmcp/utils/-/utils-0.11.1.tgz#52aa2b49be1d8ef5915635b83b2b99955883a8e6"
-  integrity sha512-kmq3Zy7HSvdTDuhbuiBE6DiNYAWxrhZRoLAxwD62oGj/Ie7CFaQoV+CvAW0c0WbvKfja89eKwtDquLRwh5Tw0A==
-  dependencies:
-    "@enclave-vm/ast" "^2.10.1"
-    "@noble/ciphers" "^2.1.1"
-    "@noble/hashes" "^2.0.1"
-    zod "^4.0.0"
 
 "@google/generative-ai@^0.24.0":
   version "0.24.1"
