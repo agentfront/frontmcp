@@ -424,7 +424,7 @@ See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-se
 // Docker templates (moved to ci/ folder)
 function generateDockerfile(pm: PackageManager): string {
   const cfg = PM_CONFIG[pm];
-  const corepack = pm === 'pnpm' ? '\nRUN corepack enable\n' : '';
+  const corepack = pm !== 'npm' ? '\nRUN corepack enable\n' : '';
   return `
 # Build stage
 FROM node:24-alpine AS builder

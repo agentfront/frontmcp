@@ -411,7 +411,7 @@ describe('runCreate', () => {
         expect(content).toContain('RUN yarn install --frozen-lockfile');
         expect(content).toContain('COPY package.json yarn.lock* ./');
         expect(content).toContain('RUN yarn build');
-        expect(content).not.toContain('corepack');
+        expect(content).toContain('RUN corepack enable');
       });
 
       it('should generate pnpm Dockerfile with corepack enable and pnpm install', async () => {
@@ -442,6 +442,15 @@ describe('runCreate', () => {
         expect(content).toContain('pnpm/action-setup@v4');
         expect(content).toContain("cache: 'pnpm'");
         expect(content).toContain('pnpm install --frozen-lockfile');
+      });
+
+      it('should generate CI workflow with npm cache', async () => {
+        await runCreate('npm-ci', { yes: true, target: 'node', pm: 'npm', cicd: true });
+
+        const content = readFileSync(path.join(tempDir, 'npm-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
+        expect(content).toContain("cache: 'npm'");
+        expect(content).toContain('npm ci');
+        expect(content).toContain("node-version: '24'");
       });
     });
 

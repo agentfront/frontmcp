@@ -57,7 +57,8 @@ COPY package|" "$dockerfile"
   rm -f "${dockerfile}.bak"
   # Verify the patch was applied
   if ! grep -qF "COPY ${config_file}" "$dockerfile"; then
-    echo "  ⚠️  patch_dockerfile_for_registry: no COPY package line found in $dockerfile"
+    echo "patch_dockerfile_for_registry: no COPY package line found in $dockerfile"
+    return 1
   fi
 }
 
