@@ -102,10 +102,7 @@ export class TestServer {
     const project = options.project ?? 'default';
     const { port, release } = await reservePort(project, options.port);
 
-    // Release the reservation since the actual server will bind the port
-    await release();
-
-    const server = new TestServer(options, port);
+    const server = new TestServer(options, port, release);
     try {
       await server.startProcess();
     } catch (error) {
@@ -129,9 +126,6 @@ export class TestServer {
     // Use the Nx project name for port range allocation
     const { port, release } = await reservePort(project, options.port);
 
-    // Release the reservation since the actual server will bind the port
-    await release();
-
     const serverOptions: TestServerOptions = {
       ...options,
       port,
@@ -140,7 +134,7 @@ export class TestServer {
       cwd: options.cwd ?? process.cwd(),
     };
 
-    const server = new TestServer(serverOptions, port);
+    const server = new TestServer(serverOptions, port, release);
     try {
       await server.startProcess();
     } catch (error) {
@@ -184,6 +178,11 @@ export class TestServer {
    * Stop the test server
    */
   async stop(): Promise<void> {
+    if (this.portRelease) {
+      await this.portRelease();
+      this.portRelease = null;
+    }
+
     if (this.process) {
       this.log('Stopping server...');
 
@@ -284,6 +283,12 @@ export class TestServer {
       ...this.options.env,
       PORT: String(this.options.port),
     };
+
+    // Release port reservation just before spawning so the server can bind it
+    if (this.portRelease) {
+      await this.portRelease();
+      this.portRelease = null;
+    }
 
     // Use shell: true to handle complex commands with quoted arguments
     // This avoids fragile command parsing with split(' ')

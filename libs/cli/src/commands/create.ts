@@ -455,7 +455,7 @@ function generateDockerfile(pm: PackageManager): string {
   const corepack = pm !== 'npm' ? '\nRUN corepack enable\n' : '';
   return `
 # Build stage
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /app
 ${corepack}
@@ -471,7 +471,7 @@ RUN ${cfg.run} build
 ${cfg.pruneDevDeps}
 
 # Production stage
-FROM node:22-slim AS runner
+FROM node:24-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -641,7 +641,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: '${cfg.ghCache}'
 
       - name: Install dependencies
@@ -651,7 +651,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: '${cfg.ghCache}'
 
       - name: Install dependencies

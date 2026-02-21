@@ -231,8 +231,8 @@ describe('runCreate', () => {
         expect(content).toContain('AS runner');
 
         // Base image
-        expect(content).toContain('FROM node:22-slim AS builder');
-        expect(content).toContain('FROM node:22-slim AS runner');
+        expect(content).toContain('FROM node:24-slim AS builder');
+        expect(content).toContain('FROM node:24-slim AS runner');
 
         // Builder stage
         expect(content).toContain('RUN npm ci');
@@ -449,7 +449,7 @@ describe('runCreate', () => {
         const content = readFileSync(path.join(tempDir, 'yarn-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
         expect(content).toContain("cache: 'yarn'");
         expect(content).toContain('yarn install --frozen-lockfile');
-        expect(content).toContain("node-version: '22'");
+        expect(content).toContain("node-version: '24'");
       });
 
       it('should generate CI workflow with pnpm setup action', async () => {
@@ -467,7 +467,7 @@ describe('runCreate', () => {
         const content = readFileSync(path.join(tempDir, 'npm-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
         expect(content).toContain("cache: 'npm'");
         expect(content).toContain('npm ci');
-        expect(content).toContain("node-version: '22'");
+        expect(content).toContain("node-version: '24'");
       });
     });
 
