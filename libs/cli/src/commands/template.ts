@@ -1,8 +1,8 @@
 import * as path from 'path';
-import * as readline from 'readline';
 import { c } from '../colors';
 import { ensureDir, fileExists } from '@frontmcp/utils';
 import { fsp } from '../utils/fs';
+import { clack } from '../utils/prompts';
 
 type AuthType = 'oauth2' | 'bearer' | 'apiKey';
 
@@ -31,89 +31,101 @@ export async function runTemplate(templateName?: string): Promise<void> {
     return;
   }
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  const p = await clack();
+  const templatesRoot = path.resolve(__dirname, '..', 'templates');
 
-  const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, (ans) => resolve(ans.trim())));
-
-  try {
-    const templatesRoot = path.resolve(__dirname, '..', 'templates');
-
-    // 1) Collect available templates up-front
-    const available = await listAvailableTemplates(templatesRoot);
-    if (!available.length) {
-      console.log(c('red', `No templates found under ${path.relative(process.cwd(), templatesRoot)}.`));
-      return;
-    }
-
-    // 2) Sanitize the name and choose the actual template folder
-    const sanitized = sanitizeTemplateName(name);
-    let selected: string | null = null;
-
-    if (available.includes(name)) {
-      selected = name;
-    } else if (available.includes(sanitized)) {
-      selected = sanitized;
-      if (sanitized !== name) {
-        console.log(c('yellow', `[template] Template "${name}" not found, using sanitized "${sanitized}"`));
-      }
-    }
-
-    if (!selected) {
-      console.log(c('red', `Template "${name}" not found under ${path.relative(process.cwd(), templatesRoot)}.`));
-      console.log(c('gray', '\nAvailable templates:'));
-      for (const t of available) {
-        console.log('  -', t);
-      }
-      return;
-    }
-
-    const templateRoot = path.resolve(templatesRoot, selected);
-
-    console.log(c('cyan', '[template]') + ` Using template "${selected}" from src/templates/${selected}`);
-
-    // Ask for owner & service
-    let owner = await ask(`Third-party owner (e.g. google, github, slack): `);
-    if (!owner) {
-      console.log(c('red', 'Owner is required.'));
-      return;
-    }
-    owner = sanitizeSlug(owner);
-
-    let service = await ask(`Third-party service (e.g. gmail, slack-bot): `);
-    if (!service) {
-      console.log(c('red', 'Service is required.'));
-      return;
-    }
-    service = sanitizeSlug(service);
-
-    // Auth type (for placeholders only – you can use or ignore in templates)
-    let authRaw = await ask(`Default auth type (oauth2/bearer/apiKey) [oauth2]: `);
-    if (!authRaw) authRaw = 'oauth2';
-    const authType = authRaw as AuthType;
-    if (!['oauth2', 'bearer', 'apiKey'].includes(authType)) {
-      console.log(c('red', `Invalid auth type: ${authRaw}`));
-      return;
-    }
-
-    const ctx: TemplateContext = { owner, service, authType };
-
-    const cwd = process.cwd();
-    const destRoot = path.resolve(cwd, 'integrations', owner, service);
-    await ensureDir(destRoot);
-
-    console.log(c('gray', `[template] Scaffolding into ${path.relative(cwd, destRoot)}`));
-
-    await copyTemplateTree(templateRoot, destRoot, ctx);
-
-    console.log('');
-    console.log(c('green', '✔ Template hydrated into: ') + path.relative(cwd, destRoot));
-    console.log(c('gray', 'You can now edit or delete the generated example files and create your own tools.'));
-  } finally {
-    rl.close();
+  // 1) Collect available templates up-front
+  const available = await listAvailableTemplates(templatesRoot);
+  if (!available.length) {
+    console.log(c('red', `No templates found under ${path.relative(process.cwd(), templatesRoot)}.`));
+    return;
   }
+
+  // 2) Sanitize the name and choose the actual template folder
+  const sanitized = sanitizeTemplateName(name);
+  let selected: string | null = null;
+
+  if (available.includes(name)) {
+    selected = name;
+  } else if (available.includes(sanitized)) {
+    selected = sanitized;
+    if (sanitized !== name) {
+      console.log(c('yellow', `[template] Template "${name}" not found, using sanitized "${sanitized}"`));
+    }
+  }
+
+  if (!selected) {
+    console.log(c('red', `Template "${name}" not found under ${path.relative(process.cwd(), templatesRoot)}.`));
+    console.log(c('gray', '\nAvailable templates:'));
+    for (const t of available) {
+      console.log('  -', t);
+    }
+    return;
+  }
+
+  const templateRoot = path.resolve(templatesRoot, selected);
+
+  console.log(c('cyan', '[template]') + ` Using template "${selected}" from src/templates/${selected}`);
+
+  // Ask for owner
+  const ownerResult = await p.text({
+    message: 'Third-party owner',
+    placeholder: 'google, github, slack',
+    validate: (val) => {
+      if (!val.trim()) return 'Owner is required.';
+      return undefined;
+    },
+  });
+  if (p.isCancel(ownerResult)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+  const owner = sanitizeSlug(ownerResult);
+
+  // Ask for service
+  const serviceResult = await p.text({
+    message: 'Third-party service',
+    placeholder: 'gmail, slack-bot',
+    validate: (val) => {
+      if (!val.trim()) return 'Service is required.';
+      return undefined;
+    },
+  });
+  if (p.isCancel(serviceResult)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+  const service = sanitizeSlug(serviceResult);
+
+  // Auth type — select instead of free-text
+  const authResult = await p.select({
+    message: 'Default auth type',
+    options: [
+      { label: 'OAuth 2.0', value: 'oauth2' as AuthType },
+      { label: 'Bearer token', value: 'bearer' as AuthType },
+      { label: 'API key', value: 'apiKey' as AuthType },
+    ],
+    initialValue: 'oauth2' as AuthType,
+  });
+  if (p.isCancel(authResult)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+  const authType = authResult;
+
+  const ctx: TemplateContext = { owner, service, authType };
+
+  const cwd = process.cwd();
+  const destRoot = path.resolve(cwd, 'integrations', owner, service);
+  await ensureDir(destRoot);
+
+  console.log(c('gray', `[template] Scaffolding into ${path.relative(cwd, destRoot)}`));
+
+  await copyTemplateTree(templateRoot, destRoot, ctx);
+
+  console.log('');
+  console.log(c('green', '✔ Template hydrated into: ') + path.relative(cwd, destRoot));
+  console.log(c('gray', 'You can now edit or delete the generated example files and create your own tools.'));
 }
 
 /* -------------------------------------------------------------------------- */
