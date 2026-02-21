@@ -16,15 +16,10 @@ VERDACCIO_URL="http://localhost:$VERDACCIO_PORT"
 TEST_DIR=$(mktemp -d)
 VERDACCIO_PID=""
 
-# Detect Docker availability and registry host for Docker-in-Docker access
+# Detect Docker availability
 DOCKER_AVAILABLE=false
-DOCKER_REGISTRY_HOST="host.docker.internal"
-if DOCKER_INFO_OUTPUT=$(docker info 2>/dev/null); then
+if docker info >/dev/null 2>&1; then
   DOCKER_AVAILABLE=true
-  # On Linux (non-Docker-Desktop), use bridge gateway
-  if [ "$(uname)" = "Linux" ] && ! echo "$DOCKER_INFO_OUTPUT" | grep -q "Desktop"; then
-    DOCKER_REGISTRY_HOST="172.17.0.1"
-  fi
 fi
 
 cleanup() {
@@ -346,7 +341,7 @@ if [ "$DOCKER_AVAILABLE" = "true" ]; then
   fi
   cd test-npm-docker
 
-  # Configure registry for both host install and Docker build
+  # Configure registry for Verdaccio
   echo "registry=$VERDACCIO_URL" > .npmrc
   if ! npm install --registry "$VERDACCIO_URL"; then
     echo "  ❌ npm install failed"
@@ -354,17 +349,11 @@ if [ "$DOCKER_AVAILABLE" = "true" ]; then
   fi
   echo "  ✅ npm install succeeded"
 
-  # npm ci uses 'resolved' URLs from package-lock.json, ignoring .npmrc registry.
-  # The lockfile has localhost URLs, but inside Docker localhost is the container
-  # itself. Rewrite to the Docker-accessible host so npm ci can reach Verdaccio.
-  sed -i.bak "s|http://localhost:${VERDACCIO_PORT}|http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}|g" package-lock.json
-  rm -f package-lock.json.bak
-
-  # Patch Dockerfile so Docker build can reach Verdaccio via host.docker.internal
-  echo "registry=http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}/" > .npmrc
+  # Patch Dockerfile to copy .npmrc so Docker build uses Verdaccio registry
   patch_dockerfile_for_registry ci/Dockerfile .npmrc
 
-  if ! npm run docker:build; then
+  # Build with host networking so npm ci can reach Verdaccio at localhost
+  if ! docker build --network host -t test-npm-docker -f ci/Dockerfile .; then
     echo "  ❌ npm docker:build failed"
     exit 1
   fi
@@ -396,16 +385,11 @@ if [ "$DOCKER_AVAILABLE" = "true" ]; then
   fi
   echo "  ✅ yarn install succeeded"
 
-  # yarn install --frozen-lockfile uses 'resolved' URLs from yarn.lock.
-  # Rewrite localhost to Docker-accessible host (same reason as npm above).
-  sed -i.bak "s|http://localhost:${VERDACCIO_PORT}|http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}|g" yarn.lock
-  rm -f yarn.lock.bak
-
-  # Patch Dockerfile so Docker build can reach Verdaccio via host.docker.internal
-  echo "registry=http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}/" > .npmrc
+  # Patch Dockerfile to copy .npmrc so Docker build uses Verdaccio registry
   patch_dockerfile_for_registry ci/Dockerfile .npmrc
 
-  if ! yarn docker:build; then
+  # Build with host networking so yarn can reach Verdaccio at localhost
+  if ! docker build --network host -t test-yarn-docker -f ci/Dockerfile .; then
     echo "  ❌ yarn docker:build failed"
     exit 1
   fi
