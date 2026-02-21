@@ -3,7 +3,7 @@
 import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { SkillRecord } from '../records';
 import { SkillContext, SkillContent } from '../interfaces';
-import { SkillMetadata, SkillToolRef, normalizeToolRef } from '../metadata';
+import { SkillMetadata, SkillToolRef, SkillResources, normalizeToolRef } from '../metadata';
 
 /**
  * Result of loading a skill with tool validation information.
@@ -115,5 +115,40 @@ export abstract class SkillEntry extends BaseEntry<SkillRecord, SkillContext, Sk
    */
   getPriority(): number {
     return this.metadata.priority ?? 0;
+  }
+
+  /**
+   * Get the skill's license.
+   */
+  getLicense(): string | undefined {
+    return this.metadata.license;
+  }
+
+  /**
+   * Get the skill's compatibility notes.
+   */
+  getCompatibility(): string | undefined {
+    return this.metadata.compatibility;
+  }
+
+  /**
+   * Get the skill's spec metadata (arbitrary key-value pairs).
+   */
+  getSpecMetadata(): Record<string, string> | undefined {
+    return this.metadata.specMetadata;
+  }
+
+  /**
+   * Get the skill's allowed tools (space-delimited string).
+   */
+  getAllowedTools(): string | undefined {
+    return this.metadata.allowedTools;
+  }
+
+  /**
+   * Get the skill's bundled resource directories.
+   */
+  getResources(): SkillResources | undefined {
+    return this.metadata.resources;
   }
 }

@@ -160,8 +160,8 @@ Skills are automatically:
 
 ```ts
 @Skill({
-  name: string,              // Required: unique identifier
-  description: string,       // Required: short description for discovery
+  name: string,              // Required: kebab-case, max 64 chars
+  description: string,       // Required: max 1024 chars, no XML tags
   instructions: InstructionSource, // Required: detailed guidance (see below)
   tools?: ToolRef[],         // Optional: tool references with purpose
   tags?: string[],           // Optional: categorization tags
@@ -169,6 +169,13 @@ Skills are automatically:
   examples?: Example[],      // Optional: usage examples
   priority?: number,         // Optional: search ranking weight (default: 0)
   hideFromDiscovery?: boolean, // Optional: hide from searchSkills (default: false)
+  visibility?: 'mcp' | 'http' | 'both', // Optional: discovery visibility (default: 'both')
+  toolValidation?: 'strict' | 'warn' | 'ignore', // Optional: tool ref validation (default: 'warn')
+  license?: string,          // Optional: license name (e.g. 'MIT')
+  compatibility?: string,    // Optional: environment requirements (max 500 chars)
+  specMetadata?: Record<string, string>, // Optional: arbitrary key-value metadata
+  allowedTools?: string,     // Optional: space-delimited pre-approved tools
+  resources?: SkillResources, // Optional: bundled resource directories
 })
 ```
 
@@ -176,8 +183,8 @@ Skills are automatically:
 
 | Field               | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
-| `name`              | Unique identifier used in search and load operations         |
-| `description`       | Short text helping the model understand when to use this skill |
+| `name`              | Unique identifier, must be kebab-case (max 64 chars, no consecutive hyphens) |
+| `description`       | Short text for discovery (max 1024 chars, no XML/HTML tags)  |
 | `instructions`      | Detailed step-by-step guidance (inline, file, or URL)        |
 | `tools`             | Tools this skill uses, with optional purpose descriptions    |
 | `tags`              | Categorization for filtering and organization                |
@@ -185,6 +192,40 @@ Skills are automatically:
 | `examples`          | Scenarios demonstrating when and how to use the skill        |
 | `priority`          | Higher values appear earlier in search results               |
 | `hideFromDiscovery` | When `true`, skill is loadable but not listed in search      |
+| `visibility`        | Where this skill is discoverable: `mcp`, `http`, or `both`   |
+| `toolValidation`    | How to handle missing tool references: `strict`, `warn`, `ignore` |
+| `license`           | License name or reference (per Agent Skills spec)            |
+| `compatibility`     | Environment requirements (max 500 chars, per Agent Skills spec) |
+| `specMetadata`      | Arbitrary key-value metadata (maps to spec `metadata` field) |
+| `allowedTools`      | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
+| `resources`         | Bundled resource directories (`scripts/`, `references/`, `assets/`) |
+
+### Name Validation
+
+Skill names follow strict kebab-case rules per the [Anthropic Agent Skills specification](https://agentskills.io/specification):
+
+- Lowercase letters, numbers, and hyphens only
+- Must start and end with a letter or number
+- No consecutive hyphens (`--`)
+- Maximum 64 characters
+
+```ts
+// Valid names
+'review-pr'           // ✓
+'deploy-v2'           // ✓
+'a'                   // ✓
+
+// Invalid names
+'Review-PR'           // ✗ uppercase
+'review_pr'           // ✗ underscore
+'review--pr'          // ✗ consecutive hyphens
+'-review-pr'          // ✗ starts with hyphen
+```
+
+### Description Validation
+
+- Maximum 1024 characters
+- Must not contain XML/HTML tags (per Agent Skills spec)
 
 ---
 
@@ -612,6 +653,140 @@ Results are ranked by:
 1. Relevance score
 2. Priority field (higher = earlier)
 3. Tool availability (complete skills rank higher)
+
+---
+
+## Agent Skills Specification Alignment
+
+FrontMCP skills are aligned with the [Anthropic Agent Skills specification](https://agentskills.io/specification). This means you can use standard SKILL.md files and skill directories with FrontMCP.
+
+### New Spec Fields
+
+Fields from the Agent Skills spec are available as first-class properties:
+
+```ts
+@Skill({
+  name: 'deploy-app',
+  description: 'Deploy application to production',
+  instructions: '...',
+  tools: ['docker_build', 'k8s_apply'],
+
+  // Agent Skills spec fields
+  license: 'MIT',
+  compatibility: 'Requires Docker 24+ and kubectl',
+  specMetadata: {
+    author: 'platform-team',
+    version: '2.1.0',
+    category: 'devops',
+  },
+  allowedTools: 'Read Edit Bash(docker build) Bash(kubectl apply)',
+  resources: {
+    scripts: './skills/deploy-app/scripts',
+    references: './skills/deploy-app/references',
+  },
+})
+class DeployAppSkill extends SkillContext {}
+```
+
+### SKILL.md Frontmatter
+
+FrontMCP can parse SKILL.md files with YAML frontmatter, the standard format from the Agent Skills specification:
+
+```markdown
+---
+name: review-pr
+description: Review a GitHub pull request
+license: MIT
+compatibility: Requires git CLI
+tags:
+  - github
+  - code-review
+metadata:
+  author: dev-team
+  version: "1.0"
+allowed-tools: Read Edit Bash(git diff)
+---
+# PR Review Instructions
+
+1. Fetch the PR details
+2. Review each changed file
+3. Add review comments
+4. Submit the review
+```
+
+The frontmatter fields are mapped to FrontMCP metadata:
+- `metadata` → `specMetadata`
+- `allowed-tools` → `allowedTools`
+- All other fields map directly
+
+The markdown body becomes the `instructions` content.
+
+<Tip>
+When loading instructions from a file, FrontMCP automatically strips YAML frontmatter so you get clean instruction content.
+</Tip>
+
+---
+
+## Loading Skill Directories
+
+Load complete skill directories following the Agent Skills spec structure:
+
+```
+skills/
+  review-pr/
+    SKILL.md           # Required: frontmatter + instructions
+    scripts/           # Optional: automation scripts
+    references/        # Optional: reference documents
+    assets/            # Optional: images, diagrams, etc.
+```
+
+### Using `skillDir()`
+
+```ts
+import { skillDir } from '@frontmcp/sdk';
+
+// Load a skill directory
+const reviewSkill = await skillDir('./skills/review-pr');
+
+@App({
+  name: 'my-app',
+  skills: [reviewSkill],
+})
+class MyApp {}
+```
+
+### Using `loadSkillDirectory()`
+
+For more control:
+
+```ts
+import { loadSkillDirectory, scanSkillResources } from '@frontmcp/sdk';
+
+// Load with full metadata
+const record = await loadSkillDirectory('./skills/review-pr');
+// record.kind === 'FILE'
+// record.metadata contains parsed frontmatter
+// record.metadata.resources contains detected directories
+
+// Or just scan for resource directories
+const { resources, hasSkillMd } = await scanSkillResources('./skills/review-pr');
+```
+
+### Allowed Tools
+
+The `allowedTools` field lists tools that are pre-approved for the skill. This is useful for skill sessions where tool access is restricted:
+
+```ts
+@Skill({
+  name: 'code-review',
+  description: 'Review code changes',
+  instructions: '...',
+  tools: ['github_get_pr', 'github_add_comment'],
+  allowedTools: 'Read Edit Bash(git diff) Bash(git log)',
+})
+```
+
+Tools in `allowedTools` don't require additional user confirmation during skill sessions.
 
 ---
 

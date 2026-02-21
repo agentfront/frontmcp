@@ -18,6 +18,19 @@ declare global {
 }
 
 /**
+ * Bundled resource directories for a skill.
+ * Maps to scripts/, references/, and assets/ directories per Agent Skills spec.
+ */
+export interface SkillResources {
+  /** Path to scripts directory */
+  scripts?: string;
+  /** Path to references directory */
+  references?: string;
+  /** Path to assets directory */
+  assets?: string;
+}
+
+/**
  * Reference to a tool used by a skill.
  * Can be a simple string (tool name), a tool class, or a detailed reference with purpose.
  */
@@ -288,6 +301,46 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * ```
    */
   visibility?: 'mcp' | 'http' | 'both';
+
+  /**
+   * License name or reference to a bundled LICENSE file.
+   * Per Agent Skills specification.
+   *
+   * @example 'MIT'
+   * @example 'Apache-2.0'
+   */
+  license?: string;
+
+  /**
+   * Environment requirements or compatibility notes (max 500 chars).
+   * Per Agent Skills specification.
+   *
+   * @example 'Requires Node.js 18+ and git CLI'
+   */
+  compatibility?: string;
+
+  /**
+   * Arbitrary key-value metadata map.
+   * Maps to the `metadata` field in the Anthropic Agent Skills specification.
+   * Named `specMetadata` to avoid conflict with the internal `metadata` token.
+   */
+  specMetadata?: Record<string, string>;
+
+  /**
+   * Space-delimited list of pre-approved tool names.
+   * Maps to the `allowed-tools` field in the Anthropic Agent Skills specification.
+   * Tools listed here are considered pre-approved for the skill and don't require
+   * additional user confirmation.
+   *
+   * @example 'Read Edit Bash(git status) Bash(git diff)'
+   */
+  allowedTools?: string;
+
+  /**
+   * Bundled resource directories (scripts/, references/, assets/).
+   * Per Agent Skills specification.
+   */
+  resources?: SkillResources;
 }
 
 // ============================================
@@ -354,11 +407,33 @@ export type SkillToolValidationMode = 'strict' | 'warn' | 'ignore';
  */
 export type SkillVisibility = 'mcp' | 'http' | 'both';
 
+const skillResourcesSchema = z.object({
+  scripts: z.string().optional(),
+  references: z.string().optional(),
+  assets: z.string().optional(),
+});
+
 export const skillMetadataSchema = z
   .object({
     id: z.string().optional(),
-    name: z.string().min(1),
-    description: z.string().min(1),
+    name: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, {
+        message:
+          'Skill name must be kebab-case: lowercase letters, numbers, and hyphens only. Must not start/end with a hyphen.',
+      })
+      .refine((n) => !n.includes('--'), {
+        message: 'Skill name must not contain consecutive hyphens.',
+      }),
+    description: z
+      .string()
+      .min(1)
+      .max(1024)
+      .refine((d) => !/<[a-zA-Z][^>]*>/.test(d), {
+        message: 'Skill description must not contain XML/HTML tags (per Agent Skills spec).',
+      }),
     instructions: skillInstructionSourceSchema,
     tools: z.array(skillToolInputSchema).optional(),
     tags: z.array(z.string().min(1)).optional(),
@@ -368,6 +443,11 @@ export const skillMetadataSchema = z
     hideFromDiscovery: z.boolean().optional().default(false),
     toolValidation: z.enum(['strict', 'warn', 'ignore']).optional().default('warn'),
     visibility: z.enum(['mcp', 'http', 'both']).optional().default('both'),
+    license: z.string().optional(),
+    compatibility: z.string().max(500).optional(),
+    specMetadata: z.record(z.string(), z.string()).optional(),
+    allowedTools: z.string().optional(),
+    resources: skillResourcesSchema.optional(),
   } satisfies RawZodShape<SkillMetadata, ExtendFrontMcpSkillMetadata>)
   .passthrough();
 
