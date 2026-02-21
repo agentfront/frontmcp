@@ -9,9 +9,12 @@ export default function completeRequestHandler({
   return {
     requestSchema: CompleteRequestSchema,
     handler: async (request: CompleteRequest, ctx) => {
-      logger.debug('completion/complete requested');
+      logger.verbose('completion/complete requested');
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('completion:complete', { request, ctx });
+        const result = await scope.runFlowForOutput('completion:complete', { request, ctx });
+        logger.verbose('completion/complete completed', { durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('completion/complete failed', {
           error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,

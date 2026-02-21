@@ -114,6 +114,7 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
     // This satisfies the MCP SDK's session header requirement while keeping requests stateless
     if (!request.headers['mcp-session-id']) {
       request.headers['mcp-session-id'] = '__stateless__';
+      logger.verbose('handleRequest: injected __stateless__ session ID');
     }
 
     logger.verbose(`handleRequest: requestType=${requestType}, forwarding to transport`);

@@ -90,6 +90,15 @@ export default class PluginRegistry
     return [...this.instances.values()];
   }
 
+  /**
+   * Returns the names of all registered plugins from their definition records.
+   * Unlike getPlugins().map(p => p.metadata.name), this is safe because
+   * raw plugin instances (e.g. DynamicPlugin subclasses) may not carry a .metadata property.
+   */
+  getPluginNames(): string[] {
+    return [...this.defs.values()].map((rec) => rec.metadata.name);
+  }
+
   protected override buildMap(list: PluginType[]): RegistryBuildMapResult<PluginRecord> {
     const tokens = new Set<Token>();
     const defs = new Map<Token, PluginRecord>();

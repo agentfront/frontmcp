@@ -9,9 +9,12 @@ export default function listPromptsRequestHandler({
   return {
     requestSchema: ListPromptsRequestSchema,
     handler: async (request: ListPromptsRequest, ctx) => {
-      logger.debug('prompts/list requested');
+      logger.verbose('prompts/list requested');
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('prompts:list-prompts', { request, ctx });
+        const result = await scope.runFlowForOutput('prompts:list-prompts', { request, ctx });
+        logger.verbose('prompts/list completed', { durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('prompts/list failed', {
           error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,

@@ -13,8 +13,11 @@ export default function readResourceRequestHandler({
     handler: async (request: ReadResourceRequest, ctx) => {
       const uri = request.params?.uri || 'unknown';
       logger.info(`resources/read: ${uri}`);
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('resources:read-resource', { request, ctx });
+        const result = await scope.runFlowForOutput('resources:read-resource', { request, ctx });
+        logger.verbose('resources/read completed', { uri, durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('resources/read failed', {
           uri,

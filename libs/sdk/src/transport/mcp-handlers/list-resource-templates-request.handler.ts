@@ -15,9 +15,12 @@ export default function listResourceTemplatesRequestHandler({
   return {
     requestSchema: ListResourceTemplatesRequestSchema,
     handler: async (request: ListResourceTemplatesRequest, ctx) => {
-      logger.debug('resources/listTemplates requested');
+      logger.verbose('resources/listTemplates requested');
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('resources:list-resource-templates', { request, ctx });
+        const result = await scope.runFlowForOutput('resources:list-resource-templates', { request, ctx });
+        logger.verbose('resources/listTemplates completed', { durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('resources/listTemplates failed', {
           error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,

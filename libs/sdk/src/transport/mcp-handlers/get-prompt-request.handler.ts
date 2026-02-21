@@ -11,8 +11,11 @@ export default function getPromptRequestHandler({
     handler: async (request: GetPromptRequest, ctx) => {
       const promptName = request.params?.name || 'unknown';
       logger.info(`prompts/get: ${promptName}`);
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('prompts:get-prompt', { request, ctx });
+        const result = await scope.runFlowForOutput('prompts:get-prompt', { request, ctx });
+        logger.verbose('prompts/get completed', { prompt: promptName, durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('prompts/get failed', {
           prompt: promptName,

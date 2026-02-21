@@ -174,7 +174,7 @@ export class Scope extends ScopeEntry {
 
       this.scopePlugins = new PluginRegistry(this.scopeProviders, serverPlugins, scopeRef, serverPluginScopeInfo);
       await this.scopePlugins.ready;
-      const pluginNames = this.scopePlugins.getPlugins().map((p) => p.metadata.name);
+      const pluginNames = this.scopePlugins.getPluginNames();
       this.logger.verbose(`PluginRegistry initialized (${pluginNames.length} plugin(s): [${pluginNames.join(', ')}])`);
     }
 

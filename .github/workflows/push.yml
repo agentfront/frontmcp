@@ -162,6 +162,7 @@ jobs:
     name: "Unit Tests"
     needs: [setup, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       NX_DAEMON: "false"
       RUN_COVERAGE: ${{ github.ref == 'refs/heads/main' }}
@@ -213,6 +214,7 @@ jobs:
     name: "E2E Tests (${{ matrix.project }})"
     needs: [setup, build, discover-e2e]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

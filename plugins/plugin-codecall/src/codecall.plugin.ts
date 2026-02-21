@@ -1,6 +1,15 @@
 // file: plugins/plugin-codecall/src/codecall.plugin.ts
 
-import { DynamicPlugin, FlowCtxOf, ListToolsHook, Plugin, ProviderType, ScopeEntry, ToolEntry } from '@frontmcp/sdk';
+import {
+  DynamicPlugin,
+  FlowCtxOf,
+  FrontMcpLogger,
+  ListToolsHook,
+  Plugin,
+  ProviderType,
+  ScopeEntry,
+  ToolEntry,
+} from '@frontmcp/sdk';
 
 import {
   CodeCallMode,
@@ -26,12 +35,19 @@ import CachePlugin from '@frontmcp/plugin-cache';
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions, CodeCallPluginOptionsInput> {
   options: CodeCallPluginOptions;
+  private cachedLogger?: FrontMcpLogger;
+
+  private getLogger(): FrontMcpLogger {
+    if (!this.cachedLogger) {
+      this.cachedLogger = this.get(FrontMcpLogger).child('CodeCall');
+    }
+    return this.cachedLogger;
+  }
 
   constructor(options: CodeCallPluginOptionsInput = {}) {
     super();
     // Parse options with Zod schema to apply all defaults
     this.options = codeCallPluginOptionsSchema.parse(options);
-    console.log('[CodeCall] Plugin initialized with mode:', this.options.mode);
   }
 
   /**
@@ -91,12 +107,13 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    */
   @ListToolsHook.Did('resolveConflicts', { priority: 1000 })
   async adjustListTools(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    const logger = this.getLogger();
     const { resolvedTools } = flowCtx.state;
-    console.log('[CodeCall] adjustListTools hook called, mode:', this.options.mode);
-    console.log('[CodeCall] Tools before filter:', resolvedTools?.length ?? 0);
+    logger.verbose('adjustListTools hook called', { mode: this.options.mode });
+    logger.verbose('adjustListTools: tools before filter', { count: resolvedTools?.length ?? 0 });
 
     if (!resolvedTools || resolvedTools.length === 0) {
-      console.log('[CodeCall] No tools to filter, returning early');
+      logger.verbose('adjustListTools: no tools to filter, returning early');
       return;
     }
 
@@ -105,7 +122,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       return this.shouldShowInListTools(tool, this.options.mode);
     });
 
-    console.log('[CodeCall] Tools after filter:', filteredTools.length);
+    logger.verbose('adjustListTools: tools after filter', { count: filteredTools.length });
 
     // Update the state with filtered tools
     flowCtx.state.set('resolvedTools', filteredTools);

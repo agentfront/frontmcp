@@ -15,9 +15,12 @@ export default function listResourcesRequestHandler({
   return {
     requestSchema: ListResourcesRequestSchema,
     handler: async (request: ListResourcesRequest, ctx) => {
-      logger.debug('resources/list requested');
+      logger.verbose('resources/list requested');
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('resources:list-resources', { request, ctx });
+        const result = await scope.runFlowForOutput('resources:list-resources', { request, ctx });
+        logger.verbose('resources/list completed', { durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('resources/list failed', {
           error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
