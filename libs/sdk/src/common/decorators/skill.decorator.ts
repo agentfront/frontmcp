@@ -10,6 +10,11 @@ import { SkillKind, SkillValueRecord } from '../records';
  * multi-step tasks using tools. Unlike tools, skills don't execute
  * directly - they provide instructions and context for LLMs.
  *
+ * Aligned with the Anthropic Agent Skills specification:
+ * - `name`: kebab-case, max 64 chars, no consecutive hyphens
+ * - `description`: max 1024 chars, no XML/HTML tags
+ * - Supports `license`, `compatibility`, `specMetadata`, `allowedTools`, `resources`
+ *
  * @param providedMetadata - Skill metadata including name, description, and instructions
  * @returns Class decorator
  *
@@ -27,7 +32,7 @@ import { SkillKind, SkillValueRecord } from '../records';
  * }
  * ```
  *
- * @example Skill with file-based instructions
+ * @example Skill with Agent Skills spec fields
  * ```typescript
  * @Skill({
  *   name: 'deploy-app',
@@ -35,6 +40,9 @@ import { SkillKind, SkillValueRecord } from '../records';
  *   instructions: { file: './skills/deploy.md' },
  *   tools: ['docker_build', 'k8s_apply'],
  *   tags: ['devops', 'deployment'],
+ *   license: 'MIT',
+ *   compatibility: 'Requires Docker 24+ and kubectl',
+ *   allowedTools: 'Read Edit Bash(docker build)',
  * })
  * class DeploySkill extends SkillContext { ... }
  * ```
@@ -74,6 +82,9 @@ function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
  * Use this when you want to define a skill without creating a class.
  * The skill is registered as a value record with a unique symbol token.
  *
+ * Name must be kebab-case (max 64 chars, no consecutive hyphens).
+ * Description max 1024 chars, no XML/HTML tags.
+ *
  * @param providedMetadata - Skill metadata including name, description, and instructions
  * @returns A skill value record that can be passed to app/plugin skills array
  *
@@ -92,6 +103,7 @@ function FrontMcpSkill(providedMetadata: SkillMetadata): ClassDecorator {
  *     { name: 'github_add_comment', purpose: 'Add review comments' },
  *   ],
  *   tags: ['github', 'code-review'],
+ *   license: 'MIT',
  * });
  *
  * @FrontMcp({

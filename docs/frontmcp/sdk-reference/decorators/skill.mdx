@@ -49,22 +49,37 @@ function Skill(providedMetadata: SkillMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique skill identifier |
-| `description` | `string` | Skill description |
-| `instructions` | `string \| { file: string } \| { url: string }` | Skill instructions |
-| `tools` | `SkillToolInput[]` | Tools used by the skill |
+| Property | Type | Constraints | Description |
+|----------|------|-------------|-------------|
+| `name` | `string` | kebab-case, 1-64 chars, no `--` | Unique skill identifier |
+| `description` | `string` | 1-1024 chars, no XML tags | Skill description |
+| `instructions` | `string \| { file: string } \| { url: string }` | | Skill instructions |
 
 ### Optional Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `string` | Stable identifier |
+| `tools` | `SkillToolInput[]` | Tools used by the skill |
+| `id` | `string` | Stable identifier (defaults to `name`) |
 | `parameters` | `SkillParameter[]` | Input parameters |
 | `examples` | `SkillExample[]` | Usage examples |
 | `tags` | `string[]` | Categorization tags |
-| `priority` | `number` | Execution priority |
+| `priority` | `number` | Search ranking weight (default: `0`) |
+| `hideFromDiscovery` | `boolean` | Hide from search results (default: `false`) |
+| `visibility` | `'mcp' \| 'http' \| 'both'` | Discovery visibility (default: `'both'`) |
+| `toolValidation` | `'strict' \| 'warn' \| 'ignore'` | Tool reference validation mode (default: `'warn'`) |
+
+### Agent Skills Spec Properties
+
+These properties align with the [Anthropic Agent Skills specification](https://agentskills.io/specification):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `license` | `string` | License name or reference (e.g. `'MIT'`, `'Apache-2.0'`) |
+| `compatibility` | `string` | Environment requirements (max 500 chars) |
+| `specMetadata` | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`) |
+| `allowedTools` | `string` | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
+| `resources` | `SkillResources` | Bundled resource directories (`scripts`, `references`, `assets`) |
 
 ## Instruction Sources
 
@@ -211,6 +226,19 @@ interface SkillContent {
   }>;
   parameters?: SkillParameter[];
   examples?: SkillExample[];
+
+  // Agent Skills spec fields
+  license?: string;
+  compatibility?: string;
+  specMetadata?: Record<string, string>;
+  allowedTools?: string;
+  resources?: SkillResources;
+}
+
+interface SkillResources {
+  scripts?: string;
+  references?: string;
+  assets?: string;
 }
 ```
 
@@ -376,6 +404,102 @@ class ProjectManagementApp {}
   },
 })
 export default class PMAssistantServer {}
+```
+
+## SKILL.md Files
+
+Load skills from SKILL.md files with YAML frontmatter (per Agent Skills spec):
+
+```markdown
+---
+name: review-pr
+description: Review a GitHub pull request
+license: MIT
+compatibility: Requires git CLI
+tags:
+  - github
+  - code-review
+metadata:
+  author: platform-team
+  version: "1.0"
+allowed-tools: Read Edit Bash(git diff)
+---
+# PR Review Instructions
+
+1. Fetch the PR details using github_get_pr
+2. Review each changed file
+3. Add review comments
+4. Submit the review
+```
+
+### Loading SKILL.md Files
+
+```typescript
+import { loadSkillMdFile, parseSkillMdFrontmatter } from '@frontmcp/sdk';
+
+// High-level: read + parse in one call
+const metadata = await loadSkillMdFile('./skills/review-pr/SKILL.md');
+
+// Low-level: parse content you already have
+const { frontmatter, body } = parseSkillMdFrontmatter(rawContent);
+```
+
+## Skill Directories
+
+Load entire skill directories with the `skillDir()` helper:
+
+```typescript
+import { skillDir } from '@frontmcp/sdk';
+
+const reviewSkill = await skillDir('./skills/review-pr');
+// Reads SKILL.md, auto-detects scripts/, references/, assets/
+
+@App({
+  name: 'my-app',
+  skills: [reviewSkill],
+})
+class MyApp {}
+```
+
+Expected directory structure:
+
+```
+skills/review-pr/
+  SKILL.md             # Required
+  scripts/             # Optional: automation scripts
+  references/          # Optional: reference documents
+  assets/              # Optional: images, templates
+```
+
+## Agent Skills Spec Example
+
+A fully spec-compliant skill:
+
+```typescript
+@Skill({
+  name: 'security-audit',
+  description: 'Perform a security audit on the codebase',
+  instructions: { file: './skills/security-audit/SKILL.md' },
+  tools: [
+    { name: 'code_search', purpose: 'Search for vulnerability patterns', required: true },
+    { name: 'file_read', purpose: 'Read source files', required: true },
+    { name: 'create_report', purpose: 'Generate audit report' },
+  ],
+  tags: ['security', 'audit', 'compliance'],
+  license: 'Apache-2.0',
+  compatibility: 'Requires Node.js 18+ and access to source repository',
+  specMetadata: {
+    author: 'security-team',
+    version: '3.0.0',
+    category: 'security',
+  },
+  allowedTools: 'Read Grep Glob',
+  resources: {
+    scripts: './skills/security-audit/scripts',
+    references: './skills/security-audit/references',
+  },
+})
+class SecurityAuditSkill extends SkillContext {}
 ```
 
 ## Related

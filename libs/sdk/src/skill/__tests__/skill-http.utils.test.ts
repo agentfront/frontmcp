@@ -156,6 +156,23 @@ describe('formatSkillsForLlmCompact', () => {
     const result = formatSkillsForLlmCompact([]);
     expect(result).toBe('');
   });
+
+  it('should include license in compact output when present', () => {
+    const skills = [
+      createMockSkillEntry({
+        name: 'licensed-skill',
+        metadata: {
+          name: 'licensed-skill',
+          description: 'Skill with license',
+          license: 'MIT',
+        },
+      }),
+    ];
+
+    const result = formatSkillsForLlmCompact(skills);
+
+    expect(result).toContain('License: MIT');
+  });
 });
 
 describe('formatSkillForLLMWithSchemas', () => {
@@ -248,6 +265,29 @@ describe('formatSkillForLLMWithSchemas', () => {
 
     expect(result).not.toContain('## Examples');
   });
+
+  it('should include license and compatibility in output', () => {
+    const skill = createMockSkillContent({
+      license: 'MIT',
+      compatibility: 'Requires Node.js 18+',
+    });
+    const toolRegistry = createMockToolRegistry([]);
+
+    const result = formatSkillForLLMWithSchemas(skill, [], [], toolRegistry as any);
+
+    expect(result).toContain('**License:** MIT');
+    expect(result).toContain('**Compatibility:** Requires Node.js 18+');
+  });
+
+  it('should not include license/compatibility when not present', () => {
+    const skill = createMockSkillContent({ license: undefined, compatibility: undefined });
+    const toolRegistry = createMockToolRegistry([]);
+
+    const result = formatSkillForLLMWithSchemas(skill, [], [], toolRegistry as any);
+
+    expect(result).not.toContain('**License:**');
+    expect(result).not.toContain('**Compatibility:**');
+  });
 });
 
 describe('skillToApiResponse', () => {
@@ -313,6 +353,37 @@ describe('skillToApiResponse', () => {
     const result = skillToApiResponse(skill);
 
     expect(result.visibility).toBe('both');
+  });
+
+  it('should include new spec fields in API response', () => {
+    const skill = createMockSkillEntry({
+      metadata: {
+        name: 'spec-skill',
+        description: 'Spec skill',
+        license: 'Apache-2.0',
+        compatibility: 'Node.js 20+',
+        specMetadata: { author: 'alice', version: '2.0' },
+        allowedTools: 'Read Edit Bash(git status)',
+      },
+    });
+
+    const result = skillToApiResponse(skill);
+
+    expect(result.license).toBe('Apache-2.0');
+    expect(result.compatibility).toBe('Node.js 20+');
+    expect(result.specMetadata).toEqual({ author: 'alice', version: '2.0' });
+    expect(result.allowedTools).toBe('Read Edit Bash(git status)');
+  });
+
+  it('should leave new spec fields undefined when not set', () => {
+    const skill = createMockSkillEntry({});
+
+    const result = skillToApiResponse(skill);
+
+    expect(result.license).toBeUndefined();
+    expect(result.compatibility).toBeUndefined();
+    expect(result.specMetadata).toBeUndefined();
+    expect(result.allowedTools).toBeUndefined();
   });
 
   it('should handle empty tags', () => {
