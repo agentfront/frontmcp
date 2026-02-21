@@ -354,6 +354,12 @@ if [ "$DOCKER_AVAILABLE" = "true" ]; then
   fi
   echo "  ✅ npm install succeeded"
 
+  # npm ci uses 'resolved' URLs from package-lock.json, ignoring .npmrc registry.
+  # The lockfile has localhost URLs, but inside Docker localhost is the container
+  # itself. Rewrite to the Docker-accessible host so npm ci can reach Verdaccio.
+  sed -i.bak "s|http://localhost:${VERDACCIO_PORT}|http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}|g" package-lock.json
+  rm -f package-lock.json.bak
+
   # Patch Dockerfile so Docker build can reach Verdaccio via host.docker.internal
   echo "registry=http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}/" > .npmrc
   patch_dockerfile_for_registry ci/Dockerfile .npmrc
@@ -389,6 +395,11 @@ if [ "$DOCKER_AVAILABLE" = "true" ]; then
     exit 1
   fi
   echo "  ✅ yarn install succeeded"
+
+  # yarn install --frozen-lockfile uses 'resolved' URLs from yarn.lock.
+  # Rewrite localhost to Docker-accessible host (same reason as npm above).
+  sed -i.bak "s|http://localhost:${VERDACCIO_PORT}|http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}|g" yarn.lock
+  rm -f yarn.lock.bak
 
   # Patch Dockerfile so Docker build can reach Verdaccio via host.docker.internal
   echo "registry=http://${DOCKER_REGISTRY_HOST}:${VERDACCIO_PORT}/" > .npmrc
