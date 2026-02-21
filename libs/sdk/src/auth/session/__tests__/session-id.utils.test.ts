@@ -3,7 +3,7 @@
  *
  * Tests for session ID creation, encryption, decryption, and payload updates.
  */
-import { SessionIdPayload, TransportProtocolType } from '../../../common';
+import { SessionIdPayload, TransportProtocolType, PlatformDetectionConfig } from '../../../common';
 
 // Mock factories use jest.fn() directly — no TDZ-vulnerable variable refs
 jest.mock('@frontmcp/utils', () => ({
@@ -142,10 +142,10 @@ describe('session-id.utils', () => {
     it('should pass platform detection config when provided', () => {
       mockDetectPlatformFromUserAgent.mockReturnValue('cursor');
 
-      const config = { userAgentPatterns: [{ pattern: 'custom', platform: 'cursor' }] };
+      const config: PlatformDetectionConfig = { mappings: [{ pattern: 'custom', platform: 'cursor' }] };
       createSessionId('streamable-http', TEST_TOKEN, {
         userAgent: 'Custom-Client/1.0',
-        platformDetectionConfig: config as any,
+        platformDetectionConfig: config,
       });
 
       expect(mockDetectPlatformFromUserAgent).toHaveBeenCalledWith('Custom-Client/1.0', config);
@@ -514,15 +514,16 @@ describe('session-id.utils', () => {
 
     it('should complete encryption in development mode without secret', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      process.env['NODE_ENV'] = 'development';
-      delete process.env['MCP_SESSION_SECRET'];
+      try {
+        process.env['NODE_ENV'] = 'development';
+        delete process.env['MCP_SESSION_SECRET'];
 
-      // Session creation should complete without error
-      const result = createSessionId('streamable-http', TEST_TOKEN);
-      expect(result.id).toBeDefined();
-      expect(result.payload).toBeDefined();
-
-      warnSpy.mockRestore();
+        const result = createSessionId('streamable-http', TEST_TOKEN);
+        expect(result.id).toBeDefined();
+        expect(result.payload).toBeDefined();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });
