@@ -25,6 +25,7 @@ export type Command =
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
 export type RedisSetupOption = 'docker' | 'existing' | 'none';
+export type PackageManagerOption = 'npm' | 'yarn' | 'pnpm';
 
 export interface ParsedArgs {
   _: string[];
@@ -42,6 +43,7 @@ export interface ParsedArgs {
   target?: DeploymentAdapter;
   redis?: RedisSetupOption;
   cicd?: boolean;
+  pm?: PackageManagerOption;
   // Socket command flags
   socket?: string;
   db?: string;
@@ -79,6 +81,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
     else if (a === '--cicd') out.cicd = true;
     else if (a === '--no-cicd') out.cicd = false;
+    else if (a === '--pm') out.pm = argv[++i] as PackageManagerOption;
     // Socket command flags
     else if (a === '--socket' || a === '-s') out.socket = argv[++i];
     else if (a === '--db') out.db = argv[++i];

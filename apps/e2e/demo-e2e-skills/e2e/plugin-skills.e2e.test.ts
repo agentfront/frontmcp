@@ -269,7 +269,7 @@ test.describe('Plugin Skills E2E', () => {
     test('should execute rollback tool from plugin', async ({ mcp }) => {
       const result = await mcp.tools.call('rollback_deployment', {
         environment: 'production',
-        targetVersion: '0.9.0',
+        targetVersion: '0.11.1',
       });
 
       expect(result).toBeSuccessful();
@@ -277,7 +277,7 @@ test.describe('Plugin Skills E2E', () => {
       const content = result.json<RollbackResult>();
       expect(content.success).toBe(true);
       expect(content.environment).toBe('production');
-      expect(content.rolledBackTo).toBe('0.9.0');
+      expect(content.rolledBackTo).toBe('0.11.1');
     });
 
     test('should execute rollback without target version', async ({ mcp }) => {
