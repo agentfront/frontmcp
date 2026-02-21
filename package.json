@@ -30,7 +30,7 @@
   "private": true,
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^11.9.3",
-    "@enclave-vm/core": "^2.10.1",
+    "@enclave-vm/core": "^2.11.0",
     "@huggingface/transformers": "^3.2.2",
     "@modelcontextprotocol/sdk": "1.26.0",
     "@noble/ciphers": "^2.1.1",

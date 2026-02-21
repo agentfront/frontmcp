@@ -80,6 +80,7 @@ ${c('bold', 'Create Options')}
   -y, --yes            Use defaults (non-interactive mode)
   --target <target>    Deployment target: node, vercel, lambda, cloudflare
   --redis <setup>      Redis setup: docker, existing, none (node target only)
+  --pm <pm>            Package manager: npm, yarn, pnpm
   --cicd               Enable GitHub Actions CI/CD
   --no-cicd            Disable GitHub Actions CI/CD
 
@@ -156,6 +157,7 @@ async function main(): Promise<void> {
           target: parsed.target,
           redis: parsed.redis,
           cicd: parsed.cicd,
+          pm: parsed.pm,
         });
         break;
       }

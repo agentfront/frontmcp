@@ -3,37 +3,39 @@
  *
  * Tests for session ID creation, encryption, decryption, and payload updates.
  */
-import { SessionIdPayload, TransportProtocolType } from '../../../common';
+import { SessionIdPayload, TransportProtocolType, PlatformDetectionConfig } from '../../../common';
 
-// Mock dependencies before importing the module under test
-const mockRandomUUID = jest.fn();
-
+// Mock factories use jest.fn() directly — no TDZ-vulnerable variable refs
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
-  randomUUID: () => mockRandomUUID(),
+  randomUUID: jest.fn(() => 'default-uuid'),
 }));
-
-// Mock @frontmcp/auth functions that session-id.utils.ts imports directly
-const mockEncryptJson = jest.fn();
-const mockSafeDecrypt = jest.fn();
-const mockGetMachineId = jest.fn();
-const mockGetTokenSignatureFingerprint = jest.fn();
 
 jest.mock('@frontmcp/auth', () => {
   const actual = jest.requireActual('@frontmcp/auth');
   return {
     ...actual,
-    encryptJson: (...args: unknown[]) => mockEncryptJson(...args),
-    safeDecrypt: (...args: unknown[]) => mockSafeDecrypt(...args),
-    getMachineId: () => mockGetMachineId(),
-    getTokenSignatureFingerprint: (token: string) => mockGetTokenSignatureFingerprint(token),
+    encryptJson: jest.fn(() => 'test-iv.test-tag.test-data'),
+    safeDecrypt: jest.fn(() => null),
+    getMachineId: jest.fn(() => 'default-machine-id'),
+    getTokenSignatureFingerprint: jest.fn(() => 'default-sig'),
   };
 });
 
-const mockDetectPlatformFromUserAgent = jest.fn();
 jest.mock('../../../notification/notification.service', () => ({
-  detectPlatformFromUserAgent: (ua: string, config?: any) => mockDetectPlatformFromUserAgent(ua, config),
+  detectPlatformFromUserAgent: jest.fn(() => 'unknown'),
 }));
+
+// Get references via require() (not hoisted, runs after mocks are set up)
+const { randomUUID: mockRandomUUID } = require('@frontmcp/utils') as { randomUUID: jest.Mock };
+const {
+  encryptJson: mockEncryptJson,
+  safeDecrypt: mockSafeDecrypt,
+  getMachineId: mockGetMachineId,
+  getTokenSignatureFingerprint: mockGetTokenSignatureFingerprint,
+} = require('@frontmcp/auth') as Record<string, jest.Mock>;
+const { detectPlatformFromUserAgent: mockDetectPlatformFromUserAgent } =
+  require('../../../notification/notification.service') as { detectPlatformFromUserAgent: jest.Mock };
 
 // Import after mocking
 import {
@@ -140,10 +142,10 @@ describe('session-id.utils', () => {
     it('should pass platform detection config when provided', () => {
       mockDetectPlatformFromUserAgent.mockReturnValue('cursor');
 
-      const config = { userAgentPatterns: [{ pattern: 'custom', platform: 'cursor' }] };
+      const config: PlatformDetectionConfig = { mappings: [{ pattern: 'custom', platform: 'cursor' }] };
       createSessionId('streamable-http', TEST_TOKEN, {
         userAgent: 'Custom-Client/1.0',
-        platformDetectionConfig: config as any,
+        platformDetectionConfig: config,
       });
 
       expect(mockDetectPlatformFromUserAgent).toHaveBeenCalledWith('Custom-Client/1.0', config);
@@ -512,15 +514,16 @@ describe('session-id.utils', () => {
 
     it('should complete encryption in development mode without secret', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      process.env['NODE_ENV'] = 'development';
-      delete process.env['MCP_SESSION_SECRET'];
+      try {
+        process.env['NODE_ENV'] = 'development';
+        delete process.env['MCP_SESSION_SECRET'];
 
-      // Session creation should complete without error
-      const result = createSessionId('streamable-http', TEST_TOKEN);
-      expect(result.id).toBeDefined();
-      expect(result.payload).toBeDefined();
-
-      warnSpy.mockRestore();
+        const result = createSessionId('streamable-http', TEST_TOKEN);
+        expect(result.id).toBeDefined();
+        expect(result.payload).toBeDefined();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });
