@@ -10,7 +10,7 @@
  */
 
 import type { SkillContent, SkillEntry, ToolRegistryInterface, ToolEntry } from '../common';
-import type { SkillVisibility } from '../common/metadata/skill.metadata';
+import type { SkillVisibility, SkillResources } from '../common/metadata/skill.metadata';
 import type { SkillRegistryInterface as SkillRegistryInterfaceType } from './skill.registry';
 
 /**
@@ -266,6 +266,7 @@ export interface SkillApiResponse {
   compatibility?: string;
   specMetadata?: Record<string, string>;
   allowedTools?: string;
+  resources?: SkillResources;
   availableTools?: string[];
   missingTools?: string[];
   isComplete?: boolean;
@@ -305,6 +306,7 @@ export function skillToApiResponse(
     compatibility: skill.metadata.compatibility,
     specMetadata: skill.metadata.specMetadata,
     allowedTools: skill.metadata.allowedTools,
+    resources: skill.metadata.resources,
   };
 
   if (loadResult) {

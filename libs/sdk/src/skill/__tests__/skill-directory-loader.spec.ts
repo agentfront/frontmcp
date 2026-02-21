@@ -10,6 +10,17 @@ jest.mock('@frontmcp/utils', () => ({
   readFile: jest.fn(),
   fileExists: jest.fn(),
   stat: jest.fn(),
+  joinPath: (...parts: string[]) =>
+    parts
+      .map((p) => p.replace(/^\/+|\/+$/g, ''))
+      .filter(Boolean)
+      .join('/')
+      .replace(/^/, '/'),
+  randomBytes: (n: number) => new Uint8Array(n),
+  bytesToHex: (bytes: Uint8Array) =>
+    Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join(''),
 }));
 
 import { readFile, fileExists, stat } from '@frontmcp/utils';
@@ -139,9 +150,7 @@ Step 2: Review code`;
     it('should throw error when SKILL.md is missing', async () => {
       mockFileExists.mockResolvedValue(false);
 
-      await expect(loadSkillDirectory('/skills/no-skill')).rejects.toThrow(
-        'SKILL.md not found in directory: /skills/no-skill',
-      );
+      await expect(loadSkillDirectory('/skills/no-skill')).rejects.toThrow('SKILL.md not found in directory');
     });
 
     it('should throw error when name is missing from frontmatter', async () => {

@@ -57,7 +57,7 @@ export function parseSkillMdFrontmatter(content: string): SkillMdParseResult {
 
   let frontmatter: Record<string, unknown> = {};
   try {
-    const parsed = yaml.load(yamlBlock);
+    const parsed: unknown = yaml.load(yamlBlock);
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       frontmatter = parsed as Record<string, unknown>;
     }

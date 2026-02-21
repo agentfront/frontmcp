@@ -9,11 +9,12 @@
  * @module skill/skill-directory-loader
  */
 
-import { readFile, fileExists, stat } from '@frontmcp/utils';
+import { readFile, fileExists, stat, joinPath } from '@frontmcp/utils';
 import { SkillKind } from '../common/records/skill.record';
 import type { SkillFileRecord } from '../common/records/skill.record';
 import type { SkillMetadata, SkillResources } from '../common/metadata/skill.metadata';
 import { skillMetadataSchema } from '../common/metadata/skill.metadata';
+import { InvalidSkillError } from '../errors/sdk.errors';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from './skill-md-parser';
 
 /**
@@ -37,16 +38,20 @@ export interface ScanResult {
 export async function scanSkillResources(dirPath: string): Promise<ScanResult> {
   const resources: SkillResources = {};
 
+  const scriptsPath = joinPath(dirPath, 'scripts');
+  const referencesPath = joinPath(dirPath, 'references');
+  const assetsPath = joinPath(dirPath, 'assets');
+
   const checks = await Promise.all([
-    checkDirectory(`${dirPath}/scripts`),
-    checkDirectory(`${dirPath}/references`),
-    checkDirectory(`${dirPath}/assets`),
-    fileExists(`${dirPath}/SKILL.md`),
+    checkDirectory(scriptsPath),
+    checkDirectory(referencesPath),
+    checkDirectory(assetsPath),
+    fileExists(joinPath(dirPath, 'SKILL.md')),
   ]);
 
-  if (checks[0]) resources.scripts = `${dirPath}/scripts`;
-  if (checks[1]) resources.references = `${dirPath}/references`;
-  if (checks[2]) resources.assets = `${dirPath}/assets`;
+  if (checks[0]) resources.scripts = scriptsPath;
+  if (checks[1]) resources.references = referencesPath;
+  if (checks[2]) resources.assets = assetsPath;
 
   return {
     resources,
@@ -77,12 +82,12 @@ async function checkDirectory(path: string): Promise<boolean> {
  * @throws Error if SKILL.md is not found or metadata is invalid
  */
 export async function loadSkillDirectory(dirPath: string): Promise<SkillFileRecord> {
-  const skillMdPath = `${dirPath}/SKILL.md`;
+  const skillMdPath = joinPath(dirPath, 'SKILL.md');
 
   // Verify SKILL.md exists
   const exists = await fileExists(skillMdPath);
   if (!exists) {
-    throw new Error(`SKILL.md not found in directory: ${dirPath}`);
+    throw new InvalidSkillError(dirPath.split('/').pop() ?? 'unknown', 'SKILL.md not found in directory');
   }
 
   // Read and parse SKILL.md
@@ -105,13 +110,14 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
 
   // Ensure required fields
   if (!partialMetadata.name) {
-    throw new Error(`SKILL.md in ${dirPath} is missing required 'name' field in frontmatter.`);
+    throw new InvalidSkillError('unknown', "SKILL.md is missing required 'name' field in frontmatter");
   }
+  const skillName = partialMetadata.name;
   if (!partialMetadata.description) {
-    throw new Error(`SKILL.md in ${dirPath} is missing required 'description' field in frontmatter.`);
+    throw new InvalidSkillError(skillName, "SKILL.md is missing required 'description' field in frontmatter");
   }
   if (!partialMetadata.instructions) {
-    throw new Error(`SKILL.md in ${dirPath} has no body content for instructions.`);
+    throw new InvalidSkillError(skillName, 'SKILL.md has no body content for instructions');
   }
 
   const metadata = partialMetadata as SkillMetadata;
@@ -120,7 +126,7 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
   const parsed = skillMetadataSchema.safeParse(metadata);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
-    throw new Error(`Invalid skill metadata in ${dirPath}: ${issues}`);
+    throw new InvalidSkillError(partialMetadata.name ?? 'unknown', issues);
   }
 
   return {
