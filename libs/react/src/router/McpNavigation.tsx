@@ -11,8 +11,15 @@ export interface McpNavigationProps {
 }
 
 export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.ReactElement {
-  const { tools, resources, prompts, status } = useFrontMcp();
+  const { tools, resources, prompts, status, error } = useFrontMcp();
 
+  if (status === 'error') {
+    return React.createElement(
+      'nav',
+      null,
+      React.createElement('em', null, `Connection error: ${error?.message ?? 'unknown'}`),
+    );
+  }
   if (status !== 'connected') {
     return React.createElement('nav', null, React.createElement('em', null, 'Connecting...'));
   }

@@ -26,8 +26,14 @@ export function useAITools<P extends LLMPlatform>(platform: P): UseAIToolsResult
     }
 
     try {
-      // Cast ToolInfo[] to the MCP Tool shape expected by formatToolsForPlatform
-      const mcpTools = toolInfos as unknown as McpToolInfo[];
+      const mcpTools: McpToolInfo[] = toolInfos
+        .filter((t): t is typeof t & { inputSchema: Record<string, unknown> } => t.inputSchema != null)
+        .map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+      if (mcpTools.length === 0) {
+        setFormattedTools(null);
+        setLoading(false);
+        return;
+      }
       const formatted = formatToolsForPlatform(
         mcpTools as Parameters<typeof formatToolsForPlatform>[0],
         platform,
@@ -46,9 +52,14 @@ export function useAITools<P extends LLMPlatform>(platform: P): UseAIToolsResult
       if (!server) {
         throw new Error('FrontMCP server not available');
       }
-
-      const rawResult = await server.callTool(name, args);
-      return formatResultForPlatform(rawResult as Parameters<typeof formatResultForPlatform>[0], platform);
+      try {
+        const rawResult = await server.callTool(name, args);
+        return formatResultForPlatform(rawResult as Parameters<typeof formatResultForPlatform>[0], platform);
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error);
+        throw error;
+      }
     },
     [server, platform],
   );

@@ -1,5 +1,7 @@
 import { Buffer } from 'buffer';
-globalThis.Buffer = Buffer;
+if (typeof globalThis.Buffer === 'undefined') {
+  globalThis.Buffer = Buffer;
+}
 
 import 'reflect-metadata';
 import { createRoot } from 'react-dom/client';

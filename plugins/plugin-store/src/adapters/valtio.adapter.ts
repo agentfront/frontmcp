@@ -49,6 +49,8 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
           (current as unknown as unknown[])[index] = {};
         }
         current = (current as unknown as unknown[])[index] as Record<string, unknown>;
+      } else {
+        return; // not an array — cannot traverse
       }
     } else {
       if (!isSafeKey(segment)) return;
@@ -65,6 +67,8 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
     const index = parseInt(lastArrayMatch[1], 10);
     if (Array.isArray(current)) {
       (current as unknown as unknown[])[index] = value;
+    } else {
+      return; // not an array — cannot set
     }
   } else {
     if (!isSafeKey(lastSegment)) return;
@@ -94,11 +98,18 @@ export function createValtioStore<T extends object>(initialState: T): StoreAdapt
     setState(path: string[], value: unknown) {
       if (path.length === 0) {
         // Replace root — copy all keys
+        if (typeof value !== 'object' || value === null) {
+          throw new TypeError('Root state must be a non-null object');
+        }
         const val = value as Record<string, unknown>;
         for (const key of Object.keys(state)) {
           delete (state as Record<string, unknown>)[key];
         }
-        Object.assign(state, val);
+        for (const key of Object.keys(val)) {
+          if (isSafeKey(key)) {
+            (state as Record<string, unknown>)[key] = val[key];
+          }
+        }
       } else {
         setNestedValue(state, path, value);
       }
