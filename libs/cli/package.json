@@ -35,6 +35,7 @@
     "prepare": "npm run build"
   },
   "dependencies": {
+    "@clack/prompts": "^0.10.0",
     "@frontmcp/utils": "0.11.1",
     "tslib": "^2.3.0",
     "@rspack/core": "^1.7.6",
