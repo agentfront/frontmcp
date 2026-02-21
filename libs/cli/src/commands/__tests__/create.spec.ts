@@ -228,8 +228,12 @@ describe('runCreate', () => {
 
         // Runner stage
         expect(content).toContain('ENV NODE_ENV=production');
-        expect(content).toContain('npm ci --omit=dev');
+        expect(content).toContain('COPY --from=builder /app/node_modules ./node_modules');
         expect(content).toContain('COPY --from=builder /app/dist ./dist');
+        expect(content).toContain('COPY --from=builder /app/package.json ./');
+
+        // Builder prunes devDeps before copy
+        expect(content).toContain('npm prune --omit=dev');
 
         // Entrypoint
         expect(content).toContain('EXPOSE 3000');

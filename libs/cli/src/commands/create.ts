@@ -33,7 +33,7 @@ export interface CreateFlags {
 interface PmConfig {
   lockfileCopy: string;
   installAll: string;
-  installProd: string;
+  pruneDevDeps: string;
   run: string;
   userInstall: string;
   ghCache: string;
@@ -45,7 +45,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
   npm: {
     lockfileCopy: 'COPY package*.json package-lock.json* ./',
     installAll: 'RUN npm ci',
-    installProd: 'RUN npm ci --omit=dev',
+    pruneDevDeps: 'RUN npm prune --omit=dev',
     run: 'npm run',
     userInstall: 'npm install',
     ghCache: 'npm',
@@ -55,7 +55,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
   yarn: {
     lockfileCopy: 'COPY package.json yarn.lock* ./',
     installAll: 'RUN yarn install --frozen-lockfile',
-    installProd: 'RUN yarn install --frozen-lockfile --production',
+    pruneDevDeps: 'RUN yarn install --frozen-lockfile --production',
     run: 'yarn',
     userInstall: 'yarn install',
     ghCache: 'yarn',
@@ -65,7 +65,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
   pnpm: {
     lockfileCopy: 'COPY package.json pnpm-lock.yaml* ./',
     installAll: 'RUN pnpm install --frozen-lockfile',
-    installProd: 'RUN pnpm install --frozen-lockfile --prod',
+    pruneDevDeps: 'RUN pnpm prune --prod',
     run: 'pnpm run',
     userInstall: 'pnpm install',
     ghCache: 'pnpm',
@@ -443,18 +443,18 @@ ${cfg.installAll}
 COPY . .
 RUN ${cfg.run} build
 
+# Prune devDependencies so only production deps remain
+${cfg.pruneDevDeps}
+
 # Production stage
 FROM node:24-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
-${corepack}
-# Install production dependencies only
-${cfg.lockfileCopy}
-${cfg.installProd}
 
-# Copy built artifacts from builder
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
 
 EXPOSE 3000
 
