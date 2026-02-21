@@ -70,6 +70,8 @@ Everything else is optional with sensible defaults.
     port?: 3001,                // default 3001
     entryPath?: '',             // MUST match PRM resourcePath in .well-known
     hostFactory?: /* custom host */,
+    socketPath?: '/tmp/mcp.sock',  // Unix socket path (overrides port)
+    cors?: CorsOptions | false, // default: permissive with built-in adapter (all origins + credentials)
   },
 
   /** Transport & session lifecycle (NEW in v0.6) */
@@ -137,22 +139,98 @@ FrontMCP can host **many apps**. Choose how they’re exposed:
 
 ```ts
 http: {
-  port?: number;      // default 3001
-  entryPath?: string; // default ''; MUST match the PRM resourcePath in .well-known
+  port?: number;                // default 3001
+  entryPath?: string;           // default ''; MUST match the PRM resourcePath in .well-known
   hostFactory?: FrontMcpServer | ((cfg) => FrontMcpServer);
+  socketPath?: string;          // Unix socket path (overrides port)
+  cors?: CorsOptions | false;   // default: permissive with built-in adapter (all origins + credentials)
 }
 ```
 
-| Field         | Description                                             |
-| ------------- | ------------------------------------------------------- |
-| `port`        | HTTP listening port (default: 3001)                     |
-| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery |
-| `hostFactory` | Custom host implementation for advanced setups          |
+| Field         | Description                                                                   |
+| ------------- | ----------------------------------------------------------------------------- |
+| `port`        | HTTP listening port (default: 3001)                                           |
+| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery                       |
+| `hostFactory` | Custom host implementation for advanced setups                                |
+| `socketPath`  | Unix socket path; when set, server listens on a socket instead of a TCP port  |
+| `cors`        | CORS configuration (see [CORS](#cors) below)                                  |
 
 - **Port**: listening port for Streamable HTTP.
 - **entryPath**: your MCP JSON-RPC entry (`''` or `'/mcp'`). Must align with discovery.
 - **hostFactory**: advanced — provide/construct a custom host implementation.
+- **socketPath**: listen on a Unix socket instead of a TCP port. The entire HTTP feature set (streamable HTTP, SSE, elicitation, sessions) works unchanged over Unix sockets.
 - **Split-by-app scopes**: when `splitByApp` is enabled, clients hit `<entryPath>/<appId>` (for example `/mcp/billing`) and subscribe via `<entryPath>/<appId>/message`; FrontMCP handles the prefixing.
+
+### CORS
+
+CORS is configured via the `http.cors` option. It supports three modes:
+
+| Value          | Behavior                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `undefined`    | **Default** — permissive CORS enabled (`origin: true`, `credentials: false`)                |
+| `false`        | CORS disabled entirely (no CORS headers are sent)                                          |
+| `CorsOptions`  | Custom CORS configuration                                                                  |
+
+```typescript
+interface CorsOptions {
+  origin?:
+    | boolean               // true = reflect request origin
+    | string                // single allowed origin
+    | string[]              // multiple allowed origins
+    | ((origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => void);
+  credentials?: boolean;    // allow cookies / auth headers (default: false)
+  maxAge?: number;          // preflight cache duration in seconds
+}
+```
+
+| Field         | Type                                             | Default   | Description                                                    |
+| ------------- | ------------------------------------------------ | --------- | -------------------------------------------------------------- |
+| `origin`      | `boolean \| string \| string[] \| function`      | —         | Allowed origins; `true` reflects the request `Origin` header. Defaults to `true` only via the built-in `DEFAULT_CORS` when `cors` is omitted entirely.  |
+| `credentials` | `boolean`                                        | `false`   | Whether to allow credentials (cookies, authorization headers)  |
+| `maxAge`      | `number`                                         | —         | How long (in seconds) browsers may cache preflight responses   |
+
+<Warning>
+The permissive default (`origin: true`, `credentials: false`) only applies when using the **built-in Express adapter** (i.e. no `hostFactory`). When a custom `hostFactory` is provided, the factory receives the full `http` config (including `cors`) but is responsible for applying CORS itself — FrontMCP does not install CORS middleware automatically.
+</Warning>
+
+<Tip>
+An empty `cors: {}` object (without an `origin` key) will **not** enable CORS middleware — the adapter requires an explicit `origin` value. To enable permissive CORS, omit `cors` entirely or pass `cors: { origin: true }`.
+</Tip>
+
+<Info>
+FrontMCP automatically adds `Mcp-Session-Id` (alongside `WWW-Authenticate`) to the `Access-Control-Expose-Headers` response header when CORS is enabled. This ensures Streamable HTTP clients can read the session ID from cross-origin responses without additional configuration.
+</Info>
+
+<CodeGroup>
+```ts Default (permissive)
+@FrontMcp({
+  http: { port: 3001 },
+  // cors is undefined → permissive CORS (origin: true, credentials: false)
+})
+```
+
+```ts Disabled
+@FrontMcp({
+  http: {
+    port: 3001,
+    cors: false,  // No CORS headers
+  },
+})
+```
+
+```ts Custom
+@FrontMcp({
+  http: {
+    port: 3001,
+    cors: {
+      origin: ['https://app.example.com', 'https://admin.example.com'],
+      credentials: true,
+      maxAge: 86400,  // cache preflight for 24 hours
+    },
+  },
+})
+```
+</CodeGroup>
 
 ---
 

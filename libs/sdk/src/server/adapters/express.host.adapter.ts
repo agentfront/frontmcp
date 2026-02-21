@@ -3,42 +3,8 @@ import * as http from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import { HostServerAdapter } from './base.host.adapter';
-import { HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from '../../common';
+import { CorsOptions, HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from '../../common';
 import { fileExists, unlink } from '@frontmcp/utils';
-
-/**
- * CORS configuration options for ExpressHostAdapter.
- */
-export interface ExpressCorsOptions {
-  /**
-   * Allowed origins. Can be:
-   * - `true` to reflect the request origin (allows all origins with credentials)
-   * - `false` to disable CORS
-   * - `'*'` to allow all origins (no credentials)
-   * - A string for a single origin
-   * - An array of strings for multiple origins
-   * - A function that dynamically determines if an origin is allowed
-   * @default false (CORS disabled by default for security)
-   */
-  origin?:
-    | boolean
-    | string
-    | string[]
-    | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void);
-
-  /**
-   * Whether to allow credentials (cookies, authorization headers).
-   * Cannot be used with `origin: '*'`.
-   * @default false
-   */
-  credentials?: boolean;
-
-  /**
-   * How long preflight results can be cached (in seconds).
-   * @default 300
-   */
-  maxAge?: number;
-}
 
 /**
  * Options for ExpressHostAdapter.
@@ -46,10 +12,10 @@ export interface ExpressCorsOptions {
 export interface ExpressHostAdapterOptions {
   /**
    * CORS configuration.
-   * For security, CORS is disabled by default.
-   * Enable it explicitly with appropriate origins.
+   * At the adapter level, CORS is disabled by default (no middleware installed).
+   * Note: FrontMcpServerInstance provides a permissive default when `cors` is omitted.
    */
-  cors?: ExpressCorsOptions;
+  cors?: CorsOptions;
 }
 
 export class ExpressHostAdapter extends HostServerAdapter {
@@ -66,7 +32,8 @@ export class ExpressHostAdapter extends HostServerAdapter {
     // CORS middleware is only enabled when an explicit origin is provided
     // This prevents accidental enabling with { credentials: true } alone
     const corsOptions = options?.cors;
-    if (corsOptions?.origin !== undefined && corsOptions.origin !== false) {
+    const corsEnabled = corsOptions?.origin !== undefined && corsOptions.origin !== false;
+    if (corsEnabled) {
       this.app.use(
         cors({
           origin: corsOptions.origin,
@@ -78,7 +45,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     // When creating the HTTP(S) server that hosts /mcp:
     this.app.use((req, res, next) => {
-      res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate');
+      // Only set CORS-specific headers when CORS is enabled
+      if (corsEnabled) {
+        res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate, Mcp-Session-Id');
+      }
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       next();

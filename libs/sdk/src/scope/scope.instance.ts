@@ -408,12 +408,6 @@ export class Scope extends ScopeEntry {
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
-    if (!this.metadata.auth) {
-      // log a large warning about using FrontMcp without authentication
-      this.logger.warn(
-        `\n\n*******************************\n  WARNING: FrontMcp is running without authentication. \n  This is a security risk and should only be used in development environments. \n*******************************\n\n`,
-      );
-    }
   }
 
   private get defaultScopeProviders() {

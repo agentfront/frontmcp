@@ -2,6 +2,26 @@
 // Zod schema for HTTP configuration
 
 import { z } from 'zod';
+import type { CorsOptions } from './interfaces';
+
+type CorsOriginCallback = Extract<CorsOptions['origin'], Function>;
+
+/**
+ * CORS options Zod schema.
+ * Origin accepts boolean, string, string array, or a callback function.
+ */
+const corsOptionsSchema = z.object({
+  origin: z
+    .union([
+      z.boolean(),
+      z.string(),
+      z.array(z.string()),
+      z.custom<CorsOriginCallback>((val) => typeof val === 'function'),
+    ])
+    .optional(),
+  credentials: z.boolean().optional(),
+  maxAge: z.number().optional(),
+});
 
 /**
  * HTTP options Zod schema.
@@ -18,6 +38,13 @@ export const httpOptionsSchema = z.object({
    * Express natively supports `app.listen('/path/to/file.sock')`.
    */
   socketPath: z.string().optional(),
+  /**
+   * CORS configuration.
+   * - undefined (default): permissive CORS (all origins, no credentials)
+   * - false: CORS disabled
+   * - CorsOptions object: custom CORS config
+   */
+  cors: z.union([z.literal(false), corsOptionsSchema]).optional(),
 });
 
 /**
