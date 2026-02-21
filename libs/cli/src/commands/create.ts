@@ -239,6 +239,30 @@ coverage/
 test-output/
 `;
 
+const TEMPLATE_DOCKERIGNORE = `
+node_modules
+dist
+.git
+coverage
+test-output
+*.tsbuildinfo
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+.env.*.local
+.frontmcp
+e2e
+*.md
+LICENSE
+`;
+
 const TEMPLATE_JEST_E2E_CONFIG = `
 /* eslint-disable */
 export default {
@@ -1058,7 +1082,8 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 `;
 
   if (deploymentTarget === 'node') {
-    readme += `├── ci/
+    readme += `├── .dockerignore      # Docker build context exclusions
+├── ci/
 │   ├── Dockerfile         # Container build config
 │   ├── docker-compose.yml # Docker services config
 │   └── .env.docker        # Docker-specific env vars
@@ -1245,6 +1270,7 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
       const dockerCompose = redisSetup === 'docker' ? generateDockerComposeWithRedis() : generateDockerComposeNoRedis();
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, 'docker-compose.yml'), dockerCompose);
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, '.env.docker'), TEMPLATE_ENV_DOCKER_CI);
+      await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.dockerignore'), TEMPLATE_DOCKERIGNORE);
       break;
     }
 

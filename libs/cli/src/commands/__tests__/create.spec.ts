@@ -161,6 +161,19 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('.gitignore'))).toBe(true);
     });
 
+    it('should create .dockerignore for Docker target', async () => {
+      await runCreate('docker-ignore-app', { yes: true, target: 'node' });
+
+      expect(consoleLogs.some((log) => log.includes('.dockerignore'))).toBe(true);
+    });
+
+    it('should not create .dockerignore for non-Docker targets', async () => {
+      await runCreate('vercel-no-dockerignore', { yes: true, target: 'vercel' });
+
+      const base = path.join(tempDir, 'vercel-no-dockerignore');
+      expect(existsSync(path.join(base, '.dockerignore'))).toBe(false);
+    });
+
     it('should create README.md', async () => {
       await runCreate('my-app', { yes: true });
 
