@@ -243,10 +243,34 @@ export abstract class AuthorizationBase implements Authorization {
    */
   static validateNoTokenLeakage(data: unknown): void {
     const json = JSON.stringify(data);
-    // Detect JWT pattern (header.payload.signature)
-    if (/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.test(json)) {
-      throw new TokenLeakDetectedError('JWT pattern detected in LLM context data');
+
+    // Detect JWT pattern using indexOf pre-check to avoid polynomial regex
+    const JWT_SEGMENT = /^[A-Za-z0-9_-]+$/;
+    let idx = json.indexOf('eyJ');
+    while (idx !== -1) {
+      const dot1 = json.indexOf('.', idx);
+      if (dot1 > idx) {
+        const seg1 = json.substring(idx, dot1);
+        const afterDot1 = dot1 + 1;
+        if (json.startsWith('eyJ', afterDot1)) {
+          const dot2 = json.indexOf('.', afterDot1);
+          if (dot2 > afterDot1) {
+            const seg2 = json.substring(afterDot1, dot2);
+            // Find end of third segment (next non-base64url char or end)
+            let end = dot2 + 1;
+            while (end < json.length && /[A-Za-z0-9_-]/.test(json[end])) end++;
+            if (end > dot2 + 1) {
+              const seg3 = json.substring(dot2 + 1, end);
+              if (JWT_SEGMENT.test(seg1) && JWT_SEGMENT.test(seg2) && JWT_SEGMENT.test(seg3)) {
+                throw new TokenLeakDetectedError('JWT pattern detected in LLM context data');
+              }
+            }
+          }
+        }
+      }
+      idx = json.indexOf('eyJ', idx + 1);
     }
+
     // Detect sensitive field names
     const sensitiveFields = ['access_token', 'refresh_token', 'id_token', 'tokenEnc', 'secretRefId'];
     for (const field of sensitiveFields) {

@@ -117,7 +117,7 @@ describe('CodeCallPlugin', () => {
 
     const createPluginWithLogger = (options: CodeCallPluginOptionsInput = { mode: 'codecall_only' }) => {
       const p = new CodeCallPlugin(options);
-      (p as any).get = jest.fn().mockReturnValue({ child: () => mockLogger });
+      jest.spyOn(p, 'get').mockReturnValue({ child: () => mockLogger } as unknown as never);
       return p;
     };
 

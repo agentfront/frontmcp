@@ -101,14 +101,20 @@ interface AnonymousSessionOptions {
   access: 'authorized',
 })
 export default class SessionVerifyFlow extends FlowBase<typeof name> {
+  logger = this.scopeLogger.child('SessionVerifyFlow');
+
+  private maskSub(sub: string): string {
+    if (sub.length <= 10) return '***' + sub.slice(-4);
+    return sub.slice(0, 6) + '***' + sub.slice(-4);
+  }
+
   /**
    * Create an anonymous session with consistent structure for both public and transparent-anon modes.
    * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
    */
   private createAnonymousSession(options: AnonymousSessionOptions): void {
     const { authMode, issuer, scopes = ['anonymous'], sessionIdHeader } = options;
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-    logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
+    this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
     const machineId = getMachineId();
 
     // If client sent session ID, use it for transport lookup
@@ -176,7 +182,6 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
     const entryPath = normalizeEntryPrefix(this.scope.entryPath);
     const routeBase = normalizeScopeBase(this.scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, entryPath);
@@ -203,7 +208,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
     const prmMetadataHeader = `Bearer resource_metadata="${baseUrl}${prmMetadataPath}"`;
 
-    logger.verbose('parseInput', {
+    this.logger.verbose('parseInput', {
       hasAuthHeader: !!authorizationHeader,
       hasToken: !!token,
       sessionProtocol,
@@ -244,8 +249,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-    logger.info('handlePublicMode: allowing anonymous access (public mode)');
+    this.logger.info('handlePublicMode: allowing anonymous access (public mode)');
 
     // Use shared helper for anonymous session creation
     this.createAnonymousSession({
@@ -270,8 +274,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     },
   })
   async handleAnonymousFallback() {
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-    logger.verbose('handleAnonymousFallback: creating anonymous session (transparent-anon)');
+    this.logger.verbose('handleAnonymousFallback: creating anonymous session (transparent-anon)');
     const authOptions = this.scope.auth?.options as TransparentAuthOptions | undefined;
     const scopes = authOptions?.anonymousScopes ?? ['anonymous'];
 
@@ -299,8 +302,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     },
   })
   async requireAuthorizationOrChallenge() {
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-    logger.verbose('requireAuthorizationOrChallenge: returning 401');
+    this.logger.verbose('requireAuthorizationOrChallenge: returning 401');
     this.respond({
       kind: 'unauthorized',
       prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -323,10 +325,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // Handle missing/empty token (e.g., "Bearer " or non-Bearer scheme like "Basic xxx")
     // When authorizationHeader exists but extractBearerToken returns undefined,
     // we should return 401 rather than throwing an error
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-
     if (!token) {
-      logger.warn('verifyIfJwt: missing or empty bearer token, returning 401');
+      this.logger.warn('verifyIfJwt: missing or empty bearer token, returning 401');
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -336,7 +336,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     if (!isJwt(token)) {
       // Non-JWT tokens are not supported - require JWT for verification
-      logger.warn('verifyIfJwt: token is not a JWT, returning 401');
+      this.logger.warn('verifyIfJwt: token is not a JWT, returning 401');
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -348,7 +348,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // Add defensive null check for this.scope.auth (consistent with line 130)
     const auth = this.scope.auth;
     if (!auth) {
-      logger.warn('verifyIfJwt: auth registry not available, returning 401');
+      this.logger.warn('verifyIfJwt: auth registry not available, returning 401');
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -361,7 +361,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Transparent mode uses remote provider's keys, all other modes use local keys
     const mode = isTransparentMode(authOptions) ? 'transparent' : 'gateway';
-    logger.verbose(`verifyIfJwt: verifying using ${mode} mode`);
+    this.logger.verbose(`verifyIfJwt: verifying using ${mode} mode`);
     if (isTransparentMode(authOptions)) {
       const primary = authOptions as TransparentAuthOptions;
       const issuer = auth.issuer;
@@ -385,7 +385,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.state.set({ jwtPayload: result.payload });
       return;
     }
-    logger.warn('verifyIfJwt: JWT verification failed', { error: result.error });
+    this.logger.warn('verifyIfJwt: JWT verification failed', { error: result.error });
     this.respond({
       kind: 'unauthorized',
       prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -411,8 +411,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     } = this.state;
 
     const session = parseSessionHeader(sessionIdHeader, token);
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-    logger.verbose('parseSessionHeader', { hasSessionId: !!sessionIdHeader, parsed: !!session });
+    this.logger.verbose('parseSessionHeader', { hasSessionId: !!sessionIdHeader, parsed: !!session });
     if (session) {
       this.state.set('session', session);
     }
@@ -425,9 +424,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       session,
     } = this.state;
 
-    const logger = this.scopeLogger.child('SessionVerifyFlow');
-    logger.info('Session verified successfully', {
-      sub: user.sub,
+    this.logger.info('Session verified successfully', {
+      sub: this.maskSub(user.sub),
       hasSession: !!session,
     });
 

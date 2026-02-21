@@ -423,21 +423,21 @@ export class Scope extends ScopeEntry {
 
     await this.auth.ready;
 
-    // Build a concise summary with only non-zero counts
-    const counts: string[] = [];
-    const appsCount = this.scopeApps.getApps().length;
-    const toolsCount = this.scopeTools.getTools(true).length;
-    const resourcesCount = this.scopeResources.getResources().length;
-    const promptsCount = this.scopePrompts.getPrompts().length;
-    const agentsCount = this.scopeAgents.getAgents().length;
-    const skillsCount = this.scopeSkills.getSkills().length;
-    if (appsCount > 0) counts.push(`${appsCount} app${appsCount !== 1 ? 's' : ''}`);
-    if (toolsCount > 0) counts.push(`${toolsCount} tool${toolsCount !== 1 ? 's' : ''}`);
-    if (resourcesCount > 0) counts.push(`${resourcesCount} resource${resourcesCount !== 1 ? 's' : ''}`);
-    if (promptsCount > 0) counts.push(`${promptsCount} prompt${promptsCount !== 1 ? 's' : ''}`);
-    if (agentsCount > 0) counts.push(`${agentsCount} agent${agentsCount !== 1 ? 's' : ''}`);
-    if (skillsCount > 0) counts.push(`${skillsCount} skill${skillsCount !== 1 ? 's' : ''}`);
-    this.logger.info(`Scope ready — ${counts.join(', ')}`);
+    this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
+  }
+
+  private formatScopeSummary(): string {
+    const entries: string[] = [];
+    const add = (count: number, label: string) => {
+      if (count > 0) entries.push(`${count} ${label}${count !== 1 ? 's' : ''}`);
+    };
+    add(this.scopeApps.getApps().length, 'app');
+    add(this.scopeTools.getTools(true).length, 'tool');
+    add(this.scopeResources.getResources().length, 'resource');
+    add(this.scopePrompts.getPrompts().length, 'prompt');
+    add(this.scopeAgents.getAgents().length, 'agent');
+    add(this.scopeSkills.getSkills().length, 'skill');
+    return entries.length > 0 ? entries.join(', ') : 'empty';
   }
 
   private get defaultScopeProviders() {

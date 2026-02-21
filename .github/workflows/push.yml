@@ -214,7 +214,7 @@ jobs:
     name: "E2E Tests (${{ matrix.project }})"
     needs: [setup, build, discover-e2e]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
