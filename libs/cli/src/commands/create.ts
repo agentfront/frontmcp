@@ -50,7 +50,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     userInstall: 'npm install',
     ghCache: 'npm',
     ghInstallCmd: 'npm ci',
-    engines: { node: '>=24', npm: '>=10' },
+    engines: { node: '>=22', npm: '>=10' },
   },
   yarn: {
     lockfileCopy: 'COPY package.json yarn.lock* ./',
@@ -60,7 +60,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     userInstall: 'yarn install',
     ghCache: 'yarn',
     ghInstallCmd: 'yarn install --frozen-lockfile',
-    engines: { node: '>=24' },
+    engines: { node: '>=22' },
   },
   pnpm: {
     lockfileCopy: 'COPY package.json pnpm-lock.yaml* ./',
@@ -70,7 +70,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     userInstall: 'pnpm install',
     ghCache: 'pnpm',
     ghInstallCmd: 'pnpm install --frozen-lockfile',
-    engines: { node: '>=24' },
+    engines: { node: '>=22' },
   },
 };
 
@@ -455,7 +455,7 @@ function generateDockerfile(pm: PackageManager): string {
   const corepack = pm !== 'npm' ? '\nRUN corepack enable\n' : '';
   return `
 # Build stage
-FROM node:24-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 ${corepack}
@@ -471,7 +471,7 @@ RUN ${cfg.run} build
 ${cfg.pruneDevDeps}
 
 # Production stage
-FROM node:24-slim AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -641,7 +641,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: '${cfg.ghCache}'
 
       - name: Install dependencies
@@ -651,7 +651,7 @@ function generatePmSetupSteps(pm: PackageManager): string {
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: '${cfg.ghCache}'
 
       - name: Install dependencies

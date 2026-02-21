@@ -231,8 +231,8 @@ describe('runCreate', () => {
         expect(content).toContain('AS runner');
 
         // Base image
-        expect(content).toContain('FROM node:24-slim AS builder');
-        expect(content).toContain('FROM node:24-slim AS runner');
+        expect(content).toContain('FROM node:22-slim AS builder');
+        expect(content).toContain('FROM node:22-slim AS runner');
 
         // Builder stage
         expect(content).toContain('RUN npm ci');
@@ -449,7 +449,7 @@ describe('runCreate', () => {
         const content = readFileSync(path.join(tempDir, 'yarn-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
         expect(content).toContain("cache: 'yarn'");
         expect(content).toContain('yarn install --frozen-lockfile');
-        expect(content).toContain("node-version: '24'");
+        expect(content).toContain("node-version: '22'");
       });
 
       it('should generate CI workflow with pnpm setup action', async () => {
@@ -467,7 +467,7 @@ describe('runCreate', () => {
         const content = readFileSync(path.join(tempDir, 'npm-ci', '.github', 'workflows', 'ci.yml'), 'utf8');
         expect(content).toContain("cache: 'npm'");
         expect(content).toContain('npm ci');
-        expect(content).toContain("node-version: '24'");
+        expect(content).toContain("node-version: '22'");
       });
     });
 
@@ -476,7 +476,7 @@ describe('runCreate', () => {
         await runCreate('npm-engines', { yes: true, pm: 'npm' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'npm-engines', 'package.json'), 'utf8'));
-        expect(pkgJson.engines.node).toBe('>=24');
+        expect(pkgJson.engines.node).toBe('>=22');
         expect(pkgJson.engines.npm).toBe('>=10');
       });
 
@@ -484,7 +484,7 @@ describe('runCreate', () => {
         await runCreate('yarn-engines', { yes: true, pm: 'yarn' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'yarn-engines', 'package.json'), 'utf8'));
-        expect(pkgJson.engines.node).toBe('>=24');
+        expect(pkgJson.engines.node).toBe('>=22');
         expect(pkgJson.engines.npm).toBeUndefined();
       });
 
@@ -492,7 +492,7 @@ describe('runCreate', () => {
         await runCreate('pnpm-engines', { yes: true, pm: 'pnpm' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'pnpm-engines', 'package.json'), 'utf8'));
-        expect(pkgJson.engines.node).toBe('>=24');
+        expect(pkgJson.engines.node).toBe('>=22');
         expect(pkgJson.engines.npm).toBeUndefined();
       });
     });
