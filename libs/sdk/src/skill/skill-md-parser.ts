@@ -53,7 +53,9 @@ export function parseSkillMdFrontmatter(content: string): SkillMdParseResult {
   }
 
   const yamlBlock = trimmed.substring(3, closingIndex).trim();
-  const body = trimmed.substring(closingIndex + 4).trim();
+  const afterClose = closingIndex + 4;
+  const bodyStart = trimmed[afterClose] === '\n' ? afterClose + 1 : afterClose;
+  const body = trimmed.substring(bodyStart);
 
   let frontmatter: Record<string, unknown> = {};
   try {
@@ -100,7 +102,7 @@ export function skillMdFrontmatterToMetadata(
     const specMeta: Record<string, string> = {};
     for (const [key, val] of Object.entries(meta)) {
       if (typeof val === 'string') specMeta[key] = val;
-      else specMeta[key] = String(val);
+      else specMeta[key] = JSON.stringify(val);
     }
     result.specMetadata = specMeta;
   }
