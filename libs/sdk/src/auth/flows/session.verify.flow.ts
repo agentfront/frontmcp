@@ -174,6 +174,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
+    const logger = this.scopeLogger.child('SessionVerifyFlow');
     const entryPath = normalizeEntryPrefix(this.scope.entryPath);
     const routeBase = normalizeScopeBase(this.scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, entryPath);
@@ -199,6 +200,13 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
     const prmMetadataHeader = `Bearer resource_metadata="${baseUrl}${prmMetadataPath}"`;
+
+    logger.verbose('parseInput', {
+      hasAuthHeader: !!authorizationHeader,
+      hasToken: !!token,
+      sessionProtocol,
+      hasSessionId: !!sessionIdHeader,
+    });
 
     this.state.set({
       baseUrl,
@@ -233,6 +241,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     if (this.state.token) {
       return;
     }
+
+    const logger = this.scopeLogger.child('SessionVerifyFlow');
+    logger.info('handlePublicMode: allowing anonymous access (public mode)');
 
     // Use shared helper for anonymous session creation
     this.createAnonymousSession({
@@ -361,6 +372,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.state.set({ jwtPayload: result.payload });
       return;
     }
+    const logger = this.scopeLogger.child('SessionVerifyFlow');
+    logger.warn('verifyIfJwt: JWT verification failed');
     this.respond({
       kind: 'unauthorized',
       prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -397,6 +410,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       required: { token, user },
       session,
     } = this.state;
+
+    const logger = this.scopeLogger.child('SessionVerifyFlow');
+    logger.info('Session verified successfully', {
+      sub: user.sub,
+      hasSession: !!session,
+    });
 
     this.respond({
       kind: 'authorized',

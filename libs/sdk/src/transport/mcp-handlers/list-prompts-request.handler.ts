@@ -9,7 +9,7 @@ export default function listPromptsRequestHandler({
   return {
     requestSchema: ListPromptsRequestSchema,
     handler: async (request: ListPromptsRequest, ctx) => {
-      logger.verbose('prompts/list: listing prompts');
+      logger.debug('prompts/list requested');
       try {
         return await scope.runFlowForOutput('prompts:list-prompts', { request, ctx });
       } catch (e) {

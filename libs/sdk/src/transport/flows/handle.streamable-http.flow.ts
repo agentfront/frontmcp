@@ -128,16 +128,21 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     }
 
     this.state.set(stateSchema.parse({ token, session }));
+
+    const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
+    logger.info('parseInput: session resolved', { sessionId: session.id?.slice(0, 20) });
   }
 
   @Stage('router')
   async router() {
     const { request } = this.rawInput;
+    const logger = this.scopeLogger.child('handle:streamable-http:router');
 
     // GET requests are SSE listener streams - no body expected
     // Per MCP spec, clients can open SSE stream with GET + Accept: text/event-stream
     if (request.method.toUpperCase() === 'GET') {
       this.state.set('requestType', 'sseListener');
+      logger.info('router: requestType=sseListener, method=GET');
       return;
     }
 
@@ -149,14 +154,19 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
+      logger.info('router: requestType=initialize, method=POST');
     } else if (typeof method === 'string' && method.startsWith('ui/')) {
       // Ext-apps methods: ui/initialize, ui/callServerTool, etc.
       this.state.set('requestType', 'extApps');
+      logger.info(`router: requestType=extApps, method=${method}`);
     } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
       this.state.set('requestType', 'elicitResult');
+      logger.info('router: requestType=elicitResult, method=POST');
     } else if (method && RequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'message');
+      logger.info(`router: requestType=message, method=${method}`);
     } else {
+      logger.warn('router: invalid request, no valid method');
       this.respond(httpRespond.rpcError('Invalid Request'));
     }
   }

@@ -15,7 +15,7 @@ export default function listResourceTemplatesRequestHandler({
   return {
     requestSchema: ListResourceTemplatesRequestSchema,
     handler: async (request: ListResourceTemplatesRequest, ctx) => {
-      logger.verbose('resources/listTemplates: listing resource templates');
+      logger.debug('resources/listTemplates requested');
       try {
         return await scope.runFlowForOutput('resources:list-resource-templates', { request, ctx });
       } catch (e) {

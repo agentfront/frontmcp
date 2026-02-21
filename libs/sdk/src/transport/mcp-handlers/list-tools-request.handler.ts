@@ -9,7 +9,7 @@ export default function listToolsRequestHandler({
   return {
     requestSchema: ListToolsRequestSchema,
     handler: async (request: ListToolsRequest, ctx) => {
-      logger.verbose('tools/list: listing tools');
+      logger.debug('tools/list requested');
       try {
         return await scope.runFlowForOutput('tools:list-tools', { request, ctx });
       } catch (e) {

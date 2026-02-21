@@ -12,7 +12,7 @@ export default function readResourceRequestHandler({
     requestSchema: ReadResourceRequestSchema,
     handler: async (request: ReadResourceRequest, ctx) => {
       const uri = request.params?.uri || 'unknown';
-      logger.verbose(`resources/read: ${uri}`);
+      logger.info(`resources/read: ${uri}`);
       try {
         return await scope.runFlowForOutput('resources:read-resource', { request, ctx });
       } catch (e) {

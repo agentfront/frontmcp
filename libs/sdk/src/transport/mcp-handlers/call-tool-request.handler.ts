@@ -17,7 +17,7 @@ export default function callToolRequestHandler({
     requestSchema: CallToolRequestSchema,
     handler: async (request: CallToolRequest, ctx) => {
       const toolName = request.params?.name || 'unknown';
-      logger.verbose(`tools/call: ${toolName}`);
+      logger.info(`tools/call: ${toolName}`);
 
       try {
         // All tool calls go through the standard tool flow

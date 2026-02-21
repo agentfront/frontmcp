@@ -15,7 +15,7 @@ export default function listResourcesRequestHandler({
   return {
     requestSchema: ListResourcesRequestSchema,
     handler: async (request: ListResourcesRequest, ctx) => {
-      logger.verbose('resources/list: listing resources');
+      logger.debug('resources/list requested');
       try {
         return await scope.runFlowForOutput('resources:list-resources', { request, ctx });
       } catch (e) {

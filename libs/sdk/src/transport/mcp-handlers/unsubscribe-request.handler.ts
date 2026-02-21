@@ -23,11 +23,9 @@ export default function UnsubscribeRequestHandler({ scope }: McpHandlerOptions) 
       const wasSubscribed = scope.notifications.unsubscribeResource(sessionId, uri);
 
       if (wasSubscribed) {
-        scope.logger.verbose(`resources/unsubscribe: Session ${sessionId.slice(0, 20)}... unsubscribed from ${uri}`);
+        scope.logger.info(`resources/unsubscribe: Session ${sessionId.slice(0, 20)}... unsubscribed from ${uri}`);
       } else {
-        scope.logger.verbose(
-          `resources/unsubscribe: Session ${sessionId.slice(0, 20)}... was not subscribed to ${uri}`,
-        );
+        scope.logger.debug(`resources/unsubscribe: Session ${sessionId.slice(0, 20)}... was not subscribed to ${uri}`);
       }
 
       // Per MCP spec, return empty result

@@ -9,7 +9,7 @@ export default function completeRequestHandler({
   return {
     requestSchema: CompleteRequestSchema,
     handler: async (request: CompleteRequest, ctx) => {
-      logger.verbose('completion/complete: completing');
+      logger.debug('completion/complete requested');
       try {
         return await scope.runFlowForOutput('completion:complete', { request, ctx });
       } catch (e) {

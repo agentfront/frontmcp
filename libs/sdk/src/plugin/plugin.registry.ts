@@ -23,6 +23,7 @@ import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { InvalidPluginScopeError, RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 import { installContextExtensions } from '../context';
+import { FrontMcpLogger } from '../common';
 
 /**
  * Scope information for plugin hook registration.
@@ -60,6 +61,7 @@ export default class PluginRegistry
   private readonly scope: Scope;
   private readonly scopeInfo?: PluginScopeInfo;
   private readonly owner?: EntryOwnerRef;
+  private readonly logger?: FrontMcpLogger;
 
   constructor(
     providers: ProviderRegistry,
@@ -77,6 +79,11 @@ export default class PluginRegistry
     this.scope = providers.getActiveScope();
     this.scopeInfo = scopeInfo;
     this.owner = owner;
+    try {
+      this.logger = providers.get(FrontMcpLogger)?.child('PluginRegistry');
+    } catch {
+      // Logger not available
+    }
   }
 
   getPlugins(): PluginEntry[] {
@@ -114,6 +121,7 @@ export default class PluginRegistry
   }
 
   protected async initialize() {
+    this.logger?.verbose(`PluginRegistry: initializing ${this.tokens.size} plugin(s)`);
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
       const deps = this.graph.get(token)!;
@@ -284,6 +292,10 @@ export default class PluginRegistry
         }
       }
       this.instances.set(token, pluginInstance);
+      this.logger?.verbose(`PluginRegistry: registered plugin '${rec.metadata.name}'`);
+      this.logger?.verbose(
+        `Plugin '${rec.metadata.name}': ${hooks.length} hook(s), ${contextExtensions?.length ?? 0} context extension(s)`,
+      );
     }
   }
 }

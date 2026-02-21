@@ -10,7 +10,7 @@ export default function getPromptRequestHandler({
     requestSchema: GetPromptRequestSchema,
     handler: async (request: GetPromptRequest, ctx) => {
       const promptName = request.params?.name || 'unknown';
-      logger.verbose(`prompts/get: ${promptName}`);
+      logger.info(`prompts/get: ${promptName}`);
       try {
         return await scope.runFlowForOutput('prompts:get-prompt', { request, ctx });
       } catch (e) {
