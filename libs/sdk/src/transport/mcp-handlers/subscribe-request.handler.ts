@@ -23,9 +23,9 @@ export default function SubscribeRequestHandler({ scope }: McpHandlerOptions) {
       const isNew = scope.notifications.subscribeResource(sessionId, uri);
 
       if (isNew) {
-        scope.logger.verbose(`resources/subscribe: Session ${sessionId.slice(0, 20)}... subscribed to ${uri}`);
+        scope.logger.info(`resources/subscribe: Session ${sessionId.slice(0, 20)}... subscribed to ${uri}`);
       } else {
-        scope.logger.verbose(`resources/subscribe: Session ${sessionId.slice(0, 20)}... already subscribed to ${uri}`);
+        scope.logger.debug(`resources/subscribe: Session ${sessionId.slice(0, 20)}... already subscribed to ${uri}`);
       }
 
       // Per MCP spec, return empty result

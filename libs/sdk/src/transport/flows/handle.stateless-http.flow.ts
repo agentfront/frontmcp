@@ -55,11 +55,14 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
+    const logger = (this.scope as Scope).logger.child('HandleStatelessHttpFlow');
 
     // Check if we have auth info
     const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
     const token = auth?.token;
     const isAuthenticated = !!token && token.length > 0;
+
+    logger.verbose('parseInput', { isAuthenticated, hasToken: !!token });
 
     this.state.set(
       stateSchema.parse({
@@ -72,6 +75,7 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   @Stage('router')
   async router() {
     const { request } = this.rawInput;
+    const logger = (this.scope as Scope).logger.child('HandleStatelessHttpFlow');
     const body = request.body as { method?: string } | undefined;
     const method = body?.method;
 
@@ -79,9 +83,12 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
+      logger.info('router: requestType=initialize, method=POST');
     } else if (method && RequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'message');
+      logger.info(`router: requestType=message, method=${method}`);
     } else {
+      logger.warn('router: invalid request, no valid method');
       this.respond(httpRespond.rpcError('Invalid Request'));
     }
   }
@@ -89,8 +96,11 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   @Stage('handleRequest')
   async handleRequest() {
     const transportService = (this.scope as Scope).transportService;
+    const logger = (this.scope as Scope).logger.child('HandleStatelessHttpFlow');
     const { request, response } = this.rawInput;
     const { token, isAuthenticated, requestType } = this.state;
+
+    logger.info(`handleRequest: using ${isAuthenticated ? 'authenticated' : 'anonymous'} stateless transport`);
 
     // Get or create the stateless transport
     // For anonymous: shared singleton transport
@@ -104,12 +114,23 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
     // This satisfies the MCP SDK's session header requirement while keeping requests stateless
     if (!request.headers['mcp-session-id']) {
       request.headers['mcp-session-id'] = '__stateless__';
+      logger.verbose('handleRequest: injected __stateless__ session ID');
     }
 
-    if (requestType === 'initialize') {
-      await transport.initialize(request, response);
-    } else {
-      await transport.handleRequest(request, response);
+    logger.verbose(`handleRequest: requestType=${requestType}, forwarding to transport`);
+
+    try {
+      if (requestType === 'initialize') {
+        await transport.initialize(request, response);
+      } else {
+        await transport.handleRequest(request, response);
+      }
+    } catch (error) {
+      logger.error('handleRequest: transport failed', {
+        requestType,
+        error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+      });
+      throw error;
     }
 
     this.handled();

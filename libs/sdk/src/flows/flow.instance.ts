@@ -5,6 +5,7 @@ import {
   FlowCtxOf,
   FlowEntry,
   FlowInputOf,
+  FrontMcpLogger,
   FlowName,
   FlowOutputOf,
   FlowPlan,
@@ -55,6 +56,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   private FlowClass: FlowType;
   private stages: StageMap<FlowType>;
   private hooks: HookRegistry;
+  private readonly logger: FrontMcpLogger;
 
   constructor(scope: Scope, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
@@ -64,6 +66,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     this.ready = this.initialize();
     this.plan = this.record.metadata.plan;
     this.hooks = scope.providers.getHooksRegistry();
+    this.logger = scope.logger.child('FlowInstance');
   }
 
   protected async initialize() {
@@ -107,8 +110,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
             }
           }
           // Log unhandled errors for visibility (non-FlowControl errors indicate bugs)
-          // Note: Using structured logging to avoid Node.js util.inspect issues with Zod errors
-          console.error('[FlowInstance] Unhandled error:', {
+          this.logger.error('Unhandled error in flow', {
+            flow: this.name,
             name: e instanceof Error ? e.name : 'UnknownError',
             message: e instanceof Error ? e.message : String(e),
           });
@@ -147,6 +150,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     try {
       return this.globalProviders.get(FrontMcpContextStorage);
     } catch {
+      this.logger.verbose('getContextStorage: FrontMcpContextStorage not available');
       return undefined;
     }
   }
@@ -195,6 +199,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   }
 
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
+    this.logger.verbose(`run: starting flow '${this.name}'`);
     const scope = this.globalProviders.getActiveScope();
     const { FlowClass, plan, name } = this;
 
@@ -263,12 +268,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           metas.push(h.metadata);
         } catch (e) {
-          // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
-
-          console.warn(
-            '[flow] Ignoring injected hook that failed to materialize:',
-            e instanceof Error ? e.message : 'Unknown error',
-          );
+          this.logger.warn('Ignoring injected hook that failed to materialize', {
+            flow: this.name,
+            error: e instanceof Error ? e.message : 'Unknown error',
+          });
         }
       }
 
@@ -426,6 +429,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // ---------- PRE ----------
     {
       const pre = await runStageGroup((plan as any).pre, true);
+      this.logger.verbose(`run: PRE completed, outcome=${pre.outcome}`);
       if (pre.outcome === 'respond') {
         const post = await runStageGroup((plan as any).post, false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
@@ -466,6 +470,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // ---------- EXECUTE ----------
     if (!responded) {
       const exec = await runStageGroup((plan as any).execute, true);
+      this.logger.verbose(`run: EXECUTE completed, outcome=${exec.outcome}`);
       if (exec.outcome === 'respond') {
         // continue to post + finalize
       } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
@@ -487,6 +492,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // ---------- POST ----------
     {
       const post = await runStageGroup((plan as any).post, false);
+      this.logger.verbose(`run: POST completed, outcome=${post.outcome}`);
       if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
         try {
           await runErrorStage();

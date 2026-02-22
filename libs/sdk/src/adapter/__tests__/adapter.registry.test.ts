@@ -332,14 +332,14 @@ describe('AdapterRegistry', () => {
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('2 adapter(s) registered'));
     });
 
-    it('should log initialization complete', async () => {
+    it('should log initialization complete at verbose level', async () => {
       const logger = createMockLogger();
       addProviderToMock(mockProviders, FrontMcpLogger, logger);
 
       const registry = new AdapterRegistry(mockProviders, []);
       await registry.ready;
 
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('initialization complete'));
+      expect(logger.verbose).toHaveBeenCalledWith(expect.stringContaining('initialization complete'));
     });
   });
 });

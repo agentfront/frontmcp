@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { Token, tokenName } from '@frontmcp/di';
-import { AppType, AppEntry, AppKind, AppRecord, EntryOwnerRef } from '../common';
+import { AppType, AppEntry, AppKind, AppRecord, EntryOwnerRef, FrontMcpLogger } from '../common';
 import { appDiscoveryDeps, normalizeApp } from './app.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
@@ -9,10 +9,16 @@ import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
   private readonly owner: EntryOwnerRef;
+  private logger?: FrontMcpLogger;
 
   constructor(globalProviders: ProviderRegistry, list: AppType[], owner: EntryOwnerRef) {
     super('AppRegistry', globalProviders, list);
     this.owner = owner;
+    try {
+      this.logger = globalProviders.get(FrontMcpLogger)?.child('AppRegistry');
+    } catch {
+      // Logger not available
+    }
   }
 
   protected buildMap(list: AppType[]): RegistryBuildMapResult<AppRecord> {
@@ -44,6 +50,7 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
 
   /** Instantiate adapters, run fetch/transform, and populate registries. */
   protected async initialize(): Promise<void> {
+    this.logger?.verbose(`AppRegistry: initializing ${this.tokens.size} app(s)`);
     const readyArr: Promise<void>[] = [];
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
@@ -59,8 +66,10 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
 
       this.instances.set(token, app);
       readyArr.push(app.ready);
+      this.logger?.verbose(`AppRegistry: registered ${rec.kind} app '${rec.metadata.name}'`);
     }
     await Promise.all(readyArr);
+    this.logger?.debug(`AppRegistry: initialization complete (${this.instances.size} app(s))`);
   }
 
   getApps(): AppEntry[] {

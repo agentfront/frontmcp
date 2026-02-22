@@ -17,12 +17,15 @@ export default function callToolRequestHandler({
     requestSchema: CallToolRequestSchema,
     handler: async (request: CallToolRequest, ctx) => {
       const toolName = request.params?.name || 'unknown';
-      logger.verbose(`tools/call: ${toolName}`);
+      logger.info(`tools/call: ${toolName}`);
+      const start = Date.now();
 
       try {
         // All tool calls go through the standard tool flow
         // Agents are registered as regular tools with custom execute functions
-        return await scope.runFlowForOutput('tools:call-tool', { request, ctx });
+        const result = await scope.runFlowForOutput('tools:call-tool', { request, ctx });
+        logger.verbose('tools/call completed', { tool: toolName, durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         // FlowControl is a control flow mechanism, not an error - handle silently
         if (e instanceof FlowControl) {
