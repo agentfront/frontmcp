@@ -9,6 +9,7 @@
  * @module skill/skill-directory-loader
  */
 
+import { basename } from 'node:path';
 import { readFile, fileExists, stat, joinPath } from '@frontmcp/utils';
 import { SkillKind } from '../common/records/skill.record';
 import type { SkillFileRecord } from '../common/records/skill.record';
@@ -66,8 +67,9 @@ async function checkDirectory(path: string): Promise<boolean> {
   try {
     const s = await stat(path);
     return s.isDirectory();
-  } catch {
-    return false;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
   }
 }
 
@@ -87,13 +89,21 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
   // Verify SKILL.md exists
   const exists = await fileExists(skillMdPath);
   if (!exists) {
-    throw new InvalidSkillError(dirPath.split('/').pop() ?? 'unknown', 'SKILL.md not found in directory');
+    throw new InvalidSkillError(basename(dirPath), 'SKILL.md not found in directory');
   }
 
   // Read and parse SKILL.md
-  const content = await readFile(skillMdPath, 'utf-8');
-  const { frontmatter, body } = parseSkillMdFrontmatter(content);
-  const partialMetadata = skillMdFrontmatterToMetadata(frontmatter, body);
+  let content: string;
+  let partialMetadata: Partial<SkillMetadata>;
+  try {
+    content = await readFile(skillMdPath, 'utf-8');
+    const { frontmatter, body } = parseSkillMdFrontmatter(content);
+    partialMetadata = skillMdFrontmatterToMetadata(frontmatter, body);
+  } catch (err) {
+    const name = basename(dirPath);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new InvalidSkillError(name, `Failed to read or parse SKILL.md: ${message}`);
+  }
 
   // Scan for resource directories
   const { resources } = await scanSkillResources(dirPath);
@@ -103,7 +113,7 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
   }
 
   // Validate name matches directory name (per spec recommendation)
-  const dirName = dirPath.split('/').filter(Boolean).pop();
+  const dirName = basename(dirPath);
   if (partialMetadata.name && dirName && partialMetadata.name !== dirName) {
     console.warn(`Skill name "${partialMetadata.name}" does not match directory name "${dirName}"`);
   }
