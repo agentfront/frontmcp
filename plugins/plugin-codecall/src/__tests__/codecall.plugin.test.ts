@@ -1,23 +1,13 @@
 // file: plugins/plugin-codecall/src/__tests__/codecall.plugin.test.ts
 
 import CodeCallPlugin from '../codecall.plugin';
-import { CodeCallMode } from '../codecall.types';
+import { CodeCallMode, CodeCallPluginOptionsInput } from '../codecall.types';
 import CodeCallConfig from '../providers/code-call.config';
 import EnclaveService from '../services/enclave.service';
 import { ToolSearchService } from '../services';
 import { ScopeEntry } from '@frontmcp/sdk';
 
 describe('CodeCallPlugin', () => {
-  let consoleLogSpy: jest.SpyInstance;
-
-  beforeEach(() => {
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    consoleLogSpy.mockRestore();
-  });
-
   describe('constructor', () => {
     it('should initialize with default options', () => {
       const plugin = new CodeCallPlugin();
@@ -32,11 +22,6 @@ describe('CodeCallPlugin', () => {
       });
       expect(plugin.options.mode).toBe('codecall_opt_in');
       expect(plugin.options.topK).toBe(15);
-    });
-
-    it('should log initialization message', () => {
-      new CodeCallPlugin();
-      expect(consoleLogSpy).toHaveBeenCalledWith('[CodeCall] Plugin initialized with mode:', 'codecall_only');
     });
   });
 
@@ -111,6 +96,7 @@ describe('CodeCallPlugin', () => {
 
   describe('adjustListTools hook', () => {
     let plugin: CodeCallPlugin;
+    let mockLogger: { verbose: jest.Mock; info: jest.Mock; warn: jest.Mock; error: jest.Mock; child: jest.Mock };
 
     const createMockFlowCtx = (tools: Array<{ tool: { name?: string; fullName?: string; metadata?: any } }>) => {
       let resolvedTools = tools;
@@ -129,14 +115,27 @@ describe('CodeCallPlugin', () => {
       } as any;
     };
 
+    const createPluginWithLogger = (options: CodeCallPluginOptionsInput = { mode: 'codecall_only' }) => {
+      const p = new CodeCallPlugin(options);
+      jest.spyOn(p, 'get').mockReturnValue({ child: () => mockLogger } as unknown as never);
+      return p;
+    };
+
     beforeEach(() => {
-      plugin = new CodeCallPlugin({ mode: 'codecall_only' });
+      mockLogger = {
+        verbose: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+      plugin = createPluginWithLogger({ mode: 'codecall_only' });
     });
 
     it('should return early when no tools present', async () => {
       const flowCtx = createMockFlowCtx([]);
       await plugin.adjustListTools(flowCtx);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[CodeCall] No tools to filter, returning early');
+      expect(mockLogger.verbose).toHaveBeenCalledWith('adjustListTools: no tools to filter, returning early');
     });
 
     it('should return early when resolvedTools is undefined', async () => {
@@ -147,11 +146,11 @@ describe('CodeCallPlugin', () => {
         },
       } as any;
       await plugin.adjustListTools(flowCtx);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[CodeCall] No tools to filter, returning early');
+      expect(mockLogger.verbose).toHaveBeenCalledWith('adjustListTools: no tools to filter, returning early');
     });
 
     it('should always show codecall: meta-tools in codecall_only mode', async () => {
-      plugin = new CodeCallPlugin({ mode: 'codecall_only' });
+      plugin = createPluginWithLogger({ mode: 'codecall_only' });
       const flowCtx = createMockFlowCtx([
         { tool: { name: 'codecall:search' } },
         { tool: { name: 'codecall:describe' } },
@@ -167,7 +166,7 @@ describe('CodeCallPlugin', () => {
     });
 
     it('should show tools with visibleInListTools=true in codecall_only mode', async () => {
-      plugin = new CodeCallPlugin({ mode: 'codecall_only' });
+      plugin = createPluginWithLogger({ mode: 'codecall_only' });
       const flowCtx = createMockFlowCtx([
         { tool: { name: 'visible:tool', metadata: { codecall: { visibleInListTools: true } } } },
         { tool: { name: 'hidden:tool', metadata: { codecall: { visibleInListTools: false } } } },
@@ -182,7 +181,7 @@ describe('CodeCallPlugin', () => {
     });
 
     it('should show all tools in codecall_opt_in mode', async () => {
-      plugin = new CodeCallPlugin({ mode: 'codecall_opt_in' });
+      plugin = createPluginWithLogger({ mode: 'codecall_opt_in' });
       const flowCtx = createMockFlowCtx([
         { tool: { name: 'tool1' } },
         { tool: { name: 'tool2' } },
@@ -196,7 +195,7 @@ describe('CodeCallPlugin', () => {
     });
 
     it('should hide tools with visibleInListTools=false in metadata_driven mode', async () => {
-      plugin = new CodeCallPlugin({ mode: 'metadata_driven' });
+      plugin = createPluginWithLogger({ mode: 'metadata_driven' });
       const flowCtx = createMockFlowCtx([
         { tool: { name: 'visible:tool', metadata: { codecall: { visibleInListTools: true } } } },
         { tool: { name: 'hidden:tool', metadata: { codecall: { visibleInListTools: false } } } },
@@ -213,7 +212,7 @@ describe('CodeCallPlugin', () => {
     });
 
     it('should show tools by default in metadata_driven mode', async () => {
-      plugin = new CodeCallPlugin({ mode: 'metadata_driven' });
+      plugin = createPluginWithLogger({ mode: 'metadata_driven' });
       const flowCtx = createMockFlowCtx([
         { tool: { name: 'tool-no-metadata' } },
         { tool: { name: 'tool-empty-metadata', metadata: {} } },
@@ -227,7 +226,7 @@ describe('CodeCallPlugin', () => {
     });
 
     it('should handle tools with fullName instead of name', async () => {
-      plugin = new CodeCallPlugin({ mode: 'codecall_only' });
+      plugin = createPluginWithLogger({ mode: 'codecall_only' });
       const flowCtx = createMockFlowCtx([
         { tool: { fullName: 'codecall:execute' } },
         { tool: { fullName: 'other:tool' } },
@@ -241,17 +240,17 @@ describe('CodeCallPlugin', () => {
     });
 
     it('should log before and after tool counts', async () => {
-      plugin = new CodeCallPlugin({ mode: 'codecall_only' });
+      plugin = createPluginWithLogger({ mode: 'codecall_only' });
       const flowCtx = createMockFlowCtx([{ tool: { name: 'codecall:search' } }, { tool: { name: 'other:tool' } }]);
 
       await plugin.adjustListTools(flowCtx);
 
-      expect(consoleLogSpy).toHaveBeenCalledWith('[CodeCall] Tools before filter:', 2);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[CodeCall] Tools after filter:', 1);
+      expect(mockLogger.verbose).toHaveBeenCalledWith('adjustListTools: tools before filter', { count: 2 });
+      expect(mockLogger.verbose).toHaveBeenCalledWith('adjustListTools: tools after filter', { count: 1 });
     });
 
     it('should handle unknown mode by showing all tools (fail-open)', async () => {
-      plugin = new CodeCallPlugin({});
+      plugin = createPluginWithLogger({});
       // Force an unknown mode via private property
       (plugin as any).options.mode = 'unknown_mode' as CodeCallMode;
 

@@ -472,7 +472,7 @@ describe('runCreate', () => {
     });
 
     describe('package.json engines per package manager', () => {
-      it('should set node>=24 and npm>=10 for npm', async () => {
+      it('should set node>=22 and npm>=10 for npm', async () => {
         await runCreate('npm-engines', { yes: true, pm: 'npm' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'npm-engines', 'package.json'), 'utf8'));
@@ -480,7 +480,7 @@ describe('runCreate', () => {
         expect(pkgJson.engines.npm).toBe('>=10');
       });
 
-      it('should set only node>=24 for yarn (no npm engine)', async () => {
+      it('should set only node>=22 for yarn (no npm engine)', async () => {
         await runCreate('yarn-engines', { yes: true, pm: 'yarn' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'yarn-engines', 'package.json'), 'utf8'));
@@ -488,7 +488,7 @@ describe('runCreate', () => {
         expect(pkgJson.engines.npm).toBeUndefined();
       });
 
-      it('should set only node>=24 for pnpm (no npm engine)', async () => {
+      it('should set only node>=22 for pnpm (no npm engine)', async () => {
         await runCreate('pnpm-engines', { yes: true, pm: 'pnpm' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'pnpm-engines', 'package.json'), 'utf8'));

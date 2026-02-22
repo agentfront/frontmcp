@@ -101,12 +101,21 @@ interface AnonymousSessionOptions {
   access: 'authorized',
 })
 export default class SessionVerifyFlow extends FlowBase<typeof name> {
+  logger = this.scopeLogger.child('SessionVerifyFlow');
+
+  private maskSub(sub: string | undefined): string {
+    if (!sub) return '***';
+    if (sub.length <= 10) return '***' + sub.slice(-4);
+    return sub.slice(0, 6) + '***' + sub.slice(-4);
+  }
+
   /**
    * Create an anonymous session with consistent structure for both public and transparent-anon modes.
    * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
    */
   private createAnonymousSession(options: AnonymousSessionOptions): void {
     const { authMode, issuer, scopes = ['anonymous'], sessionIdHeader } = options;
+    this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
     const machineId = getMachineId();
 
     // If client sent session ID, use it for transport lookup
@@ -200,6 +209,13 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
     const prmMetadataHeader = `Bearer resource_metadata="${baseUrl}${prmMetadataPath}"`;
 
+    this.logger.verbose('parseInput', {
+      hasAuthHeader: !!authorizationHeader,
+      hasToken: !!token,
+      sessionProtocol,
+      hasSessionId: !!sessionIdHeader,
+    });
+
     this.state.set({
       baseUrl,
       authorizationHeader,
@@ -234,6 +250,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
+    this.logger.info('handlePublicMode: allowing anonymous access (public mode)');
+
     // Use shared helper for anonymous session creation
     this.createAnonymousSession({
       authMode: 'public',
@@ -257,6 +275,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     },
   })
   async handleAnonymousFallback() {
+    this.logger.verbose('handleAnonymousFallback: creating anonymous session (transparent-anon)');
     const authOptions = this.scope.auth?.options as TransparentAuthOptions | undefined;
     const scopes = authOptions?.anonymousScopes ?? ['anonymous'];
 
@@ -284,6 +303,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     },
   })
   async requireAuthorizationOrChallenge() {
+    this.logger.verbose('requireAuthorizationOrChallenge: returning 401');
     this.respond({
       kind: 'unauthorized',
       prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -307,6 +327,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // When authorizationHeader exists but extractBearerToken returns undefined,
     // we should return 401 rather than throwing an error
     if (!token) {
+      this.logger.warn('verifyIfJwt: missing or empty bearer token, returning 401');
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -316,6 +337,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     if (!isJwt(token)) {
       // Non-JWT tokens are not supported - require JWT for verification
+      this.logger.warn('verifyIfJwt: token is not a JWT, returning 401');
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -327,6 +349,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // Add defensive null check for this.scope.auth (consistent with line 130)
     const auth = this.scope.auth;
     if (!auth) {
+      this.logger.warn('verifyIfJwt: auth registry not available, returning 401');
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -338,6 +361,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const authOptions = auth.options;
 
     // Transparent mode uses remote provider's keys, all other modes use local keys
+    const mode = isTransparentMode(authOptions) ? 'transparent' : 'gateway';
+    this.logger.verbose(`verifyIfJwt: verifying using ${mode} mode`);
     if (isTransparentMode(authOptions)) {
       const primary = authOptions as TransparentAuthOptions;
       const issuer = auth.issuer;
@@ -361,6 +386,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.state.set({ jwtPayload: result.payload });
       return;
     }
+    this.logger.warn('verifyIfJwt: JWT verification failed', { error: result.error });
     this.respond({
       kind: 'unauthorized',
       prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -386,6 +412,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     } = this.state;
 
     const session = parseSessionHeader(sessionIdHeader, token);
+    this.logger.verbose('parseSessionHeader', { hasSessionId: !!sessionIdHeader, parsed: !!session });
     if (session) {
       this.state.set('session', session);
     }
@@ -397,6 +424,11 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       required: { token, user },
       session,
     } = this.state;
+
+    this.logger.info('Session verified successfully', {
+      sub: this.maskSub(user.sub),
+      hasSession: !!session,
+    });
 
     this.respond({
       kind: 'authorized',

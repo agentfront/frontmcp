@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { Token, tokenName } from '@frontmcp/di';
-import { AppType, FrontMcpConfigType, ScopeEntry, ScopeRecord, ScopeKind } from '../common';
+import { AppType, FrontMcpConfigType, FrontMcpLogger, ScopeEntry, ScopeRecord, ScopeKind } from '../common';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
@@ -10,9 +10,12 @@ import { Scope } from './scope.instance';
 import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {
+  private logger?: FrontMcpLogger;
+
   constructor(globalProviders: ProviderRegistry) {
     const metadata = globalProviders.get(FrontMcpConfig);
     super('ScopeRegistry', globalProviders, metadata);
+    this.logger = globalProviders.get(FrontMcpLogger)?.child('ScopeRegistry');
   }
 
   protected override buildMap(metadata: FrontMcpConfigType): RegistryBuildMapResult<ScopeRecord> {
@@ -81,6 +84,7 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
   }
 
   protected async initialize() {
+    this.logger?.verbose(`ScopeRegistry: initializing ${this.tokens.size} scope(s)`);
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
 
@@ -98,7 +102,9 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
 
       await scope.ready;
       this.instances.set(token, scope);
+      this.logger?.verbose(`ScopeRegistry: initialized scope '${tokenName(token)}'`);
     }
+    this.logger?.verbose(`ScopeRegistry: initialization complete (${this.instances.size} scope(s))`);
   }
 
   /**

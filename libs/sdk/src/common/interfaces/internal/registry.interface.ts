@@ -106,6 +106,7 @@ export interface AppRegistryInterface {
 
 export interface PluginRegistryInterface {
   getPlugins(): PluginEntry[];
+  getPluginNames(): string[];
 }
 
 export interface AdapterRegistryInterface {

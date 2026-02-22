@@ -265,6 +265,33 @@ interface SkillChangeEvent {
 }
 ```
 
+## SkillEntry Accessors
+
+Each skill in the registry is a `SkillEntry` with these accessor methods:
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `getDescription()` | `string` | Skill description |
+| `getToolRefs()` | `SkillToolRef[]` | Normalized tool references |
+| `getToolNames()` | `string[]` | Tool name strings |
+| `getTags()` | `string[]` | Categorization tags |
+| `getPriority()` | `number` | Search ranking priority |
+| `isHidden()` | `boolean` | Whether hidden from discovery |
+| `getLicense()` | `string \| undefined` | License (per Agent Skills spec) |
+| `getCompatibility()` | `string \| undefined` | Compatibility notes (per Agent Skills spec) |
+| `getSpecMetadata()` | `Record<string, string> \| undefined` | Arbitrary metadata (per Agent Skills spec) |
+| `getAllowedTools()` | `string \| undefined` | Pre-approved tools (per Agent Skills spec) |
+| `getResources()` | `SkillResources \| undefined` | Bundled resource directories |
+
+```typescript
+const skill = registry.findByName('review-pr');
+if (skill) {
+  console.log(skill.getLicense());       // 'MIT'
+  console.log(skill.getCompatibility()); // 'Requires git CLI'
+  console.log(skill.getResources());     // { scripts: '...', references: '...' }
+}
+```
+
 ## Skill Visibility
 
 Skills can have different visibility modes:

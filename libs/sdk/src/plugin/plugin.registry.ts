@@ -23,6 +23,7 @@ import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { InvalidPluginScopeError, RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 import { installContextExtensions } from '../context';
+import { FrontMcpLogger } from '../common';
 
 /**
  * Scope information for plugin hook registration.
@@ -60,6 +61,7 @@ export default class PluginRegistry
   private readonly scope: Scope;
   private readonly scopeInfo?: PluginScopeInfo;
   private readonly owner?: EntryOwnerRef;
+  private readonly logger?: FrontMcpLogger;
 
   constructor(
     providers: ProviderRegistry,
@@ -77,10 +79,24 @@ export default class PluginRegistry
     this.scope = providers.getActiveScope();
     this.scopeInfo = scopeInfo;
     this.owner = owner;
+    try {
+      this.logger = providers.get(FrontMcpLogger)?.child('PluginRegistry');
+    } catch (e) {
+      console.debug('PluginRegistry: logger initialization failed', e);
+    }
   }
 
   getPlugins(): PluginEntry[] {
     return [...this.instances.values()];
+  }
+
+  /**
+   * Returns the names of all registered plugins from their definition records.
+   * Unlike getPlugins().map(p => p.metadata.name), this is safe because
+   * raw plugin instances (e.g. DynamicPlugin subclasses) may not carry a .metadata property.
+   */
+  getPluginNames(): string[] {
+    return [...this.defs.values()].map((rec) => rec.metadata.name);
   }
 
   protected override buildMap(list: PluginType[]): RegistryBuildMapResult<PluginRecord> {
@@ -114,6 +130,7 @@ export default class PluginRegistry
   }
 
   protected async initialize() {
+    this.logger?.verbose(`PluginRegistry: initializing ${this.tokens.size} plugin(s)`);
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
       const deps = this.graph.get(token)!;
@@ -284,6 +301,9 @@ export default class PluginRegistry
         }
       }
       this.instances.set(token, pluginInstance);
+      this.logger?.verbose(
+        `PluginRegistry: registered plugin '${rec.metadata.name}' (${hooks.length} hook(s), ${contextExtensions?.length ?? 0} context extension(s))`,
+      );
     }
   }
 }

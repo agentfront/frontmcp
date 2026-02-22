@@ -2,6 +2,7 @@ import {
   FrontMcpConfigInput,
   FrontMcpConfigType,
   FrontMcpInterface,
+  FrontMcpLogger,
   FrontMcpServer,
   ScopeEntry,
   frontMcpMetadataSchema,
@@ -24,6 +25,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   private logger: LoggerRegistry;
   private providers: ProviderRegistry;
   private scopes: ScopeRegistry;
+  private log?: FrontMcpLogger;
 
   constructor(config: FrontMcpConfigType) {
     this.config = config;
@@ -37,11 +39,18 @@ export class FrontMcpInstance implements FrontMcpInterface {
     this.logger = new LoggerRegistry(this.providers);
     await this.logger.ready;
 
+    this.log = this.providers.get(FrontMcpLogger);
+    const name = this.config.info?.name;
+    const version = this.config.info?.version;
+    const tag = [name, version].filter(Boolean).join(' v');
+    this.log?.info(`Initializing FrontMCP${tag ? ` "${tag}"` : ''}...`);
+
     this.scopes = new ScopeRegistry(this.providers);
     await this.scopes.ready;
   }
 
   async start() {
+    this.log?.info('Starting FrontMCP server...');
     const server = this.providers.get(FrontMcpServer);
     if (!server) {
       throw new ServerNotFoundError();
@@ -69,6 +78,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await frontMcp.ready;
 
     await frontMcp.start();
+    frontMcp.log?.info('FrontMCP bootstrap complete');
   }
 
   /**
@@ -92,6 +102,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     server.prepare();
+    frontMcp.log?.info('FrontMCP handler created (serverless mode)');
     return server.getHandler();
   }
 
@@ -159,6 +170,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     // Return a DirectMcpServer wrapping the first scope
+    frontMcp.log?.info('FrontMCP direct server created');
     return new DirectMcpServerImpl(scopes[0] as Scope);
   }
 
@@ -236,7 +248,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     await frontMcp.ready;
 
     await frontMcp.start();
-    console.log(`MCP server listening on unix://${socketPath}`);
+    frontMcp.log?.info(`MCP server listening on unix://${socketPath}`);
 
     // Cleanup function to remove socket file and signal handlers
     const cleanup = async () => {

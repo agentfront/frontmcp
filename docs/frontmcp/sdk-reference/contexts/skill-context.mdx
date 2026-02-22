@@ -56,6 +56,19 @@ interface SkillContent {
   }>;
   parameters?: SkillParameter[];
   examples?: SkillExample[];
+
+  // Agent Skills spec fields
+  license?: string;
+  compatibility?: string;
+  specMetadata?: Record<string, string>;
+  allowedTools?: string;
+  resources?: SkillResources;
+}
+
+interface SkillResources {
+  scripts?: string;    // Path to scripts directory
+  references?: string; // Path to references directory
+  assets?: string;     // Path to assets directory
 }
 ```
 

@@ -7,6 +7,12 @@
  * multi-step tasks using tools. Unlike tools (individual actions), skills are
  * recipes/playbooks that combine tools into coherent workflows.
  *
+ * Aligned with the Anthropic Agent Skills specification, supporting:
+ * - SKILL.md frontmatter parsing
+ * - Skill directory loading (scripts/, references/, assets/)
+ * - Spec fields: license, compatibility, specMetadata, allowedTools, resources
+ * - Strict name validation (kebab-case, max 64 chars)
+ *
  * @example Defining a skill with decorator
  * ```typescript
  * @Skill({
@@ -17,6 +23,7 @@
  *     2. Review each changed file...
  *   `,
  *   tools: ['github_get_pr', 'github_add_comment'],
+ *   license: 'MIT',
  * })
  * class ReviewPRSkill extends SkillContext { ... }
  * ```
@@ -29,6 +36,11 @@
  *   instructions: { file: './skills/deploy.md' },
  *   tools: ['docker_build', 'k8s_apply'],
  * });
+ * ```
+ *
+ * @example Loading a skill directory
+ * ```typescript
+ * const mySkill = await skillDir('./skills/review-pr');
  * ```
  *
  * @module skill
@@ -112,6 +124,19 @@ export {
   buildSkillContent,
   formatSkillForLLM,
 } from './skill.utils';
+
+// SKILL.md Parser
+export {
+  parseSkillMdFrontmatter,
+  skillMdFrontmatterToMetadata,
+  loadSkillMdFile,
+  stripFrontmatter,
+} from './skill-md-parser';
+export type { SkillMdParseResult } from './skill-md-parser';
+
+// Directory Loader
+export { loadSkillDirectory, scanSkillResources, skillDir } from './skill-directory-loader';
+export type { ScanResult } from './skill-directory-loader';
 
 // HTTP Utilities
 export {
