@@ -17,6 +17,15 @@ jest.mock('@frontmcp/utils', () => ({
   randomUUID: jest.fn(() => MOCK_UUID),
   randomBytes: jest.fn(() => new Uint8Array(8)),
   bytesToHex: jest.fn(() => 'deadbeef01234567'),
+  base64urlDecode: jest.fn((input: string) => {
+    // Real base64url decode for JWT header validation
+    const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }),
 }));
 
 const MOCK_ENCRYPTED = 'iv123.tag456.ct789';
@@ -599,6 +608,17 @@ describe('AuthorizationBase', () => {
 
     it('should handle arrays without throwing for safe data', () => {
       expect(() => AuthorizationBase.validateNoTokenLeakage([1, 'hello', { safe: true }])).not.toThrow();
+    });
+
+    it('should not throw for domain-like strings (e.g. api.example.com)', () => {
+      expect(() => AuthorizationBase.validateNoTokenLeakage({ url: 'api.example.com' })).not.toThrow();
+      expect(() => AuthorizationBase.validateNoTokenLeakage({ domain: 'service.example.org' })).not.toThrow();
+      expect(() => AuthorizationBase.validateNoTokenLeakage({ namespace: 'com.example.app' })).not.toThrow();
+    });
+
+    it('should not throw for version-like or IP-like strings', () => {
+      expect(() => AuthorizationBase.validateNoTokenLeakage({ version: '1.2.3' })).not.toThrow();
+      expect(() => AuthorizationBase.validateNoTokenLeakage({ ip: '192.168.1.1' })).not.toThrow();
     });
   });
 });

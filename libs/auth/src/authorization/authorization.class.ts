@@ -1,6 +1,6 @@
 // auth/authorization/authorization.class.ts
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, base64urlDecode } from '@frontmcp/utils';
 import {
   Authorization,
   AuthorizationCreateCtx,
@@ -238,6 +238,20 @@ export abstract class AuthorizationBase implements Authorization {
   }
 
   /**
+   * Check if a base64url segment decodes to a JWT-like header (contains "alg").
+   */
+  private static isJwtHeader(segment: string): boolean {
+    try {
+      const bytes = base64urlDecode(segment);
+      const text = new TextDecoder().decode(bytes);
+      const parsed = JSON.parse(text);
+      return typeof parsed === 'object' && parsed !== null && typeof parsed.alg === 'string';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Validate that no tokens are leaked in data
    * Throws if JWT pattern detected
    */
@@ -273,7 +287,7 @@ export abstract class AuthorizationBase implements Authorization {
             const seg1 = json.substring(seg1Start, dotIdx);
             const seg2 = json.substring(dotIdx + 1, dot2);
             const seg3 = json.substring(dot2 + 1, seg3End);
-            if (B64URL.test(seg1) && B64URL.test(seg2) && B64URL.test(seg3)) {
+            if (B64URL.test(seg1) && B64URL.test(seg2) && B64URL.test(seg3) && AuthorizationBase.isJwtHeader(seg1)) {
               throw new TokenLeakDetectedError('JWT pattern detected in LLM context data');
             }
           }
