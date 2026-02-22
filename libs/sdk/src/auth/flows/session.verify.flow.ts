@@ -103,7 +103,8 @@ interface AnonymousSessionOptions {
 export default class SessionVerifyFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('SessionVerifyFlow');
 
-  private maskSub(sub: string): string {
+  private maskSub(sub: string | undefined): string {
+    if (!sub) return '***';
     if (sub.length <= 10) return '***' + sub.slice(-4);
     return sub.slice(0, 6) + '***' + sub.slice(-4);
   }

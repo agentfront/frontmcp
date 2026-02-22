@@ -244,31 +244,42 @@ export abstract class AuthorizationBase implements Authorization {
   static validateNoTokenLeakage(data: unknown): void {
     const json = JSON.stringify(data);
 
-    // Detect JWT pattern using indexOf pre-check to avoid polynomial regex
-    const JWT_SEGMENT = /^[A-Za-z0-9_-]+$/;
-    let idx = json.indexOf('eyJ');
-    while (idx !== -1) {
-      const dot1 = json.indexOf('.', idx);
-      if (dot1 > idx) {
-        const seg1 = json.substring(idx, dot1);
-        const afterDot1 = dot1 + 1;
-        if (json.startsWith('eyJ', afterDot1)) {
-          const dot2 = json.indexOf('.', afterDot1);
-          if (dot2 > afterDot1) {
-            const seg2 = json.substring(afterDot1, dot2);
-            // Find end of third segment (next non-base64url char or end)
-            let end = dot2 + 1;
-            while (end < json.length && /[A-Za-z0-9_-]/.test(json[end])) end++;
-            if (end > dot2 + 1) {
-              const seg3 = json.substring(dot2 + 1, end);
-              if (JWT_SEGMENT.test(seg1) && JWT_SEGMENT.test(seg2) && JWT_SEGMENT.test(seg3)) {
-                throw new TokenLeakDetectedError('JWT pattern detected in LLM context data');
-              }
+    // Detect any three-segment base64url pattern (JWT-like: seg1.seg2.seg3)
+    // Uses indexOf('.') scan to avoid polynomial regex while not requiring 'eyJ' prefix
+    const B64URL = /^[A-Za-z0-9_-]+$/;
+    const MIN_SEG = 2; // minimum segment length to reduce false positives
+
+    let dotIdx = json.indexOf('.');
+    while (dotIdx !== -1) {
+      // Walk backwards from dot to find seg1 start
+      let seg1Start = dotIdx;
+      while (seg1Start > 0 && /[A-Za-z0-9_-]/.test(json[seg1Start - 1])) seg1Start--;
+      const seg1Len = dotIdx - seg1Start;
+
+      if (seg1Len >= MIN_SEG) {
+        // Walk forward from dot to find seg2 end (next dot or non-base64url char)
+        let seg2End = dotIdx + 1;
+        while (seg2End < json.length && /[A-Za-z0-9_-]/.test(json[seg2End])) seg2End++;
+        const seg2Len = seg2End - (dotIdx + 1);
+
+        if (seg2Len >= MIN_SEG && seg2End < json.length && json[seg2End] === '.') {
+          // Found second dot — walk forward to find seg3 end
+          const dot2 = seg2End;
+          let seg3End = dot2 + 1;
+          while (seg3End < json.length && /[A-Za-z0-9_-]/.test(json[seg3End])) seg3End++;
+          const seg3Len = seg3End - (dot2 + 1);
+
+          if (seg3Len >= MIN_SEG) {
+            const seg1 = json.substring(seg1Start, dotIdx);
+            const seg2 = json.substring(dotIdx + 1, dot2);
+            const seg3 = json.substring(dot2 + 1, seg3End);
+            if (B64URL.test(seg1) && B64URL.test(seg2) && B64URL.test(seg3)) {
+              throw new TokenLeakDetectedError('JWT pattern detected in LLM context data');
             }
           }
         }
       }
-      idx = json.indexOf('eyJ', idx + 1);
+      dotIdx = json.indexOf('.', dotIdx + 1);
     }
 
     // Detect sensitive field names

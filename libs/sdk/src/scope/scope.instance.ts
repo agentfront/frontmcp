@@ -181,7 +181,7 @@ export class Scope extends ScopeEntry {
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
     const toolNames = this.scopeTools.getTools(true).map((t) => t.metadata.name);
-    this.logger.verbose(`ToolRegistry initialized (${toolNames.length} tool(s): [${toolNames.join(', ')}])`);
+    this.logger.verbose(`ToolRegistry initialized with initial ${toolNames.length} tool(s): [${toolNames.join(', ')}]`);
 
     // Register sendElicitationResult system tool (hidden by default)
     // This tool is used for fallback elicitation with non-supporting clients
