@@ -57,6 +57,7 @@
   },
   "dependencies": {
     "@frontmcp/plugin-cache": "0.11.1",
+    "@frontmcp/plugin-approval": "0.11.1",
     "@frontmcp/plugin-codecall": "0.11.1",
     "@frontmcp/plugin-dashboard": "0.11.1",
     "@frontmcp/plugin-remember": "0.11.1"

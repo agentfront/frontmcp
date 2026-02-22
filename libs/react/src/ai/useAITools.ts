@@ -54,7 +54,7 @@ export function useAITools<P extends LLMPlatform>(platform: P): UseAIToolsResult
       }
       try {
         const rawResult = await server.callTool(name, args);
-        return formatResultForPlatform(rawResult as Parameters<typeof formatResultForPlatform>[0], platform);
+        return formatResultForPlatform(rawResult, platform);
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);

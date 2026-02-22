@@ -11,6 +11,7 @@ export interface McpNavigationProps {
 }
 
 export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.ReactElement {
+  const normalizedBase = basePath.replace(/\/+$/, '') || '/';
   const { tools, resources, prompts, status, error } = useFrontMcp();
 
   if (status === 'error') {
@@ -39,7 +40,7 @@ export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.
             React.createElement(
               'li',
               { key: t.name },
-              React.createElement(Link, { to: `${basePath}/tools/${encodeURIComponent(t.name)}` }, t.name),
+              React.createElement(Link, { to: `${normalizedBase}/tools/${encodeURIComponent(t.name)}` }, t.name),
             ),
           ),
         ),
@@ -56,7 +57,11 @@ export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.
             React.createElement(
               'li',
               { key: r.uri },
-              React.createElement(Link, { to: `${basePath}/resources/${encodeURIComponent(r.uri)}` }, r.name ?? r.uri),
+              React.createElement(
+                Link,
+                { to: `${normalizedBase}/resources/${encodeURIComponent(r.uri)}` },
+                r.name ?? r.uri,
+              ),
             ),
           ),
         ),
@@ -73,7 +78,7 @@ export function McpNavigation({ basePath = '/mcp' }: McpNavigationProps): React.
             React.createElement(
               'li',
               { key: p.name },
-              React.createElement(Link, { to: `${basePath}/prompts/${encodeURIComponent(p.name)}` }, p.name),
+              React.createElement(Link, { to: `${normalizedBase}/prompts/${encodeURIComponent(p.name)}` }, p.name),
             ),
           ),
         ),

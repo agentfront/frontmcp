@@ -43,3 +43,8 @@ export class Buffer {
 // HTTP/2 stubs
 export class Http2ServerRequest {}
 export class Http2ServerResponse {}
+
+// @hono/node-server stubs
+export function getRequestListener() {
+  return noop;
+}

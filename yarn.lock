@@ -1138,7 +1138,7 @@
   dependencies:
     tslib "^2.4.0"
 
-"@enclave-vm/ast@2.11.1", "@enclave-vm/ast@^2.11.1":
+"@enclave-vm/ast@2.11.1", "@enclave-vm/ast@^2.10.1", "@enclave-vm/ast@^2.11.1":
   version "2.11.1"
   resolved "https://registry.yarnpkg.com/@enclave-vm/ast/-/ast-2.11.1.tgz#092a345b2f6f3a0c2840b947de7340c0a350c030"
   integrity sha512-VvctvbTj8oSViX+RF2coimvw3Ts2ORhO3lZBR83E5SoG/L2qHn3LROVUEuuIW9UOcPiqopZsaf+T9CH1dmu+ZQ==
@@ -1148,7 +1148,7 @@
     acorn-walk "8.3.4"
     astring "1.9.0"
 
-"@enclave-vm/core@^2.11.1":
+"@enclave-vm/core@^2.10.1", "@enclave-vm/core@^2.11.1":
   version "2.11.1"
   resolved "https://registry.yarnpkg.com/@enclave-vm/core/-/core-2.11.1.tgz#487bd617924a94c6c990e9f46752c816b08d3388"
   integrity sha512-4iJfR9rfkkaB/W11HqHsuTL7LhA6FGNemhSfozrgiQivbADcT3qU8ZjG357ENkA5zOm/zniiAZYXWX2/CZ2/og==
@@ -1392,6 +1392,66 @@
   version "0.2.10"
   resolved "https://registry.yarnpkg.com/@floating-ui/utils/-/utils-0.2.10.tgz#a2a1e3812d14525f725d011a73eceb41fef5bc1c"
   integrity sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==
+
+"@frontmcp/auth@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@frontmcp/auth/-/auth-0.9.0.tgz#25a412553f32954816a59d6b7add92f35df16749"
+  integrity sha512-GgNaev8unj6t/mGnC9zyCrHXSijmTzysqyJbi1/n2Fmmw5Ud/5Sfooi3O9/sMTnfBCXS/0sHWMt1+YdFji4jIw==
+  dependencies:
+    "@frontmcp/utils" "0.9.0"
+    jose "^6.0.0"
+
+"@frontmcp/di@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@frontmcp/di/-/di-0.9.0.tgz#45f900d854f22a96a17b82a0a97edee6df7fa0b5"
+  integrity sha512-yDIvsRcugaVrPjT12rnUAJKaMCi+g13cH0LphtcaXFBO9HLzn6k/TBNdiYIQEI/JwIvmY4DEBxGP2mYkuxVO0Q==
+  dependencies:
+    mitt "^3.0.1"
+
+"@frontmcp/sdk@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@frontmcp/sdk/-/sdk-0.9.0.tgz#141de6939ba2a82d020f340cd7b77fa4bd7f693c"
+  integrity sha512-PXocUkhxOJIB+QLs44RSzQhu03U/126LIxM9ZJbW9eC0fM1dF856+lbdSH2Z7JFCfc1n6ARx3cR0r0QvVw19wQ==
+  dependencies:
+    "@frontmcp/auth" "0.9.0"
+    "@frontmcp/di" "0.9.0"
+    "@frontmcp/uipack" "0.9.0"
+    "@frontmcp/utils" "0.9.0"
+    "@langchain/anthropic" "^1.3.3"
+    "@langchain/core" "^1.1.8"
+    "@langchain/openai" "^1.2.0"
+    "@modelcontextprotocol/sdk" "1.25.3"
+    ioredis "^5.8.0"
+    jose "^6.1.3"
+    js-yaml "^4.1.1"
+    reflect-metadata "^0.2.2"
+  optionalDependencies:
+    "@langchain/google-genai" "^2.1.3"
+    "@langchain/groq" "^1.0.2"
+    "@langchain/mistralai" "^1.0.2"
+
+"@frontmcp/uipack@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@frontmcp/uipack/-/uipack-0.9.0.tgz#bee92c128bbf427ccffc6121e6437e4184b27fa1"
+  integrity sha512-entY51e68fKc/suMxOXmq2KG6Jd35D3HfxTP/jaP/WfbU2H1GF4oI90BdmDjY9NFkvyQvsVUlg5gVLVFnb9d6Q==
+  dependencies:
+    "@enclave-vm/core" "^2.10.1"
+    "@frontmcp/utils" "0.9.0"
+    "@swc/core" "^1.5.0"
+    dompurify "^3.3.1"
+    esbuild "^0.27.1"
+    handlebars "^4.7.8"
+    zod "^4.0.0"
+
+"@frontmcp/utils@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@frontmcp/utils/-/utils-0.9.0.tgz#6e1f3e435b472c9b8864b51787427c03373acd34"
+  integrity sha512-q6rBSUlZur7cMnX3nZRC6RcM/uKkA+hGbhlxlG0p1jWadSoWk8JZYkf6oLoX2TD1xzVIKN5sBpG88OflJXVuHw==
+  dependencies:
+    "@enclave-vm/ast" "^2.10.1"
+    "@noble/ciphers" "^2.1.1"
+    "@noble/hashes" "^2.0.1"
+    zod "^4.0.0"
 
 "@google/generative-ai@^0.24.0":
   version "0.24.1"
@@ -2355,6 +2415,28 @@
     spawn-rx "^5.1.2"
     ts-node "^10.9.2"
     zod "^3.25.76"
+
+"@modelcontextprotocol/sdk@1.25.3":
+  version "1.25.3"
+  resolved "https://registry.yarnpkg.com/@modelcontextprotocol/sdk/-/sdk-1.25.3.tgz#a665ae5f983a5cdfe1a1809aafb48110b04faef1"
+  integrity sha512-vsAMBMERybvYgKbg/l4L1rhS7VXV1c0CtyJg72vwxONVX0l4ZfKVAnZEWTQixJGTzKnELjQ59e4NbdFDALRiAQ==
+  dependencies:
+    "@hono/node-server" "^1.19.9"
+    ajv "^8.17.1"
+    ajv-formats "^3.0.1"
+    content-type "^1.0.5"
+    cors "^2.8.5"
+    cross-spawn "^7.0.5"
+    eventsource "^3.0.2"
+    eventsource-parser "^3.0.0"
+    express "^5.0.1"
+    express-rate-limit "^7.5.0"
+    jose "^6.1.1"
+    json-schema-typed "^8.0.2"
+    pkce-challenge "^5.0.0"
+    raw-body "^3.0.0"
+    zod "^3.25 || ^4.0"
+    zod-to-json-schema "^3.25.0"
 
 "@modelcontextprotocol/sdk@1.26.0", "@modelcontextprotocol/sdk@^1.24.0", "@modelcontextprotocol/sdk@^1.25.2", "@modelcontextprotocol/sdk@^1.26.0":
   version "1.26.0"
@@ -7040,7 +7122,7 @@ esast-util-from-js@^2.0.0:
     esast-util-from-estree "^2.0.0"
     vfile-message "^4.0.0"
 
-esbuild@^0.27.0, esbuild@^0.27.3, esbuild@~0.27.0:
+esbuild@^0.27.0, esbuild@^0.27.1, esbuild@^0.27.3, esbuild@~0.27.0:
   version "0.27.3"
   resolved "https://registry.yarnpkg.com/esbuild/-/esbuild-0.27.3.tgz#5859ca8e70a3af956b26895ce4954d7e73bd27a8"
   integrity sha512-8VwMnyGCONIs6cWue2IdpHxHnAjzxnw2Zr7MkVxB2vjmQ2ivqGFb4LEG3SMnv0Gb2F/G/2yA8zUaiL1gywDCCg==
@@ -7376,6 +7458,11 @@ express-rate-limit@5.5.1:
   resolved "https://registry.yarnpkg.com/express-rate-limit/-/express-rate-limit-5.5.1.tgz#110c23f6a65dfa96ab468eda95e71697bc6987a2"
   integrity sha512-MTjE2eIbHv5DyfuFz4zLYWxpqVhEhkTiwFGuB74Q9CSou2WHO52nlE5y3Zlg6SIsiYUIPj6ifFxnkPz6O3sIUg==
 
+express-rate-limit@^7.5.0:
+  version "7.5.1"
+  resolved "https://registry.yarnpkg.com/express-rate-limit/-/express-rate-limit-7.5.1.tgz#8c3a42f69209a3a1c969890070ece9e20a879dec"
+  integrity sha512-7iN8iPMDzOMHPUYllBEsQdWVB6fPDMPqwjBaFrgr4Jgr/+okjvzAy+UHlYYL/Vs0OsOrMkwS6PJDkFlJwoxUnw==
+
 express-rate-limit@^8.2.1:
   version "8.2.1"
   resolved "https://registry.yarnpkg.com/express-rate-limit/-/express-rate-limit-8.2.1.tgz#ec75fdfe280ecddd762b8da8784c61bae47d7f7f"
@@ -7420,7 +7507,7 @@ express@4.22.1, express@^4.22.1:
     utils-merge "1.0.1"
     vary "~1.1.2"
 
-express@^5.1.0, express@^5.2.1:
+express@^5.0.1, express@^5.1.0, express@^5.2.1:
   version "5.2.1"
   resolved "https://registry.yarnpkg.com/express/-/express-5.2.1.tgz#8f21d15b6d327f92b4794ecf8cb08a72f956ac04"
   integrity sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==
@@ -9244,7 +9331,7 @@ jest@^30.0.2:
     import-local "^3.2.0"
     jest-cli "30.2.0"
 
-jose@^6.0.0, jose@^6.0.11, jose@^6.1.0, jose@^6.1.3:
+jose@^6.0.0, jose@^6.0.11, jose@^6.1.0, jose@^6.1.1, jose@^6.1.3:
   version "6.1.3"
   resolved "https://registry.yarnpkg.com/jose/-/jose-6.1.3.tgz#8453d7be88af7bb7d64a0481d6a35a0145ba3ea5"
   integrity sha512-0TpaTfihd4QMNwrz/ob2Bp7X04yuxJkjRGi4aKmOqwhov54i6u79oCv7T+C7lo70MKH6BesI3vscD1yb/yzKXQ==
@@ -14454,7 +14541,7 @@ zod-from-json-schema@^0.5.2:
   dependencies:
     zod "^4.0.17"
 
-zod-to-json-schema@^3.24.1, zod-to-json-schema@^3.25.1:
+zod-to-json-schema@^3.24.1, zod-to-json-schema@^3.25.0, zod-to-json-schema@^3.25.1:
   version "3.25.1"
   resolved "https://registry.yarnpkg.com/zod-to-json-schema/-/zod-to-json-schema-3.25.1.tgz#7f24962101a439ddade2bf1aeab3c3bfec7d84ba"
   integrity sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==

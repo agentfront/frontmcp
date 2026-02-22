@@ -99,7 +99,6 @@ export function FrontMcpProvider({
       mountedRef.current = false;
       clientRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const contextValue = useMemo(

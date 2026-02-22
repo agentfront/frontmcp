@@ -50,7 +50,7 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
         }
         current = (current as unknown as unknown[])[index] as Record<string, unknown>;
       } else {
-        return; // not an array — cannot traverse
+        throw new TypeError(`Expected array at path segment "${segment}", but found ${typeof current}`);
       }
     } else {
       if (!isSafeKey(segment)) return;
@@ -68,7 +68,7 @@ function setNestedValue(obj: unknown, path: string[], value: unknown): void {
     if (Array.isArray(current)) {
       (current as unknown as unknown[])[index] = value;
     } else {
-      return; // not an array — cannot set
+      throw new TypeError(`Expected array at path segment "${lastSegment}", but found ${typeof current}`);
     }
   } else {
     if (!isSafeKey(lastSegment)) return;
