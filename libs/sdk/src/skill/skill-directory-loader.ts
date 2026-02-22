@@ -105,7 +105,7 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
   // Validate name matches directory name (per spec recommendation)
   const dirName = dirPath.split('/').filter(Boolean).pop();
   if (partialMetadata.name && dirName && partialMetadata.name !== dirName) {
-    // Warn but don't fail — directory name mismatch is not fatal
+    console.warn(`Skill name "${partialMetadata.name}" does not match directory name "${dirName}"`);
   }
 
   // Ensure required fields

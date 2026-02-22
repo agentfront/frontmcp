@@ -81,8 +81,8 @@ export default class PluginRegistry
     this.owner = owner;
     try {
       this.logger = providers.get(FrontMcpLogger)?.child('PluginRegistry');
-    } catch {
-      // Logger not available
+    } catch (e) {
+      console.debug('PluginRegistry: logger initialization failed', e);
     }
   }
 

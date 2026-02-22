@@ -82,6 +82,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     const authorization = request[ServerRequestTokens.auth] as Authorization;
     const { token } = authorization;
+    const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
 
     // CRITICAL: The mcp-session-id header is the client's reference to their session.
     // We MUST use this exact ID for transport registry lookup.
@@ -96,7 +97,6 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     // If client sent a header but validation failed, return 404
     if (raw !== undefined && !mcpSessionHeader) {
-      const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
       logger.warn('parseInput: invalid mcp-session-id header');
       this.respond(httpRespond.sessionNotFound('invalid session id'));
       return;
@@ -131,7 +131,6 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     this.state.set(stateSchema.parse({ token, session }));
 
-    const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
     logger.info('parseInput: session resolved', { sessionId: session.id?.slice(0, 20) });
   }
 
@@ -184,7 +183,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { token, session } = this.state.required;
 
     logger.info('onInitialize: creating transport', {
-      sessionId: session.id.slice(0, 30),
+      sessionId: session.id?.slice(0, 20),
       hasToken: !!token,
       tokenPrefix: token?.slice(0, 10),
     });
@@ -480,10 +479,14 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     if (!transport) {
       const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, session.id);
       if (wasCreated) {
-        logger.warn('onExtApps: session expired/not initialized', { sessionId: session.id?.slice(0, 20) });
+        logger.info('onExtApps: session expired - client should re-initialize', {
+          sessionId: session.id?.slice(0, 20),
+        });
         this.respond(httpRespond.sessionExpired('session expired'));
       } else {
-        logger.warn('onExtApps: session expired/not initialized', { sessionId: session.id?.slice(0, 20) });
+        logger.warn('onExtApps: session not initialized - client attempted request without initializing', {
+          sessionId: session.id?.slice(0, 20),
+        });
         this.respond(httpRespond.sessionNotFound('session not initialized'));
       }
       return;
