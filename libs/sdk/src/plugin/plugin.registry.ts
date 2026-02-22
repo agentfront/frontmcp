@@ -81,8 +81,8 @@ export default class PluginRegistry
     this.owner = owner;
     try {
       this.logger = providers.get(FrontMcpLogger)?.child('PluginRegistry');
-    } catch {
-      // Logger not available
+    } catch (e) {
+      console.debug('PluginRegistry: logger initialization failed', e);
     }
   }
 
@@ -301,9 +301,8 @@ export default class PluginRegistry
         }
       }
       this.instances.set(token, pluginInstance);
-      this.logger?.verbose(`PluginRegistry: registered plugin '${rec.metadata.name}'`);
       this.logger?.verbose(
-        `Plugin '${rec.metadata.name}': ${hooks.length} hook(s), ${contextExtensions?.length ?? 0} context extension(s)`,
+        `PluginRegistry: registered plugin '${rec.metadata.name}' (${hooks.length} hook(s), ${contextExtensions?.length ?? 0} context extension(s))`,
       );
     }
   }
