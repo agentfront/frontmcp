@@ -116,13 +116,16 @@ export class Scope extends ScopeEntry {
 
     this.scopeHooks = new HookRegistry(scopeProviders, []);
     await this.scopeHooks.ready;
+    this.logger.verbose('HookRegistry initialized');
 
     this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow]);
     await this.scopeFlows.ready;
+    this.logger.verbose('FlowRegistry initialized');
 
     // Pass transport persistence config to TransportService
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
+    this.logger.verbose('TransportService initialized');
 
     // Initialize EventStore for SSE resumability support (optional)
     // Disabled by default because Claude.ai's client doesn't handle priming events correctly
@@ -152,8 +155,11 @@ export class Scope extends ScopeEntry {
 
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     await this.scopeAuth.ready;
+    this.logger.verbose('AuthRegistry initialized');
 
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
+    const appCount = this.metadata.apps.length;
+    this.logger.info(`Initializing ${appCount} app(s)...`);
     await this.scopeApps.ready;
 
     // Initialize server-level plugins (from @FrontMcp decorator)
@@ -168,10 +174,14 @@ export class Scope extends ScopeEntry {
 
       this.scopePlugins = new PluginRegistry(this.scopeProviders, serverPlugins, scopeRef, serverPluginScopeInfo);
       await this.scopePlugins.ready;
+      const pluginNames = this.scopePlugins.getPluginNames();
+      this.logger.verbose(`PluginRegistry initialized (${pluginNames.length} plugin(s): [${pluginNames.join(', ')}])`);
     }
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
+    const toolNames = this.scopeTools.getTools(true).map((t) => t.metadata.name);
+    this.logger.verbose(`ToolRegistry initialized with initial ${toolNames.length} tool(s): [${toolNames.join(', ')}]`);
 
     // Register sendElicitationResult system tool (hidden by default)
     // This tool is used for fallback elicitation with non-supporting clients
@@ -184,6 +194,7 @@ export class Scope extends ScopeEntry {
 
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeResources.ready;
+    this.logger.verbose(`ResourceRegistry initialized (${this.scopeResources.getResources().length} resource(s))`);
 
     // Register UI resource templates if any tools have UI configs
     // This enables resource capabilities to be advertised when tools have UI
@@ -315,14 +326,17 @@ export class Scope extends ScopeEntry {
 
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     await this.scopePrompts.ready;
+    this.logger.verbose(`PromptRegistry initialized (${this.scopePrompts.getPrompts().length} prompt(s))`);
 
     // Initialize agent registry (scope-level agents, typically none but allows for scope-wide agents)
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeAgents.ready;
+    this.logger.verbose(`AgentRegistry initialized (${this.scopeAgents.getAgents().length} agent(s))`);
 
     // Initialize skill registry (scope-level skills from @FrontMcp metadata)
     this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
     await this.scopeSkills.ready;
+    this.logger.verbose(`SkillRegistry initialized (${this.scopeSkills.getSkills().length} skill(s))`);
 
     // Initialize skill session manager if skills are available
     // Skill sessions enable tool authorization enforcement at runtime
@@ -396,6 +410,7 @@ export class Scope extends ScopeEntry {
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
+    this.logger.verbose('NotificationService initialized');
 
     // Register logging, completion, agent, and elicitation flows
     await this.scopeFlows.registryFlows([
@@ -407,7 +422,22 @@ export class Scope extends ScopeEntry {
     ]);
 
     await this.auth.ready;
-    this.logger.info('Initializing multi-app scope', this.metadata);
+
+    this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
+  }
+
+  private formatScopeSummary(): string {
+    const entries: string[] = [];
+    const add = (count: number, label: string) => {
+      if (count > 0) entries.push(`${count} ${label}${count !== 1 ? 's' : ''}`);
+    };
+    add(this.scopeApps.getApps().length, 'app');
+    add(this.scopeTools.getTools(true).length, 'tool');
+    add(this.scopeResources.getResources().length, 'resource');
+    add(this.scopePrompts.getPrompts().length, 'prompt');
+    add(this.scopeAgents.getAgents().length, 'agent');
+    add(this.scopeSkills.getSkills().length, 'skill');
+    return entries.length > 0 ? entries.join(', ') : 'empty';
   }
 
   private get defaultScopeProviders() {

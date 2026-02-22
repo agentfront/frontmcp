@@ -10,7 +10,7 @@
  */
 
 import type { SkillContent, SkillEntry, ToolRegistryInterface, ToolEntry } from '../common';
-import type { SkillVisibility } from '../common/metadata/skill.metadata';
+import type { SkillVisibility, SkillResources } from '../common/metadata/skill.metadata';
 import type { SkillRegistryInterface as SkillRegistryInterfaceType } from './skill.registry';
 
 /**
@@ -67,6 +67,11 @@ export function formatSkillsForLlmCompact(skills: SkillEntry[]): string {
     const tags = skill.metadata.tags;
     if (tags && tags.length > 0) {
       lines.push(`Tags: ${tags.join(', ')}`);
+    }
+
+    // License (if any)
+    if (skill.metadata.license) {
+      lines.push(`License: ${skill.metadata.license}`);
     }
 
     parts.push(lines.join('\n'));
@@ -132,6 +137,16 @@ export function formatSkillForLLMWithSchemas(
   parts.push('');
   parts.push(skill.description);
   parts.push('');
+
+  // License and compatibility info
+  if (skill.license) {
+    parts.push(`**License:** ${skill.license}`);
+    parts.push('');
+  }
+  if (skill.compatibility) {
+    parts.push(`**Compatibility:** ${skill.compatibility}`);
+    parts.push('');
+  }
 
   // Warning if tools are missing
   if (missingTools.length > 0) {
@@ -247,6 +262,11 @@ export interface SkillApiResponse {
   }>;
   priority: number;
   visibility: SkillVisibility;
+  license?: string;
+  compatibility?: string;
+  specMetadata?: Record<string, string>;
+  allowedTools?: string;
+  resources?: SkillResources;
   availableTools?: string[];
   missingTools?: string[];
   isComplete?: boolean;
@@ -282,6 +302,11 @@ export function skillToApiResponse(
     })),
     priority: skill.metadata.priority ?? 0,
     visibility: skill.metadata.visibility ?? 'both',
+    license: skill.metadata.license,
+    compatibility: skill.metadata.compatibility,
+    specMetadata: skill.metadata.specMetadata,
+    allowedTools: skill.metadata.allowedTools,
+    resources: skill.metadata.resources,
   };
 
   if (loadResult) {

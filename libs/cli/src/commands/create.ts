@@ -1,10 +1,10 @@
 import * as path from 'path';
-import * as readline from 'readline';
 import { promises as fsp } from 'fs';
 import { c } from '../colors';
 import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON } from '@frontmcp/utils';
 import { runInit } from '../tsconfig';
 import { getSelfVersion } from '../version';
+import { clack } from '../utils/prompts';
 
 // =============================================================================
 // Types
@@ -12,12 +12,14 @@ import { getSelfVersion } from '../version';
 
 export type DeploymentTarget = 'node' | 'vercel' | 'lambda' | 'cloudflare';
 export type RedisSetup = 'docker' | 'existing' | 'none';
+export type PackageManager = 'npm' | 'yarn' | 'pnpm';
 
 export interface CreateOptions {
   projectName: string;
   deploymentTarget: DeploymentTarget;
   redisSetup: RedisSetup;
   enableGitHubActions: boolean;
+  packageManager: PackageManager;
 }
 
 export interface CreateFlags {
@@ -25,7 +27,52 @@ export interface CreateFlags {
   target?: DeploymentTarget;
   redis?: RedisSetup;
   cicd?: boolean;
+  pm?: PackageManager;
 }
+
+interface PmConfig {
+  lockfileCopy: string;
+  installAll: string;
+  pruneDevDeps: string;
+  run: string;
+  userInstall: string;
+  ghCache: string;
+  ghInstallCmd: string;
+  engines: { node: string; npm?: string };
+}
+
+const PM_CONFIG: Record<PackageManager, PmConfig> = {
+  npm: {
+    lockfileCopy: 'COPY package*.json package-lock.json* ./',
+    installAll: 'RUN npm ci',
+    pruneDevDeps: 'RUN npm prune --omit=dev',
+    run: 'npm run',
+    userInstall: 'npm install',
+    ghCache: 'npm',
+    ghInstallCmd: 'npm ci',
+    engines: { node: '>=22', npm: '>=10' },
+  },
+  yarn: {
+    lockfileCopy: 'COPY package.json yarn.lock* ./',
+    installAll: 'RUN yarn install --frozen-lockfile',
+    pruneDevDeps: 'RUN yarn install --frozen-lockfile --production',
+    run: 'yarn',
+    userInstall: 'yarn install',
+    ghCache: 'yarn',
+    ghInstallCmd: 'yarn install --frozen-lockfile',
+    engines: { node: '>=22' },
+  },
+  pnpm: {
+    lockfileCopy: 'COPY package.json pnpm-lock.yaml* ./',
+    installAll: 'RUN pnpm install --frozen-lockfile',
+    pruneDevDeps: 'RUN pnpm prune --prod',
+    run: 'pnpm run',
+    userInstall: 'pnpm install',
+    ghCache: 'pnpm',
+    ghInstallCmd: 'pnpm install --frozen-lockfile',
+    engines: { node: '>=22' },
+  },
+};
 
 interface PackageJson {
   name?: string;
@@ -38,50 +85,6 @@ interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   [key: string]: unknown;
-}
-
-// =============================================================================
-// Interactive Prompt Utility
-// =============================================================================
-
-interface PromptOption<T> {
-  label: string;
-  value: T;
-}
-
-function createPrompt() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return {
-    ask: (question: string): Promise<string> =>
-      new Promise((resolve) => rl.question(question, (ans) => resolve(ans.trim()))),
-
-    select: async <T extends string>(question: string, options: PromptOption<T>[], defaultIndex = 0): Promise<T> => {
-      console.log(question);
-      options.forEach((opt, i) => {
-        const marker = i === defaultIndex ? c('green', '●') : c('gray', '○');
-        console.log(`  ${marker} ${c('cyan', `${i + 1})`)} ${opt.label}`);
-      });
-      const answer = await new Promise<string>((resolve) =>
-        rl.question(`${c('gray', `Select [1-${options.length}]:`)} `, resolve),
-      );
-      const idx = parseInt(answer.trim(), 10) - 1;
-      if (!isNaN(idx) && idx >= 0 && idx < options.length) return options[idx].value;
-      return options[defaultIndex].value;
-    },
-
-    confirm: async (question: string, defaultValue = true): Promise<boolean> => {
-      const hint = defaultValue ? '[Y/n]' : '[y/N]';
-      const answer = await new Promise<string>((resolve) => rl.question(`${question} ${c('gray', hint)} `, resolve));
-      if (!answer.trim()) return defaultValue;
-      return answer.trim().toLowerCase().startsWith('y');
-    },
-
-    close: () => rl.close(),
-  };
 }
 
 function isInteractive(): boolean {
@@ -234,6 +237,30 @@ coverage/
 
 # Test output
 test-output/
+`;
+
+const TEMPLATE_DOCKERIGNORE = `
+node_modules
+dist
+.git
+coverage
+test-output
+*.tsbuildinfo
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+.env.*.local
+.frontmcp
+e2e
+*.md
+LICENSE
 `;
 
 const TEMPLATE_JEST_E2E_CONFIG = `
@@ -423,41 +450,44 @@ See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-se
 // =============================================================================
 
 // Docker templates (moved to ci/ folder)
-const TEMPLATE_DOCKERFILE_CI = `
+function generateDockerfile(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  const corepack = pm !== 'npm' ? '\nRUN corepack enable\n' : '';
+  return `
 # Build stage
-FROM node:22-alpine AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /app
-
+${corepack}
 # Install all dependencies (including devDependencies for build)
-COPY package*.json ./
-RUN npm ci
+${cfg.lockfileCopy}
+${cfg.installAll}
 
 # Copy source and build
 COPY . .
-RUN npm run build
+RUN ${cfg.run} build
+
+# Prune devDependencies so only production deps remain
+${cfg.pruneDevDeps}
 
 # Production stage
-FROM node:22-alpine AS runner
+FROM node:24-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install production dependencies only
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy built artifacts from builder
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
 
 EXPOSE 3000
 
 CMD ["node", "dist/main.js"]
 `;
+}
 
-const TEMPLATE_DOCKER_COMPOSE_WITH_REDIS = `
-version: '3.8'
-
+function generateDockerComposeWithRedis(): string {
+  return `
 services:
   redis:
     image: redis:7-alpine
@@ -468,7 +498,7 @@ services:
     command: redis-server --appendonly yes
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
+      interval: 3s
       timeout: 5s
       retries: 3
 
@@ -480,22 +510,20 @@ services:
       - '\${PORT:-3000}:3000'
     environment:
       - NODE_ENV=\${NODE_ENV:-development}
+      - PORT=\${PORT:-3000}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
-    volumes:
-      - ../src:/app/src
-    command: npm run dev
 
 volumes:
   redis-data:
 `;
+}
 
-const TEMPLATE_DOCKER_COMPOSE_NO_REDIS = `
-version: '3.8'
-
+function generateDockerComposeNoRedis(): string {
+  return `
 services:
   app:
     build:
@@ -505,10 +533,9 @@ services:
       - '\${PORT:-3000}:3000'
     environment:
       - NODE_ENV=\${NODE_ENV:-development}
-    volumes:
-      - ../src:/app/src
-    command: npm run dev
+      - PORT=\${PORT:-3000}
 `;
+}
 
 const TEMPLATE_ENV_DOCKER_CI = `
 # Docker-specific environment
@@ -604,7 +631,36 @@ NODE_ENV = "production"
 // GitHub Actions Templates
 // =============================================================================
 
-const TEMPLATE_GH_CI = `
+function generatePmSetupSteps(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  if (pm === 'pnpm') {
+    return `
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: '${cfg.ghCache}'
+
+      - name: Install dependencies
+        run: ${cfg.ghInstallCmd}`;
+  }
+  return `
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: '${cfg.ghCache}'
+
+      - name: Install dependencies
+        run: ${cfg.ghInstallCmd}`;
+}
+
+function generateGhCi(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `
 name: CI
 
 on:
@@ -619,24 +675,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+${generatePmSetupSteps(pm)}
 
       - name: Type check
         run: npx tsc --noEmit
 
       - name: Run tests
-        run: npm test
+        run: ${cfg.run} test
 `;
+}
 
-const TEMPLATE_GH_E2E = `
+function generateGhE2e(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `
 name: E2E Tests
 
 on:
@@ -651,22 +702,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+${generatePmSetupSteps(pm)}
 
       - name: Build
-        run: npm run build
+        run: ${cfg.run} build
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: ${cfg.run} test:e2e
 `;
+}
 
 const TEMPLATE_GH_DEPLOY_DOCKER = `
 name: Build and Push Docker Image
@@ -713,7 +757,9 @@ jobs:
           labels: \${{ steps.meta.outputs.labels }}
 `;
 
-const TEMPLATE_GH_DEPLOY_VERCEL = `
+function generateGhDeployVercel(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `
 name: Deploy to Vercel
 
 on:
@@ -726,18 +772,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+${generatePmSetupSteps(pm)}
 
       - name: Build
-        run: npm run build
+        run: ${cfg.run} build
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
@@ -747,8 +785,11 @@ jobs:
           vercel-project-id: \${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
 `;
+}
 
-const TEMPLATE_GH_DEPLOY_LAMBDA = `
+function generateGhDeployLambda(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `
 name: Deploy to AWS Lambda
 
 on:
@@ -761,18 +802,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+${generatePmSetupSteps(pm)}
 
       - name: Build
-        run: npm run build
+        run: ${cfg.run} build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -790,8 +823,11 @@ jobs:
           sam build
           sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
 `;
+}
 
-const TEMPLATE_GH_DEPLOY_CLOUDFLARE = `
+function generateGhDeployCloudflare(pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `
 name: Deploy to Cloudflare Workers
 
 on:
@@ -804,31 +840,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+${generatePmSetupSteps(pm)}
 
       - name: Build
-        run: npm run build
+        run: ${cfg.run} build
 
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: \${{ secrets.CLOUDFLARE_API_TOKEN }}
 `;
+}
 
 // =============================================================================
 // Dynamic README Templates
 // =============================================================================
 
 function generateReadme(options: CreateOptions): string {
-  const { projectName, deploymentTarget, redisSetup, enableGitHubActions } = options;
+  const { projectName, deploymentTarget, redisSetup, enableGitHubActions, packageManager } = options;
+  const cfg = PM_CONFIG[packageManager];
 
   let readme = `# ${projectName}
 
@@ -847,13 +877,13 @@ A TypeScript MCP server built with [FrontMCP](https://github.com/agentfront/fron
 
 \`\`\`bash
 # Install dependencies
-npm install
+${cfg.userInstall}
 
 # Start development server
-npm run dev
+${cfg.run} dev
 
 # Run MCP Inspector
-npm run inspect
+${cfg.run} inspect
 \`\`\`
 `;
 
@@ -864,13 +894,13 @@ npm run inspect
 
 \`\`\`bash
 # Start all services${redisSetup === 'docker' ? ' (includes Redis)' : ''}
-npm run docker:up
+${cfg.run} docker:up
 
 # Stop all services
-npm run docker:down
+${cfg.run} docker:down
 
 # Rebuild Docker image
-npm run docker:build
+${cfg.run} docker:build
 \`\`\`
 `;
 
@@ -905,7 +935,7 @@ docker push your-registry/${projectName}:latest
 
 \`\`\`bash
 # Build for production
-npm run build
+${cfg.run} build
 
 # Deploy using Vercel CLI
 npx vercel --prod
@@ -921,10 +951,10 @@ Or connect your repository to Vercel for automatic deployments.
 
 \`\`\`bash
 # Build the project
-npm run build
+${cfg.run} build
 
 # Deploy using AWS SAM
-npm run deploy
+${cfg.run} deploy
 \`\`\`
 
 ### Prerequisites
@@ -940,10 +970,10 @@ npm run deploy
 
 \`\`\`bash
 # Build the project
-npm run build
+${cfg.run} build
 
 # Deploy using Wrangler
-npm run deploy
+${cfg.run} deploy
 \`\`\`
 
 ### Prerequisites
@@ -1020,23 +1050,23 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 
 | Script | Description |
 |--------|-------------|
-| \`npm run dev\` | Start development server with hot reload |
-| \`npm run build\` | Build for production |
-| \`npm run inspect\` | Launch MCP Inspector |
-| \`npm run doctor\` | Check project configuration |
-| \`npm run test\` | Run unit tests |
-| \`npm run test:e2e\` | Run E2E tests |
+| \`${cfg.run} dev\` | Start development server with hot reload |
+| \`${cfg.run} build\` | Build for production |
+| \`${cfg.run} inspect\` | Launch MCP Inspector |
+| \`${cfg.run} doctor\` | Check project configuration |
+| \`${cfg.run} test\` | Run unit tests |
+| \`${cfg.run} test:e2e\` | Run E2E tests |
 `;
 
   if (deploymentTarget === 'node') {
-    readme += `| \`npm run docker:up\` | Start Docker services |
-| \`npm run docker:down\` | Stop Docker services |
-| \`npm run docker:build\` | Rebuild Docker image |
+    readme += `| \`${cfg.run} docker:up\` | Start Docker services |
+| \`${cfg.run} docker:down\` | Stop Docker services |
+| \`${cfg.run} docker:build\` | Rebuild Docker image |
 `;
   }
 
   if (deploymentTarget === 'lambda' || deploymentTarget === 'cloudflare') {
-    readme += `| \`npm run deploy\` | Deploy to ${deploymentTarget === 'lambda' ? 'AWS Lambda' : 'Cloudflare Workers'} |
+    readme += `| \`${cfg.run} deploy\` | Deploy to ${deploymentTarget === 'lambda' ? 'AWS Lambda' : 'Cloudflare Workers'} |
 `;
   }
 
@@ -1052,7 +1082,8 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 `;
 
   if (deploymentTarget === 'node') {
-    readme += `├── ci/
+    readme += `├── .dockerignore      # Docker build context exclusions
+├── ci/
 │   ├── Dockerfile         # Container build config
 │   ├── docker-compose.yml # Docker services config
 │   └── .env.docker        # Docker-specific env vars
@@ -1114,56 +1145,112 @@ function getDefaults(projectArg?: string): CreateOptions {
     deploymentTarget: 'node',
     redisSetup: 'docker',
     enableGitHubActions: true,
+    packageManager: 'npm',
   };
 }
 
-async function collectOptions(
-  prompt: ReturnType<typeof createPrompt>,
-  projectArg?: string,
-  flags?: CreateFlags,
-): Promise<CreateOptions> {
+async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise<CreateOptions> {
+  const p = await clack();
+
   // Project name
   let projectName = projectArg;
   if (!projectName) {
-    projectName = await prompt.ask(`${c('cyan', '?')} Project name: `);
-    if (!projectName) {
-      throw new Error('Project name is required');
+    const result = await p.text({
+      message: 'Project name',
+      validate: (val) => {
+        if (!val.trim()) return 'Project name is required';
+        return undefined;
+      },
+    });
+    if (p.isCancel(result)) {
+      p.cancel('Cancelled.');
+      process.exit(0);
     }
-  } else {
-    console.log(`${c('cyan', '?')} Project name: ${c('bold', projectName)}`);
+    projectName = result;
   }
 
   // Deployment target
-  const deploymentTarget =
-    flags?.target ||
-    (await prompt.select<DeploymentTarget>(`\n${c('cyan', '?')} Select deployment target:`, [
-      { label: 'Node.js (Docker) - Recommended for production', value: 'node' },
-      { label: 'Vercel (Serverless)', value: 'vercel' },
-      { label: 'AWS Lambda', value: 'lambda' },
-      { label: 'Cloudflare Workers', value: 'cloudflare' },
-    ]));
+  let deploymentTarget = flags?.target;
+  if (!deploymentTarget) {
+    const result = await p.select({
+      message: 'Select deployment target',
+      options: [
+        { label: 'Node.js (Docker) - Recommended for production', value: 'node' as DeploymentTarget },
+        { label: 'Vercel (Serverless)', value: 'vercel' as DeploymentTarget },
+        { label: 'AWS Lambda', value: 'lambda' as DeploymentTarget },
+        { label: 'Cloudflare Workers', value: 'cloudflare' as DeploymentTarget },
+      ],
+      initialValue: 'node' as DeploymentTarget,
+    });
+    if (p.isCancel(result)) {
+      p.cancel('Cancelled.');
+      process.exit(0);
+    }
+    deploymentTarget = result;
+  }
 
   // Redis setup (only for Node.js/Docker)
   let redisSetup: RedisSetup = 'none';
   if (deploymentTarget === 'node') {
-    redisSetup =
-      flags?.redis ||
-      (await prompt.select<RedisSetup>(`\n${c('cyan', '?')} Redis setup:`, [
-        { label: 'Docker Compose (recommended for development)', value: 'docker' },
-        { label: 'Existing Redis (I have my own Redis)', value: 'existing' },
-        { label: 'None (skip Redis)', value: 'none' },
-      ]));
+    if (flags?.redis) {
+      redisSetup = flags.redis;
+    } else {
+      const result = await p.select({
+        message: 'Redis setup',
+        options: [
+          { label: 'Docker Compose (recommended for development)', value: 'docker' as RedisSetup },
+          { label: 'Existing Redis (I have my own Redis)', value: 'existing' as RedisSetup },
+          { label: 'None (skip Redis)', value: 'none' as RedisSetup },
+        ],
+        initialValue: 'docker' as RedisSetup,
+      });
+      if (p.isCancel(result)) {
+        p.cancel('Cancelled.');
+        process.exit(0);
+      }
+      redisSetup = result;
+    }
+  }
+
+  // Package manager
+  let packageManager = flags?.pm;
+  if (!packageManager) {
+    const result = await p.select({
+      message: 'Package manager',
+      options: [
+        { label: 'npm (default)', value: 'npm' as PackageManager },
+        { label: 'yarn', value: 'yarn' as PackageManager },
+        { label: 'pnpm', value: 'pnpm' as PackageManager },
+      ],
+      initialValue: 'npm' as PackageManager,
+    });
+    if (p.isCancel(result)) {
+      p.cancel('Cancelled.');
+      process.exit(0);
+    }
+    packageManager = result;
   }
 
   // GitHub Actions
-  const enableGitHubActions =
-    flags?.cicd ?? (await prompt.confirm(`\n${c('cyan', '?')} Set up GitHub Actions CI/CD?`, true));
+  let enableGitHubActions = flags?.cicd;
+  if (enableGitHubActions === undefined) {
+    const result = await p.confirm({
+      message: 'Set up GitHub Actions CI/CD?',
+      initialValue: true,
+    });
+    if (p.isCancel(result)) {
+      p.cancel('Cancelled.');
+      process.exit(0);
+    }
+    enableGitHubActions = result;
+  }
 
   return {
     projectName,
     deploymentTarget,
     redisSetup,
     enableGitHubActions,
+    packageManager,
   };
 }
 
@@ -1174,12 +1261,16 @@ async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions
     case 'node': {
       const ciDir = path.join(targetDir, 'ci');
       await ensureDir(ciDir);
-      await scaffoldFileIfMissing(targetDir, path.join(ciDir, 'Dockerfile'), TEMPLATE_DOCKERFILE_CI);
+      await scaffoldFileIfMissing(
+        targetDir,
+        path.join(ciDir, 'Dockerfile'),
+        generateDockerfile(options.packageManager),
+      );
 
-      const dockerCompose =
-        redisSetup === 'docker' ? TEMPLATE_DOCKER_COMPOSE_WITH_REDIS : TEMPLATE_DOCKER_COMPOSE_NO_REDIS;
+      const dockerCompose = redisSetup === 'docker' ? generateDockerComposeWithRedis() : generateDockerComposeNoRedis();
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, 'docker-compose.yml'), dockerCompose);
       await scaffoldFileIfMissing(targetDir, path.join(ciDir, '.env.docker'), TEMPLATE_ENV_DOCKER_CI);
+      await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.dockerignore'), TEMPLATE_DOCKERIGNORE);
       break;
     }
 
@@ -1220,34 +1311,38 @@ PORT=3000
 NODE_ENV=development
 `;
 
-async function scaffoldGitHubActions(targetDir: string, deploymentTarget: DeploymentTarget): Promise<void> {
+async function scaffoldGitHubActions(
+  targetDir: string,
+  deploymentTarget: DeploymentTarget,
+  pm: PackageManager,
+): Promise<void> {
   const workflowDir = path.join(targetDir, '.github', 'workflows');
   await ensureDir(workflowDir);
 
   // Always create CI and E2E workflows
-  await scaffoldFileIfMissing(targetDir, path.join(workflowDir, 'ci.yml'), TEMPLATE_GH_CI);
-  await scaffoldFileIfMissing(targetDir, path.join(workflowDir, 'e2e.yml'), TEMPLATE_GH_E2E);
+  await scaffoldFileIfMissing(targetDir, path.join(workflowDir, 'ci.yml'), generateGhCi(pm));
+  await scaffoldFileIfMissing(targetDir, path.join(workflowDir, 'e2e.yml'), generateGhE2e(pm));
 
   // Create deployment workflow based on target
-  const deployTemplate = getDeployWorkflowTemplate(deploymentTarget);
+  const deployTemplate = getDeployWorkflowTemplate(deploymentTarget, pm);
   await scaffoldFileIfMissing(targetDir, path.join(workflowDir, 'deploy.yml'), deployTemplate);
 }
 
-function getDeployWorkflowTemplate(target: DeploymentTarget): string {
+function getDeployWorkflowTemplate(target: DeploymentTarget, pm: PackageManager): string {
   switch (target) {
     case 'node':
       return TEMPLATE_GH_DEPLOY_DOCKER;
     case 'vercel':
-      return TEMPLATE_GH_DEPLOY_VERCEL;
+      return generateGhDeployVercel(pm);
     case 'lambda':
-      return TEMPLATE_GH_DEPLOY_LAMBDA;
+      return generateGhDeployLambda(pm);
     case 'cloudflare':
-      return TEMPLATE_GH_DEPLOY_CLOUDFLARE;
+      return generateGhDeployCloudflare(pm);
   }
 }
 
 async function scaffoldProject(options: CreateOptions): Promise<void> {
-  const { projectName, deploymentTarget, redisSetup, enableGitHubActions } = options;
+  const { projectName, deploymentTarget, redisSetup, enableGitHubActions, packageManager } = options;
 
   const folder = sanitizeForFolder(projectName);
   const pkgName = sanitizeForNpm(projectName);
@@ -1283,6 +1378,7 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   if (deploymentTarget === 'node') {
     console.log(c('gray', `  Redis: ${redisSetup}`));
   }
+  console.log(c('gray', `  Package manager: ${packageManager}`));
   console.log(c('gray', `  GitHub Actions: ${enableGitHubActions ? 'Yes' : 'No'}`));
   console.log('');
 
@@ -1293,7 +1389,7 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // Create package.json with deployment-specific scripts
   const selfVersion = getSelfVersion();
-  await upsertPackageJsonWithTarget(targetDir, pkgName, selfVersion, deploymentTarget);
+  await upsertPackageJsonWithTarget(targetDir, pkgName, selfVersion, deploymentTarget, packageManager);
 
   // Scaffold base files
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'main.ts'), TEMPLATE_MAIN_TS);
@@ -1313,14 +1409,14 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // GitHub Actions
   if (enableGitHubActions) {
-    await scaffoldGitHubActions(targetDir, deploymentTarget);
+    await scaffoldGitHubActions(targetDir, deploymentTarget, packageManager);
   }
 
   // Dynamic README
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'README.md'), generateReadme(options));
 
   // Print next steps
-  printNextSteps(folder, deploymentTarget, redisSetup, enableGitHubActions);
+  printNextSteps(folder, deploymentTarget, redisSetup, enableGitHubActions, packageManager);
 }
 
 function printNextSteps(
@@ -1328,23 +1424,25 @@ function printNextSteps(
   deploymentTarget: DeploymentTarget,
   redisSetup: RedisSetup,
   enableGitHubActions: boolean,
+  pm: PackageManager,
 ): void {
+  const cfg = PM_CONFIG[pm];
   console.log('\nNext steps:');
   console.log(`  1) cd ${folder}`);
-  console.log('  2) npm install');
-  console.log('  3) npm run dev      ', c('gray', '# tsx watcher + async tsc type-check'));
-  console.log('  4) npm run inspect  ', c('gray', '# launch MCP Inspector'));
-  console.log('  5) npm run build    ', c('gray', '# compile with tsc via frontmcp build'));
-  console.log('  6) npm run test:e2e ', c('gray', '# run E2E tests'));
+  console.log(`  2) ${cfg.userInstall}`);
+  console.log(`  3) ${cfg.run} dev      `, c('gray', '# tsx watcher + async tsc type-check'));
+  console.log(`  4) ${cfg.run} inspect  `, c('gray', '# launch MCP Inspector'));
+  console.log(`  5) ${cfg.run} build    `, c('gray', '# compile with tsc via frontmcp build'));
+  console.log(`  6) ${cfg.run} test:e2e `, c('gray', '# run E2E tests'));
 
   if (deploymentTarget === 'node') {
     console.log('');
     console.log(c('cyan', 'Docker:'));
     console.log(
-      '  npm run docker:up   ',
+      `  ${cfg.run} docker:up   `,
       c('gray', `# start${redisSetup === 'docker' ? ' Redis +' : ''} app in Docker`),
     );
-    console.log('  npm run docker:down ', c('gray', '# stop Docker services'));
+    console.log(`  ${cfg.run} docker:down `, c('gray', '# stop Docker services'));
   }
 
   if (deploymentTarget === 'vercel') {
@@ -1356,13 +1454,13 @@ function printNextSteps(
   if (deploymentTarget === 'lambda') {
     console.log('');
     console.log(c('cyan', 'Deploy to AWS Lambda:'));
-    console.log('  npm run deploy      ', c('gray', '# deploy with SAM'));
+    console.log(`  ${cfg.run} deploy      `, c('gray', '# deploy with SAM'));
   }
 
   if (deploymentTarget === 'cloudflare') {
     console.log('');
     console.log(c('cyan', 'Deploy to Cloudflare:'));
-    console.log('  npm run deploy      ', c('gray', '# deploy with Wrangler'));
+    console.log(`  ${cfg.run} deploy      `, c('gray', '# deploy with Wrangler'));
   }
 
   if (enableGitHubActions) {
@@ -1381,6 +1479,7 @@ async function upsertPackageJsonWithTarget(
   nameOverride: string | undefined,
   selfVersion: string,
   deploymentTarget: DeploymentTarget,
+  pm: PackageManager = 'npm',
 ) {
   const pkgPath = path.join(cwd, 'package.json');
   const existing = await readJSON<PackageJson>(pkgPath);
@@ -1418,19 +1517,17 @@ async function upsertPackageJsonWithTarget(
     type: 'commonjs',
     main: 'src/main.ts',
     scripts: baseScripts,
-    engines: {
-      node: '>=22',
-      npm: '>=10',
-    },
+    engines: PM_CONFIG[pm].engines,
     dependencies: {
       '@frontmcp/sdk': frontmcpLibRange,
       '@frontmcp/plugins': frontmcpLibRange,
       '@frontmcp/adapters': frontmcpLibRange,
+      frontmcp: selfVersion,
+      tslib: '^2.5.0',
       zod: '^4.0.0',
       'reflect-metadata': '^0.2.2',
     },
     devDependencies: {
-      frontmcp: selfVersion,
       '@frontmcp/testing': frontmcpLibRange,
       '@swc/core': '^1.11.29',
       '@swc/jest': '^0.2.37',
@@ -1462,8 +1559,7 @@ async function upsertPackageJsonWithTarget(
 
   merged.engines = {
     ...(existing.engines || {}),
-    node: existing.engines?.node || base.engines.node,
-    npm: existing.engines?.npm || base.engines.npm,
+    ...base.engines,
   };
 
   merged.dependencies = {
@@ -1492,6 +1588,7 @@ export async function runCreate(projectArg?: string, flags?: CreateFlags): Promi
     if (flags?.target) options.deploymentTarget = flags.target;
     if (flags?.redis) options.redisSetup = flags.redis;
     if (flags?.cicd !== undefined) options.enableGitHubActions = flags.cicd;
+    if (flags?.pm) options.packageManager = flags.pm;
     if (projectArg) options.projectName = projectArg;
 
     if (!options.projectName) {
@@ -1505,19 +1602,11 @@ export async function runCreate(projectArg?: string, flags?: CreateFlags): Promi
   }
 
   // Interactive mode
-  console.log(`\n${c('bold', 'Create a new FrontMCP project')}\n`);
+  const p = await clack();
+  p.intro('Create a new FrontMCP project');
 
-  const prompt = createPrompt();
-  try {
-    const options = await collectOptions(prompt, projectArg, flags);
-    await scaffoldProject(options);
-  } catch (err) {
-    if (err instanceof Error && err.message === 'Project name is required') {
-      console.error(c('red', '\nError: Project name is required.'));
-      process.exit(1);
-    }
-    throw err;
-  } finally {
-    prompt.close();
-  }
+  const options = await collectOptions(projectArg, flags);
+  await scaffoldProject(options);
+
+  p.outro('Done!');
 }

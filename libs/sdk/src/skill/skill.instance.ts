@@ -16,6 +16,8 @@ interface CachedSkillContent extends SkillContent {
   priority?: number;
   hideFromDiscovery?: boolean;
   visibility?: SkillVisibility;
+  // Note: license, compatibility, specMetadata, allowedTools, resources
+  // are already part of SkillContent and inherited automatically.
 }
 
 /**

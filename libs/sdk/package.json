@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/sdk",
-  "version": "0.9.0",
+  "version": "0.11.1",
   "description": "FrontMCP SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -76,7 +76,7 @@
     "content-type": "^1.0.5",
     "vectoriadb": "^2.1.3",
     "@vercel/kv": "^3.0.0",
-    "@frontmcp/storage-sqlite": "0.9.0"
+    "@frontmcp/storage-sqlite": "0.11.1"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {
@@ -87,10 +87,10 @@
     }
   },
   "dependencies": {
-    "@frontmcp/utils": "0.9.0",
-    "@frontmcp/di": "0.9.0",
-    "@frontmcp/uipack": "0.9.0",
-    "@frontmcp/auth": "0.9.0",
+    "@frontmcp/utils": "0.11.1",
+    "@frontmcp/di": "0.11.1",
+    "@frontmcp/uipack": "0.11.1",
+    "@frontmcp/auth": "0.11.1",
     "@modelcontextprotocol/sdk": "1.26.0",
     "@langchain/core": "^1.1.8",
     "@langchain/openai": "^1.2.0",

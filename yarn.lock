@@ -1035,6 +1035,23 @@
   resolved "https://registry.yarnpkg.com/@cfworker/json-schema/-/json-schema-4.1.1.tgz#4a2a3947ee9fa7b7c24be981422831b8674c3be6"
   integrity sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==
 
+"@clack/core@0.4.2":
+  version "0.4.2"
+  resolved "https://registry.yarnpkg.com/@clack/core/-/core-0.4.2.tgz#8271fdd3d66642e98ff0f3ccf41bc36fda6f0222"
+  integrity sha512-NYQfcEy8MWIxrT5Fj8nIVchfRFA26yYKJcvBS7WlUIlw2OmQOY9DhGGXMovyI5J5PpxrCPGkgUi207EBrjpBvg==
+  dependencies:
+    picocolors "^1.0.0"
+    sisteransi "^1.0.5"
+
+"@clack/prompts@^0.10.0":
+  version "0.10.1"
+  resolved "https://registry.yarnpkg.com/@clack/prompts/-/prompts-0.10.1.tgz#62d9234ac48794a771e3139011a2bcab66091221"
+  integrity sha512-Q0T02vx8ZM9XSv9/Yde0jTmmBQufZhPJfYAg2XrrrxWWaZgq1rr8nU8Hv710BQ1dhoP8rtY7YUdpGej2Qza/cw==
+  dependencies:
+    "@clack/core" "0.4.2"
+    picocolors "^1.0.0"
+    sisteransi "^1.0.5"
+
 "@cspotcode/source-map-support@^0.8.0":
   version "0.8.1"
   resolved "https://registry.yarnpkg.com/@cspotcode/source-map-support/-/source-map-support-0.8.1.tgz#00629c35a688e05a88b1cda684fb9d5e73f000a1"
@@ -1121,33 +1138,33 @@
   dependencies:
     tslib "^2.4.0"
 
-"@enclave-vm/ast@2.10.1", "@enclave-vm/ast@^2.10.1":
-  version "2.10.1"
-  resolved "https://registry.yarnpkg.com/@enclave-vm/ast/-/ast-2.10.1.tgz#4ca1084d6b11361b849e7a70d2625bd0af5a8721"
-  integrity sha512-56vuTZFuBj1wHsNWmD2E7U9wgzzoWcCjKRBKX8YbewqZ+SxLSTtIhNSxyRKI8D0MCHUWjB6FVohtQ24Fw3g3Og==
+"@enclave-vm/ast@2.11.1", "@enclave-vm/ast@^2.11.1":
+  version "2.11.1"
+  resolved "https://registry.yarnpkg.com/@enclave-vm/ast/-/ast-2.11.1.tgz#092a345b2f6f3a0c2840b947de7340c0a350c030"
+  integrity sha512-VvctvbTj8oSViX+RF2coimvw3Ts2ORhO3lZBR83E5SoG/L2qHn3LROVUEuuIW9UOcPiqopZsaf+T9CH1dmu+ZQ==
   dependencies:
     "@types/estree" "1.0.8"
     acorn "8.15.0"
     acorn-walk "8.3.4"
     astring "1.9.0"
 
-"@enclave-vm/core@^2.10.1":
-  version "2.10.1"
-  resolved "https://registry.yarnpkg.com/@enclave-vm/core/-/core-2.10.1.tgz#873a09ce0463c3f0b623fbc84cb9728a5797b494"
-  integrity sha512-QiiQpnse7+qCdKIIyaBKsdu8ykvGLB9XdtAw99wLulCpRWXY7ZuinDczwip9ISzlmK8Ajhw201K16qH1uaVlcQ==
+"@enclave-vm/core@^2.11.1":
+  version "2.11.1"
+  resolved "https://registry.yarnpkg.com/@enclave-vm/core/-/core-2.11.1.tgz#487bd617924a94c6c990e9f46752c816b08d3388"
+  integrity sha512-4iJfR9rfkkaB/W11HqHsuTL7LhA6FGNemhSfozrgiQivbADcT3qU8ZjG357ENkA5zOm/zniiAZYXWX2/CZ2/og==
   dependencies:
     "@babel/standalone" "^7.29.0"
-    "@enclave-vm/ast" "2.10.1"
-    "@enclave-vm/types" "2.10.1"
+    "@enclave-vm/ast" "2.11.1"
+    "@enclave-vm/types" "2.11.1"
     acorn "8.15.0"
     acorn-walk "8.3.4"
     astring "1.9.0"
     zod "^4.3.6"
 
-"@enclave-vm/types@2.10.1":
-  version "2.10.1"
-  resolved "https://registry.yarnpkg.com/@enclave-vm/types/-/types-2.10.1.tgz#4518166f02aa5c507b90bd44867e6a66b12b0d80"
-  integrity sha512-ypGSDhrVivSu6lT0Q+avcjUGcvQVzhsMgZMYByqir3pLOzix0SmxRBsvThTXMtBfNVFjSlvoshFZA0FJU1kxSA==
+"@enclave-vm/types@2.11.1":
+  version "2.11.1"
+  resolved "https://registry.yarnpkg.com/@enclave-vm/types/-/types-2.11.1.tgz#2d12daba09692a340c651c655a06980ad21456c0"
+  integrity sha512-cdSIdKgHd6wZJcbQtQHjYSRg9fAo7uMFn6+1Ga6RdRuwFc3T5HfF+/c6pGbI8YsMOD5MwlNBka4ohP+N2DrYfA==
   dependencies:
     zod "^4.3.6"
 
@@ -12785,6 +12802,11 @@ simple-wcswidth@^1.1.2:
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/simple-wcswidth/-/simple-wcswidth-1.1.2.tgz#66722f37629d5203f9b47c5477b1225b85d6525b"
   integrity sha512-j7piyCjAeTDSjzTSQ7DokZtMNwNlEAyxqSZeCS+CXH7fJ4jx3FuJ/mTW3mE+6JLs4VJBbcll0Kjn+KXI5t21Iw==
+
+sisteransi@^1.0.5:
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/sisteransi/-/sisteransi-1.0.5.tgz#134d681297756437cc05ca01370d3a7a571075ed"
+  integrity sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==
 
 slash@^3.0.0:
   version "3.0.0"

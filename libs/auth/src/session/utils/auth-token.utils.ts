@@ -56,6 +56,6 @@ export function deriveTypedUser(claims: Record<string, unknown>): UserClaim {
 
 export function extractBearerToken(header?: string): string | undefined {
   if (!header) return undefined;
-  const m = header.match(/^\s*Bearer\s+(.+)\s*$/i);
-  return m ? m[1].trim() : undefined;
+  const m = header.match(/^\s*Bearer\s+(\S+)\s*$/i);
+  return m ? m[1] : undefined;
 }

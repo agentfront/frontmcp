@@ -60,6 +60,7 @@ Use `--yes` (or `-y`) to skip prompts and use defaults.
 | `--target <type>`    | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node`   |
 | `--redis <setup>`    | Redis: `docker`, `existing`, `none`                  | `docker` |
 | `--cicd / --no-cicd` | Enable GitHub Actions                                | `--cicd` |
+| `--pm <manager>`     | Package manager: `npm`, `yarn`, `pnpm`               | `npm`    |
 
 **Examples:**
 
@@ -72,6 +73,9 @@ npx frontmcp create my-app --yes
 
 # Vercel target with CI/CD
 npx frontmcp create my-app --target vercel
+
+# Use pnpm as package manager
+npx frontmcp create my-app --pm pnpm --yes
 
 # Docker without Redis
 npx frontmcp create my-app --target node --redis none --no-cicd

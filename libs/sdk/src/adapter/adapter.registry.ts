@@ -78,9 +78,10 @@ export default class AdapterRegistry
 
       this.instances.set(token, instance);
       readyArr.push(instance.ready);
+      this.logger?.verbose(`AdapterRegistry: initialized adapter '${rec.metadata.name}'`);
     }
     await Promise.all(readyArr);
-    this.logger?.debug('AdapterRegistry: initialization complete');
+    this.logger?.verbose(`AdapterRegistry: initialization complete (${this.instances.size} adapter(s))`);
   }
 
   getAdapters(): AdapterEntry[] {

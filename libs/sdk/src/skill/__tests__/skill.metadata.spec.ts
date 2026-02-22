@@ -35,6 +35,24 @@ describe('skill.metadata', () => {
       }
     });
 
+    it('should validate single-char name', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'a',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate name with numbers', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'skill2go',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('should validate metadata with all fields', () => {
       const metadata: SkillMetadata = {
         id: 'custom-id',
@@ -91,6 +109,174 @@ describe('skill.metadata', () => {
 
       const result = skillMetadataSchema.safeParse(metadata);
       expect(result.success).toBe(false);
+    });
+
+    it('should reject name longer than 64 characters', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'a'.repeat(65),
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept name exactly 64 characters', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'a'.repeat(64),
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject name with uppercase letters', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'Test-Skill',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject name with underscores', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test_skill',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject name with spaces', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test skill',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject name starting with a hyphen', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: '-test-skill',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject name ending with a hyphen', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill-',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject name with consecutive hyphens', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test--skill',
+        description: 'A skill',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject description longer than 1024 characters', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'a'.repeat(1025),
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept description exactly 1024 characters', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'a'.repeat(1024),
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject description with XML tags', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'A skill with <b>bold</b> text',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject description with XML self-closing tags', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'A skill with <br/> break',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept description with angle brackets that are not tags', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'A skill that checks x < y and x > 0',
+        instructions: 'Do something',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate new spec fields (license, compatibility, specMetadata, allowedTools, resources)', () => {
+      const metadata: SkillMetadata = {
+        name: 'spec-skill',
+        description: 'A spec-compliant skill',
+        instructions: 'Do something',
+        license: 'MIT',
+        compatibility: 'Requires Node.js 18+',
+        specMetadata: { author: 'test', version: '1.0' },
+        allowedTools: 'Read Edit Bash(git status)',
+        resources: {
+          scripts: '/path/to/scripts',
+          references: '/path/to/references',
+          assets: '/path/to/assets',
+        },
+      };
+
+      const result = skillMetadataSchema.safeParse(metadata);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.license).toBe('MIT');
+        expect(result.data.compatibility).toBe('Requires Node.js 18+');
+        expect(result.data.specMetadata).toEqual({ author: 'test', version: '1.0' });
+        expect(result.data.allowedTools).toBe('Read Edit Bash(git status)');
+        expect(result.data.resources).toEqual({
+          scripts: '/path/to/scripts',
+          references: '/path/to/references',
+          assets: '/path/to/assets',
+        });
+      }
+    });
+
+    it('should reject compatibility longer than 500 characters', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'A skill',
+        instructions: 'Do something',
+        compatibility: 'a'.repeat(501),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept partial resources', () => {
+      const result = skillMetadataSchema.safeParse({
+        name: 'test-skill',
+        description: 'A skill',
+        instructions: 'Do something',
+        resources: { scripts: '/scripts' },
+      });
+      expect(result.success).toBe(true);
     });
 
     it('should reject empty description', () => {

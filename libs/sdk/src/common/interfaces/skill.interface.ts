@@ -1,7 +1,7 @@
 // file: libs/sdk/src/common/interfaces/skill.interface.ts
 
 import { Type } from '@frontmcp/di';
-import { SkillMetadata, SkillToolRef, normalizeToolRef, SkillParameter } from '../metadata';
+import { SkillMetadata, SkillToolRef, normalizeToolRef, SkillParameter, SkillResources } from '../metadata';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 import { SkillRecord } from '../records';
 
@@ -54,6 +54,31 @@ export interface SkillContent {
     parameters?: Record<string, unknown>;
     expectedOutcome?: string;
   }>;
+
+  /**
+   * License name or reference (per Agent Skills spec).
+   */
+  license?: string;
+
+  /**
+   * Environment requirements or compatibility notes (per Agent Skills spec).
+   */
+  compatibility?: string;
+
+  /**
+   * Arbitrary key-value metadata (maps to spec `metadata` field).
+   */
+  specMetadata?: Record<string, string>;
+
+  /**
+   * Space-delimited pre-approved tools (maps to spec `allowed-tools` field).
+   */
+  allowedTools?: string;
+
+  /**
+   * Bundled resource directories (scripts/, references/, assets/).
+   */
+  resources?: SkillResources;
 }
 
 /**

@@ -18,6 +18,7 @@ import {
 import { SkillContent } from '../common/interfaces';
 import { readFile } from '@frontmcp/utils';
 import { InvalidSkillError, SkillInstructionFetchError, InvalidInstructionSourceError } from '../errors';
+import { stripFrontmatter } from './skill-md-parser';
 
 /**
  * Collect skill metadata from a decorated class.
@@ -139,7 +140,9 @@ export async function loadInstructions(source: SkillInstructionSource, basePath?
   if (isFileInstructions(source)) {
     // Resolve file path
     const filePath = basePath ? `${basePath}/${source.file}` : source.file;
-    return readFile(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
+    // Strip YAML frontmatter if present (e.g., SKILL.md files)
+    return stripFrontmatter(content);
   }
 
   if (isUrlInstructions(source)) {
@@ -170,6 +173,11 @@ export function buildSkillContent(metadata: SkillMetadata, instructions: string)
     tools: normalizeToolRefs(metadata.tools),
     parameters: metadata.parameters,
     examples: metadata.examples,
+    license: metadata.license,
+    compatibility: metadata.compatibility,
+    specMetadata: metadata.specMetadata,
+    allowedTools: metadata.allowedTools,
+    resources: metadata.resources,
   };
 }
 
@@ -225,6 +233,16 @@ export function formatSkillForLLM(skill: SkillContent, availableTools: string[],
   parts.push('');
   parts.push(skill.description);
   parts.push('');
+
+  // License and compatibility info
+  if (skill.license) {
+    parts.push(`**License:** ${skill.license}`);
+    parts.push('');
+  }
+  if (skill.compatibility) {
+    parts.push(`**Compatibility:** ${skill.compatibility}`);
+    parts.push('');
+  }
 
   // Warning if tools are missing
   if (missingTools.length > 0) {

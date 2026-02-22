@@ -96,6 +96,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     // If client sent a header but validation failed, return 404
     if (raw !== undefined && !mcpSessionHeader) {
+      const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
+      logger.warn('parseInput: invalid mcp-session-id header');
       this.respond(httpRespond.sessionNotFound('invalid session id'));
       return;
     }
@@ -128,16 +130,21 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     }
 
     this.state.set(stateSchema.parse({ token, session }));
+
+    const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
+    logger.info('parseInput: session resolved', { sessionId: session.id?.slice(0, 20) });
   }
 
   @Stage('router')
   async router() {
     const { request } = this.rawInput;
+    const logger = this.scopeLogger.child('handle:streamable-http:router');
 
     // GET requests are SSE listener streams - no body expected
     // Per MCP spec, clients can open SSE stream with GET + Accept: text/event-stream
     if (request.method.toUpperCase() === 'GET') {
       this.state.set('requestType', 'sseListener');
+      logger.info('router: requestType=sseListener, method=GET');
       return;
     }
 
@@ -149,14 +156,19 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // The actual schema validation happens in the MCP SDK's transport layer
     if (method === 'initialize') {
       this.state.set('requestType', 'initialize');
+      logger.info('router: requestType=initialize, method=POST');
     } else if (typeof method === 'string' && method.startsWith('ui/')) {
       // Ext-apps methods: ui/initialize, ui/callServerTool, etc.
       this.state.set('requestType', 'extApps');
+      logger.info(`router: requestType=extApps, method=${method}`);
     } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
       this.state.set('requestType', 'elicitResult');
+      logger.info('router: requestType=elicitResult, method=POST');
     } else if (method && RequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'message');
+      logger.info(`router: requestType=message, method=${method}`);
     } else {
+      logger.warn('router: invalid request, no valid method');
       this.respond(httpRespond.rpcError('Invalid Request'));
     }
   }
@@ -219,12 +231,12 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // elicitation result may arrive on a different node than the original request.
     if (!transport) {
       try {
-        logger.info('onElicitResult: transport not in memory, checking stored session', {
+        logger.verbose('onElicitResult: transport not in memory, checking stored session', {
           sessionId: session.id?.slice(0, 20),
         });
         const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
         if (storedSession) {
-          logger.info('onElicitResult: recreating transport from stored session', {
+          logger.verbose('onElicitResult: recreating transport from stored session', {
             sessionId: session.id?.slice(0, 20),
             createdAt: storedSession.createdAt,
             initialized: storedSession.initialized,
@@ -282,21 +294,21 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     // 1. Try to get existing transport from memory
     let transport = await transportService.getTransporter('streamable-http', token, session.id);
-    logger.info('onMessage: getTransporter result', { found: !!transport });
+    logger.verbose('onMessage: getTransporter result', { found: !!transport });
 
     // 2. If not in memory, check if session exists in Redis and recreate
     if (!transport) {
       try {
-        logger.info('onMessage: transport not in memory, checking Redis', {
+        logger.verbose('onMessage: transport not in memory, checking Redis', {
           sessionId: session.id?.slice(0, 20),
         });
         const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
-        logger.info('onMessage: getStoredSession result', {
+        logger.verbose('onMessage: getStoredSession result', {
           found: !!storedSession,
           initialized: storedSession?.initialized,
         });
         if (storedSession) {
-          logger.info('Recreating transport from Redis session', {
+          logger.verbose('onMessage: recreating transport from stored session', {
             sessionId: session.id?.slice(0, 20),
             createdAt: storedSession.createdAt,
             initialized: storedSession.initialized,
@@ -308,7 +320,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
             storedSession,
             response,
           );
-          logger.info('onMessage: transport recreated successfully');
+          logger.verbose('onMessage: transport recreated successfully');
         }
       } catch (error) {
         // Log and fall through to 404 logic - transport remains undefined
@@ -407,6 +419,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     }
 
     if (!transport) {
+      logger.warn('onSseListener: transport not found', { sessionId: session.id?.slice(0, 20) });
       this.respond(httpRespond.notFound('Session not found'));
       return;
     }
@@ -437,12 +450,12 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     // 2. If not in memory, check if session exists in storage and recreate
     if (!transport) {
       try {
-        logger.info('onExtApps: transport not in memory, checking stored session', {
+        logger.verbose('onExtApps: transport not in memory, checking stored session', {
           sessionId: session.id?.slice(0, 20),
         });
         const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
         if (storedSession) {
-          logger.info('onExtApps: recreating transport from stored session', {
+          logger.verbose('onExtApps: recreating transport from stored session', {
             sessionId: session.id?.slice(0, 20),
             createdAt: storedSession.createdAt,
             initialized: storedSession.initialized,
@@ -467,8 +480,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     if (!transport) {
       const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, session.id);
       if (wasCreated) {
+        logger.warn('onExtApps: session expired/not initialized', { sessionId: session.id?.slice(0, 20) });
         this.respond(httpRespond.sessionExpired('session expired'));
       } else {
+        logger.warn('onExtApps: session expired/not initialized', { sessionId: session.id?.slice(0, 20) });
         this.respond(httpRespond.sessionNotFound('session not initialized'));
       }
       return;

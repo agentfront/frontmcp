@@ -1,13 +1,13 @@
 /**
  * Interactive setup questionnaire runner.
- * Reads manifest setup steps and prompts the user via Node.js readline.
+ * Reads manifest setup steps and prompts the user via @clack/prompts.
  */
 
-import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
 import { c } from '../../colors';
 import { ManifestSetupStep } from '../build/exec/manifest';
+import { clack } from '../../utils/prompts';
 
 export interface QuestionnaireResult {
   answers: Record<string, string>;
@@ -27,48 +27,35 @@ export async function runQuestionnaire(
     return runSilent(steps);
   }
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const ask = (question: string): Promise<string> =>
-    new Promise((resolve) => {
-      rl.question(question, (answer) => resolve(answer));
-    });
+  const p = await clack();
 
   let currentIndex = 0;
   const stepMap = new Map(steps.map((s, i) => [s.id, i]));
+  let currentGroup = '';
 
-  try {
-    let currentGroup = '';
+  while (currentIndex < steps.length) {
+    const step = steps[currentIndex];
 
-    while (currentIndex < steps.length) {
-      const step = steps[currentIndex];
-
-      // Check showWhen conditions
-      if (step.showWhen && !evaluateShowWhen(step.showWhen, answers)) {
-        currentIndex++;
-        continue;
-      }
-
-      // Show group header
-      if (step.group && step.group !== currentGroup) {
-        currentGroup = step.group;
-        console.log(`\n${c('bold', `--- ${currentGroup} ---`)}`);
-      }
-
-      // Determine prompt based on schema type
-      const defaultValue = getDefaultFromSchema(step.jsonSchema);
-      const value = await promptStep(ask, step, defaultValue);
-
-      answers[step.id] = value;
-
-      // Determine next step
-      currentIndex = resolveNextStep(step, value, currentIndex, stepMap, steps.length);
+    // Check showWhen conditions
+    if (step.showWhen && !evaluateShowWhen(step.showWhen, answers)) {
+      currentIndex++;
+      continue;
     }
-  } finally {
-    rl.close();
+
+    // Show group header
+    if (step.group && step.group !== currentGroup) {
+      currentGroup = step.group;
+      p.log.step(`--- ${currentGroup} ---`);
+    }
+
+    // Determine prompt based on schema type
+    const defaultValue = getDefaultFromSchema(step.jsonSchema);
+    const value = await promptStep(step, defaultValue);
+
+    answers[step.id] = value;
+
+    // Determine next step
+    currentIndex = resolveNextStep(step, value, currentIndex, stepMap, steps.length);
   }
 
   return {
@@ -115,110 +102,91 @@ function runSilent(steps: ManifestSetupStep[]): QuestionnaireResult {
   };
 }
 
-async function promptStep(
-  ask: (q: string) => Promise<string>,
-  step: ManifestSetupStep,
-  defaultValue: string | undefined,
-): Promise<string> {
+async function promptStep(step: ManifestSetupStep, defaultValue: string | undefined): Promise<string> {
   const schema = step.jsonSchema;
 
-  // Enum → numbered select menu
+  // Enum → select menu
   if (schema.enum && Array.isArray(schema.enum)) {
-    return promptEnum(ask, step, schema.enum as string[], defaultValue);
+    return promptEnum(step, schema.enum as string[], defaultValue);
   }
 
-  // Boolean → y/n
+  // Boolean → confirm
   if (schema.type === 'boolean') {
-    return promptBoolean(ask, step, defaultValue);
+    return promptBoolean(step, defaultValue);
   }
 
   // Default → text input
-  return promptText(ask, step, defaultValue);
+  return promptText(step, defaultValue);
 }
 
 async function promptEnum(
-  ask: (q: string) => Promise<string>,
   step: ManifestSetupStep,
   options: string[],
   defaultValue: string | undefined,
 ): Promise<string> {
-  if (step.description) {
-    console.log(`  ${c('gray', step.description)}`);
+  const p = await clack();
+
+  const message = step.description ? `${step.prompt}\n${c('gray', step.description)}` : step.prompt;
+
+  const result = await p.select({
+    message,
+    options: options.map((opt) => ({ label: opt, value: opt })),
+    initialValue: defaultValue ?? options[0],
+  });
+
+  if (p.isCancel(result)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
   }
 
-  for (let i = 0; i < options.length; i++) {
-    const marker = options[i] === defaultValue ? c('green', '*') : ' ';
-    console.log(`  ${marker} ${i + 1}) ${options[i]}`);
-  }
-
-  while (true) {
-    const defaultHint = defaultValue ? ` [${defaultValue}]` : '';
-    const input = await ask(`${step.prompt}${defaultHint}: `);
-    const trimmed = input.trim();
-
-    if (!trimmed && defaultValue) return defaultValue;
-
-    // Accept number or value
-    const num = parseInt(trimmed, 10);
-    if (num >= 1 && num <= options.length) return options[num - 1];
-    if (options.includes(trimmed)) return trimmed;
-
-    console.log(c('red', `  Invalid choice. Enter 1-${options.length} or a value from the list.`));
-  }
+  return result;
 }
 
-async function promptBoolean(
-  ask: (q: string) => Promise<string>,
-  step: ManifestSetupStep,
-  defaultValue: string | undefined,
-): Promise<string> {
-  const defaultHint = defaultValue !== undefined ? ` [${defaultValue === 'true' ? 'Y/n' : 'y/N'}]` : ' [y/N]';
-  while (true) {
-    const input = await ask(`${step.prompt}${defaultHint}: `);
-    const trimmed = input.trim().toLowerCase();
+async function promptBoolean(step: ManifestSetupStep, defaultValue: string | undefined): Promise<string> {
+  const p = await clack();
 
-    if (!trimmed && defaultValue !== undefined) return defaultValue;
-    if (trimmed === 'y' || trimmed === 'yes') return 'true';
-    if (trimmed === 'n' || trimmed === 'no') return 'false';
+  const result = await p.confirm({
+    message: step.prompt,
+    initialValue: defaultValue === undefined ? false : defaultValue === 'true',
+  });
 
-    console.log(c('red', '  Please enter y or n.'));
+  if (p.isCancel(result)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
   }
+
+  return result ? 'true' : 'false';
 }
 
-async function promptText(
-  ask: (q: string) => Promise<string>,
-  step: ManifestSetupStep,
-  defaultValue: string | undefined,
-): Promise<string> {
-  if (step.description) {
-    console.log(`  ${c('gray', step.description)}`);
-  }
+async function promptText(step: ManifestSetupStep, defaultValue: string | undefined): Promise<string> {
+  const p = await clack();
 
-  while (true) {
-    const defaultHint = defaultValue ? ` [${step.sensitive ? '****' : defaultValue}]` : '';
-    const input = await ask(`${step.prompt}${defaultHint}: `);
-    const trimmed = input.trim();
+  const schema = step.jsonSchema;
+  const isOptional = schema.default !== undefined || (schema as Record<string, unknown>).nullable === true;
 
-    if (!trimmed && defaultValue !== undefined) return defaultValue;
-    if (!trimmed) {
-      // Check if optional
-      const schema = step.jsonSchema;
-      if (schema.default !== undefined || (schema as Record<string, unknown>).nullable === true) {
-        return '';
+  const result = await p.text({
+    message: step.prompt,
+    placeholder: step.description || (step.sensitive && defaultValue ? '****' : undefined),
+    defaultValue,
+    validate: (val) => {
+      const trimmed = val.trim();
+      if (!trimmed && !defaultValue && !isOptional) {
+        return 'This field is required.';
       }
-      console.log(c('red', '  This field is required.'));
-      continue;
-    }
+      if (trimmed) {
+        const error = validateAgainstSchema(trimmed, step.jsonSchema);
+        if (error) return error;
+      }
+      return undefined;
+    },
+  });
 
-    // Validate against JSON Schema constraints
-    const validationError = validateAgainstSchema(trimmed, step.jsonSchema);
-    if (validationError) {
-      console.log(c('red', `  ${validationError}`));
-      continue;
-    }
-
-    return trimmed;
+  if (p.isCancel(result)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
   }
+
+  return result.trim() || defaultValue || '';
 }
 
 function validateAgainstSchema(value: string, schema: Record<string, unknown>): string | null {
