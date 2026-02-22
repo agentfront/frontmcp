@@ -9,12 +9,14 @@
  * @module skill/skill-directory-loader
  */
 
+import { basename } from 'node:path';
 import { readFile, fileExists, stat, joinPath } from '@frontmcp/utils';
 import { SkillKind } from '../common/records/skill.record';
 import type { SkillFileRecord } from '../common/records/skill.record';
 import type { SkillMetadata, SkillResources } from '../common/metadata/skill.metadata';
 import { skillMetadataSchema } from '../common/metadata/skill.metadata';
 import { InvalidSkillError } from '../errors/sdk.errors';
+import type { FrontMcpLogger } from '../common';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from './skill-md-parser';
 
 /**
@@ -66,8 +68,9 @@ async function checkDirectory(path: string): Promise<boolean> {
   try {
     const s = await stat(path);
     return s.isDirectory();
-  } catch {
-    return false;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
   }
 }
 
@@ -78,22 +81,31 @@ async function checkDirectory(path: string): Promise<boolean> {
  * and validates the result.
  *
  * @param dirPath - Path to the skill directory
+ * @param logger - Optional SDK logger for structured warnings
  * @returns A SkillFileRecord ready for registration
  * @throws Error if SKILL.md is not found or metadata is invalid
  */
-export async function loadSkillDirectory(dirPath: string): Promise<SkillFileRecord> {
+export async function loadSkillDirectory(dirPath: string, logger?: FrontMcpLogger): Promise<SkillFileRecord> {
   const skillMdPath = joinPath(dirPath, 'SKILL.md');
 
   // Verify SKILL.md exists
   const exists = await fileExists(skillMdPath);
   if (!exists) {
-    throw new InvalidSkillError(dirPath.split('/').pop() ?? 'unknown', 'SKILL.md not found in directory');
+    throw new InvalidSkillError(basename(dirPath), 'SKILL.md not found in directory');
   }
 
   // Read and parse SKILL.md
-  const content = await readFile(skillMdPath, 'utf-8');
-  const { frontmatter, body } = parseSkillMdFrontmatter(content);
-  const partialMetadata = skillMdFrontmatterToMetadata(frontmatter, body);
+  let content: string;
+  let partialMetadata: Partial<SkillMetadata>;
+  try {
+    content = await readFile(skillMdPath, 'utf-8');
+    const { frontmatter, body } = parseSkillMdFrontmatter(content);
+    partialMetadata = skillMdFrontmatterToMetadata(frontmatter, body);
+  } catch (err) {
+    const name = basename(dirPath);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new InvalidSkillError(name, `Failed to read or parse SKILL.md: ${message}`);
+  }
 
   // Scan for resource directories
   const { resources } = await scanSkillResources(dirPath);
@@ -103,9 +115,14 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
   }
 
   // Validate name matches directory name (per spec recommendation)
-  const dirName = dirPath.split('/').filter(Boolean).pop();
+  const dirName = basename(dirPath);
   if (partialMetadata.name && dirName && partialMetadata.name !== dirName) {
-    // Warn but don't fail — directory name mismatch is not fatal
+    const msg = `Skill name "${partialMetadata.name}" does not match directory name "${dirName}"`;
+    if (logger) {
+      logger.warn(msg, { skillName: partialMetadata.name, dirName });
+    } else {
+      console.warn(msg);
+    }
   }
 
   // Ensure required fields
@@ -142,6 +159,7 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
  * Returns a SkillFileRecord suitable for passing to `@FrontMcp({ skills: [...] })`.
  *
  * @param dirPath - Path to the skill directory containing SKILL.md
+ * @param logger - Optional SDK logger for structured warnings
  * @returns A SkillFileRecord
  *
  * @example
@@ -152,6 +170,6 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
  * class MyApp {}
  * ```
  */
-export async function skillDir(dirPath: string): Promise<SkillFileRecord> {
-  return loadSkillDirectory(dirPath);
+export async function skillDir(dirPath: string, logger?: FrontMcpLogger): Promise<SkillFileRecord> {
+  return loadSkillDirectory(dirPath, logger);
 }

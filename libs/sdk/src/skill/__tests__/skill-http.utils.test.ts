@@ -364,6 +364,7 @@ describe('skillToApiResponse', () => {
         compatibility: 'Node.js 20+',
         specMetadata: { author: 'alice', version: '2.0' },
         allowedTools: 'Read Edit Bash(git status)',
+        resources: { scripts: 'scripts/', references: 'references/' },
       },
     });
 
@@ -373,6 +374,7 @@ describe('skillToApiResponse', () => {
     expect(result.compatibility).toBe('Node.js 20+');
     expect(result.specMetadata).toEqual({ author: 'alice', version: '2.0' });
     expect(result.allowedTools).toBe('Read Edit Bash(git status)');
+    expect(result.resources).toEqual({ scripts: 'scripts/', references: 'references/' });
   });
 
   it('should leave new spec fields undefined when not set', () => {
@@ -384,6 +386,7 @@ describe('skillToApiResponse', () => {
     expect(result.compatibility).toBeUndefined();
     expect(result.specMetadata).toBeUndefined();
     expect(result.allowedTools).toBeUndefined();
+    expect(result.resources).toBeUndefined();
   });
 
   it('should handle empty tags', () => {
