@@ -29,6 +29,12 @@ const mockReadFile = readFile as jest.MockedFunction<typeof readFile>;
 const mockFileExists = fileExists as jest.MockedFunction<typeof fileExists>;
 const mockStat = stat as jest.MockedFunction<typeof stat>;
 
+function enoent(path: string): NodeJS.ErrnoException {
+  const err: NodeJS.ErrnoException = new Error(`ENOENT: no such file or directory, stat '${path}'`);
+  err.code = 'ENOENT';
+  return err;
+}
+
 describe('skill-directory-loader', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -44,7 +50,7 @@ describe('skill-directory-loader', () => {
         ) {
           return { isDirectory: () => true } as any;
         }
-        throw new Error('Not found');
+        throw enoent(path);
       });
       mockFileExists.mockResolvedValue(true);
 
@@ -57,7 +63,7 @@ describe('skill-directory-loader', () => {
     });
 
     it('should handle missing optional directories', async () => {
-      mockStat.mockRejectedValue(new Error('Not found'));
+      mockStat.mockRejectedValue(enoent('/skills/my-skill'));
       mockFileExists.mockResolvedValue(true);
 
       const result = await scanSkillResources('/skills/my-skill');
@@ -73,7 +79,7 @@ describe('skill-directory-loader', () => {
         if (path === '/skills/my-skill/scripts') {
           return { isDirectory: () => true } as any;
         }
-        throw new Error('Not found');
+        throw enoent(path);
       });
       mockFileExists.mockResolvedValue(false);
 
@@ -83,6 +89,15 @@ describe('skill-directory-loader', () => {
       expect(result.resources.references).toBeUndefined();
       expect(result.resources.assets).toBeUndefined();
       expect(result.hasSkillMd).toBe(false);
+    });
+
+    it('should re-throw non-ENOENT errors from stat', async () => {
+      const permErr: NodeJS.ErrnoException = new Error('permission denied');
+      permErr.code = 'EACCES';
+      mockStat.mockRejectedValue(permErr);
+      mockFileExists.mockResolvedValue(true);
+
+      await expect(scanSkillResources('/skills/my-skill')).rejects.toThrow('permission denied');
     });
 
     it('should handle files that are not directories', async () => {
@@ -116,7 +131,7 @@ Step 2: Review code`;
     it('should load skill directory with SKILL.md', async () => {
       mockFileExists.mockResolvedValue(true);
       mockReadFile.mockResolvedValue(validSkillMd);
-      mockStat.mockRejectedValue(new Error('Not found'));
+      mockStat.mockRejectedValue(enoent('/skills/review-pr'));
 
       const result = await loadSkillDirectory('/skills/review-pr');
 
@@ -136,7 +151,7 @@ Step 2: Review code`;
         if (path === '/skills/review-pr/scripts' || path === '/skills/review-pr/assets') {
           return { isDirectory: () => true } as any;
         }
-        throw new Error('Not found');
+        throw enoent(path);
       });
 
       const result = await loadSkillDirectory('/skills/review-pr');
@@ -153,13 +168,23 @@ Step 2: Review code`;
       await expect(loadSkillDirectory('/skills/no-skill')).rejects.toThrow('SKILL.md not found in directory');
     });
 
+    it('should wrap readFile errors in InvalidSkillError', async () => {
+      mockFileExists.mockResolvedValue(true);
+      mockReadFile.mockRejectedValue(new Error('disk read error'));
+      mockStat.mockRejectedValue(enoent('/skills/bad-read'));
+
+      await expect(loadSkillDirectory('/skills/bad-read')).rejects.toThrow(
+        'Failed to read or parse SKILL.md: disk read error',
+      );
+    });
+
     it('should throw error when name is missing from frontmatter', async () => {
       mockFileExists.mockResolvedValue(true);
       mockReadFile.mockResolvedValue(`---
 description: A skill without name
 ---
 Instructions.`);
-      mockStat.mockRejectedValue(new Error('Not found'));
+      mockStat.mockRejectedValue(enoent('/skills/missing-name'));
 
       await expect(loadSkillDirectory('/skills/missing-name')).rejects.toThrow("missing required 'name' field");
     });
@@ -170,7 +195,7 @@ Instructions.`);
 name: no-desc
 ---
 Instructions.`);
-      mockStat.mockRejectedValue(new Error('Not found'));
+      mockStat.mockRejectedValue(enoent('/skills/no-desc'));
 
       await expect(loadSkillDirectory('/skills/no-desc')).rejects.toThrow("missing required 'description' field");
     });
@@ -181,7 +206,7 @@ Instructions.`);
 name: no-body
 description: A skill with empty body
 ---`);
-      mockStat.mockRejectedValue(new Error('Not found'));
+      mockStat.mockRejectedValue(enoent('/skills/no-body'));
 
       await expect(loadSkillDirectory('/skills/no-body')).rejects.toThrow('no body content for instructions');
     });
@@ -195,7 +220,7 @@ name: alias-test
 description: Testing the alias
 ---
 Instructions.`);
-      mockStat.mockRejectedValue(new Error('Not found'));
+      mockStat.mockRejectedValue(enoent('/skills/alias-test'));
 
       const result = await skillDir('/skills/alias-test');
 
