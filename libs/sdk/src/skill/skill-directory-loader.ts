@@ -16,6 +16,7 @@ import type { SkillFileRecord } from '../common/records/skill.record';
 import type { SkillMetadata, SkillResources } from '../common/metadata/skill.metadata';
 import { skillMetadataSchema } from '../common/metadata/skill.metadata';
 import { InvalidSkillError } from '../errors/sdk.errors';
+import type { FrontMcpLogger } from '../common';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from './skill-md-parser';
 
 /**
@@ -80,10 +81,11 @@ async function checkDirectory(path: string): Promise<boolean> {
  * and validates the result.
  *
  * @param dirPath - Path to the skill directory
+ * @param logger - Optional SDK logger for structured warnings
  * @returns A SkillFileRecord ready for registration
  * @throws Error if SKILL.md is not found or metadata is invalid
  */
-export async function loadSkillDirectory(dirPath: string): Promise<SkillFileRecord> {
+export async function loadSkillDirectory(dirPath: string, logger?: FrontMcpLogger): Promise<SkillFileRecord> {
   const skillMdPath = joinPath(dirPath, 'SKILL.md');
 
   // Verify SKILL.md exists
@@ -115,7 +117,12 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
   // Validate name matches directory name (per spec recommendation)
   const dirName = basename(dirPath);
   if (partialMetadata.name && dirName && partialMetadata.name !== dirName) {
-    console.warn(`Skill name "${partialMetadata.name}" does not match directory name "${dirName}"`);
+    const msg = `Skill name "${partialMetadata.name}" does not match directory name "${dirName}"`;
+    if (logger) {
+      logger.warn(msg, { skillName: partialMetadata.name, dirName });
+    } else {
+      console.warn(msg);
+    }
   }
 
   // Ensure required fields
@@ -152,6 +159,7 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
  * Returns a SkillFileRecord suitable for passing to `@FrontMcp({ skills: [...] })`.
  *
  * @param dirPath - Path to the skill directory containing SKILL.md
+ * @param logger - Optional SDK logger for structured warnings
  * @returns A SkillFileRecord
  *
  * @example
@@ -162,6 +170,6 @@ export async function loadSkillDirectory(dirPath: string): Promise<SkillFileReco
  * class MyApp {}
  * ```
  */
-export async function skillDir(dirPath: string): Promise<SkillFileRecord> {
-  return loadSkillDirectory(dirPath);
+export async function skillDir(dirPath: string, logger?: FrontMcpLogger): Promise<SkillFileRecord> {
+  return loadSkillDirectory(dirPath, logger);
 }
