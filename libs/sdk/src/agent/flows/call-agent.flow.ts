@@ -481,7 +481,18 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.logger.info('finalize: sending response', {
       agent: agent.metadata.name,
       hasContent: Array.isArray(result.content) && result.content.length > 0,
-      contentLength: Array.isArray(result.content) ? result.content.length : 0,
+      contentParts: Array.isArray(result.content) ? result.content.length : 0,
+      contentBytes: Array.isArray(result.content)
+        ? result.content.reduce((sum, part) => {
+            const str = JSON.stringify(part);
+            return (
+              sum +
+              (typeof Buffer !== 'undefined'
+                ? Buffer.byteLength(str, 'utf8')
+                : new TextEncoder().encode(str).byteLength)
+            );
+          }, 0)
+        : 0,
       hasStructuredContent: result.structuredContent !== undefined,
       hasMeta: result._meta !== undefined,
       metaKeys: result._meta ? Object.keys(result._meta) : [],

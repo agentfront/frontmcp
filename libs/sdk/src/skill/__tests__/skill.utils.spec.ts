@@ -321,6 +321,43 @@ describe('skill.utils', () => {
         { name: 'optional-with-purpose', purpose: 'Optional operation', required: false },
       ]);
     });
+
+    it('should include new spec fields in content', () => {
+      const metadata: SkillMetadata = {
+        name: 'spec-skill',
+        description: 'A spec skill',
+        instructions: 'ignored',
+        license: 'MIT',
+        compatibility: 'Node.js 18+',
+        specMetadata: { author: 'test' },
+        allowedTools: 'Read Edit',
+        resources: { scripts: '/path/scripts' },
+      };
+
+      const content = buildSkillContent(metadata, 'Instructions');
+
+      expect(content.license).toBe('MIT');
+      expect(content.compatibility).toBe('Node.js 18+');
+      expect(content.specMetadata).toEqual({ author: 'test' });
+      expect(content.allowedTools).toBe('Read Edit');
+      expect(content.resources).toEqual({ scripts: '/path/scripts' });
+    });
+
+    it('should leave new spec fields undefined when not set', () => {
+      const metadata: SkillMetadata = {
+        name: 'basic-skill',
+        description: 'A basic skill',
+        instructions: 'ignored',
+      };
+
+      const content = buildSkillContent(metadata, 'Instructions');
+
+      expect(content.license).toBeUndefined();
+      expect(content.compatibility).toBeUndefined();
+      expect(content.specMetadata).toBeUndefined();
+      expect(content.allowedTools).toBeUndefined();
+      expect(content.resources).toBeUndefined();
+    });
   });
 
   describe('formatSkillForLLM', () => {
@@ -439,6 +476,51 @@ describe('skill.utils', () => {
       const result = formatSkillForLLM(skill, [], []);
 
       expect(result).not.toContain('## Examples');
+    });
+
+    it('should include license when present', () => {
+      const skill: SkillContent = {
+        id: 'test-skill',
+        name: 'Test Skill',
+        description: 'A test skill',
+        instructions: 'Instructions',
+        tools: [],
+        license: 'MIT',
+      };
+
+      const result = formatSkillForLLM(skill, [], []);
+
+      expect(result).toContain('**License:** MIT');
+    });
+
+    it('should include compatibility when present', () => {
+      const skill: SkillContent = {
+        id: 'test-skill',
+        name: 'Test Skill',
+        description: 'A test skill',
+        instructions: 'Instructions',
+        tools: [],
+        compatibility: 'Requires Node.js 18+',
+      };
+
+      const result = formatSkillForLLM(skill, [], []);
+
+      expect(result).toContain('**Compatibility:** Requires Node.js 18+');
+    });
+
+    it('should not include license/compatibility when not set', () => {
+      const skill: SkillContent = {
+        id: 'test-skill',
+        name: 'Test Skill',
+        description: 'A test skill',
+        instructions: 'Instructions',
+        tools: [],
+      };
+
+      const result = formatSkillForLLM(skill, [], []);
+
+      expect(result).not.toContain('**License:**');
+      expect(result).not.toContain('**Compatibility:**');
     });
   });
 });

@@ -9,9 +9,12 @@ export default function listToolsRequestHandler({
   return {
     requestSchema: ListToolsRequestSchema,
     handler: async (request: ListToolsRequest, ctx) => {
-      logger.verbose('tools/list: listing tools');
+      logger.verbose('tools/list requested');
+      const start = Date.now();
       try {
-        return await scope.runFlowForOutput('tools:list-tools', { request, ctx });
+        const result = await scope.runFlowForOutput('tools:list-tools', { request, ctx });
+        logger.verbose('tools/list completed', { durationMs: Date.now() - start });
+        return result;
       } catch (e) {
         logger.error('tools/list failed', {
           error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,

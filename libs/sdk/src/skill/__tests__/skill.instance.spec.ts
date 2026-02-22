@@ -269,6 +269,32 @@ describe('SkillInstance', () => {
       expect(extendedContent.priority).toBe(10);
       expect(extendedContent.hideFromDiscovery).toBe(true);
     });
+
+    it('should include new spec fields in loaded content', async () => {
+      const metadata: SkillMetadata = {
+        name: 'spec-skill',
+        description: 'A spec skill',
+        instructions: 'Do something',
+        license: 'MIT',
+        compatibility: 'Node.js 18+',
+        specMetadata: { author: 'test' },
+        allowedTools: 'Read Edit',
+        resources: { scripts: '/scripts', assets: '/assets' },
+      };
+      const record = createSkillRecord(metadata);
+      const instance = new SkillInstance(record, mockProviders, mockOwner);
+      await instance.ready;
+
+      mockLoadInstructions.mockResolvedValue('Loaded instructions');
+
+      const content = await instance.load();
+
+      expect(content.license).toBe('MIT');
+      expect(content.compatibility).toBe('Node.js 18+');
+      expect(content.specMetadata).toEqual({ author: 'test' });
+      expect(content.allowedTools).toBe('Read Edit');
+      expect(content.resources).toEqual({ scripts: '/scripts', assets: '/assets' });
+    });
   });
 
   describe('getToolRefs', () => {

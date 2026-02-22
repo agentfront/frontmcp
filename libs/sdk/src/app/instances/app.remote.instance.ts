@@ -55,6 +55,10 @@ class EmptyPluginRegistry implements PluginRegistryInterface {
   getPlugins(): PluginEntry[] {
     return [];
   }
+
+  getPluginNames(): string[] {
+    return [];
+  }
 }
 
 /**
