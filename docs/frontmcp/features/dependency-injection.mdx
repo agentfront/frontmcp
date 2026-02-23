@@ -1,0 +1,100 @@
+---
+title: Dependency Injection
+slug: features/dependency-injection
+icon: syringe
+description: Type-safe dependency injection with @Provider and scoped containers
+---
+
+FrontMCP includes a built-in dependency injection system. Define services with `@Provider`, inject them into tools, resources, prompts, and agents with `this.get()`.
+
+## Defining Providers
+
+Create a provider with a token and scope:
+
+```ts
+import { Provider } from '@frontmcp/sdk';
+
+export const CONFIG_TOKEN = Symbol('Config');
+
+@Provider({
+  token: CONFIG_TOKEN,
+  scope: 'singleton',
+})
+export class ConfigProvider {
+  readonly apiKey = process.env.API_KEY!;
+  readonly baseUrl = process.env.BASE_URL!;
+
+  static factory() {
+    return new ConfigProvider();
+  }
+}
+```
+
+## Provider Scopes
+
+| Scope | Lifetime | Use Case |
+| --- | --- | --- |
+| `singleton` | One instance per server | Configuration, database connections |
+| `request` | One instance per MCP request | Request-scoped caches, loggers |
+| `context` | One instance per execution context | Per-tool state |
+
+## Injecting Providers
+
+Use `this.get()` or `this.tryGet()` inside any context class:
+
+```ts
+@Tool({
+  name: 'fetch-data',
+  inputSchema: { url: z.string() },
+})
+class FetchDataTool extends ToolContext {
+  async execute({ url }: { url: string }) {
+    const config = this.get(CONFIG_TOKEN);    // Throws if not found
+    const cache = this.tryGet(CACHE_TOKEN);   // Returns undefined if not found
+
+    const response = await this.fetch(url, {
+      headers: { Authorization: `Bearer ${config.apiKey}` },
+    });
+
+    return response.json();
+  }
+}
+```
+
+## Registering Providers
+
+Register providers at the server or app level:
+
+```ts
+// Server-level — available to all apps
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  providers: [ConfigProvider, DatabaseProvider],
+})
+class Server {}
+
+// App-level — available only within this app
+@App({
+  id: 'crm',
+  name: 'CRM',
+  tools: [CreateLeadTool],
+  providers: [CrmServiceProvider],
+})
+class CrmApp {}
+```
+
+<Info>
+Server-level providers are shared across all apps. App-level providers are isolated to their app.
+</Info>
+
+## Learn More
+
+<CardGroup cols={2}>
+  <Card title="Providers Guide" icon="syringe" href="/frontmcp/extensibility/providers">
+    Full guide to defining, scoping, and composing providers
+  </Card>
+  <Card title="@Provider Reference" icon="code" href="/frontmcp/sdk-reference/decorators/provider">
+    Complete decorator API reference
+  </Card>
+</CardGroup>

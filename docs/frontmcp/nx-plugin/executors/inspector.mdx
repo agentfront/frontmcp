@@ -1,0 +1,39 @@
+---
+title: Inspector Executor
+slug: nx-plugin/executors/inspector
+icon: magnifying-glass
+description: Launch MCP Inspector using frontmcp inspector
+---
+
+Launches the MCP Inspector UI for testing and debugging your server's tools, resources, and prompts.
+
+## Usage
+
+```bash
+nx inspector my-app
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "inspector": {
+      "executor": "@frontmcp/nx:inspector",
+      "options": {}
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `port` | `number` | Inspector port |
+
+## Behavior
+
+- Opens the MCP Inspector at `http://localhost:6274`
+- Connect to your running server to browse and test capabilities
+- **Not cacheable**: Interactive, long-running process

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Deploy",
+  "description": "Deploy to a target platform",
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Deployment target",
+      "enum": ["node", "vercel", "lambda", "cloudflare"]
+    }
+  },
+  "required": ["target"]
+}

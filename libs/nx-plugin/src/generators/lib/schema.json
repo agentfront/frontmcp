@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpLib",
+  "title": "FrontMCP Library Generator",
+  "description": "Generate a shared library",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the library",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the library?",
+      "x-priority": "important"
+    },
+    "directory": {
+      "type": "string",
+      "description": "The directory of the library (default: libs/<name>)",
+      "x-priority": "important"
+    },
+    "libType": {
+      "type": "string",
+      "description": "The type of library to generate",
+      "enum": ["generic", "plugin", "adapter", "tool-register"],
+      "default": "generic",
+      "x-prompt": {
+        "message": "What type of library?",
+        "type": "list",
+        "items": [
+          { "value": "generic", "label": "Generic TypeScript library" },
+          { "value": "plugin", "label": "FrontMCP Plugin" },
+          { "value": "adapter", "label": "FrontMCP Adapter" },
+          { "value": "tool-register", "label": "Tool Register (multi-tool)" }
+        ]
+      },
+      "x-priority": "important"
+    },
+    "publishable": {
+      "type": "boolean",
+      "description": "Generate a publishable library with package.json",
+      "default": false
+    },
+    "importPath": {
+      "type": "string",
+      "description": "The npm scope/import path (e.g., @my-org/my-lib). Required for publishable libraries."
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags for the project",
+      "x-priority": "internal"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Skip formatting files",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name"]
+}

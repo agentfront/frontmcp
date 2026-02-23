@@ -1,0 +1,44 @@
+---
+title: Serve Executor
+slug: nx-plugin/executors/serve
+icon: play
+description: Start a supervised production server using frontmcp start
+---
+
+Starts a supervised production server with automatic restart on crashes. Uses the FrontMCP process manager.
+
+## Usage
+
+```bash
+nx serve my-app
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "serve": {
+      "executor": "@frontmcp/nx:serve",
+      "options": {
+        "entry": "{projectRoot}/src/main.ts",
+        "port": 3000
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `entry` | `string` | — | Entry file path |
+| `port` | `number` | — | Port to listen on |
+| `maxRestarts` | `number` | `5` | Maximum number of automatic restarts |
+
+## Behavior
+
+- **Process supervision**: Automatically restarts on crash (up to `maxRestarts`)
+- **Graceful shutdown**: Handles SIGTERM for clean stops
+- **Not cacheable**: Long-running process

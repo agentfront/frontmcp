@@ -1,0 +1,46 @@
+{
+  "name": "<%= name %>",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "libs/*",
+    "servers/*"
+  ],
+  "scripts": {
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint"
+  },
+  "dependencies": {
+    "@frontmcp/sdk": "<%= frontmcpVersion %>",
+    "@frontmcp/cli": "<%= frontmcpVersion %>",
+    "reflect-metadata": "^0.2.2",
+    "zod": "^4.0.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@frontmcp/nx": "<%= frontmcpVersion %>",
+    "@frontmcp/testing": "<%= frontmcpVersion %>",
+    "nx": "<%= nxVersion %>",
+    "@nx/devkit": "<%= nxVersion %>",
+    "@nx/js": "<%= nxVersion %>",
+    "@nx/eslint": "<%= nxVersion %>",
+    "@nx/jest": "<%= nxVersion %>",
+    "@nx/esbuild": "<%= nxVersion %>",
+    "@nx/workspace": "<%= nxVersion %>",
+    "@swc-node/register": "~1.9.1",
+    "@swc/core": "~1.5.7",
+    "@swc/helpers": "~0.5.11",
+    "@swc/jest": "~0.2.38",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "jest": "^30.0.2",
+    "typescript": "~5.9.2",
+    "prettier": "~3.6.2"
+  }
+}

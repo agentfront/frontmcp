@@ -1,0 +1,19 @@
+import { Plugin, DynamicPlugin, type PluginRegistrationContext } from '@frontmcp/sdk';
+
+export interface <%= className %>PluginOptions {
+  // TODO: define plugin options
+}
+
+@Plugin({
+  name: '<%= fileName %>',
+  description: 'TODO: describe what this plugin does',
+})
+export class <%= className %>Plugin extends DynamicPlugin<<%= className %>PluginOptions> {
+  async dynamicProviders() {
+    return [];
+  }
+
+  async onRegister(ctx: PluginRegistrationContext): Promise<void> {
+    // TODO: register tools, resources, prompts, or context extensions
+  }
+}

@@ -28,6 +28,7 @@ export interface CreateFlags {
   redis?: RedisSetup;
   cicd?: boolean;
   pm?: PackageManager;
+  nx?: boolean;
 }
 
 interface PmConfig {
@@ -1149,6 +1150,51 @@ function getDefaults(projectArg?: string): CreateOptions {
   };
 }
 
+async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Promise<void> {
+  try {
+    const { FsTree } = await import('nx/src/generators/tree.js');
+    const { workspaceGenerator } = await import('@frontmcp/nx');
+    const { flushChanges } = await import('nx/src/generators/tree.js');
+
+    console.log(c('cyan', `\nScaffolding Nx monorepo: ${projectName}...\n`));
+
+    const tree = new FsTree(process.cwd(), false);
+    const callback = await workspaceGenerator(tree, {
+      name: projectName,
+      packageManager: flags?.pm ?? 'npm',
+      skipInstall: false,
+      skipGit: false,
+      createSampleApp: true,
+    });
+
+    flushChanges(tree.root, tree.listChanges());
+
+    if (callback) {
+      callback();
+    }
+
+    console.log(c('green', `\n✅ Nx monorepo created at ./${projectName}\n`));
+    console.log(c('dim', 'Next steps:'));
+    console.log(c('dim', `  cd ${projectName}`));
+    console.log(c('dim', '  nx g @frontmcp/nx:app my-app      # Add an app'));
+    console.log(c('dim', '  nx g @frontmcp/nx:lib my-lib       # Add a library'));
+    console.log(c('dim', '  nx g @frontmcp/nx:tool my-tool     # Add a tool to an app'));
+    console.log(c('dim', '  nx dev demo                        # Start dev server'));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('Cannot find module') || message.includes('MODULE_NOT_FOUND')) {
+      console.error(c('red', '\n@frontmcp/nx is not installed.'));
+      console.log(c('dim', 'Install it first:'));
+      console.log(c('bold', '  npm install -D @frontmcp/nx nx @nx/devkit'));
+      console.log(c('dim', '\nThen retry:'));
+      console.log(c('bold', `  frontmcp create ${projectName} --nx`));
+    } else {
+      console.error(c('red', `\nFailed to scaffold Nx workspace: ${message}`));
+    }
+    process.exit(1);
+  }
+}
+
 async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise<CreateOptions> {
   const p = await clack();
 
@@ -1167,6 +1213,44 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
       process.exit(0);
     }
     projectName = result;
+  }
+
+  // Project type: Standalone or Nx monorepo
+  if (flags?.nx) {
+    await scaffoldNxWorkspace(projectName, flags);
+    // Return early — Nx workspace generator handles everything
+    return {
+      projectName,
+      deploymentTarget: flags.target ?? 'node',
+      redisSetup: flags.redis ?? 'none',
+      enableGitHubActions: flags.cicd ?? false,
+      packageManager: flags.pm ?? 'npm',
+    };
+  }
+
+  if (!flags?.yes) {
+    const projectType = await p.select({
+      message: 'Project type',
+      options: [
+        { label: 'Standalone project (recommended)', value: 'standalone' as const },
+        { label: 'Nx monorepo (advanced)', value: 'nx' as const },
+      ],
+      initialValue: 'standalone' as const,
+    });
+    if (p.isCancel(projectType)) {
+      p.cancel('Cancelled.');
+      process.exit(0);
+    }
+    if (projectType === 'nx') {
+      await scaffoldNxWorkspace(projectName, flags);
+      return {
+        projectName,
+        deploymentTarget: 'node',
+        redisSetup: 'none',
+        enableGitHubActions: false,
+        packageManager: flags?.pm ?? 'npm',
+      };
+    }
   }
 
   // Deployment target
@@ -1581,6 +1665,13 @@ async function upsertPackageJsonWithTarget(
 // =============================================================================
 
 export async function runCreate(projectArg?: string, flags?: CreateFlags): Promise<void> {
+  // Nx monorepo mode (non-interactive with --nx flag)
+  if (flags?.nx) {
+    const name = projectArg || 'frontmcp-app';
+    await scaffoldNxWorkspace(name, flags);
+    return;
+  }
+
   // Non-interactive mode: use --yes flag or non-TTY environment
   if (flags?.yes || !isInteractive()) {
     const options = getDefaults(projectArg);

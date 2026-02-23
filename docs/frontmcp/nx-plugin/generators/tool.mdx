@@ -1,0 +1,70 @@
+---
+title: Tool Generator
+slug: nx-plugin/generators/tool
+icon: wrench
+description: Generate a @Tool class
+---
+
+Generates a `@Tool` class extending `ToolContext` with stub input/output schemas.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:tool fetch-contacts --project crm
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the tool |
+| `project` | `string` | — | **Required.** The project to add the tool to |
+| `directory` | `string` | — | Subdirectory within `src/tools/` |
+
+## Generated File
+
+```
+src/tools/fetch-contacts.tool.ts
+```
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'fetch-contacts',
+  description: 'TODO: describe what this tool does',
+  inputSchema: {
+    // TODO: define input schema
+  },
+  outputSchema: {
+    // TODO: define output schema
+  },
+})
+export default class FetchContactsTool extends ToolContext {
+  async execute(input: unknown) {
+    // TODO: implement
+    return {};
+  }
+}
+```
+
+## Example
+
+```bash
+# Add to a specific subdirectory
+nx g @frontmcp/nx:tool send-email --project crm --directory notifications
+# Creates: src/tools/notifications/send-email.tool.ts
+```
+
+After generating, update the app to register the tool:
+
+```ts
+import FetchContactsTool from './tools/fetch-contacts.tool';
+
+@App({
+  id: 'crm',
+  tools: [FetchContactsTool],
+})
+class CrmApp {}
+```

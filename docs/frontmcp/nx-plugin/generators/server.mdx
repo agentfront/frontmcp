@@ -1,0 +1,110 @@
+---
+title: Server Generator
+slug: nx-plugin/generators/server
+icon: server
+description: Generate a deployment shell in servers/
+---
+
+Generates a deployment shell that composes one or more apps and includes platform-specific infrastructure configuration (Docker, Vercel, Lambda, or Cloudflare).
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:server production --apps crm,analytics
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the server |
+| `apps` | `string` | — | **Required.** Comma-separated app names to compose |
+| `directory` | `string` | `servers/<name>` | The directory of the server |
+| `deploymentTarget` | `node` \| `vercel` \| `lambda` \| `cloudflare` | `node` | The deployment target platform |
+| `redis` | `docker` \| `existing` \| `none` | `none` | Redis setup option (node target only) |
+| `tags` | `string` | — | Comma-separated tags |
+
+## Generated Files
+
+<Tabs>
+  <Tab title="Node.js (Docker)">
+    ```
+    servers/production/
+    ├── src/main.ts              # Entry point composing apps
+    ├── Dockerfile               # Multi-stage Docker build
+    ├── docker-compose.yml       # Docker Compose (+ Redis if selected)
+    ├── .dockerignore
+    ├── project.json
+    ├── tsconfig.json
+    └── tsconfig.lib.json
+    ```
+  </Tab>
+  <Tab title="Vercel">
+    ```
+    servers/production/
+    ├── src/main.ts
+    ├── vercel.json              # Vercel deployment config
+    ├── project.json
+    ├── tsconfig.json
+    └── tsconfig.lib.json
+    ```
+  </Tab>
+  <Tab title="Lambda">
+    ```
+    servers/production/
+    ├── src/main.ts
+    ├── template.yaml            # AWS SAM template
+    ├── project.json
+    ├── tsconfig.json
+    └── tsconfig.lib.json
+    ```
+  </Tab>
+  <Tab title="Cloudflare">
+    ```
+    servers/production/
+    ├── src/main.ts
+    ├── wrangler.toml            # Cloudflare Workers config
+    ├── project.json
+    ├── tsconfig.json
+    └── tsconfig.lib.json
+    ```
+  </Tab>
+</Tabs>
+
+## Generated Code
+
+The entry point imports and composes all specified apps:
+
+```ts src/main.ts
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+import { CrmApp } from '../../apps/crm/crm.app';
+import { AnalyticsApp } from '../../apps/analytics/analytics.app';
+
+@FrontMcp({
+  info: { name: 'Production Server', version: '0.1.0' },
+  apps: [CrmApp, AnalyticsApp],
+})
+export default class Server {}
+```
+
+## Nx Targets
+
+| Target | Executor | Description |
+| --- | --- | --- |
+| `build` | `@frontmcp/nx:build` | Compile with deployment adapter |
+| `deploy` | `@frontmcp/nx:deploy` | Deploy to target platform |
+
+## Example
+
+```bash
+# Node.js server with Docker Redis
+nx g @frontmcp/nx:server production --apps crm,analytics --deploymentTarget node --redis docker
+
+# Vercel deployment
+nx g @frontmcp/nx:server edge --apps crm --deploymentTarget vercel
+
+# Build and deploy
+nx build production
+nx deploy production
+```

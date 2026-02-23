@@ -1,0 +1,25 @@
+{
+  "name": "<%= projectName %>",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "<%= projectRoot %>/src",
+  "projectType": "application",
+  "tags": [<%- parsedTags.map(t => `"${t}"`).join(', ') %>],
+  "targets": {
+    "build": {
+      "executor": "@frontmcp/nx:build",
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "entry": "{projectRoot}/src/main.ts",
+        "outputPath": "{projectRoot}/dist",
+        "adapter": "<%= deploymentTarget %>"
+      }
+    },
+    "deploy": {
+      "executor": "@frontmcp/nx:deploy",
+      "dependsOn": ["build"],
+      "options": {
+        "target": "<%= deploymentTarget %>"
+      }
+    }
+  }
+}

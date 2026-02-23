@@ -22,13 +22,13 @@ icon: code
 
 <CardGroup cols={2}>
   <Card title="Scalable Discovery" icon="magnifying-glass">
-    Search across hundreds of tools using natural language with [VectoriaDB](/docs/frontmcp/guides/vectoriadb) embeddings
+    Search across hundreds of tools using natural language with VectoriaDB embeddings
   </Card>
   <Card title="Code Orchestration" icon="code">
     LLMs write JavaScript to combine tools, filter data, and build workflows in a single execution
   </Card>
   <Card title="Bank-Grade Security" icon="shield-check">
-    Defense-in-depth with [AST Guard](/docs/frontmcp/guides/ast-guard) validation and [Enclave](/docs/frontmcp/guides/enclave) sandboxing
+    Defense-in-depth with AST Guard validation and Enclave sandboxing
   </Card>
   <Card title="Any LLM, Any Cloud" icon="server">
     Open source, self-hosted, works with any MCP-compatible client - not just Claude
@@ -182,8 +182,8 @@ yarn add @frontmcp/plugins
   </Accordion>
 
   <Accordion title="Self-Hosted Security" icon="lock">
-    - **No data leaves your VPC**: Embeddings run locally via [VectoriaDB](/docs/frontmcp/guides/vectoriadb)
-    - **Bank-grade sandboxing**: [AST Guard](/docs/frontmcp/guides/ast-guard) + [Enclave](/docs/frontmcp/guides/enclave)
+    - **No data leaves your VPC**: Embeddings run locally via VectoriaDB
+    - **Bank-grade sandboxing**: AST Guard + Enclave
     - **Audit everything**: Full logging of script execution and tool calls
     - **You control the limits**: Timeouts, iteration caps, tool allowlists
   </Accordion>
@@ -217,13 +217,13 @@ yarn add @frontmcp/plugins
 CodeCall is built on three battle-tested FrontMCP libraries:
 
 <CardGroup cols={3}>
-  <Card title="AST Guard" icon="shield-check" href="/docs/frontmcp/guides/ast-guard">
+  <Card title="AST Guard" icon="shield-check" href="https://github.com/agentfront/enclave/tree/main/libs/ast-guard">
     **Static analysis** validates JavaScript AST before execution. Blocks eval, dangerous globals, prototype pollution, and unbounded loops.
   </Card>
-  <Card title="Enclave" icon="lock" href="/docs/frontmcp/guides/enclave">
+  <Card title="Enclave" icon="lock" href="https://github.com/agentfront/enclave">
     **Runtime sandbox** executes validated code in isolated Node.js vm context with timeouts, iteration limits, and sanitized outputs.
   </Card>
-  <Card title="VectoriaDB" icon="magnifying-glass" href="/docs/frontmcp/guides/vectoriadb">
+  <Card title="VectoriaDB" icon="magnifying-glass" href="https://github.com/agentfront/vectoriadb">
     **Semantic search** indexes tools with local embeddings. No external API calls, works offline, sub-millisecond queries.
   </Card>
 </CardGroup>

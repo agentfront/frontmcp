@@ -1,0 +1,56 @@
+---
+title: Deploy Executor
+slug: nx-plugin/executors/deploy
+icon: cloud-arrow-up
+description: Deploy to a target platform (node/vercel/lambda/cloudflare)
+---
+
+Deploys a built server to the specified target platform.
+
+## Usage
+
+```bash
+nx deploy production
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "deploy": {
+      "executor": "@frontmcp/nx:deploy",
+      "dependsOn": ["build"],
+      "options": {
+        "target": "vercel"
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `target` | `node` \| `vercel` \| `lambda` \| `cloudflare` | **Required.** Deployment target platform |
+
+## Platform Details
+
+| Target | What Happens |
+| --- | --- |
+| `node` | Builds Docker image, ready for `docker compose up` |
+| `vercel` | Runs `vercel deploy` using `vercel.json` config |
+| `lambda` | Runs `sam deploy` using `template.yaml` SAM template |
+| `cloudflare` | Runs `wrangler deploy` using `wrangler.toml` config |
+
+## Workflow
+
+```bash
+# Build first, then deploy
+nx build production
+nx deploy production
+
+# Or use dependsOn to chain automatically
+nx deploy production  # triggers build first if configured
+```

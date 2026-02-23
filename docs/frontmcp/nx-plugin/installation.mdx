@@ -1,0 +1,97 @@
+---
+title: Installation
+slug: nx-plugin/installation
+icon: arrow-down-to-line
+description: Install @frontmcp/nx in a new or existing Nx workspace
+---
+
+## Prerequisites
+
+- **Node.js** 22+ (24 recommended)
+- **npm** 10+ (or yarn/pnpm)
+
+---
+
+## Option A: New Monorepo
+
+Scaffold a complete FrontMCP Nx workspace from scratch:
+
+```bash
+npx frontmcp create my-workspace --nx
+```
+
+This creates:
+- Nx workspace with `nx.json` configuration
+- `apps/`, `libs/`, `servers/` directory structure
+- `@frontmcp/sdk`, `@frontmcp/cli`, `@frontmcp/nx` pre-installed
+- Sample application (optional)
+- TypeScript, Jest, ESLint pre-configured
+
+### Package Manager
+
+Choose your package manager during creation:
+
+```bash
+npx frontmcp create my-workspace --nx --pm yarn
+npx frontmcp create my-workspace --nx --pm pnpm
+npx frontmcp create my-workspace --nx --pm npm   # default
+```
+
+---
+
+## Option B: Existing Nx Workspace
+
+Add `@frontmcp/nx` to an existing Nx workspace:
+
+<CodeGroup>
+```bash npm
+npm install -D @frontmcp/nx @frontmcp/sdk @frontmcp/cli @frontmcp/testing
+```
+
+```bash yarn
+yarn add -D @frontmcp/nx @frontmcp/sdk @frontmcp/cli @frontmcp/testing
+```
+
+```bash pnpm
+pnpm add -D @frontmcp/nx @frontmcp/sdk @frontmcp/cli @frontmcp/testing
+```
+</CodeGroup>
+
+Ensure your `tsconfig.base.json` includes decorator support:
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "es2022",
+    "module": "esnext",
+    "strict": true
+  }
+}
+```
+
+---
+
+## Verify Installation
+
+List available generators to confirm the plugin is installed:
+
+```bash
+nx list @frontmcp/nx
+```
+
+You should see all 14 generators and 7 executors listed.
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket-launch" href="/frontmcp/nx-plugin/quickstart">
+    Build your first monorepo project
+  </Card>
+  <Card title="Generators" icon="wand-magic-sparkles" href="/frontmcp/nx-plugin/generators/overview">
+    Explore all 14 generators
+  </Card>
+</CardGroup>

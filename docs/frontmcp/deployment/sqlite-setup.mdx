@@ -34,7 +34,7 @@ description: Use SQLite for local session, elicitation, and event storage withou
 | Edge / serverless | Not supported | **Required** |
 
 <Info>
-SQLite is ideal for local-only deployments — Unix socket servers, CLI tools, and background daemons. For multi-instance production or serverless, use [Redis](/docs/frontmcp/deployment/redis-setup) or [Vercel KV](/docs/frontmcp/deployment/vercel-kv) instead.
+SQLite is ideal for local-only deployments — Unix socket servers, CLI tools, and background daemons. For multi-instance production or serverless, use [Redis](/frontmcp/deployment/redis-setup) or [Vercel KV](/frontmcp/deployment/vercel-kv) instead.
 </Info>
 
 ## Installation
@@ -223,16 +223,16 @@ const elicitation = new SqliteElicitationStore({
 ## Related Documentation
 
 <CardGroup cols={2}>
-  <Card title="Unix Socket" icon="plug-circle-bolt" href="/docs/frontmcp/deployment/unix-socket">
+  <Card title="Unix Socket" icon="plug-circle-bolt" href="/frontmcp/deployment/unix-socket">
     Run FrontMCP as a persistent local server over Unix sockets
   </Card>
-  <Card title="Redis Setup" icon="database" href="/docs/frontmcp/deployment/redis-setup">
+  <Card title="Redis Setup" icon="database" href="/frontmcp/deployment/redis-setup">
     Configure Redis for multi-instance production deployments
   </Card>
-  <Card title="Vercel KV" icon="bolt" href="/docs/frontmcp/deployment/vercel-kv">
+  <Card title="Vercel KV" icon="bolt" href="/frontmcp/deployment/vercel-kv">
     Edge-compatible storage for Vercel deployments
   </Card>
-  <Card title="Runtime Modes" icon="layer-group" href="/docs/frontmcp/deployment/runtime-modes">
+  <Card title="Runtime Modes" icon="layer-group" href="/frontmcp/deployment/runtime-modes">
     Compare SDK, Server, and Handler deployment modes
   </Card>
 </CardGroup>

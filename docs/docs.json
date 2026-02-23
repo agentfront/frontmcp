@@ -72,6 +72,7 @@
               "frontmcp/getting-started/welcome",
               "frontmcp/getting-started/installation",
               "frontmcp/getting-started/quickstart",
+              "frontmcp/getting-started/cli-reference",
               "frontmcp/updates"
             ]
           },
@@ -90,7 +91,8 @@
                   "frontmcp/servers/agents",
                   "frontmcp/servers/elicitation",
                   "frontmcp/servers/skills",
-                  "frontmcp/servers/discovery"
+                  "frontmcp/servers/discovery",
+                  "frontmcp/servers/flows"
                 ]
               },
               {
@@ -139,6 +141,20 @@
                   }
                 ]
               }
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "frontmcp/features/overview",
+              "frontmcp/features/decorator-driven-development",
+              "frontmcp/features/dependency-injection",
+              "frontmcp/features/multi-app-composition",
+              "frontmcp/features/authentication-and-authorization",
+              "frontmcp/features/deployment-targets",
+              "frontmcp/features/plugin-system",
+              "frontmcp/features/testing-framework",
+              "frontmcp/features/skill-based-workflows"
             ]
           },
           {
@@ -294,6 +310,56 @@
               "frontmcp/sdk-reference/errors/normalization-errors",
               "frontmcp/sdk-reference/errors/sdk-errors",
               "frontmcp/sdk-reference/errors/auth-internal-errors"
+            ]
+          }
+        ]
+      },
+      {
+        "dropdown": "Nx Plugin",
+        "icon": "hexagon",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["frontmcp/nx-plugin/overview", "frontmcp/nx-plugin/installation", "frontmcp/nx-plugin/quickstart"]
+          },
+          {
+            "group": "Generators",
+            "pages": [
+              "frontmcp/nx-plugin/generators/overview",
+              "frontmcp/nx-plugin/generators/workspace",
+              "frontmcp/nx-plugin/generators/app",
+              "frontmcp/nx-plugin/generators/lib",
+              "frontmcp/nx-plugin/generators/server",
+              "frontmcp/nx-plugin/generators/tool",
+              "frontmcp/nx-plugin/generators/resource",
+              "frontmcp/nx-plugin/generators/prompt",
+              "frontmcp/nx-plugin/generators/skill",
+              "frontmcp/nx-plugin/generators/agent",
+              "frontmcp/nx-plugin/generators/provider",
+              "frontmcp/nx-plugin/generators/plugin",
+              "frontmcp/nx-plugin/generators/adapter",
+              "frontmcp/nx-plugin/generators/auth-provider",
+              "frontmcp/nx-plugin/generators/flow"
+            ]
+          },
+          {
+            "group": "Executors",
+            "pages": [
+              "frontmcp/nx-plugin/executors/overview",
+              "frontmcp/nx-plugin/executors/build",
+              "frontmcp/nx-plugin/executors/build-exec",
+              "frontmcp/nx-plugin/executors/dev",
+              "frontmcp/nx-plugin/executors/serve",
+              "frontmcp/nx-plugin/executors/test",
+              "frontmcp/nx-plugin/executors/inspector",
+              "frontmcp/nx-plugin/executors/deploy"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "frontmcp/nx-plugin/guides/monorepo-patterns",
+              "frontmcp/nx-plugin/guides/migration-from-standalone"
             ]
           }
         ]

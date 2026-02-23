@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nx
+.nx/cache
+.nx/workspace-data
+
+# Coverage
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local

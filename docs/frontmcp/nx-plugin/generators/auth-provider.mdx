@@ -1,0 +1,91 @@
+---
+title: Auth Provider Generator
+slug: nx-plugin/generators/auth-provider
+icon: shield-check
+description: Generate an @AuthProvider class
+---
+
+Generates an `@AuthProvider` class with type-specific authentication logic (OAuth, API key, bearer, basic, or custom).
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:auth-provider openai --project crm --type api-key
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the auth provider |
+| `project` | `string` | — | **Required.** The project to add the auth provider to |
+| `type` | `oauth` \| `api-key` \| `bearer` \| `basic` \| `custom` | `bearer` | The authentication type |
+| `directory` | `string` | — | Subdirectory within `src/auth/` |
+
+## Generated Code by Type
+
+<Tabs>
+  <Tab title="API Key">
+    ```ts
+    @AuthProvider({ name: 'openai', type: 'api-key' })
+    export class OpenaiAuthProvider {
+      async headers(): Promise<Record<string, string>> {
+        const apiKey = process.env.OPENAI_API_KEY ?? '';
+        return { 'X-API-Key': apiKey };
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Bearer">
+    ```ts
+    @AuthProvider({ name: 'openai', type: 'bearer' })
+    export class OpenaiAuthProvider {
+      async headers(): Promise<Record<string, string>> {
+        const token = process.env.OPENAI_TOKEN ?? '';
+        return { Authorization: `Bearer ${token}` };
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Basic">
+    ```ts
+    @AuthProvider({ name: 'openai', type: 'basic' })
+    export class OpenaiAuthProvider {
+      async headers(): Promise<Record<string, string>> {
+        const username = process.env.OPENAI_USERNAME ?? '';
+        const password = process.env.OPENAI_PASSWORD ?? '';
+        const encoded = Buffer.from(`${username}:${password}`).toString('base64');
+        return { Authorization: `Basic ${encoded}` };
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="OAuth">
+    ```ts
+    @AuthProvider({ name: 'openai', type: 'oauth' })
+    export class OpenaiAuthProvider {
+      async headers(): Promise<Record<string, string>> {
+        const accessToken = ''; // TODO: implement token retrieval
+        return { Authorization: `Bearer ${accessToken}` };
+      }
+
+      async refreshToken(): Promise<void> {
+        // TODO: implement token refresh logic
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Custom">
+    ```ts
+    @AuthProvider({ name: 'openai', type: 'custom' })
+    export class OpenaiAuthProvider {
+      async headers(): Promise<Record<string, string>> {
+        // TODO: implement custom auth headers
+        return {};
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Environment variables follow the `{CONSTANT_NAME}_{SUFFIX}` pattern (e.g., `OPENAI_API_KEY`, `OPENAI_TOKEN`).

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Serve",
+  "description": "Start a supervised production server",
+  "type": "object",
+  "properties": {
+    "entry": { "type": "string", "description": "Entry file path" },
+    "port": { "type": "number", "description": "Port to listen on" },
+    "maxRestarts": { "type": "number", "description": "Maximum number of restarts", "default": 5 }
+  },
+  "required": []
+}

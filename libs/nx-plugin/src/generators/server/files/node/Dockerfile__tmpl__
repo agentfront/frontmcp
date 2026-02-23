@@ -1,0 +1,15 @@
+FROM node:24-slim AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+COPY . .
+RUN npx nx build <%= projectName %>
+
+FROM node:24-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/<%= projectRoot %>/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+EXPOSE 3000
+CMD ["node", "dist/main.js"]

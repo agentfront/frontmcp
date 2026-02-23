@@ -1,0 +1,58 @@
+---
+title: Provider Generator
+slug: nx-plugin/generators/provider
+icon: syringe
+description: Generate a @Provider class for dependency injection
+---
+
+Generates a `@Provider` class with a Symbol token and configurable scope for the DI container.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:provider database --project crm
+nx g @frontmcp/nx:provider database --project crm --scope singleton
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the provider |
+| `project` | `string` | — | **Required.** The project to add the provider to |
+| `scope` | `singleton` \| `request` \| `context` | `singleton` | The provider scope |
+| `directory` | `string` | — | Subdirectory within `src/providers/` |
+
+## Generated Code
+
+```ts
+import { Provider } from '@frontmcp/sdk';
+
+export const DATABASE_TOKEN = Symbol('DatabaseProvider');
+
+@Provider({
+  token: DATABASE_TOKEN,
+  scope: 'singleton',
+})
+export class DatabaseProvider {
+  // TODO: implement provider logic
+
+  static factory(): DatabaseProvider {
+    return new DatabaseProvider();
+  }
+}
+```
+
+## Usage in Tools
+
+```ts
+import { DATABASE_TOKEN } from '../providers/database.provider';
+
+@Tool({ name: 'query-db', inputSchema: { sql: z.string() } })
+class QueryDbTool extends ToolContext {
+  async execute({ sql }) {
+    const db = this.get(DATABASE_TOKEN);
+    return db.query(sql);
+  }
+}
+```

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpAuthProvider",
+  "title": "FrontMCP Auth Provider Generator",
+  "description": "Generate an @AuthProvider class",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the auth provider",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the auth provider?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the auth provider to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "type": {
+      "type": "string",
+      "description": "The authentication type",
+      "enum": ["oauth", "api-key", "bearer", "basic", "custom"],
+      "default": "bearer",
+      "x-prompt": {
+        "message": "What type of authentication?",
+        "type": "list",
+        "items": [
+          { "value": "oauth", "label": "OAuth 2.0" },
+          { "value": "api-key", "label": "API Key" },
+          { "value": "bearer", "label": "Bearer Token" },
+          { "value": "basic", "label": "Basic Auth" },
+          { "value": "custom", "label": "Custom" }
+        ]
+      },
+      "x-priority": "important"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/auth/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

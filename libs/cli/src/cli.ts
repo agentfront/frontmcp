@@ -158,6 +158,7 @@ async function main(): Promise<void> {
           redis: parsed.redis,
           cicd: parsed.cicd,
           pm: parsed.pm,
+          nx: parsed.nx,
         });
         break;
       }

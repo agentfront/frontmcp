@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Dev Server",
+  "description": "Start a development server",
+  "type": "object",
+  "properties": {
+    "entry": { "type": "string", "description": "Entry file path" },
+    "port": { "type": "number", "description": "Port to listen on" }
+  },
+  "required": []
+}

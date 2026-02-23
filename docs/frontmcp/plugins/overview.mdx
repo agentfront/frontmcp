@@ -30,7 +30,7 @@ Plugins are powerful components that add cross-cutting functionality to your MCP
 These plugins are maintained by the FrontMCP team and included in `@frontmcp/plugins`.
 
 <CardGroup cols={1}>
-  <Card title="Remember Plugin" icon="brain" href="/docs/frontmcp/plugins/remember-plugin">
+  <Card title="Remember Plugin" icon="brain" href="/frontmcp/plugins/remember-plugin">
     Encrypted session memory with scoped storage and tool approval system for secure AI agent interactions.
 
     **Features:**
@@ -44,14 +44,14 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
 
   </Card>
 
-  <Card title="CodeCall Plugin" icon="code" href="/docs/frontmcp/plugins/codecall/overview">
+  <Card title="CodeCall Plugin" icon="code" href="/frontmcp/plugins/codecall/overview">
     Hide large toolsets behind a code-first meta-API. Instead of exposing hundreds of tools directly, CodeCall provides
     search, describe, and execute capabilities that let models write JavaScript plans to orchestrate your tools.
 
     **Features:**
     - Search and discover tools dynamically
     - Generate JavaScript execution plans
-    - Defense-in-depth security with [Enclave](/docs/frontmcp/guides/enclave) (AST validation + runtime sandboxing)
+    - Defense-in-depth security with Enclave (AST validation + runtime sandboxing)
     - Multi-app tool orchestration
     - Direct invocation mode for simple cases
 
@@ -59,7 +59,7 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
 
   </Card>
 
-  <Card title="Cache Plugin" icon="database" href="/docs/frontmcp/plugins/cache-plugin">
+  <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/cache-plugin">
     Transparently cache tool responses to reduce redundant computation and improve response times. Works with both
     in-memory and Redis backends.
 
@@ -237,13 +237,13 @@ Choose the right plugin for your use case:
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Remember Plugin" icon="brain" href="/docs/frontmcp/plugins/remember-plugin">
+  <Card title="Remember Plugin" icon="brain" href="/frontmcp/plugins/remember-plugin">
     Learn how to use session memory and approvals
   </Card>
-  <Card title="CodeCall Plugin" icon="code" href="/docs/frontmcp/plugins/codecall/overview">
+  <Card title="CodeCall Plugin" icon="code" href="/frontmcp/plugins/codecall/overview">
     Learn how to use the CodeCall plugin
   </Card>
-  <Card title="Cache Plugin" icon="database" href="/docs/frontmcp/plugins/cache-plugin">
+  <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/cache-plugin">
     Learn how to use the Cache plugin
   </Card>
   <Card title="Join Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
@@ -254,7 +254,7 @@ Choose the right plugin for your use case:
 ## Resources
 
 <CardGroup cols={2}>
-  <Card title="SDK Documentation" icon="book-open" href="/docs/frontmcp/getting-started/welcome">
+  <Card title="SDK Documentation" icon="book-open" href="/frontmcp/getting-started/welcome">
     Learn about the FrontMCP SDK and plugin interfaces
   </Card>
   <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/plugins">
@@ -271,10 +271,10 @@ Choose the right plugin for your use case:
 ## Related Guides
 
 <CardGroup cols={2}>
-  <Card title="Enclave Guide" icon="shield-halved" href="/docs/frontmcp/guides/enclave">
-    Learn about secure code execution with Enclave
+  <Card title="Enclave" icon="shield-halved" href="https://github.com/agentfront/enclave">
+    Secure code execution with Enclave (available as a separate repository)
   </Card>
-  <Card title="AST Guard Guide" icon="shield-check" href="/docs/frontmcp/guides/ast-guard">
-    Understand AST validation and security rules
+  <Card title="AST Guard" icon="shield-check" href="https://github.com/agentfront/enclave/tree/main/libs/ast-guard">
+    AST validation and security rules (available as a separate repository)
   </Card>
 </CardGroup>

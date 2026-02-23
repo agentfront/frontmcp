@@ -1,0 +1,103 @@
+---
+title: Authentication & Authorization
+slug: features/authentication-and-authorization
+icon: shield-check
+description: Three-tier auth model from public access to full OAuth 2.1 orchestration
+---
+
+FrontMCP implements a flexible **three-tier authentication system**. Choose the right level for each deployment scenario — from open development servers to production multi-tenant systems.
+
+## Three-Tier Model
+
+| Mode | How It Works | Best For |
+| --- | --- | --- |
+| **Public** | No auth required, anonymous sessions | Development, testing, public APIs |
+| **Transparent** | Pass-through tokens from external IdPs | Existing Auth0, Okta, Azure AD setups |
+| **Orchestrated** | Full OAuth 2.1 server (local or remote) | Multi-app, federated auth, progressive auth |
+
+## Public Mode
+
+No authentication — every request is accepted:
+
+```ts
+@FrontMcp({
+  info: { name: 'Dev Server', version: '0.1.0' },
+  apps: [MyApp],
+  auth: { mode: 'public' },
+})
+class Server {}
+```
+
+## Transparent Mode
+
+Validate tokens from your existing identity provider:
+
+```ts
+@FrontMcp({
+  info: { name: 'API Server', version: '1.0.0' },
+  apps: [MyApp],
+  auth: {
+    mode: 'transparent',
+    issuer: 'https://your-tenant.auth0.com/',
+    audience: 'https://api.example.com',
+  },
+})
+class Server {}
+```
+
+## Orchestrated Mode
+
+Full OAuth 2.1 with built-in or remote authorization server:
+
+```ts
+@FrontMcp({
+  info: { name: 'Production Server', version: '1.0.0' },
+  apps: [MyApp],
+  auth: {
+    mode: 'orchestrated',
+    local: {
+      issuer: 'https://mcp.example.com',
+      clients: [{ clientId: 'my-client', redirectUris: ['http://localhost:3000/callback'] }],
+    },
+  },
+})
+class Server {}
+```
+
+## Progressive Authentication
+
+Request additional scopes during tool execution — no upfront login wall:
+
+```ts
+@Tool({ name: 'access-billing', inputSchema: { accountId: z.string() } })
+class BillingTool extends ToolContext {
+  async execute({ accountId }) {
+    // Request elevated scope if needed
+    await this.requestScopes(['billing:read']);
+    // Proceed with billing data access
+  }
+}
+```
+
+## Learn More
+
+<CardGroup cols={3}>
+  <Card title="Auth Overview" icon="shield-check" href="/frontmcp/authentication/overview">
+    Complete authentication guide
+  </Card>
+  <Card title="Auth Modes" icon="layer-group" href="/frontmcp/authentication/modes">
+    Deep dive into all three modes
+  </Card>
+  <Card title="Progressive Auth" icon="stairs" href="/frontmcp/authentication/progressive">
+    On-demand scope elevation
+  </Card>
+  <Card title="CIMD" icon="fingerprint" href="/frontmcp/authentication/cimd">
+    Multi-account disambiguation
+  </Card>
+  <Card title="Local OAuth" icon="house" href="/frontmcp/authentication/local">
+    Built-in OAuth 2.1 server
+  </Card>
+  <Card title="Remote OAuth" icon="cloud" href="/frontmcp/authentication/remote">
+    External IdP integration
+  </Card>
+</CardGroup>

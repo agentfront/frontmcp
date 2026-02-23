@@ -66,7 +66,8 @@
       "@frontmcp/ui/universal": ["libs/ui/src/universal/index.ts"],
       "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
       "@frontmcp/auth": ["libs/auth/src/index.ts"],
-      "@frontmcp/storage-sqlite": ["libs/storage-sqlite/src/index.ts"]
+      "@frontmcp/storage-sqlite": ["libs/storage-sqlite/src/index.ts"],
+      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

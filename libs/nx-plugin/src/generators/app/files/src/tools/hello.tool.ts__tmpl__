@@ -1,0 +1,14 @@
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'hello',
+  description: 'Say hello to someone',
+  inputSchema: { name: z.string().describe('Name to greet') },
+  outputSchema: { message: z.string() },
+})
+export default class HelloTool extends ToolContext {
+  async execute(input: { name: string }) {
+    return { message: `Hello, ${input.name}!` };
+  }
+}
