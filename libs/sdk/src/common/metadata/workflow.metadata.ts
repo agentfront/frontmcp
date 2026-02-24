@@ -163,7 +163,7 @@ const workflowStepSchema = z.object({
 const workflowWebhookConfigSchema = z.object({
   path: z
     .string()
-    .regex(/^\/[a-zA-Z0-9\-._~:@!$&'()*+,;=\/]*$/, 'Webhook path must be a valid relative URI path starting with /')
+    .regex(/^\/[a-zA-Z0-9\-._~:@!$&'()*+,;=/]*$/, 'Webhook path must be a valid relative URI path starting with /')
     .optional(),
   /** NOTE: Webhook secrets should be stripped from discovery/listing responses. */
   secret: z.string().optional(),
