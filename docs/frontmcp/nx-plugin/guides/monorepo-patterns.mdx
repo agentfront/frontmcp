@@ -1,0 +1,161 @@
+---
+title: Monorepo Patterns
+slug: nx-plugin/guides/monorepo-patterns
+icon: sitemap
+description: Architecture patterns for large FrontMCP monorepos
+---
+
+This guide covers proven patterns for organizing FrontMCP projects at scale using the Nx monorepo structure.
+
+## Three-Layer Architecture
+
+FrontMCP monorepos follow a three-layer architecture:
+
+```
+my-platform/
+├── apps/          # FrontMCP applications (business logic)
+├── libs/          # Shared libraries (reusable code)
+└── servers/       # Deployment shells (infrastructure)
+```
+
+| Layer | Contains | Depends On |
+| --- | --- | --- |
+| **Servers** | Entry points, Docker/Vercel/Lambda config | Apps, Libs |
+| **Apps** | Tools, resources, prompts, skills, agents | Libs |
+| **Libs** | Shared utilities, plugins, adapters | Other Libs |
+
+<Info>
+Servers never contain business logic — they only compose apps. Apps never contain infrastructure config — they only define capabilities. Libs are reusable across both.
+</Info>
+
+---
+
+## Multi-App Server Composition
+
+Create different servers that compose different app combinations:
+
+```bash
+# Create apps
+nx g @frontmcp/nx:app crm
+nx g @frontmcp/nx:app analytics
+nx g @frontmcp/nx:app admin
+
+# Create servers for different environments
+nx g @frontmcp/nx:server production --apps crm,analytics --deploymentTarget node
+nx g @frontmcp/nx:server staging --apps crm,analytics,admin --deploymentTarget node
+nx g @frontmcp/nx:server edge --apps crm --deploymentTarget vercel
+```
+
+```
+servers/
+├── production/    # CRM + Analytics (Docker)
+├── staging/       # CRM + Analytics + Admin (Docker)
+└── edge/          # CRM only (Vercel)
+```
+
+---
+
+## Shared Libraries
+
+### Generic Libraries
+
+Shared utilities used across multiple apps:
+
+```bash
+nx g @frontmcp/nx:lib shared-utils
+nx g @frontmcp/nx:lib data-models
+```
+
+### Plugin Libraries
+
+Reusable plugins published as npm packages:
+
+```bash
+nx g @frontmcp/nx:lib audit-plugin --libType plugin --publishable --importPath @my-org/plugin-audit
+```
+
+### Tool Register Libraries
+
+Multi-tool packages shared across apps:
+
+```bash
+nx g @frontmcp/nx:lib github-tools --libType tool-register
+```
+
+```ts
+// In any app:
+import { GithubToolsTools } from '@libs/github-tools';
+
+@App({ id: 'crm', tools: [...GithubToolsTools, CreateLeadTool] })
+class CrmApp {}
+```
+
+---
+
+## Dependency Graph
+
+Visualize your workspace dependencies:
+
+```bash
+nx graph
+```
+
+Nx tracks which projects depend on which, enabling:
+
+- **Affected commands**: `nx affected -t test` — only test projects affected by your changes
+- **Build ordering**: `nx run-many -t build` — builds in correct dependency order
+- **Caching**: Unchanged projects skip builds entirely
+
+---
+
+## Tagging Convention
+
+Use tags to enforce dependency rules:
+
+```bash
+nx g @frontmcp/nx:app crm --tags "scope:crm,type:app"
+nx g @frontmcp/nx:lib shared-utils --tags "scope:shared,type:lib"
+nx g @frontmcp/nx:server production --tags "scope:infra,type:server"
+```
+
+Example boundary rules in `.eslintrc.json`:
+
+```json
+{
+  "@nx/enforce-module-boundaries": [
+    "error",
+    {
+      "depConstraints": [
+        { "sourceTag": "type:app", "onlyDependOnLibsWithTags": ["type:lib"] },
+        { "sourceTag": "type:server", "onlyDependOnLibsWithTags": ["type:app", "type:lib"] },
+        { "sourceTag": "type:lib", "onlyDependOnLibsWithTags": ["type:lib"] }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Per-Environment Servers
+
+Create environment-specific servers with different configurations:
+
+```
+servers/
+├── dev/           # All apps, public auth, memory storage
+├── staging/       # All apps, transparent auth, Redis
+└── production/    # Selected apps, orchestrated auth, Redis cluster
+```
+
+Each server's `main.ts` can customize providers and auth:
+
+```ts servers/production/src/main.ts
+@FrontMcp({
+  info: { name: 'Production', version: '1.0.0' },
+  apps: [CrmApp, AnalyticsApp],
+  auth: { mode: 'orchestrated', /* ... */ },
+  providers: [RedisProvider],
+})
+export default class Server {}
+```

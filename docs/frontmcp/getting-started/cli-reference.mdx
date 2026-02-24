@@ -1,0 +1,230 @@
+---
+title: CLI Reference
+slug: getting-started/cli-reference
+icon: terminal
+description: Complete reference for all FrontMCP CLI commands
+---
+
+The `frontmcp` CLI provides commands for development, process management, and package management. Install it globally or use via `npx`.
+
+```bash
+frontmcp <command> [options]
+```
+
+## Development Commands
+
+Commands for building, testing, and debugging your FrontMCP server.
+
+| Command | Description |
+| --- | --- |
+| `dev` | Start in development mode (tsx --watch + async type-check) |
+| `build` | Compile entry with TypeScript (tsc) |
+| `build --exec` | Build distributable executable bundle (esbuild) |
+| `test` | Run E2E tests with auto-injected Jest configuration |
+| `init` | Create or fix a tsconfig.json suitable for FrontMCP |
+| `doctor` | Check Node/npm versions and tsconfig requirements |
+| `inspector` | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`) |
+| `create [name]` | Scaffold a new FrontMCP project (interactive if name omitted) |
+| `template <type>` | Scaffold a template by type (e.g., `3rd-party-integration`) |
+| `socket <entry>` | Start Unix socket daemon for local MCP server |
+
+---
+
+## Process Manager Commands
+
+Manage long-running MCP servers with automatic supervision, restart policies, and logging.
+
+| Command | Description |
+| --- | --- |
+| `start <name>` | Start a named MCP server with supervisor |
+| `stop <name>` | Stop a managed server (graceful by default) |
+| `restart <name>` | Restart a managed server |
+| `status [name]` | Show process status (detail if name given, table if omitted) |
+| `list` | List all managed processes |
+| `logs <name>` | Tail log output for a managed server |
+| `service <action>` | Install/uninstall systemd/launchd service |
+
+---
+
+## Package Manager Commands
+
+Install, configure, and manage MCP apps from npm, local paths, or git repositories.
+
+| Command | Description |
+| --- | --- |
+| `install <source>` | Install an MCP app from npm, local path, or git |
+| `uninstall <name>` | Remove an installed MCP app |
+| `configure <name>` | Re-run setup questionnaire for an installed app |
+
+---
+
+## Options Reference
+
+### General Options
+
+| Option | Description |
+| --- | --- |
+| `-h, --help` | Show help message |
+| `-o, --out-dir <dir>` | Output directory (default: `./dist`) |
+| `-e, --entry <path>` | Manually specify entry file path |
+
+### Build Options
+
+| Option | Description |
+| --- | --- |
+| `--exec` | Build distributable executable bundle |
+| `-a, --adapter <name>` | Deployment adapter: `node`, `vercel`, `lambda`, `cloudflare` |
+
+### Start Options
+
+| Option | Description |
+| --- | --- |
+| `-e, --entry <path>` | Entry file for the server |
+| `-p, --port <N>` | Port number for the server |
+| `-s, --socket <path>` | Unix socket path |
+| `--db <path>` | SQLite database path |
+| `--max-restarts <N>` | Maximum auto-restart attempts (default: `5`) |
+
+### Stop Options
+
+| Option | Description |
+| --- | --- |
+| `-f, --force` | Force kill (SIGKILL instead of SIGTERM) |
+
+### Logs Options
+
+| Option | Description |
+| --- | --- |
+| `-F, --follow` | Follow log output (like `tail -f`) |
+| `-n, --lines <N>` | Number of lines to show (default: `50`) |
+
+### Install Options
+
+| Option | Description |
+| --- | --- |
+| `--registry <url>` | npm registry URL for private packages |
+| `-y, --yes` | Silent mode (use defaults, skip questionnaire) |
+| `-p, --port <N>` | Override default port |
+
+### Create Options
+
+| Option | Description |
+| --- | --- |
+| `-y, --yes` | Use defaults (non-interactive mode) |
+| `--target <target>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare` |
+| `--redis <setup>` | Redis setup: `docker`, `existing`, `none` (node target only) |
+| `--pm <pm>` | Package manager: `npm`, `yarn`, `pnpm` |
+| `--cicd` | Enable GitHub Actions CI/CD |
+| `--no-cicd` | Disable GitHub Actions CI/CD |
+| `--nx` | Scaffold an Nx monorepo workspace |
+
+### Socket Options
+
+| Option | Description |
+| --- | --- |
+| `-s, --socket <path>` | Unix socket path (default: `~/.frontmcp/sockets/{app}.sock`) |
+| `--db <path>` | SQLite database path for persistence |
+| `-b, --background` | Run as background daemon (detached process) |
+
+### Test Options
+
+| Option | Description |
+| --- | --- |
+| `-i, --runInBand` | Run tests sequentially (recommended for E2E) |
+| `-w, --watch` | Run tests in watch mode |
+| `-v, --verbose` | Show verbose test output |
+| `-t, --timeout <ms>` | Set test timeout (default: `60000ms`) |
+| `-c, --coverage` | Collect test coverage |
+
+---
+
+## Examples
+
+### Development
+
+```bash
+# Start dev server with hot-reload
+frontmcp dev
+
+# Build to custom output directory
+frontmcp build --out-dir build
+
+# Build distributable executable
+frontmcp build --exec
+
+# Run E2E tests sequentially
+frontmcp test --runInBand
+
+# Initialize tsconfig
+frontmcp init
+
+# Check environment
+frontmcp doctor
+
+# Launch MCP Inspector
+frontmcp inspector
+```
+
+### Project Scaffolding
+
+```bash
+# Interactive mode
+npx frontmcp create
+
+# Use defaults (non-interactive)
+npx frontmcp create my-mcp --yes
+
+# Target Vercel deployment
+npx frontmcp create my-mcp --target vercel
+
+# Scaffold an Nx monorepo workspace
+npx frontmcp create my-workspace --nx
+
+# Scaffold a template
+frontmcp template marketplace-3rd-tools
+```
+
+### Unix Socket
+
+```bash
+# Start socket server
+frontmcp socket ./src/main.ts --socket /tmp/my-app.sock
+
+# Start with SQLite persistence
+frontmcp socket ./src/main.ts --socket /tmp/my-app.sock --db ~/.frontmcp/data/app.sqlite
+```
+
+### Process Management
+
+```bash
+# Start a named server
+frontmcp start my-app --entry ./src/main.ts --port 3005
+
+# Stop a server
+frontmcp stop my-app
+
+# Tail logs
+frontmcp logs my-app --follow
+
+# Install as system service
+frontmcp service install my-app
+```
+
+### Package Management
+
+```bash
+# Install from npm (private registry)
+frontmcp install @company/my-mcp --registry https://npm.company.com
+
+# Install from local path
+frontmcp install ./my-local-app
+
+# Install from GitHub
+frontmcp install github:user/repo
+
+# Re-configure an installed app
+frontmcp configure my-app
+
+# Uninstall
+frontmcp uninstall my-app
+```

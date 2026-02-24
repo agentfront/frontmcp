@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpWorkspace",
+  "title": "FrontMCP Workspace Generator",
+  "description": "Scaffold a full FrontMCP Nx monorepo",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the workspace",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the workspace?",
+      "x-priority": "important"
+    },
+    "packageManager": {
+      "type": "string",
+      "description": "Package manager to use",
+      "enum": ["npm", "yarn", "pnpm", "bun"],
+      "default": "npm",
+      "x-priority": "important"
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "description": "Skip package installation",
+      "default": false,
+      "x-priority": "internal"
+    },
+    "skipGit": {
+      "type": "boolean",
+      "description": "Skip git initialization",
+      "default": false,
+      "x-priority": "internal"
+    },
+    "createSampleApp": {
+      "type": "boolean",
+      "description": "Create a sample demo application",
+      "default": true,
+      "x-priority": "important"
+    }
+  },
+  "required": ["name"]
+}

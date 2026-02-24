@@ -1,0 +1,91 @@
+---
+title: Nx Plugin Overview
+slug: nx-plugin/overview
+icon: hexagon
+description: "@frontmcp/nx — Nx generators and executors for FrontMCP monorepos"
+---
+
+`@frontmcp/nx` is the official Nx plugin for FrontMCP. It provides **14 generators** for scaffolding projects and components, and **7 executors** for building, testing, and deploying your servers — all integrated with the Nx build system.
+
+<Info>
+Use the Nx plugin when you want monorepo-scale development: shared libraries, multi-app composition, per-environment servers, and Nx's dependency graph + affected commands.
+</Info>
+
+## When to Use the Nx Plugin
+
+| Scenario | Recommendation |
+| --- | --- |
+| Single MCP server | Use `npx frontmcp create` (standalone) |
+| Multiple apps sharing code | Use `@frontmcp/nx` (monorepo) |
+| Team with shared libraries | Use `@frontmcp/nx` (monorepo) |
+| Multiple deployment targets | Use `@frontmcp/nx` (monorepo) |
+| Existing Nx workspace | Add `@frontmcp/nx` |
+
+## Architecture
+
+The Nx plugin organizes your code into three layers:
+
+```mermaid
+graph TD
+    S1["servers/production"] --> A1["apps/crm"]
+    S1 --> A2["apps/analytics"]
+    S2["servers/staging"] --> A1
+    S2 --> A3["apps/admin"]
+
+    A1 --> L1["libs/shared-utils"]
+    A2 --> L1
+    A1 --> L2["libs/crm-plugin"]
+    A3 --> L1
+
+    style S1 fill:#16A34A,color:#fff
+    style S2 fill:#16A34A,color:#fff
+    style A1 fill:#2563EB,color:#fff
+    style A2 fill:#2563EB,color:#fff
+    style A3 fill:#2563EB,color:#fff
+    style L1 fill:#7C3AED,color:#fff
+    style L2 fill:#7C3AED,color:#fff
+```
+
+| Layer | Directory | Purpose |
+| --- | --- | --- |
+| **Apps** | `apps/` | FrontMCP applications with tools, resources, prompts |
+| **Libs** | `libs/` | Shared libraries (generic, plugin, adapter, tool-register) |
+| **Servers** | `servers/` | Deployment shells that compose apps for a target platform |
+
+## Feature Summary
+
+### Generators (14)
+
+| Category | Generators |
+| --- | --- |
+| **Structural** | `workspace`, `app`, `lib`, `server` |
+| **Component** | `tool`, `resource`, `prompt`, `skill`, `agent`, `provider`, `plugin`, `adapter`, `auth-provider`, `flow` |
+
+### Executors (7)
+
+| Executor | Wraps | Cacheable |
+| --- | --- | --- |
+| `build` | `frontmcp build` | Yes |
+| `build-exec` | `frontmcp build --exec` | Yes |
+| `dev` | `frontmcp dev` | No (long-running) |
+| `serve` | `frontmcp start` | No (long-running) |
+| `test` | `frontmcp test` | Yes |
+| `inspector` | `frontmcp inspector` | No (long-running) |
+| `deploy` | Platform-specific | No |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="arrow-down-to-line" href="/frontmcp/nx-plugin/installation">
+    Install @frontmcp/nx in new or existing workspaces
+  </Card>
+  <Card title="Quickstart" icon="rocket-launch" href="/frontmcp/nx-plugin/quickstart">
+    Build your first monorepo in 5 minutes
+  </Card>
+  <Card title="Generators" icon="wand-magic-sparkles" href="/frontmcp/nx-plugin/generators/overview">
+    Scaffold apps, libs, servers, and components
+  </Card>
+  <Card title="Executors" icon="play" href="/frontmcp/nx-plugin/executors/overview">
+    Build, test, and deploy with Nx
+  </Card>
+</CardGroup>

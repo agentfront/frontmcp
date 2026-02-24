@@ -1,0 +1,88 @@
+---
+title: Multi-App Composition
+slug: features/multi-app-composition
+icon: grid-2
+description: Compose multiple @App modules into a single MCP server
+---
+
+FrontMCP servers are composed of one or more **apps**. Each `@App` is an isolated container with its own tools, resources, prompts, providers, and authentication — composed together under a single `@FrontMcp` server.
+
+## Composing Apps
+
+```ts
+@FrontMcp({
+  info: { name: 'Platform Server', version: '1.0.0' },
+  apps: [CrmApp, AnalyticsApp, AdminApp],
+})
+export default class Server {}
+```
+
+Each app defines its own capabilities:
+
+```ts
+@App({
+  id: 'crm',
+  name: 'CRM',
+  tools: [CreateLeadTool, GetContactsTool],
+  resources: [LeadResource],
+  providers: [CrmDatabaseProvider],
+})
+class CrmApp {}
+
+@App({
+  id: 'analytics',
+  name: 'Analytics',
+  tools: [RunReportTool, ExportDataTool],
+  providers: [AnalyticsDatabaseProvider],
+})
+class AnalyticsApp {}
+
+@App({
+  id: 'admin',
+  name: 'Admin',
+  tools: [ManageUsersTool],
+})
+class AdminApp {}
+```
+
+## What Each App Gets
+
+| Feature | Scope |
+| --- | --- |
+| **Tools, Resources, Prompts** | Registered under the app's namespace |
+| **Providers** | Isolated to the app (server-level providers are shared) |
+| **Authentication** | Per-app auth configuration |
+| **Skills** | Registered and searchable within the app |
+| **Plugins** | Can be app-specific or server-wide |
+
+## Shared vs Isolated Providers
+
+```ts
+// Server-level: shared across all apps
+@FrontMcp({
+  providers: [SharedCacheProvider, LoggingProvider],
+  apps: [CrmApp, AnalyticsApp],
+})
+class Server {}
+
+// App-level: isolated to CRM only
+@App({
+  id: 'crm',
+  providers: [CrmDatabaseProvider],
+  tools: [CreateLeadTool],
+})
+class CrmApp {}
+```
+
+Tools in `CrmApp` can access both `SharedCacheProvider` and `CrmDatabaseProvider`, while tools in `AnalyticsApp` can only access `SharedCacheProvider`.
+
+## Learn More
+
+<CardGroup cols={2}>
+  <Card title="Apps" icon="grid-2" href="/frontmcp/servers/apps">
+    Full guide to @App configuration and capabilities
+  </Card>
+  <Card title="Server" icon="server" href="/frontmcp/servers/server">
+    Server-level composition and configuration
+  </Card>
+</CardGroup>

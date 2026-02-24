@@ -1,0 +1,82 @@
+---
+title: Plugin Generator
+slug: nx-plugin/generators/plugin
+icon: puzzle-piece
+description: Generate a @Plugin class extending DynamicPlugin
+---
+
+Generates a `@Plugin` class with optional context extension for adding properties like `this.myFeature` to all execution contexts.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:plugin audit --project crm
+nx g @frontmcp/nx:plugin audit --project crm --withContextExtension
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the plugin |
+| `project` | `string` | — | **Required.** The project to add the plugin to |
+| `withContextExtension` | `boolean` | `false` | Generate a context extension file |
+| `directory` | `string` | — | Subdirectory within `src/plugins/` |
+
+## Generated Files
+
+```
+src/plugins/
+├── audit.plugin.ts                  # Plugin class
+└── audit.context-extension.ts       # (only with --withContextExtension)
+```
+
+## Generated Code
+
+```ts audit.plugin.ts
+import { Plugin, DynamicPlugin, type PluginRegistrationContext } from '@frontmcp/sdk';
+
+export interface AuditPluginOptions {
+  // TODO: define plugin options
+}
+
+@Plugin({
+  name: 'audit',
+  description: 'TODO: describe what this plugin does',
+})
+export class AuditPlugin extends DynamicPlugin<AuditPluginOptions> {
+  async dynamicProviders() {
+    return [];
+  }
+
+  async onRegister(ctx: PluginRegistrationContext): Promise<void> {
+    // TODO: register tools, resources, prompts, or context extensions
+  }
+}
+```
+
+### Context Extension (optional)
+
+When `--withContextExtension` is used, a second file provides module augmentation and runtime prototype extension:
+
+```ts audit.context-extension.ts
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly audit: unknown; // TODO: replace with actual type
+  }
+}
+
+export function installAuditContextExtension(): void {
+  const { ExecutionContextBase } = require('@frontmcp/sdk');
+  Object.defineProperty(ExecutionContextBase.prototype, 'audit', {
+    get: function () {
+      // TODO: return value from DI container
+      return undefined;
+    },
+    configurable: true,
+    enumerable: false,
+  });
+}
+```
+
+This lets all tools use `this.audit` after the plugin is registered.

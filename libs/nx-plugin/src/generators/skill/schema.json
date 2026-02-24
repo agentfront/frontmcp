@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpSkill",
+  "title": "FrontMCP Skill Generator",
+  "description": "Generate a @Skill class",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the skill",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the skill?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the skill to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "tools": {
+      "type": "string",
+      "description": "Comma-separated tool names to reference"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/skills/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

@@ -1,0 +1,40 @@
+---
+title: Generators Overview
+slug: nx-plugin/generators/overview
+icon: wand-magic-sparkles
+description: All 14 FrontMCP Nx generators for scaffolding projects and components
+---
+
+Generators scaffold code following FrontMCP conventions. Run them with:
+
+```bash
+nx g @frontmcp/nx:<generator> <name> [options]
+```
+
+## Structural Generators
+
+These create top-level projects in your monorepo:
+
+| Generator | Description | Output |
+| --- | --- | --- |
+| [`workspace`](/frontmcp/nx-plugin/generators/workspace) | Scaffold a full FrontMCP Nx monorepo | Root directory |
+| [`app`](/frontmcp/nx-plugin/generators/app) | Generate a FrontMCP application | `apps/<name>/` |
+| [`lib`](/frontmcp/nx-plugin/generators/lib) | Generate a shared library | `libs/<name>/` |
+| [`server`](/frontmcp/nx-plugin/generators/server) | Generate a deployment shell | `servers/<name>/` |
+
+## Component Generators
+
+These add components to existing projects:
+
+| Generator | Description | Output |
+| --- | --- | --- |
+| [`tool`](/frontmcp/nx-plugin/generators/tool) | Generate a `@Tool` class | `src/tools/<name>.tool.ts` |
+| [`resource`](/frontmcp/nx-plugin/generators/resource) | Generate a `@Resource` or `@ResourceTemplate` | `src/resources/<name>.resource.ts` |
+| [`prompt`](/frontmcp/nx-plugin/generators/prompt) | Generate a `@Prompt` class | `src/prompts/<name>.prompt.ts` |
+| [`skill`](/frontmcp/nx-plugin/generators/skill) | Generate a `@Skill` class | `src/skills/<name>.skill.ts` |
+| [`agent`](/frontmcp/nx-plugin/generators/agent) | Generate an `@Agent` class | `src/agents/<name>.agent.ts` |
+| [`provider`](/frontmcp/nx-plugin/generators/provider) | Generate a `@Provider` class | `src/providers/<name>.provider.ts` |
+| [`plugin`](/frontmcp/nx-plugin/generators/plugin) | Generate a `@Plugin` class | `src/plugins/<name>.plugin.ts` |
+| [`adapter`](/frontmcp/nx-plugin/generators/adapter) | Generate an `@Adapter` class | `src/adapters/<name>.adapter.ts` |
+| [`auth-provider`](/frontmcp/nx-plugin/generators/auth-provider) | Generate an `@AuthProvider` class | `src/auth/<name>.auth-provider.ts` |
+| [`flow`](/frontmcp/nx-plugin/generators/flow) | Generate a `@Flow` class | `src/flows/<name>.flow.ts` |

@@ -393,59 +393,34 @@ This gives you:
 ## Testing Site Authorization
 
 ```typescript
-import { createTestingModule } from '@frontmcp/sdk/testing';
-import EmployeeTimeApp from './apps/employee-time';
+import { test, expect } from '@frontmcp/testing';
 
-describe('Site Authorization', () => {
-  it('should allow access to authorized site', async () => {
-    const { scope } = await createTestingModule({
-      apps: [EmployeeTimeApp],
-    });
+test.use({ server: './src/main.ts' });
 
-    const result = await scope.callTool('employee-time:list-employees', {
-      siteId: 'site-A',
-    }, {
-      authInfo: {
-        user: { id: 'user-1', sites: ['site-A', 'site-B'] },
-      },
-    });
-
-    expect(result.success).toBe(true);
+test('should allow access to authorized site', async ({ mcp }) => {
+  const result = await mcp.tools.call('employee-time:list-employees', {
+    siteId: 'site-A',
   });
 
-  it('should deny access to unauthorized site', async () => {
-    const { scope } = await createTestingModule({
-      apps: [EmployeeTimeApp],
-    });
+  expect(result).toBeSuccessful();
+});
 
-    await expect(
-      scope.callTool('employee-time:list-employees', {
-        siteId: 'site-C',  // Not in user's sites
-      }, {
-        authInfo: {
-          user: { id: 'user-1', sites: ['site-A', 'site-B'] },
-        },
-      })
-    ).rejects.toThrow('Not authorized for site site-C');
+test('should deny access to unauthorized site', async ({ mcp }) => {
+  const result = await mcp.tools.call('employee-time:list-employees', {
+    siteId: 'site-C', // Not in user's sites
   });
 
-  it('should require admin for admin tools', async () => {
-    const { scope } = await createTestingModule({
-      apps: [EmployeeTimeApp],
-    });
+  expect(result).not.toBeSuccessful();
+});
 
-    await expect(
-      scope.callTool('employee-time:admin-add-entry', {
-        siteId: 'site-A',
-        employeeId: 'emp-1',
-        hours: 8,
-      }, {
-        authInfo: {
-          user: { id: 'user-1', sites: ['site-A'], roles: ['user'] },
-        },
-      })
-    ).rejects.toThrow('Admin privileges required');
+test('should require admin for admin tools', async ({ mcp }) => {
+  const result = await mcp.tools.call('employee-time:admin-add-entry', {
+    siteId: 'site-A',
+    employeeId: 'emp-1',
+    hours: 8,
   });
+
+  expect(result).not.toBeSuccessful();
 });
 ```
 

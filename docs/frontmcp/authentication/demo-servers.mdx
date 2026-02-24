@@ -93,7 +93,7 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
 
 - Spins up the full OAuth 2.1 stack (authorization code + PKCE) entirely inside FrontMCP.
 - Shows the consent UI grouping tools by app, plus incremental auth defaults.
-- Uses the same transport defaults documented in [Transport controls](/docs/frontmcp/servers/server#transport) so you can compare behavior with production builds.
+- Uses the same transport defaults documented in [Transport controls](/frontmcp/servers/server#transport) so you can compare behavior with production builds.
 
 <Warning>
 The demo login accepts any email address. Replace it with a real IdP before exposing the flow to users.
@@ -159,17 +159,17 @@ test('lists demo tools', async ({ mcp }) => {
 });
 ```
 
-Pair this with the [Transport controls reference](/docs/frontmcp/servers/server#transport) to mirror the exact transports your production server exposes.
+Pair this with the [Transport controls reference](/frontmcp/servers/server#transport) to mirror the exact transports your production server exposes.
 
 ---
 
 ## What to read next
 
 <CardGroup cols={2}>
-  <Card title="Authentication Modes" icon="layer-group" href="/docs/frontmcp/authentication/modes">
+  <Card title="Authentication Modes" icon="layer-group" href="/frontmcp/authentication/modes">
     Understand when to reach for public, transparent, or orchestrated auth.
   </Card>
-  <Card title="Transport controls" icon="server" href="/docs/frontmcp/servers/server#transport-controls">
+  <Card title="Transport controls" icon="server" href="/frontmcp/servers/server#transport-controls">
     Dive deeper into Streamable, stateful, and stateless HTTP settings.
   </Card>
 </CardGroup>

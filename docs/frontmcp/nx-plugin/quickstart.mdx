@@ -1,0 +1,139 @@
+---
+title: Quickstart
+slug: nx-plugin/quickstart
+icon: rocket-launch
+description: Build your first FrontMCP monorepo in 5 minutes
+---
+
+This walkthrough takes you from an empty directory to a running multi-app MCP server inside an Nx monorepo.
+
+<Steps>
+  <Step title="Create the workspace">
+    ```bash
+    npx frontmcp create my-platform --nx
+    cd my-platform
+    ```
+
+    This scaffolds the full monorepo structure with a sample app.
+  </Step>
+
+  <Step title="Generate an app">
+    ```bash
+    nx g @frontmcp/nx:app crm
+    ```
+
+    Creates `apps/crm/` with a main entry point, app class, and sample tool.
+  </Step>
+
+  <Step title="Add a tool">
+    ```bash
+    nx g @frontmcp/nx:tool fetch-contacts --project crm
+    ```
+
+    Creates `apps/crm/src/tools/fetch-contacts.tool.ts` — edit the `execute()` method to add your logic.
+  </Step>
+
+  <Step title="Generate a shared library">
+    ```bash
+    nx g @frontmcp/nx:lib shared-utils
+    ```
+
+    Creates `libs/shared-utils/` — use it for code shared across apps.
+  </Step>
+
+  <Step title="Generate a server">
+    ```bash
+    nx g @frontmcp/nx:server production --apps crm --deploymentTarget node
+    ```
+
+    Creates `servers/production/` with a Dockerfile, docker-compose.yml, and an entry point that composes the CRM app.
+  </Step>
+
+  <Step title="Start development">
+    ```bash
+    nx dev crm
+    ```
+
+    Starts the CRM app in development mode with hot-reload.
+  </Step>
+
+  <Step title="Build for production">
+    ```bash
+    nx build production
+    ```
+
+    Compiles the production server to `servers/production/dist/`.
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    nx test crm
+    ```
+
+    Runs E2E tests for the CRM app using `@frontmcp/testing`.
+  </Step>
+</Steps>
+
+<Check>Your monorepo is ready! Add more apps, tools, and libraries as your platform grows.</Check>
+
+---
+
+## Project Structure
+
+After completing the steps above, your workspace looks like this:
+
+```
+my-platform/
+├── apps/
+│   └── crm/
+│       ├── src/
+│       │   ├── main.ts
+│       │   ├── crm.app.ts
+│       │   └── tools/
+│       │       ├── hello.tool.ts
+│       │       └── fetch-contacts.tool.ts
+│       ├── project.json
+│       └── tsconfig.json
+├── libs/
+│   └── shared-utils/
+│       ├── src/
+│       │   ├── shared-utils.ts
+│       │   └── index.ts
+│       └── project.json
+├── servers/
+│   └── production/
+│       ├── src/main.ts
+│       ├── Dockerfile
+│       ├── docker-compose.yml
+│       └── project.json
+├── nx.json
+├── tsconfig.base.json
+└── package.json
+```
+
+---
+
+## Common Commands
+
+| Command | Description |
+| --- | --- |
+| `nx dev <app>` | Start an app with hot-reload |
+| `nx build <project>` | Build an app or server |
+| `nx test <project>` | Run tests |
+| `nx inspector <app>` | Launch MCP Inspector |
+| `nx graph` | Visualize dependency graph |
+| `nx affected -t test` | Test only affected projects |
+| `nx run-many -t build` | Build all projects |
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generators" icon="wand-magic-sparkles" href="/frontmcp/nx-plugin/generators/overview">
+    All 14 generators for scaffolding components
+  </Card>
+  <Card title="Monorepo Patterns" icon="sitemap" href="/frontmcp/nx-plugin/guides/monorepo-patterns">
+    Architecture patterns for large monorepos
+  </Card>
+</CardGroup>

@@ -1,0 +1,42 @@
+---
+title: Dev Executor
+slug: nx-plugin/executors/dev
+icon: laptop-code
+description: Start a development server using frontmcp dev
+---
+
+Starts a development server with hot-reload (`tsx --watch`) and async type-checking. This is a long-running process.
+
+## Usage
+
+```bash
+nx dev my-app
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "dev": {
+      "executor": "@frontmcp/nx:dev",
+      "options": {
+        "entry": "{projectRoot}/src/main.ts"
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `entry` | `string` | Entry file path |
+| `port` | `number` | Port to listen on |
+
+## Behavior
+
+- **Hot reload**: File changes trigger automatic restart
+- **Type checking**: Runs `tsc --noEmit` asynchronously in the background
+- **Not cacheable**: Long-running process, no Nx caching

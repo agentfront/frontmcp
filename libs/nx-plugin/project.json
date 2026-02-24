@@ -1,0 +1,70 @@
+{
+  "name": "nx-plugin",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/nx-plugin/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/nx-plugin/jest.config.ts"
+      }
+    },
+    "build-tsc": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/nx-plugin/dist",
+        "main": "libs/nx-plugin/src/index.ts",
+        "tsConfig": "libs/nx-plugin/tsconfig.lib.json",
+        "assets": [
+          "libs/nx-plugin/generators.json",
+          "libs/nx-plugin/executors.json",
+          "README.md",
+          "LICENSE",
+          "libs/nx-plugin/package.json",
+          {
+            "input": "libs/nx-plugin/src",
+            "glob": "**/*.json",
+            "output": "."
+          },
+          {
+            "input": "libs/nx-plugin/src",
+            "glob": "**/files/**",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-tsc"],
+      "options": {
+        "commands": [
+          "cp -r libs/nx-plugin/dist/src/* libs/nx-plugin/dist/ && rm -rf libs/nx-plugin/dist/src",
+          "sed 's|./src/|./|g' libs/nx-plugin/dist/generators.json > libs/nx-plugin/dist/generators.json.tmp && mv libs/nx-plugin/dist/generators.json.tmp libs/nx-plugin/dist/generators.json",
+          "sed 's|./src/|./|g' libs/nx-plugin/dist/executors.json > libs/nx-plugin/dist/executors.json.tmp && mv libs/nx-plugin/dist/executors.json.tmp libs/nx-plugin/dist/executors.json",
+          "node scripts/strip-dist-from-pkg.js libs/nx-plugin/dist/package.json"
+        ],
+        "parallel": false
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/nx-plugin/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

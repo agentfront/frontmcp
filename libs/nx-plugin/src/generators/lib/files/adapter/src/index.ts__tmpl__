@@ -1,0 +1,1 @@
+export { <%= className %>Adapter } from './<%= fileName %>.adapter';

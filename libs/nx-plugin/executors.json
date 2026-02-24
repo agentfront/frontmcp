@@ -1,0 +1,39 @@
+{
+  "executors": {
+    "build": {
+      "implementation": "./src/executors/build/build.impl",
+      "schema": "./src/executors/build/schema.json",
+      "description": "Compile a FrontMCP project using frontmcp build"
+    },
+    "build-exec": {
+      "implementation": "./src/executors/build-exec/build-exec.impl",
+      "schema": "./src/executors/build-exec/schema.json",
+      "description": "Build a distributable bundle using frontmcp build --exec"
+    },
+    "dev": {
+      "implementation": "./src/executors/dev/dev.impl",
+      "schema": "./src/executors/dev/schema.json",
+      "description": "Start a development server using frontmcp dev"
+    },
+    "serve": {
+      "implementation": "./src/executors/serve/serve.impl",
+      "schema": "./src/executors/serve/schema.json",
+      "description": "Start a supervised production server using frontmcp start"
+    },
+    "test": {
+      "implementation": "./src/executors/test/test.impl",
+      "schema": "./src/executors/test/schema.json",
+      "description": "Run E2E tests using frontmcp test"
+    },
+    "inspector": {
+      "implementation": "./src/executors/inspector/inspector.impl",
+      "schema": "./src/executors/inspector/schema.json",
+      "description": "Launch MCP Inspector using frontmcp inspector"
+    },
+    "deploy": {
+      "implementation": "./src/executors/deploy/deploy.impl",
+      "schema": "./src/executors/deploy/schema.json",
+      "description": "Deploy to a target platform (node/vercel/lambda/cloudflare)"
+    }
+  }
+}

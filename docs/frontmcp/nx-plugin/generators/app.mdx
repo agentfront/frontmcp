@@ -1,0 +1,86 @@
+---
+title: App Generator
+slug: nx-plugin/generators/app
+icon: grid-2
+description: Generate a FrontMCP application in apps/
+---
+
+Generates a FrontMCP application with an entry point, app class, sample tool, and full project configuration.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:app my-app
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the application |
+| `directory` | `string` | `apps/<name>` | The directory of the application |
+| `tags` | `string` | — | Comma-separated tags for the project |
+
+## Generated Files
+
+```
+apps/my-app/
+├── src/
+│   ├── main.ts               # Server entry point
+│   ├── my-app.app.ts         # @App class
+│   └── tools/
+│       └── hello.tool.ts     # Sample @Tool
+├── project.json               # Nx project config with targets
+├── tsconfig.json
+├── tsconfig.lib.json
+├── tsconfig.spec.json
+└── jest.config.ts
+```
+
+## Generated Code
+
+```ts src/my-app.app.ts
+import { App } from '@frontmcp/sdk';
+import HelloTool from './tools/hello.tool';
+
+@App({
+  id: 'my-app',
+  name: 'MyApp',
+  tools: [HelloTool],
+})
+export class MyAppApp {}
+```
+
+```ts src/main.ts
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+import { MyAppApp } from './my-app.app';
+
+@FrontMcp({
+  info: { name: 'MyApp', version: '0.1.0' },
+  apps: [MyAppApp],
+})
+export default class Server {}
+```
+
+## Nx Targets
+
+The generated `project.json` includes these targets:
+
+| Target | Executor | Description |
+| --- | --- | --- |
+| `build` | `@frontmcp/nx:build` | Compile to dist/ |
+| `dev` | `@frontmcp/nx:dev` | Development mode with watch |
+| `serve` | `@frontmcp/nx:serve` | Run application server |
+| `test` | `@frontmcp/nx:test` | Run Jest tests |
+| `inspector` | `@frontmcp/nx:inspector` | Launch MCP Inspector |
+
+## Example
+
+```bash
+# Create app with tags
+nx g @frontmcp/nx:app analytics --tags "scope:analytics,type:app"
+
+# Start development
+nx dev analytics
+```

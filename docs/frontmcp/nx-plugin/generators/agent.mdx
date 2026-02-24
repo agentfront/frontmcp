@@ -1,0 +1,47 @@
+---
+title: Agent Generator
+slug: nx-plugin/generators/agent
+icon: robot
+description: Generate an @Agent class
+---
+
+Generates an `@Agent` class with LLM configuration and optional tool references.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:agent researcher --project crm
+nx g @frontmcp/nx:agent researcher --project crm --model claude-sonnet-4-5-20250514 --tools web_search,summarize
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the agent |
+| `project` | `string` | — | **Required.** The project to add the agent to |
+| `model` | `string` | `gpt-4` | The LLM model name |
+| `tools` | `string` | — | Comma-separated tool names to reference |
+| `directory` | `string` | — | Subdirectory within `src/agents/` |
+
+## Generated Code
+
+```ts
+import { Agent, AgentContext } from '@frontmcp/sdk';
+
+@Agent({
+  name: 'researcher',
+  description: 'TODO: describe what this agent does',
+  llm: {
+    model: 'claude-sonnet-4-5-20250514',
+  },
+  tools: ['web_search', 'summarize'],
+  systemInstructions: 'TODO: define system instructions for this agent',
+})
+export default class ResearcherAgent extends AgentContext {
+  async execute(input: unknown): Promise<unknown> {
+    // TODO: implement agent logic
+    return {};
+  }
+}
+```

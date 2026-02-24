@@ -1,0 +1,286 @@
+---
+title: Flows
+slug: servers/flows
+icon: route
+description: Named execution pipelines with lifecycle stages for request processing
+---
+
+Flows are **named execution pipelines** that define how requests are processed through a series of lifecycle stages. Every MCP operation (calling a tool, reading a resource, getting a prompt) passes through a flow that controls pre-processing, execution, post-processing, and finalization.
+
+<Info>
+Flows are part of the FrontMCP execution model. They provide hook points for cross-cutting concerns like logging, caching, validation, and error handling.
+</Info>
+
+## Why Flows?
+
+Flows give you fine-grained control over request processing without modifying tool, resource, or prompt code directly.
+
+| Aspect | Flow | Tool | Plugin |
+| --- | --- | --- | --- |
+| **Purpose** | Request lifecycle management | Execute actions | Cross-cutting extensions |
+| **Scope** | Per-request pipeline | Single action | Across all requests |
+| **Customization** | Stage-level hooks | Execute method | Registration hooks |
+| **Use case** | Logging, caching, auth checks | Business logic | Feature extensions |
+
+Flows are ideal for:
+
+- **Request validation** — check permissions, validate inputs before execution
+- **Caching** — intercept responses and serve from cache
+- **Logging and auditing** — trace every request through the system
+- **Error handling** — centralized error recovery and formatting
+- **Performance monitoring** — measure timing across stages
+
+---
+
+## Flow Lifecycle
+
+Every request passes through these stages in order:
+
+```mermaid
+graph LR
+    A[pre] --> B[execute]
+    B --> C[post]
+    C --> D[finalize]
+    B -.->|error| E[error]
+    A -.->|error| E
+    C -.->|error| E
+```
+
+| Stage | Purpose | Example |
+| --- | --- | --- |
+| **pre** | Validation, auth checks, input transformation | Check API key, parse headers |
+| **execute** | Run the core operation (tool, resource, prompt) | Call `execute()` on the tool |
+| **post** | Transform output, apply caching, logging | Cache response, format output |
+| **finalize** | Send response, cleanup | Emit response to client, release resources |
+| **error** | Handle failures from any stage | Log error, return formatted error response |
+
+---
+
+## Built-in Flows
+
+FrontMCP provides built-in flows for all MCP protocol operations:
+
+| Flow Name | Trigger | Description |
+| --- | --- | --- |
+| `tools:call-tool` | `tools/call` request | Execute a tool with validated arguments |
+| `tools:list-tools` | `tools/list` request | List all available tools |
+| `resources:read-resource` | `resources/read` request | Read a resource by URI |
+| `resources:list-resources` | `resources/list` request | List all available resources |
+| `resources:subscribe` | `resources/subscribe` request | Subscribe to resource changes |
+| `prompts:get-prompt` | `prompts/get` request | Generate a prompt with arguments |
+| `prompts:list-prompts` | `prompts/list` request | List all available prompts |
+
+---
+
+## Creating Custom Flows
+
+Define custom flows with the `@Flow` decorator:
+
+```ts
+import { Flow, FlowBase } from '@frontmcp/sdk';
+
+@Flow({
+  name: 'custom:my-flow',
+  description: 'Custom processing pipeline',
+  plan: {
+    steps: ['pre', 'execute', 'post', 'finalize'],
+  },
+})
+export default class MyCustomFlow extends FlowBase {
+  async pre(): Promise<void> {
+    // Validate inputs, check permissions
+    const input = this.state.get('input');
+    if (!input) {
+      this.fail('Missing required input');
+    }
+  }
+
+  async execute(): Promise<void> {
+    // Core business logic
+    const result = await this.processRequest();
+    this.state.set('result', result);
+  }
+
+  async post(): Promise<void> {
+    // Transform output, cache results
+    const result = this.state.get('result');
+    this.state.set('output', this.formatResponse(result));
+  }
+
+  async finalize(): Promise<void> {
+    // Send response to client
+    const output = this.state.get('output');
+    this.respond(output);
+  }
+
+  async error(err: Error): Promise<void> {
+    // Centralized error handling
+    this.respond({ error: err.message });
+  }
+}
+```
+
+### Flow Metadata
+
+```ts
+@Flow({
+  name: string,              // Required: unique flow identifier
+  description?: string,      // Optional: human-readable description
+  plan: {
+    steps: string[],         // Required: ordered stage names
+  },
+})
+```
+
+---
+
+## Hooking into Flows
+
+You don't need to create a full custom flow to customize behavior. Use **hooks** to intercept specific stages of existing flows.
+
+### Hook Types
+
+| Hook Type | When It Runs | Use Case |
+| --- | --- | --- |
+| **Will** | Before a stage executes | Validate, transform input |
+| **Did** | After a stage completes | Log, cache, transform output |
+| **Around** | Wraps the entire stage | Timing, retry logic, circuit breakers |
+
+### Applying Hooks
+
+Use the `@Hooks` decorator on tools, resources, or prompts:
+
+```ts
+import { Tool, ToolContext, Hooks } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'my-tool',
+  inputSchema: { query: z.string() },
+})
+@Hooks([
+  {
+    flow: 'tools:call-tool',
+    stage: 'pre',
+    type: 'will',
+    handler: async (ctx) => {
+      console.log('About to execute tool:', ctx.input);
+    },
+  },
+  {
+    flow: 'tools:call-tool',
+    stage: 'execute',
+    type: 'did',
+    handler: async (ctx) => {
+      console.log('Tool execution complete:', ctx.output);
+    },
+  },
+])
+class MyTool extends ToolContext {
+  async execute({ query }: { query: string }) {
+    return `Result for: ${query}`;
+  }
+}
+```
+
+### Around Hooks
+
+Around hooks wrap a stage completely, giving you control over whether the stage executes:
+
+```ts
+{
+  flow: 'tools:call-tool',
+  stage: 'execute',
+  type: 'around',
+  handler: async (ctx, next) => {
+    const start = Date.now();
+    try {
+      await next();  // Execute the stage
+    } finally {
+      const elapsed = Date.now() - start;
+      console.log(`Execution took ${elapsed}ms`);
+    }
+  },
+}
+```
+
+<Tip>
+For a complete guide to hooks, see the [Hooks decorator reference](/frontmcp/sdk-reference/decorators/hooks).
+</Tip>
+
+---
+
+## Flow Control
+
+Within flow stages, you have access to control methods:
+
+| Method | Description |
+| --- | --- |
+| `this.respond(value)` | End the flow and send a response to the client |
+| `this.fail(message)` | Abort the flow with an error |
+| `this.state.get(key)` | Read from flow state |
+| `this.state.set(key, value)` | Write to flow state |
+
+### State Management
+
+Flows use a state object to pass data between stages. Never mutate `rawInput` directly — use `state.set()` instead:
+
+```ts
+async pre(): Promise<void> {
+  // Read from the request
+  const input = this.state.get('rawInput');
+
+  // Transform and store in state
+  this.state.set('normalizedInput', {
+    ...input,
+    timestamp: Date.now(),
+  });
+}
+
+async execute(): Promise<void> {
+  // Read from state set in previous stage
+  const input = this.state.get('normalizedInput');
+  const result = await this.process(input);
+  this.state.set('result', result);
+}
+```
+
+<Info>
+Never mutate `rawInput` in flows — use `state.set()` for flow state. This ensures each stage works with clean, immutable inputs.
+</Info>
+
+---
+
+## Generating Flows
+
+Use the Nx generator to scaffold a new flow:
+
+```bash
+nx g @frontmcp/nx:flow --name audit-log --project my-app
+```
+
+This generates a flow class with all lifecycle methods:
+
+```
+src/flows/
+  audit-log.flow.ts
+```
+
+---
+
+## Best Practices
+
+**Do:**
+
+- Use hooks for cross-cutting concerns instead of duplicating logic in tools
+- Keep flow stages focused — each stage should have a single responsibility
+- Use `state.set()` / `state.get()` for passing data between stages
+- Handle errors in the `error()` stage for centralized error management
+- Validate hook flows match their entry type (e.g., tool hooks use `tools:call-tool`)
+
+**Don't:**
+
+- Mutate `rawInput` directly — use flow state instead
+- Create custom flows for simple operations that built-in flows already handle
+- Skip the `error()` stage — unhandled errors surface as generic MCP errors
+- Add business logic to hooks — keep hooks lightweight, delegate to providers

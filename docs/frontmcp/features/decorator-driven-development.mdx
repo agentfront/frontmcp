@@ -1,0 +1,210 @@
+---
+title: Decorator-Driven Development
+slug: features/decorator-driven-development
+icon: at
+description: Build MCP servers entirely with TypeScript decorators
+---
+
+FrontMCP uses TypeScript decorators as the primary API. Every component — servers, apps, tools, resources, prompts, agents, skills, providers, plugins, and flows — is defined with a decorator on a class or function.
+
+## Decorator Inventory
+
+| Decorator | Purpose | Base Class |
+| --- | --- | --- |
+| `@FrontMcp` | Server entry point | — |
+| `@App` | Capability container | — |
+| `@Tool` | AI-callable action | `ToolContext` |
+| `@Resource` / `@ResourceTemplate` | Data endpoint | `ResourceContext` |
+| `@Prompt` | Message template | `PromptContext` |
+| `@Agent` | LLM-powered actor | `AgentContext` |
+| `@Skill` | Workflow guide | `SkillContext` |
+| `@Provider` | DI service | — |
+| `@Plugin` | Extension | `DynamicPlugin` |
+| `@Adapter` | Dynamic capabilities | `DynamicAdapter` |
+| `@Flow` | Lifecycle pipeline | `FlowBase` |
+
+---
+
+## One Snippet Per Decorator
+
+### @FrontMcp — Server Entry Point
+
+```ts
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+### @App — Capability Container
+
+```ts
+import { App } from '@frontmcp/sdk';
+
+@App({
+  id: 'crm',
+  name: 'CRM App',
+  tools: [CreateLeadTool, GetContactsTool],
+  resources: [LeadResource],
+  prompts: [OutreachPrompt],
+})
+class CrmApp {}
+```
+
+### @Tool — AI-Callable Action
+
+<CodeGroup>
+```ts Class Style
+@Tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: { name: z.string() },
+})
+class GreetTool extends ToolContext {
+  async execute({ name }: { name: string }) {
+    return `Hello, ${name}!`;
+  }
+}
+```
+
+```ts Function Style
+const GreetTool = tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: { name: z.string() },
+})(({ name }) => `Hello, ${name}!`);
+```
+</CodeGroup>
+
+### @Resource — Data Endpoint
+
+<CodeGroup>
+```ts Static Resource
+@Resource({
+  name: 'config',
+  uri: 'config://app',
+  mimeType: 'application/json',
+})
+class ConfigResource extends ResourceContext {
+  async execute(uri: string) {
+    return { contents: [{ uri, mimeType: 'application/json', text: '{}' }] };
+  }
+}
+```
+
+```ts Resource Template
+@ResourceTemplate({
+  name: 'user',
+  uriTemplate: 'users://{userId}',
+  mimeType: 'application/json',
+})
+class UserResource extends ResourceContext {
+  async execute(uri: string, params: Record<string, string>) {
+    return { contents: [{ uri, text: JSON.stringify({ id: params.userId }) }] };
+  }
+}
+```
+</CodeGroup>
+
+### @Prompt — Message Template
+
+```ts
+@Prompt({
+  name: 'summarize',
+  arguments: [
+    { name: 'topic', description: 'Topic to summarize', required: true },
+  ],
+})
+class SummarizePrompt extends PromptContext {
+  async execute(args: Record<string, string>): Promise<GetPromptResult> {
+    return {
+      messages: [{ role: 'user', content: { type: 'text', text: `Summarize: ${args.topic}` } }],
+    };
+  }
+}
+```
+
+### @Agent — LLM-Powered Actor
+
+```ts
+@Agent({
+  name: 'researcher',
+  description: 'Research agent that gathers information',
+  llm: { model: 'claude-sonnet-4-5-20250514' },
+  tools: ['web_search', 'summarize'],
+  systemInstructions: 'You are a thorough research assistant.',
+})
+class ResearcherAgent extends AgentContext {
+  async execute(input: unknown) { /* ... */ }
+}
+```
+
+### @Skill — Workflow Guide
+
+```ts
+@Skill({
+  name: 'review-pr',
+  description: 'Review a GitHub pull request',
+  instructions: `## Steps\n1. Fetch PR details\n2. Review files\n3. Submit review`,
+  tools: [
+    { name: 'github_get_pr', purpose: 'Fetch PR metadata', required: true },
+    { name: 'github_submit_review', purpose: 'Submit review verdict' },
+  ],
+})
+class ReviewPRSkill extends SkillContext {}
+```
+
+### @Provider — DI Service
+
+```ts
+export const DB_TOKEN = Symbol('Database');
+
+@Provider({ token: DB_TOKEN, scope: 'singleton' })
+export class DatabaseProvider {
+  static factory() { return new DatabaseProvider(); }
+}
+```
+
+### @Plugin — Extension
+
+```ts
+@Plugin({ name: 'audit', description: 'Audit logging plugin' })
+class AuditPlugin extends DynamicPlugin {
+  async onRegister(ctx: PluginRegistrationContext) {
+    // Register hooks, providers, context extensions
+  }
+}
+```
+
+### @Flow — Lifecycle Pipeline
+
+```ts
+@Flow({
+  name: 'custom:pipeline',
+  plan: { steps: ['pre', 'execute', 'post', 'finalize'] },
+})
+class PipelineFlow extends FlowBase {
+  async pre() { /* validate */ }
+  async execute() { /* process */ }
+  async post() { /* transform */ }
+  async finalize() { /* respond */ }
+}
+```
+
+---
+
+## Learn More
+
+<CardGroup cols={2}>
+  <Card title="Decorator Reference" icon="code" href="/frontmcp/sdk-reference/decorators/overview">
+    Complete API reference for every decorator
+  </Card>
+  <Card title="Context Classes" icon="layer-group" href="/frontmcp/sdk-reference/contexts/overview">
+    Base classes that provide DI, logging, and auth
+  </Card>
+</CardGroup>

@@ -1,0 +1,1 @@
+export { <%= className %>Plugin } from './<%= fileName %>.plugin';

@@ -1,185 +1,259 @@
 ---
 title: Creating Plugins
-description: Build custom FrontMCP plugins
+description: Build custom FrontMCP plugins using the DynamicPlugin API
 ---
 
 # Creating Plugins
 
-Build custom plugins to extend FrontMCP with your own functionality.
+Build custom plugins to extend FrontMCP with cross-cutting capabilities like caching, authorization, logging, and more.
 
-## Basic Plugin Structure
+## Plugin Architecture
+
+FrontMCP plugins use the `@Plugin` decorator and typically extend `DynamicPlugin`. They can:
+
+1. **Register providers** — Services available to the plugin and exported to the host app
+2. **Contribute tools, resources, and skills** — Add capabilities when the plugin is attached
+3. **Intercept flows via hooks** — Run code before/after specific stages using `@ToolHook` and `@ListToolsHook`
+4. **Accept configuration** — Via `init()` for runtime customization
+5. **Extend metadata** — Add custom fields to tool metadata
+
+## Basic Plugin
 
 ```typescript
-import { Plugin, PluginContext } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
 
-export class MyPlugin implements Plugin {
-  name = 'my-plugin';
+interface AuditPluginOptions {
+  logLevel?: 'info' | 'debug';
+}
 
-  constructor(private options: MyPluginOptions) {}
+@Plugin({
+  name: 'audit',
+  description: 'Logs all tool executions',
+})
+export default class AuditPlugin extends DynamicPlugin<AuditPluginOptions> {
+  options: AuditPluginOptions;
 
-  async onInit(ctx: PluginContext) {
-    console.log('Plugin initialized');
+  constructor(options: AuditPluginOptions = {}) {
+    super();
+    this.options = { logLevel: 'info', ...options };
   }
 
-  async beforeTool(ctx: ToolContext) {
-    console.log(`Before: ${ctx.toolName}`);
-  }
+  @ToolHook.Did('execute', { priority: 1000 })
+  async logExecution(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
 
-  async afterTool(ctx: ToolContext, result: any) {
-    console.log(`After: ${ctx.toolName}`);
-    return result; // Can modify result
+    console.log(`[audit] Tool executed: ${tool.fullName}`);
   }
 }
 ```
 
-## Adding Tools
+## Registering a Plugin
 
-Plugins can add tools to the server:
+Attach plugins at the app level:
 
 ```typescript
-export class AnalyticsPlugin implements Plugin {
-  name = 'analytics';
+import { App } from '@frontmcp/sdk';
+import AuditPlugin from './plugins/audit.plugin';
 
-  getTools() {
-    return [
-      {
-        name: 'trackEvent',
-        description: 'Track an analytics event',
-        schema: z.object({
-          event: z.string(),
-          properties: z.record(z.any()).optional()
-        }),
-        handler: async ({ event, properties }) => {
-          await this.analytics.track(event, properties);
-          return { tracked: true };
-        }
-      }
-    ];
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [
+    // Option 1: Pass class directly (uses default options)
+    AuditPlugin,
+
+    // Option 2: Use init() with custom options
+    AuditPlugin.init({ logLevel: 'debug' }),
+  ],
+})
+export default class MyApp {}
+```
+
+## Adding Hooks
+
+Plugins intercept flow stages using `@ToolHook` and `@ListToolsHook` decorators:
+
+```typescript
+import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf, FlowHooksOf } from '@frontmcp/sdk';
+
+const ListToolsHook = FlowHooksOf('tools:list-tools');
+
+@Plugin({
+  name: 'authorization',
+  description: 'Role-based access control for tools',
+})
+export default class AuthorizationPlugin extends DynamicPlugin {
+  // Runs BEFORE tool execution
+  @ToolHook.Will('execute', { priority: 900 })
+  async validateAccess(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext } = flowCtx.state;
+    if (!toolContext) return;
+    // Check authorization...
+  }
+
+  // Runs AFTER tool listing — filter unauthorized tools
+  @ListToolsHook.Did('findTools')
+  async filterTools(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    const { tools } = flowCtx.state.required;
+    // Filter tools based on user roles
+    const filteredTools = tools.filter((t) => this.isToolAllowed(t));
+    flowCtx.state.set('tools', filteredTools);
+  }
+
+  /** TODO: implement real role check */
+  private isToolAllowed(_tool: unknown): boolean {
+    return true;
   }
 }
 ```
 
-## Adding Resources
+### Hook Timing
 
-Plugins can add resources:
+- `.Will(stage)` — runs **before** the stage
+- `.Did(stage)` — runs **after** the stage
 
-```typescript
-export class ConfigPlugin implements Plugin {
-  name = 'config';
+### Priority
 
-  getResources() {
-    return [
-      {
-        name: 'config',
-        description: 'Server configuration',
-        uri: 'config://settings',
-        handler: async () => this.config
-      }
-    ];
-  }
-}
-```
+Lower numbers run first:
 
-## Intercepting Calls
+| Priority | Use Case |
+|----------|----------|
+| 100–500 | Critical security checks |
+| 500–900 | Authorization, validation |
+| 900–1000 | Standard plugin behavior |
+| 1000+ | Logging, metrics |
 
-Modify tool behavior:
+## Dynamic Providers
+
+For plugins that create providers based on configuration:
 
 ```typescript
-export class LoggingPlugin implements Plugin {
-  name = 'logging';
+import { DynamicPlugin, Plugin, ProviderType, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
 
-  async beforeTool(ctx: ToolContext) {
-    ctx.startTime = Date.now();
-    this.logger.info(`Calling ${ctx.toolName}`, { params: ctx.params });
-  }
-
-  async afterTool(ctx: ToolContext, result: any) {
-    const duration = Date.now() - ctx.startTime;
-    this.logger.info(`${ctx.toolName} completed`, { duration, result });
-    return result;
-  }
-
-  async onError(error: Error, ctx: ToolContext) {
-    this.logger.error(`${ctx.toolName} failed`, { error: error.message });
-  }
-}
-```
-
-## Providing Services
-
-Share services with apps:
-
-```typescript
-export class DatabasePlugin implements Plugin {
-  name = 'database';
-  private client: DatabaseClient;
-
-  async onInit() {
-    this.client = await Database.connect(this.options.url);
-  }
-
-  async onDestroy() {
-    await this.client.disconnect();
-  }
-
-  getProviders() {
-    return [
-      {
-        provide: 'Database',
-        useValue: this.client
-      }
-    ];
-  }
-}
-```
-
-## Configuration
-
-Make plugins configurable:
-
-```typescript
-interface RateLimitOptions {
-  maxRequests: number;
-  windowMs: number;
+interface CachePluginOptions {
+  type: 'memory' | 'redis';
+  host?: string;
+  port?: number;
 }
 
-export class RateLimitPlugin implements Plugin {
-  name = 'rate-limit';
+const CacheStoreToken = Symbol('CacheStore');
 
-  constructor(private options: RateLimitOptions) {}
-
-  async beforeTool(ctx: ToolContext) {
-    const key = `${ctx.userId}:${ctx.toolName}`;
-    const count = await this.increment(key);
-
-    if (count > this.options.maxRequests) {
-      throw new Error('Rate limit exceeded');
+@Plugin({
+  name: 'cache',
+  description: 'Cache plugin for tool results',
+  providers: [
+    {
+      name: 'cache:memory',
+      provide: CacheStoreToken,
+      useValue: new MemoryCacheProvider(),
+    },
+  ],
+})
+export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
+  static override dynamicProviders(options: CachePluginOptions): ProviderType[] {
+    if (options.type === 'redis') {
+      return [{
+        name: 'cache:redis',
+        provide: CacheStoreToken,
+        useValue: new RedisCacheProvider(options),
+      }];
     }
+    return [];
+  }
+
+  @ToolHook.Will('execute', { priority: 950 })
+  async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const cacheStore = this.get(CacheStoreToken);
+    // Check cache and respond early if hit...
+  }
+
+  @ToolHook.Did('execute', { priority: 950 })
+  async storeCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const cacheStore = this.get(CacheStoreToken);
+    // Store result in cache...
   }
 }
+```
+
+## Extending Tool Metadata
+
+Plugins can add custom fields to tool metadata via global type augmentation:
+
+```typescript
+declare global {
+  interface ExtendFrontMcpToolMetadata {
+    cache?: { ttl?: number } | true;
+  }
+}
+```
+
+Tools can then use this metadata:
+
+```typescript
+@Tool({
+  name: 'get-user',
+  inputSchema: { id: z.string() },
+  cache: { ttl: 3600 },
+})
+export default class GetUserTool extends ToolContext { /* ... */ }
+```
+
+## Contributing Tools and Skills
+
+Plugins can contribute tools and skills via the `@Plugin` decorator:
+
+```typescript
+import { DynamicPlugin, Plugin } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'devops',
+  description: 'DevOps tools and workflows',
+  tools: [DeployTool, RollbackTool],
+  skills: [DeployWorkflowSkill],
+})
+export default class DevOpsPlugin extends DynamicPlugin {}
 ```
 
 ## Publishing Plugins
 
 ```bash
-# Package structure
+# Recommended package structure
 my-plugin/
 ├── src/
-│   └── index.ts
+│   ├── index.ts              # Exports
+│   ├── my-plugin.plugin.ts   # Plugin class
+│   └── my-plugin.types.ts    # Types
 ├── package.json
 └── README.md
+```
 
-# Publish
-npm publish
+```json package.json
+{
+  "name": "@yourscope/frontmcp-plugin-myfeature",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "keywords": ["frontmcp", "frontmcp-plugin", "mcp", "plugin"],
+  "peerDependencies": {
+    "@frontmcp/sdk": "^0.4.0"
+  }
+}
 ```
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/docs/official/cache">
-    Learn from Cache Plugin
+  <Card title="Plugin Guide" icon="puzzle-piece" href="/frontmcp/extensibility/plugins">
+    Full plugin API reference with hooks, scopes, and DynamicPlugin details
   </Card>
-  <Card title="Community" icon="users" href="/frontmcp/plugins/docs/community/overview">
-    Share your plugin
+  <Card title="Create a Plugin" icon="plug" href="/frontmcp/guides/create-plugin">
+    Step-by-step tutorial building a real-world plugin
+  </Card>
+  <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/cache-plugin">
+    Study the built-in cache plugin implementation
+  </Card>
+  <Card title="Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
+    Share your plugin with the community
   </Card>
 </CardGroup>

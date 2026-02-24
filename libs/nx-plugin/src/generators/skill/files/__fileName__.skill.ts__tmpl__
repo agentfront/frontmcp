@@ -1,0 +1,16 @@
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: '<%= name %>',
+  description: 'TODO: describe what this skill does',<% if (toolRefs.length > 0) { %>
+  tools: [<%- toolRefs.map(t => `'${t}'`).join(', ') %>],<% } %>
+})
+export default class <%= className %>Skill extends SkillContext {
+  async loadInstructions(): Promise<string> {
+    return 'TODO: define skill instructions';
+  }
+
+  async build(): Promise<void> {
+    // TODO: implement skill build logic
+  }
+}

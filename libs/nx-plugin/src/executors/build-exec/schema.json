@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Build Exec",
+  "description": "Build a distributable bundle",
+  "type": "object",
+  "properties": {
+    "entry": { "type": "string", "description": "Entry file path" },
+    "outputPath": { "type": "string", "description": "Output directory path" }
+  },
+  "required": []
+}

@@ -1,0 +1,103 @@
+---
+title: Library Generator
+slug: nx-plugin/generators/lib
+icon: book
+description: Generate a shared library in libs/
+---
+
+Generates a shared library for code reuse across apps. Supports four library types: generic, plugin, adapter, and tool-register.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:lib my-lib
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the library |
+| `directory` | `string` | `libs/<name>` | The directory of the library |
+| `libType` | `generic` \| `plugin` \| `adapter` \| `tool-register` | `generic` | The type of library to generate |
+| `publishable` | `boolean` | `false` | Generate a publishable library with package.json |
+| `importPath` | `string` | — | The npm scope/import path (required for publishable) |
+| `tags` | `string` | — | Comma-separated tags for the project |
+
+## Library Types
+
+### Generic (default)
+
+A plain TypeScript library with a class and barrel export:
+
+```bash
+nx g @frontmcp/nx:lib shared-utils --libType generic
+```
+
+```
+libs/shared-utils/src/
+├── shared-utils.ts    # Sample class
+└── index.ts           # Barrel export
+```
+
+### Plugin
+
+A FrontMCP plugin library extending `DynamicPlugin`:
+
+```bash
+nx g @frontmcp/nx:lib my-plugin --libType plugin
+```
+
+```
+libs/my-plugin/src/
+├── my-plugin.plugin.ts  # @Plugin class
+└── index.ts
+```
+
+### Adapter
+
+A FrontMCP adapter library extending `DynamicAdapter`:
+
+```bash
+nx g @frontmcp/nx:lib my-adapter --libType adapter
+```
+
+```
+libs/my-adapter/src/
+├── my-adapter.adapter.ts  # @Adapter class
+└── index.ts
+```
+
+### Tool Register
+
+A multi-tool library that exports an array of tools:
+
+```bash
+nx g @frontmcp/nx:lib github-tools --libType tool-register
+```
+
+```
+libs/github-tools/src/
+├── github-tools.tools.ts  # Tool classes + exported array
+└── index.ts
+```
+
+Usage in an app:
+
+```ts
+import { GithubToolsTools } from '@libs/github-tools';
+
+@App({
+  id: 'my-app',
+  tools: [...GithubToolsTools, ...OtherTools],
+})
+class MyApp {}
+```
+
+## Publishable Libraries
+
+Generate a library with a `package.json` for npm publishing:
+
+```bash
+nx g @frontmcp/nx:lib my-plugin --libType plugin --publishable --importPath @my-org/plugin-cache
+```

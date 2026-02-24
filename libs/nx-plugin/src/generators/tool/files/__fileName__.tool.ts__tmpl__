@@ -1,0 +1,19 @@
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: '<%= name %>',
+  description: 'TODO: describe what this tool does',
+  inputSchema: {
+    value: z.string().describe('TODO: replace with actual input'),
+  },
+  outputSchema: {
+    result: z.string().describe('TODO: replace with actual output'),
+  },
+})
+export default class <%= className %>Tool extends ToolContext {
+  async execute(input: unknown) {
+    // TODO: implement
+    return {};
+  }
+}

@@ -1,0 +1,25 @@
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+
+@Prompt({
+  name: '<%= name %>',
+  description: 'TODO: describe what this prompt does',<% if (promptArgs.length > 0) { %>
+  arguments: [<% promptArgs.forEach(function(arg, i) { %>
+    { name: '<%= arg %>', description: 'TODO: describe', required: true },<% }); %>
+  ],<% } %>
+})
+export default class <%= className %>Prompt extends PromptContext {
+  async execute(args: Record<string, string>): Promise<GetPromptResult> {
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: 'TODO: implement prompt template',
+          },
+        },
+      ],
+    };
+  }
+}

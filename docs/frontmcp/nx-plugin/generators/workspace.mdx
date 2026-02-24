@@ -1,0 +1,71 @@
+---
+title: Workspace Generator
+slug: nx-plugin/generators/workspace
+icon: folder-tree
+description: Scaffold a full FrontMCP Nx monorepo with apps/, libs/, and servers/ directories
+---
+
+Scaffolds a complete FrontMCP Nx monorepo with pre-configured tooling, dependencies, and directory structure.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:workspace my-platform
+```
+
+Or via the CLI shortcut:
+
+```bash
+npx frontmcp create my-platform --nx
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the workspace |
+| `packageManager` | `npm` \| `yarn` \| `pnpm` | `npm` | Package manager to use |
+| `skipInstall` | `boolean` | `false` | Skip package installation |
+| `skipGit` | `boolean` | `false` | Skip git initialization |
+| `createSampleApp` | `boolean` | `true` | Create a sample demo application |
+
+## Generated Files
+
+```
+my-platform/
+├── apps/                    # FrontMCP applications
+├── libs/                    # Shared libraries
+├── servers/                 # Deployment shells
+├── nx.json                  # Nx workspace configuration
+├── tsconfig.base.json       # Shared TypeScript config
+├── package.json             # Dependencies and scripts
+├── .gitignore
+└── .prettierrc
+```
+
+## Example
+
+```bash
+nx g @frontmcp/nx:workspace my-platform --packageManager yarn --createSampleApp
+```
+
+The `package.json` includes all FrontMCP dependencies:
+
+```json
+{
+  "dependencies": {
+    "@frontmcp/sdk": "...",
+    "@frontmcp/cli": "...",
+    "reflect-metadata": "^0.2.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@frontmcp/nx": "...",
+    "@frontmcp/testing": "...",
+    "nx": "22.3.3",
+    "typescript": "~5.9.2"
+  }
+}
+```
+
+The `nx.json` configures plugins for TypeScript, ESLint, and Jest with build caching and dependency ordering.

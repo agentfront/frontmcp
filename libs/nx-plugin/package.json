@@ -1,0 +1,24 @@
+{
+  "name": "@frontmcp/nx",
+  "version": "0.11.1",
+  "description": "Nx plugin for FrontMCP — generators and executors for building MCP servers",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "generators": "./generators.json",
+  "executors": "./executors.json",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@nx/devkit": "22.3.3",
+    "tslib": "^2.3.0"
+  },
+  "peerDependencies": {
+    "nx": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

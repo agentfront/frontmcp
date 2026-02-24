@@ -1,0 +1,19 @@
+import { Adapter, DynamicAdapter, type AdapterFetchResult } from '@frontmcp/sdk';
+
+export interface <%= className %>AdapterOptions {
+  // TODO: define adapter options
+}
+
+@Adapter({
+  name: '<%= fileName %>',
+  description: 'TODO: describe what this adapter does',
+})
+export class <%= className %>Adapter extends DynamicAdapter<<%= className %>AdapterOptions> {
+  async fetch(): Promise<AdapterFetchResult> {
+    return {
+      tools: [],
+      resources: [],
+      prompts: [],
+    };
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpResource",
+  "title": "FrontMCP Resource Generator",
+  "description": "Generate a @Resource or @ResourceTemplate class",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the resource",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the resource?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the resource to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "template": {
+      "type": "boolean",
+      "description": "Generate a @ResourceTemplate with URI template params",
+      "default": false
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/resources/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

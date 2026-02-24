@@ -1,0 +1,24 @@
+---
+title: Skill-Based Workflows
+slug: features/skill-based-workflows
+icon: graduation-cap
+description: Teach AI multi-step workflows with @Skill and Agent Skills spec
+---
+
+Skills are **modular knowledge packages** that teach AI how to perform multi-step tasks using tools. Unlike tools (individual actions), skills are recipes that combine tools into coherent workflows.
+
+| Aspect | Skill | Tool | Prompt |
+| --- | --- | --- | --- |
+| **Purpose** | Multi-step workflow | Single action | Message template |
+| **Contains** | Instructions + tool refs | Execution logic | Message array |
+| **Side effects** | No (guidance only) | Yes | No |
+| **Discovery** | `searchSkills` / `loadSkill` | `tools/list` | `prompts/list` |
+
+<CardGroup cols={2}>
+  <Card title="Skills Guide" icon="graduation-cap" href="/frontmcp/servers/skills">
+    Full skills guide with search, parameters, and examples
+  </Card>
+  <Card title="@Skill Reference" icon="code" href="/frontmcp/sdk-reference/decorators/skill">
+    Complete decorator API reference
+  </Card>
+</CardGroup>

@@ -1,0 +1,15 @@
+import { Provider } from '@frontmcp/sdk';
+
+export const <%= constantName %>_TOKEN = Symbol('<%= className %>Provider');
+
+@Provider({
+  token: <%= constantName %>_TOKEN,
+  scope: '<%= scope %>',
+})
+export class <%= className %>Provider {
+  // TODO: implement provider logic
+
+  static factory(): <%= className %>Provider {
+    return new <%= className %>Provider();
+  }
+}

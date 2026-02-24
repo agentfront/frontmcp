@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Inspector",
+  "description": "Launch MCP Inspector",
+  "type": "object",
+  "properties": {
+    "port": { "type": "number", "description": "Inspector port" }
+  },
+  "required": []
+}
