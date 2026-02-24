@@ -5,7 +5,6 @@
     "rootDir": ".",
     "strict": true,
     "sourceMap": true,
-    "noImplicitAny": false,
     "declaration": false,
     "moduleResolution": "node",
     "emitDecoratorMetadata": true,

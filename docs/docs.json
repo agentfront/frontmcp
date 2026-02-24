@@ -168,6 +168,7 @@
                 "pages": [
                   "frontmcp/plugins/overview",
                   "frontmcp/plugins/creating-plugins",
+                  "frontmcp/extensibility/plugins",
                   "frontmcp/plugins/cache-plugin",
                   "frontmcp/plugins/remember-plugin",
                   {
@@ -373,6 +374,18 @@
     {
       "source": "/frontmcp/plugins/codecall/scaling",
       "destination": "/frontmcp/plugins/codecall/production"
+    },
+    {
+      "source": "/frontmcp/plugins/official/cache",
+      "destination": "/frontmcp/plugins/cache-plugin"
+    },
+    {
+      "source": "/frontmcp/plugins/official/remember",
+      "destination": "/frontmcp/plugins/remember-plugin"
+    },
+    {
+      "source": "/frontmcp/plugins/introduction",
+      "destination": "/frontmcp/plugins/overview"
     }
   ]
 }

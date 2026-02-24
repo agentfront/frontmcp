@@ -5,10 +5,10 @@ import { z } from 'zod';
   name: '<%= name %>',
   description: 'TODO: describe what this tool does',
   inputSchema: {
-    // TODO: define input schema
+    value: z.string().describe('TODO: replace with actual input'),
   },
   outputSchema: {
-    // TODO: define output schema
+    result: z.string().describe('TODO: replace with actual output'),
   },
 })
 export default class <%= className %>Tool extends ToolContext {

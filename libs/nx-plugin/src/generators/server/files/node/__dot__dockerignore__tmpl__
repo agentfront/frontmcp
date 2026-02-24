@@ -4,3 +4,5 @@ dist
 tmp
 coverage
 .git
+.env
+.env.*

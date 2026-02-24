@@ -83,6 +83,7 @@ ${c('bold', 'Create Options')}
   --pm <pm>            Package manager: npm, yarn, pnpm
   --cicd               Enable GitHub Actions CI/CD
   --no-cicd            Disable GitHub Actions CI/CD
+  --nx                 Scaffold an Nx monorepo instead of standalone project
 
 ${c('bold', 'Socket Options')}
   -s, --socket <path>  Unix socket path (default: ~/.frontmcp/sockets/{app}.sock)

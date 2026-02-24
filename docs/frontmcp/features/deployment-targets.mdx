@@ -10,9 +10,11 @@ FrontMCP supports multiple deployment targets out of the box. The same `@FrontMc
 | Target | Runtime | Session Storage | Cold Start | Best For |
 | --- | --- | --- | --- | --- |
 | **Node.js / Docker** | Long-running | In-memory or Redis | None | Full-featured servers |
-| **Vercel** | Serverless | Vercel KV or Redis | ~200ms | Edge-first deployments |
-| **AWS Lambda** | Serverless | Redis / DynamoDB | ~500ms | AWS-native infrastructure |
-| **Cloudflare Workers** | Edge | KV / Durable Objects | ~5ms | Ultra-low latency |
+| **Vercel** | Serverless | Vercel KV or Redis | Low (~50–250 ms) | Edge-first deployments |
+| **AWS Lambda** | Serverless | Redis / DynamoDB | Moderate (~100–500 ms) | AWS-native infrastructure |
+| **Cloudflare Workers** | Edge | KV / Durable Objects | Minimal (~1–10 ms) | Ultra-low latency |
+
+> **Note:** Cold-start timings are approximate ranges that vary by provider, region, bundle size, and workload.
 
 <CardGroup cols={2}>
   <Card title="Local Development" icon="laptop-code" href="/frontmcp/deployment/local-dev-server">

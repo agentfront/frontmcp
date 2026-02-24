@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import type { ExecutorContext } from '../executor-context.js';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -7,7 +8,7 @@ jest.mock('child_process', () => ({
 
 import devExecutor from './dev.impl';
 
-const mockContext = {
+const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'demo',
   projectsConfigurations: { version: 2, projects: { demo: { root: 'apps/demo' } } },
@@ -15,7 +16,7 @@ const mockContext = {
   isVerbose: false,
   projectGraph: { nodes: {}, dependencies: {} },
   nxJsonConfiguration: {},
-} as any;
+};
 
 describe('dev executor', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -33,9 +34,22 @@ describe('dev executor', () => {
     // Start gen.next() before emitting close — the generator registers its
     // listener only after resuming from the first yield.
     const secondPromise = gen.next();
-    mockChild.emit('close');
+    mockChild.emit('close', 0);
     const second = await secondPromise;
     expect(second.value?.success).toBe(true);
+  });
+
+  it('should report failure on non-zero exit code', async () => {
+    const mockChild = new EventEmitter();
+    (spawn as jest.Mock).mockReturnValue(mockChild);
+
+    const gen = devExecutor({}, mockContext);
+    await gen.next();
+
+    const secondPromise = gen.next();
+    mockChild.emit('close', 1);
+    const second = await secondPromise;
+    expect(second.value?.success).toBe(false);
   });
 
   it('should pass port option', async () => {
@@ -48,7 +62,7 @@ describe('dev executor', () => {
     expect(spawn).toHaveBeenCalledWith('npx', ['frontmcp', 'dev', '--port', '4000'], expect.anything());
 
     const done = gen.next();
-    mockChild.emit('close');
+    mockChild.emit('close', 0);
     await done;
   });
 
@@ -62,7 +76,7 @@ describe('dev executor', () => {
     expect(spawn).toHaveBeenCalledWith('npx', ['frontmcp', 'dev', '--entry', 'src/main.ts'], expect.anything());
 
     const done = gen.next();
-    mockChild.emit('close');
+    mockChild.emit('close', 0);
     await done;
   });
 });

@@ -1,10 +1,11 @@
 import { execSync } from 'child_process';
+import type { ExecutorContext } from '../executor-context.js';
 
 jest.mock('child_process', () => ({ execSync: jest.fn() }));
 
 import buildExecExecutor from './build-exec.impl';
 
-const mockContext = {
+const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'demo',
   projectsConfigurations: { version: 2, projects: { demo: { root: 'apps/demo' } } },
@@ -12,7 +13,7 @@ const mockContext = {
   isVerbose: false,
   projectGraph: { nodes: {}, dependencies: {} },
   nxJsonConfiguration: {},
-} as any;
+};
 
 describe('build-exec executor', () => {
   beforeEach(() => jest.clearAllMocks());

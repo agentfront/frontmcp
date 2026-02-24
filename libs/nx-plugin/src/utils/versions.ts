@@ -49,7 +49,7 @@ export function getNxDevDependencies(): Record<string, string> {
     '@swc-node/register': '~1.9.1',
     '@swc/core': '~1.5.7',
     '@swc/helpers': '~0.5.11',
-    '@swc/jest': '~0.2.38',
+    '@swc/jest': '~0.2.39',
     '@types/jest': '^30.0.0',
     '@types/node': '^24.0.0',
     jest: '^30.0.2',

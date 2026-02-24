@@ -15,7 +15,7 @@
     "packageManager": {
       "type": "string",
       "description": "Package manager to use",
-      "enum": ["npm", "yarn", "pnpm"],
+      "enum": ["npm", "yarn", "pnpm", "bun"],
       "default": "npm",
       "x-priority": "important"
     },

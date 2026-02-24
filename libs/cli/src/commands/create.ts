@@ -1170,7 +1170,7 @@ async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Pr
     flushChanges(tree.root, tree.listChanges());
 
     if (callback) {
-      callback();
+      await callback();
     }
 
     console.log(c('green', `\n✅ Nx monorepo created at ./${projectName}\n`));

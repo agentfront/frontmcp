@@ -8,8 +8,10 @@ RUN npx nx build <%= projectName %>
 FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 COPY --from=builder /app/<%= projectRoot %>/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package.json /app/package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts
+USER appuser
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

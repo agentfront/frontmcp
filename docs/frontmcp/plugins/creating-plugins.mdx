@@ -9,7 +9,7 @@ Build custom plugins to extend FrontMCP with cross-cutting capabilities like cac
 
 ## Plugin Architecture
 
-FrontMCP plugins use the `@Plugin` decorator and extend `DynamicPlugin`. They can:
+FrontMCP plugins use the `@Plugin` decorator and typically extend `DynamicPlugin`. They can:
 
 1. **Register providers** — Services available to the plugin and exported to the host app
 2. **Contribute tools, resources, and skills** — Add capabilities when the plugin is attached
@@ -96,7 +96,8 @@ export default class AuthorizationPlugin extends DynamicPlugin {
   @ListToolsHook.Did('findTools')
   async filterTools(flowCtx: FlowCtxOf<'tools:list-tools'>) {
     const { tools } = flowCtx.state.required;
-    // Filter tools based on user roles...
+    // Filter tools based on user roles
+    const filteredTools = tools.filter((t) => this.isToolAllowed(t));
     flowCtx.state.set('tools', filteredTools);
   }
 }
@@ -150,13 +151,13 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     return [];
   }
 
-  @ToolHook.Will('execute', { priority: 1000 })
+  @ToolHook.Will('execute', { priority: 950 })
   async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const cacheStore = this.get(CacheStoreToken);
     // Check cache and respond early if hit...
   }
 
-  @ToolHook.Did('execute', { priority: 1000 })
+  @ToolHook.Did('execute', { priority: 950 })
   async storeCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const cacheStore = this.get(CacheStoreToken);
     // Store result in cache...
@@ -192,13 +193,15 @@ export default class GetUserTool extends ToolContext { /* ... */ }
 Plugins can contribute tools and skills via the `@Plugin` decorator:
 
 ```typescript
+import { DynamicPlugin, Plugin } from '@frontmcp/sdk';
+
 @Plugin({
   name: 'devops',
   description: 'DevOps tools and workflows',
   tools: [DeployTool, RollbackTool],
   skills: [DeployWorkflowSkill],
 })
-export default class DevOpsPlugin {}
+export default class DevOpsPlugin extends DynamicPlugin {}
 ```
 
 ## Publishing Plugins

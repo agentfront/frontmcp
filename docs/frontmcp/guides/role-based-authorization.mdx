@@ -337,15 +337,17 @@ import { test, expect } from '@frontmcp/testing';
 test.use({ server: './src/main.ts' });
 
 test('should hide admin tools from regular users', async ({ mcp }) => {
+  // Authenticate as a regular user before listing tools
+  await mcp.auth.loginWithToken({ roles: ['user'] });
   const tools = await mcp.tools.list();
-  // With a regular user token, admin-only tools should be filtered out
   expect(tools).not.toContainTool('delete-expense');
   expect(tools).toContainTool('create-expense');
 });
 
 test('should show admin tools to admins', async ({ mcp }) => {
+  // Authenticate as an admin before listing tools
+  await mcp.auth.loginWithToken({ roles: ['admin'] });
   const tools = await mcp.tools.list();
-  // With an admin token, all tools should be visible
   expect(tools).toContainTool('delete-expense');
   expect(tools).toContainTool('create-expense');
 });
@@ -389,6 +391,8 @@ test('should show admin tools to admins', async ({ mcp }) => {
     For defense in depth, also check roles during execution:
 
     ```typescript
+    import { ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+
     @ToolHook.Will('execute', { priority: 900 })
     async validateExecution(flowCtx: FlowCtxOf<'tools:call-tool'>) {
       const { tool, toolContext } = flowCtx.state;

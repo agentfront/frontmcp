@@ -1,11 +1,12 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import type { ExecutorContext } from '../executor-context.js';
 
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
 
 import inspectorExecutor from './inspector.impl';
 
-const mockContext = {
+const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'demo',
   projectsConfigurations: { version: 2, projects: { demo: { root: 'apps/demo' } } },
@@ -13,7 +14,7 @@ const mockContext = {
   isVerbose: false,
   projectGraph: { nodes: {}, dependencies: {} },
   nxJsonConfiguration: {},
-} as any;
+};
 
 describe('inspector executor', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -33,9 +34,22 @@ describe('inspector executor', () => {
     expect(first.value?.success).toBe(true);
 
     const secondPromise = gen.next();
-    mockChild.emit('close');
+    mockChild.emit('close', 0);
     const second = await secondPromise;
     expect(second.value?.success).toBe(true);
+  });
+
+  it('should report failure on non-zero exit code', async () => {
+    const mockChild = new EventEmitter();
+    (spawn as jest.Mock).mockReturnValue(mockChild);
+
+    const gen = inspectorExecutor({}, mockContext);
+    await gen.next();
+
+    const secondPromise = gen.next();
+    mockChild.emit('close', 1);
+    const second = await secondPromise;
+    expect(second.value?.success).toBe(false);
   });
 
   it('should pass port option', async () => {
@@ -48,7 +62,7 @@ describe('inspector executor', () => {
     expect(spawn).toHaveBeenCalledWith('npx', ['frontmcp', 'inspector', '--port', '9229'], expect.anything());
 
     const done = gen.next();
-    mockChild.emit('close');
+    mockChild.emit('close', 0);
     await done;
   });
 });

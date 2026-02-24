@@ -21,9 +21,10 @@ export default async function* devExecutor(
 
   yield { success: true, baseUrl: `http://localhost:${options.port ?? 3000}` };
 
-  await new Promise<void>((resolve) => {
-    child.on('close', () => resolve());
+  const exitCode = await new Promise<number>((resolve) => {
+    child.on('error', () => resolve(1));
+    child.on('close', (code) => resolve(code ?? 1));
   });
 
-  yield { success: true };
+  yield { success: exitCode === 0 };
 }
