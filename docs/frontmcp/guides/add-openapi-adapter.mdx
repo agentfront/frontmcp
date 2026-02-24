@@ -365,7 +365,7 @@ OpenapiAdapter.init({
     Generated tools inherit app plugins:
 
     ```ts
-    import CachePlugin from '@frontmcp/plugins/cache';
+    import { CachePlugin } from '@frontmcp/plugins';
 
     @App({
       id: 'cached-api',
@@ -468,7 +468,7 @@ Here's a full working example with authentication and caching:
 ```ts
 import { FrontMcp, App, LogLevel } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @App({
   id: 'expense',

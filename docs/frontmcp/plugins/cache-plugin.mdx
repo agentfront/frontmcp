@@ -59,7 +59,7 @@ npm install @frontmcp/plugins
 
 ```ts
 import { App } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @App({
   id: 'my-app',
@@ -542,7 +542,7 @@ Use short TTLs for frequently changing data:
 
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 import { z } from 'zod';
 
 // Configure Redis cache

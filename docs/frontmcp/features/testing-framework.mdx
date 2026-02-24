@@ -5,79 +5,19 @@ icon: flask-vial
 description: E2E testing with fixtures, custom matchers, and interceptors
 ---
 
-`@frontmcp/testing` provides a complete testing framework for MCP servers. Write E2E tests that spin up your server, call tools, and assert on results — all with type-safe fixtures and custom matchers.
-
-## E2E Test Example
-
-```ts
-import { test, expect, createTestFixture } from '@frontmcp/testing';
-
-const fixture = createTestFixture(Server);
-
-test('greet tool returns greeting', async () => {
-  const { mcp } = await fixture.setup();
-
-  const result = await mcp.tools.call('greet', { name: 'Ada' });
-
-  expect(result).toBeSuccessful();
-  expect(result.content[0].text).toContain('Hello, Ada');
-});
-```
-
-## Key Capabilities
-
-| Feature | Description |
-| --- | --- |
-| **Fixtures** | Spin up server instances with `createTestFixture()` |
-| **Custom Matchers** | `toBeSuccessful()`, `toHaveRenderedHtml()`, `toBeXssSafe()` |
-| **Interceptors** | Mock provider responses, simulate failures |
-| **HTTP Mocking** | Intercept `this.fetch()` calls in tools |
-| **Auth Testing** | Test authenticated flows with mock tokens |
-
-## Custom Matchers
-
-```ts
-// Check tool result is successful
-expect(result).toBeSuccessful();
-
-// Check HTML rendering (Tool UI)
-expect(result).toHaveRenderedHtml();
-
-// Check for XSS safety
-expect(result).toBeXssSafe();
-```
-
-## CLI Command
-
-Run E2E tests with the FrontMCP CLI:
-
-```bash
-# Run all E2E tests
-frontmcp test
-
-# Run sequentially (recommended for E2E)
-frontmcp test --runInBand
-
-# With coverage
-frontmcp test --coverage
-
-# Watch mode
-frontmcp test --watch
-```
-
-## Learn More
+`@frontmcp/testing` provides a complete end-to-end testing framework for MCP servers. Write tests that spin up your server, call tools, and assert on results — all with type-safe fixtures and custom matchers.
 
 <CardGroup cols={2}>
   <Card title="Testing Overview" icon="flask-vial" href="/frontmcp/testing/overview">
-    Complete testing guide
+    Complete testing guide with installation and configuration
   </Card>
   <Card title="Fixtures" icon="wrench" href="/frontmcp/testing/fixtures">
-    Test server setup and teardown
+    Test server setup and teardown with Playwright-inspired fixtures
   </Card>
   <Card title="Custom Matchers" icon="check" href="/frontmcp/testing/matchers">
-    All available Jest matchers
+    All available Jest matchers (`toBeSuccessful`, `toBeXssSafe`, etc.)
   </Card>
   <Card title="Interceptors" icon="shield-check" href="/frontmcp/testing/interceptors">
-    Mock providers and responses
+    Mock providers and simulate failure scenarios
   </Card>
 </CardGroup>

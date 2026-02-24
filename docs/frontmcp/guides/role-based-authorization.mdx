@@ -332,40 +332,22 @@ Usage:
 ## Testing Authorization
 
 ```typescript
-import { createTestingModule } from '@frontmcp/sdk/testing';
-import ExpenseApp from './apps/expense';
+import { test, expect } from '@frontmcp/testing';
 
-describe('Authorization', () => {
-  it('should hide admin tools from regular users', async () => {
-    const { scope } = await createTestingModule({
-      apps: [ExpenseApp],
-    });
+test.use({ server: './src/main.ts' });
 
-    // Mock regular user
-    const tools = await scope.listTools({
-      authInfo: {
-        user: { id: 'user-1', roles: ['user'] },
-      },
-    });
+test('should hide admin tools from regular users', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+  // With a regular user token, admin-only tools should be filtered out
+  expect(tools).not.toContainTool('delete-expense');
+  expect(tools).toContainTool('create-expense');
+});
 
-    expect(tools.find(t => t.name === 'delete-expense')).toBeUndefined();
-    expect(tools.find(t => t.name === 'create-expense')).toBeDefined();
-  });
-
-  it('should show admin tools to admins', async () => {
-    const { scope } = await createTestingModule({
-      apps: [ExpenseApp],
-    });
-
-    // Mock admin user
-    const tools = await scope.listTools({
-      authInfo: {
-        user: { id: 'admin-1', roles: ['admin', 'user'] },
-      },
-    });
-
-    expect(tools.find(t => t.name === 'delete-expense')).toBeDefined();
-  });
+test('should show admin tools to admins', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+  // With an admin token, all tools should be visible
+  expect(tools).toContainTool('delete-expense');
+  expect(tools).toContainTool('create-expense');
 });
 ```
 

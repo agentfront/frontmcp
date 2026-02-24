@@ -5,9 +5,7 @@ icon: puzzle-piece
 description: Extend servers with plugins, adapters, and context extensions
 ---
 
-FrontMCP's plugin system lets you add cross-cutting capabilities — caching, logging, context extensions, and more — without modifying your tools or resources.
-
-## What Plugins Can Do
+FrontMCP's plugin system lets you add cross-cutting capabilities — caching, logging, context extensions, and more — without modifying your tools or resources. Plugins use the `@Plugin` decorator and `DynamicPlugin` base class to hook into the request lifecycle.
 
 | Capability | Example |
 | --- | --- |
@@ -16,75 +14,15 @@ FrontMCP's plugin system lets you add cross-cutting capabilities — caching, lo
 | Extend context | Add `this.remember`, `this.cache` to tool contexts |
 | Hook into flows | Intercept request lifecycle stages |
 
-## Quick Example: Audit Plugin
-
-```ts
-@Plugin({ name: 'audit', description: 'Logs all tool executions' })
-class AuditPlugin extends DynamicPlugin {
-  async onRegister(ctx: PluginRegistrationContext) {
-    ctx.hooks.register({
-      flow: 'tools:call-tool',
-      stage: 'execute',
-      type: 'did',
-      handler: async (flowCtx) => {
-        console.log(`Tool executed: ${flowCtx.toolName}`, flowCtx.output);
-      },
-    });
-  }
-}
-```
-
-Register it on your server:
-
-```ts
-@FrontMcp({
-  info: { name: 'Server', version: '1.0.0' },
-  apps: [MyApp],
-  plugins: [new AuditPlugin()],
-})
-class Server {}
-```
-
-## Official Plugins
-
-| Plugin | Description |
-| --- | --- |
-| **Cache** | Transparent caching for tool and resource responses |
-| **Remember** | Session memory with `this.remember.get/set` and tool approval tracking |
-| **CodeCall** | AgentScript runtime for safe, sandboxed AI code execution |
-
-## Adapters
-
-Adapters dynamically generate tools, resources, and prompts from external sources:
-
-```ts
-import { OpenAPIAdapter } from '@frontmcp/adapters';
-
-@App({
-  id: 'api',
-  name: 'API',
-  adapters: [
-    new OpenAPIAdapter({
-      url: 'https://api.example.com/openapi.json',
-    }),
-  ],
-})
-class ApiApp {}
-```
-
-The OpenAPI adapter reads your spec and generates one tool per operation automatically.
-
-## Learn More
-
 <CardGroup cols={2}>
-  <Card title="Plugin Guide" icon="puzzle-piece" href="/frontmcp/plugins/introduction">
-    Full guide to creating and using plugins
+  <Card title="Plugin Overview" icon="puzzle-piece" href="/frontmcp/plugins/overview">
+    Official and community plugins
   </Card>
-  <Card title="Creating Plugins" icon="code" href="/frontmcp/plugins/creating-plugins">
+  <Card title="Plugin API" icon="code" href="/frontmcp/extensibility/plugins">
+    Full DynamicPlugin API, hooks, and scopes
+  </Card>
+  <Card title="Create a Plugin" icon="plug" href="/frontmcp/guides/create-plugin">
     Step-by-step plugin creation tutorial
-  </Card>
-  <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/official/cache">
-    Transparent response caching
   </Card>
   <Card title="OpenAPI Adapter" icon="file-code" href="/frontmcp/adapters/openapi-adapter">
     Auto-generate tools from OpenAPI specs

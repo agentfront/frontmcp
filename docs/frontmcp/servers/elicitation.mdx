@@ -432,18 +432,20 @@ Intercepts the elicitation result flow when the user responds.
 ### Example: Plugin with Elicitation Hooks
 
 ```ts
-import { FrontMcpPlugin, PluginInterface } from '@frontmcp/sdk';
-import { ElicitationRequestHook, ElicitationResultHook } from '@frontmcp/sdk/elicitation';
-import type { FlowCtxOf } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, FlowHooksOf, FlowCtxOf } from '@frontmcp/sdk';
 
-@FrontMcpPlugin({
+const ElicitationRequestHook = FlowHooksOf<'elicitation:request'>('elicitation:request');
+const ElicitationResultHook = FlowHooksOf<'elicitation:result'>('elicitation:result');
+
+@Plugin({
   name: 'elicitation-audit',
-  scope: 'app',
+  description: 'Audit logging for elicitation flows',
 })
-export class ElicitationAuditPlugin implements PluginInterface {
+export class ElicitationAuditPlugin extends DynamicPlugin {
   private auditLog: AuditLog;
 
   constructor(auditLog: AuditLog) {
+    super();
     this.auditLog = auditLog;
   }
 
@@ -497,8 +499,8 @@ class MyApp {}
 **Input Sanitization (BEFORE buildResult):**
 
 ```ts
-@FrontMcpPlugin({ name: 'elicitation-sanitizer' })
-class SanitizerPlugin implements PluginInterface {
+@Plugin({ name: 'elicitation-sanitizer', description: 'Sanitize elicitation input' })
+class SanitizerPlugin extends DynamicPlugin {
   @ElicitationResultHook.Will('buildResult')
   async sanitizeInput(ctx: FlowCtxOf<'elicitation:result'>) {
     // Sanitize content before it's built into result
@@ -512,8 +514,8 @@ class SanitizerPlugin implements PluginInterface {
 **Analytics (AFTER finalize):**
 
 ```ts
-@FrontMcpPlugin({ name: 'elicitation-analytics' })
-class AnalyticsPlugin implements PluginInterface {
+@Plugin({ name: 'elicitation-analytics', description: 'Track elicitation completions' })
+class AnalyticsPlugin extends DynamicPlugin {
   @ElicitationResultHook.Did('finalize')
   async trackCompletion(ctx: FlowCtxOf<'elicitation:result'>) {
     const { pendingRecord, elicitResult } = ctx.state;
@@ -531,8 +533,8 @@ class AnalyticsPlugin implements PluginInterface {
 **Conditional Hooks (with filter):**
 
 ```ts
-@FrontMcpPlugin({ name: 'admin-audit' })
-class AdminAuditPlugin implements PluginInterface {
+@Plugin({ name: 'admin-audit', description: 'Audit admin elicitation actions' })
+class AdminAuditPlugin extends DynamicPlugin {
   @ElicitationRequestHook.Did('finalize', {
     filter: (ctx) => ctx.authInfo?.role === 'admin',
   })

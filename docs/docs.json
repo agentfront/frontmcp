@@ -167,10 +167,9 @@
                 "group": "Plugins",
                 "pages": [
                   "frontmcp/plugins/overview",
-                  "frontmcp/plugins/introduction",
                   "frontmcp/plugins/creating-plugins",
-                  "frontmcp/plugins/official/cache",
-                  "frontmcp/plugins/official/remember",
+                  "frontmcp/plugins/cache-plugin",
+                  "frontmcp/plugins/remember-plugin",
                   {
                     "group": "CodeCall",
                     "pages": [

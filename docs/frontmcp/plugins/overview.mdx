@@ -121,41 +121,32 @@ Community plugins are created and maintained by the FrontMCP community. While no
 
 ## Creating Custom Plugins
 
-You can create custom plugins to add any cross-cutting capability to FrontMCP. Plugins are TypeScript classes decorated with `@Plugin` that hook into the tool execution lifecycle.
+You can create custom plugins to add any cross-cutting capability to FrontMCP. Plugins use the `@Plugin` decorator, extend `DynamicPlugin`, and hook into the tool execution lifecycle via `@ToolHook` decorators.
 
 ### Basic Plugin Structure
 
 ```ts
-import { Plugin, PluginContext, ToolHooks } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
 
 @Plugin({
   name: 'my-plugin',
   description: 'My custom plugin',
 })
-export default class MyCustomPlugin implements ToolHooks {
-  // Called before tool execution
-  async beforeToolCall(ctx: PluginContext) {
-    // Add pre-execution logic (validation, auth, etc.)
-    console.log(`About to execute tool: ${ctx.toolName}`);
+export default class MyCustomPlugin extends DynamicPlugin {
+  // Runs BEFORE tool execution
+  @ToolHook.Will('execute', { priority: 1000 })
+  async beforeExecute(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+    console.log(`About to execute tool: ${tool.fullName}`);
   }
 
-  // Called after successful tool execution
-  async afterToolCall(ctx: PluginContext, result: any) {
-    // Add post-execution logic (logging, caching, etc.)
-    console.log(`Tool ${ctx.toolName} returned:`, result);
-    return result; // Can transform the result
-  }
-
-  // Called on tool execution errors
-  async onToolError(ctx: PluginContext, error: Error) {
-    // Add error handling logic
-    console.error(`Tool ${ctx.toolName} failed:`, error);
-    throw error; // Re-throw or transform the error
-  }
-
-  // Initialize with options
-  static init(options?: MyPluginOptions) {
-    return new MyCustomPlugin(options);
+  // Runs AFTER tool execution
+  @ToolHook.Did('execute', { priority: 1000 })
+  async afterExecute(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+    console.log(`Tool ${tool.fullName} completed`);
   }
 }
 ```

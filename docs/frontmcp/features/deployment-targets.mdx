@@ -7,54 +7,12 @@ description: Deploy to Node.js, Vercel, AWS Lambda, or Cloudflare Workers
 
 FrontMCP supports multiple deployment targets out of the box. The same `@FrontMcp` server code deploys to any platform — only the build adapter and infrastructure config change.
 
-## Target Comparison
-
 | Target | Runtime | Session Storage | Cold Start | Best For |
 | --- | --- | --- | --- | --- |
 | **Node.js / Docker** | Long-running | In-memory or Redis | None | Full-featured servers |
 | **Vercel** | Serverless | Vercel KV or Redis | ~200ms | Edge-first deployments |
 | **AWS Lambda** | Serverless | Redis / DynamoDB | ~500ms | AWS-native infrastructure |
 | **Cloudflare Workers** | Edge | KV / Durable Objects | ~5ms | Ultra-low latency |
-
-## CLI Flags
-
-Create a project targeting any platform:
-
-```bash
-# Node.js with Docker (default)
-npx frontmcp create my-server --target node
-
-# Vercel Functions
-npx frontmcp create my-server --target vercel
-
-# AWS Lambda (SAM)
-npx frontmcp create my-server --target lambda
-
-# Cloudflare Workers
-npx frontmcp create my-server --target cloudflare
-```
-
-Build with the appropriate adapter:
-
-```bash
-frontmcp build --adapter vercel
-frontmcp build --exec  # Executable bundle for any target
-```
-
-## Process Manager
-
-For Node.js deployments, the built-in process manager handles supervision:
-
-```bash
-frontmcp start my-app --entry ./src/main.ts --port 3005
-frontmcp stop my-app
-frontmcp restart my-app
-frontmcp status my-app
-frontmcp logs my-app --follow
-frontmcp service install my-app   # systemd/launchd
-```
-
-## Learn More
 
 <CardGroup cols={2}>
   <Card title="Local Development" icon="laptop-code" href="/frontmcp/deployment/local-dev-server">
