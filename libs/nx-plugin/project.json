@@ -28,12 +28,12 @@
           {
             "input": "libs/nx-plugin/src",
             "glob": "**/*.json",
-            "output": "src"
+            "output": "."
           },
           {
             "input": "libs/nx-plugin/src",
             "glob": "**/files/**",
-            "output": "src"
+            "output": "."
           }
         ]
       }
@@ -42,7 +42,13 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-tsc"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/nx-plugin/dist/package.json"
+        "commands": [
+          "cp -r libs/nx-plugin/dist/src/* libs/nx-plugin/dist/ && rm -rf libs/nx-plugin/dist/src",
+          "sed 's|./src/|./|g' libs/nx-plugin/dist/generators.json > libs/nx-plugin/dist/generators.json.tmp && mv libs/nx-plugin/dist/generators.json.tmp libs/nx-plugin/dist/generators.json",
+          "sed 's|./src/|./|g' libs/nx-plugin/dist/executors.json > libs/nx-plugin/dist/executors.json.tmp && mv libs/nx-plugin/dist/executors.json.tmp libs/nx-plugin/dist/executors.json",
+          "node scripts/strip-dist-from-pkg.js libs/nx-plugin/dist/package.json"
+        ],
+        "parallel": false
       }
     },
     "publish": {

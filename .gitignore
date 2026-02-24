@@ -69,6 +69,7 @@ docs/docs.backup.json
 
 # Prevent declaration files in source directories (should only be in dist)
 libs/*/src/**/*.d.ts
+!libs/cli/src/types/*.d.ts
 libs/*/src/**/*.d.ts.map
 apps/*/src/**/*.d.ts
 apps/*/src/**/*.d.ts.map

@@ -8,15 +8,14 @@ export default async function* devExecutor(
 ): AsyncGenerator<{ success: boolean; baseUrl?: string }> {
   const args: string[] = ['frontmcp', 'dev'];
   if (options.entry) args.push('--entry', options.entry);
-  if (options.port) args.push('--port', String(options.port));
+  if (options.port !== undefined) args.push('--port', String(options.port));
 
   console.log(`Running: npx ${args.join(' ')}`);
 
-  const child = spawn('npx', args, {
+  const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', args, {
     cwd: context.root,
     stdio: 'inherit',
     env: { ...process.env, FORCE_COLOR: '1' },
-    shell: true,
   });
 
   yield { success: true, baseUrl: `http://localhost:${options.port ?? 3000}` };

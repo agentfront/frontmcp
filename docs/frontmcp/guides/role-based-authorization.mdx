@@ -336,17 +336,19 @@ import { test, expect } from '@frontmcp/testing';
 
 test.use({ server: './src/main.ts' });
 
-test('should hide admin tools from regular users', async ({ mcp }) => {
+test('should hide admin tools from regular users', async ({ mcp, auth }) => {
   // Authenticate as a regular user before listing tools
-  await mcp.auth.loginWithToken({ roles: ['user'] });
+  const token = await auth.createToken({ sub: 'user-1', claims: { roles: ['user'] } });
+  await mcp.authenticate(token);
   const tools = await mcp.tools.list();
   expect(tools).not.toContainTool('delete-expense');
   expect(tools).toContainTool('create-expense');
 });
 
-test('should show admin tools to admins', async ({ mcp }) => {
+test('should show admin tools to admins', async ({ mcp, auth }) => {
   // Authenticate as an admin before listing tools
-  await mcp.auth.loginWithToken({ roles: ['admin'] });
+  const token = await auth.createToken({ sub: 'admin-1', claims: { roles: ['admin'] } });
+  await mcp.authenticate(token);
   const tools = await mcp.tools.list();
   expect(tools).toContainTool('delete-expense');
   expect(tools).toContainTool('create-expense');

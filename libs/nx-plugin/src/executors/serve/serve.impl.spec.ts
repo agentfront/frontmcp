@@ -6,6 +6,8 @@ jest.mock('child_process', () => ({ spawn: jest.fn() }));
 
 import serveExecutor from './serve.impl';
 
+const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
+
 const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'demo',
@@ -21,13 +23,13 @@ describe('serve executor', () => {
 
   it('should spawn frontmcp start', async () => {
     const mockChild = new EventEmitter();
-    (spawn as jest.Mock).mockReturnValue(mockChild);
+    mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = serveExecutor({}, mockContext);
     const first = await gen.next();
 
-    expect(spawn).toHaveBeenCalledWith(
-      'npx',
+    expect(mockSpawn).toHaveBeenCalledWith(
+      expect.stringContaining('npx'),
       ['frontmcp', 'start', 'demo'],
       expect.objectContaining({ cwd: '/workspace' }),
     );
@@ -41,7 +43,7 @@ describe('serve executor', () => {
 
   it('should report failure on non-zero exit code', async () => {
     const mockChild = new EventEmitter();
-    (spawn as jest.Mock).mockReturnValue(mockChild);
+    mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = serveExecutor({}, mockContext);
     await gen.next();
@@ -52,15 +54,41 @@ describe('serve executor', () => {
     expect(second.value?.success).toBe(false);
   });
 
+  it('should report failure on error event', async () => {
+    const mockChild = new EventEmitter();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = serveExecutor({}, mockContext);
+    await gen.next();
+
+    const secondPromise = gen.next();
+    mockChild.emit('error', new Error('spawn ENOENT'));
+    const second = await secondPromise;
+    expect(second.value?.success).toBe(false);
+  });
+
+  it('should report failure when close emits null', async () => {
+    const mockChild = new EventEmitter();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = serveExecutor({}, mockContext);
+    await gen.next();
+
+    const secondPromise = gen.next();
+    mockChild.emit('close', null);
+    const second = await secondPromise;
+    expect(second.value?.success).toBe(false);
+  });
+
   it('should pass port and maxRestarts', async () => {
     const mockChild = new EventEmitter();
-    (spawn as jest.Mock).mockReturnValue(mockChild);
+    mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = serveExecutor({ port: 8080, maxRestarts: 10 }, mockContext);
     await gen.next();
 
-    expect(spawn).toHaveBeenCalledWith(
-      'npx',
+    expect(mockSpawn).toHaveBeenCalledWith(
+      expect.stringContaining('npx'),
       ['frontmcp', 'start', 'demo', '--port', '8080', '--max-restarts', '10'],
       expect.anything(),
     );
@@ -72,13 +100,13 @@ describe('serve executor', () => {
 
   it('should pass entry option', async () => {
     const mockChild = new EventEmitter();
-    (spawn as jest.Mock).mockReturnValue(mockChild);
+    mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = serveExecutor({ entry: 'src/main.ts' }, mockContext);
     await gen.next();
 
-    expect(spawn).toHaveBeenCalledWith(
-      'npx',
+    expect(mockSpawn).toHaveBeenCalledWith(
+      expect.stringContaining('npx'),
       ['frontmcp', 'start', 'demo', '--entry', 'src/main.ts'],
       expect.anything(),
     );

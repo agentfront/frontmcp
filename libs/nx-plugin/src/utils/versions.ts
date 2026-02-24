@@ -7,6 +7,9 @@ function readPluginVersion(): string {
   if (cachedVersion) return cachedVersion;
   const pkgPath = join(__dirname, '..', '..', 'package.json');
   const pkg = readJsonFile<{ version: string }>(pkgPath);
+  if (!pkg.version || typeof pkg.version !== 'string') {
+    throw new Error(`@frontmcp/nx package.json at ${pkgPath} is missing a valid "version" field`);
+  }
   cachedVersion = pkg.version;
   return cachedVersion;
 }

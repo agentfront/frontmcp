@@ -7,15 +7,14 @@ export default async function* inspectorExecutor(
   context: ExecutorContext,
 ): AsyncGenerator<{ success: boolean }> {
   const args: string[] = ['frontmcp', 'inspector'];
-  if (options.port) args.push('--port', String(options.port));
+  if (options.port !== undefined) args.push('--port', String(options.port));
 
   console.log(`Running: npx ${args.join(' ')}`);
 
-  const child = spawn('npx', args, {
+  const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', args, {
     cwd: context.root,
     stdio: 'inherit',
     env: { ...process.env, FORCE_COLOR: '1' },
-    shell: true,
   });
 
   yield { success: true };

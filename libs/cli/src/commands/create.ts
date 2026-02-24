@@ -20,6 +20,7 @@ export interface CreateOptions {
   redisSetup: RedisSetup;
   enableGitHubActions: boolean;
   packageManager: PackageManager;
+  nxScaffolded?: boolean;
 }
 
 export interface CreateFlags {
@@ -1225,6 +1226,7 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
       redisSetup: flags.redis ?? 'none',
       enableGitHubActions: flags.cicd ?? false,
       packageManager: flags.pm ?? 'npm',
+      nxScaffolded: true,
     };
   }
 
@@ -1249,6 +1251,7 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
         redisSetup: 'none',
         enableGitHubActions: false,
         packageManager: flags?.pm ?? 'npm',
+        nxScaffolded: true,
       };
     }
   }
@@ -1697,7 +1700,7 @@ export async function runCreate(projectArg?: string, flags?: CreateFlags): Promi
   p.intro('Create a new FrontMCP project');
 
   const options = await collectOptions(projectArg, flags);
-  await scaffoldProject(options);
+  if (!options.nxScaffolded) await scaffoldProject(options);
 
   p.outro('Done!');
 }
