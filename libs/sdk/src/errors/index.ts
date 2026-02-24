@@ -219,4 +219,5 @@ export {
   RegistryNotInitializedError,
   EnclaveExecutionError,
   FlowInputMissingError,
+  DynamicJobDirectExecutionError,
 } from './sdk.errors';

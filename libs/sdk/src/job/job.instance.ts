@@ -9,7 +9,7 @@ import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
-import { InvalidRegistryKindError } from '../errors';
+import { InvalidRegistryKindError, DynamicJobDirectExecutionError } from '../errors';
 
 /**
  * Concrete implementation of a job that can be executed.
@@ -101,8 +101,7 @@ export class JobInstance<
       case JobKind.FUNCTION:
         return new FunctionJobContext<InSchema, OutSchema, In, Out>(this.record as JobFunctionTokenRecord, jobCtorArgs);
       case JobKind.DYNAMIC:
-        // Dynamic jobs are handled by the enclave bridge, not here
-        throw new Error('Dynamic jobs must be executed through the enclave bridge');
+        throw new DynamicJobDirectExecutionError(this.name);
       default:
         throw new InvalidRegistryKindError('job', (this.record as { kind: string }).kind);
     }

@@ -1,5 +1,6 @@
 import { Token, tokenName } from '@frontmcp/di';
 import { EntryLineage, EntryOwnerRef } from '../common';
+import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { JobEntry } from '../common/entries/job.entry';
 import { JobRecord, JobDynamicRecord } from '../common/records/job.record';
 import { JobType } from '../common/interfaces/job.interface';
@@ -47,10 +48,16 @@ export default class JobRegistry
 
   private version = 0;
   private emitter = new JobEmitter();
+  private logger?: FrontMcpLogger;
 
   constructor(providers: ProviderRegistry, list: JobType[], owner: EntryOwnerRef) {
     super('JobRegistry', providers, list, false);
     this.owner = owner;
+    try {
+      this.logger = providers.get(FrontMcpLogger);
+    } catch {
+      // Logger not available - optional dependency
+    }
     this.buildGraph();
     this.ready = this.initialize();
   }
@@ -203,13 +210,13 @@ export default class JobRegistry
     const effective = [...this.localRows, ...this.dynamicRows];
     for (const r of effective) {
       if (this.byName.has(r.baseName)) {
-        console.warn(`JobRegistry: duplicate job name "${r.baseName}" detected during reindex; later entry wins`);
+        this.logger?.warn(`JobRegistry: duplicate job name "${r.baseName}" detected during reindex; later entry wins`);
       }
       this.byName.set(r.baseName, r);
 
       const idKey = r.instance.metadata.id ?? r.baseName;
       if (this.byId.has(idKey)) {
-        console.warn(`JobRegistry: duplicate job id "${idKey}" detected during reindex; later entry wins`);
+        this.logger?.warn(`JobRegistry: duplicate job id "${idKey}" detected during reindex; later entry wins`);
       }
       this.byId.set(idKey, r);
     }

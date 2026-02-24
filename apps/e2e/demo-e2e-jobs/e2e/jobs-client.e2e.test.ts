@@ -92,6 +92,24 @@ describe('Jobs DirectClient E2E', () => {
     });
   });
 
+  describe('Error handling', () => {
+    it('should reject when executing a non-existent job', async () => {
+      await expect(client.executeJob('does-not-exist', {})).rejects.toThrow();
+    });
+
+    it('should reject when executing a non-existent workflow', async () => {
+      await expect(client.executeWorkflow('does-not-exist')).rejects.toThrow();
+    });
+
+    it('should reject when getting status for an unknown job runId', async () => {
+      await expect(client.getJobStatus('unknown-run-id')).rejects.toThrow();
+    });
+
+    it('should reject when getting status for an unknown workflow runId', async () => {
+      await expect(client.getWorkflowStatus('unknown-run-id')).rejects.toThrow();
+    });
+  });
+
   describe('Jobs appear in tool listing', () => {
     it('should include job management tools in listTools', async () => {
       const tools = await client.listTools();

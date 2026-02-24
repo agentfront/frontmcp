@@ -1,5 +1,6 @@
 import { Token, tokenName } from '@frontmcp/di';
 import { EntryLineage, EntryOwnerRef } from '../common';
+import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { WorkflowEntry } from '../common/entries/workflow.entry';
 import { WorkflowRecord, WorkflowDynamicRecord } from '../common/records/workflow.record';
 import { WorkflowType } from '../common/interfaces/workflow.interface';
@@ -46,10 +47,16 @@ export default class WorkflowRegistry
 
   private version = 0;
   private emitter = new WorkflowEmitter();
+  private logger?: FrontMcpLogger;
 
   constructor(providers: ProviderRegistry, list: WorkflowType[], owner: EntryOwnerRef) {
     super('WorkflowRegistry', providers, list, false);
     this.owner = owner;
+    try {
+      this.logger = providers.get(FrontMcpLogger);
+    } catch {
+      // Logger not available - optional dependency
+    }
     this.buildGraph();
     this.ready = this.initialize();
   }
@@ -188,7 +195,7 @@ export default class WorkflowRegistry
     const effective = [...this.localRows, ...this.dynamicRows];
     for (const r of effective) {
       if (this.byName.has(r.baseName)) {
-        console.warn(
+        this.logger?.warn(
           `WorkflowRegistry: duplicate workflow name "${r.baseName}" detected during reindex; later entry wins`,
         );
       }
@@ -196,7 +203,9 @@ export default class WorkflowRegistry
 
       const idKey = r.instance.metadata.id ?? r.baseName;
       if (this.byId.has(idKey)) {
-        console.warn(`WorkflowRegistry: duplicate workflow id "${idKey}" detected during reindex; later entry wins`);
+        this.logger?.warn(
+          `WorkflowRegistry: duplicate workflow id "${idKey}" detected during reindex; later entry wins`,
+        );
       }
       this.byId.set(idKey, r);
     }
