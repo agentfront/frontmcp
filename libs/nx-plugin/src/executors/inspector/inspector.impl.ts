@@ -19,10 +19,14 @@ export default async function* inspectorExecutor(
 
   yield { success: true };
 
-  const exitCode = await new Promise<number>((resolve) => {
-    child.on('error', () => resolve(1));
-    child.on('close', (code) => resolve(code ?? 1));
-  });
+  try {
+    const exitCode = await new Promise<number>((resolve) => {
+      child.on('error', () => resolve(1));
+      child.on('close', (code) => resolve(code ?? 1));
+    });
 
-  yield { success: exitCode === 0 };
+    yield { success: exitCode === 0 };
+  } finally {
+    if (!child.killed) child.kill();
+  }
 }

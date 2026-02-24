@@ -131,6 +131,12 @@ For plugins that create providers based on configuration:
 ```typescript
 import { DynamicPlugin, Plugin, ProviderType, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
 
+interface CachePluginOptions {
+  type: 'memory' | 'redis';
+  host?: string;
+  port?: number;
+}
+
 const CacheStoreToken = Symbol('CacheStore');
 
 @Plugin({
@@ -225,6 +231,9 @@ my-plugin/
 ```json package.json
 {
   "name": "@yourscope/frontmcp-plugin-myfeature",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
   "keywords": ["frontmcp", "frontmcp-plugin", "mcp", "plugin"],
   "peerDependencies": {
     "@frontmcp/sdk": "^0.4.0"

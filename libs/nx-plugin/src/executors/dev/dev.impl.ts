@@ -18,12 +18,16 @@ export default async function* devExecutor(
     env: { ...process.env, FORCE_COLOR: '1' },
   });
 
-  yield { success: true, baseUrl: `http://localhost:${options.port ?? 3000}` };
+  yield { success: true, ...(options.port !== undefined && { baseUrl: `http://localhost:${options.port}` }) };
 
-  const exitCode = await new Promise<number>((resolve) => {
-    child.on('error', () => resolve(1));
-    child.on('close', (code) => resolve(code ?? 1));
-  });
+  try {
+    const exitCode = await new Promise<number>((resolve) => {
+      child.on('error', () => resolve(1));
+      child.on('close', (code) => resolve(code ?? 1));
+    });
 
-  yield { success: exitCode === 0 };
+    yield { success: exitCode === 0 };
+  } finally {
+    if (!child.killed) child.kill();
+  }
 }

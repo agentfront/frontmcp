@@ -1216,20 +1216,6 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
     projectName = result;
   }
 
-  // Project type: Standalone or Nx monorepo
-  if (flags?.nx) {
-    await scaffoldNxWorkspace(projectName, flags);
-    // Return early — Nx workspace generator handles everything
-    return {
-      projectName,
-      deploymentTarget: flags.target ?? 'node',
-      redisSetup: flags.redis ?? 'none',
-      enableGitHubActions: flags.cicd ?? false,
-      packageManager: flags.pm ?? 'npm',
-      nxScaffolded: true,
-    };
-  }
-
   if (!flags?.yes) {
     const projectType = await p.select({
       message: 'Project type',

@@ -6,8 +6,8 @@ export default async function* serveExecutor(
   options: ServeExecutorSchema,
   context: ExecutorContext,
 ): AsyncGenerator<{ success: boolean }> {
-  const projectName = context.projectName ?? '';
-  const args: string[] = ['frontmcp', 'start', projectName];
+  const args: string[] = ['frontmcp', 'start'];
+  if (context.projectName) args.push(context.projectName);
   if (options.entry) args.push('--entry', options.entry);
   if (options.port !== undefined) args.push('--port', String(options.port));
   if (options.maxRestarts !== undefined) args.push('--max-restarts', String(options.maxRestarts));
@@ -22,10 +22,14 @@ export default async function* serveExecutor(
 
   yield { success: true };
 
-  const exitCode = await new Promise<number>((resolve) => {
-    child.on('error', () => resolve(1));
-    child.on('close', (code) => resolve(code ?? 1));
-  });
+  try {
+    const exitCode = await new Promise<number>((resolve) => {
+      child.on('error', () => resolve(1));
+      child.on('close', (code) => resolve(code ?? 1));
+    });
 
-  yield { success: exitCode === 0 };
+    yield { success: exitCode === 0 };
+  } finally {
+    if (!child.killed) child.kill();
+  }
 }

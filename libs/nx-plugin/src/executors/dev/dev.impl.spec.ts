@@ -10,6 +10,15 @@ import devExecutor from './dev.impl';
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
+function createMockChild() {
+  const child = new EventEmitter() as EventEmitter & { killed: boolean; kill: jest.Mock };
+  child.killed = false;
+  child.kill = jest.fn(() => {
+    child.killed = true;
+  });
+  return child;
+}
+
 const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'demo',
@@ -24,7 +33,7 @@ describe('dev executor', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('should spawn frontmcp dev', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = devExecutor({}, mockContext);
@@ -46,7 +55,7 @@ describe('dev executor', () => {
   });
 
   it('should report failure on non-zero exit code', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = devExecutor({}, mockContext);
@@ -59,7 +68,7 @@ describe('dev executor', () => {
   });
 
   it('should report failure on error event', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = devExecutor({}, mockContext);
@@ -72,7 +81,7 @@ describe('dev executor', () => {
   });
 
   it('should report failure when close emits null', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = devExecutor({}, mockContext);
@@ -84,18 +93,33 @@ describe('dev executor', () => {
     expect(second.value?.success).toBe(false);
   });
 
-  it('should pass port option', async () => {
-    const mockChild = new EventEmitter();
+  it('should pass port option and include baseUrl', async () => {
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = devExecutor({ port: 4000 }, mockContext);
-    await gen.next();
+    const first = await gen.next();
 
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.stringContaining('npx'),
       ['frontmcp', 'dev', '--port', '4000'],
       expect.anything(),
     );
+    expect(first.value).toEqual({ success: true, baseUrl: 'http://localhost:4000' });
+
+    const done = gen.next();
+    mockChild.emit('close', 0);
+    await done;
+  });
+
+  it('should omit baseUrl when port is not specified', async () => {
+    const mockChild = createMockChild();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = devExecutor({}, mockContext);
+    const first = await gen.next();
+
+    expect(first.value).toEqual({ success: true });
 
     const done = gen.next();
     mockChild.emit('close', 0);
@@ -103,7 +127,7 @@ describe('dev executor', () => {
   });
 
   it('should pass entry option', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = devExecutor({ entry: 'src/main.ts' }, mockContext);

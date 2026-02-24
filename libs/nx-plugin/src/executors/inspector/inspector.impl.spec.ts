@@ -8,6 +8,15 @@ import inspectorExecutor from './inspector.impl';
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
+function createMockChild() {
+  const child = new EventEmitter() as EventEmitter & { killed: boolean; kill: jest.Mock };
+  child.killed = false;
+  child.kill = jest.fn(() => {
+    child.killed = true;
+  });
+  return child;
+}
+
 const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'demo',
@@ -22,7 +31,7 @@ describe('inspector executor', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('should spawn frontmcp inspector', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = inspectorExecutor({}, mockContext);
@@ -42,7 +51,7 @@ describe('inspector executor', () => {
   });
 
   it('should report failure on non-zero exit code', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = inspectorExecutor({}, mockContext);
@@ -55,7 +64,7 @@ describe('inspector executor', () => {
   });
 
   it('should report failure on error event', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = inspectorExecutor({}, mockContext);
@@ -68,7 +77,7 @@ describe('inspector executor', () => {
   });
 
   it('should report failure when close emits null', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = inspectorExecutor({}, mockContext);
@@ -81,7 +90,7 @@ describe('inspector executor', () => {
   });
 
   it('should pass port option', async () => {
-    const mockChild = new EventEmitter();
+    const mockChild = createMockChild();
     mockSpawn.mockReturnValue(mockChild as never);
 
     const gen = inspectorExecutor({ port: 9229 }, mockContext);
