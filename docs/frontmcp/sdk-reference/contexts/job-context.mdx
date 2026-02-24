@@ -33,7 +33,6 @@ export abstract class JobContext<
 | `output` | `Out \| undefined` | Job output (after execution) |
 | `jobName` | `string` | Job name |
 | `jobId` | `string` | Job ID (or name if not specified) |
-| `attempt` | `number` | Current retry attempt (1-based) |
 
 ## Abstract Method
 
@@ -72,6 +71,7 @@ respond(value: Out): never
 
 ```typescript
 async execute(input) {
+  const cached = await this.tryGetCached(input); // e.g. from your cache layer
   if (cached) {
     this.respond(cached); // Ends execution here
   }
@@ -108,8 +108,13 @@ getLogs(): readonly string[]
 ```
 
 ```typescript
-const logs = this.getLogs();
-// ['[<timestamp>] Starting processing', ...]
+async execute(input) {
+  this.log('Starting processing');
+  await this.doWork(input);
+  const logs = this.getLogs();
+  // ['[<timestamp>] Starting processing', ...]
+  return { success: true, logs };
+}
 ```
 
 ### Progress Methods
@@ -200,7 +205,7 @@ class BatchFetchJob extends JobContext<typeof inputSchema, typeof outputSchema> 
   async execute(input) {
     this.log(`Fetching ${input.urls.length} URLs (attempt ${this.attempt})`);
 
-    const results = [];
+    const results: Array<{ url: string; status: number; size: number }> = [];
     for (let i = 0; i < input.urls.length; i++) {
       const url = input.urls[i];
       await this.progress(i + 1, input.urls.length, `Fetching ${url}`);

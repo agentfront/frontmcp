@@ -3,6 +3,7 @@ import { JobRetryConfig } from '../../common/metadata/job.metadata';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { JobRegistryInterface } from '../../job/job.registry';
 import { JobEntry } from '../../common/entries/job.entry';
+import { InvalidEntityError } from '../../errors';
 
 /**
  * Executes a single workflow step by resolving the job and running it.
@@ -26,7 +27,7 @@ export class WorkflowStepExecutor {
     // Resolve job from registry
     const job = this.jobRegistry.findByName(step.jobName);
     if (!job) {
-      throw new Error(`Job "${step.jobName}" not found for step "${step.id}"`);
+      throw new InvalidEntityError('job', step.jobName, `a registered job (referenced by step "${step.id}")`);
     }
 
     // Determine retry config (step override or job default)

@@ -103,6 +103,12 @@ export class WorkflowEngine {
         // If no progress after skip propagation, break to avoid infinite loop
         const sizeAfter = completed.size + failed.size + skipped.size;
         if (sizeAfter === sizeBefore) {
+          // Deadlock: mark all remaining steps as skipped
+          for (const step of remaining) {
+            skipped.add(step.id);
+            stepResults.set(step.id, { outputs: {}, state: 'skipped' });
+            this.logger.info(`Skipping step "${step.id}" — unreachable due to deadlock`);
+          }
           break;
         }
         continue;
@@ -204,6 +210,7 @@ export class WorkflowEngine {
     }
 
     // Detect cycles using DFS
+    const stepMap = new Map(steps.map((s) => [s.id, s]));
     const visiting = new Set<string>();
     const visited = new Set<string>();
 
@@ -213,7 +220,7 @@ export class WorkflowEngine {
         throw new Error(`Workflow has a cycle involving step "${id}"`);
       }
       visiting.add(id);
-      const step = steps.find((s) => s.id === id);
+      const step = stepMap.get(id);
       if (!step) {
         throw new Error(`Step "${id}" not found during cycle detection`);
       }

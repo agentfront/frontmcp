@@ -206,6 +206,20 @@ export class RegistryNotInitializedError extends InternalMcpError {
  * Thrown when a flow stage receives missing or undefined input
  * (e.g., `request` is undefined in a well-known flow's parseInput stage).
  */
+/**
+ * Thrown when an enclave execution fails.
+ */
+export class EnclaveExecutionError extends InternalMcpError {
+  constructor(message: string, cause?: Error) {
+    super(`Enclave execution failed: ${message}`, 'ENCLAVE_EXECUTION_FAILED');
+    if (cause) this.cause = cause;
+  }
+}
+
+/**
+ * Thrown when a flow stage receives missing or undefined input
+ * (e.g., `request` is undefined in a well-known flow's parseInput stage).
+ */
 export class FlowInputMissingError extends InternalMcpError {
   readonly field: string;
   readonly flowName?: string;

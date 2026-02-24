@@ -9,6 +9,7 @@ import { normalizeJob, jobDiscoveryDeps } from './job.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { JobInstance } from './job.instance';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { RegistryDefinitionNotFoundError, RegistryGraphEntryNotFoundError } from '../errors';
 
 export interface IndexedJob {
   token: Token;
@@ -22,7 +23,7 @@ export interface IndexedJob {
 }
 
 export interface JobRegistryInterface {
-  owner: EntryOwnerRef;
+  readonly owner: EntryOwnerRef;
   getJobs(includeHidden?: boolean): JobEntry[];
   findByName(name: string): JobEntry | undefined;
   findById(id: string): JobEntry | undefined;
@@ -37,7 +38,7 @@ export default class JobRegistry
   extends RegistryAbstract<JobInstance, JobRecord, JobType[]>
   implements JobRegistryInterface
 {
-  owner: EntryOwnerRef;
+  readonly owner: EntryOwnerRef;
 
   private localRows: IndexedJob[] = [];
   private dynamicRows: IndexedJob[] = [];
@@ -72,14 +73,14 @@ export default class JobRegistry
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
       if (!rec) {
-        throw new Error(`JobRegistry: definition not found for token "${tokenName(token)}"`);
+        throw new RegistryDefinitionNotFoundError('JobRegistry', tokenName(token));
       }
       const deps = jobDiscoveryDeps(rec);
       for (const d of deps) {
         this.providers.get(d);
         const edges = this.graph.get(token);
         if (!edges) {
-          throw new Error(`JobRegistry: graph entry not found for token "${tokenName(token)}"`);
+          throw new RegistryGraphEntryNotFoundError('JobRegistry', tokenName(token));
         }
         edges.add(d);
       }
@@ -90,7 +91,7 @@ export default class JobRegistry
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
       if (!rec) {
-        throw new Error(`JobRegistry: definition not found for token "${tokenName(token)}" during initialization`);
+        throw new RegistryDefinitionNotFoundError('JobRegistry', tokenName(token));
       }
       const ji = new JobInstance(rec, this.providers, this.owner);
       this.instances.set(token as Token<JobInstance>, ji);

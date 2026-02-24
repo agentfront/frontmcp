@@ -64,7 +64,7 @@ export abstract class JobEntry<
       if (outSchema instanceof z.ZodType) {
         return toJSONSchema(outSchema) as Record<string, unknown>;
       }
-      if (typeof outSchema === 'object' && outSchema !== null) {
+      if (outSchema && typeof outSchema === 'object') {
         return toJSONSchema(z.object(outSchema as z.ZodRawShape)) as Record<string, unknown>;
       }
     } catch {

@@ -160,14 +160,26 @@ const workflowStepSchema = z.object({
     .optional(),
 });
 
+/** RFC 3986 relative-path characters: unreserved / sub-delims / ":" / "@" / "/" */
+const WEBHOOK_PATH_PATTERN = /^\/[a-zA-Z0-9\-._~:@!$&'()*+,;=/]*$/;
+
+function isValidWebhookPath(path: string): boolean {
+  return WEBHOOK_PATH_PATTERN.test(path);
+}
+
 const workflowWebhookConfigSchema = z.object({
   path: z
     .string()
-    .regex(/^\/[a-zA-Z0-9\-._~:@!$&'()*+,;=/]*$/, 'Webhook path must be a valid relative URI path starting with /')
-    .optional(),
+    .optional()
+    .refine((val) => val === undefined || isValidWebhookPath(val), {
+      message: 'Webhook path must be a valid RFC 3986 relative path starting with /',
+    }),
   /** NOTE: Webhook secrets should be stripped from discovery/listing responses. */
   secret: z.string().optional(),
-  methods: z.array(z.enum(['GET', 'POST'])).optional(),
+  methods: z
+    .array(z.enum(['GET', 'POST']))
+    .optional()
+    .default(['POST']),
 });
 
 export const frontMcpWorkflowMetadataSchema = z

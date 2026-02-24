@@ -209,5 +209,6 @@ export {
   VercelKvAsyncInitRequiredError,
   RequiredConfigUndefinedError,
   RegistryNotInitializedError,
+  EnclaveExecutionError,
   FlowInputMissingError,
 } from './sdk.errors';

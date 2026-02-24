@@ -8,7 +8,7 @@
 
 import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
 import type { DirectClient } from '@frontmcp/sdk';
-import { serverConfig } from '../src/main';
+import { serverConfig } from '../src/config';
 
 describe('Jobs DirectClient E2E', () => {
   let server: DirectMcpServer;
@@ -94,9 +94,9 @@ describe('Jobs DirectClient E2E', () => {
   describe('Jobs appear in tool listing', () => {
     it('should include job management tools in listTools', async () => {
       const tools = await client.listTools();
-      const toolNames = tools.tools.map((t: { name: string }) => t.name);
-      expect(toolNames).toContain('list-jobs');
+      const toolNames = (tools as Array<{ name: string }>).map((t) => t.name);
       expect(toolNames).toContain('execute-job');
+      expect(toolNames).toContain('get-job-status');
     });
   });
 });

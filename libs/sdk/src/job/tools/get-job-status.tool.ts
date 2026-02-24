@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Tool, ToolContext } from '../../common';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
+import { GenericServerError, InvalidInputError } from '../../errors';
 
 @Tool({
   name: 'get-job-status',
@@ -31,12 +32,12 @@ export default class GetJobStatusTool extends ToolContext {
     const executionManager = scope._jobExecutionManager;
 
     if (!executionManager) {
-      return this.fail(new Error('Jobs system is not enabled'));
+      return this.fail(new GenericServerError('Jobs system is not enabled'));
     }
 
     const record = await executionManager.getStatus(input.runId);
     if (!record) {
-      return this.fail(new Error(`Run "${input.runId}" not found`));
+      return this.fail(new InvalidInputError(`Run "${input.runId}" not found`));
     }
 
     return {

@@ -22,7 +22,7 @@ export interface IndexedWorkflow {
 }
 
 export interface WorkflowRegistryInterface {
-  owner: EntryOwnerRef;
+  readonly owner: EntryOwnerRef;
   getWorkflows(includeHidden?: boolean): WorkflowEntry[];
   findByName(name: string): WorkflowEntry | undefined;
   findById(id: string): WorkflowEntry | undefined;
@@ -37,7 +37,7 @@ export default class WorkflowRegistry
   extends RegistryAbstract<WorkflowInstance, WorkflowRecord, WorkflowType[]>
   implements WorkflowRegistryInterface
 {
-  owner: EntryOwnerRef;
+  readonly owner: EntryOwnerRef;
 
   private localRows: IndexedWorkflow[] = [];
   private dynamicRows: IndexedWorkflow[] = [];

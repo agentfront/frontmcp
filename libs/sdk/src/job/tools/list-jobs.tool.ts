@@ -20,6 +20,7 @@ import type { JobRegistryInterface } from '../job.registry';
         labels: z.record(z.string(), z.string()).optional(),
       }),
     ),
+    count: z.number(),
   },
   hideFromDiscovery: true,
 })
@@ -27,7 +28,7 @@ export default class ListJobsTool extends ToolContext {
   async execute(input: { tags?: string[]; labels?: Record<string, string>; query?: string }) {
     const jobRegistry = (this.scope as unknown as { jobs?: JobRegistryInterface }).jobs;
     if (!jobRegistry) {
-      return { jobs: [] };
+      return { jobs: [], count: 0 };
     }
 
     const jobs = jobRegistry.search(input.query, {
@@ -35,13 +36,16 @@ export default class ListJobsTool extends ToolContext {
       labels: input.labels,
     });
 
+    const mapped = jobs.map((j: JobEntry) => ({
+      name: j.name,
+      description: j.metadata.description,
+      tags: j.getTags(),
+      labels: j.getLabels(),
+    }));
+
     return {
-      jobs: jobs.map((j: JobEntry) => ({
-        name: j.name,
-        description: j.metadata.description,
-        tags: j.getTags(),
-        labels: j.getLabels(),
-      })),
+      jobs: mapped,
+      count: mapped.length,
     };
   }
 }

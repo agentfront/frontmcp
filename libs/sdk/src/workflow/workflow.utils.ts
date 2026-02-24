@@ -10,7 +10,7 @@ export function collectWorkflowMetadata(cls: WorkflowType): WorkflowMetadata {
   const seed = (extended ? { ...extended } : {}) as WorkflowMetadata;
   return Object.entries(FrontMcpWorkflowTokens).reduce((metadata, [key, token]) => {
     const value = getMetadata(token, cls);
-    if (value) {
+    if (value !== undefined) {
       return Object.assign(metadata, {
         [key]: value,
       });
@@ -28,10 +28,11 @@ export function normalizeWorkflow(item: unknown): WorkflowRecord {
     item[FrontMcpWorkflowTokens.type] === 'value-workflow' &&
     item[FrontMcpWorkflowTokens.metadata]
   ) {
+    const metadata = item[FrontMcpWorkflowTokens.metadata] as WorkflowMetadata;
     return {
       kind: WorkflowKind.VALUE,
-      provide: Symbol.for(`workflow:${(item[FrontMcpWorkflowTokens.metadata] as WorkflowMetadata).name}`),
-      metadata: item[FrontMcpWorkflowTokens.metadata] as WorkflowMetadata,
+      provide: Symbol.for(`workflow:${metadata.name}`),
+      metadata,
     };
   }
 

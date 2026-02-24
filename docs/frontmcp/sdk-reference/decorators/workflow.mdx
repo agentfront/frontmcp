@@ -68,7 +68,7 @@ function Workflow(opts: WorkflowMetadata): ClassDecorator
 | `condition` | `(steps) => boolean` | — | Skip step if returns `false` |
 | `continueOnError` | `boolean` | `false` | Continue workflow if step fails |
 | `timeout` | `number` | Job default | Per-step timeout override in ms |
-| `retry` | `JobRetryConfig` | Job default | Per-step retry override |
+| `retry` | [`JobRetryConfig`](/frontmcp/sdk-reference/decorators/job#retry-configuration) | Job default | Per-step retry override (`maxAttempts`, `backoffMs`, `backoffMultiplier`, `maxBackoffMs`) |
 
 ### WorkflowWebhookConfig
 

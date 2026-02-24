@@ -2,7 +2,7 @@ import type { Config } from '@jest/types';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
+const e2eCoveragePreset: Config.InitialOptions = require('../../../jest.e2e.coverage.preset.js');
 
 const config: Config.InitialOptions = {
   displayName: 'demo-e2e-jobs',

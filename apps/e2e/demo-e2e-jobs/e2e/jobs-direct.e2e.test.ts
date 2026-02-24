@@ -6,7 +6,7 @@
  */
 
 import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
-import { serverConfig } from '../src/main';
+import { serverConfig } from '../src/config';
 
 describe('Jobs Direct E2E', () => {
   let server: DirectMcpServer;

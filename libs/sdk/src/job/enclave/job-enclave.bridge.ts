@@ -1,4 +1,5 @@
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { EnclaveExecutionError } from '../../errors';
 
 export interface EnclaveOptions {
   timeout?: number;
@@ -69,7 +70,7 @@ export class JobEnclaveBridge {
 
     // Inject sandbox-safe APIs
     const globals: Record<string, unknown> = {
-      input: JSON.parse(JSON.stringify(input)),
+      input: structuredClone(input ?? null),
       console: {
         log: (...args: unknown[]) => context.mcpLog?.('info', args.map(String).join(' ')),
         warn: (...args: unknown[]) => context.mcpLog?.('warning', args.map(String).join(' ')),
@@ -78,18 +79,31 @@ export class JobEnclaveBridge {
     };
 
     if (context.callTool) {
-      globals['callTool'] = context.callTool;
+      globals['callTool'] = async (name: string, args: unknown) => {
+        try {
+          return await context.callTool!(name, args);
+        } catch (err) {
+          throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
+        }
+      };
     }
     if (context.getTool) {
-      globals['getTool'] = context.getTool;
+      globals['getTool'] = (name: string) => {
+        try {
+          return context.getTool!(name);
+        } catch (err) {
+          throw { message: err instanceof Error ? err.message : String(err), type: 'ToolError' };
+        }
+      };
     }
 
     try {
       const result = await sandbox.run(script, globals);
       return result;
     } catch (err) {
-      this.logger.error(`Enclave execution failed: ${err}`);
-      throw err;
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.logger.error(`Enclave execution failed: ${error.message}`);
+      throw new EnclaveExecutionError(error.message, error);
     } finally {
       sandbox.dispose?.();
     }

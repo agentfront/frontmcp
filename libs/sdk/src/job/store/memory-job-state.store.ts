@@ -14,7 +14,8 @@ export class MemoryJobStateStore implements JobStateStore {
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     const existing = this.runs.get(runId);
     if (!existing) return;
-    this.runs.set(runId, { ...existing, ...updates });
+    const { runId: _ignoreRunId, ...safeUpdates } = updates;
+    this.runs.set(runId, { ...existing, ...safeUpdates });
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {
@@ -47,7 +48,7 @@ export class MemoryJobStateStore implements JobStateStore {
       results = results.slice(0, opts.limit);
     }
 
-    return results;
+    return results.map((r) => ({ ...r }));
   }
 
   async cleanup(olderThanMs: number): Promise<number> {

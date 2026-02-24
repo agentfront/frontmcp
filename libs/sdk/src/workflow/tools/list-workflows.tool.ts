@@ -21,6 +21,7 @@ import type { WorkflowRegistryInterface } from '../workflow.registry';
         tags: z.array(z.string()).optional(),
       }),
     ),
+    count: z.number(),
   },
   hideFromDiscovery: true,
 })
@@ -29,7 +30,7 @@ export default class ListWorkflowsTool extends ToolContext {
     const scope = this.scope as unknown as { workflows?: WorkflowRegistryInterface };
     const workflowRegistry = scope.workflows;
     if (!workflowRegistry) {
-      return { workflows: [] };
+      return { workflows: [], count: 0 };
     }
 
     const workflows = workflowRegistry.search(input.query, {
@@ -37,14 +38,17 @@ export default class ListWorkflowsTool extends ToolContext {
       labels: input.labels,
     });
 
+    const mapped = workflows.map((w: WorkflowEntry) => ({
+      name: w.name,
+      description: w.metadata.description,
+      trigger: w.getTrigger(),
+      stepCount: w.getSteps().length,
+      tags: w.getTags(),
+    }));
+
     return {
-      workflows: workflows.map((w: WorkflowEntry) => ({
-        name: w.name,
-        description: w.metadata.description,
-        trigger: w.getTrigger(),
-        stepCount: w.getSteps().length,
-        tags: w.getTags(),
-      })),
+      workflows: mapped,
+      count: mapped.length,
     };
   }
 }
