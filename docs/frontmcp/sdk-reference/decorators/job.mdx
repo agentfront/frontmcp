@@ -197,13 +197,15 @@ async execute(input) {
 
 ```typescript
 async execute(input) {
-  if (!input.valid) {
-    this.fail(new Error('Invalid input'));
+  // Fail with an error when validation fails
+  if (!input.data) {
+    this.fail(new Error('Missing required data'));
   }
 
-  // Early return with output
-  if (cached) {
-    this.respond(cached); // Ends execution
+  // Early return with a previously computed output
+  const cachedResult = this.tryGet(CacheToken)?.get(input.data);
+  if (cachedResult) {
+    this.respond(cachedResult); // Ends execution
   }
 }
 ```

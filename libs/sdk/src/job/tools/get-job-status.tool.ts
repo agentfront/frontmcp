@@ -4,7 +4,7 @@ import type { JobExecutionManager } from '../execution/job-execution.manager';
 
 @Tool({
   name: 'get-job-status',
-  description: 'Get the execution status of a job or workflow run by runId.',
+  description: 'Get the execution status of a job run by runId.',
   inputSchema: {
     runId: z.string().describe('Run ID returned from execute-job or execute-workflow'),
   },

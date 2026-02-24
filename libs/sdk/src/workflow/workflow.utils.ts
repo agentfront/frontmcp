@@ -1,6 +1,6 @@
 import { isClass, getMetadata } from '@frontmcp/di';
 import { InvalidEntityError } from '../errors';
-import { WorkflowMetadata, frontMcpWorkflowMetadataSchema } from '../common/metadata/workflow.metadata';
+import { WorkflowMetadata } from '../common/metadata/workflow.metadata';
 import { FrontMcpWorkflowTokens, extendedWorkflowMetadata } from '../common/tokens/workflow.tokens';
 import { WorkflowRecord, WorkflowKind } from '../common/records/workflow.record';
 import { WorkflowType } from '../common/interfaces/workflow.interface';

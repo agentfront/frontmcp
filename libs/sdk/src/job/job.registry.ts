@@ -1,7 +1,7 @@
 import { Token, tokenName } from '@frontmcp/di';
 import { EntryLineage, EntryOwnerRef } from '../common';
 import { JobEntry } from '../common/entries/job.entry';
-import { JobRecord, JobKind, JobDynamicRecord } from '../common/records/job.record';
+import { JobRecord, JobDynamicRecord } from '../common/records/job.record';
 import { JobType } from '../common/interfaces/job.interface';
 import { JobChangeEvent, JobEmitter } from './job.events';
 import ProviderRegistry from '../provider/provider.registry';
@@ -27,6 +27,7 @@ export interface JobRegistryInterface {
   findByName(name: string): JobEntry | undefined;
   findById(id: string): JobEntry | undefined;
   search(query?: string, opts?: { tags?: string[]; labels?: Record<string, string> }): JobEntry[];
+  hasAny(): boolean;
   registerDynamic(record: JobDynamicRecord): void;
   removeDynamic(jobId: string): boolean;
   subscribe(opts: { immediate?: boolean }, cb: (evt: JobChangeEvent) => void): () => void;
@@ -129,9 +130,10 @@ export default class JobRegistry
     }
 
     if (opts?.tags && opts.tags.length > 0) {
+      const filterTags = opts.tags;
       jobs = jobs.filter((j) => {
         const tags = j.getTags();
-        return opts.tags!.some((t) => tags.includes(t));
+        return filterTags.some((t) => tags.includes(t));
       });
     }
 
@@ -199,8 +201,16 @@ export default class JobRegistry
     this.byId.clear();
     const effective = [...this.localRows, ...this.dynamicRows];
     for (const r of effective) {
+      if (this.byName.has(r.baseName)) {
+        console.warn(`JobRegistry: duplicate job name "${r.baseName}" detected during reindex; later entry wins`);
+      }
       this.byName.set(r.baseName, r);
-      this.byId.set(r.instance.metadata.id ?? r.baseName, r);
+
+      const idKey = r.instance.metadata.id ?? r.baseName;
+      if (this.byId.has(idKey)) {
+        console.warn(`JobRegistry: duplicate job id "${idKey}" detected during reindex; later entry wins`);
+      }
+      this.byId.set(idKey, r);
     }
   }
 

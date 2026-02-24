@@ -18,7 +18,8 @@ export class MemoryJobStateStore implements JobStateStore {
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {
-    return this.runs.get(runId) ?? null;
+    const record = this.runs.get(runId);
+    return record ? { ...record } : null;
   }
 
   async listRuns(opts?: {

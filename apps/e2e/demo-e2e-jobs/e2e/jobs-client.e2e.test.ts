@@ -57,7 +57,7 @@ describe('Jobs DirectClient E2E', () => {
     it('should filter jobs by tags', async () => {
       const result = await client.listJobs({ tags: ['greeting'] });
       expect(result.jobs.length).toBeGreaterThanOrEqual(1);
-      expect(result.jobs.every((j) => j.tags?.includes('greeting'))).toBe(true);
+      expect(result.jobs.every((j) => Array.isArray(j.tags) && j.tags.includes('greeting'))).toBe(true);
     });
   });
 
@@ -94,9 +94,9 @@ describe('Jobs DirectClient E2E', () => {
   describe('Jobs appear in tool listing', () => {
     it('should include job management tools in listTools', async () => {
       const tools = await client.listTools();
-      const toolsStr = JSON.stringify(tools);
-      expect(toolsStr).toContain('list-jobs');
-      expect(toolsStr).toContain('execute-job');
+      const toolNames = tools.tools.map((t: { name: string }) => t.name);
+      expect(toolNames).toContain('list-jobs');
+      expect(toolNames).toContain('execute-job');
     });
   });
 });

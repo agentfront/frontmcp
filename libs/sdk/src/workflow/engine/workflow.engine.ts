@@ -33,7 +33,7 @@ export class WorkflowEngine {
     metadata: WorkflowMetadata,
     jobRegistry: JobRegistryInterface,
     logger: FrontMcpLogger,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: any },
+    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
   ) {
     this.metadata = metadata;
     this.logger = logger;
@@ -110,7 +110,7 @@ export class WorkflowEngine {
 
       // Execute ready steps in parallel, bounded by maxConcurrency
       const batch = ready.slice(0, this.maxConcurrency);
-      const results = await Promise.allSettled(
+      await Promise.allSettled(
         batch.map(async (step) => {
           // Evaluate condition
           if (step.condition) {

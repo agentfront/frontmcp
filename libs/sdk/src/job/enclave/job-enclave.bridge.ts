@@ -5,6 +5,14 @@ export interface EnclaveOptions {
   maxIterations?: number;
 }
 
+/** Minimal shape of the @enclave-vm/core module. */
+interface EnclaveCore {
+  Sandbox: new (opts: { timeout?: number; maxIterations?: number }) => {
+    run(script: string, globals: Record<string, unknown>): Promise<unknown>;
+    dispose?(): void;
+  };
+}
+
 /**
  * Bridge to @enclave-vm/core for executing dynamic job scripts in a sandbox.
  * Lazy-requires the enclave package (peerDependency).
@@ -12,7 +20,7 @@ export interface EnclaveOptions {
 export class JobEnclaveBridge {
   private readonly logger: FrontMcpLogger;
   private readonly options: EnclaveOptions;
-  private enclaveCore: any;
+  private enclaveCore: EnclaveCore | undefined;
 
   constructor(logger: FrontMcpLogger, options: EnclaveOptions = {}) {
     this.logger = logger;
@@ -25,10 +33,11 @@ export class JobEnclaveBridge {
   /**
    * Lazy-load @enclave-vm/core.
    */
-  private getEnclaveCore(): any {
+  private getEnclaveCore(): EnclaveCore {
     if (!this.enclaveCore) {
       try {
-        this.enclaveCore = require('@enclave-vm/core');
+        const loaded: EnclaveCore = require('@enclave-vm/core');
+        this.enclaveCore = loaded;
       } catch {
         throw new Error(
           'Missing optional dependency: dynamic jobs require @enclave-vm/core. Install it with: npm install @enclave-vm/core',

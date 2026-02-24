@@ -114,9 +114,10 @@ export default class WorkflowRegistry
     }
 
     if (opts?.tags && opts.tags.length > 0) {
+      const filterTags = opts.tags;
       workflows = workflows.filter((w) => {
         const tags = w.getTags();
-        return opts.tags!.some((t) => tags.includes(t));
+        return filterTags.some((t) => tags.includes(t));
       });
     }
 

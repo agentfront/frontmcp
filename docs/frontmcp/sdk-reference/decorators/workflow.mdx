@@ -75,7 +75,7 @@ function Workflow(opts: WorkflowMetadata): ClassDecorator
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `path` | `string` | `/workflows/webhook/{name}` | Custom webhook path |
-| `secret` | `string` | — | Webhook secret for validation |
+| `secret` | `string` | — | Webhook secret for validation. Load from environment variables or a secrets manager — never hardcode in source. |
 | `methods` | `('GET' \| 'POST')[]` | `['POST']` | Allowed HTTP methods |
 
 ## Examples
@@ -169,6 +169,10 @@ class MultiAnalysisWorkflow {}
 })
 class ConditionalPipelineWorkflow {}
 ```
+
+<Note>
+A step whose `condition` returns `false` is treated as **skipped** and satisfies downstream `dependsOn` dependencies. This means steps that depend on a skipped step will still run.
+</Note>
 
 ## Function-Based Alternative
 

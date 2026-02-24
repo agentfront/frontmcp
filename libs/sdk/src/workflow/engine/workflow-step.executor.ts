@@ -31,7 +31,7 @@ export class WorkflowStepExecutor {
 
     // Determine retry config (step override or job default)
     const retryConfig: JobRetryConfig = step.retry ?? job.metadata.retry ?? {};
-    const maxAttempts = retryConfig.maxAttempts ?? 1;
+    const maxAttempts = retryConfig.maxAttempts ?? 3;
     const backoffMs = retryConfig.backoffMs ?? 1000;
     const backoffMultiplier = retryConfig.backoffMultiplier ?? 2;
     const maxBackoffMs = retryConfig.maxBackoffMs ?? 60000;

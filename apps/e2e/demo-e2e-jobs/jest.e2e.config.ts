@@ -36,8 +36,8 @@ const config: Config.InitialOptions = {
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
-  coverageDirectory: '../../../coverage/e2e/demo-e2e-jobs',
   ...e2eCoveragePreset,
+  coverageDirectory: '../../../coverage/e2e/demo-e2e-jobs',
 };
 
 export default config;

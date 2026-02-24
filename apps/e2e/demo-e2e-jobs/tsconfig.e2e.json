@@ -4,6 +4,5 @@
     "noEmit": true,
     "types": ["node", "jest"]
   },
-  "include": ["e2e/**/*.ts"],
-  "exclude": []
+  "include": ["e2e/**/*.ts"]
 }
