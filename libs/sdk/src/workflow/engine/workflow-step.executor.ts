@@ -4,6 +4,7 @@ import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { JobRegistryInterface } from '../../job/job.registry';
 import { JobEntry } from '../../common/entries/job.entry';
 import { InvalidEntityError } from '../../errors';
+import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
 
 /**
  * Executes a single workflow step by resolving the job and running it.
@@ -73,7 +74,7 @@ export class WorkflowStepExecutor {
     // underlying job execution — it only rejects the caller early on timeout.
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error(`Job "${job.name}" timed out after ${timeout}ms`));
+        reject(new WorkflowJobTimeoutError(job.name, timeout));
       }, timeout);
 
       Promise.resolve(ctx.execute(parsedInput))

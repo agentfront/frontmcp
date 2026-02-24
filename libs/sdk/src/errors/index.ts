@@ -186,6 +186,14 @@ export {
   OrchestratorJwksNotAvailableError,
 } from './auth-internal.errors';
 
+// Export workflow errors
+export {
+  WorkflowStepNotFoundError,
+  WorkflowTimeoutError,
+  WorkflowDagValidationError,
+  WorkflowJobTimeoutError,
+} from './workflow.errors';
+
 // Export SDK errors
 export {
   FlowExitedWithoutOutputError,

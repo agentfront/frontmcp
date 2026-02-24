@@ -134,6 +134,12 @@ export default class WorkflowRegistry
 
   registerDynamic(record: WorkflowDynamicRecord): void {
     const token = Symbol.for(`workflow:dynamic:${record.provide}`) as Token;
+
+    const existing = this.dynamicRows.findIndex((r) => r.token === token);
+    if (existing !== -1) {
+      this.dynamicRows.splice(existing, 1);
+    }
+
     const wi = new WorkflowInstance(record, this.providers, this.owner);
     this.instances.set(token as Token<WorkflowInstance>, wi);
 

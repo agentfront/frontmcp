@@ -44,7 +44,7 @@ describe('Jobs DirectClient E2E', () => {
     it('should execute job in background', async () => {
       const result = await client.executeJob('analyze-text', { text: 'Hello world' }, { background: true });
       expect(result.runId).toBeDefined();
-      expect(result.state).toBeDefined();
+      expect(['pending', 'running', 'completed']).toContain(result.state);
     });
 
     it('should get job status', async () => {
@@ -80,6 +80,7 @@ describe('Jobs DirectClient E2E', () => {
     it('should execute workflow in background', async () => {
       const result = await client.executeWorkflow('greet-and-analyze', undefined, { background: true });
       expect(result.runId).toBeDefined();
+      expect(['pending', 'running', 'completed']).toContain(result.state);
     });
 
     it('should get workflow status', async () => {

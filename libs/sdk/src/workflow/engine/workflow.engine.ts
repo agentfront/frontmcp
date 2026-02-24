@@ -8,6 +8,11 @@ import { WorkflowExecutionResult } from '../../common/interfaces/workflow.interf
 import { WorkflowStepExecutor } from './workflow-step.executor';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { JobRegistryInterface } from '../../job/job.registry';
+import {
+  WorkflowStepNotFoundError,
+  WorkflowTimeoutError,
+  WorkflowDagValidationError,
+} from '../../errors/workflow.errors';
 
 /**
  * DAG-based workflow execution engine.
@@ -56,7 +61,7 @@ export class WorkflowEngine {
       get(alias: string): WorkflowStepResult {
         const result = stepResults.get(alias);
         if (!result) {
-          throw new Error(`Step "${alias}" has not completed yet or does not exist`);
+          throw new WorkflowStepNotFoundError(alias);
         }
         return result;
       },
@@ -74,7 +79,7 @@ export class WorkflowEngine {
 
     while (completed.size + failed.size + skipped.size < allStepIds.size) {
       if (Date.now() > deadline) {
-        throw new Error(`Workflow "${this.metadata.name}" timed out after ${timeoutMs}ms`);
+        throw new WorkflowTimeoutError(this.metadata.name, timeoutMs);
       }
 
       // Find ready steps: all dependsOn are completed or skipped
@@ -136,16 +141,16 @@ export class WorkflowEngine {
             }
           }
 
-          // Compute input
-          let input: Record<string, unknown>;
-          if (typeof step.input === 'function') {
-            input = step.input(stepsContext);
-          } else {
-            input = step.input ?? workflowInput ?? {};
-          }
-
           // Execute step
           try {
+            // Compute input
+            let input: Record<string, unknown>;
+            if (typeof step.input === 'function') {
+              input = step.input(stepsContext);
+            } else {
+              input = step.input ?? workflowInput ?? {};
+            }
+
             const result = await this.stepExecutor.executeStep(step, input);
             completed.add(step.id);
             stepResults.set(step.id, result);
@@ -197,14 +202,14 @@ export class WorkflowEngine {
 
     // Check for duplicate IDs
     if (ids.size !== steps.length) {
-      throw new Error('Workflow has duplicate step IDs');
+      throw new WorkflowDagValidationError('Workflow has duplicate step IDs');
     }
 
     // Check for missing dependencies
     for (const step of steps) {
       for (const dep of step.dependsOn ?? []) {
         if (!ids.has(dep)) {
-          throw new Error(`Step "${step.id}" depends on unknown step "${dep}"`);
+          throw new WorkflowDagValidationError(`Step "${step.id}" depends on unknown step "${dep}"`);
         }
       }
     }
@@ -217,12 +222,12 @@ export class WorkflowEngine {
     const dfs = (id: string): void => {
       if (visited.has(id)) return;
       if (visiting.has(id)) {
-        throw new Error(`Workflow has a cycle involving step "${id}"`);
+        throw new WorkflowDagValidationError(`Workflow has a cycle involving step "${id}"`);
       }
       visiting.add(id);
       const step = stepMap.get(id);
       if (!step) {
-        throw new Error(`Step "${id}" not found during cycle detection`);
+        throw new WorkflowDagValidationError(`Step "${id}" not found during cycle detection`);
       }
       for (const dep of step.dependsOn ?? []) {
         dfs(dep);

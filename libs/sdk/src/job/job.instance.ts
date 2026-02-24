@@ -78,10 +78,10 @@ export class JobInstance<
 
   override create(
     input: In,
-    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: any },
+    extra: { authInfo: Partial<Record<string, unknown>>; contextProviders?: unknown },
   ): JobContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
-    const providers = extra.contextProviders ?? this._providers;
+    const providers = (extra.contextProviders ?? this._providers) as ProviderRegistry;
     const scope = this._providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = extra.authInfo;
