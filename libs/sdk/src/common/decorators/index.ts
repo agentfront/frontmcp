@@ -12,3 +12,5 @@ export * from './prompt.decorator';
 export * from './logger.decorator';
 export * from './agent.decorator';
 export * from './skill.decorator';
+export * from './job.decorator';
+export * from './workflow.decorator';

@@ -14,6 +14,8 @@ import {
   FrontMcpResourceTemplateTokens,
   FrontMcpSkillTokens,
   FrontMcpToolTokens,
+  FrontMcpJobTokens,
+  FrontMcpWorkflowTokens,
 } from '../tokens';
 import {
   frontMcpAdapterMetadataSchema,
@@ -212,6 +214,38 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
     return false;
   },
   { message: 'agents items must be annotated with @Agent() | @FrontMcpAgent() or use agent() builder.' },
+);
+
+export const annotatedFrontMcpJobsSchema = z.custom<Type>(
+  (v): v is Type => {
+    if (typeof v === 'function') {
+      if (Reflect.hasMetadata(FrontMcpJobTokens.type, v)) {
+        return true;
+      }
+      // Function-style job() builder
+      if (v[FrontMcpJobTokens.type] !== undefined) {
+        return true;
+      }
+    }
+    return false;
+  },
+  { message: 'jobs items must be annotated with @Job() | @FrontMcpJob() or use job() builder.' },
+);
+
+export const annotatedFrontMcpWorkflowsSchema = z.custom<Type>(
+  (v): v is Type => {
+    if (typeof v === 'function') {
+      if (Reflect.hasMetadata(FrontMcpWorkflowTokens.type, v)) {
+        return true;
+      }
+      // Function-style workflow() builder
+      if (v[FrontMcpWorkflowTokens.type] !== undefined) {
+        return true;
+      }
+    }
+    return false;
+  },
+  { message: 'workflows items must be annotated with @Workflow() | @FrontMcpWorkflow() or use workflow() builder.' },
 );
 
 export const annotatedFrontMcpSkillsSchema = z.custom<Type>(

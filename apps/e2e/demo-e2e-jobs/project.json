@@ -1,0 +1,62 @@
+{
+  "name": "demo-e2e-jobs",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-jobs/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:jobs"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-jobs",
+        "main": "apps/e2e/demo-e2e-jobs/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-jobs/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-jobs/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-jobs/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-jobs"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-jobs/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-jobs-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-jobs/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-jobs"
+      }
+    }
+  }
+}

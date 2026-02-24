@@ -161,6 +161,76 @@ export interface DirectMcpServer {
   getPrompt(name: string, args?: Record<string, string>, options?: DirectCallOptions): Promise<GetPromptResult>;
 
   // ─────────────────────────────────────────────────────────────────
+  // Job Operations
+  // ─────────────────────────────────────────────────────────────────
+
+  /**
+   * List all available jobs.
+   *
+   * @param options - Optional call options with auth context
+   * @returns Tool call result containing jobs list as JSON text
+   */
+  listJobs(options?: DirectCallOptions): Promise<CallToolResult>;
+
+  /**
+   * Execute a job by name.
+   *
+   * @param name - Job name
+   * @param input - Job input arguments
+   * @param options - Optional call options with auth context and background flag
+   * @returns Tool call result containing execution result as JSON text
+   */
+  executeJob(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: DirectCallOptions & { background?: boolean },
+  ): Promise<CallToolResult>;
+
+  /**
+   * Get the status of a job run.
+   *
+   * @param runId - The run ID returned from executeJob
+   * @param options - Optional call options with auth context
+   * @returns Tool call result containing job status as JSON text
+   */
+  getJobStatus(runId: string, options?: DirectCallOptions): Promise<CallToolResult>;
+
+  // ─────────────────────────────────────────────────────────────────
+  // Workflow Operations
+  // ─────────────────────────────────────────────────────────────────
+
+  /**
+   * List all available workflows.
+   *
+   * @param options - Optional call options with auth context
+   * @returns Tool call result containing workflows list as JSON text
+   */
+  listWorkflows(options?: DirectCallOptions): Promise<CallToolResult>;
+
+  /**
+   * Execute a workflow by name.
+   *
+   * @param name - Workflow name
+   * @param input - Workflow input arguments
+   * @param options - Optional call options with auth context and background flag
+   * @returns Tool call result containing execution result as JSON text
+   */
+  executeWorkflow(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: DirectCallOptions & { background?: boolean },
+  ): Promise<CallToolResult>;
+
+  /**
+   * Get the status of a workflow run.
+   *
+   * @param runId - The run ID returned from executeWorkflow
+   * @param options - Optional call options with auth context
+   * @returns Tool call result containing workflow status as JSON text
+   */
+  getWorkflowStatus(runId: string, options?: DirectCallOptions): Promise<CallToolResult>;
+
+  // ─────────────────────────────────────────────────────────────────
   // Client Connections
   // ─────────────────────────────────────────────────────────────────
 

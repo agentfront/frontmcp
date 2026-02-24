@@ -34,6 +34,12 @@ icon: "database"
   <Card title="AuthRegistry" icon="lock" href="/frontmcp/sdk-reference/registries/auth-registry">
     Manage auth providers
   </Card>
+  <Card title="JobRegistry" icon="briefcase" href="/frontmcp/sdk-reference/registries/job-registry">
+    Manage jobs
+  </Card>
+  <Card title="WorkflowRegistry" icon="diagram-project" href="/frontmcp/sdk-reference/registries/workflow-registry">
+    Manage workflows
+  </Card>
 </CardGroup>
 
 ## Common Patterns
@@ -149,6 +155,8 @@ scope.hooks;      // HookRegistry
 scope.providers;  // ProviderRegistry
 scope.auth;       // FrontMcpAuth (primary)
 scope.authProviders; // AuthRegistry
+scope.jobs;       // JobRegistry
+scope.workflows;  // WorkflowRegistry
 ```
 
 ## Common Methods

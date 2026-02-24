@@ -26,6 +26,16 @@ interface DirectClient {
   loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult>;
   listSkills(options?: ListSkillsOptions): Promise<ListSkillsResult>;
 
+  // Jobs
+  listJobs(options?: ListJobsOptions): Promise<ListJobsResult>;
+  executeJob(name: string, input?: Record<string, unknown>, options?: ExecuteJobOptions): Promise<JobExecutionResult>;
+  getJobStatus(runId: string): Promise<JobStatusResult>;
+
+  // Workflows
+  listWorkflows(options?: ListWorkflowsOptions): Promise<ListWorkflowsResult>;
+  executeWorkflow(name: string, input?: Record<string, unknown>, options?: ExecuteWorkflowOptions): Promise<WorkflowExecutionResult>;
+  getWorkflowStatus(runId: string): Promise<WorkflowStatusResult>;
+
   // Info
   getSessionId(): string;
   getClientInfo(): ClientInfo;
@@ -228,6 +238,91 @@ List all available skills.
 
 ```typescript
 const { skills } = await client.listSkills();
+```
+
+## Job Operations
+
+### listJobs(options?)
+
+List all available jobs.
+
+```typescript
+const { jobs, count } = await client.listJobs();
+jobs.forEach(j => console.log(j.name, j.description));
+
+// Filter by tags
+const filtered = await client.listJobs({ tags: ['notification'] });
+```
+
+### executeJob(name, input?, options?)
+
+Execute a job by name. Supports background mode.
+
+```typescript
+// Inline execution (waits for completion)
+const result = await client.executeJob('analyze-text', {
+  text: 'Hello world',
+  language: 'en',
+});
+console.log(result.state); // 'completed'
+console.log(result.result); // { sentiment: 'positive', ... }
+
+// Background execution (returns immediately with runId)
+const { runId } = await client.executeJob('analyze-text', {
+  text: 'Hello world',
+}, { background: true });
+```
+
+### getJobStatus(runId)
+
+Get the status of a job run.
+
+```typescript
+const status = await client.getJobStatus(runId);
+console.log(status.state);      // 'running' | 'completed' | 'failed'
+console.log(status.result);     // Job result (when completed)
+console.log(status.logs);       // Execution logs
+console.log(status.attempt);    // Current retry attempt
+```
+
+## Workflow Operations
+
+### listWorkflows(options?)
+
+List all available workflows.
+
+```typescript
+const { workflows, count } = await client.listWorkflows();
+workflows.forEach(w => console.log(w.name, w.trigger, w.steps?.length));
+```
+
+### executeWorkflow(name, input?, options?)
+
+Execute a workflow by name.
+
+```typescript
+// Inline execution
+const result = await client.executeWorkflow('data-pipeline', {
+  source: 'api',
+});
+console.log(result.state);       // 'completed' | 'failed'
+console.log(result.stepResults); // Per-step results
+
+// Background execution
+const { runId } = await client.executeWorkflow('data-pipeline', {
+  source: 'api',
+}, { background: true });
+```
+
+### getWorkflowStatus(runId)
+
+Get the status of a workflow run with per-step details.
+
+```typescript
+const status = await client.getWorkflowStatus(runId);
+console.log(status.state);          // 'running' | 'completed' | 'failed'
+console.log(status.workflowName);   // Workflow name
+console.log(status.stepResults);    // { step1: { state, outputs }, ... }
 ```
 
 ## Elicitation

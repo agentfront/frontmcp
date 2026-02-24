@@ -58,6 +58,31 @@ export {
 // Tool change events for subscription
 export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 
+// Job exports - saved, discoverable, triggerable executions
+export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
+export type {
+  JobRegistryInterface,
+  IndexedJob,
+  JobChangeEvent,
+  JobChangeKind,
+  JobChangeScope,
+  ExecuteJobOptions,
+  ExecuteWorkflowOptions,
+  InlineJobResult,
+  BackgroundJobResult,
+} from './job';
+export type { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState, JobDefinitionStore } from './job';
+
+// Workflow exports - managed multi-step job pipelines
+export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
+export type {
+  WorkflowRegistryInterface,
+  IndexedWorkflow,
+  WorkflowChangeEvent,
+  WorkflowChangeKind,
+  WorkflowChangeScope,
+} from './workflow';
+
 // Skill exports - skills are knowledge/workflow packages for multi-step tasks
 export {
   // Registry
@@ -204,6 +229,18 @@ export type {
 // LLM platform utilities (for advanced use)
 export { detectPlatform, formatToolsForPlatform, formatResultForPlatform, PLATFORM_CLIENT_INFO } from './direct';
 export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools } from './direct';
+
+// DirectClient Job/Workflow types (for client-side operations)
+export type {
+  ListJobsOptions,
+  ListJobsResult,
+  JobExecutionResult,
+  JobStatusResult,
+  ListWorkflowsOptions,
+  ListWorkflowsResult,
+  WorkflowExecutionResult,
+  WorkflowStatusResult,
+} from './direct';
 
 // Direct MCP Server - legacy programmatic access without HTTP transport
 export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';

@@ -193,6 +193,33 @@ export interface FrontMcpBaseMetadata {
    * Used by the Unix socket daemon mode and other local runtimes.
    */
   sqlite?: SqliteOptionsInput;
+
+  /**
+   * Jobs and workflows configuration.
+   * Enables the jobs/workflows system for saved, discoverable, triggerable executions.
+   *
+   * @default { enabled: false }
+   *
+   * @example Enable jobs system
+   * ```typescript
+   * jobs: { enabled: true }
+   * ```
+   *
+   * @example With Redis store
+   * ```typescript
+   * jobs: {
+   *   enabled: true,
+   *   store: { redis: { provider: 'redis', host: 'localhost' } }
+   * }
+   * ```
+   */
+  jobs?: {
+    enabled: boolean;
+    store?: {
+      redis?: RedisOptionsInput;
+      keyPrefix?: string;
+    };
+  };
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -214,6 +241,17 @@ export const frontMcpBaseSchema = z.object({
   skillsConfig: skillsConfigOptionsSchema.optional(),
   extApps: extAppsOptionsSchema.optional(),
   sqlite: sqliteOptionsSchema.optional(),
+  jobs: z
+    .object({
+      enabled: z.boolean(),
+      store: z
+        .object({
+          redis: redisOptionsSchema.optional(),
+          keyPrefix: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

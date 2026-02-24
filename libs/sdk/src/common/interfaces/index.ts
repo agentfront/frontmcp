@@ -34,5 +34,7 @@ export * from './logger.interface';
 export * from './llm-adapter.interface';
 export * from './agent.interface';
 export * from './skill.interface';
+export * from './job.interface';
+export * from './workflow.interface';
 
 export * from './internal';

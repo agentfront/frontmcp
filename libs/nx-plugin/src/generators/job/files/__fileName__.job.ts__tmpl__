@@ -1,0 +1,19 @@
+import { Job, JobContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Job({
+  name: '<%= name %>',
+  description: 'TODO: describe what this job does',
+  inputSchema: {
+    value: z.string().describe('TODO: replace with actual input'),
+  },
+  outputSchema: {
+    result: z.string().describe('TODO: replace with actual output'),
+  },
+})
+export default class <%= className %>Job extends JobContext {
+  async execute(input: { value: string }) {
+    // Full SDK access: this.scope.tools, this.scope.agents, etc.
+    return { result: `Processed: ${input.value}` };
+  }
+}

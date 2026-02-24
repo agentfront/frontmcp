@@ -1,0 +1,242 @@
+---
+title: "JobContext"
+description: "JobContext is the base class for all job implementations. It extends ExecutionContextBase and provides job-specific features like logging, progress reporting, and retry tracking."
+icon: "briefcase"
+---
+
+## Class Definition
+
+```typescript
+export abstract class JobContext<
+  InSchema extends ToolInputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
+> extends ExecutionContextBase<Out>
+```
+
+## Type Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `InSchema` | Input schema type (Zod shape) |
+| `OutSchema` | Output schema type |
+| `In` | Inferred input type |
+| `Out` | Inferred output type |
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metadata` | `JobMetadata` | Job metadata (name, description, retry, etc.) |
+| `input` | `In` | Parsed and validated input |
+| `output` | `Out \| undefined` | Job output (after execution) |
+| `jobName` | `string` | Job name |
+| `jobId` | `string` | Job ID (or name if not specified) |
+| `attempt` | `number` | Current retry attempt (1-based) |
+
+## Abstract Method
+
+### execute(input)
+
+The main execution method that must be implemented.
+
+```typescript
+abstract execute(input: In): Promise<Out>
+```
+
+```typescript
+@Job({
+  name: 'process-data',
+  inputSchema: { data: z.string() },
+  outputSchema: { result: z.string() },
+})
+class ProcessDataJob extends JobContext {
+  async execute(input: { data: string }) {
+    return { result: `Processed: ${input.data}` };
+  }
+}
+```
+
+## Methods
+
+### Response Methods
+
+#### respond(value)
+
+Set output and end execution immediately.
+
+```typescript
+respond(value: Out): never
+```
+
+```typescript
+async execute(input) {
+  if (cached) {
+    this.respond(cached); // Ends execution here
+  }
+  // This code won't run if cached
+  return processInput(input);
+}
+```
+
+### Logging Methods
+
+#### log(message)
+
+Append a timestamped log entry to the job's log buffer.
+
+```typescript
+protected log(message: string): void
+```
+
+```typescript
+async execute(input) {
+  this.log('Starting processing');
+  await this.doWork(input);
+  this.log('Processing complete');
+  return { success: true };
+}
+```
+
+#### getLogs()
+
+Get all log entries recorded during execution.
+
+```typescript
+getLogs(): readonly string[]
+```
+
+```typescript
+const logs = this.getLogs();
+// ['[2026-02-24T10:00:00.000Z] Starting processing', ...]
+```
+
+### Progress Methods
+
+#### progress(pct, total?, msg?)
+
+Send a progress notification to the client. Returns `false` if no session is available.
+
+```typescript
+protected async progress(
+  pct: number,
+  total?: number,
+  msg?: string
+): Promise<boolean>
+```
+
+```typescript
+for (let i = 0; i < items.length; i++) {
+  await this.progress(i + 1, items.length, `Processing item ${i + 1}`);
+  await this.processItem(items[i]);
+}
+```
+
+### Retry Tracking
+
+#### attempt
+
+The current retry attempt number (1-based).
+
+```typescript
+get attempt(): number
+```
+
+```typescript
+async execute(input) {
+  this.log(`Attempt ${this.attempt}`);
+  if (this.attempt > 1) {
+    this.log('Retrying after previous failure');
+  }
+  // ...
+}
+```
+
+## Inherited Methods
+
+From `ExecutionContextBase`:
+
+| Method | Description |
+|--------|-------------|
+| `get(token)` | Resolve a required dependency |
+| `tryGet(token)` | Resolve an optional dependency (returns `undefined` if not found) |
+| `scope` | Access the current scope |
+| `logger` | Scoped logger instance |
+| `getAuthInfo()` | Get authentication context |
+| `fail(error)` | Fail execution with an error |
+| `mark(stage)` | Mark current execution stage |
+| `fetch(url, options?)` | Context-aware HTTP fetch |
+
+## Full Example
+
+```typescript
+import { Job, JobContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const inputSchema = {
+  urls: z.array(z.string().url()).describe('URLs to fetch'),
+  timeout: z.number().default(5000).describe('Per-URL timeout in ms'),
+};
+
+const outputSchema = {
+  results: z.array(z.object({
+    url: z.string(),
+    status: z.number(),
+    size: z.number(),
+  })),
+  totalSize: z.number(),
+};
+
+@Job({
+  name: 'batch-fetch',
+  description: 'Fetch multiple URLs and report their status',
+  inputSchema,
+  outputSchema,
+  retry: { maxAttempts: 3, backoffMs: 1000 },
+  timeout: 60000,
+})
+class BatchFetchJob extends JobContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input) {
+    this.log(`Fetching ${input.urls.length} URLs (attempt ${this.attempt})`);
+
+    const results = [];
+    for (let i = 0; i < input.urls.length; i++) {
+      const url = input.urls[i];
+      await this.progress(i + 1, input.urls.length, `Fetching ${url}`);
+
+      try {
+        const response = await this.fetch(url, {
+          signal: AbortSignal.timeout(input.timeout),
+        });
+        const body = await response.text();
+        results.push({ url, status: response.status, size: body.length });
+        this.log(`${url}: ${response.status} (${body.length} bytes)`);
+      } catch (err: unknown) {
+        results.push({ url, status: 0, size: 0 });
+        this.log(`${url}: failed - ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    const totalSize = results.reduce((sum, r) => sum + r.size, 0);
+    return { results, totalSize };
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Job" icon="at" href="/frontmcp/sdk-reference/decorators/job">
+    Job decorator
+  </Card>
+  <Card title="ExecutionContextBase" icon="code" href="/frontmcp/sdk-reference/contexts/execution-context-base">
+    Base class
+  </Card>
+  <Card title="JobRegistry" icon="database" href="/frontmcp/sdk-reference/registries/job-registry">
+    Job registry
+  </Card>
+  <Card title="Jobs Guide" icon="book" href="/frontmcp/servers/jobs">
+    Jobs documentation
+  </Card>
+</CardGroup>

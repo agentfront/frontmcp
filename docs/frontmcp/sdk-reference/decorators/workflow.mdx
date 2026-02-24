@@ -1,0 +1,203 @@
+---
+title: "@Workflow"
+description: "The @Workflow decorator defines a DAG-based multi-step pipeline that composes jobs with dependencies, conditions, and parallel execution."
+icon: "diagram-project"
+---
+
+## Basic Usage
+
+```typescript
+import { Workflow } from '@frontmcp/sdk';
+
+@Workflow({
+  name: 'data-pipeline',
+  description: 'Extract, transform, and load data',
+  steps: [
+    { id: 'extract', jobName: 'extract-data' },
+    { id: 'transform', jobName: 'transform-data', dependsOn: ['extract'] },
+    { id: 'load', jobName: 'load-data', dependsOn: ['transform'] },
+  ],
+})
+class DataPipelineWorkflow {}
+```
+
+<Note>
+Workflows are declarative — the class body is empty. All configuration goes in the decorator metadata.
+</Note>
+
+## Signature
+
+```typescript
+function Workflow(opts: WorkflowMetadata): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique workflow identifier |
+| `steps` | `WorkflowStep[]` | Step definitions (minimum 1) |
+
+### Optional Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `description` | `string` | — | Workflow description |
+| `id` | `string` | `name` | Stable identifier for tracking |
+| `trigger` | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered |
+| `webhook` | `WorkflowWebhookConfig` | — | Webhook configuration |
+| `timeout` | `number` | `600000` | Max total execution time in ms (10 min) |
+| `maxConcurrency` | `number` | `5` | Max parallel step concurrency |
+| `tags` | `string[]` | — | Categorization tags |
+| `labels` | `Record<string, string>` | — | Key-value labels |
+| `hideFromDiscovery` | `boolean` | `false` | Hide from `list-workflows` |
+| `permissions` | `JobPermission[]` | — | RBAC permission rules |
+| `inputSchema` | `ZodShape` | — | Workflow-level input schema |
+| `outputSchema` | `ZodShape` | — | Workflow-level output schema |
+
+### WorkflowStep
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | `string` | — | **Required.** Unique step identifier |
+| `jobName` | `string` | — | **Required.** Name of the registered job to execute |
+| `dependsOn` | `string[]` | `[]` | Step IDs that must complete first |
+| `input` | `object \| function` | Workflow input | Static input or dynamic callback |
+| `condition` | `(steps) => boolean` | — | Skip step if returns `false` |
+| `continueOnError` | `boolean` | `false` | Continue workflow if step fails |
+| `timeout` | `number` | Job default | Per-step timeout override in ms |
+| `retry` | `JobRetryConfig` | Job default | Per-step retry override |
+
+### WorkflowWebhookConfig
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `path` | `string` | `/workflows/webhook/{name}` | Custom webhook path |
+| `secret` | `string` | — | Webhook secret for validation |
+| `methods` | `('GET' \| 'POST')[]` | `['POST']` | Allowed HTTP methods |
+
+## Examples
+
+### Linear Workflow
+
+```typescript
+@Workflow({
+  name: 'onboarding',
+  description: 'User onboarding pipeline',
+  steps: [
+    { id: 'create-account', jobName: 'create-account' },
+    {
+      id: 'send-welcome',
+      jobName: 'send-email',
+      dependsOn: ['create-account'],
+      input: (steps) => ({
+        to: steps.get('create-account').outputs.email,
+        subject: 'Welcome!',
+        body: 'Welcome to our platform.',
+      }),
+    },
+    {
+      id: 'setup-defaults',
+      jobName: 'setup-defaults',
+      dependsOn: ['create-account'],
+      input: (steps) => ({
+        userId: steps.get('create-account').outputs.userId,
+      }),
+    },
+  ],
+})
+class OnboardingWorkflow {}
+```
+
+### Parallel Workflow
+
+```typescript
+@Workflow({
+  name: 'multi-analysis',
+  description: 'Run multiple analyses in parallel',
+  maxConcurrency: 3,
+  steps: [
+    { id: 'fetch', jobName: 'fetch-data' },
+    { id: 'sentiment', jobName: 'analyze-sentiment', dependsOn: ['fetch'] },
+    { id: 'entities', jobName: 'extract-entities', dependsOn: ['fetch'] },
+    { id: 'topics', jobName: 'detect-topics', dependsOn: ['fetch'] },
+    {
+      id: 'report',
+      jobName: 'generate-report',
+      dependsOn: ['sentiment', 'entities', 'topics'],
+      input: (steps) => ({
+        sentiment: steps.get('sentiment').outputs,
+        entities: steps.get('entities').outputs,
+        topics: steps.get('topics').outputs,
+      }),
+    },
+  ],
+})
+class MultiAnalysisWorkflow {}
+```
+
+### Conditional Workflow
+
+```typescript
+@Workflow({
+  name: 'conditional-pipeline',
+  description: 'Pipeline with conditional steps',
+  steps: [
+    { id: 'validate', jobName: 'validate-input' },
+    {
+      id: 'premium-processing',
+      jobName: 'premium-process',
+      dependsOn: ['validate'],
+      condition: (steps) =>
+        steps.get('validate').outputs.tier === 'premium',
+    },
+    {
+      id: 'standard-processing',
+      jobName: 'standard-process',
+      dependsOn: ['validate'],
+      condition: (steps) =>
+        steps.get('validate').outputs.tier !== 'premium',
+    },
+    {
+      id: 'finalize',
+      jobName: 'finalize',
+      dependsOn: ['premium-processing', 'standard-processing'],
+    },
+  ],
+})
+class ConditionalPipelineWorkflow {}
+```
+
+## Function-Based Alternative
+
+```typescript
+import { workflow } from '@frontmcp/sdk';
+
+const DataPipeline = workflow({
+  name: 'data-pipeline',
+  steps: [
+    { id: 'extract', jobName: 'extract-data' },
+    { id: 'transform', jobName: 'transform-data', dependsOn: ['extract'] },
+    { id: 'load', jobName: 'load-data', dependsOn: ['transform'] },
+  ],
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="WorkflowRegistry" icon="database" href="/frontmcp/sdk-reference/registries/workflow-registry">
+    Workflow registry API
+  </Card>
+  <Card title="Workflows Guide" icon="book" href="/frontmcp/servers/workflows">
+    Workflows documentation
+  </Card>
+  <Card title="@Job" icon="briefcase" href="/frontmcp/sdk-reference/decorators/job">
+    Define jobs
+  </Card>
+  <Card title="DirectClient" icon="plug" href="/frontmcp/sdk-reference/core/direct-client">
+    Programmatic execution
+  </Card>
+</CardGroup>

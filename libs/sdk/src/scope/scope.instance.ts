@@ -48,6 +48,14 @@ import { normalizeTool } from '../tool/tool.utils';
 import { ToolInstance } from '../tool/tool.instance';
 import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createEventStore } from '../transport/event-stores';
+import JobRegistry from '../job/job.registry';
+import WorkflowRegistry from '../workflow/workflow.registry';
+import { JobExecutionManager } from '../job/execution/job-execution.manager';
+import { registerJobCapabilities, JobsConfig } from '../job/job-scope.helper';
+import type { JobType } from '../common/interfaces/job.interface';
+import type { WorkflowType } from '../common/interfaces/workflow.interface';
+import type { JobStateStore } from '../job/store/job-state.interface';
+import type { JobDefinitionStore } from '../job/store/job-definition.interface';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -83,6 +91,13 @@ export class Scope extends ScopeEntry {
 
   /** EventStore for SSE resumability support (optional) */
   private _eventStore?: EventStore;
+
+  /** Job/workflow registries and execution (optional) */
+  private _scopeJobs?: JobRegistry;
+  private _scopeWorkflows?: WorkflowRegistry;
+  private _jobExecutionManager?: JobExecutionManager;
+  private _jobStateStore?: JobStateStore;
+  private _jobDefinitionStore?: JobDefinitionStore;
 
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
@@ -407,6 +422,68 @@ export class Scope extends ScopeEntry {
       logger: this.logger,
     });
 
+    // Initialize jobs and workflows if enabled
+    const jobsConfig = this.metadata.jobs as JobsConfig | undefined;
+    if (jobsConfig?.enabled) {
+      const metaRecord = this.metadata as unknown as Record<string, unknown>;
+      const jobsList = (metaRecord['jobTypes'] as JobType[] | undefined) ?? [];
+      const workflowsList = (metaRecord['workflowTypes'] as WorkflowType[] | undefined) ?? [];
+
+      // Collect jobs/workflows from apps
+      const appJobs: JobType[] = [];
+      const appWorkflows: WorkflowType[] = [];
+      for (const app of this.scopeApps.getApps()) {
+        const appMeta = app.metadata as unknown as Record<string, unknown>;
+        if (Array.isArray(appMeta['jobs'])) appJobs.push(...(appMeta['jobs'] as JobType[]));
+        if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
+      }
+
+      // TODO: Wire up actual notification delivery
+      const notifyFn = async (data: Record<string, unknown>) => {
+        if (this.notificationService) {
+          // Use notification service for SSE notifications
+          this.logger.debug('Job notification', data);
+        }
+      };
+
+      const result = await registerJobCapabilities({
+        providers: this.scopeProviders,
+        owner: scopeRef,
+        jobsList: [...jobsList, ...appJobs],
+        workflowsList: [...workflowsList, ...appWorkflows],
+        jobsConfig,
+        logger: this.logger,
+        notifyFn,
+      });
+
+      this._scopeJobs = result.jobRegistry as JobRegistry;
+      this._scopeWorkflows = result.workflowRegistry as WorkflowRegistry;
+      this._jobExecutionManager = result.executionManager;
+      this._jobStateStore = result.stateStore;
+      this._jobDefinitionStore = result.definitionStore;
+
+      // Register job/workflow management tools
+      for (const toolCls of result.managementTools) {
+        try {
+          const toolRecord = normalizeTool(toolCls);
+          const toolInstance = new ToolInstance(toolRecord, this.scopeProviders, {
+            kind: 'scope',
+            id: '_jobs',
+            ref: toolCls,
+          });
+          this.scopeTools.registerToolInstance(toolInstance);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to register job management tool: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      this.logger.info(
+        `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
+      );
+    }
+
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
@@ -437,6 +514,8 @@ export class Scope extends ScopeEntry {
     add(this.scopePrompts.getPrompts().length, 'prompt');
     add(this.scopeAgents.getAgents().length, 'agent');
     add(this.scopeSkills.getSkills().length, 'skill');
+    if (this._scopeJobs) add(this._scopeJobs.getJobs().length, 'job');
+    if (this._scopeWorkflows) add(this._scopeWorkflows.getWorkflows().length, 'workflow');
     return entries.length > 0 ? entries.join(', ') : 'empty';
   }
 
@@ -515,6 +594,14 @@ export class Scope extends ScopeEntry {
 
   get skills(): SkillRegistry {
     return this.scopeSkills;
+  }
+
+  get jobs(): JobRegistry | undefined {
+    return this._scopeJobs;
+  }
+
+  get workflows(): WorkflowRegistry | undefined {
+    return this._scopeWorkflows;
   }
 
   /**

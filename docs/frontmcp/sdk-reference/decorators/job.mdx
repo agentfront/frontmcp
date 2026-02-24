@@ -1,0 +1,226 @@
+---
+title: "@Job"
+description: "The @Job decorator defines an executable job with validated input/output schemas, retry configuration, and permission checks."
+icon: "briefcase"
+---
+
+## Basic Usage
+
+```typescript
+import { Job, JobContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Job({
+  name: 'send-email',
+  description: 'Send an email to a recipient',
+  inputSchema: {
+    to: z.string().email().describe('Recipient email'),
+    subject: z.string().describe('Email subject'),
+    body: z.string().describe('Email body'),
+  },
+  outputSchema: {
+    messageId: z.string(),
+    sent: z.boolean(),
+  },
+})
+class SendEmailJob extends JobContext {
+  async execute(input: { to: string; subject: string; body: string }) {
+    const mailer = this.get(MailerToken);
+    const result = await mailer.send(input);
+    return { messageId: result.id, sent: true };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Job<I extends ToolInputType, O extends ToolOutputType>(
+  opts: JobMetadata<I, O>
+): ClassDecorator
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique job identifier |
+| `inputSchema` | `ZodShape` | Zod object shape for input validation |
+| `outputSchema` | `ZodShape` | Zod schema for output validation |
+
+### Optional Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `description` | `string` | — | Job description |
+| `id` | `string` | `name` | Stable identifier for tracking |
+| `timeout` | `number` | `300000` | Max execution time in ms (5 min) |
+| `retry` | `JobRetryConfig` | — | Retry configuration |
+| `tags` | `string[]` | — | Categorization tags |
+| `labels` | `Record<string, string>` | — | Key-value labels |
+| `hideFromDiscovery` | `boolean` | `false` | Hide from `list-jobs` |
+| `permissions` | `JobPermission[]` | — | RBAC permission rules |
+
+### RetryConfig
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `maxAttempts` | `number` | `3` | Maximum retry attempts |
+| `backoffMs` | `number` | `1000` | Initial backoff delay in ms |
+| `backoffMultiplier` | `number` | `2` | Backoff multiplier per attempt |
+| `maxBackoffMs` | `number` | `60000` | Maximum backoff delay in ms |
+
+### Permission
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `action` | `'create' \| 'read' \| 'update' \| 'delete' \| 'execute' \| 'list'` | Permission action |
+| `roles` | `string[]` | Required roles (at least one must match) |
+| `scopes` | `string[]` | Required OAuth scopes |
+| `custom` | `(authInfo) => boolean \| Promise<boolean>` | Custom guard function |
+
+## Examples
+
+### Simple Job
+
+```typescript
+@Job({
+  name: 'greet',
+  inputSchema: { name: z.string() },
+  outputSchema: { message: z.string() },
+})
+class GreetJob extends JobContext {
+  async execute(input: { name: string }) {
+    return { message: `Hello, ${input.name}!` };
+  }
+}
+```
+
+### Job with Retry
+
+```typescript
+@Job({
+  name: 'fetch-api',
+  description: 'Fetch data from external API with retries',
+  inputSchema: { endpoint: z.string().url() },
+  outputSchema: { data: z.unknown(), statusCode: z.number() },
+  retry: {
+    maxAttempts: 5,
+    backoffMs: 2000,
+    backoffMultiplier: 2,
+    maxBackoffMs: 30000,
+  },
+  timeout: 60000,
+})
+class FetchApiJob extends JobContext {
+  async execute(input: { endpoint: string }) {
+    this.log(`Attempt ${this.attempt}: fetching ${input.endpoint}`);
+    const response = await this.fetch(input.endpoint);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { data: await response.json(), statusCode: response.status };
+  }
+}
+```
+
+### Job with Permissions
+
+```typescript
+@Job({
+  name: 'delete-records',
+  description: 'Delete records from database',
+  inputSchema: {
+    table: z.string(),
+    ids: z.array(z.string()),
+  },
+  outputSchema: {
+    deletedCount: z.number(),
+  },
+  permissions: [
+    { action: 'execute', roles: ['admin'] },
+    { action: 'execute', scopes: ['data:delete'] },
+  ],
+  tags: ['destructive', 'admin'],
+})
+class DeleteRecordsJob extends JobContext {
+  async execute(input: { table: string; ids: string[] }) {
+    const db = this.get(DatabaseToken);
+    const count = await db.deleteMany(input.table, input.ids);
+    return { deletedCount: count };
+  }
+}
+```
+
+## Function-Based Alternative
+
+For simpler jobs, use the `job()` function:
+
+```typescript
+import { job } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const GreetJob = job({
+  name: 'greet',
+  description: 'Generate a greeting',
+  inputSchema: { name: z.string() },
+  outputSchema: { message: z.string() },
+})((input, ctx) => {
+  ctx.log(`Greeting ${input.name}`);
+  return { message: `Hello, ${input.name}!` };
+});
+```
+
+## Context Methods
+
+The `JobContext` base class provides:
+
+### Dependency Injection
+
+```typescript
+async execute(input) {
+  const service = this.get(ServiceToken);      // Required dependency
+  const optional = this.tryGet(OptionalToken); // Optional dependency
+}
+```
+
+### Logging and Progress
+
+```typescript
+async execute(input) {
+  this.log('Starting processing');
+  await this.progress(50, 100, 'Halfway done');
+}
+```
+
+### Error Handling
+
+```typescript
+async execute(input) {
+  if (!input.valid) {
+    this.fail(new Error('Invalid input'));
+  }
+
+  // Early return with output
+  if (cached) {
+    this.respond(cached); // Ends execution
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="JobContext" icon="code" href="/frontmcp/sdk-reference/contexts/job-context">
+    Context class details
+  </Card>
+  <Card title="JobRegistry" icon="database" href="/frontmcp/sdk-reference/registries/job-registry">
+    Job registry API
+  </Card>
+  <Card title="Jobs Guide" icon="book" href="/frontmcp/servers/jobs">
+    Jobs documentation
+  </Card>
+  <Card title="@Workflow" icon="diagram-project" href="/frontmcp/sdk-reference/decorators/workflow">
+    Define workflows
+  </Card>
+</CardGroup>

@@ -34,6 +34,12 @@ FrontMCP is a TypeScript-first framework for building production-ready MCP serve
   <Card title="Skill-Based Workflows" icon="graduation-cap" href="/frontmcp/features/skill-based-workflows">
     Teach AI multi-step workflows with @Skill and Agent Skills spec support
   </Card>
+  <Card title="Jobs" icon="briefcase" href="/frontmcp/servers/jobs">
+    Define typed jobs with retries, timeouts, and background execution
+  </Card>
+  <Card title="Workflows" icon="diagram-project" href="/frontmcp/servers/workflows">
+    Compose jobs into DAG-based multi-step pipelines
+  </Card>
 </CardGroup>
 
 ---
@@ -56,6 +62,9 @@ graph TD
     A2 --> T3["@Tool: RunReport"]
     A3 --> T4["@Tool: ManageUsers"]
 
+    A1 --> J1["@Job: EnrichLead"]
+    A1 --> WF1["@Workflow: LeadPipeline"]
+
     FM -.-> PL["@Plugin: Cache"]
     FM -.-> AD["@Adapter: OpenAPI"]
     FM -.-> PR["@Provider: Database"]
@@ -76,5 +85,7 @@ graph TD
 | **Providers** | Dependency injection services | `@Provider` | [Providers](/frontmcp/extensibility/providers) |
 | **Plugins** | Cross-cutting extensions | `@Plugin` | [Plugins](/frontmcp/plugins/overview) |
 | **Adapters** | Dynamic capability generation | `@Adapter` | [Adapters](/frontmcp/adapters/overview) |
+| **Jobs** | Reliable executable units of work | `@Job` | [Jobs](/frontmcp/servers/jobs) |
+| **Workflows** | DAG-based multi-step pipelines | `@Workflow` | [Workflows](/frontmcp/servers/workflows) |
 | **Flows** | Request lifecycle pipelines | `@Flow` | [Flows](/frontmcp/servers/flows) |
 | **Apps** | Modular capability containers | `@App` | [Apps](/frontmcp/servers/apps) |
