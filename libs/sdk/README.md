@@ -7,7 +7,7 @@ The core FrontMCP framework for building MCP servers and clients in TypeScript.
 ## Install
 
 ```bash
-npm install @frontmcp/sdk reflect-metadata
+npm install @frontmcp/sdk
 ```
 
 > Most users should scaffold with `npx frontmcp create my-app` instead of installing manually. See [Installation][docs-install].
