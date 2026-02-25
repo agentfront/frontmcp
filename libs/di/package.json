@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/di",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "Generic dependency injection container and registry utilities for TypeScript applications",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
