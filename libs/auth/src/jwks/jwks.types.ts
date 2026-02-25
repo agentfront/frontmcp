@@ -1,5 +1,4 @@
 import { JSONWebKeySet } from 'jose';
-import { DevKeyPersistenceOptions } from './dev-key-persistence';
 import type { AuthLogger } from '../common/auth-logger.interface';
 
 export type JwksServiceOptions = {
@@ -9,16 +8,9 @@ export type JwksServiceOptions = {
   providerJwksTtlMs?: number;
   /** Timeout (ms) for network metadata/JWKS fetches. Default: 5s */
   networkTimeoutMs?: number;
-  /**
-   * Options for dev key persistence (development mode only by default).
-   * When enabled, keys are saved to a file and reloaded on server restart.
-   */
-  devKeyPersistence?: DevKeyPersistenceOptions;
   /** Optional logger. If not provided, logging is disabled. */
   logger?: AuthLogger;
 };
-
-export type { DevKeyPersistenceOptions };
 
 /** Rich descriptor used by verification & fetching */
 export type ProviderVerifyRef = {

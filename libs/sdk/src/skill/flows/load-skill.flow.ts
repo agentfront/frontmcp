@@ -86,7 +86,7 @@ const outputSchema = z.object({
   nextSteps: z.string().describe('Guidance on what to do next with the loaded skills'),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 // Load result with activation info for state

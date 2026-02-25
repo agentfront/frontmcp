@@ -4,19 +4,18 @@
 import type { z } from 'zod';
 
 // Import schemas
-import type { publicAccessConfigSchema, remoteProviderConfigSchema } from './shared.schemas';
+import type { publicAccessConfigSchema } from './shared.schemas';
 import type { publicAuthOptionsSchema } from './public.schema';
 import type { transparentAuthOptionsSchema } from './transparent.schema';
-import type { orchestratedLocalSchema, orchestratedRemoteSchema } from './orchestrated.schema';
+import type { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
 
 // Import interfaces
 import type {
   PublicAccessConfig,
-  RemoteProviderConfig,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
-  OrchestratedLocalOptionsInterface,
-  OrchestratedRemoteOptionsInterface,
+  LocalAuthOptionsInterface,
+  RemoteAuthOptionsInterface,
 } from './interfaces';
 
 // ============================================
@@ -34,9 +33,6 @@ type IsAssignable<T, U> = T extends U ? true : false;
 type _PublicAccessFromSchema = z.output<typeof publicAccessConfigSchema>;
 type _PublicAccessCheck = AssertTrue<IsAssignable<PublicAccessConfig, Partial<_PublicAccessFromSchema>>>;
 
-type _RemoteFromSchema = z.output<typeof remoteProviderConfigSchema>;
-type _RemoteCheck = AssertTrue<IsAssignable<RemoteProviderConfig, Partial<_RemoteFromSchema>>>;
-
 // ============================================
 // AUTH MODE CHECKS
 // ============================================
@@ -47,15 +43,11 @@ type _PublicInterfaceCheck = AssertTrue<IsAssignable<PublicAuthOptionsInterface,
 type _TransparentSchemaInput = z.input<typeof transparentAuthOptionsSchema>;
 type _TransparentInterfaceCheck = AssertTrue<IsAssignable<TransparentAuthOptionsInterface, _TransparentSchemaInput>>;
 
-type _OrchestratedLocalSchemaInput = z.input<typeof orchestratedLocalSchema>;
-type _OrchestratedLocalInterfaceCheck = AssertTrue<
-  IsAssignable<OrchestratedLocalOptionsInterface, _OrchestratedLocalSchemaInput>
->;
+type _LocalSchemaInput = z.input<typeof localAuthSchema>;
+type _LocalInterfaceCheck = AssertTrue<IsAssignable<LocalAuthOptionsInterface, _LocalSchemaInput>>;
 
-type _OrchestratedRemoteSchemaInput = z.input<typeof orchestratedRemoteSchema>;
-type _OrchestratedRemoteInterfaceCheck = AssertTrue<
-  IsAssignable<OrchestratedRemoteOptionsInterface, _OrchestratedRemoteSchemaInput>
->;
+type _RemoteSchemaInput = z.input<typeof remoteAuthSchema>;
+type _RemoteInterfaceCheck = AssertTrue<IsAssignable<RemoteAuthOptionsInterface, _RemoteSchemaInput>>;
 
 // ============================================
 // MODE LITERAL CHECKS
@@ -63,11 +55,8 @@ type _OrchestratedRemoteInterfaceCheck = AssertTrue<
 
 type _PublicModeCheck = AssertTrue<IsEqual<PublicAuthOptionsInterface['mode'], 'public'>>;
 type _TransparentModeCheck = AssertTrue<IsEqual<TransparentAuthOptionsInterface['mode'], 'transparent'>>;
-type _OrchestratedLocalModeCheck = AssertTrue<IsEqual<OrchestratedLocalOptionsInterface['mode'], 'orchestrated'>>;
-type _OrchestratedRemoteModeCheck = AssertTrue<IsEqual<OrchestratedRemoteOptionsInterface['mode'], 'orchestrated'>>;
-
-type _OrchestratedLocalTypeCheck = AssertTrue<IsEqual<OrchestratedLocalOptionsInterface['type'], 'local'>>;
-type _OrchestratedRemoteTypeCheck = AssertTrue<IsEqual<OrchestratedRemoteOptionsInterface['type'], 'remote'>>;
+type _LocalModeCheck = AssertTrue<IsEqual<LocalAuthOptionsInterface['mode'], 'local'>>;
+type _RemoteModeCheck = AssertTrue<IsEqual<RemoteAuthOptionsInterface['mode'], 'remote'>>;
 
 // ============================================
 // EXPORT

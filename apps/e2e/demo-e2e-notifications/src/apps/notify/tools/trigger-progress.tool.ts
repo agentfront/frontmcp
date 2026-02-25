@@ -2,13 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { notificationLogStore } from '../data/notification-log.store';
 
-const inputSchema = z
-  .object({
-    level: z.enum(['debug', 'info', 'notice', 'warning', 'error']).optional().default('info').describe('Log level'),
-    message: z.string().describe('Progress message'),
-    data: z.record(z.string(), z.unknown()).optional().describe('Additional data'),
-  })
-  .strict();
+const inputSchema = {
+  level: z.enum(['debug', 'info', 'notice', 'warning', 'error']).optional().default('info').describe('Log level'),
+  message: z.string().describe('Progress message'),
+  data: z.record(z.string(), z.unknown()).optional().describe('Additional data'),
+};
 
 const outputSchema = z.object({
   success: z.boolean(),
@@ -16,7 +14,7 @@ const outputSchema = z.object({
   logId: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

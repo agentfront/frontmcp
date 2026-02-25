@@ -1,9 +1,5 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
-import type { JSONSchema } from 'zod/v4/core';
-
-/** JSON Schema type from Zod v4 */
-type JsonSchema = JSONSchema.JSONSchema;
 
 // ============================================
 // Auth Provider Mapping for Tools
@@ -192,7 +188,7 @@ export type ToolSingleOutputType =
  * Default default tool schema is {}
  */
 export type ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[] | undefined;
-export type ToolInputType = z.ZodRawShape | z.ZodObject<any>;
+export type ToolInputType = z.ZodRawShape;
 
 /**
  * Declarative metadata describing what an McpTool contributes.
@@ -220,22 +216,11 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * Used for validation and for generating automatic docs/UX.
    */
   inputSchema: InSchema;
-  /**
-   * Zod schema describing the expected input payload for the tool.
-   * Used for validation and for generating automatic docs/UX.
-   */
-  rawInputSchema?: JsonSchema;
 
   /**
    * Zod schema describing the structure of the tool's successful output.
    */
   outputSchema?: OutSchema;
-
-  /**
-   * Raw JSON Schema representation of the output schema.
-   * Used by OpenAPI tools and tool/list to expose structured output schema.
-   */
-  rawOutputSchema?: JsonSchema;
 
   /**
    * Optional list of tags/labels that categorize the tool for discovery and filtering.
@@ -338,9 +323,7 @@ export const frontMcpToolMetadataSchema = z
     name: z.string().min(1),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
-    rawInputSchema: z.any().optional(),
     outputSchema: toolOutputSchema.optional(),
-    rawOutputSchema: z.any().optional(),
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),
     hideFromDiscovery: z.boolean().optional().default(false),

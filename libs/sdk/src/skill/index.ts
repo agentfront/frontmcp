@@ -152,7 +152,7 @@ export type { CompactSkillSummary } from './skill-http.utils';
 export { SearchSkillsFlow, LoadSkillFlow } from './flows';
 
 // Tools (deprecated - use flows instead)
-export { SearchSkillsTool, LoadSkillsTool, LoadSkillTool, getSkillTools } from './tools';
+export { SearchSkillsTool, LoadSkillsTool, getSkillTools } from './tools';
 
 // Session Management
 export { SkillSessionManager } from './session/skill-session.manager';

@@ -1,11 +1,9 @@
 import { Tool, ToolContext, InternalMcpError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    trigger: z.boolean().default(true).describe('Whether to trigger the internal error'),
-  })
-  .strict();
+const inputSchema = {
+  trigger: z.boolean().default(true).describe('Whether to trigger the internal error'),
+};
 
 const outputSchema = z
   .object({
@@ -13,7 +11,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

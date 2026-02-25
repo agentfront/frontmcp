@@ -1,18 +1,16 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    action: z.string().describe('Action to confirm'),
-  })
-  .strict();
+const inputSchema = {
+  action: z.string().describe('Action to confirm'),
+};
 
 const outputSchema = z.object({
   message: z.string(),
   confirmed: z.boolean(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -155,7 +155,7 @@ Vercel KV works seamlessly with the CachePlugin using `type: 'global-store'`:
 ```typescript
 import 'reflect-metadata';
 import { FrontMcp, App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
@@ -216,7 +216,7 @@ Need resource subscriptions but still want Vercel KV's edge compatibility for se
 ```typescript
 import 'reflect-metadata';
 import { FrontMcp, App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },

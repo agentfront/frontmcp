@@ -2,13 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = z
-  .object({
-    userId: z.string().describe('User ID for the activity'),
-    type: z.enum(['call', 'email', 'meeting', 'note']).describe('Activity type'),
-    description: z.string().describe('Activity description'),
-  })
-  .strict();
+const inputSchema = {
+  userId: z.string().describe('User ID for the activity'),
+  type: z.enum(['call', 'email', 'meeting', 'note']).describe('Activity type'),
+  description: z.string().describe('Activity description'),
+};
 
 const outputSchema = z.object({
   activity: z.object({
@@ -27,7 +25,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class ActivitiesLogTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const activity = crmStore.logActivity(input);
     return { activity };
   }

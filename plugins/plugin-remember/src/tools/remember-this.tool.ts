@@ -5,7 +5,7 @@ import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols'
 /**
  * Input schema for the remember_this tool.
  */
-export const rememberThisInputSchema = z.object({
+export const rememberThisInputSchema = {
   key: z.string().min(1).describe('What to call this memory (e.g., "user_preference", "last_action")'),
   value: z.unknown().describe('The value to remember (any JSON-serializable data)'),
   scope: z
@@ -19,7 +19,7 @@ export const rememberThisInputSchema = z.object({
     .enum(['preference', 'cache', 'state', 'conversation', 'custom'])
     .optional()
     .describe('Type hint for the stored value'),
-});
+};
 
 /**
  * Output schema for the remember_this tool.
@@ -31,7 +31,7 @@ export const rememberThisOutputSchema = z.object({
   expiresAt: z.number().optional(),
 });
 
-export type RememberThisInput = z.infer<typeof rememberThisInputSchema>;
+export type RememberThisInput = z.input<z.ZodObject<typeof rememberThisInputSchema>>;
 
 export type RememberThisOutput = z.infer<typeof rememberThisOutputSchema>;
 

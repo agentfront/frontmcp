@@ -77,7 +77,7 @@ Everything else is optional with sensible defaults.
   /** Transport & session lifecycle (NEW in v0.6) */
   transport?: {
     // Session lifecycle
-    sessionMode?: 'stateful' | 'stateless',     // default 'stateful'
+    // sessionMode has been removed in v1.0 — configure via transport.protocol presets
     platformDetection?: { customOnly?: boolean },
 
     // Protocol configuration (use preset or custom config)
@@ -113,8 +113,8 @@ Everything else is optional with sensible defaults.
 
   /** Server-level default auth (omit if splitByApp: true) */
   auth?: (
-    | { type: 'remote', name: string, baseUrl: string, ... }
-    | { type: 'local',  id: string,   name: string,   ... }
+    | { mode: 'remote', name: string, baseUrl: string, ... }
+    | { mode: 'local',  id: string,   name: string,   ... }
   ),
 })
 ```
@@ -246,7 +246,6 @@ The `transport` config controls session lifecycle, protocol presets, and session
 @FrontMcp({
   transport: {
     // Session lifecycle
-    sessionMode: 'stateful',
     platformDetection: { customOnly: false },
 
     // Protocol preset (or custom config)
@@ -267,29 +266,7 @@ The `transport` config controls session lifecycle, protocol presets, and session
 
 | Option              | Default      | Description                                                                 |
 | ------------------- | ------------ | --------------------------------------------------------------------------- |
-| `sessionMode`       | `'stateful'` | `'stateful'` (server-side store) or `'stateless'` (JWT-based)               |
 | `platformDetection` | `undefined`  | Platform detection config; set `customOnly: true` to skip built-in mappings |
-
-<CodeGroup>
-```ts Stateful Sessions
-transport: {
-  sessionMode: 'stateful',    // Server-side session store (default)
-}
-```
-
-```ts Stateless Sessions
-transport: {
-  sessionMode: 'stateless',   // JWT-based sessions (client-portable)
-}
-```
-
-```ts Dynamic (per issuer)
-transport: {
-  sessionMode: (issuer) => issuer === 'internal' ? 'stateful' : 'stateless',
-}
-```
-
-</CodeGroup>
 
 ### Protocol Presets
 
@@ -429,7 +406,7 @@ Configure Redis once at the server level for use across features:
 The `redis` config is automatically used by:
 
 - **Session persistence** (`transport.persistence`) — stores session state for recovery
-- **Token storage** (`auth.tokenStorage: { type: 'redis' }`) — stores refresh tokens securely
+- **Token storage** (`auth.tokenStorage: { redis: { ... } }`) — stores refresh tokens securely
 
 ```ts
 @FrontMcp({
@@ -441,9 +418,8 @@ The `redis` config is automatically used by:
     persistence: { defaultTtlMs: 3600000 },
   },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
-    tokenStorage: { type: 'redis' },
+    mode: 'local',
+    tokenStorage: 'redis',
   },
 })
 ```
@@ -461,12 +437,8 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
 <CodeGroup>
 ```ts Before (deprecated)
 @FrontMcp({
-  session: {
-    sessionMode: 'stateful',
-  },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     transport: {
       enableStreamableHttp: true,
       enableStatefulHttp: true,
@@ -485,13 +457,11 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
     host: 'localhost',
   },
   transport: {
-    sessionMode: 'stateful',
     protocol: 'full',  // Or use custom: { streamable: true, json: true, ... }
     // persistence auto-enabled when redis is configured
   },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
   },
 })
 ```
@@ -502,7 +472,6 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
 
 | Old Path                                     | New Path                                |
 | -------------------------------------------- | --------------------------------------- |
-| `session.sessionMode`                        | `transport.sessionMode`                 |
 | `session.platformDetection`                  | `transport.platformDetection`           |
 | `auth.transport.enableLegacySSE`             | `transport.protocol.legacy`             |
 | `auth.transport.enableSseListener`           | `transport.protocol.sse`                |
@@ -561,12 +530,12 @@ Server-level `auth` sets the **default** auth for all apps (unless `splitByApp: 
 
 ```ts
 auth: {
-  type: 'remote',
+  mode: 'remote',
   name: 'frontegg',
   baseUrl: 'https://auth.example.com',
   dcrEnabled?: boolean,
   clientId?: string | ((info) => string), // for non-DCR via local proxy
-  mode?: 'orchestrated' | 'transparent',
+  mode?: 'local' | 'remote' | 'transparent',
   allowAnonymous?: boolean,
   consent?: boolean,
   scopes?: string[],
@@ -584,7 +553,7 @@ auth: {
 
 ```ts
 auth: {
-  type: 'local',
+  mode: 'local',
   id: 'local',
   name: 'Local Auth',
   scopes?: string[],
@@ -628,7 +597,7 @@ auth: {
 - Use top-level `transport` config (not `auth.transport` or `session`)
 - Use protocol presets (`'legacy'`, `'modern'`, etc.) instead of individual flags
 - Configure `redis` at top-level for shared use across features (auto-enables persistence)
-- Use `stateful` session mode with Redis for production deployments
+- Use Redis for session persistence in production deployments
 - Set log level to `Info` or higher in production
 
 **Don't:**
@@ -636,7 +605,7 @@ auth: {
 - Configure server-level `auth` when using `splitByApp: true`
 - Use deprecated `auth.transport` or `session` — migrate to `transport`
 - Disable `serve` unless you're managing bootstrap manually
-- Use `stateless` session mode with short-lived upstream tokens
+- Use `protocol: 'stateless-api'` with short-lived upstream tokens
 - Use `protocol: 'stateless-api'` in production without trust boundaries
 - Leave `enableConsole: true` in containerized production (use transports)
 

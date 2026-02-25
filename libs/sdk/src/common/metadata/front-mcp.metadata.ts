@@ -266,12 +266,12 @@ const frontMcpMultiAppSchema = frontMcpBaseSchema.extend({
 
 export interface FrontMcpSplitByAppMetadata extends FrontMcpBaseMetadata {
   splitByApp: true;
-  auth?: never;
+  auth?: AuthOptionsInput;
 }
 
 const frontMcpSplitByAppSchema = frontMcpBaseSchema.extend({
   splitByApp: z.literal(true).describe('If false, apps are grouped under the same scope & basePath.'),
-  auth: z.never().optional(),
+  auth: authOptionsSchema.optional().describe("Configures the server's default authentication provider."),
 } satisfies RawZodShape<FrontMcpSplitByAppMetadata, FrontMcpBaseMetadata>);
 
 export type FrontMcpMetadata = FrontMcpMultiAppMetadata | FrontMcpSplitByAppMetadata;
@@ -374,7 +374,7 @@ export type FrontMcpConfigType = z.infer<typeof frontMcpMetadataSchema>;
 /** Input type for FrontMCP configuration (before zod defaults) */
 export type FrontMcpConfigInput = z.input<typeof frontMcpMetadataSchema>;
 
-export interface AppScopeMetadata extends Omit<FrontMcpSplitByAppMetadata, 'auth' | 'splitByApp'> {
+export interface AppScopeMetadata extends Omit<FrontMcpSplitByAppMetadata, 'splitByApp'> {
   id: string;
   apps: [AppType];
   auth?: AuthOptions;

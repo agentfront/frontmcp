@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { eventStore } from '../data/event.store';
 
-const inputSchema = z
-  .object({
-    upcomingOnly: z.boolean().optional().default(false).describe('Only show upcoming events'),
-  })
-  .strict();
+const inputSchema = {
+  upcomingOnly: z.boolean().optional().default(false).describe('Only show upcoming events'),
+};
 
 const outputSchema = z.object({
   events: z.array(
@@ -22,7 +20,7 @@ const outputSchema = z.object({
   count: z.number(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -3,12 +3,10 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { notesStore } from '../data/notes.store';
 
-const inputSchema = z
-  .object({
-    title: z.string().describe('Title of the note'),
-    content: z.string().describe('Content of the note'),
-  })
-  .strict();
+const inputSchema = {
+  title: z.string().describe('Title of the note'),
+  content: z.string().describe('Content of the note'),
+};
 
 const outputSchema = z.object({
   id: z.string(),
@@ -17,7 +15,7 @@ const outputSchema = z.object({
   createdAt: z.string(),
 });
 
-type CreateNoteInput = z.infer<typeof inputSchema>;
+type CreateNoteInput = z.input<z.ZodObject<typeof inputSchema>>;
 type CreateNoteOutput = z.infer<typeof outputSchema>;
 
 @Tool({

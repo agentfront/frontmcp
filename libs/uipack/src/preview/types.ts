@@ -215,24 +215,8 @@ export interface ClaudeMetaFields {
 /**
  * Generic MCP metadata fields.
  * Uses ui/* namespace for maximum compatibility with MCP clients.
- *
- * Note: This type includes both legacy frontmcp/* and new ui/* keys
- * for type compatibility during the migration period. New code should
- * only emit ui/* keys. The frontmcp/* keys will be removed in a future
- * major version.
- *
- * @deprecated frontmcp/* keys are deprecated - use ui/* keys instead
  */
-export interface FrontMCPMetaFields {
-  // Legacy frontmcp/* keys (deprecated)
-  'frontmcp/html'?: string;
-  'frontmcp/outputTemplate'?: string;
-  'frontmcp/component'?: string;
-  'frontmcp/widgetCSP'?: {
-    connect_domains?: string[];
-    resource_domains?: string[];
-  };
-  // Standard ui/* keys (use camelCase for consistency)
+export interface GenericMetaFields {
   'ui/html'?: string;
   'ui/mimeType'?: string;
   'ui/resourceUri'?: string;
@@ -246,4 +230,4 @@ export interface FrontMCPMetaFields {
 /**
  * Combined metadata fields for all platforms.
  */
-export type UIMetaFields = OpenAIMetaFields & ClaudeMetaFields & FrontMCPMetaFields;
+export type UIMetaFields = OpenAIMetaFields & ClaudeMetaFields & GenericMetaFields;

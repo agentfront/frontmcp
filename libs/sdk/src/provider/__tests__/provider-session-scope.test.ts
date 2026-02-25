@@ -57,26 +57,6 @@ describe('ProviderRegistry - Context Scope', () => {
       await expect(registry.buildViews('session@key')).rejects.toThrow('Session ID contains invalid characters');
     });
 
-    it('should provide session alias pointing to context store', async () => {
-      const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
-      await registry.ready;
-
-      const views = await registry.buildViews('my-session-123');
-
-      // session should be same as context (alias)
-      expect(views.session).toBe(views.context);
-    });
-
-    it('should provide request alias pointing to context store', async () => {
-      const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
-      await registry.ready;
-
-      const views = await registry.buildViews('my-session-123');
-
-      // request should be same as context (alias)
-      expect(views.request).toBe(views.context);
-    });
-
     it('should build CONTEXT-scoped providers fresh per-request (no caching)', async () => {
       const callCount = { count: 0 };
 

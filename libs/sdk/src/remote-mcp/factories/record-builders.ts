@@ -53,12 +53,13 @@ export function buildRemoteToolRecord(
 
   const ContextClass = createRemoteToolContextClass(mcpClient, remoteAppId, remoteTool.name);
 
-  const metadata: ToolMetadata = {
+  // rawInputSchema is set as an internal passthrough field (not part of the public ToolMetadata interface)
+  const metadata: ToolMetadata & Record<string, unknown> = {
     name: toolName,
     id: toolName,
     description: remoteTool.description || `Remote tool: ${remoteTool.name}`,
     inputSchema: {},
-    rawInputSchema: remoteTool.inputSchema as ToolMetadata['rawInputSchema'],
+    rawInputSchema: remoteTool.inputSchema,
     outputSchema: 'json' as ToolMetadata['outputSchema'],
     annotations: {
       ...remoteTool.annotations,

@@ -8,15 +8,15 @@ import {
   ConfigEntityType,
 } from '@frontmcp/sdk';
 
-const inputSchema = z.object({
+const inputSchema = {
   key: z.string().describe('Config key to look up'),
   entityType: z.enum(['agents', 'plugins', 'adapters']).describe('Entity type'),
   entityName: z.string().describe('Entity name (can include dashes, spaces)'),
   customFallbacks: z.array(z.string()).optional().describe('Custom fallback paths (overrides auto)'),
   disableFallbacks: z.boolean().optional().describe('If true, disable fallbacks (direct lookup only)'),
-});
+};
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 
 interface FallbackResult {
   key: string;

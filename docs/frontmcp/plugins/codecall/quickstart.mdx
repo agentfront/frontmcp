@@ -19,22 +19,20 @@ icon: rocket
 ## From Zero to CodeCall in 5 Steps
 
 <Steps>
-  <Step title="Install the Plugins Package">
-    CodeCall ships as part of `@frontmcp/plugins`. Add it to your project:
+  <Step title="Install the CodeCall Plugin">
+    Add the CodeCall plugin to your project:
 
     <CodeGroup>
     ```bash npm
-    npm install @frontmcp/plugins
+    npm install @frontmcp/plugin-codecall
     ```
     ```bash pnpm
-    pnpm add @frontmcp/plugins
+    pnpm add @frontmcp/plugin-codecall
     ```
     ```bash yarn
-    yarn add @frontmcp/plugins
+    yarn add @frontmcp/plugin-codecall
     ```
     </CodeGroup>
-
-    This includes `CodeCallPlugin` along with all official FrontMCP plugins.
   </Step>
 
   <Step title="Create Tools with CodeCall Metadata">
@@ -96,7 +94,7 @@ icon: rocket
 
     ```ts title="src/app.ts"
     import { App } from '@frontmcp/sdk';
-    import { CodeCallPlugin } from '@frontmcp/plugins';
+    import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
     import { ListUsersTool, GetUserTool } from './tools/users';
 
     @App({

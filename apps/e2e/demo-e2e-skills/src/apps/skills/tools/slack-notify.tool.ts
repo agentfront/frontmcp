@@ -12,7 +12,7 @@ const outputSchema = {
   timestamp: z.string(),
 };
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<z.ZodObject<typeof outputSchema>>;
 
 @Tool({

@@ -70,16 +70,12 @@ The proxy maintains:
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'remote',
-    remote: {
-      provider: 'https://legacy-idp.example.com',
-      clientId: 'pre-provisioned-client-id',
-      clientSecret: process.env.IDP_CLIENT_SECRET,
-      scopes: ['openid', 'profile', 'email'],
-    },
+    mode: 'remote',
+    provider: 'https://legacy-idp.example.com',
+    clientId: 'pre-provisioned-client-id',
+    clientSecret: process.env.IDP_CLIENT_SECRET,
+    scopes: ['openid', 'profile', 'email'],
     consent: { enabled: true },
-    sessionMode: 'stateful',
   },
 })
 export class Server {}
@@ -89,12 +85,11 @@ export class Server {}
 
 | Option                | Type                        | Default              | Description                          |
 | --------------------- | --------------------------- | -------------------- | ------------------------------------ |
-| `remote.provider`     | `string`                    | Required             | Upstream IdP base URL                |
-| `remote.clientId`     | `string`                    | Required             | Pre-registered client ID             |
-| `remote.clientSecret` | `string`                    | -                    | Client secret (confidential clients) |
-| `remote.scopes`       | `string[]`                  | `['openid']`         | Scopes to request from IdP           |
-| `consent`             | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration             |
-| `sessionMode`         | `'stateful' \| 'stateless'` | `'stateful'`         | Session strategy                     |
+| `provider`     | `string`        | Required             | Upstream IdP base URL                |
+| `clientId`     | `string`        | Required             | Pre-registered client ID             |
+| `clientSecret` | `string`        | -                    | Client secret (confidential clients) |
+| `scopes`       | `string[]`      | `['openid']`         | Scopes to request from IdP           |
+| `consent`      | `ConsentConfig` | `{ enabled: false }` | Consent UI configuration             |
 
 ---
 
@@ -104,13 +99,11 @@ For non-standard IdPs, override auto-discovered endpoints:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'remote',
-  remote: {
-    provider: 'https://legacy-idp.example.com',
-    clientId: 'my-client',
-    clientSecret: process.env.SECRET,
-
+  mode: 'remote',
+  provider: 'https://legacy-idp.example.com',
+  clientId: 'my-client',
+  clientSecret: process.env.SECRET,
+  providerConfig: {
     // Override endpoints
     authEndpoint: 'https://legacy-idp.example.com/authorize',
     tokenEndpoint: 'https://legacy-idp.example.com/token',
@@ -125,8 +118,8 @@ auth: {
 For IdPs without a JWKS endpoint:
 
 ```typescript
-remote: {
-  provider: 'https://legacy-idp.example.com',
+provider: 'https://legacy-idp.example.com',
+providerConfig: {
   jwks: {
     keys: [
       {
@@ -171,11 +164,10 @@ When upstream tokens expire, the proxy handles refresh:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'remote',
-  remote: {
-    provider: 'https://legacy-idp.example.com',
-    clientId: 'my-client',
+  mode: 'remote',
+  provider: 'https://legacy-idp.example.com',
+  clientId: 'my-client',
+  providerConfig: {
     refreshUpstream: true, // Auto-refresh upstream tokens
   },
   refresh: {
@@ -193,12 +185,9 @@ Add claims from upstream user info to FrontMCP tokens:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'remote',
-  remote: {
-    provider: 'https://legacy-idp.example.com',
-    clientId: 'my-client',
-  },
+  mode: 'remote',
+  provider: 'https://legacy-idp.example.com',
+  clientId: 'my-client',
   tokenClaims: async (upstreamUser) => ({
     // Map upstream claims to FrontMCP token
     department: upstreamUser.department,
@@ -218,13 +207,10 @@ Proxy multiple IdPs under one FrontMCP instance:
 @App({
   name: 'CRM',
   auth: {
-    mode: 'orchestrated',
-    type: 'remote',
-    remote: {
-      provider: 'https://crm-idp.example.com',
-      clientId: process.env.CRM_CLIENT_ID,
-      clientSecret: process.env.CRM_CLIENT_SECRET,
-    },
+    mode: 'remote',
+    provider: 'https://crm-idp.example.com',
+    clientId: process.env.CRM_CLIENT_ID,
+    clientSecret: process.env.CRM_CLIENT_SECRET,
   },
 })
 export class CrmApp {}
@@ -232,13 +218,10 @@ export class CrmApp {}
 @App({
   name: 'ERP',
   auth: {
-    mode: 'orchestrated',
-    type: 'remote',
-    remote: {
-      provider: 'https://erp-idp.example.com',
-      clientId: process.env.ERP_CLIENT_ID,
-      clientSecret: process.env.ERP_CLIENT_SECRET,
-    },
+    mode: 'remote',
+    provider: 'https://erp-idp.example.com',
+    clientId: process.env.ERP_CLIENT_ID,
+    clientSecret: process.env.ERP_CLIENT_SECRET,
   },
 })
 export class ErpApp {}
@@ -247,10 +230,8 @@ export class ErpApp {}
   info: { name: 'EnterpriseSuite', version: '1.0.0' },
   apps: [CrmApp, ErpApp],
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
-    sessionMode: 'stateful',
   },
 })
 export class Server {}

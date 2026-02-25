@@ -1,12 +1,10 @@
 import { Tool, ToolContext, InvalidInputError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    value: z.string().describe('Value to validate'),
-    minLength: z.number().int().min(1).default(5).describe('Minimum length required'),
-  })
-  .strict();
+const inputSchema = {
+  value: z.string().describe('Value to validate'),
+  minLength: z.number().int().min(1).default(5).describe('Minimum length required'),
+};
 
 const outputSchema = z
   .object({
@@ -15,7 +13,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

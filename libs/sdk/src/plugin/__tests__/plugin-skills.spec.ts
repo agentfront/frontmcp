@@ -422,7 +422,7 @@ describe('Plugin Skills', () => {
 
   describe('mixed components', () => {
     it('should handle plugin with both tools and skills', async () => {
-      const inputSchema = z.object({ name: z.string() });
+      const inputSchema = { name: z.string() };
 
       @Tool({
         name: 'plugin-tool',

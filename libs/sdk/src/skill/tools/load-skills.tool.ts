@@ -78,7 +78,7 @@ const outputSchema = {
   nextSteps: z.string().describe('Guidance on what to do next with the loaded skills'),
 };
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<z.ZodObject<typeof outputSchema>>;
 
 /**
@@ -237,8 +237,3 @@ export class LoadSkillsTool extends ToolContext<typeof inputSchema, typeof outpu
     };
   }
 }
-
-/**
- * @deprecated Use LoadSkillsTool instead
- */
-export { LoadSkillsTool as LoadSkillTool };

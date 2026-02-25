@@ -18,19 +18,14 @@ import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
 import type { Scope } from '../scope';
 
-const inputSchema = z
-  .object({
-    elicitId: z.string().describe('The elicitation ID from the pending request'),
-    action: z.enum(['accept', 'cancel', 'decline']).describe('User action: accept (submit), cancel, or decline'),
-    content: z.unknown().optional().describe('User response content (required for accept action)'),
-  })
-  .refine((data) => data.action !== 'accept' || (data.content !== undefined && data.content !== null), {
-    message: 'content is required when action is "accept"',
-    path: ['content'],
-  });
+const inputSchema = {
+  elicitId: z.string().describe('The elicitation ID from the pending request'),
+  action: z.enum(['accept', 'cancel', 'decline']).describe('User action: accept (submit), cancel, or decline'),
+  content: z.unknown().optional().describe('User response content (required for accept action)'),
+};
 
 /** Input type for sendElicitationResult tool */
-type SendElicitationResultInput = z.infer<typeof inputSchema>;
+type SendElicitationResultInput = z.input<z.ZodObject<typeof inputSchema>>;
 
 /**
  * System tool for submitting elicitation results.

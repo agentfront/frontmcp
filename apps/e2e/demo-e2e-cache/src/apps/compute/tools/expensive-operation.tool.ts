@@ -2,12 +2,10 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { executionTracker } from '../data/execution-tracker';
 
-const inputSchema = z
-  .object({
-    operationId: z.string().describe('Unique operation identifier'),
-    complexity: z.number().optional().default(1).describe('Complexity factor (1-10)'),
-  })
-  .strict();
+const inputSchema = {
+  operationId: z.string().describe('Unique operation identifier'),
+  complexity: z.number().optional().default(1).describe('Complexity factor (1-10)'),
+};
 
 const outputSchema = z.object({
   operationId: z.string(),
@@ -16,7 +14,7 @@ const outputSchema = z.object({
   computedAt: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

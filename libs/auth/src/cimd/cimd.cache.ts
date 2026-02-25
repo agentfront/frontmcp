@@ -399,12 +399,6 @@ export class InMemoryCimdCache implements CimdCacheBackend {
 }
 
 /**
- * Backwards compatibility alias for CimdCache.
- * @deprecated Use InMemoryCimdCache directly or createCimdCache factory.
- */
-export const CimdCache = InMemoryCimdCache;
-
-/**
  * Factory function to create a CIMD cache backend.
  *
  * @param config - Cache configuration

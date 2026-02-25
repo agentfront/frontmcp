@@ -687,7 +687,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     outputSchemaDescriptionMode: 'summary', // or 'jsonSchema', 'compact', 'none'
   },
 });
@@ -709,7 +709,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     outputSchemaDescriptionMode: 'summary',
     formatOutputSchema: (schema, mode) => {
       if (mode === 'summary') {
@@ -733,7 +733,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       global: {
         // Remove schema from tool definition
@@ -754,7 +754,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       global: {
         transformSchema: (schema) => {
@@ -778,7 +778,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       perTool: {
         listUsers: {
@@ -803,7 +803,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       generator: (tool) => {
         // Add method info to all tool descriptions
@@ -827,7 +827,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     postToolTransforms: {
       perTool: {
         // Extract users array from paginated response
@@ -851,7 +851,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     postToolTransforms: {
       global: {
         transform: (data, ctx) => ({
@@ -875,7 +875,7 @@ const adapter = new OpenapiAdapter({
   name: 'my-api',
   baseUrl: 'https://api.example.com',
   spec: mySpec,
-  outputTransforms: {
+  dataTransforms: {
     postToolTransforms: {
       generator: (tool) => {
         // Only transform successful GET requests
@@ -922,7 +922,7 @@ Transforms are applied in this order:
 1. **descriptionMode** - Basic description generation from OpenAPI summary/description
 2. **toolTransforms** - Tool metadata modifications (annotations, tags, etc.)
 3. **inputTransforms** - Input schema modifications (hide/inject fields)
-4. **outputTransforms** - Output schema and response modifications
+4. **dataTransforms** - Output schema and response modifications
    - `outputSchemaDescriptionMode` (built-in) runs first
    - `preToolTransforms` run second (can override built-in)
    - `postToolTransforms` are stored and run at execution time

@@ -1,9 +1,9 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   name: z.string().default('World'),
-});
+};
 
 const outputSchema = z.object({
   message: z.string(),

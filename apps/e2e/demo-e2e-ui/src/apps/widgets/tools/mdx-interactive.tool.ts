@@ -2,13 +2,11 @@ import React from 'react';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    topic: z.string().describe('Interactive topic'),
-    points: z.array(z.string()).describe('Key points to display'),
-    codeExample: z.string().optional().describe('Optional code example'),
-  })
-  .strict();
+const inputSchema = {
+  topic: z.string().describe('Interactive topic'),
+  points: z.array(z.string()).describe('Key points to display'),
+  codeExample: z.string().optional().describe('Optional code example'),
+};
 
 const outputSchema = z
   .object({
@@ -19,7 +17,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 // ═══════════════════════════════════════════════════════════════════

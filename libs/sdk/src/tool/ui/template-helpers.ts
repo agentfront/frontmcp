@@ -81,20 +81,6 @@ export function jsonEmbed(data: unknown): string {
 }
 
 /**
- * Create a TemplateHelpers object with all helper functions.
- * @deprecated Use createTemplateHelpers from @frontmcp/uipack/runtime instead
- */
-export function createTemplateHelpersLocal(): TemplateHelpers {
-  return {
-    escapeHtml,
-    formatDate,
-    formatCurrency,
-    uniqueId,
-    jsonEmbed,
-  };
-}
-
-/**
  * Reset the ID counter (useful for testing).
  * @internal
  */

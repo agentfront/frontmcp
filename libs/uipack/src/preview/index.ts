@@ -18,7 +18,7 @@ export type {
   PreviewHandler,
   OpenAIMetaFields,
   ClaudeMetaFields,
-  FrontMCPMetaFields,
+  GenericMetaFields,
   UIMetaFields,
 } from './types';
 

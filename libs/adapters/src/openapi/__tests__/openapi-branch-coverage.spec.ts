@@ -632,7 +632,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           global: {
             transform: globalTransform,
@@ -680,7 +680,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           global: {
             transform: globalTransform,
@@ -725,7 +725,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           perTool: {
             get_users: {
@@ -768,7 +768,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           generator: () => ({
             transform: generatedTransform,

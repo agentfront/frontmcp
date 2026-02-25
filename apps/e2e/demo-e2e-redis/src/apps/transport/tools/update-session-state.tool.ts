@@ -2,12 +2,10 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getSessionStore } from '../../sessions/data/session.store';
 
-const inputSchema = z
-  .object({
-    key: z.string().describe('State key to update'),
-    value: z.string().describe('State value'),
-  })
-  .strict();
+const inputSchema = {
+  key: z.string().describe('State key to update'),
+  value: z.string().describe('State value'),
+};
 
 const outputSchema = z
   .object({
@@ -25,7 +23,7 @@ const outputSchema = z
   outputSchema,
 })
 export default class UpdateSessionStateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 

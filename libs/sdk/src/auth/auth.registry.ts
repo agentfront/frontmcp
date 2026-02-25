@@ -195,11 +195,10 @@ export class AuthRegistry
       throw new AuthConfigurationError(`Invalid auth configuration: ${validationErrors[0]}`, {
         errors: validationErrors,
         suggestion:
-          `1. Change your parent auth mode from 'transparent' to 'orchestrated'\n` +
+          `1. Change your parent auth mode from 'transparent' to 'local' or 'remote'\n` +
           `2. Example:\n` +
           `   auth: {\n` +
-          `     mode: 'orchestrated',\n` +
-          `     type: 'local', // or 'remote' with your provider config\n` +
+          `     mode: 'local', // or 'remote' with your provider config\n` +
           `   }`,
       });
     }

@@ -6,7 +6,7 @@
  * Platform detection happens at runtime via the FrontMCP Bridge.
  */
 
-import { buildToolUI, buildStaticWidget, type BuildResult } from '../index';
+import { buildToolUI, buildStaticWidget } from '../index';
 
 describe('buildToolUI - Universal Build', () => {
   const simpleTemplate = () => '<div id="weather">Sunny, 72°F</div>';
@@ -234,42 +234,6 @@ describe('buildToolUI - Universal Build', () => {
     });
   });
 
-  describe('legacy compatibility', () => {
-    it('should support sampleInput/sampleOutput aliases', async () => {
-      const result = await buildToolUI({
-        template: { template: simpleTemplate },
-        toolName: 'test',
-        sampleInput: { city: 'Paris' },
-        sampleOutput: { temp: 20 },
-      });
-
-      expect(result.html).toContain('Paris');
-      expect(result.html).toContain('20');
-    });
-
-    it('should support injectAdapters alias for includeBridge', async () => {
-      const result = await buildToolUI({
-        template: { template: simpleTemplate },
-        toolName: 'test',
-        injectAdapters: false,
-      });
-
-      expect(result.html).not.toContain('FrontMcpBridge');
-    });
-
-    it('should support legacy platform option (ignored)', async () => {
-      // Platform is now auto-detected at runtime
-      // This option is ignored but should not cause errors
-      const result = await buildToolUI({
-        template: { template: simpleTemplate },
-        toolName: 'test',
-        platform: 'chatgpt', // Legacy - ignored
-      });
-
-      expect(result.html).toContain('FrontMcpBridge');
-    });
-  });
-
   describe('minification', () => {
     it('should minify when config.minify is true', async () => {
       const unminified = await buildToolUI({
@@ -323,46 +287,3 @@ describe('buildStaticWidget', () => {
   });
 });
 
-describe('buildToolUIMulti (legacy)', () => {
-  const simpleTemplate = () => '<div>Test</div>';
-
-  it('should build for multiple platforms (returns same HTML)', async () => {
-    const { buildToolUIMulti } = await import('../index');
-
-    const result = await buildToolUIMulti({
-      template: { template: simpleTemplate },
-      toolName: 'test',
-      platforms: ['chatgpt', 'claude', 'universal'],
-      sampleOutput: { value: 1 },
-    });
-
-    // All platforms get the same universal HTML
-    expect(result.bundles['chatgpt']).toBeDefined();
-    expect(result.bundles['claude']).toBeDefined();
-    expect(result.bundles['universal']).toBeDefined();
-
-    // Same HTML content for all
-    expect(result.bundles['chatgpt'].html).toBe(result.bundles['claude'].html);
-    expect(result.bundles['claude'].html).toBe(result.bundles['universal'].html);
-
-    // But legacy mimeType field differs for compatibility
-    expect((result.bundles['chatgpt'] as BuildResult & { mimeType: string }).mimeType).toBe(
-      'text/html+skybridge'
-    );
-    expect((result.bundles['claude'] as BuildResult & { mimeType: string }).mimeType).toBe(
-      'text/html+mcp'
-    );
-  });
-
-  it('should return total build time', async () => {
-    const { buildToolUIMulti } = await import('../index');
-
-    const result = await buildToolUIMulti({
-      template: { template: simpleTemplate },
-      toolName: 'test',
-      sampleOutput: { value: 1 },
-    });
-
-    expect(result.totalTime).toBeGreaterThanOrEqual(0);
-  });
-});

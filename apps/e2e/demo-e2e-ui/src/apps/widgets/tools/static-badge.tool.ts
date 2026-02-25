@@ -8,13 +8,11 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    label: z.string().describe('Badge label text'),
-    value: z.string().describe('Badge value text'),
-    color: z.enum(['green', 'blue', 'red', 'yellow', 'gray']).optional().describe('Badge color'),
-  })
-  .strict();
+const inputSchema = {
+  label: z.string().describe('Badge label text'),
+  value: z.string().describe('Badge value text'),
+  color: z.enum(['green', 'blue', 'red', 'yellow', 'gray']).optional().describe('Badge color'),
+};
 
 const outputSchema = z
   .object({
@@ -25,7 +23,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

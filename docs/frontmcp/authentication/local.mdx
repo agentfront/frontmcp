@@ -18,8 +18,7 @@ FrontMCP includes a built-in OAuth 2.1 authorization server for self-contained a
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
   },
 })
@@ -30,9 +29,8 @@ export class Server {}
 
 | Option               | Type                        | Default              | Description                      |
 | -------------------- | --------------------------- | -------------------- | -------------------------------- |
-| `consent`            | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration         |
-| `sessionMode`        | `'stateful' \| 'stateless'` | `'stateful'`         | Session management strategy      |
-| `tokenStorage`       | `object`                    | `{ type: 'memory' }` | Token storage backend            |
+| `consent`            | `ConsentConfig`                    | `{ enabled: false }` | Consent UI configuration         |
+| `tokenStorage`       | `'memory' \| { redis: RedisConfig }` | `'memory'`         | Token storage backend            |
 | `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated access     |
 | `anonymousScopes`    | `string[]`                  | `['anonymous']`      | Scopes for anonymous sessions    |
 | `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization config |
@@ -135,8 +133,7 @@ By default, FrontMCP generates RS256 keys at startup:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   // Keys auto-generated
 }
 ```
@@ -151,8 +148,7 @@ Provide keys for stable token validation:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   local: {
     signKey: {
       kty: 'RSA',
@@ -173,8 +169,7 @@ Use ES256 for smaller tokens:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   local: {
     signKey: {
       kty: 'EC',
@@ -236,8 +231,7 @@ Configure local auth per app with `splitByApp: true`:
 @App({
   name: 'Billing',
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
   },
 })
@@ -246,8 +240,7 @@ export class BillingApp {}
 @App({
   name: 'Analytics',
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
   },
 })
 export class AnalyticsApp {}
@@ -268,9 +261,8 @@ export class Server {}
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
-  tokenStorage: { type: 'memory' },
+  mode: 'local',
+  tokenStorage: 'memory',
 }
 ```
 
@@ -278,11 +270,9 @@ auth: {
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   tokenStorage: {
-    type: 'redis',
-    config: {
+    redis: {
       host: process.env.REDIS_HOST!,
       port: parseInt(process.env.REDIS_PORT || '6379'),
       password: process.env.REDIS_PASSWORD,
@@ -300,8 +290,7 @@ Enable and customize the consent UI:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   consent: {
     enabled: true,
     groupByApp: true,           // Group tools by app
@@ -326,13 +315,10 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
-    sessionMode: 'stateful',
     tokenStorage: {
-      type: 'redis',
-      config: {
+      redis: {
         host: process.env.REDIS_HOST!,
         port: parseInt(process.env.REDIS_PORT || '6379'),
         password: process.env.REDIS_PASSWORD,

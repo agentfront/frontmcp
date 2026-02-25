@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getVault } from '../data/vault.store';
 
-const inputSchema = z
-  .object({
-    entryId: z.string().describe('Vault entry ID to retrieve'),
-  })
-  .strict();
+const inputSchema = {
+  entryId: z.string().describe('Vault entry ID to retrieve'),
+};
 
 const outputSchema = z
   .object({
@@ -38,7 +36,7 @@ const outputSchema = z
   outputSchema,
 })
 export default class GetVaultEntryTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 

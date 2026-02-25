@@ -1,17 +1,17 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   a: z.number().describe('First number to add'),
   b: z.number().describe('Second number to add'),
-});
+};
 
 const outputSchema = z.object({
   result: z.number(),
   operation: z.string(),
 });
 
-type AddInput = z.infer<typeof inputSchema>;
+type AddInput = z.input<z.ZodObject<typeof inputSchema>>;
 type AddOutput = z.infer<typeof outputSchema>;
 
 @Tool({

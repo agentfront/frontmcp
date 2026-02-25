@@ -54,10 +54,8 @@ Enable progressive auth with orchestrated mode:
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true }, // Enable consent UI
-    sessionMode: 'stateful', // Required for token vault
   },
   apps: [SlackApp, GitHubApp, CrmApp],
 })
@@ -212,10 +210,8 @@ The built-in consent UI lets users choose which apps to authorize:
   name: 'Slack',
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: 'https://slack.com/oauth',
-      scopes: ['chat:write', 'channels:read'],
-    },
+    provider: 'https://slack.com/oauth',
+    scopes: ['chat:write', 'channels:read'],
   },
 })
 export class SlackApp {
@@ -229,10 +225,8 @@ export class SlackApp {
   name: 'GitHub',
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: 'https://github.com/login/oauth',
-      scopes: ['repo', 'user'],
-    },
+    provider: 'https://github.com/login/oauth',
+    scopes: ['repo', 'user'],
   },
 })
 export class GitHubApp {
@@ -249,13 +243,10 @@ export class GitHubApp {
 @FrontMcp({
   info: { name: 'AgentSuite', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
-    sessionMode: 'stateful',
     tokenStorage: {
-      type: 'redis',
-      config: {
+      redis: {
         host: process.env.REDIS_HOST!,
         port: parseInt(process.env.REDIS_PORT || '6379'),
       },
@@ -338,8 +329,7 @@ When using OpenAPI adapters, tools are automatically grouped by auth provider:
 @FrontMcp({
   info: { name: 'APIGateway', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
   },
   adapters: [
@@ -348,10 +338,8 @@ When using OpenAPI adapters, tools are automatically grouped by auth provider:
       spec: 'https://api.github.com/openapi.json',
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://github.com',
-          clientId: 'github-client-id',
-        },
+        provider: 'https://github.com',
+        clientId: 'github-client-id',
       },
     },
     {
@@ -359,10 +347,8 @@ When using OpenAPI adapters, tools are automatically grouped by auth provider:
       spec: 'https://api.stripe.com/openapi.json',
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://connect.stripe.com',
-          clientId: 'stripe-client-id',
-        },
+        provider: 'https://connect.stripe.com',
+        clientId: 'stripe-client-id',
       },
     },
   ],
@@ -388,7 +374,7 @@ Tools from each adapter are grouped by their auth configuration and appear in th
 
 <AccordionGroup>
   <Accordion title="Token vault not updating">
-    - Ensure `sessionMode: 'stateful'` is configured
+    - Ensure stateful token storage is configured (Redis for multi-instance)
     - Check Redis connectivity if using Redis storage
     - Verify the session ID matches across requests
   </Accordion>

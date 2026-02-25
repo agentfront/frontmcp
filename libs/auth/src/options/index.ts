@@ -7,10 +7,9 @@
 export type {
   PublicAccessConfig,
   LocalSigningConfig,
+  ProviderConfig,
   RemoteProviderConfig,
   TokenStorageConfig,
-  TokenStorageMemory,
-  TokenStorageRedis,
   TokenRefreshConfig,
   SkippedAppBehavior,
   ConsentConfig,
@@ -18,11 +17,15 @@ export type {
   IncrementalAuthConfig,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
+  LocalAuthOptionsInterface,
+  RemoteAuthOptionsInterface,
+  LocalOrRemoteAuthOptionsInterface,
+  AuthOptionsInterface,
+  AuthMode,
+  // Deprecated compat aliases
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,
   OrchestratedAuthOptionsInterface,
-  AuthOptionsInterface,
-  AuthMode,
   OrchestratedType,
 } from './interfaces';
 
@@ -32,7 +35,9 @@ export type {
 export {
   publicAccessConfigSchema,
   localSigningConfigSchema,
+  providerConfigSchema,
   remoteProviderConfigSchema,
+  flatRemoteProviderFields,
   tokenStorageConfigSchema,
   tokenRefreshConfigSchema,
   skippedAppBehaviorSchema,
@@ -46,6 +51,8 @@ export type {
   PublicAccessConfigInput,
   LocalSigningConfig as LocalSigningConfigZod,
   LocalSigningConfigInput,
+  ProviderConfig as ProviderConfigZod,
+  ProviderConfigInput,
   RemoteProviderConfig as RemoteProviderConfigZod,
   RemoteProviderConfigInput,
   TokenStorageConfig as TokenStorageConfigZod,
@@ -75,21 +82,29 @@ export { transparentAuthOptionsSchema } from './transparent.schema';
 export type { TransparentAuthOptions, TransparentAuthOptionsInput } from './transparent.schema';
 
 // ============================================
-// ORCHESTRATED MODE SCHEMAS
+// LOCAL / REMOTE MODE SCHEMAS
 // ============================================
 export {
+  localAuthSchema,
+  remoteAuthSchema,
+  // Deprecated compat aliases
   orchestratedLocalSchema,
   orchestratedRemoteSchema,
-  orchestratedAuthOptionsSchema,
 } from './orchestrated.schema';
 export type {
+  LocalAuthOptions,
+  LocalAuthOptionsInput,
+  RemoteAuthOptions,
+  RemoteAuthOptionsInput,
+  LocalOrRemoteAuthOptions,
+  LocalOrRemoteAuthOptionsInput,
+  // Deprecated compat aliases
   OrchestratedLocalOptions,
   OrchestratedLocalOptionsInput,
   OrchestratedRemoteOptions,
   OrchestratedRemoteOptionsInput,
   OrchestratedAuthOptions,
   OrchestratedAuthOptionsInput,
-  OrchestratedType as OrchestratedTypeZod,
 } from './orchestrated.schema';
 
 // ============================================
@@ -111,6 +126,8 @@ export {
   parseAuthOptions,
   isPublicMode,
   isTransparentMode,
+  isLocalMode,
+  isRemoteMode,
   isOrchestratedMode,
   isOrchestratedLocal,
   isOrchestratedRemote,

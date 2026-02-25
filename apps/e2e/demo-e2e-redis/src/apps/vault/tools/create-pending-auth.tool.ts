@@ -2,16 +2,14 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getVault } from '../data/vault.store';
 
-const inputSchema = z
-  .object({
-    entryId: z.string().describe('Vault entry ID'),
-    appId: z.string().describe('Application ID requiring auth'),
-    toolId: z.string().optional().describe('Tool ID that triggered the auth'),
-    authUrl: z.string().describe('URL for the user to complete auth'),
-    requiredScopes: z.array(z.string()).optional().describe('Required scopes'),
-    ttlMs: z.number().optional().describe('Time to live in milliseconds'),
-  })
-  .strict();
+const inputSchema = {
+  entryId: z.string().describe('Vault entry ID'),
+  appId: z.string().describe('Application ID requiring auth'),
+  toolId: z.string().optional().describe('Tool ID that triggered the auth'),
+  authUrl: z.string().describe('URL for the user to complete auth'),
+  requiredScopes: z.array(z.string()).optional().describe('Required scopes'),
+  ttlMs: z.number().optional().describe('Time to live in milliseconds'),
+};
 
 const outputSchema = z
   .object({
@@ -29,7 +27,7 @@ const outputSchema = z
   outputSchema,
 })
 export default class CreatePendingAuthTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 

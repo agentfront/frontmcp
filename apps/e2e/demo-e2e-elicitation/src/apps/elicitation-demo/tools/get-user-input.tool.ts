@@ -1,11 +1,9 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    prompt: z.string().describe('Prompt to show user'),
-  })
-  .strict();
+const inputSchema = {
+  prompt: z.string().describe('Prompt to show user'),
+};
 
 const outputSchema = z.object({
   message: z.string(),
@@ -13,7 +11,7 @@ const outputSchema = z.object({
   received: z.boolean(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

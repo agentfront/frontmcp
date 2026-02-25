@@ -43,7 +43,7 @@ export {
   checkSsrfProtection,
   hasOnlyLocalhostRedirectUris,
   // Cache
-  CimdCache,
+  InMemoryCimdCache,
   extractCacheHeaders,
   parseCacheHeaders,
   type CimdCacheEntry,

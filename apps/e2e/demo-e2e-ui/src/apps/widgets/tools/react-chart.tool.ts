@@ -10,7 +10,7 @@ import { z } from 'zod';
 import ChartCard from './chart-ui';
 
 // Define input/output schemas
-const inputSchema = z.object({
+const inputSchema = {
   data: z
     .array(
       z.object({
@@ -20,7 +20,7 @@ const inputSchema = z.object({
     )
     .describe('Chart data points'),
   title: z.string().optional().describe('Chart title'),
-});
+};
 
 const outputSchema = z.object({
   data: z.array(
@@ -33,7 +33,7 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas
-type ChartInput = z.infer<typeof inputSchema>;
+type ChartInput = z.input<z.ZodObject<typeof inputSchema>>;
 type ChartOutput = z.infer<typeof outputSchema>;
 
 @Tool({

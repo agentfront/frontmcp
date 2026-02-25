@@ -7,10 +7,9 @@
 export type {
   PublicAccessConfig,
   LocalSigningConfig,
+  ProviderConfig,
   RemoteProviderConfig,
   TokenStorageConfig,
-  TokenStorageMemory,
-  TokenStorageRedis,
   TokenRefreshConfig,
   SkippedAppBehavior,
   ConsentConfig,
@@ -18,11 +17,15 @@ export type {
   IncrementalAuthConfig,
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
+  LocalAuthOptionsInterface,
+  RemoteAuthOptionsInterface,
+  LocalOrRemoteAuthOptionsInterface,
+  AuthOptionsInterface,
+  AuthMode,
+  // Deprecated compat aliases
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,
   OrchestratedAuthOptionsInterface,
-  AuthOptionsInterface,
-  AuthMode,
   OrchestratedType,
 } from '@frontmcp/auth';
 
@@ -32,7 +35,9 @@ export type {
 export {
   publicAccessConfigSchema,
   localSigningConfigSchema,
+  providerConfigSchema,
   remoteProviderConfigSchema,
+  flatRemoteProviderFields,
   tokenStorageConfigSchema,
   tokenRefreshConfigSchema,
   skippedAppBehaviorSchema,
@@ -46,6 +51,8 @@ export type {
   PublicAccessConfigInput,
   LocalSigningConfigZod,
   LocalSigningConfigInput,
+  ProviderConfigZod,
+  ProviderConfigInput,
   RemoteProviderConfigZod,
   RemoteProviderConfigInput,
   TokenStorageConfigZod,
@@ -75,17 +82,22 @@ export { transparentAuthOptionsSchema } from '@frontmcp/auth';
 export type { TransparentAuthOptions, TransparentAuthOptionsInput } from '@frontmcp/auth';
 
 // ============================================
-// ORCHESTRATED MODE SCHEMAS
+// LOCAL / REMOTE MODE SCHEMAS
 // ============================================
-export { orchestratedLocalSchema, orchestratedRemoteSchema, orchestratedAuthOptionsSchema } from '@frontmcp/auth';
+export { localAuthSchema, remoteAuthSchema, orchestratedLocalSchema, orchestratedRemoteSchema } from '@frontmcp/auth';
 export type {
+  LocalAuthOptions,
+  LocalAuthOptionsInput,
+  RemoteAuthOptions,
+  RemoteAuthOptionsInput,
+  LocalOrRemoteAuthOptions,
+  LocalOrRemoteAuthOptionsInput,
   OrchestratedLocalOptions,
   OrchestratedLocalOptionsInput,
   OrchestratedRemoteOptions,
   OrchestratedRemoteOptionsInput,
   OrchestratedAuthOptions,
   OrchestratedAuthOptionsInput,
-  OrchestratedTypeZod,
 } from '@frontmcp/auth';
 
 // ============================================
@@ -107,6 +119,8 @@ export {
   parseAuthOptions,
   isPublicMode,
   isTransparentMode,
+  isLocalMode,
+  isRemoteMode,
   isOrchestratedMode,
   isOrchestratedLocal,
   isOrchestratedRemote,

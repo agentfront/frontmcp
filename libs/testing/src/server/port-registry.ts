@@ -298,19 +298,3 @@ export function getReservedPorts(): Array<{ port: number; project: string; reser
     reservedAt: r.reservedAt,
   }));
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// LEGACY COMPATIBILITY
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Find an available port (legacy compatibility function)
- *
- * @deprecated Use reservePort() for better port management
- */
-export async function findAvailablePort(): Promise<number> {
-  const { port, release } = await reservePort('default');
-  // Release immediately for legacy behavior (not ideal but maintains compatibility)
-  await release();
-  return port;
-}

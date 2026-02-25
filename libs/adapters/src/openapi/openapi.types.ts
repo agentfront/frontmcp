@@ -598,12 +598,6 @@ export interface DataTransformOptions {
   };
 }
 
-/**
- * @deprecated Use `DataTransformOptions` instead.
- * Kept for backward compatibility.
- */
-export type OutputTransformOptions = DataTransformOptions;
-
 // ============================================================================
 // Extended Metadata Types (internal)
 // ============================================================================
@@ -943,12 +937,6 @@ interface BaseOptions {
    * ```
    */
   dataTransforms?: DataTransformOptions;
-
-  /**
-   * @deprecated Use `dataTransforms` instead.
-   * Kept for backward compatibility.
-   */
-  outputTransforms?: OutputTransformOptions;
 
   /**
    * Logger instance for adapter diagnostics.

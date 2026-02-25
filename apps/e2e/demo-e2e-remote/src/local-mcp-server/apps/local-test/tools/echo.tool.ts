@@ -1,16 +1,16 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   message: z.string().describe('The message to echo back'),
-});
+};
 
 const outputSchema = z.object({
   echo: z.string(),
   receivedAt: z.string(),
 });
 
-type EchoInput = z.infer<typeof inputSchema>;
+type EchoInput = z.input<z.ZodObject<typeof inputSchema>>;
 type EchoOutput = z.infer<typeof outputSchema>;
 
 @Tool({

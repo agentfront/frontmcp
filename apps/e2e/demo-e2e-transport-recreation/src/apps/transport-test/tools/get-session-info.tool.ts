@@ -1,7 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({}).strict();
+const inputSchema = {};
 
 const outputSchema = z.object({
   sessionId: z.string(),

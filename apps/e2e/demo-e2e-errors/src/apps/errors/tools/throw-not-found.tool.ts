@@ -1,11 +1,9 @@
 import { Tool, ToolContext, ResourceNotFoundError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    resourceId: z.string().describe('Resource ID to look up'),
-  })
-  .strict();
+const inputSchema = {
+  resourceId: z.string().describe('Resource ID to look up'),
+};
 
 const outputSchema = z
   .object({
@@ -14,7 +12,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 // Simulated database of existing resources

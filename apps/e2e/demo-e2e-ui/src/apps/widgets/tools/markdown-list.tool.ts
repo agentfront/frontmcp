@@ -1,20 +1,18 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    title: z.string().describe('List title'),
-    items: z
-      .array(
-        z.object({
-          text: z.string(),
-          completed: z.boolean().optional(),
-        }),
-      )
-      .describe('List items'),
-    ordered: z.boolean().optional().describe('Use ordered list'),
-  })
-  .strict();
+const inputSchema = {
+  title: z.string().describe('List title'),
+  items: z
+    .array(
+      z.object({
+        text: z.string(),
+        completed: z.boolean().optional(),
+      }),
+    )
+    .describe('List items'),
+  ordered: z.boolean().optional().describe('Use ordered list'),
+};
 
 const outputSchema = z.object({
   uiType: z.literal('markdown'),
@@ -24,7 +22,7 @@ const outputSchema = z.object({
   markdown: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

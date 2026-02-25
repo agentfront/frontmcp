@@ -1,11 +1,9 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    key: z.string().describe('Environment variable key to check'),
-  })
-  .strict();
+const inputSchema = {
+  key: z.string().describe('Environment variable key to check'),
+};
 
 const outputSchema = z
   .object({
@@ -17,7 +15,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

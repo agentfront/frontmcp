@@ -51,11 +51,17 @@ export abstract class ToolEntry<
   abstract get providers(): ProviderRegistry;
 
   inputSchema: InSchema;
-  // This is whatever JSON-schema-ish thing you store for input; keeping type loose
+  /**
+   * Raw JSON Schema for input, set internally by OpenAPI adapter or remote tools.
+   * Not part of the user-facing decorator API (removed in v1.0.0).
+   */
   rawInputSchema: unknown;
   // This is your *metadata* outputSchema (literals / zod / raw shapes / arrays)
   outputSchema?: OutSchema;
-  // Raw JSON Schema for output (for tool/list to expose)
+  /**
+   * Raw JSON Schema for output, set internally by OpenAPI adapter or remote tools.
+   * Not part of the user-facing decorator API (removed in v1.0.0).
+   */
   rawOutputSchema?: unknown;
 
   /**

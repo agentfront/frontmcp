@@ -2,16 +2,14 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import '@frontmcp/plugin-remember'; // Import for this.remember types
 
-const inputSchema = z
-  .object({
-    key: z.string().describe('Key to recall'),
-    scope: z
-      .enum(['session', 'user', 'tool', 'global'])
-      .optional()
-      .default('session')
-      .describe('Scope to look up the memory in'),
-  })
-  .strict();
+const inputSchema = {
+  key: z.string().describe('Key to recall'),
+  scope: z
+    .enum(['session', 'user', 'tool', 'global'])
+    .optional()
+    .default('session')
+    .describe('Scope to look up the memory in'),
+};
 
 const outputSchema = z.object({
   found: z.boolean(),
@@ -20,7 +18,7 @@ const outputSchema = z.object({
   scope: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

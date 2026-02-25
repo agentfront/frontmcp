@@ -109,7 +109,7 @@ Full auth flow with OAuth support:
 @FrontMcp({
   name: 'orchestrated-server',
   auth: {
-    mode: 'orchestrated',
+    mode: 'local',
     providers: ['google', 'github'],
     sessionStore: 'redis',
   },
@@ -186,7 +186,7 @@ The registry validates auth configuration:
 // Invalid configuration throws
 @FrontMcp({
   auth: {
-    mode: 'orchestrated',
+    mode: 'local',
     providers: [], // Error: No providers specified
   },
 })
@@ -223,7 +223,7 @@ Auth integrates with session management:
 ```typescript
 @FrontMcp({
   auth: {
-    mode: 'orchestrated',
+    mode: 'local',
     sessionStore: {
       provider: 'redis',
       host: 'localhost',

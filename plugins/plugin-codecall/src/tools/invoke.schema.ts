@@ -13,7 +13,7 @@ ERRORS: tool_not_found (→ re-search) | validation_error | execution_error | pe
 
 FLOW: search → describe → invoke`;
 
-export const invokeToolInputSchema = z.object({
+export const invokeToolInputSchema = {
   tool: z
     .string()
     .describe(
@@ -24,9 +24,9 @@ export const invokeToolInputSchema = z.object({
     .describe(
       "The input parameters for the tool. Structure must match the tool's input schema (check codecall:describe for schema details).",
     ),
-});
+};
 
-export type InvokeToolInput = z.infer<typeof invokeToolInputSchema>;
+export type InvokeToolInput = z.input<z.ZodObject<typeof invokeToolInputSchema>>;
 
 // Use standard MCP CallToolResult schema - returns same format as direct tool call
 export const invokeToolOutputSchema = CallToolResultSchema;

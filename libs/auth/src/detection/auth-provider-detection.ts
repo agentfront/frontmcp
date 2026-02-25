@@ -15,7 +15,7 @@ import type { AuthOptions } from '../options/schema';
 export const detectedAuthProviderSchema = z.object({
   id: z.string(),
   providerUrl: z.string().optional(),
-  mode: z.enum(['public', 'transparent', 'orchestrated']),
+  mode: z.enum(['public', 'transparent', 'local', 'remote']),
   appIds: z.array(z.string()),
   scopes: z.array(z.string()),
   isParentProvider: z.boolean(),
@@ -54,12 +54,12 @@ export function deriveProviderId(options: AuthOptions): string {
   }
 
   if (isTransparentMode(options)) {
-    return options.remote.id ?? urlToProviderId(options.remote.provider);
+    return options.providerConfig?.id ?? urlToProviderId(options.provider);
   }
 
   if (isOrchestratedMode(options)) {
     if (isOrchestratedRemote(options)) {
-      return options.remote.id ?? urlToProviderId(options.remote.provider);
+      return options.providerConfig?.id ?? urlToProviderId(options.provider);
     }
     return options.local?.issuer ?? 'local';
   }
@@ -83,7 +83,7 @@ function extractScopes(options: AuthOptions): string[] {
 
   if (isOrchestratedMode(options)) {
     if (isOrchestratedRemote(options)) {
-      return options.remote.scopes || [];
+      return options.scopes || [];
     }
   }
 
@@ -148,7 +148,7 @@ export function detectAuthProviders(
     validationErrors.push(
       `Invalid auth configuration: Parent uses transparent mode but apps have their own auth providers. ` +
         `Transparent mode passes tokens through without modification, which is incompatible with multi-provider setups. ` +
-        `Change parent auth to orchestrated mode to properly manage tokens for each provider. ` +
+        `Change parent auth to local or remote mode to properly manage tokens for each provider. ` +
         `Detected providers: ${[...providers.keys()].join(', ')}`,
     );
   }
@@ -156,7 +156,7 @@ export function detectAuthProviders(
   if (uniqueProviderCount > 1 && parentAuth && isPublicMode(parentAuth)) {
     warnings.push(
       `Parent uses public mode but apps have auth providers configured. ` +
-        `App-level auth will be used, but consider using orchestrated mode at parent for unified auth management.`,
+        `App-level auth will be used, but consider using local or remote mode at parent for unified auth management.`,
     );
   }
 
@@ -173,11 +173,11 @@ export function detectAuthProviders(
 
 function getProviderUrl(options: AuthOptions): string | undefined {
   if (isTransparentMode(options)) {
-    return options.remote.provider;
+    return options.provider;
   }
 
   if (isOrchestratedMode(options) && isOrchestratedRemote(options)) {
-    return options.remote.provider;
+    return options.provider;
   }
 
   return undefined;

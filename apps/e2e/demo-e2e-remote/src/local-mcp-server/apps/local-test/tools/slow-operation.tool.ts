@@ -1,9 +1,9 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   delayMs: z.number().min(0).max(100000).describe('Delay in milliseconds (max ~100s to fit E2E timeout)'),
-});
+};
 
 const outputSchema = z.object({
   completed: z.boolean(),
@@ -12,7 +12,7 @@ const outputSchema = z.object({
   completedAt: z.string(),
 });
 
-type SlowOperationInput = z.infer<typeof inputSchema>;
+type SlowOperationInput = z.input<z.ZodObject<typeof inputSchema>>;
 type SlowOperationOutput = z.infer<typeof outputSchema>;
 
 @Tool({

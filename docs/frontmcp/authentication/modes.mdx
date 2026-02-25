@@ -103,8 +103,8 @@ Pass-through tokens from an external identity provider. FrontMCP validates token
 ```typescript
 const auth: AuthOptionsInput = {
   mode: 'transparent',
-  remote: {
-    provider: 'https://auth.example.com',
+  provider: 'https://auth.example.com',
+  providerConfig: {
     jwksUri: 'https://auth.example.com/.well-known/jwks.json',
   },
   expectedAudience: 'https://api.myservice.com',
@@ -134,9 +134,9 @@ sequenceDiagram
 
 | Option             | Type                 | Default         | Description                          |
 | ------------------ | -------------------- | --------------- | ------------------------------------ |
-| `remote.provider`  | `string`             | Required        | Base URL of the IdP                  |
-| `remote.jwksUri`   | `string`             | Auto-discovered | Custom JWKS endpoint                 |
-| `remote.jwks`      | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `provider`                    | `string`        | Required        | Base URL of the IdP                  |
+| `providerConfig.jwksUri`      | `string`        | Auto-discovered | Custom JWKS endpoint                 |
+| `providerConfig.jwks`         | `JSONWebKeySet` | -               | Inline JWKS for offline verification |
 | `expectedAudience` | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
 | `requiredScopes`   | `string[]`           | `[]`            | Scopes that must be present          |
 | `allowAnonymous`   | `boolean`            | `false`         | Allow requests without tokens        |
@@ -148,10 +148,8 @@ sequenceDiagram
     ```typescript
     auth: {
       mode: 'transparent',
-      remote: {
-        provider: 'https://your-tenant.auth0.com',
-        // JWKS discovered automatically from /.well-known/jwks.json
-      },
+      provider: 'https://your-tenant.auth0.com',
+      // JWKS discovered automatically from /.well-known/jwks.json
       expectedAudience: 'https://api.yourservice.com',
     }
     ```
@@ -160,9 +158,7 @@ sequenceDiagram
     ```typescript
     auth: {
       mode: 'transparent',
-      remote: {
-        provider: 'https://your-org.okta.com/oauth2/default',
-      },
+      provider: 'https://your-org.okta.com/oauth2/default',
       expectedAudience: 'api://default',
     }
     ```
@@ -171,8 +167,8 @@ sequenceDiagram
     ```typescript
     auth: {
       mode: 'transparent',
-      remote: {
-        provider: 'https://login.microsoftonline.com/{tenant}/v2.0',
+      provider: 'https://login.microsoftonline.com/{tenant}/v2.0',
+      providerConfig: {
         jwksUri: 'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys',
       },
       expectedAudience: 'api://{client-id}',
@@ -212,11 +208,9 @@ Self-contained auth server with built-in user management.
 
 ```typescript
 const auth: AuthOptionsInput = {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   consent: { enabled: true },
-  sessionMode: 'stateful',
-  tokenStorage: { type: 'memory' }, // Use 'redis' in production
+  tokenStorage: 'memory', // Use 'redis' in production
 };
 ```
 
@@ -230,16 +224,12 @@ Local auth server that proxies user authentication to an upstream IdP.
 
 ```typescript
 const auth: AuthOptionsInput = {
-  mode: 'orchestrated',
-  type: 'remote',
-  remote: {
-    provider: 'https://auth.example.com',
-    clientId: 'your-client-id',
-    clientSecret: 'your-client-secret',
-    scopes: ['openid', 'profile', 'email'],
-  },
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  clientId: 'your-client-id',
+  clientSecret: 'your-client-secret',
+  scopes: ['openid', 'profile', 'email'],
   consent: { enabled: true },
-  sessionMode: 'stateful',
 };
 ```
 
@@ -278,10 +268,8 @@ sequenceDiagram
 
 | Option               | Type                        | Default              | Description                      |
 | -------------------- | --------------------------- | -------------------- | -------------------------------- |
-| `type`               | `'local' \| 'remote'`       | Required             | Self-contained or upstream proxy |
-| `consent`            | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration         |
-| `sessionMode`        | `'stateful' \| 'stateless'` | `'stateful'`         | Token storage strategy           |
-| `tokenStorage.type`  | `'memory' \| 'redis'`       | `'memory'`           | Storage backend                  |
+| `consent`            | `ConsentConfig`                    | `{ enabled: false }` | Consent UI configuration         |
+| `tokenStorage`       | `'memory' \| { redis: RedisConfig }` | `'memory'`         | Storage backend                  |
 | `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated requests   |
 | `federatedAuth`      | `FederatedAuthConfig`       | -                    | Federated auth state validation  |
 | `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization        |

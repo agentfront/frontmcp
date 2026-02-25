@@ -1,13 +1,11 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    headers: z.array(z.string()).describe('Table column headers'),
-    rows: z.array(z.array(z.string())).describe('Table row data'),
-    title: z.string().optional().describe('Optional table title'),
-  })
-  .strict();
+const inputSchema = {
+  headers: z.array(z.string()).describe('Table column headers'),
+  rows: z.array(z.array(z.string())).describe('Table row data'),
+  title: z.string().optional().describe('Optional table title'),
+};
 
 const outputSchema = z
   .object({
@@ -18,7 +16,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -19,7 +19,7 @@ import type { JobExecutionManager } from '../execution/job-execution.manager';
   },
 })
 export default class ExecuteJobTool extends ToolContext {
-  async execute(input: { name: string; input?: Record<string, unknown>; background: boolean }) {
+  async execute(input: { name: string; input?: Record<string, unknown>; background?: boolean }) {
     const scope = this.scope as unknown as { jobs?: JobRegistryInterface; _jobExecutionManager?: JobExecutionManager };
     const executionManager = scope._jobExecutionManager;
     const jobRegistry = scope.jobs;

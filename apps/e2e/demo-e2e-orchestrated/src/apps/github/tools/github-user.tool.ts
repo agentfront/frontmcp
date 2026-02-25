@@ -7,7 +7,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({});
+const inputSchema = {};
 
 const outputSchema = z.object({
   success: z.boolean(),
@@ -32,7 +32,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export class GitHubUserTool extends ToolContext {
-  async execute(_input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     // For E2E testing, check if the auth info contains federated provider claims
     // In a full implementation, this would use orchestration.tryGetToken('github')
     const authInfo = this.getAuthInfo();

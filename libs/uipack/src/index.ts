@@ -68,14 +68,10 @@ export {
 // Build-Time API (SDK-independent)
 // ============================================
 export {
-  type BuildTargetPlatform,
   type BuildOptions,
   type BuildResult,
-  type MultiBuildOptions,
-  type MultiBuildResult,
   type StaticWidgetOptions,
   buildToolUI,
-  buildToolUIMulti,
   buildStaticWidget,
   // Hybrid mode data injection
   HYBRID_DATA_PLACEHOLDER,
@@ -191,7 +187,7 @@ export {
   type PreviewHandler,
   type OpenAIMetaFields,
   type ClaudeMetaFields,
-  type FrontMCPMetaFields,
+  type GenericMetaFields,
   type UIMetaFields,
   // Preview Handlers
   OpenAIPreview,

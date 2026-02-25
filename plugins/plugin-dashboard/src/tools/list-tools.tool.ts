@@ -6,13 +6,13 @@ import { safeRegex } from '../shared/safe-regex';
 /**
  * Input schema for the list-tools tool.
  */
-export const listToolsInputSchema = z.object({
+export const listToolsInputSchema = {
   filter: z.string().optional().describe('Filter tools by name pattern (regex supported)'),
   includePlugins: z.boolean().default(true).describe('Include tools from plugins'),
   includeSchemas: z.boolean().default(false).describe('Include input/output schemas in the response'),
-});
+};
 
-export type ListToolsInput = z.output<typeof listToolsInputSchema>;
+export type ListToolsInput = z.output<z.ZodObject<typeof listToolsInputSchema>>;
 
 /**
  * Output schema for the list-tools tool.

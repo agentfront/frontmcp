@@ -39,11 +39,11 @@ export interface PublicAccessConfig {
 }
 
 /**
- * Local signing configuration (for orchestrated local type)
+ * Local signing configuration
  */
 export interface LocalSigningConfig {
   /**
-   * Private key for signing orchestrated tokens
+   * Private key for signing tokens
    * @default auto-generated
    */
   signKey?: JWK | Uint8Array;
@@ -55,14 +55,55 @@ export interface LocalSigningConfig {
   jwks?: JSONWebKeySet;
 
   /**
-   * Issuer identifier for orchestrated tokens
+   * Issuer identifier for tokens
    * @default auto-derived from server URL
    */
   issuer?: string;
 }
 
 /**
- * Remote OAuth provider configuration (for orchestrated remote and transparent)
+ * Advanced provider configuration (optional sub-object)
+ */
+export interface ProviderConfig {
+  /** Provider display name */
+  name?: string;
+
+  /**
+   * Unique identifier for this provider
+   * @default derived from provider URL
+   */
+  id?: string;
+
+  /**
+   * Inline JWKS for offline token verification
+   * Falls back to fetching from provider's /.well-known/jwks.json
+   */
+  jwks?: JSONWebKeySet;
+
+  /** Custom JWKS URI if not at standard path */
+  jwksUri?: string;
+
+  /**
+   * Enable Dynamic Client Registration (DCR)
+   * @default false
+   */
+  dcrEnabled?: boolean;
+
+  /** Authorization endpoint override */
+  authEndpoint?: string;
+
+  /** Token endpoint override */
+  tokenEndpoint?: string;
+
+  /** Registration endpoint override (for DCR) */
+  registrationEndpoint?: string;
+
+  /** User info endpoint override */
+  userInfoEndpoint?: string;
+}
+
+/**
+ * Remote OAuth provider configuration (legacy full shape, kept for internal use)
  */
 export interface RemoteProviderConfig {
   /**
@@ -89,10 +130,10 @@ export interface RemoteProviderConfig {
   /** Custom JWKS URI if not at standard path */
   jwksUri?: string;
 
-  /** Client ID for this MCP server (for orchestrated mode) */
+  /** Client ID for this MCP server */
   clientId?: string;
 
-  /** Client secret (for confidential clients in orchestrated mode) */
+  /** Client secret (for confidential clients) */
   clientSecret?: string;
 
   /** Scopes to request from the upstream provider */
@@ -118,24 +159,12 @@ export interface RemoteProviderConfig {
 }
 
 /**
- * Token storage - in-memory
+ * Token storage configuration (simplified, BC-030)
+ *
+ * Either the string 'memory' for in-memory storage,
+ * or an object { redis: RedisConfig } for Redis storage.
  */
-export interface TokenStorageMemory {
-  type: 'memory';
-}
-
-/**
- * Token storage - Redis
- */
-export interface TokenStorageRedis {
-  type: 'redis';
-  config: RedisConfig;
-}
-
-/**
- * Token storage configuration for orchestrated mode
- */
-export type TokenStorageConfig = TokenStorageMemory | TokenStorageRedis;
+export type TokenStorageConfig = 'memory' | { redis: RedisConfig };
 
 /**
  * Token refresh configuration
@@ -266,7 +295,11 @@ export interface PublicAuthOptionsInterface {
 
 export interface TransparentAuthOptionsInterface {
   mode: 'transparent';
-  remote: RemoteProviderConfig;
+  provider: string;
+  clientId?: string;
+  clientSecret?: string;
+  scopes?: string[];
+  providerConfig?: ProviderConfig;
   expectedAudience?: string | string[];
   requiredScopes?: string[];
   allowAnonymous?: boolean;
@@ -274,9 +307,8 @@ export interface TransparentAuthOptionsInterface {
   publicAccess?: PublicAccessConfig;
 }
 
-export interface OrchestratedLocalOptionsInterface {
-  mode: 'orchestrated';
-  type: 'local';
+export interface LocalAuthOptionsInterface {
+  mode: 'local';
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
   allowDefaultPublic?: boolean;
@@ -289,10 +321,13 @@ export interface OrchestratedLocalOptionsInterface {
   incrementalAuth?: IncrementalAuthConfig;
 }
 
-export interface OrchestratedRemoteOptionsInterface {
-  mode: 'orchestrated';
-  type: 'remote';
-  remote: RemoteProviderConfig;
+export interface RemoteAuthOptionsInterface {
+  mode: 'remote';
+  provider: string;
+  clientId?: string;
+  clientSecret?: string;
+  scopes?: string[];
+  providerConfig?: ProviderConfig;
   local?: LocalSigningConfig;
   tokenStorage?: TokenStorageConfig;
   allowDefaultPublic?: boolean;
@@ -312,11 +347,22 @@ export interface OrchestratedRemoteOptionsInterface {
 export type AuthOptionsInterface =
   | PublicAuthOptionsInterface
   | TransparentAuthOptionsInterface
-  | OrchestratedLocalOptionsInterface
-  | OrchestratedRemoteOptionsInterface;
+  | LocalAuthOptionsInterface
+  | RemoteAuthOptionsInterface;
 
-export type OrchestratedAuthOptionsInterface = OrchestratedLocalOptionsInterface | OrchestratedRemoteOptionsInterface;
+export type LocalOrRemoteAuthOptionsInterface = LocalAuthOptionsInterface | RemoteAuthOptionsInterface;
 
-export type AuthMode = 'public' | 'transparent' | 'orchestrated';
+export type AuthMode = 'public' | 'transparent' | 'local' | 'remote';
 
+// ============================================
+// BACKWARDS COMPAT ALIASES (deprecated)
+// ============================================
+
+/** @deprecated Use LocalAuthOptionsInterface */
+export type OrchestratedLocalOptionsInterface = LocalAuthOptionsInterface;
+/** @deprecated Use RemoteAuthOptionsInterface */
+export type OrchestratedRemoteOptionsInterface = RemoteAuthOptionsInterface;
+/** @deprecated Use LocalOrRemoteAuthOptionsInterface */
+export type OrchestratedAuthOptionsInterface = LocalOrRemoteAuthOptionsInterface;
+/** @deprecated Removed - modes are now 'local' | 'remote' */
 export type OrchestratedType = 'local' | 'remote';

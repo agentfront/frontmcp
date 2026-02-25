@@ -154,7 +154,7 @@ Each server's `main.ts` can customize providers and auth:
 @FrontMcp({
   info: { name: 'Production', version: '1.0.0' },
   apps: [CrmApp, AnalyticsApp],
-  auth: { mode: 'orchestrated', /* ... */ },
+  auth: { mode: 'local', /* ... */ },
   providers: [RedisProvider],
 })
 export default class Server {}

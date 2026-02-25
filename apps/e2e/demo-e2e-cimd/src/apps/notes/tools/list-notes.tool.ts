@@ -1,7 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({});
+const inputSchema = {};
 
 const outputSchema = z.object({
   notes: z.array(
@@ -13,7 +13,7 @@ const outputSchema = z.object({
   ),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

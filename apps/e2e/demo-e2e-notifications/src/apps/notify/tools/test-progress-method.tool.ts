@@ -1,14 +1,12 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    steps: z.number().int().min(1).max(10).describe('Number of progress steps to send'),
-    delayMs: z.number().int().min(0).max(500).optional().describe('Delay between steps in milliseconds'),
-    includeTotal: z.boolean().optional().describe('If true, include total in progress notification'),
-    includeMessage: z.boolean().optional().describe('If true, include message in progress notification'),
-  })
-  .strict();
+const inputSchema = {
+  steps: z.number().int().min(1).max(10).describe('Number of progress steps to send'),
+  delayMs: z.number().int().min(0).max(500).optional().describe('Delay between steps in milliseconds'),
+  includeTotal: z.boolean().optional().describe('If true, include total in progress notification'),
+  includeMessage: z.boolean().optional().describe('If true, include message in progress notification'),
+};
 
 const outputSchema = z.object({
   success: z.boolean(),
@@ -16,7 +14,7 @@ const outputSchema = z.object({
   hadProgressToken: z.boolean(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 /**

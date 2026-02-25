@@ -1,11 +1,9 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    amount: z.number().int().min(1).default(1).describe('Amount to increment by'),
-  })
-  .strict();
+const inputSchema = {
+  amount: z.number().int().min(1).default(1).describe('Amount to increment by'),
+};
 
 const outputSchema = z.object({
   sessionId: z.string(),
@@ -24,7 +22,7 @@ const sessionCounters = new Map<string, number>();
   outputSchema,
 })
 export default class IncrementCounterTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     // Prefer FrontMcpContext.sessionId (set when context exists) over authInfo.sessionId (may be undefined in public mode)
     const ctx = this.tryGetContext();
     const authInfo = this.getAuthInfo();

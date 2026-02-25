@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { auditLog, AuditEntry } from '../data/audit-log';
 
-const inputSchema = z
-  .object({
-    toolName: z.string().optional().describe('Filter by tool name'),
-  })
-  .strict();
+const inputSchema = {
+  toolName: z.string().optional().describe('Filter by tool name'),
+};
 
 const outputSchema = z.object({
   entries: z.array(
@@ -29,7 +27,7 @@ const outputSchema = z.object({
   }),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

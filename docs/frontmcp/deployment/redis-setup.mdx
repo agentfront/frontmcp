@@ -52,7 +52,7 @@ sudo systemctl start redis
 ### Configuration
 
 ```typescript
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 CachePlugin.init({
   type: 'redis',
@@ -121,7 +121,7 @@ services:
 // src/main.ts
 import 'reflect-metadata';
 import { FrontMcp } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },

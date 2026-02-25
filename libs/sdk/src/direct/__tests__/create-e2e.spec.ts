@@ -15,11 +15,11 @@ import type { DirectClient } from '../client.types';
 // Test Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const echoInput = z.object({ message: z.string() });
+const echoInput = { message: z.string() };
 
 @Tool({ name: 'echo', description: 'Echoes the message', inputSchema: echoInput })
 class EchoTool extends ToolContext<typeof echoInput> {
-  async execute(input: z.infer<typeof echoInput>): Promise<CallToolResult> {
+  async execute(input: z.input<z.ZodObject<typeof echoInput>>): Promise<CallToolResult> {
     return { content: [{ type: 'text', text: `Echo: ${input.message}` }] };
   }
 }

@@ -11,7 +11,7 @@ export const graphToolInputSchema = {
   refresh: z.boolean().optional().default(false).describe('Force refresh the graph data (bypass cache)'),
 };
 
-export type GraphToolInput = z.infer<z.ZodObject<typeof graphToolInputSchema>>;
+export type GraphToolInput = z.input<z.ZodObject<typeof graphToolInputSchema>>;
 
 /**
  * Tool to get the server graph showing all tools, resources, prompts, and their relationships.

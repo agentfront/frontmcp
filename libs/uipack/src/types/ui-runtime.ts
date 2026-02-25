@@ -389,28 +389,6 @@ export interface RendererAssets {
    * Used for cache invalidation.
    */
   bundleHash?: string;
-
-  // ========== Legacy (deprecated) ==========
-
-  /**
-   * @deprecated Use `react.url` instead
-   */
-  reactRuntime?: string;
-
-  /**
-   * @deprecated Use `reactDom.url` instead
-   */
-  reactDomRuntime?: string;
-
-  /**
-   * @deprecated Use `markdown.url` instead
-   */
-  markdownEngine?: string;
-
-  /**
-   * @deprecated Use `handlebars.url` instead
-   */
-  handlebarsRuntime?: string;
 }
 
 // ============================================
@@ -434,7 +412,7 @@ export interface RendererAssets {
  *   "widgetAccessible": true,
  *   "schema": { "type": "object", "properties": {...} },
  *   "csp": { "scriptSrc": ["'self'"], ... },
- *   "rendererAssets": { "reactRuntime": "https://..." },
+ *   "rendererAssets": { "react": { "url": "https://..." } },
  *   "hash": "sha256-abc123..."
  * }
  * ```
@@ -638,45 +616,6 @@ export interface OpenAIMetaFields {
  * Includes both standard UI fields and platform-specific fields.
  */
 export type ToolResponseMeta = Partial<UIMetaFields> & Partial<OpenAIMetaFields> & Record<string, unknown>;
-
-/**
- * @deprecated Use UIMetaFields instead. RuntimePayload is being replaced
- * with explicit _meta field types.
- */
-export interface RuntimePayload {
-  /**
-   * Resolved UI type for this invocation.
-   * @deprecated Use UIMetaFields['ui/type']
-   */
-  type: UIType;
-
-  /**
-   * Rendered/compiled content.
-   * @deprecated Use UIMetaFields['ui/content']
-   */
-  content: string;
-
-  /**
-   * Content hash for cache validation.
-   * @deprecated Use UIMetaFields['ui/hash']
-   */
-  hash: string;
-
-  /**
-   * Hydration data for React components.
-   */
-  hydrationData?: unknown;
-
-  /**
-   * Structured tool output (JSON-serializable).
-   */
-  toolOutput?: unknown;
-
-  /**
-   * Additional metadata for the runtime.
-   */
-  metadata?: Record<string, unknown>;
-}
 
 // ============================================
 // Widget Configuration
@@ -1246,25 +1185,25 @@ export const DEFAULT_CSP_BY_TYPE: Record<UIType, CSPDirectives> = {
  */
 export const DEFAULT_RENDERER_ASSETS: Record<UIType, Partial<RendererAssets>> = {
   html: {
-    handlebarsRuntime: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js',
+    handlebars: { url: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js' },
   },
   react: {
-    reactRuntime: 'https://unpkg.com/react@18/umd/react.production.min.js',
-    reactDomRuntime: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+    react: { url: 'https://unpkg.com/react@18/umd/react.production.min.js' },
+    reactDom: { url: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js' },
   },
   mdx: {
-    reactRuntime: 'https://unpkg.com/react@18/umd/react.production.min.js',
-    reactDomRuntime: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-    markdownEngine: 'https://unpkg.com/marked@latest/marked.min.js',
+    react: { url: 'https://unpkg.com/react@18/umd/react.production.min.js' },
+    reactDom: { url: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js' },
+    markdown: { url: 'https://unpkg.com/marked@latest/marked.min.js' },
   },
   markdown: {
-    markdownEngine: 'https://unpkg.com/marked@latest/marked.min.js',
+    markdown: { url: 'https://unpkg.com/marked@latest/marked.min.js' },
   },
   auto: {
-    reactRuntime: 'https://unpkg.com/react@18/umd/react.production.min.js',
-    reactDomRuntime: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-    markdownEngine: 'https://unpkg.com/marked@latest/marked.min.js',
-    handlebarsRuntime: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js',
+    react: { url: 'https://unpkg.com/react@18/umd/react.production.min.js' },
+    reactDom: { url: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js' },
+    markdown: { url: 'https://unpkg.com/marked@latest/marked.min.js' },
+    handlebars: { url: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js' },
   },
 };
 

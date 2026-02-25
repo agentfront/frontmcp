@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = z
-  .object({
-    id: z.string().describe('User ID to delete'),
-  })
-  .strict();
+const inputSchema = {
+  id: z.string().describe('User ID to delete'),
+};
 
 const outputSchema = z.object({
   success: z.boolean(),
@@ -20,7 +18,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class UsersDeleteTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const deleted = crmStore.deleteUser(input.id);
     return {
       success: deleted,

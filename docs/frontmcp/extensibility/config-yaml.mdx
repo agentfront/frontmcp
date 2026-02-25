@@ -241,7 +241,7 @@ class MyApp {}
 @Tool({
   name: 'get-settings',
   description: 'Get current configuration settings',
-  inputSchema: z.object({}),
+  inputSchema: {},
 })
 class MyTool extends ToolContext {
   async execute() {

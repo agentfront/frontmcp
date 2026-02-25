@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { RawZodShape } from '../common/zod-utils';
 import { publicAuthOptionsSchema } from './public.schema';
 import { transparentAuthOptionsSchema } from './transparent.schema';
-import { orchestratedLocalSchema, orchestratedRemoteSchema } from './orchestrated.schema';
+import { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
 
 // ============================================
 // STANDALONE OPTION
@@ -40,8 +40,8 @@ const standaloneOptionSchema = {
 export const appAuthOptionsSchema = z.union([
   publicAuthOptionsSchema.extend(standaloneOptionSchema),
   transparentAuthOptionsSchema.extend(standaloneOptionSchema),
-  orchestratedLocalSchema.extend(standaloneOptionSchema),
-  orchestratedRemoteSchema.extend(standaloneOptionSchema),
+  localAuthSchema.extend(standaloneOptionSchema),
+  remoteAuthSchema.extend(standaloneOptionSchema),
 ]);
 
 // ============================================

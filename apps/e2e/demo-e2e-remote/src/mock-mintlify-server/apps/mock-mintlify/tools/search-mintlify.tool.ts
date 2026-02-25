@@ -1,9 +1,9 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   query: z.string().describe('Search query for Mintlify documentation'),
-});
+};
 
 const resultSchema = z.object({
   title: z.string(),
@@ -17,7 +17,7 @@ const outputSchema = z.object({
   totalResults: z.number(),
 });
 
-type SearchInput = z.infer<typeof inputSchema>;
+type SearchInput = z.input<z.ZodObject<typeof inputSchema>>;
 type SearchOutput = z.infer<typeof outputSchema>;
 
 // Mock documentation database

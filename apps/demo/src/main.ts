@@ -23,8 +23,8 @@ import CrmMcpApp from './apps/crm';
   },
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
+    provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
+    providerConfig: {
       name: 'frontegg',
       dcrEnabled: false,
     },

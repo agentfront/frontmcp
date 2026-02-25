@@ -73,9 +73,9 @@ export { FrontMcpTool, FrontMcpTool as Tool, frontMcpTool, frontMcpTool as tool 
  */
 // ---------- zod helpers ----------
 type __Shape = z.ZodRawShape;
-type __AsZodObj<T> = T extends z.ZodObject<any> ? T : T extends z.ZodRawShape ? z.ZodObject<T> : never;
+type __AsZodObj<T> = T extends z.ZodRawShape ? z.ZodObject<T> : never;
 
-export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.infer<__AsZodObj<I>> : never;
+export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.input<__AsZodObj<I>> : never;
 
 // ---------- output inference helpers for NEW schemas ----------
 
@@ -94,26 +94,26 @@ type __InferFromSingleSchema<S> =
   S extends 'image'
     ? z.infer<typeof ImageOutputSchema>
     : S extends 'audio'
-    ? z.infer<typeof AudioOutputSchema>
-    : S extends 'resource'
-    ? z.infer<typeof ResourceOutputSchema>
-    : S extends 'resource_link'
-    ? z.infer<typeof ResourceLinkOutputSchema>
-    : // Handle primitive type literals
-    S extends 'string'
-    ? string
-    : S extends 'number'
-    ? number
-    : S extends 'boolean'
-    ? boolean
-    : S extends 'date'
-    ? Date
-    : // Handle all Zod schemas (primitives, objects, arrays, etc.)
-    // This will correctly infer z.ZodString to string, etc.
-    S extends z.ZodType | z.ZodRawShape
-    ? __InferZod<S>
-    : // Fallback for unknown/unrecognized schema
-      any;
+      ? z.infer<typeof AudioOutputSchema>
+      : S extends 'resource'
+        ? z.infer<typeof ResourceOutputSchema>
+        : S extends 'resource_link'
+          ? z.infer<typeof ResourceLinkOutputSchema>
+          : // Handle primitive type literals
+            S extends 'string'
+            ? string
+            : S extends 'number'
+              ? number
+              : S extends 'boolean'
+                ? boolean
+                : S extends 'date'
+                  ? Date
+                  : // Handle all Zod schemas (primitives, objects, arrays, etc.)
+                    // This will correctly infer z.ZodString to string, etc.
+                    S extends z.ZodType | z.ZodRawShape
+                    ? __InferZod<S>
+                    : // Fallback for unknown/unrecognized schema
+                      any;
 
 /**
  * Infers a tuple/array of output types from an array of schemas
@@ -169,7 +169,7 @@ type __OutputSchema = __ToolSingleOutputType | __ToolSingleOutputType[];
  * Base tool metadata options without UI field.
  */
 type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetadata<
-  I | z.ZodObject<I>, // inputSchema can be a raw shape or ZodObject
+  I, // inputSchema: ZodRawShape only
   O // outputSchema: any of the allowed forms
 >;
 
@@ -212,7 +212,7 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    * }
    * ```
    */
-  ui?: ToolUIConfig<ToolInputOf<{ inputSchema: I | z.ZodObject<I> }>, ToolOutputOf<{ outputSchema: O }>>;
+  ui?: ToolUIConfig<ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
 };
 
 // ---------- ctor & reflection ----------
@@ -220,13 +220,13 @@ type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);
 type __A<C extends __Ctor> = C extends new (...a: infer A) => any
   ? A
   : C extends abstract new (...a: infer A) => any
-  ? A
-  : never;
+    ? A
+    : never;
 type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
   ? R
   : C extends abstract new (...a: any[]) => infer R
-  ? R
-  : never;
+    ? R
+    : never;
 type __Param<C extends __Ctor> = __R<C> extends { execute: (arg: infer P, ...r: any) => any } ? P : never;
 type __Return<C extends __Ctor> = __R<C> extends { execute: (...a: any) => infer R } ? R : never;
 type __Unwrap<T> = T extends Promise<infer U> ? U : T;
@@ -235,9 +235,8 @@ type __IsAny<T> = 0 extends 1 & T ? true : false;
 // ---------- friendly branded errors (UPDATED) ----------
 
 // Must extend ToolContext (assuming ToolContext is exported by the SDK)
-type __MustExtendCtx<C extends __Ctor> = __R<C> extends ToolContext
-  ? unknown
-  : { 'Tool class error': 'Class must extend ToolContext' };
+type __MustExtendCtx<C extends __Ctor> =
+  __R<C> extends ToolContext ? unknown : { 'Tool class error': 'Class must extend ToolContext' };
 
 // execute param must exactly match In (and not be any)
 type __MustParam<C extends __Ctor, In> =
@@ -245,22 +244,22 @@ type __MustParam<C extends __Ctor, In> =
   __IsAny<In> extends true
     ? unknown
     : // 2. Check if the actual param type is 'any'. This is an error.
-    __IsAny<__Param<C>> extends true
-    ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
-    : // 3. Check for the exact match: Param extends In AND In extends Param
-    __Param<C> extends In
-    ? In extends __Param<C>
-      ? unknown // OK, exact match
-      : {
-          'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
-          expected_input_type: In;
-          actual_parameter_type: __Param<C>;
-        }
-    : {
-        'execute() parameter error': 'Parameter type does not match the input schema.';
-        expected_input_type: In;
-        actual_parameter_type: __Param<C>;
-      };
+      __IsAny<__Param<C>> extends true
+      ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
+      : // 3. Check for the exact match: Param extends In AND In extends Param
+        __Param<C> extends In
+        ? In extends __Param<C>
+          ? unknown // OK, exact match
+          : {
+              'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
+              expected_input_type: In;
+              actual_parameter_type: __Param<C>;
+            }
+        : {
+            'execute() parameter error': 'Parameter type does not match the input schema.';
+            expected_input_type: In;
+            actual_parameter_type: __Param<C>;
+          };
 
 // execute return must be Out or Promise<Out>
 type __MustReturn<C extends __Ctor, Out> =
@@ -268,20 +267,20 @@ type __MustReturn<C extends __Ctor, Out> =
   __IsAny<Out> extends true
     ? unknown
     : // 2. Check if the unwrapped return type is assignable to Out.
-    __Unwrap<__Return<C>> extends Out
-    ? unknown // OK
-    : {
-        'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
-        expected_output_type: Out;
-        'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
-      };
+      __Unwrap<__Return<C>> extends Out
+      ? unknown // OK
+      : {
+          'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
+          expected_output_type: Out;
+          'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
+        };
 
 // Rewrapped constructor with updated ToolContext generic params
 type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
   ? C & (abstract new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
   : C extends new (...a: __A<C>) => __R<C>
-  ? C & (new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
-  : never;
+    ? C & (new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
+    : never;
 
 declare module '@frontmcp/sdk' {
   // ---------- the decorator (overloads) ----------

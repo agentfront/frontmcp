@@ -66,7 +66,6 @@ export {
 export {
   // Classes
   InMemoryCimdCache,
-  CimdCache, // Backwards compatibility alias
   // Factory
   createCimdCache,
   // Functions

@@ -84,6 +84,4 @@ export {
   isHash,
   transpileJsx,
   isSwcAvailable,
-  executeTranspiledCode,
-  transpileAndExecute,
 } from './utils';

@@ -156,7 +156,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
     // 5. Apply output schema options (mode, description format)
     // This is async because it supports LLM-based description formatting
-    const dataTransforms = this.options.dataTransforms || this.options.outputTransforms;
+    const dataTransforms = this.options.dataTransforms;
     if (this.options.outputSchema || dataTransforms) {
       transformedTools = await Promise.all(
         transformedTools.map((tool) => this.applyOutputSchemaOptions(tool, dataTransforms)),

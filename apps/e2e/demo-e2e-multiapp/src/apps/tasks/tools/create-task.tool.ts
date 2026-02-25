@@ -2,13 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { taskStore, TaskPriority } from '../data/task.store';
 
-const inputSchema = z
-  .object({
-    title: z.string().min(1).describe('Task title'),
-    description: z.string().optional().default('').describe('Task description'),
-    priority: z.enum(['low', 'medium', 'high']).optional().default('medium').describe('Task priority'),
-  })
-  .strict();
+const inputSchema = {
+  title: z.string().min(1).describe('Task title'),
+  description: z.string().optional().default('').describe('Task description'),
+  priority: z.enum(['low', 'medium', 'high']).optional().default('medium').describe('Task priority'),
+};
 
 const outputSchema = z.object({
   id: z.string(),
@@ -19,7 +17,7 @@ const outputSchema = z.object({
   createdAt: z.number(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

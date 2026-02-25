@@ -8,14 +8,12 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    serviceName: z.string().describe('Name of the service'),
-    status: z.enum(['healthy', 'degraded', 'down']).describe('Service status'),
-    uptime: z.number().optional().describe('Uptime percentage'),
-    lastCheck: z.string().optional().describe('Last check timestamp'),
-  })
-  .strict();
+const inputSchema = {
+  serviceName: z.string().describe('Name of the service'),
+  status: z.enum(['healthy', 'degraded', 'down']).describe('Service status'),
+  uptime: z.number().optional().describe('Uptime percentage'),
+  lastCheck: z.string().optional().describe('Last check timestamp'),
+};
 
 const outputSchema = z
   .object({
@@ -28,7 +26,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

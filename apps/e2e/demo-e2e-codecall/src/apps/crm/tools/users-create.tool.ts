@@ -2,14 +2,12 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = z
-  .object({
-    name: z.string().describe('User name'),
-    email: z.string().email().describe('User email'),
-    company: z.string().describe('Company name'),
-    role: z.string().describe('User role'),
-  })
-  .strict();
+const inputSchema = {
+  name: z.string().describe('User name'),
+  email: z.string().email().describe('User email'),
+  company: z.string().describe('Company name'),
+  role: z.string().describe('User role'),
+};
 
 const outputSchema = z.object({
   user: z.object({
@@ -29,7 +27,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class UsersCreateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const user = crmStore.createUser(input);
     return { user };
   }

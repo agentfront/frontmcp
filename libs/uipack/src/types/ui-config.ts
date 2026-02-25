@@ -229,12 +229,6 @@ export type WidgetServingMode =
   | 'direct-url' // HTTP endpoint on MCP server
   | 'custom-url'; // Custom URL (CDN or external hosting)
 
-/**
- * @deprecated Use 'static' instead of 'mcp-resource'. Will be removed in v2.0.
- * Alias maintained for backwards compatibility.
- */
-export type WidgetServingModeLegacy = 'mcp-resource';
-
 // ============================================
 // Display Mode
 // ============================================

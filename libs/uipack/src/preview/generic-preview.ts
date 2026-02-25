@@ -14,7 +14,7 @@ import type {
   ExecutionPreviewOptions,
   DiscoveryMeta,
   ExecutionMeta,
-  FrontMCPMetaFields,
+  GenericMetaFields,
   BuilderMockData,
 } from './types';
 import type { BuilderResult, StaticBuildResult, HybridBuildResult, InlineBuildResult } from '../build/builders/types';
@@ -114,7 +114,7 @@ export class GenericPreview implements PreviewHandler {
   private forDiscoveryStatic(result: StaticBuildResult, toolName: string, _description?: string): DiscoveryMeta {
     const resourceUri = `resource://widget/${toolName}`;
 
-    const _meta: FrontMCPMetaFields = {
+    const _meta: GenericMetaFields = {
       // Use ui/* namespace for generic MCP clients
       'ui/resourceUri': resourceUri,
       'ui/widgetCSP': {
@@ -132,7 +132,7 @@ export class GenericPreview implements PreviewHandler {
   }
 
   private forDiscoveryHybrid(result: HybridBuildResult, _toolName: string, _description?: string): DiscoveryMeta {
-    const _meta: FrontMCPMetaFields = {
+    const _meta: GenericMetaFields = {
       // Use ui/* namespace for generic MCP clients
       'ui/resourceUri': result.shellResourceUri,
       'ui/widgetCSP': {
@@ -150,7 +150,7 @@ export class GenericPreview implements PreviewHandler {
   }
 
   private forDiscoveryInline(result: InlineBuildResult, _toolName: string, _description?: string): DiscoveryMeta {
-    const _meta: FrontMCPMetaFields = {
+    const _meta: GenericMetaFields = {
       // Use ui/* namespace for generic MCP clients
       'ui/html': result.loaderShell,
       'ui/mimeType': 'text/html+mcp',
@@ -199,7 +199,7 @@ export class GenericPreview implements PreviewHandler {
     builderMode: boolean,
     mockData?: BuilderMockData,
   ): ExecutionMeta {
-    const _meta: FrontMCPMetaFields = {
+    const _meta: GenericMetaFields = {
       'ui/component': result.componentChunk,
     };
 
@@ -230,7 +230,7 @@ export class GenericPreview implements PreviewHandler {
     _mockData?: BuilderMockData,
   ): ExecutionMeta {
     // Inline mode returns full HTML
-    const _meta: FrontMCPMetaFields = {
+    const _meta: GenericMetaFields = {
       'ui/html': '<!-- Full widget will be generated -->',
     };
 

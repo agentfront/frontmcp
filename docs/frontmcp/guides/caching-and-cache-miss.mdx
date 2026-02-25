@@ -35,7 +35,7 @@ By the end of this guide, you'll know how to:
 ## Step 1: Install the Cache Plugin
 
 ```bash
-npm install @frontmcp/plugins
+npm install @frontmcp/plugin-cache
 ```
 
 ---
@@ -46,7 +46,7 @@ npm install @frontmcp/plugins
 
 ```ts Simple (in-memory)
 import { App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @App({
   id: 'my-app',
@@ -61,7 +61,7 @@ export default class MyApp {}
 
 ```ts Custom TTL (in-memory)
 import { App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @App({
   id: 'my-app',
@@ -81,7 +81,7 @@ export default class MyApp {}
 
 ```ts Redis (production)
 import { App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @App({
   id: 'my-app',
@@ -596,7 +596,7 @@ Here's a full example with multiple tools using different caching strategies:
 
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 import { z } from 'zod';
 
 // Real-time data: short TTL

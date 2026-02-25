@@ -1,7 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({}).strict();
+const inputSchema = {};
 
 const outputSchema = z.object({
   count: z.number(),
@@ -9,7 +9,7 @@ const outputSchema = z.object({
   sample: z.record(z.string(), z.string()),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

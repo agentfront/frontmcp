@@ -163,7 +163,7 @@ export const FULL_UI_TOOL_CONFIG = {
 /**
  * Generate output for the basic UI tool.
  */
-export function generateBasicUIToolOutput(input: z.infer<typeof basicUIToolInputSchema>) {
+export function generateBasicUIToolOutput(input: z.input<typeof basicUIToolInputSchema>) {
   return {
     message: `Hello, ${input.name}!`,
     timestamp: Date.now(),
@@ -173,7 +173,7 @@ export function generateBasicUIToolOutput(input: z.infer<typeof basicUIToolInput
 /**
  * Generate output for the full UI tool.
  */
-export function generateFullUIToolOutput(input: z.infer<typeof fullUIToolInputSchema>) {
+export function generateFullUIToolOutput(input: z.input<typeof fullUIToolInputSchema>) {
   const items: string[] = [];
   for (let i = 1; i <= input.count; i++) {
     items.push(`Item ${i}`);
@@ -225,13 +225,3 @@ export const EXPECTED_GENERIC_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mime
  * Uses ui/* namespace only.
  */
 export const EXPECTED_GENERIC_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', 'ui/type'] as const;
-
-/**
- * @deprecated Use EXPECTED_GENERIC_TOOLS_LIST_META_KEYS instead
- */
-export const EXPECTED_FRONTMCP_TOOLS_LIST_META_KEYS = EXPECTED_GENERIC_TOOLS_LIST_META_KEYS;
-
-/**
- * @deprecated Use EXPECTED_GENERIC_TOOL_CALL_META_KEYS instead
- */
-export const EXPECTED_FRONTMCP_TOOL_CALL_META_KEYS = EXPECTED_GENERIC_TOOL_CALL_META_KEYS;

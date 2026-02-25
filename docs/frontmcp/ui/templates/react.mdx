@@ -317,7 +317,7 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 // Fully typed component

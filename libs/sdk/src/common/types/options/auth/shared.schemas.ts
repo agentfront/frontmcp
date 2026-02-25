@@ -2,7 +2,9 @@
 export {
   publicAccessConfigSchema,
   localSigningConfigSchema,
+  providerConfigSchema,
   remoteProviderConfigSchema,
+  flatRemoteProviderFields,
   tokenStorageConfigSchema,
   tokenRefreshConfigSchema,
   skippedAppBehaviorSchema,
@@ -19,6 +21,8 @@ export type {
   PublicAccessConfigInput,
   LocalSigningConfig,
   LocalSigningConfigInput,
+  ProviderConfig,
+  ProviderConfigInput,
   RemoteProviderConfig,
   RemoteProviderConfigInput,
   TokenStorageConfig,

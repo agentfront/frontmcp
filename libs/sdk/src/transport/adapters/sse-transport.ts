@@ -8,7 +8,7 @@
  * This class extends our custom SSEServerTransport to expose a public API
  * for session recreation, maintaining the event ID sequence across reconnections.
  */
-import { SSEServerTransport, SSEServerTransportOptions } from '../legacy/legacy.sse.tranporter';
+import { SSEServerTransport, SSEServerTransportOptions } from './base-sse-transport';
 import type { ServerResponse } from 'http';
 
 export interface RecreateableSSEServerTransportOptions extends SSEServerTransportOptions {

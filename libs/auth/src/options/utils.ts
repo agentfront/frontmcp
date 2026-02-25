@@ -4,7 +4,7 @@
 import { authOptionsSchema, AuthOptions, AuthOptionsInput } from './schema';
 import { PublicAuthOptions } from './public.schema';
 import { TransparentAuthOptions } from './transparent.schema';
-import { OrchestratedAuthOptions, OrchestratedLocalOptions, OrchestratedRemoteOptions } from './orchestrated.schema';
+import { LocalAuthOptions, RemoteAuthOptions, LocalOrRemoteAuthOptions } from './orchestrated.schema';
 
 // ============================================
 // PARSING
@@ -36,28 +36,43 @@ export function isTransparentMode(options: AuthOptions | AuthOptionsInput): opti
 }
 
 /**
- * Check if options are orchestrated mode
+ * Check if options are local mode (formerly orchestrated local)
  */
-export function isOrchestratedMode(options: AuthOptions | AuthOptionsInput): options is OrchestratedAuthOptions {
-  return options.mode === 'orchestrated';
-}
-
-// ============================================
-// ORCHESTRATED TYPE GUARDS
-// ============================================
-
-/**
- * Check if orchestrated options are local type
- */
-export function isOrchestratedLocal(options: OrchestratedAuthOptions): options is OrchestratedLocalOptions {
-  return options.type === 'local';
+export function isLocalMode(options: AuthOptions | AuthOptionsInput): options is LocalAuthOptions {
+  return options.mode === 'local';
 }
 
 /**
- * Check if orchestrated options are remote type
+ * Check if options are remote mode (formerly orchestrated remote)
  */
-export function isOrchestratedRemote(options: OrchestratedAuthOptions): options is OrchestratedRemoteOptions {
-  return options.type === 'remote';
+export function isRemoteMode(options: AuthOptions | AuthOptionsInput): options is RemoteAuthOptions {
+  return options.mode === 'remote';
+}
+
+/**
+ * Check if options are orchestrated mode (local or remote).
+ * This replaces the old isOrchestratedMode check.
+ */
+export function isOrchestratedMode(options: AuthOptions | AuthOptionsInput): options is LocalOrRemoteAuthOptions {
+  return options.mode === 'local' || options.mode === 'remote';
+}
+
+// ============================================
+// LOCAL/REMOTE TYPE GUARDS
+// ============================================
+
+/**
+ * Check if local-or-remote options are local type
+ */
+export function isOrchestratedLocal(options: LocalOrRemoteAuthOptions): options is LocalAuthOptions {
+  return options.mode === 'local';
+}
+
+/**
+ * Check if local-or-remote options are remote type
+ */
+export function isOrchestratedRemote(options: LocalOrRemoteAuthOptions): options is RemoteAuthOptions {
+  return options.mode === 'remote';
 }
 
 // ============================================
@@ -70,6 +85,6 @@ export function isOrchestratedRemote(options: OrchestratedAuthOptions): options 
 export function allowsPublicAccess(options: AuthOptions): boolean {
   if (options.mode === 'public') return true;
   if (options.mode === 'transparent') return options.allowAnonymous;
-  if (options.mode === 'orchestrated') return options.allowDefaultPublic;
+  if (options.mode === 'local' || options.mode === 'remote') return options.allowDefaultPublic;
   return false;
 }

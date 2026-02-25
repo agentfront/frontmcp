@@ -1,10 +1,10 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   title: z.string().describe('Note title'),
   content: z.string().describe('Note content'),
-});
+};
 
 const outputSchema = z.object({
   id: z.string(),
@@ -13,7 +13,7 @@ const outputSchema = z.object({
   createdAt: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -640,7 +640,7 @@ For end-to-end tests, set up a FrontMCP app with CodeCallPlugin and invoke the m
 
 ```ts
 import { App, Tool, ToolContext } from '@frontmcp/sdk';
-import { CodeCallPlugin } from '@frontmcp/plugins';
+import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
 
 @App({ id: 'test-app', plugins: [CodeCallPlugin.init()] })
 class TestApp {

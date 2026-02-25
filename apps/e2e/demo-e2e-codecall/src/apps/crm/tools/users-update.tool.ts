@@ -2,15 +2,13 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = z
-  .object({
-    id: z.string().describe('User ID'),
-    name: z.string().optional().describe('User name'),
-    email: z.string().email().optional().describe('User email'),
-    company: z.string().optional().describe('Company name'),
-    role: z.string().optional().describe('User role'),
-  })
-  .strict();
+const inputSchema = {
+  id: z.string().describe('User ID'),
+  name: z.string().optional().describe('User name'),
+  email: z.string().email().optional().describe('User email'),
+  company: z.string().optional().describe('Company name'),
+  role: z.string().optional().describe('User role'),
+};
 
 const outputSchema = z.object({
   user: z
@@ -33,7 +31,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class UsersUpdateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const { id, ...updates } = input;
     const user = crmStore.updateUser(id, updates);
     return { user: user || null, success: !!user };

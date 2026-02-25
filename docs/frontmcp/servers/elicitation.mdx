@@ -163,7 +163,7 @@ Redirects the user to an external URL for out-of-band interaction (OAuth, paymen
 import { generateElicitationToken } from '@frontmcp/sdk';
 
 // Generate a secure token (never expose raw sessionId!)
-const token = await generateElicitationToken(this.authInfo.sessionId, {
+const token = await generateElicitationToken(this.getAuthInfo().sessionId, {
   ttl: 300000, // 5 minutes (matches elicitation timeout)
 });
 
@@ -573,7 +573,7 @@ import { supportsElicitation } from '@frontmcp/sdk';
 class ConditionalElicitTool extends ToolContext {
   async execute({ action }) {
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.authInfo.sessionId
+      this.getAuthInfo().sessionId
     );
 
     if (supportsElicitation(capabilities, 'form')) {
@@ -1132,7 +1132,7 @@ class ConnectGitHubTool extends ToolContext {
   async execute() {
     // Generate secure token - sessionId is encrypted inside
     const elicitationToken = await generateElicitationToken(
-      this.authInfo.sessionId,
+      this.getAuthInfo().sessionId,
       { ttl: 300000 } // 5 minute timeout
     );
 
@@ -1162,7 +1162,7 @@ class ConnectGitHubTool extends ToolContext {
 
     // Store the token and return success
     await this.get(TokenStore).save(
-      this.authInfo.sessionId,
+      this.getAuthInfo().sessionId,
       'github',
       result.content!.accessToken
     );
@@ -1196,7 +1196,7 @@ class DeleteFileTool extends ToolContext {
     // Check if we should/can request confirmation
     const shouldConfirm = !skipConfirmation;
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.authInfo.sessionId
+      this.getAuthInfo().sessionId
     );
     const canElicit = supportsElicitation(capabilities, 'form');
 

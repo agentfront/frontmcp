@@ -34,9 +34,7 @@ Direct token pass-through from external identity provider.
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: 'https://auth.example.com',
-    },
+    provider: 'https://auth.example.com',
     expectedAudience: 'https://api.myservice.com',
   },
 })
@@ -47,9 +45,9 @@ export class Server {}
 
 | Option             | Type                 | Default         | Description                          |
 | ------------------ | -------------------- | --------------- | ------------------------------------ |
-| `remote.provider`  | `string`             | Required        | Base URL of the identity provider    |
-| `remote.jwksUri`   | `string`             | Auto-discovered | Custom JWKS endpoint                 |
-| `remote.jwks`      | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `provider`                    | `string`        | Required        | Base URL of the identity provider    |
+| `providerConfig.jwksUri`      | `string`        | Auto-discovered | Custom JWKS endpoint                 |
+| `providerConfig.jwks`         | `JSONWebKeySet` | -               | Inline JWKS for offline verification |
 | `expectedAudience` | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
 | `requiredScopes`   | `string[]`           | `[]`            | Scopes that must be present in token |
 | `allowAnonymous`   | `boolean`            | `false`         | Allow requests without tokens        |
@@ -63,10 +61,8 @@ export class Server {}
       info: { name: 'MyServer', version: '1.0.0' },
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://your-tenant.auth0.com',
-          // JWKS auto-discovered from /.well-known/jwks.json
-        },
+        provider: 'https://your-tenant.auth0.com',
+        // JWKS auto-discovered from /.well-known/jwks.json
         expectedAudience: 'https://api.yourservice.com',
         requiredScopes: ['openid', 'profile'],
       },
@@ -80,9 +76,7 @@ export class Server {}
       info: { name: 'MyServer', version: '1.0.0' },
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://your-org.okta.com/oauth2/default',
-        },
+        provider: 'https://your-org.okta.com/oauth2/default',
         expectedAudience: 'api://default',
       },
     })
@@ -95,8 +89,8 @@ export class Server {}
       info: { name: 'MyServer', version: '1.0.0' },
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://login.microsoftonline.com/{tenant}/v2.0',
+        provider: 'https://login.microsoftonline.com/{tenant}/v2.0',
+        providerConfig: {
           jwksUri: 'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys',
         },
         expectedAudience: 'api://{client-id}',
@@ -111,8 +105,8 @@ export class Server {}
       info: { name: 'MyServer', version: '1.0.0' },
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://accounts.google.com',
+        provider: 'https://accounts.google.com',
+        providerConfig: {
           jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
         },
         expectedAudience: '{your-client-id}.apps.googleusercontent.com',
@@ -151,16 +145,12 @@ FrontMCP acts as an OAuth server while proxying user authentication to upstream 
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'remote',
-    remote: {
-      provider: 'https://auth.example.com',
-      clientId: 'your-client-id',
-      clientSecret: 'your-client-secret',
-      scopes: ['openid', 'profile', 'email'],
-    },
+    mode: 'remote',
+    provider: 'https://auth.example.com',
+    clientId: 'your-client-id',
+    clientSecret: 'your-client-secret',
+    scopes: ['openid', 'profile', 'email'],
     consent: { enabled: true },
-    sessionMode: 'stateful',
   },
 })
 export class Server {}
@@ -170,13 +160,12 @@ export class Server {}
 
 | Option                | Type                        | Default      | Description                                |
 | --------------------- | --------------------------- | ------------ | ------------------------------------------ |
-| `remote.provider`     | `string`                    | Required     | Upstream IdP base URL                      |
-| `remote.clientId`     | `string`                    | Required     | OAuth client ID                            |
-| `remote.clientSecret` | `string`                    | -            | OAuth client secret (confidential clients) |
-| `remote.scopes`       | `string[]`                  | `['openid']` | Scopes to request from IdP                 |
-| `remote.dcrEnabled`   | `boolean`                   | `false`      | Use Dynamic Client Registration            |
-| `consent`             | `boolean`                   | `false`      | Show consent UI after IdP login            |
-| `sessionMode`         | `'stateful' \| 'stateless'` | `'stateful'` | Session management strategy                |
+| `provider`                    | `string`   | Required     | Upstream IdP base URL                      |
+| `clientId`                    | `string`   | Required     | OAuth client ID                            |
+| `clientSecret`                | `string`   | -            | OAuth client secret (confidential clients) |
+| `scopes`                      | `string[]` | `['openid']` | Scopes to request from IdP                 |
+| `providerConfig.dcrEnabled`   | `boolean`  | `false`      | Use Dynamic Client Registration            |
+| `consent`                     | `boolean`  | `false`      | Show consent UI after IdP login            |
 
 ### When to Use Orchestrated Remote
 
@@ -219,13 +208,12 @@ When the IdP supports DCR, FrontMCP can register clients automatically:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'remote',
-  remote: {
-    provider: 'https://auth.example.com',
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  providerConfig: {
     dcrEnabled: true, // Enable DCR
-    // clientId/clientSecret derived from registration
   },
+  // clientId/clientSecret derived from registration
 }
 ```
 
@@ -241,10 +229,9 @@ Override auto-discovered endpoints for non-standard IdPs:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'remote',
-  remote: {
-    provider: 'https://legacy-idp.example.com',
+  mode: 'remote',
+  provider: 'https://legacy-idp.example.com',
+  providerConfig: {
     authEndpoint: 'https://legacy-idp.example.com/auth',
     tokenEndpoint: 'https://legacy-idp.example.com/token',
     userInfoEndpoint: 'https://legacy-idp.example.com/userinfo',
@@ -262,8 +249,8 @@ For offline verification or non-discoverable providers:
 ```typescript
 auth: {
   mode: 'transparent',
-  remote: {
-    provider: 'https://auth.example.com',
+  provider: 'https://auth.example.com',
+  providerConfig: {
     jwks: {
       keys: [
         {
@@ -290,7 +277,7 @@ Combine multiple providers with orchestrated mode:
   name: 'Slack',
   auth: {
     mode: 'transparent',
-    remote: { provider: 'https://slack.com/oauth' },
+    provider: 'https://slack.com/oauth',
   },
   standalone: true,
 })
@@ -300,7 +287,7 @@ export class SlackApp {}
   name: 'CRM',
   auth: {
     mode: 'transparent',
-    remote: { provider: 'https://company.auth0.com' },
+    provider: 'https://company.auth0.com',
   },
 })
 export class CrmApp {}
@@ -309,8 +296,7 @@ export class CrmApp {}
   info: { name: 'Suite', version: '1.0.0' },
   apps: [SlackApp, CrmApp],
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: { enabled: true },
   },
 })
@@ -328,9 +314,7 @@ Configure different providers per app:
   name: 'Billing',
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: 'https://billing.auth0.com',
-    },
+    provider: 'https://billing.auth0.com',
   },
 })
 export class BillingApp {}
@@ -339,9 +323,7 @@ export class BillingApp {}
   name: 'Analytics',
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: 'https://analytics.okta.com/oauth2/default',
-    },
+    provider: 'https://analytics.okta.com/oauth2/default',
   },
 })
 export class AnalyticsApp {}
@@ -371,7 +353,7 @@ export class Server {}
   <Accordion title="JWKS fetch fails">
     - Verify IdP URL is correct
     - Check network connectivity
-    - Try providing inline JWKS via `remote.jwks`
+    - Try providing inline JWKS via `providerConfig.jwks`
   </Accordion>
   <Accordion title="Redirect URI mismatch">
     - Register exact redirect URI with IdP

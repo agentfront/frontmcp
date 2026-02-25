@@ -20,7 +20,7 @@ OUTPUT: Flat deduplicated tool list. relevanceScore: 0.5+=good, 0.7+=strong matc
 
 FLOW: search → describe → execute/invoke`;
 
-export const searchToolInputSchema = z.object({
+export const searchToolInputSchema = {
   queries: z
     .array(z.string().min(2).max(256))
     .min(1)
@@ -36,9 +36,9 @@ export const searchToolInputSchema = z.object({
     .optional()
     .default(0.1)
     .describe('Minimum relevance threshold (default 0.1)'),
-});
+};
 
-export type SearchToolInput = z.infer<typeof searchToolInputSchema>;
+export type SearchToolInput = z.input<z.ZodObject<typeof searchToolInputSchema>>;
 
 export const searchToolOutputSchema = z.object({
   tools: z

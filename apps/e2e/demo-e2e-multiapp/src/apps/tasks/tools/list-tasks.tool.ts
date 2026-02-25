@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { taskStore, TaskPriority } from '../data/task.store';
 
-const inputSchema = z
-  .object({
-    priority: z.enum(['low', 'medium', 'high', 'all']).default('all').describe('Filter by priority'),
-  })
-  .strict();
+const inputSchema = {
+  priority: z.enum(['low', 'medium', 'high', 'all']).default('all').describe('Filter by priority'),
+};
 
 const outputSchema = z.object({
   tasks: z.array(
@@ -22,7 +20,7 @@ const outputSchema = z.object({
   count: z.number(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

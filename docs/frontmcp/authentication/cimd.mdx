@@ -156,8 +156,7 @@ import { FrontMcp, App } from '@frontmcp/sdk';
 @FrontMcp({
   name: 'my-mcp-server',
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     cimd: {
       enabled: true,
       security: {
@@ -180,8 +179,7 @@ import { createFrontMcpServer } from '@frontmcp/sdk';
 const server = createFrontMcpServer({
   name: 'my-mcp-server',
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     cimd: {
       enabled: true,
       security: {
@@ -205,8 +203,7 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   name: 'my-mcp-server',
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     cimd: {
       // Enable/disable CIMD support
       enabled: true,
@@ -244,8 +241,7 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   name: 'my-mcp-server',
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     // CIMD is enabled by default with secure settings
     cimd: {
       enabled: true

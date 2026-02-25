@@ -31,7 +31,8 @@ Attach plugins at app scope:
 
 ```ts
 import { App } from '@frontmcp/sdk';
-import { CachePlugin, CodeCallPlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
+import { CodeCallPlugin } from '@frontmcp/plugin-codecall';
 import MySimplePlugin from './plugins/my-simple.plugin';
 
 @App({

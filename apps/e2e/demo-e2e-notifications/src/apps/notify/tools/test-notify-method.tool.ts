@@ -1,16 +1,11 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    message: z.string().describe('The message to send'),
-    useObject: z.boolean().optional().describe('If true, send structured object instead of string'),
-    level: z
-      .enum(['debug', 'info', 'notice', 'warning', 'error'])
-      .optional()
-      .describe('Log level for the notification'),
-  })
-  .strict();
+const inputSchema = {
+  message: z.string().describe('The message to send'),
+  useObject: z.boolean().optional().describe('If true, send structured object instead of string'),
+  level: z.enum(['debug', 'info', 'notice', 'warning', 'error']).optional().describe('Log level for the notification'),
+};
 
 const outputSchema = z
   .object({
@@ -19,7 +14,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 /**

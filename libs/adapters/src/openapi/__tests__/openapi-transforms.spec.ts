@@ -1191,7 +1191,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             global: {
               transformSchema: (schema) => {
@@ -1227,7 +1227,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             global: {
               transformDescription: (desc, schema) => `${desc} [Output: ${schema?.type || 'unknown'}]`,
@@ -1256,7 +1256,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             perTool: {
               get_users: {
@@ -1287,7 +1287,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             generator: (tool) => ({
               transformDescription: (desc) => `${desc} (generated for ${tool.name})`,
@@ -1318,7 +1318,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             global: {
               transformSchema: () => undefined,
@@ -1353,7 +1353,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           postToolTransforms: {
             global: {
               transform: transformFn,
@@ -1383,7 +1383,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           postToolTransforms: {
             perTool: {
               get_users: {
@@ -1413,7 +1413,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           postToolTransforms: {
             generator: (tool) => {
               if (tool.metadata.method === 'get') {
@@ -1508,7 +1508,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             global: {
               transformSchema: transformSchemaFn,
@@ -1610,7 +1610,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
+        dataTransforms: {
           preToolTransforms: {
             global: {
               transformSchema: (schema) => {

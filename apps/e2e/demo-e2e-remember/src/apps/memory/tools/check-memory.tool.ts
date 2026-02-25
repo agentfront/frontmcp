@@ -2,12 +2,10 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import '@frontmcp/plugin-remember'; // Import for this.remember types
 
-const inputSchema = z
-  .object({
-    key: z.string().describe('Key to check'),
-    scope: z.enum(['session', 'user', 'tool', 'global']).optional().default('session').describe('Scope to check in'),
-  })
-  .strict();
+const inputSchema = {
+  key: z.string().describe('Key to check'),
+  scope: z.enum(['session', 'user', 'tool', 'global']).optional().default('session').describe('Scope to check in'),
+};
 
 const outputSchema = z.object({
   key: z.string(),
@@ -15,7 +13,7 @@ const outputSchema = z.object({
   exists: z.boolean(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

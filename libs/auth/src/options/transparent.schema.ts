@@ -2,7 +2,7 @@
 // Transparent mode - Pass-through OAuth tokens from remote provider
 
 import { z } from 'zod';
-import { publicAccessConfigSchema, remoteProviderConfigSchema } from './shared.schemas';
+import { flatRemoteProviderFields, publicAccessConfigSchema } from './shared.schemas';
 
 // ============================================
 // TRANSPARENT MODE
@@ -13,9 +13,9 @@ export const transparentAuthOptionsSchema = z.object({
   mode: z.literal('transparent'),
 
   /**
-   * Remote OAuth provider configuration (required)
+   * Flattened remote provider fields (provider, clientId, clientSecret, scopes, providerConfig)
    */
-  remote: remoteProviderConfigSchema,
+  ...flatRemoteProviderFields,
 
   /**
    * Expected token audience

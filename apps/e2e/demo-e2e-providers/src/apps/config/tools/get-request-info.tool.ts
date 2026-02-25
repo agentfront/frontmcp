@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { REQUEST_LOGGER_TOKEN, RequestLogger, RequestLoggerInfo } from '../providers/request-logger.provider';
 
-const inputSchema = z
-  .object({
-    logMessage: z.string().optional().describe('Optional message to log'),
-  })
-  .strict();
+const inputSchema = {
+  logMessage: z.string().optional().describe('Optional message to log'),
+};
 
 const outputSchema = z.object({
   requestId: z.string(),
@@ -17,7 +15,7 @@ const outputSchema = z.object({
   providerScope: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

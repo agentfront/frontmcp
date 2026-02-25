@@ -34,7 +34,6 @@ const config: Config.InitialOptions = {
     '^@frontmcp/testing$': '<rootDir>/../../../libs/testing/src/index.ts',
     '^@frontmcp/sdk$': '<rootDir>/../../../libs/sdk/src/index.ts',
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
-    '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
   coverageDirectory: '../../../coverage/e2e/demo-e2e-standalone',
   ...e2eCoveragePreset,

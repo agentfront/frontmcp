@@ -1,7 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({}).strict();
+const inputSchema = {};
 
 const outputSchema = z.object({
   pong: z.literal(true),
@@ -9,7 +9,7 @@ const outputSchema = z.object({
   serverName: z.string(),
 });
 
-type PingInput = z.infer<typeof inputSchema>;
+type PingInput = z.input<z.ZodObject<typeof inputSchema>>;
 type PingOutput = z.infer<typeof outputSchema>;
 
 @Tool({

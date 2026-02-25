@@ -348,7 +348,7 @@ describe('buildFederatedLoginPage', () => {
       ...defaultParams,
       providers: [
         { providerId: 'github', providerName: 'GitHub', mode: 'transparent', appIds: [], isPrimary: true },
-        { providerId: 'google', providerName: 'Google', mode: 'orchestrated', appIds: [] },
+        { providerId: 'google', providerName: 'Google', mode: 'local', appIds: [] },
       ],
     });
 

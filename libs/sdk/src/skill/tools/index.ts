@@ -10,14 +10,9 @@
  */
 
 import { SearchSkillsTool } from './search-skills.tool';
-import { LoadSkillsTool, LoadSkillTool } from './load-skills.tool';
+import { LoadSkillsTool } from './load-skills.tool';
 
 export { SearchSkillsTool, LoadSkillsTool };
-
-/**
- * @deprecated Use LoadSkillsTool instead
- */
-export { LoadSkillTool };
 
 /**
  * Get all skill-related tools.

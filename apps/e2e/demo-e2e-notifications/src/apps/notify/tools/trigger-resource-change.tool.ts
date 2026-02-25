@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { notificationLogStore } from '../data/notification-log.store';
 
-const inputSchema = z
-  .object({
-    uri: z.string().optional().describe('Resource URI that changed'),
-  })
-  .strict();
+const inputSchema = {
+  uri: z.string().optional().describe('Resource URI that changed'),
+};
 
 const outputSchema = z.object({
   success: z.boolean(),
@@ -14,7 +12,7 @@ const outputSchema = z.object({
   logId: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

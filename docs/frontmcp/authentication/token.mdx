@@ -59,12 +59,9 @@ FrontMCP supports two session management strategies:
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
-    sessionMode: 'stateful',
+    mode: 'local',
     tokenStorage: {
-      type: 'redis',
-      config: {
+      redis: {
         host: 'localhost',
         port: 6379,
         keyPrefix: 'myapp:auth:',
@@ -81,9 +78,7 @@ export class Server {}
 @FrontMcp({
   info: { name: 'MyServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
-    sessionMode: 'stateless',
+    mode: 'local',
   },
 })
 export class Server {}
@@ -100,9 +95,7 @@ export class Server {}
 ### In-Memory (Development)
 
 ```typescript
-tokenStorage: {
-  type: 'memory',
-}
+tokenStorage: 'memory'
 ```
 
 <Info>
@@ -113,8 +106,7 @@ tokenStorage: {
 
 ```typescript
 tokenStorage: {
-  type: 'redis',
-  config: {
+  redis: {
     host: 'redis.example.com',
     port: 6379,
     password: process.env.REDIS_PASSWORD,
@@ -192,8 +184,7 @@ FrontMCP uses default token lifetimes:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   refresh: {
     enabled: true,      // Enable automatic token refresh
     skewSeconds: 60,    // Refresh 60s before expiry
@@ -259,8 +250,7 @@ Add custom claims to tokens:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   tokenClaims: async (user) => ({
     roles: user.roles,
     tenant_id: user.tenantId,
@@ -276,8 +266,7 @@ Enable consent to let users select granted permissions:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   consent: { enabled: true },
 }
 ```
@@ -316,8 +305,7 @@ By default, keys are auto-generated at startup:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   // Keys auto-generated
 }
 ```
@@ -332,8 +320,7 @@ Provide keys for stable token validation across restarts:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   local: {
     signKey: {
       kty: 'RSA',
@@ -352,8 +339,7 @@ For production, implement key rotation:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
   local: {
     keyRotationDays: 30, // Rotate every 30 days
     maxKeys: 3, // Keep 3 keys for validation
@@ -397,9 +383,7 @@ sequenceDiagram
 ```typescript
 auth: {
   mode: 'transparent',
-  remote: {
-    provider: 'https://auth.example.com',
-  },
+  provider: 'https://auth.example.com',
   expectedAudience: 'https://api.myservice.com',
   requiredScopes: ['openid', 'profile'],
   clockTolerance: 30, // seconds of clock skew allowed

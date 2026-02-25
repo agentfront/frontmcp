@@ -13,13 +13,11 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-const inputSchema = z
-  .object({
-    title: z.string().describe('Card title'),
-    content: z.string().describe('Card content'),
-    footer: z.string().optional().describe('Optional card footer'),
-  })
-  .strict();
+const inputSchema = {
+  title: z.string().describe('Card title'),
+  content: z.string().describe('Card content'),
+  footer: z.string().optional().describe('Optional card footer'),
+};
 
 const outputSchema = z.object({
   uiType: z.literal('html'),
@@ -27,7 +25,7 @@ const outputSchema = z.object({
   title: z.string(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

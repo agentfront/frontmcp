@@ -15,7 +15,7 @@
  * test.describe('OAuth Flow', () => {
  *   test.use({
  *     server: MyServer,
- *     auth: { mode: 'orchestrated' }
+ *     auth: { mode: 'local' }
  *   });
  *
  *   test('completes OAuth flow', async ({ page, oauth }) => {

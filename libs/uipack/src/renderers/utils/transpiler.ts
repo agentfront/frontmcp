@@ -154,33 +154,3 @@ export async function isSwcAvailable(): Promise<boolean> {
   const transform = await loadSwcTransform();
   return transform !== null;
 }
-
-/**
- * Execute transpiled JavaScript code and extract the component.
- *
- * NOTE: This function has been moved to @frontmcp/ui/renderers.
- * Use executeTranspiledCode from @frontmcp/ui instead.
- *
- * @deprecated Use executeTranspiledCode from @frontmcp/ui/renderers
- */
-export async function executeTranspiledCode(_code: string, _context: Record<string, unknown> = {}): Promise<never> {
-  throw new Error(
-    'executeTranspiledCode has been moved to @frontmcp/ui/renderers. ' +
-      'Install @frontmcp/ui and import from there: import { executeTranspiledCode } from "@frontmcp/ui/renderers"',
-  );
-}
-
-/**
- * Transpile and execute a JSX string, returning the component.
- *
- * NOTE: This function has been moved to @frontmcp/ui/renderers.
- * Use transpileAndExecute from @frontmcp/ui instead.
- *
- * @deprecated Use transpileAndExecute from @frontmcp/ui/renderers
- */
-export async function transpileAndExecute(_source: string, _context: Record<string, unknown> = {}): Promise<never> {
-  throw new Error(
-    'transpileAndExecute has been moved to @frontmcp/ui/renderers. ' +
-      'Install @frontmcp/ui and import from there: import { transpileAndExecute } from "@frontmcp/ui/renderers"',
-  );
-}

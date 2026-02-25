@@ -121,10 +121,8 @@ export class AgentInstance<
     this.scope = this.providers.getActiveScope();
     this.hooks = this.scope.providers.getHooksRegistry();
 
-    // Initialize input schema
-    const schema: unknown = record.metadata.inputSchema;
-    // Support both Zod objects and raw ZodRawShape
-    this.inputSchema = (schema instanceof z.ZodObject ? schema.shape : (schema ?? {})) as InSchema;
+    // inputSchema is always a ZodRawShape
+    this.inputSchema = (record.metadata.inputSchema ?? {}) as InSchema;
 
     // Keep raw output schema
     this.outputSchema = record.metadata.outputSchema as OutSchema;

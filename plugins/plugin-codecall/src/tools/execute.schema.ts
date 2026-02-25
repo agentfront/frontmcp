@@ -26,7 +26,7 @@ ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout
 LIMITS: 10K iter/loop, 30s timeout, 100 calls max`;
 
-export const executeToolInputSchema = z.object({
+export const executeToolInputSchema = {
   script: z
     .string()
     .min(MIN_EXECUTE_SCRIPT_LENGTH)
@@ -40,9 +40,9 @@ export const executeToolInputSchema = z.object({
     .describe(
       'Optional whitelist of tool names that can be called from this script. If not provided, all indexed tools are available. Example: ["users:list", "billing:getInvoice"]',
     ),
-});
+};
 
-export type ExecuteToolInput = z.infer<typeof executeToolInputSchema>;
+export type ExecuteToolInput = z.input<z.ZodObject<typeof executeToolInputSchema>>;
 
 /**
  * Shared "payload" schemas

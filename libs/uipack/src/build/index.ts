@@ -129,18 +129,6 @@ export interface BuildOptions<In = unknown, Out = unknown> {
    * Title for the HTML document.
    */
   title?: string;
-
-  // Legacy aliases for backwards compatibility
-  /** @deprecated Use `input` instead */
-  sampleInput?: In;
-  /** @deprecated Use `output` instead */
-  sampleOutput?: Out;
-  /** @deprecated Use `config.includeBridge` instead */
-  injectAdapters?: boolean;
-  /** @deprecated Use `config.minify` instead */
-  minify?: boolean;
-  /** @deprecated Platform is now auto-detected at runtime */
-  platform?: string;
 }
 
 /**
@@ -255,25 +243,22 @@ export async function buildToolUI<In = unknown, Out = unknown>(
 ): Promise<BuildResult> {
   const startTime = Date.now();
 
-  // Normalize options (handle legacy aliases)
   const {
     template: uiConfig,
     toolName,
-    input = options.sampleInput ?? ({} as In),
-    output = options.sampleOutput ?? ({} as Out),
+    input = {} as In,
+    output = {} as Out,
     theme,
     title,
     config: userConfig = {},
-    injectAdapters,
-    minify: legacyMinify,
   } = options;
 
   // Build final config with defaults
   const config: Required<BuildConfig> = {
     network: userConfig.network ?? 'open',
     scripts: userConfig.scripts ?? 'auto',
-    includeBridge: userConfig.includeBridge ?? injectAdapters ?? true,
-    minify: userConfig.minify ?? legacyMinify ?? false,
+    includeBridge: userConfig.includeBridge ?? true,
+    minify: userConfig.minify ?? false,
   };
 
   // Resolve script strategy
@@ -516,58 +501,6 @@ export async function buildStaticWidget<In = unknown, Out = unknown>(
 }
 
 // ============================================
-// Legacy Compatibility
-// ============================================
-
-/**
- * @deprecated Use BuildConfig instead
- */
-export type BuildTargetPlatform = 'chatgpt' | 'claude' | 'universal';
-
-/**
- * @deprecated Use BuildOptions with config instead
- */
-export interface MultiBuildOptions<In = unknown, Out = unknown>
-  extends Omit<BuildOptions<In, Out>, 'platform'> {
-  platforms?: BuildTargetPlatform[];
-}
-
-/**
- * @deprecated Use BuildResult instead (same result for all platforms now)
- */
-export interface MultiBuildResult {
-  bundles: Record<string, BuildResult>;
-  totalTime: number;
-}
-
-/**
- * @deprecated Use buildToolUI with config.network instead
- */
-export async function buildToolUIMulti<In = unknown, Out = unknown>(
-  options: MultiBuildOptions<In, Out>
-): Promise<MultiBuildResult> {
-  const startTime = Date.now();
-  const { platforms = ['chatgpt', 'claude'], ...buildOptions } = options;
-
-  // For backwards compatibility, build once and return same result for all platforms
-  const result = await buildToolUI(buildOptions);
-
-  const bundles: Record<string, BuildResult> = {};
-  for (const platform of platforms) {
-    bundles[platform] = {
-      ...result,
-      // Add legacy mimeType field for compatibility
-      mimeType: platform === 'chatgpt' ? 'text/html+skybridge' : 'text/html+mcp',
-    } as BuildResult & { mimeType: string };
-  }
-
-  return {
-    bundles,
-    totalTime: Date.now() - startTime,
-  };
-}
-
-// ============================================
 // Re-exports for Convenience
 // ============================================
 
@@ -637,8 +570,6 @@ export type {
   UIMetaFields,
   OpenAIMetaFields,
   ToolResponseMeta,
-  // Deprecated
-  RuntimePayload,
 } from '../types/ui-runtime';
 
 export {

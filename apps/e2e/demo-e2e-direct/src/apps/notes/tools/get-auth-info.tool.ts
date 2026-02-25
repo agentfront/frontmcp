@@ -16,7 +16,7 @@ interface DirectAuthInfo {
   };
 }
 
-const inputSchema = z.object({}).strict();
+const inputSchema = {};
 
 const outputSchema = z.object({
   sessionId: z.string().optional(),
@@ -27,7 +27,7 @@ const outputSchema = z.object({
   userEmail: z.string().optional(),
 });
 
-type GetAuthInfoInput = z.infer<typeof inputSchema>;
+type GetAuthInfoInput = z.input<z.ZodObject<typeof inputSchema>>;
 type GetAuthInfoOutput = z.infer<typeof outputSchema>;
 
 /**

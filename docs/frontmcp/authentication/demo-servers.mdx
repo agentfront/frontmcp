@@ -74,8 +74,7 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
 ```ts title="apps/e2e/demo-e2e-orchestrated/src/main.ts"
 @FrontMcp({
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: {
       enabled: true,
       groupByApp: true,
@@ -86,7 +85,6 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
   },
   transport: {
     protocol: 'full',  // All protocols enabled, relaxed sessions for testing
-    sessionMode: 'stateful',
   },
 });
 ```
@@ -107,8 +105,8 @@ The demo login accepts any email address. Replace it with a real IdP before expo
 @FrontMcp({
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: process.env.IDP_PROVIDER_URL!,
+    provider: process.env.IDP_PROVIDER_URL!,
+    providerConfig: {
       dcrEnabled: false,
     },
     expectedAudience: process.env.IDP_EXPECTED_AUDIENCE!,

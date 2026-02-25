@@ -19,7 +19,7 @@ import type { JobExecutionManager } from '../../job/execution/job-execution.mana
   },
 })
 export default class ExecuteWorkflowTool extends ToolContext {
-  async execute(input: { name: string; input?: Record<string, unknown>; background: boolean }) {
+  async execute(input: { name: string; input?: Record<string, unknown>; background?: boolean }) {
     const scope = this.scope as unknown as {
       jobs?: JobRegistryInterface;
       workflows?: WorkflowRegistryInterface;

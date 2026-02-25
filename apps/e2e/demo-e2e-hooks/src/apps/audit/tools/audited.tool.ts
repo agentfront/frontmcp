@@ -1,12 +1,10 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    message: z.string().describe('Message to process'),
-    delay: z.number().int().min(0).default(0).describe('Optional delay in ms to simulate work'),
-  })
-  .strict();
+const inputSchema = {
+  message: z.string().describe('Message to process'),
+  delay: z.number().int().min(0).default(0).describe('Optional delay in ms to simulate work'),
+};
 
 const outputSchema = z
   .object({
@@ -16,7 +14,7 @@ const outputSchema = z
   })
   .strict();
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

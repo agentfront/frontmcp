@@ -281,7 +281,7 @@ test.describe('Public Mode', () => {
 test.describe('Orchestrated Mode', () => {
   test.use({
     server: './src/main.ts',
-    auth: { mode: 'orchestrated', type: 'local' },
+    auth: { mode: 'local' },
   });
 
   test('requires authentication', async ({ mcp }) => {

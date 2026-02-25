@@ -2,12 +2,10 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getSessionStore } from '../../sessions/data/session.store';
 
-const inputSchema = z
-  .object({
-    action: z.enum(['set', 'get']).describe('Action to perform'),
-    marker: z.string().describe('Unique marker value for isolation test'),
-  })
-  .strict();
+const inputSchema = {
+  action: z.enum(['set', 'get']).describe('Action to perform'),
+  marker: z.string().describe('Unique marker value for isolation test'),
+};
 
 const outputSchema = z
   .object({
@@ -28,7 +26,7 @@ const outputSchema = z
   outputSchema,
 })
 export default class SessionIsolationTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 

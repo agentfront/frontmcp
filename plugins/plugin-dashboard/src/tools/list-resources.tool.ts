@@ -6,12 +6,12 @@ import { safeRegex } from '../shared/safe-regex';
 /**
  * Input schema for the list-resources tool.
  */
-export const listResourcesInputSchema = z.object({
+export const listResourcesInputSchema = {
   filter: z.string().optional().describe('Filter resources by name or URI pattern (regex supported)'),
   includeTemplates: z.boolean().default(true).describe('Include resource templates in the response'),
-});
+};
 
-export type ListResourcesInput = z.output<typeof listResourcesInputSchema>;
+export type ListResourcesInput = z.output<z.ZodObject<typeof listResourcesInputSchema>>;
 
 /**
  * Output schema for the list-resources tool.

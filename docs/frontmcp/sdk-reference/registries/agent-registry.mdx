@@ -255,10 +255,10 @@ Agents are automatically registered in the parent scope's ToolRegistry:
 @Agent({
   id: 'research',
   name: 'Research Agent',
-  inputSchema: z.object({
+  inputSchema: {
     topic: z.string(),
     depth: z.enum(['shallow', 'deep']),
-  }),
+  },
 })
 class ResearchAgent extends AgentContext { }
 

@@ -10,7 +10,7 @@ OUTPUT per tool: inputSchema (JSON Schema), outputSchema (JSON Schema), usageExa
 IMPORTANT: If notFound array is non-empty → re-search with corrected queries.
 FLOW: search → describe → execute/invoke`;
 
-export const describeToolInputSchema = z.object({
+export const describeToolInputSchema = {
   toolNames: z
     .array(z.string())
     .min(1)
@@ -33,9 +33,9 @@ export const describeToolInputSchema = z.object({
     .describe(
       'Array of unique tool names (from codecall:search results) to fetch their detailed schemas and usage examples. Example: ["users:list", "billing:getInvoice"]',
     ),
-});
+};
 
-export type DescribeToolInput = z.infer<typeof describeToolInputSchema>;
+export type DescribeToolInput = z.input<z.ZodObject<typeof describeToolInputSchema>>;
 
 export const describeToolOutputSchema = z.object({
   tools: z

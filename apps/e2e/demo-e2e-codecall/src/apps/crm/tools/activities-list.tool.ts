@@ -2,11 +2,9 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = z
-  .object({
-    userId: z.string().optional().describe('Filter by user ID'),
-  })
-  .strict();
+const inputSchema = {
+  userId: z.string().optional().describe('Filter by user ID'),
+};
 
 const outputSchema = z.object({
   activities: z.array(
@@ -28,7 +26,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class ActivitiesListTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const activities = crmStore.listActivities(input.userId);
     return { activities, count: activities.length };
   }

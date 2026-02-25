@@ -1,12 +1,10 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z
-  .object({
-    key: z.string().describe('Environment variable key to retrieve'),
-    defaultValue: z.string().optional().describe('Default value if key is not found'),
-  })
-  .strict();
+const inputSchema = {
+  key: z.string().describe('Environment variable key to retrieve'),
+  defaultValue: z.string().optional().describe('Default value if key is not found'),
+};
 
 const outputSchema = z.object({
   key: z.string(),
@@ -15,7 +13,7 @@ const outputSchema = z.object({
   defaultUsed: z.boolean(),
 });
 
-type Input = z.infer<typeof inputSchema>;
+type Input = z.input<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

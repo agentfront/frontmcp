@@ -18,4 +18,4 @@ export {
 export { hashString, hashCombined, isHash } from './hash';
 
 // Transpilation utilities
-export { transpileJsx, isSwcAvailable, executeTranspiledCode, transpileAndExecute } from './transpiler';
+export { transpileJsx, isSwcAvailable } from './transpiler';

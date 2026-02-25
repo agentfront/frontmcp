@@ -7,7 +7,7 @@
  */
 import type { CimdLogger } from './cimd.logger';
 import { noopLogger } from './cimd.logger';
-import { CimdCache, type CimdCacheBackend } from './cimd.cache';
+import { InMemoryCimdCache, type CimdCacheBackend } from './cimd.cache';
 import {
   CimdFetchError,
   CimdValidationError,
@@ -67,7 +67,7 @@ export class CimdService {
     this.networkConfig = cimdNetworkConfigSchema.parse(this.config.network ?? {});
 
     // Initialize cache
-    this.cache = new CimdCache(this.cacheConfig);
+    this.cache = new InMemoryCimdCache(this.cacheConfig);
 
     this.logger.debug('CimdService initialized', {
       enabled: this.config.enabled,

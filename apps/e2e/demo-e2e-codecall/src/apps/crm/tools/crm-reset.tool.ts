@@ -2,7 +2,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = z.object({}).strict();
+const inputSchema = {};
 const outputSchema = z.object({ success: z.boolean() });
 
 @Tool({
@@ -12,7 +12,7 @@ const outputSchema = z.object({ success: z.boolean() });
   outputSchema,
 })
 export default class CrmResetTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(_input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     crmStore.reset();
     return { success: true };
   }

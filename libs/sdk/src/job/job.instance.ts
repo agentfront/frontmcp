@@ -33,11 +33,11 @@ export class JobInstance<
     this.scope = this._providers.getActiveScope();
     this.hooks = this.scope.providers.getHooksRegistry();
 
-    const schema: any = record.metadata.inputSchema;
-    this.inputSchema = schema instanceof z.ZodObject ? schema.shape : (schema ?? {});
+    // inputSchema is always a ZodRawShape
+    this.inputSchema = (record.metadata.inputSchema ?? {}) as InSchema;
 
-    const outSchema: any = record.metadata.outputSchema;
-    this.outputSchema = outSchema instanceof z.ZodObject ? outSchema.shape : (outSchema ?? {});
+    // outputSchema
+    this.outputSchema = (record.metadata.outputSchema ?? {}) as OutSchema;
 
     this.ready = this.initialize();
   }
