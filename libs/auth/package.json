@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/auth",
-  "version": "0.11.1",
+  "version": "0.12.1",
   "description": "FrontMCP Auth - Authentication, session management, and credential vault",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -51,7 +51,7 @@
     "zod": "^4.0.0",
     "ioredis": "^5.0.0",
     "@vercel/kv": "^3.0.0",
-    "@frontmcp/storage-sqlite": "0.11.1"
+    "@frontmcp/storage-sqlite": "0.12.1"
   },
   "peerDependenciesMeta": {
     "ioredis": {
@@ -65,8 +65,8 @@
     }
   },
   "dependencies": {
-    "@frontmcp/utils": "0.11.1",
-    "@frontmcp/di": "0.11.1",
+    "@frontmcp/utils": "0.12.1",
+    "@frontmcp/di": "0.12.1",
     "jose": "^6.0.0"
   },
   "devDependencies": {

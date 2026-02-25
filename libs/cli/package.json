@@ -1,6 +1,6 @@
 {
   "name": "frontmcp",
-  "version": "0.11.1",
+  "version": "0.12.1",
   "description": "FrontMCP command line interface",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
-    "@frontmcp/utils": "0.11.1",
+    "@frontmcp/utils": "0.12.1",
     "tslib": "^2.3.0",
     "@rspack/core": "^1.7.6",
     "esbuild": "^0.27.3"
