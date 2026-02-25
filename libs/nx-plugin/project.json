@@ -22,7 +22,7 @@
         "assets": [
           "libs/nx-plugin/generators.json",
           "libs/nx-plugin/executors.json",
-          "README.md",
+          "libs/nx-plugin/README.md",
           "LICENSE",
           "libs/nx-plugin/package.json",
           {
