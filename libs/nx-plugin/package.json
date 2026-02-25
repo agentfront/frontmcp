@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/nx",
-  "version": "0.12.0",
+  "version": "0.12.0-rc.1",
   "description": "Nx plugin for FrontMCP — generators and executors for building MCP servers",
   "license": "Apache-2.0",
   "type": "commonjs",
