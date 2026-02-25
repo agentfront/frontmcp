@@ -2,7 +2,28 @@
   "name": "@frontmcp/nx",
   "version": "0.11.1",
   "description": "Nx plugin for FrontMCP — generators and executors for building MCP servers",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
   "license": "Apache-2.0",
+  "keywords": [
+    "nx",
+    "nx-plugin",
+    "mcp",
+    "generators",
+    "executors",
+    "agentfront",
+    "frontmcp",
+    "framework",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/nx-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
