@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpJob",
+  "title": "FrontMCP Job Generator",
+  "description": "Generate a @Job class",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the job",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the job?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the job to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/jobs/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

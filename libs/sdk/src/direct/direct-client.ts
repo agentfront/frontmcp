@@ -30,6 +30,16 @@ import type {
   ElicitationResponse,
   CompleteOptions,
   McpLogLevel,
+  ListJobsOptions,
+  ListJobsResult,
+  ExecuteJobOptions,
+  JobExecutionResult,
+  JobStatusResult,
+  ListWorkflowsOptions,
+  ListWorkflowsResult,
+  ExecuteWorkflowOptions,
+  WorkflowExecutionResult,
+  WorkflowStatusResult,
 } from './client.types';
 import {
   detectPlatform,
@@ -457,5 +467,62 @@ export class DirectClientImpl implements DirectClient {
 
   async setLogLevel(level: McpLogLevel): Promise<void> {
     await this.mcpClient.setLoggingLevel({ level });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Job Operations (via MCP tools)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  private async callToolAndParseJson<T>(toolName: string, args: Record<string, unknown>): Promise<T> {
+    const result = await this.mcpClient.callTool({ name: toolName, arguments: args });
+    const textContent = result.content?.find((c: { type: string }) => c.type === 'text');
+    if (!textContent?.text) {
+      throw new PublicMcpError(`No text content from ${toolName}`, 'EMPTY_RESPONSE', 500);
+    }
+    return JSON.parse(textContent.text) as T;
+  }
+
+  async listJobs(options?: ListJobsOptions): Promise<ListJobsResult> {
+    return this.callToolAndParseJson('list-jobs', { ...options });
+  }
+
+  async executeJob(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: ExecuteJobOptions,
+  ): Promise<JobExecutionResult> {
+    return this.callToolAndParseJson('execute-job', {
+      name,
+      input: input ?? {},
+      background: options?.background ?? false,
+    });
+  }
+
+  async getJobStatus(runId: string): Promise<JobStatusResult> {
+    return this.callToolAndParseJson('get-job-status', { runId });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Workflow Operations (via MCP tools)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async listWorkflows(options?: ListWorkflowsOptions): Promise<ListWorkflowsResult> {
+    return this.callToolAndParseJson('list-workflows', { ...options });
+  }
+
+  async executeWorkflow(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: ExecuteWorkflowOptions,
+  ): Promise<WorkflowExecutionResult> {
+    return this.callToolAndParseJson('execute-workflow', {
+      name,
+      input: input ?? {},
+      background: options?.background ?? false,
+    });
+  }
+
+  async getWorkflowStatus(runId: string): Promise<WorkflowStatusResult> {
+    return this.callToolAndParseJson('get-workflow-status', { runId });
   }
 }

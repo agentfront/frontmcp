@@ -1,0 +1,70 @@
+---
+title: Job Generator
+slug: nx-plugin/generators/job
+icon: briefcase
+description: Generate a @Job class
+---
+
+Generates a `@Job` class extending `JobContext` with stub input/output schemas.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:job analyze-text --project text-processing
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the job |
+| `project` | `string` | — | **Required.** The project to add the job to |
+| `directory` | `string` | — | Subdirectory within `src/jobs/` |
+
+## Generated File
+
+```
+src/jobs/analyze-text.job.ts
+```
+
+```ts
+import { Job, JobContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Job({
+  name: 'analyze-text',
+  description: 'TODO: describe what this job does',
+  inputSchema: {
+    value: z.string().describe('TODO: replace with actual input'),
+  },
+  outputSchema: {
+    result: z.string().describe('TODO: replace with actual output'),
+  },
+})
+export default class AnalyzeTextJob extends JobContext {
+  async execute(input: { value: string }) {
+    // Full SDK access: this.scope.tools, this.scope.agents, etc.
+    return { result: `Processed: ${input.value}` };
+  }
+}
+```
+
+## Example
+
+```bash
+# Add to a specific subdirectory
+nx g @frontmcp/nx:job send-notification --project crm --directory notifications
+# Creates: src/jobs/notifications/send-notification.job.ts
+```
+
+After generating, update the app to register the job:
+
+```ts
+import AnalyzeTextJob from './jobs/analyze-text.job';
+
+@App({
+  id: 'text-processing',
+  jobs: [AnalyzeTextJob],
+})
+class TextProcessingApp {}
+```

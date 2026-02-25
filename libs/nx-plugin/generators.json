@@ -69,6 +69,16 @@
       "factory": "./src/generators/flow/flow",
       "schema": "./src/generators/flow/schema.json",
       "description": "Generate a @Flow class extending FlowBase"
+    },
+    "job": {
+      "factory": "./src/generators/job/job",
+      "schema": "./src/generators/job/schema.json",
+      "description": "Generate a @Job class"
+    },
+    "workflow": {
+      "factory": "./src/generators/workflow/workflow",
+      "schema": "./src/generators/workflow/schema.json",
+      "description": "Generate a @Workflow class"
     }
   }
 }

@@ -35,6 +35,18 @@ export type {
   CompleteResult,
   // Logging types
   McpLogLevel,
+  // Job types
+  ListJobsOptions,
+  ListJobsResult,
+  ExecuteJobOptions,
+  JobExecutionResult,
+  JobStatusResult,
+  // Workflow types
+  ListWorkflowsOptions,
+  ListWorkflowsResult,
+  ExecuteWorkflowOptions,
+  WorkflowExecutionResult,
+  WorkflowStatusResult,
 } from './client.types';
 
 // ─────────────────────────────────────────────────────────────────────────────

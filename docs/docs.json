@@ -92,7 +92,9 @@
                   "frontmcp/servers/elicitation",
                   "frontmcp/servers/skills",
                   "frontmcp/servers/discovery",
-                  "frontmcp/servers/flows"
+                  "frontmcp/servers/flows",
+                  "frontmcp/servers/jobs",
+                  "frontmcp/servers/workflows"
                 ]
               },
               {
@@ -104,7 +106,8 @@
                   "frontmcp/sdk-reference/contexts/resource-context",
                   "frontmcp/sdk-reference/contexts/prompt-context",
                   "frontmcp/sdk-reference/contexts/agent-context",
-                  "frontmcp/sdk-reference/contexts/skill-context"
+                  "frontmcp/sdk-reference/contexts/skill-context",
+                  "frontmcp/sdk-reference/contexts/job-context"
                 ]
               },
               {
@@ -264,6 +267,8 @@
               "frontmcp/sdk-reference/decorators/skill",
               "frontmcp/sdk-reference/decorators/provider",
               "frontmcp/sdk-reference/decorators/plugin",
+              "frontmcp/sdk-reference/decorators/job",
+              "frontmcp/sdk-reference/decorators/workflow",
               "frontmcp/sdk-reference/decorators/hooks"
             ]
           },
@@ -288,7 +293,9 @@
               "frontmcp/sdk-reference/registries/plugin-registry",
               "frontmcp/sdk-reference/registries/hook-registry",
               "frontmcp/sdk-reference/registries/provider-registry",
-              "frontmcp/sdk-reference/registries/auth-registry"
+              "frontmcp/sdk-reference/registries/auth-registry",
+              "frontmcp/sdk-reference/registries/job-registry",
+              "frontmcp/sdk-reference/registries/workflow-registry"
             ]
           },
           {
@@ -339,7 +346,9 @@
               "frontmcp/nx-plugin/generators/plugin",
               "frontmcp/nx-plugin/generators/adapter",
               "frontmcp/nx-plugin/generators/auth-provider",
-              "frontmcp/nx-plugin/generators/flow"
+              "frontmcp/nx-plugin/generators/flow",
+              "frontmcp/nx-plugin/generators/job",
+              "frontmcp/nx-plugin/generators/workflow"
             ]
           },
           {

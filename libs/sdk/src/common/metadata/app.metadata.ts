@@ -11,6 +11,8 @@ import {
   PluginType,
   AdapterType,
   SkillType,
+  JobType,
+  WorkflowType,
 } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -22,6 +24,8 @@ import {
   annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
   annotatedFrontMcpAgentsSchema,
+  annotatedFrontMcpJobsSchema,
+  annotatedFrontMcpWorkflowsSchema,
 } from '../schemas';
 
 /**
@@ -111,6 +115,18 @@ export interface LocalAppMetadata {
   skills?: SkillType[];
 
   /**
+   * Jobs registered by this app.
+   * Jobs are pure executable units with strict input/output schemas.
+   */
+  jobs?: JobType[];
+
+  /**
+   * Workflows registered by this app.
+   * Workflows connect jobs into managed steps with triggers.
+   */
+  workflows?: WorkflowType[];
+
+  /**
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
@@ -138,6 +154,8 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
   agents: z.array(annotatedFrontMcpAgentsSchema).optional(),
   skills: z.array(annotatedFrontMcpSkillsSchema).optional(),
+  jobs: z.array(annotatedFrontMcpJobsSchema).optional(),
+  workflows: z.array(annotatedFrontMcpWorkflowsSchema).optional(),
   auth: authOptionsSchema.optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])

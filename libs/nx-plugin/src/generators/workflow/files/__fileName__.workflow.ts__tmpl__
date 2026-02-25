@@ -1,0 +1,23 @@
+import { Workflow } from '@frontmcp/sdk';
+
+@Workflow({
+  name: '<%= name %>',
+  description: 'TODO: describe what this workflow does',
+  trigger: 'manual',
+  steps: [
+    {
+      id: 'step1',
+      jobName: 'TODO-first-job',
+      input: { value: 'hello' },
+    },
+    {
+      id: 'step2',
+      jobName: 'TODO-second-job',
+      dependsOn: ['step1'],
+      input: (steps) => ({
+        value: steps.get('step1').outputs.result,
+      }),
+    },
+  ],
+})
+export default class <%= className %>Workflow {}

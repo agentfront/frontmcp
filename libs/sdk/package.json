@@ -66,13 +66,17 @@
     "content-type": "^1.0.5",
     "vectoriadb": "^2.1.3",
     "@vercel/kv": "^3.0.0",
-    "@frontmcp/storage-sqlite": "0.11.1"
+    "@frontmcp/storage-sqlite": "0.11.1",
+    "@enclave-vm/core": "^2.11.1"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {
       "optional": true
     },
     "@frontmcp/storage-sqlite": {
+      "optional": true
+    },
+    "@enclave-vm/core": {
       "optional": true
     }
   },

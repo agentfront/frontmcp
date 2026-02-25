@@ -25,3 +25,5 @@ export * from './prompt.record';
 export * from './logger.record';
 export * from './agent.record';
 export * from './skill.record';
+export * from './job.record';
+export * from './workflow.record';

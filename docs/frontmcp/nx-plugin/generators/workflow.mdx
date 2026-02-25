@@ -1,0 +1,74 @@
+---
+title: Workflow Generator
+slug: nx-plugin/generators/workflow
+icon: diagram-project
+description: Generate a @Workflow class
+---
+
+Generates a `@Workflow` class with stub step definitions.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:workflow data-pipeline --project text-processing
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the workflow |
+| `project` | `string` | — | **Required.** The project to add the workflow to |
+| `directory` | `string` | — | Subdirectory within `src/workflows/` |
+
+## Generated File
+
+```
+src/workflows/data-pipeline.workflow.ts
+```
+
+```ts
+import { Workflow } from '@frontmcp/sdk';
+
+@Workflow({
+  name: 'data-pipeline',
+  description: 'TODO: describe what this workflow does',
+  trigger: 'manual',
+  steps: [
+    {
+      id: 'step1',
+      jobName: 'TODO-first-job',
+      input: { value: 'hello' },
+    },
+    {
+      id: 'step2',
+      jobName: 'TODO-second-job',
+      dependsOn: ['step1'],
+      input: (steps) => ({
+        value: steps.get('step1').outputs.result,
+      }),
+    },
+  ],
+})
+export default class DataPipelineWorkflow {}
+```
+
+## Example
+
+```bash
+# Add to a specific subdirectory
+nx g @frontmcp/nx:workflow etl-pipeline --project analytics --directory pipelines
+# Creates: src/workflows/pipelines/etl-pipeline.workflow.ts
+```
+
+After generating, update the app to register the workflow:
+
+```ts
+import DataPipelineWorkflow from './workflows/data-pipeline.workflow';
+
+@App({
+  id: 'text-processing',
+  workflows: [DataPipelineWorkflow],
+})
+class TextProcessingApp {}
+```
