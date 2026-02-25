@@ -1,0 +1,214 @@
+---
+title: "JobRegistry"
+description: "The JobRegistry manages all jobs within a scope. It provides methods for listing, finding, searching, and subscribing to job changes."
+icon: "briefcase"
+---
+
+## Overview
+
+```typescript
+import { JobRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const jobs = scope.jobs;
+
+// List all jobs
+const allJobs = jobs.getJobs();
+
+// Find a specific job
+const job = jobs.findByName('analyze-text');
+```
+
+## Methods
+
+### getJobs()
+
+Get all jobs (local + dynamic).
+
+```typescript
+getJobs(includeHidden?: boolean): JobEntry[]
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `includeHidden` | `boolean` | `false` | Include hidden jobs in results |
+
+**Example:**
+
+```typescript
+// Get all visible jobs
+const jobs = registry.getJobs();
+
+// Include hidden jobs
+const allJobs = registry.getJobs(true);
+```
+
+### findByName()
+
+Find a job by its base name.
+
+```typescript
+findByName(name: string): JobEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const job = registry.findByName('analyze-text');
+if (job) {
+  console.log(`Found: ${job.name}`);
+}
+```
+
+### findById()
+
+Find a job by its ID.
+
+```typescript
+findById(id: string): JobEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const job = registry.findById('custom-job-id');
+```
+
+### search()
+
+Search jobs by query, tags, or labels.
+
+```typescript
+search(
+  query?: string,
+  opts?: { tags?: string[]; labels?: Record<string, string> }
+): JobEntry[]
+```
+
+**Example:**
+
+```typescript
+// Search by name/description
+const results = registry.search('email');
+
+// Filter by tags
+const tagged = registry.search(undefined, { tags: ['notification'] });
+
+// Filter by labels
+const labeled = registry.search(undefined, {
+  labels: { priority: 'high' },
+});
+```
+
+### registerDynamic()
+
+Register a dynamic job at runtime.
+
+```typescript
+registerDynamic(record: JobDynamicRecord): void
+```
+
+**Example:**
+
+```typescript
+registry.registerDynamic({
+  kind: JobKind.DYNAMIC,
+  provide: 'my-dynamic-job',
+  metadata: {
+    id: 'my-dynamic-job',
+    name: 'my-dynamic-job',
+    description: 'A dynamically registered job',
+    inputSchema: {},
+    outputSchema: {},
+  },
+  script: 'module.exports = (input) => ({ result: input.value })',
+  registeredBy: 'admin',
+  registeredAt: Date.now(),
+});
+```
+
+### removeDynamic()
+
+Remove a dynamic job.
+
+```typescript
+removeDynamic(jobId: string): boolean
+```
+
+**Returns:** `true` if the job was found and removed, `false` otherwise.
+
+### subscribe()
+
+Subscribe to job change events.
+
+```typescript
+subscribe(
+  opts: { immediate?: boolean },
+  cb: (event: JobChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+**Example:**
+
+```typescript
+const unsubscribe = registry.subscribe(
+  { immediate: true },
+  (event) => {
+    console.log(`Job ${event.kind}:`, event.version);
+  }
+);
+
+// Later: stop listening
+unsubscribe();
+```
+
+### hasAny()
+
+Check if any jobs exist in the registry.
+
+```typescript
+hasAny(): boolean
+```
+
+## MCP Tools Registered
+
+When the jobs system is enabled, the registry's capabilities are exposed through these MCP tools:
+
+| Tool | Description |
+|------|-------------|
+| `list-jobs` | List all registered jobs with optional filtering |
+| `execute-job` | Execute a job by name (inline or background) |
+| `get-job-status` | Get execution status by `runId` |
+| `register-job` | Register a dynamic job with JavaScript source |
+| `remove-job` | Remove a dynamic job |
+
+## Change Events
+
+The registry emits events when jobs are added, updated, or removed:
+
+```typescript
+interface JobChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: readonly JobEntry[];
+  sessionId?: string;
+}
+```
+
+## Lifecycle
+
+```
+buildMap()     → Extract tokens, definitions from metadata
+buildGraph()   → Validate dependencies, populate graph
+initialize()   → Create instances, register dynamic jobs
+```
+
+## Related
+
+- [Jobs Guide](/frontmcp/servers/jobs)
+- [@Job Decorator](/frontmcp/sdk-reference/decorators/job)
+- [JobContext](/frontmcp/sdk-reference/contexts/job-context)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

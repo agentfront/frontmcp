@@ -1,0 +1,30 @@
+---
+title: Plugin System
+slug: features/plugin-system
+icon: puzzle-piece
+description: Extend servers with plugins, adapters, and context extensions
+---
+
+FrontMCP's plugin system lets you add cross-cutting capabilities — caching, logging, context extensions, and more — without modifying your tools or resources. Plugins use the `@Plugin` decorator and `DynamicPlugin` base class to hook into the request lifecycle.
+
+| Capability | Example |
+| --- | --- |
+| Register tools, resources, prompts | Dynamically add capabilities at startup |
+| Add providers | Inject services into the DI container |
+| Extend context | Add `this.remember`, `this.cache` to tool contexts |
+| Hook into flows | Intercept request lifecycle stages |
+
+<CardGroup cols={2}>
+  <Card title="Plugin Overview" icon="puzzle-piece" href="/frontmcp/plugins/overview">
+    Official and community plugins
+  </Card>
+  <Card title="Plugin API" icon="code" href="/frontmcp/extensibility/plugins">
+    Full DynamicPlugin API, hooks, and scopes
+  </Card>
+  <Card title="Create a Plugin" icon="plug" href="/frontmcp/guides/create-plugin">
+    Step-by-step plugin creation tutorial
+  </Card>
+  <Card title="OpenAPI Adapter" icon="file-code" href="/frontmcp/adapters/openapi-adapter">
+    Auto-generate tools from OpenAPI specs
+  </Card>
+</CardGroup>

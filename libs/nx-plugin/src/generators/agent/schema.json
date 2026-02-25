@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpAgent",
+  "title": "FrontMCP Agent Generator",
+  "description": "Generate an @Agent class",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the agent",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the agent?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the agent to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "model": {
+      "type": "string",
+      "description": "The LLM model name",
+      "default": "gpt-4"
+    },
+    "tools": {
+      "type": "string",
+      "description": "Comma-separated tool names to reference"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/agents/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

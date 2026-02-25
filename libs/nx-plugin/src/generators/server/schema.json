@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpServer",
+  "title": "FrontMCP Server Generator",
+  "description": "Generate a deployment shell",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the server deployment shell",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the server?",
+      "x-priority": "important"
+    },
+    "directory": {
+      "type": "string",
+      "description": "The directory of the server (default: servers/<name>)",
+      "x-priority": "important"
+    },
+    "deploymentTarget": {
+      "type": "string",
+      "description": "The deployment target platform",
+      "enum": ["node", "vercel", "lambda", "cloudflare"],
+      "default": "node",
+      "x-prompt": {
+        "message": "Which deployment target?",
+        "type": "list",
+        "items": [
+          { "value": "node", "label": "Node.js (Docker)" },
+          { "value": "vercel", "label": "Vercel" },
+          { "value": "lambda", "label": "AWS Lambda (SAM)" },
+          { "value": "cloudflare", "label": "Cloudflare Workers" }
+        ]
+      },
+      "x-priority": "important"
+    },
+    "apps": {
+      "type": "string",
+      "description": "Comma-separated app names to compose in this server",
+      "x-prompt": "Which apps should this server compose? (comma-separated)",
+      "x-priority": "important"
+    },
+    "redis": {
+      "type": "string",
+      "description": "Redis setup option (node target only)",
+      "enum": ["docker", "existing", "none"],
+      "default": "none"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags",
+      "x-priority": "internal"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Skip formatting files",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "apps"]
+}

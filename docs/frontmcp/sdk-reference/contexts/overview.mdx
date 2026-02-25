@@ -11,6 +11,7 @@ ExecutionContextBase<Out>
 ├── ToolContext<InSchema, OutSchema, In, Out>
 ├── ResourceContext<Params, Out>
 ├── AgentContext<InSchema, OutSchema, In, Out>
+├── JobContext<InSchema, OutSchema, In, Out>
 └── SkillContext
 
 PromptContext (independent, similar interface)
@@ -39,6 +40,8 @@ const resources = this.scope.resources;
 const prompts = this.scope.prompts;
 const agents = this.scope.agents;
 const skills = this.scope.skills;
+const jobs = this.scope.jobs;
+const workflows = this.scope.workflows;
 ```
 
 ### Logging
@@ -93,6 +96,9 @@ const error = this.error;
   </Card>
   <Card title="SkillContext" icon="lightbulb" href="/frontmcp/sdk-reference/contexts/skill-context">
     Instruction loading, skill building
+  </Card>
+  <Card title="JobContext" icon="briefcase" href="/frontmcp/sdk-reference/contexts/job-context">
+    Logging, progress, retry tracking
   </Card>
   <Card title="ExecutionContextBase" icon="code" href="/frontmcp/sdk-reference/contexts/execution-context-base">
     Base class with shared functionality

@@ -46,7 +46,7 @@ npm install @frontmcp/plugins
 
 ```ts Simple (in-memory)
 import { App } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @App({
   id: 'my-app',
@@ -61,7 +61,7 @@ export default class MyApp {}
 
 ```ts Custom TTL (in-memory)
 import { App } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @App({
   id: 'my-app',
@@ -81,7 +81,7 @@ export default class MyApp {}
 
 ```ts Redis (production)
 import { App } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @App({
   id: 'my-app',
@@ -596,7 +596,7 @@ Here's a full example with multiple tools using different caching strategies:
 
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
+import { CachePlugin } from '@frontmcp/plugins';
 import { z } from 'zod';
 
 // Real-time data: short TTL
@@ -688,7 +688,7 @@ export default class Server {}
 ## What's Next?
 
 <CardGroup cols={3}>
-  <Card title="Cache Plugin Docs" icon="book" href="/frontmcp/plugins/official/cache">
+  <Card title="Cache Plugin Docs" icon="book" href="/frontmcp/plugins/cache-plugin">
     Full Cache Plugin reference documentation
   </Card>
 

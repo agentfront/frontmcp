@@ -344,23 +344,18 @@ export default class TripPlannerAgent extends AgentContext {}
 ## Testing Agents
 
 ```typescript
-import { createTestingModule } from '@frontmcp/sdk/testing';
-import WeatherApp from './apps/weather';
+import { test, expect } from '@frontmcp/testing';
 
-describe('Weather Summary Agent', () => {
-  it('should summarize weather', async () => {
-    const { scope } = await createTestingModule({
-      apps: [WeatherApp],
-    });
+test.use({ server: './src/main.ts' });
 
-    const result = await scope.callTool('weather:weather-summary', {
-      location: 'San Francisco',
-      units: 'celsius',
-    });
-
-    expect(result.summary).toBeDefined();
-    expect(typeof result.summary).toBe('string');
+test('weather summary agent returns a summary', async ({ mcp }) => {
+  const result = await mcp.tools.call('weather:weather-summary', {
+    location: 'San Francisco',
+    units: 'celsius',
   });
+
+  expect(result).toBeSuccessful();
+  expect(result.content[0].text).toBeDefined();
 });
 ```
 

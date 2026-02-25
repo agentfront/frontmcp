@@ -1,0 +1,42 @@
+---
+title: Build Exec Executor
+slug: nx-plugin/executors/build-exec
+icon: box
+description: Build a distributable bundle using frontmcp build --exec
+---
+
+Builds a distributable executable bundle using esbuild. Produces a single-file output ideal for containerized deployments.
+
+## Usage
+
+```bash
+nx build-exec my-app
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "build-exec": {
+      "executor": "@frontmcp/nx:build-exec",
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "entry": "{projectRoot}/src/main.ts",
+        "outputPath": "{projectRoot}/dist"
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `entry` | `string` | Entry file path |
+| `outputPath` | `string` | Output directory path |
+
+## Caching
+
+This executor is **cacheable**. The bundled output is deterministic given the same inputs.

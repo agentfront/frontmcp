@@ -1,0 +1,45 @@
+---
+title: Skill Generator
+slug: nx-plugin/generators/skill
+icon: graduation-cap
+description: Generate a @Skill class
+---
+
+Generates a `@Skill` class with optional tool references for multi-step workflows.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:skill deploy-app --project crm
+nx g @frontmcp/nx:skill deploy-app --project crm --tools docker_build,k8s_apply
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the skill |
+| `project` | `string` | — | **Required.** The project to add the skill to |
+| `tools` | `string` | — | Comma-separated tool names to reference |
+| `directory` | `string` | — | Subdirectory within `src/skills/` |
+
+## Generated Code
+
+```ts
+import { Skill, SkillContext } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'deploy-app',
+  description: 'TODO: describe what this skill does',
+  tools: ['docker_build', 'k8s_apply'],
+})
+export default class DeployAppSkill extends SkillContext {
+  async loadInstructions(): Promise<string> {
+    return 'TODO: define skill instructions';
+  }
+
+  async build(): Promise<void> {
+    // TODO: implement skill build logic
+  }
+}
+```

@@ -194,6 +194,97 @@ export interface ListSkillsResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Job Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ListJobsOptions {
+  tags?: string[];
+  labels?: Record<string, string>;
+}
+
+export interface ListJobsResult {
+  jobs: Array<{
+    name: string;
+    description?: string;
+    tags?: string[];
+    labels?: Record<string, string>;
+    inputSchema?: Record<string, unknown>;
+    outputSchema?: Record<string, unknown>;
+  }>;
+  count: number;
+}
+
+export interface ExecuteJobOptions {
+  background?: boolean;
+}
+
+export interface JobExecutionResult {
+  runId: string;
+  state: string;
+  result?: unknown;
+  logs?: string[];
+}
+
+export interface JobStatusResult {
+  runId: string;
+  jobName: string;
+  state: string;
+  result?: unknown;
+  error?: { message: string; name: string };
+  logs: string[];
+  startedAt: number;
+  completedAt?: number;
+  attempt: number;
+  background: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Workflow Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ListWorkflowsOptions {
+  tags?: string[];
+  labels?: Record<string, string>;
+}
+
+export interface ListWorkflowsResult {
+  workflows: Array<{
+    name: string;
+    description?: string;
+    trigger?: string;
+    tags?: string[];
+    steps?: Array<{ id: string; jobName: string }>;
+  }>;
+  count: number;
+}
+
+export interface ExecuteWorkflowOptions {
+  background?: boolean;
+}
+
+export interface WorkflowExecutionResult {
+  runId: string;
+  state: string;
+  result?: unknown;
+  stepResults?: Record<string, { state: string; outputs?: unknown }>;
+}
+
+export interface WorkflowStatusResult extends JobStatusResult {
+  workflowName: string;
+  stepResults?: Record<
+    string,
+    {
+      jobName: string;
+      state: string;
+      outputs?: Record<string, unknown>;
+      error?: { message: string };
+      startedAt: number;
+      completedAt?: number;
+    }
+  >;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Elicitation Types
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -544,4 +635,68 @@ export interface DirectClient {
    * @param level - The logging level
    */
   setLogLevel(level: McpLogLevel): Promise<void>;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Job Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * List all available jobs.
+   *
+   * @param options - Optional filter options (tags, labels)
+   * @returns List of job definitions with count
+   */
+  listJobs(options?: ListJobsOptions): Promise<ListJobsResult>;
+
+  /**
+   * Execute a job by name.
+   *
+   * @param name - Job name
+   * @param input - Job input arguments
+   * @param options - Execution options (background mode)
+   * @returns Execution result with runId and state
+   */
+  executeJob(name: string, input?: Record<string, unknown>, options?: ExecuteJobOptions): Promise<JobExecutionResult>;
+
+  /**
+   * Get the status of a job run.
+   *
+   * @param runId - The run ID returned from executeJob
+   * @returns Job status with state, result, logs, etc.
+   */
+  getJobStatus(runId: string): Promise<JobStatusResult>;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Workflow Operations
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * List all available workflows.
+   *
+   * @param options - Optional filter options (tags, labels)
+   * @returns List of workflow definitions with count
+   */
+  listWorkflows(options?: ListWorkflowsOptions): Promise<ListWorkflowsResult>;
+
+  /**
+   * Execute a workflow by name.
+   *
+   * @param name - Workflow name
+   * @param input - Workflow input arguments
+   * @param options - Execution options (background mode)
+   * @returns Execution result with runId and state
+   */
+  executeWorkflow(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: ExecuteWorkflowOptions,
+  ): Promise<WorkflowExecutionResult>;
+
+  /**
+   * Get the status of a workflow run.
+   *
+   * @param runId - The run ID returned from executeWorkflow
+   * @returns Workflow status with state, step results, etc.
+   */
+  getWorkflowStatus(runId: string): Promise<WorkflowStatusResult>;
 }

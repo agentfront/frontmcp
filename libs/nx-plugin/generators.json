@@ -1,0 +1,84 @@
+{
+  "generators": {
+    "workspace": {
+      "factory": "./src/generators/workspace/workspace",
+      "schema": "./src/generators/workspace/schema.json",
+      "description": "Scaffold a full FrontMCP Nx monorepo with apps/, libs/, and servers/ directories"
+    },
+    "app": {
+      "factory": "./src/generators/app/app",
+      "schema": "./src/generators/app/schema.json",
+      "description": "Generate a FrontMCP application in apps/"
+    },
+    "lib": {
+      "factory": "./src/generators/lib/lib",
+      "schema": "./src/generators/lib/schema.json",
+      "description": "Generate a shared library in libs/"
+    },
+    "server": {
+      "factory": "./src/generators/server/server",
+      "schema": "./src/generators/server/schema.json",
+      "description": "Generate a deployment shell in servers/"
+    },
+    "tool": {
+      "factory": "./src/generators/tool/tool",
+      "schema": "./src/generators/tool/schema.json",
+      "description": "Generate a @Tool class"
+    },
+    "resource": {
+      "factory": "./src/generators/resource/resource",
+      "schema": "./src/generators/resource/schema.json",
+      "description": "Generate a @Resource or @ResourceTemplate class"
+    },
+    "prompt": {
+      "factory": "./src/generators/prompt/prompt",
+      "schema": "./src/generators/prompt/schema.json",
+      "description": "Generate a @Prompt class"
+    },
+    "skill": {
+      "factory": "./src/generators/skill/skill",
+      "schema": "./src/generators/skill/schema.json",
+      "description": "Generate a @Skill class"
+    },
+    "agent": {
+      "factory": "./src/generators/agent/agent",
+      "schema": "./src/generators/agent/schema.json",
+      "description": "Generate an @Agent class"
+    },
+    "provider": {
+      "factory": "./src/generators/provider/provider",
+      "schema": "./src/generators/provider/schema.json",
+      "description": "Generate a @Provider class for dependency injection"
+    },
+    "plugin": {
+      "factory": "./src/generators/plugin/plugin",
+      "schema": "./src/generators/plugin/schema.json",
+      "description": "Generate a @Plugin class extending DynamicPlugin"
+    },
+    "adapter": {
+      "factory": "./src/generators/adapter/adapter",
+      "schema": "./src/generators/adapter/schema.json",
+      "description": "Generate an @Adapter class extending DynamicAdapter"
+    },
+    "auth-provider": {
+      "factory": "./src/generators/auth-provider/auth-provider",
+      "schema": "./src/generators/auth-provider/schema.json",
+      "description": "Generate an @AuthProvider class"
+    },
+    "flow": {
+      "factory": "./src/generators/flow/flow",
+      "schema": "./src/generators/flow/schema.json",
+      "description": "Generate a @Flow class extending FlowBase"
+    },
+    "job": {
+      "factory": "./src/generators/job/job",
+      "schema": "./src/generators/job/schema.json",
+      "description": "Generate a @Job class"
+    },
+    "workflow": {
+      "factory": "./src/generators/workflow/workflow",
+      "schema": "./src/generators/workflow/schema.json",
+      "description": "Generate a @Workflow class"
+    }
+  }
+}

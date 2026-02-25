@@ -49,6 +49,7 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-elicitation': { start: 50260, size: 10 },
   'demo-e2e-agents': { start: 50270, size: 10 },
   'demo-e2e-transport-recreation': { start: 50280, size: 10 },
+  'demo-e2e-jobs': { start: 50290, size: 10 },
 
   // Infrastructure E2E tests (50300-50399)
   'demo-e2e-redis': { start: 50300, size: 10 },

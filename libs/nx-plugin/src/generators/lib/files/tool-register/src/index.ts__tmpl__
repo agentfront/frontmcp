@@ -1,0 +1,1 @@
+export { <%= className %>Tools } from './<%= fileName %>.tools';

@@ -1,0 +1,31 @@
+import { Flow, FlowBase } from '@frontmcp/sdk';
+
+@Flow({
+  name: '<%= name %>',
+  description: 'TODO: describe what this flow does',
+  plan: {
+    steps: ['pre', 'execute', 'post', 'finalize'],
+  },
+})
+export default class <%= className %>Flow extends FlowBase {
+  async pre(): Promise<void> {
+    // TODO: pre-processing logic
+  }
+
+  async execute(): Promise<void> {
+    // TODO: main execution logic
+  }
+
+  async post(): Promise<void> {
+    // TODO: post-processing logic
+  }
+
+  async finalize(): Promise<void> {
+    // TODO: finalization logic
+  }
+
+  async error(err: Error): Promise<void> {
+    // TODO: error handling logic
+    throw err;
+  }
+}

@@ -1,0 +1,33 @@
+/**
+ * Context extension for <%= className %>Plugin.
+ *
+ * This file provides:
+ * 1. Module augmentation — TypeScript types for `this.<%= propertyName %>`
+ * 2. Runtime extension — prototype modification to make it available at runtime
+ *
+ * Usage in tools/resources/prompts:
+ *   const value = this.<%= propertyName %>;
+ */
+
+// 1. Module augmentation
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly <%= propertyName %>: unknown; // TODO: replace with actual type
+  }
+}
+
+// 2. Runtime extension
+export function install<%= className %>ContextExtension(): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { ExecutionContextBase } = require('@frontmcp/sdk');
+
+  Object.defineProperty(ExecutionContextBase.prototype, '<%= propertyName %>', {
+    get: function () {
+      // TODO: return the appropriate value from DI container
+      // Example: return this.get(MY_TOKEN);
+      return undefined;
+    },
+    configurable: true,
+    enumerable: false,
+  });
+}

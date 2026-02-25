@@ -66,6 +66,8 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     agents: config.agents,
     skills: config.skills,
     auth: config.auth,
+    jobs: config.jobDefinitions,
+    workflows: config.workflowDefinitions,
   };
 
   for (const key of Object.keys(appMeta)) {
@@ -87,6 +89,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     elicitation: config.elicitation,
     skillsConfig: config.skillsConfig,
     extApps: config.extApps,
+    jobs: config.jobs,
   };
 }
 

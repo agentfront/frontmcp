@@ -1,0 +1,55 @@
+---
+title: Build Executor
+slug: nx-plugin/executors/build
+icon: hammer
+description: Compile a FrontMCP project using frontmcp build
+---
+
+Compiles a FrontMCP project using TypeScript (`tsc`). Supports deployment adapters for platform-specific output.
+
+## Usage
+
+```bash
+nx build my-app
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "build": {
+      "executor": "@frontmcp/nx:build",
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "entry": "{projectRoot}/src/main.ts",
+        "outputPath": "{projectRoot}/dist"
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `entry` | `string` | Entry file path |
+| `outputPath` | `string` | Output directory path |
+| `adapter` | `node` \| `vercel` \| `lambda` \| `cloudflare` | Deployment adapter |
+
+## Caching
+
+This executor is **cacheable**. Nx will skip the build if inputs haven't changed.
+
+```json nx.json
+{
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    }
+  }
+}
+```

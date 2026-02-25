@@ -1,0 +1,43 @@
+<% if (isTemplate) { %>import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  name: '<%= name %>',
+  uriTemplate: '<%= name %>://{id}',
+  description: 'TODO: describe this resource template',
+  mimeType: 'application/json',
+})
+export default class <%= className %>Resource extends ResourceContext {
+  async execute(uri: string, params: Record<string, string>) {
+    // TODO: implement — params.id available from URI template
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify({ id: params.id }),
+        },
+      ],
+    };
+  }
+}<% } else { %>import { Resource, ResourceContext } from '@frontmcp/sdk';
+
+@Resource({
+  name: '<%= name %>',
+  uri: '<%= name %>://data',
+  description: 'TODO: describe this resource',
+  mimeType: 'application/json',
+})
+export default class <%= className %>Resource extends ResourceContext {
+  async execute(uri: string) {
+    // TODO: implement
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify({}),
+        },
+      ],
+    };
+  }
+}<% } %>

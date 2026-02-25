@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpPlugin",
+  "title": "FrontMCP Plugin Generator",
+  "description": "Generate a @Plugin class extending DynamicPlugin",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the plugin",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the plugin?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the plugin to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "withContextExtension": {
+      "type": "boolean",
+      "description": "Generate a context extension file (module augmentation + prototype extension)",
+      "default": false
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/plugins/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

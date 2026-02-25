@@ -1,75 +1,50 @@
 ---
 title: Community Plugins
-description: Discover plugins created by the FrontMCP community, or share your own.
+description: Discover plugins created by the FrontMCP community, or publish your own.
 ---
 
-## Featured Plugins
+## Community Plugins
+
+The FrontMCP plugin system is designed to be extensible. Community members can create and publish plugins that add new capabilities to any FrontMCP server.
 
 <Note>
-  Community plugins are maintained by their authors. Review code before using in production.
+  No community plugins have been published yet. Be the first to contribute!
 </Note>
 
-### Database Adapters
+## Finding Community Plugins
 
-- **@frontmcp/plugin-postgres** - PostgreSQL integration
-- **@frontmcp/plugin-mongodb** - MongoDB integration
-- **@frontmcp/plugin-prisma** - Prisma ORM adapter
-
-### Authentication
-
-- **@frontmcp/plugin-clerk** - Clerk authentication
-- **@frontmcp/plugin-supabase-auth** - Supabase Auth integration
-
-### Observability
-
-- **@frontmcp/plugin-sentry** - Sentry error tracking
-- **@frontmcp/plugin-datadog** - Datadog APM integration
-- **@frontmcp/plugin-opentelemetry** - OpenTelemetry tracing
-
-### Integrations
-
-- **@frontmcp/plugin-slack** - Slack notifications
-- **@frontmcp/plugin-discord** - Discord bot integration
-- **@frontmcp/plugin-email** - Email sending (SendGrid, Resend)
-
-## Using Community Plugins
-
-```bash
-npm install @frontmcp/plugin-postgres
-```
-
-```typescript
-import { FrontMcp } from '@frontmcp/sdk';
-import { PostgresPlugin } from '@frontmcp/plugin-postgres';
-
-@FrontMcp({
-  plugins: [
-    new PostgresPlugin({
-      connectionString: process.env.DATABASE_URL
-    })
-  ]
-})
-export class MyServer {}
-```
+<Steps>
+  <Step title="Search npm">
+    Search for packages tagged with `frontmcp-plugin` or `mcp-plugin`:
+    ```bash
+    npm search frontmcp-plugin
+    ```
+  </Step>
+  <Step title="Check GitHub Topics">
+    Browse repositories tagged with [`frontmcp-plugin`](https://github.com/topics/frontmcp-plugin) on GitHub.
+  </Step>
+  <Step title="Join the Community">
+    Visit the [FrontMCP Discussions](https://github.com/agentfront/frontmcp/discussions) to discover and share plugins.
+  </Step>
+</Steps>
 
 ## Publishing Your Plugin
 
-### 1. Create Plugin Package
+### 1. Create Your Plugin
 
-```bash
-mkdir my-plugin
-cd my-plugin
-npm init
-```
+Follow the [Create a Plugin](/frontmcp/guides/create-plugin) guide to build a plugin using the `@Plugin` decorator and `DynamicPlugin` base class.
 
-### 2. Implement Plugin Interface
+### 2. Package It
 
-```typescript
-import { Plugin } from '@frontmcp/sdk';
-
-export class MyPlugin implements Plugin {
-  name = 'my-plugin';
-  // Implementation
+```json package.json
+{
+  "name": "@yourscope/frontmcp-plugin-myfeature",
+  "version": "1.0.0",
+  "description": "FrontMCP plugin for MyFeature",
+  "keywords": ["frontmcp", "frontmcp-plugin", "mcp", "plugin", "myfeature"],
+  "peerDependencies": {
+    "@frontmcp/sdk": "^0.4.0"
+  }
 }
 ```
 
@@ -87,14 +62,6 @@ Include a README with:
 npm publish
 ```
 
-### 5. Submit to Registry
-
-Open a PR to add your plugin to the community registry:
-
-```
-https://github.com/agentfront/frontmcp-plugins
-```
-
 ## Plugin Guidelines
 
 ### Quality Standards
@@ -103,13 +70,6 @@ https://github.com/agentfront/frontmcp-plugins
 - Comprehensive error handling
 - Unit tests with >80% coverage
 - No security vulnerabilities
-
-### Documentation
-
-- Clear installation instructions
-- Configuration reference
-- Usage examples
-- Changelog
 
 ### Maintenance
 
@@ -120,10 +80,16 @@ https://github.com/agentfront/frontmcp-plugins
 ## Get Help
 
 <CardGroup cols={2}>
+  <Card title="Create a Plugin" icon="plug" href="/frontmcp/guides/create-plugin">
+    Step-by-step plugin development guide
+  </Card>
+  <Card title="Plugin API" icon="puzzle-piece" href="/frontmcp/extensibility/plugins">
+    Full plugin API reference
+  </Card>
   <Card title="GitHub Discussions" icon="github" href="https://github.com/agentfront/frontmcp/discussions">
     Ask questions and share ideas
   </Card>
-  <Card title="Create Plugin" icon="wrench" href="/frontmcp/plugins/docs/creating-plugins">
-    Plugin development guide
+  <Card title="Official Plugins" icon="star" href="/frontmcp/plugins/overview">
+    See how official plugins are built
   </Card>
 </CardGroup>

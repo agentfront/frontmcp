@@ -28,6 +28,8 @@ import type {
   AgentType,
   SkillType,
   AuthProviderType,
+  JobType,
+  WorkflowType,
 } from '../common/interfaces';
 
 /**
@@ -111,6 +113,23 @@ export interface CreateConfig {
 
   /** Authentication configuration for the app */
   auth?: AuthOptionsInput;
+
+  /** Job definitions for the app */
+  jobDefinitions?: JobType[];
+
+  /** Workflow definitions for the app */
+  workflowDefinitions?: WorkflowType[];
+
+  // ── Server-level job system fields ─────────────────────────────────
+
+  /** Jobs system configuration (enables job/workflow features) */
+  jobs?: {
+    enabled: boolean;
+    store?: {
+      redis?: RedisOptionsInput;
+      keyPrefix?: string;
+    };
+  };
 
   // ── create()-specific fields ─────────────────────────────────────────
 

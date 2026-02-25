@@ -1,0 +1,49 @@
+---
+title: Prompt Generator
+slug: nx-plugin/generators/prompt
+icon: message
+description: Generate a @Prompt class
+---
+
+Generates a `@Prompt` class with optional typed arguments.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:prompt summarize --project crm
+nx g @frontmcp/nx:prompt summarize --project crm --arguments topic,length
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the prompt |
+| `project` | `string` | — | **Required.** The project to add the prompt to |
+| `arguments` | `string` | — | Comma-separated argument names for the prompt |
+| `directory` | `string` | — | Subdirectory within `src/prompts/` |
+
+## Generated Code
+
+```ts
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+
+@Prompt({
+  name: 'summarize',
+  description: 'TODO: describe what this prompt does',
+  arguments: [
+    { name: 'topic', description: 'TODO: describe', required: true },
+    { name: 'length', description: 'TODO: describe', required: true },
+  ],
+})
+export default class SummarizePrompt extends PromptContext {
+  async execute(args: Record<string, string>): Promise<GetPromptResult> {
+    return {
+      messages: [
+        { role: 'user', content: { type: 'text', text: 'TODO: implement prompt template' } },
+      ],
+    };
+  }
+}
+```

@@ -18,3 +18,5 @@ export * from './prompt.metadata';
 export * from './logger.metadata';
 export * from './agent.metadata';
 export * from './skill.metadata';
+export * from './job.metadata';
+export * from './workflow.metadata';

@@ -203,6 +203,30 @@ export class RegistryNotInitializedError extends InternalMcpError {
 }
 
 /**
+ * Thrown when an enclave execution fails.
+ */
+export class EnclaveExecutionError extends InternalMcpError {
+  readonly originalError?: Error;
+
+  constructor(message: string, cause?: Error) {
+    super(`Enclave execution failed: ${message}`, 'ENCLAVE_EXECUTION_FAILED');
+    this.originalError = cause;
+  }
+}
+
+/**
+ * Thrown when a dynamic job is executed directly instead of through the enclave bridge.
+ */
+export class DynamicJobDirectExecutionError extends InternalMcpError {
+  constructor(jobName?: string) {
+    const msg = jobName
+      ? `Dynamic job "${jobName}" must be executed through the enclave bridge`
+      : 'Dynamic jobs must be executed through the enclave bridge';
+    super(msg, 'DYNAMIC_JOB_DIRECT_EXECUTION');
+  }
+}
+
+/**
  * Thrown when a flow stage receives missing or undefined input
  * (e.g., `request` is undefined in a well-known flow's parseInput stage).
  */

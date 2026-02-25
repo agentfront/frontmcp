@@ -1,0 +1,68 @@
+---
+title: Executors Overview
+slug: nx-plugin/executors/overview
+icon: play
+description: All 7 FrontMCP Nx executors for building, testing, and deploying
+---
+
+Executors wrap FrontMCP CLI commands as Nx targets, enabling caching, dependency ordering, and `nx affected` support.
+
+## Summary
+
+| Executor | CLI Command | Cacheable | Long-Running |
+| --- | --- | --- | --- |
+| [`build`](/frontmcp/nx-plugin/executors/build) | `frontmcp build` | Yes | No |
+| [`build-exec`](/frontmcp/nx-plugin/executors/build-exec) | `frontmcp build --exec` | Yes | No |
+| [`dev`](/frontmcp/nx-plugin/executors/dev) | `frontmcp dev` | No | Yes |
+| [`serve`](/frontmcp/nx-plugin/executors/serve) | `frontmcp start` | No | Yes |
+| [`test`](/frontmcp/nx-plugin/executors/test) | `frontmcp test` | Yes | No |
+| [`inspector`](/frontmcp/nx-plugin/executors/inspector) | `frontmcp inspector` | No | Yes |
+| [`deploy`](/frontmcp/nx-plugin/executors/deploy) | Platform-specific | No | No |
+
+## Usage in project.json
+
+Executors are configured in each project's `project.json`:
+
+```json
+{
+  "name": "my-app",
+  "targets": {
+    "build": {
+      "executor": "@frontmcp/nx:build",
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "entry": "{projectRoot}/src/main.ts",
+        "outputPath": "{projectRoot}/dist"
+      }
+    },
+    "dev": {
+      "executor": "@frontmcp/nx:dev",
+      "options": {
+        "entry": "{projectRoot}/src/main.ts"
+      }
+    },
+    "test": {
+      "executor": "@frontmcp/nx:test",
+      "options": {
+        "runInBand": true
+      }
+    }
+  }
+}
+```
+
+## Running Executors
+
+```bash
+# Run a specific target
+nx build my-app
+nx dev my-app
+nx test my-app
+
+# Run across all projects
+nx run-many -t build
+nx run-many -t test
+
+# Run only affected projects
+nx affected -t test
+```

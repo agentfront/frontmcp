@@ -1,0 +1,32 @@
+---
+title: Deployment Targets
+slug: features/deployment-targets
+icon: cloud-arrow-up
+description: Deploy to Node.js, Vercel, AWS Lambda, or Cloudflare Workers
+---
+
+FrontMCP supports multiple deployment targets out of the box. The same `@FrontMcp` server code deploys to any platform — only the build adapter and infrastructure config change.
+
+| Target | Runtime | Session Storage | Cold Start | Best For |
+| --- | --- | --- | --- | --- |
+| **Node.js / Docker** | Long-running | In-memory or Redis | None | Full-featured servers |
+| **Vercel** | Serverless | Vercel KV or Redis | Low (~50–250 ms) | Edge-first deployments |
+| **AWS Lambda** | Serverless | Redis / DynamoDB | Moderate (~100–500 ms) | AWS-native infrastructure |
+| **Cloudflare Workers** | Edge | KV / Durable Objects | Minimal (~1–10 ms) | Ultra-low latency |
+
+> **Note:** Cold-start timings are approximate ranges that vary by provider, region, bundle size, and workload.
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/frontmcp/deployment/local-dev-server">
+    Hot-reload development server
+  </Card>
+  <Card title="Production Build" icon="building" href="/frontmcp/deployment/production-build">
+    Build optimized production bundles
+  </Card>
+  <Card title="Serverless" icon="cloud" href="/frontmcp/deployment/serverless">
+    Vercel, Lambda, and Cloudflare deployment
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/frontmcp/deployment/redis-setup">
+    Configure session and token storage
+  </Card>
+</CardGroup>

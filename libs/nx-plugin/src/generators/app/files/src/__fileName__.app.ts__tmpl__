@@ -1,0 +1,9 @@
+import { App } from '@frontmcp/sdk';
+import HelloTool from './tools/hello.tool';
+
+@App({
+  id: '<%= fileName %>',
+  name: '<%= className %>',
+  tools: [HelloTool],
+})
+export class <%= className %>App {}

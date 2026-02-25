@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Build Executor",
+  "description": "Compile a FrontMCP project",
+  "type": "object",
+  "properties": {
+    "entry": {
+      "type": "string",
+      "description": "Entry file path"
+    },
+    "outputPath": {
+      "type": "string",
+      "description": "Output directory path"
+    },
+    "adapter": {
+      "type": "string",
+      "description": "Deployment adapter",
+      "enum": ["node", "vercel", "lambda", "cloudflare"]
+    }
+  },
+  "required": []
+}

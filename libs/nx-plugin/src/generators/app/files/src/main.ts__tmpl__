@@ -1,0 +1,9 @@
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+import { <%= className %>App } from './<%= fileName %>.app';
+
+@FrontMcp({
+  info: { name: '<%= className %>', version: '0.1.0' },
+  apps: [<%= className %>App],
+})
+export default class Server {}

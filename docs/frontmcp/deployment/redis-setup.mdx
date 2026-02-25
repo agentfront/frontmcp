@@ -5,7 +5,7 @@ description: FrontMCP uses Redis for caching, session storage, and distributed s
 ---
 
 <Tip>
-**Deploying to Vercel?** Consider [Vercel KV](/docs/frontmcp/deployment/vercel-kv) for edge-compatible storage without managing Redis infrastructure.
+**Deploying to Vercel?** Consider [Vercel KV](/frontmcp/deployment/vercel-kv) for edge-compatible storage without managing Redis infrastructure.
 </Tip>
 
 ## Requirements
@@ -70,7 +70,7 @@ CachePlugin.init({
 Already configuring the top-level `redis` block (or `redis.provider: 'vercel-kv'`) on `@FrontMcp`? Set `CachePlugin.init({ type: 'global-store' })` so the plugin automatically reuses that store without duplicating credentials.
 </Tip>
 
-For complete CachePlugin API documentation, see the [Cache Plugin Guide](/docs/frontmcp/plugins/cache-plugin).
+For complete CachePlugin API documentation, see the [Cache Plugin Guide](/frontmcp/plugins/cache-plugin).
 
 ## Production Setup
 

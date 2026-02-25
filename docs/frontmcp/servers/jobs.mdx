@@ -1,0 +1,410 @@
+---
+title: Jobs
+slug: servers/jobs
+icon: briefcase
+---
+
+Jobs are **typed, executable units of work** with strict input/output schemas, automatic retries, timeouts, permission checks, and background execution support. They are designed for operations that need reliability guarantees beyond what a simple tool call provides.
+
+<Info>
+Jobs extend the FrontMCP execution model with persistent state tracking, retry logic, and DAG-based composition via [Workflows](/frontmcp/servers/workflows).
+</Info>
+
+## Why Jobs?
+
+Jobs fill the gap between lightweight tool calls and full workflow orchestration:
+
+| Aspect | Tool | Job | Workflow |
+| --- | --- | --- | --- |
+| **Purpose** | Execute a single action | Execute a reliable unit of work | Orchestrate multiple jobs |
+| **Retries** | None | Automatic with exponential backoff | Per-step retry overrides |
+| **Background** | No | Yes (with `runId` polling) | Yes (with `runId` polling) |
+| **State tracking** | None | `pending` / `running` / `completed` / `failed` | Per-step state tracking |
+| **Timeout** | None | Configurable (default: 5 min) | Configurable (default: 10 min) |
+| **Permissions** | Auth providers | RBAC with roles, scopes, custom guards | Inherits from job permissions |
+
+Jobs are ideal for:
+
+- **Data processing** — ETL pipelines, file parsing, batch operations
+- **External integrations** — API calls that may fail and need retries
+- **Long-running operations** — background tasks with progress reporting
+- **Auditable actions** — operations that need execution logs and state tracking
+
+---
+
+## Creating Jobs
+
+### Class Style
+
+Use class decorators for jobs that need dependency injection, lifecycle hooks, or complex logic:
+
+```ts
+import { Job, JobContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Job({
+  name: 'analyze-text',
+  description: 'Analyze text and return sentiment and key phrases',
+  inputSchema: {
+    text: z.string().describe('Text to analyze'),
+    language: z.string().default('en').describe('Language code'),
+  },
+  outputSchema: {
+    sentiment: z.enum(['positive', 'negative', 'neutral']),
+    keyPhrases: z.array(z.string()),
+    confidence: z.number(),
+  },
+})
+class AnalyzeTextJob extends JobContext {
+  async execute(input: { text: string; language: string }) {
+    this.log('Starting text analysis');
+    const nlp = this.get(NlpServiceToken);
+
+    const result = await nlp.analyze(input.text, input.language);
+
+    this.log(`Analysis complete: ${result.sentiment}`);
+    return {
+      sentiment: result.sentiment,
+      keyPhrases: result.keyPhrases,
+      confidence: result.confidence,
+    };
+  }
+}
+```
+
+### Function Style
+
+For simpler jobs, use the functional builder:
+
+```ts
+import { job } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const GreetJob = job({
+  name: 'greet',
+  description: 'Generate a personalized greeting',
+  inputSchema: {
+    name: z.string(),
+    formal: z.boolean().default(false),
+  },
+  outputSchema: {
+    message: z.string(),
+  },
+})((input, ctx) => {
+  ctx.log(`Generating greeting for ${input.name}`);
+  const prefix = input.formal ? 'Dear' : 'Hello';
+  return { message: `${prefix} ${input.name}!` };
+});
+```
+
+---
+
+## Registering Jobs
+
+Add jobs to your app via the `jobs` array:
+
+```ts
+import { App } from '@frontmcp/sdk';
+
+@App({
+  id: 'text-processing',
+  name: 'Text Processing',
+  jobs: [AnalyzeTextJob, GreetJob],
+})
+class TextProcessingApp {}
+```
+
+To enable the jobs system on your server, configure `jobsConfig`:
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [TextProcessingApp],
+  jobsConfig: {
+    enabled: true,
+    store: {
+      redis: { provider: 'redis', host: 'localhost', port: 6379 },
+      keyPrefix: 'mcp:jobs:',
+    },
+  },
+})
+export default class MyServer {}
+```
+
+<Tip>
+When `jobsConfig.enabled` is `true`, the SDK automatically registers MCP tools for job management: `list-jobs`, `execute-job`, `get-job-status`, `register-job`, and `remove-job`.
+</Tip>
+
+---
+
+## Input & Output Schemas
+
+Jobs require both input and output schemas using Zod:
+
+```ts
+@Job({
+  name: 'process-order',
+  inputSchema: {
+    orderId: z.string().describe('Order ID'),
+    items: z.array(z.object({
+      productId: z.string(),
+      quantity: z.number().min(1),
+    })),
+    priority: z.enum(['low', 'normal', 'high']).default('normal'),
+  },
+  outputSchema: {
+    orderId: z.string(),
+    status: z.enum(['processed', 'failed']),
+    totalAmount: z.number(),
+    processedAt: z.string(),
+  },
+})
+```
+
+---
+
+## Configuration
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** Unique job identifier |
+| `description` | `string` | — | Human-readable description |
+| `inputSchema` | `ZodShape` | — | **Required.** Zod schema for input validation |
+| `outputSchema` | `ZodShape` | — | **Required.** Zod schema for output validation |
+| `id` | `string` | `name` | Stable identifier for tracking |
+| `timeout` | `number` | `300000` | Maximum execution time in ms (5 min) |
+| `retry` | `JobRetryConfig` | — | Retry configuration (see below) |
+| `tags` | `string[]` | — | Categorization tags |
+| `labels` | `Record<string, string>` | — | Fine-grained key-value labels |
+| `hideFromDiscovery` | `boolean` | `false` | Hide from `list-jobs` |
+| `permissions` | `JobPermission[]` | — | RBAC permission rules |
+
+---
+
+## Retry Configuration
+
+Jobs support automatic retries with exponential backoff:
+
+```ts
+@Job({
+  name: 'fetch-external-data',
+  inputSchema: { url: z.string().url() },
+  outputSchema: { data: z.unknown() },
+  retry: {
+    maxAttempts: 5,
+    backoffMs: 2000,
+    backoffMultiplier: 2,
+    maxBackoffMs: 30000,
+  },
+})
+class FetchDataJob extends JobContext {
+  async execute(input: { url: string }) {
+    this.log(`Attempt ${this.attempt}: Fetching ${input.url}`);
+    const response = await this.fetch(input.url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { data: await response.json() };
+  }
+}
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxAttempts` | `number` | `3` | Maximum retry attempts |
+| `backoffMs` | `number` | `1000` | Initial backoff delay in ms |
+| `backoffMultiplier` | `number` | `2` | Backoff multiplier per attempt |
+| `maxBackoffMs` | `number` | `60000` | Maximum backoff delay in ms |
+
+The backoff schedule for defaults: 1s, 2s, 4s (capped at `maxBackoffMs`).
+
+---
+
+## Permissions
+
+Jobs support RBAC-style permission checks:
+
+```ts
+@Job({
+  name: 'delete-user-data',
+  inputSchema: { userId: z.string() },
+  outputSchema: { deleted: z.boolean() },
+  permissions: [
+    { action: 'execute', roles: ['admin', 'data-officer'] },
+    { action: 'execute', scopes: ['data:delete'] },
+  ],
+})
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` | `'create' \| 'read' \| 'update' \| 'delete' \| 'execute' \| 'list'` | Permission action type |
+| `roles` | `string[]` | Required roles (at least one must match) |
+| `scopes` | `string[]` | Required OAuth scopes (at least one must match) |
+| `custom` | `(authInfo) => boolean \| Promise<boolean>` | Custom guard function |
+
+When no permissions are defined, the job is accessible to all authenticated users.
+
+---
+
+## Background Execution
+
+Jobs can run in background mode, returning a `runId` for status polling:
+
+```ts
+// Via the execute-job MCP tool
+const result = await client.callTool('execute-job', {
+  name: 'analyze-text',
+  input: { text: 'Hello world', language: 'en' },
+  background: true,
+});
+// result: { runId: 'run-abc-123', state: 'running' }
+
+// Poll for status
+const status = await client.callTool('get-job-status', {
+  runId: 'run-abc-123',
+});
+// status: { runId: 'run-abc-123', state: 'completed', result: { ... }, logs: [...] }
+```
+
+### Via DirectClient
+
+```ts
+const { runId } = await client.executeJob('analyze-text', {
+  text: 'Hello world',
+}, { background: true });
+
+// Poll for completion
+const status = await client.getJobStatus(runId);
+```
+
+---
+
+## Progress Reporting
+
+Jobs can report progress and log messages during execution:
+
+```ts
+@Job({
+  name: 'batch-import',
+  inputSchema: {
+    records: z.array(z.record(z.string(), z.unknown())),
+  },
+  outputSchema: {
+    imported: z.number(),
+    failed: z.number(),
+  },
+})
+class BatchImportJob extends JobContext {
+  async execute(input: { records: Record<string, unknown>[] }) {
+    const total = input.records.length;
+    let imported = 0;
+    let failed = 0;
+
+    for (let i = 0; i < total; i++) {
+      this.log(`Processing record ${i + 1}/${total}`);
+      await this.progress(i + 1, total, `Importing record ${i + 1}`);
+
+      try {
+        await this.importRecord(input.records[i]);
+        imported++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { imported, failed };
+  }
+}
+```
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `this.log(message)` | `log(message: string): void` | Append a timestamped log entry |
+| `this.progress(pct, total?, msg?)` | `progress(pct: number, total?: number, msg?: string): Promise<boolean>` | Send progress notification to client |
+| `this.getLogs()` | `getLogs(): readonly string[]` | Retrieve all log entries |
+| `this.attempt` | `get attempt(): number` | Current retry attempt (1-based) |
+
+---
+
+## Job Stores
+
+Jobs use two stores for persistence:
+
+### State Store
+
+Tracks execution state (`JobRunRecord`): run ID, state, input, result, error, logs, timing.
+
+### Definition Store
+
+Persists dynamic job definitions registered at runtime via the `register-job` tool.
+
+### Memory (Default)
+
+Suitable for development. Data is lost on restart.
+
+### Redis
+
+For production, configure Redis storage:
+
+```ts
+@FrontMcp({
+  jobsConfig: {
+    enabled: true,
+    store: {
+      redis: { provider: 'redis', host: 'localhost', port: 6379 },
+      keyPrefix: 'mcp:jobs:',
+    },
+  },
+})
+```
+
+---
+
+## MCP Tools
+
+When jobs are enabled, the following MCP tools are automatically registered:
+
+| Tool | Description |
+| --- | --- |
+| `list-jobs` | List registered jobs with optional tag/label filtering |
+| `execute-job` | Execute a job (inline or background) |
+| `get-job-status` | Get execution status by `runId` |
+| `register-job` | Register a dynamic job at runtime |
+| `remove-job` | Remove a dynamic job |
+
+---
+
+## Best Practices
+
+**Do:**
+
+- Define clear input and output schemas with `.describe()` on each field
+- Use retries for operations that call external services
+- Set appropriate timeouts based on expected execution time
+- Use background mode for long-running operations
+- Log meaningful progress messages for debugging
+
+**Don't:**
+
+- Use jobs for simple, synchronous operations (use tools instead)
+- Set `maxAttempts` too high for non-idempotent operations
+- Skip output schemas — they enable validation and type safety
+- Forget to handle the retry `attempt` number in your logic
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Workflows" icon="diagram-project" href="/frontmcp/servers/workflows">
+    Compose jobs into multi-step pipelines
+  </Card>
+  <Card title="JobContext" icon="briefcase" href="/frontmcp/sdk-reference/contexts/job-context">
+    Context class API reference
+  </Card>
+  <Card title="@Job" icon="at" href="/frontmcp/sdk-reference/decorators/job">
+    Decorator reference
+  </Card>
+  <Card title="JobRegistry" icon="database" href="/frontmcp/sdk-reference/registries/job-registry">
+    Registry API reference
+  </Card>
+</CardGroup>

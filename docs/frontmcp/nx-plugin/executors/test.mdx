@@ -1,0 +1,49 @@
+---
+title: Test Executor
+slug: nx-plugin/executors/test
+icon: flask-vial
+description: Run E2E tests using frontmcp test
+---
+
+Runs E2E tests using the auto-injected Jest configuration from `@frontmcp/testing`.
+
+## Usage
+
+```bash
+nx test my-app
+nx test my-app --runInBand --coverage
+```
+
+## Configuration
+
+```json project.json
+{
+  "targets": {
+    "test": {
+      "executor": "@frontmcp/nx:test",
+      "options": {
+        "runInBand": true
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `runInBand` | `boolean` | `false` | Run tests serially (recommended for E2E) |
+| `watch` | `boolean` | `false` | Watch mode |
+| `coverage` | `boolean` | `false` | Collect test coverage |
+| `verbose` | `boolean` | `false` | Verbose output |
+| `timeout` | `number` | — | Test timeout in ms |
+
+## Caching
+
+This executor is **cacheable**. Test results are cached when inputs haven't changed. Use with `coverage` for reproducible reports.
+
+```bash
+# Run tests for affected projects only
+nx affected -t test
+```

@@ -58,6 +58,8 @@ export interface ParsedArgs {
   lines?: number;
   // Install flags
   registry?: string;
+  // Create --nx flag
+  nx?: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -101,6 +103,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const parsed = parseInt(argv[++i], 10);
       out.lines = Number.isNaN(parsed) ? undefined : parsed;
     }
+    // Create --nx flag
+    else if (a === '--nx') out.nx = true;
     // Install flags
     else if (a === '--registry') out.registry = argv[++i];
     else out._.push(a);

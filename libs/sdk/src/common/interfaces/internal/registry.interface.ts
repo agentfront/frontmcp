@@ -199,12 +199,16 @@ export type AppRegistryKind =
   | 'PromptRegistry'
   | 'ResourceRegistry'
   | 'AgentRegistry'
-  | 'SkillRegistry';
+  | 'SkillRegistry'
+  | 'JobRegistry'
+  | 'WorkflowRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
 
 // Import SkillRegistryInterface - using type import to avoid circular dependency
 import type { SkillRegistryInterface } from '../../../skill/skill.registry';
+import type { JobRegistryInterface } from '../../../job/job.registry';
+import type { WorkflowRegistryInterface } from '../../../workflow/workflow.registry';
 
 export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;
@@ -221,4 +225,6 @@ export type RegistryType = {
   PromptRegistry: PromptRegistryInterface;
   AgentRegistry: AgentRegistryInterface;
   SkillRegistry: SkillRegistryInterface;
+  JobRegistry: JobRegistryInterface;
+  WorkflowRegistry: WorkflowRegistryInterface;
 };

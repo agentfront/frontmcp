@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "FrontMCP Test",
+  "description": "Run E2E tests",
+  "type": "object",
+  "properties": {
+    "runInBand": { "type": "boolean", "description": "Run tests serially", "default": false },
+    "watch": { "type": "boolean", "description": "Watch mode", "default": false },
+    "coverage": { "type": "boolean", "description": "Collect coverage", "default": false },
+    "verbose": { "type": "boolean", "description": "Verbose output", "default": false },
+    "timeout": { "type": "number", "description": "Test timeout in ms" }
+  },
+  "required": []
+}

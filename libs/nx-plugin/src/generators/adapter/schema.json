@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpAdapter",
+  "title": "FrontMCP Adapter Generator",
+  "description": "Generate an @Adapter class extending DynamicAdapter",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the adapter",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the adapter?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the adapter to",
+      "x-dropdown": "projects",
+      "x-priority": "important"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Subdirectory within src/adapters/"
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

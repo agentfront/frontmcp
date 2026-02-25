@@ -1,0 +1,9 @@
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+<% appNames.forEach(function(appName) { %>import { <%= names(appName).className %>App } from '../../apps/<%= names(appName).fileName %>/<%= names(appName).fileName %>.app';
+<% }); %>
+@FrontMcp({
+  info: { name: '<%= className %> Server', version: '0.1.0' },
+  apps: [<%- appNames.map(a => names(a).className + 'App').join(', ') %>],
+})
+export default class Server {}

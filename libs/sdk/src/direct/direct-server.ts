@@ -183,6 +183,54 @@ export class DirectMcpServerImpl implements DirectMcpServer {
   }
 
   // ─────────────────────────────────────────────────────────────────
+  // Job Operations - delegate to MCP tools
+  // ─────────────────────────────────────────────────────────────────
+
+  async listJobs(options?: DirectCallOptions): Promise<CallToolResult> {
+    return this.callTool('list-jobs', {}, options);
+  }
+
+  async executeJob(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: DirectCallOptions & { background?: boolean },
+  ): Promise<CallToolResult> {
+    return this.callTool(
+      'execute-job',
+      { name, input: input ?? {}, background: options?.background ?? false },
+      options,
+    );
+  }
+
+  async getJobStatus(runId: string, options?: DirectCallOptions): Promise<CallToolResult> {
+    return this.callTool('get-job-status', { runId }, options);
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Workflow Operations - delegate to MCP tools
+  // ─────────────────────────────────────────────────────────────────
+
+  async listWorkflows(options?: DirectCallOptions): Promise<CallToolResult> {
+    return this.callTool('list-workflows', {}, options);
+  }
+
+  async executeWorkflow(
+    name: string,
+    input?: Record<string, unknown>,
+    options?: DirectCallOptions & { background?: boolean },
+  ): Promise<CallToolResult> {
+    return this.callTool(
+      'execute-workflow',
+      { name, input: input ?? {}, background: options?.background ?? false },
+      options,
+    );
+  }
+
+  async getWorkflowStatus(runId: string, options?: DirectCallOptions): Promise<CallToolResult> {
+    return this.callTool('get-workflow-status', { runId }, options);
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   // Client Connections
   // ─────────────────────────────────────────────────────────────────
 

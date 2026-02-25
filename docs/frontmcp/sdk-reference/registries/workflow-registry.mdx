@@ -1,0 +1,184 @@
+---
+title: "WorkflowRegistry"
+description: "The WorkflowRegistry manages all workflows within a scope. It provides methods for listing, finding, searching, and subscribing to workflow changes."
+icon: "diagram-project"
+---
+
+## Overview
+
+```typescript
+import { WorkflowRegistry } from '@frontmcp/sdk';
+
+// Access via scope
+const workflows = scope.workflows;
+
+// List all workflows
+const allWorkflows = workflows.getWorkflows();
+
+// Find a specific workflow
+const wf = workflows.findByName('data-pipeline');
+```
+
+## Methods
+
+### getWorkflows()
+
+Get all workflows (local + dynamic).
+
+```typescript
+getWorkflows(includeHidden?: boolean): WorkflowEntry[]
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `includeHidden` | `boolean` | `false` | Include hidden workflows in results |
+
+**Example:**
+
+```typescript
+// Get all visible workflows
+const workflows = registry.getWorkflows();
+
+// Include hidden workflows
+const allWorkflows = registry.getWorkflows(true);
+```
+
+### findByName()
+
+Find a workflow by its base name.
+
+```typescript
+findByName(name: string): WorkflowEntry | undefined
+```
+
+**Example:**
+
+```typescript
+const wf = registry.findByName('data-pipeline');
+if (wf) {
+  console.log(`Found: ${wf.name}, steps: ${wf.getSteps().length}`);
+}
+```
+
+### findById()
+
+Find a workflow by its ID.
+
+```typescript
+findById(id: string): WorkflowEntry | undefined
+```
+
+### search()
+
+Search workflows by query, tags, or labels.
+
+```typescript
+search(
+  query?: string,
+  opts?: { tags?: string[]; labels?: Record<string, string> }
+): WorkflowEntry[]
+```
+
+**Example:**
+
+```typescript
+// Search by name/description
+const results = registry.search('pipeline');
+
+// Filter by tags
+const tagged = registry.search(undefined, { tags: ['etl'] });
+```
+
+### registerDynamic()
+
+Register a dynamic workflow at runtime.
+
+```typescript
+registerDynamic(record: WorkflowDynamicRecord): void
+```
+
+### removeDynamic()
+
+Remove a dynamic workflow.
+
+```typescript
+removeDynamic(workflowId: string): boolean
+```
+
+**Returns:** `true` if the workflow was found and removed, `false` otherwise.
+
+### subscribe()
+
+Subscribe to workflow change events.
+
+```typescript
+subscribe(
+  opts: { immediate?: boolean },
+  cb: (event: WorkflowChangeEvent) => void
+): () => void
+```
+
+**Returns:** Unsubscribe function.
+
+**Example:**
+
+```typescript
+const unsubscribe = registry.subscribe(
+  { immediate: true },
+  (event) => {
+    console.log(`Workflow ${event.kind}:`, event.version);
+  }
+);
+
+// Later: stop listening
+unsubscribe();
+```
+
+### hasAny()
+
+Check if any workflows exist in the registry.
+
+```typescript
+hasAny(): boolean
+```
+
+## MCP Tools Registered
+
+When the jobs & workflows system is enabled, workflow capabilities are exposed through these MCP tools:
+
+| Tool | Description |
+|------|-------------|
+| `list-workflows` | List all registered workflows with optional filtering |
+| `execute-workflow` | Execute a workflow by name (inline or background) |
+| `get-workflow-status` | Get execution status with per-step results |
+| `register-workflow` | Register a dynamic workflow at runtime |
+| `remove-workflow` | Remove a dynamic workflow |
+
+## Change Events
+
+The registry emits events when workflows are added, updated, or removed:
+
+```typescript
+interface WorkflowChangeEvent {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  version: number;
+  snapshot: readonly WorkflowEntry[];
+  sessionId?: string;
+}
+```
+
+## Lifecycle
+
+```
+buildMap()     → Extract tokens, definitions from metadata
+buildGraph()   → Validate dependencies, populate graph
+initialize()   → Create instances, register dynamic workflows
+```
+
+## Related
+
+- [Workflows Guide](/frontmcp/servers/workflows)
+- [@Workflow Decorator](/frontmcp/sdk-reference/decorators/workflow)
+- [JobRegistry](/frontmcp/sdk-reference/registries/job-registry)
+- [Registries Overview](/frontmcp/sdk-reference/registries/overview)

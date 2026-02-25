@@ -163,7 +163,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
 
 ## Layer 1: AST Validation
 
-[AST Guard](/docs/frontmcp/guides/ast-guard) parses JavaScript into an Abstract Syntax Tree and validates every node against security rules before any code executes.
+[AST Guard](https://github.com/agentfront/enclave/tree/main/libs/ast-guard) parses JavaScript into an Abstract Syntax Tree and validates every node against security rules before any code executes.
 
 ### Blocked Constructs
 
@@ -323,7 +323,7 @@ let __safe_bypass = 123;
 
 ## Layer 3: Runtime Sandbox
 
-[Enclave](/docs/frontmcp/guides/enclave) executes transformed code in an isolated Node.js `vm` context.
+[Enclave](https://github.com/agentfront/enclave) executes transformed code in an isolated Node.js `vm` context.
 
 ### Isolation Guarantees
 
@@ -750,11 +750,11 @@ Before deploying CodeCall to production:
 ## Related Documentation
 
 <CardGroup cols={2}>
-  <Card title="AST Guard" icon="shield-check" href="/docs/frontmcp/guides/ast-guard">
-    Deep dive into AST validation rules, presets, and custom rule creation
+  <Card title="AST Guard" icon="shield-check" href="https://github.com/agentfront/enclave/tree/main/libs/ast-guard">
+    Deep dive into AST validation rules, presets, and custom rule creation (separate repository)
   </Card>
-  <Card title="Enclave" icon="lock" href="/docs/frontmcp/guides/enclave">
-    Runtime sandbox configuration, sidecar storage, and advanced options
+  <Card title="Enclave" icon="lock" href="https://github.com/agentfront/enclave">
+    Runtime sandbox configuration, sidecar storage, and advanced options (separate repository)
   </Card>
   <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/enclave/blob/main/libs/ast-guard/docs/SECURITY-AUDIT.md">
     Full list of 100+ blocked attack vectors including Layer 0 Pre-Scanner

@@ -1,0 +1,67 @@
+---
+title: Resource Generator
+slug: nx-plugin/generators/resource
+icon: database
+description: Generate a @Resource or @ResourceTemplate class
+---
+
+Generates a `@Resource` (static URI) or `@ResourceTemplate` (dynamic URI with parameters) class.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:resource user-profile --project crm
+nx g @frontmcp/nx:resource user-profile --project crm --template
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the resource |
+| `project` | `string` | — | **Required.** The project to add the resource to |
+| `template` | `boolean` | `false` | Generate a `@ResourceTemplate` with URI template params |
+| `directory` | `string` | — | Subdirectory within `src/resources/` |
+
+## Generated Code
+
+<Tabs>
+  <Tab title="Static Resource">
+    ```ts
+    import { Resource, ResourceContext } from '@frontmcp/sdk';
+
+    @Resource({
+      name: 'user-profile',
+      uri: 'user-profile://data',
+      description: 'TODO: describe this resource',
+      mimeType: 'application/json',
+    })
+    export default class UserProfileResource extends ResourceContext {
+      async execute(uri: string) {
+        return {
+          contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({}) }],
+        };
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Resource Template">
+    ```ts
+    import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+
+    @ResourceTemplate({
+      name: 'user-profile',
+      uriTemplate: 'user-profile://{id}',
+      description: 'TODO: describe this resource template',
+      mimeType: 'application/json',
+    })
+    export default class UserProfileResource extends ResourceContext {
+      async execute(uri: string, params: Record<string, string>) {
+        return {
+          contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ id: params.id }) }],
+        };
+      }
+    }
+    ```
+  </Tab>
+</Tabs>

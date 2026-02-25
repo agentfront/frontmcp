@@ -1,0 +1,17 @@
+import { Agent, AgentContext } from '@frontmcp/sdk';
+
+@Agent({
+  name: '<%= name %>',
+  description: 'TODO: describe what this agent does',
+  llm: {
+    model: '<%= model %>',
+  },<% if (toolRefs.length > 0) { %>
+  tools: [<%- toolRefs.map(t => `'${t}'`).join(', ') %>],<% } %>
+  systemInstructions: 'TODO: define system instructions for this agent',
+})
+export default class <%= className %>Agent extends AgentContext {
+  async execute(input: unknown): Promise<unknown> {
+    // TODO: implement agent logic
+    return {};
+  }
+}

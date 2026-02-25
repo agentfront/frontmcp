@@ -1,0 +1,20 @@
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: '<%= fileName %>_example',
+  description: 'Example tool from <%= className %> register',
+  inputSchema: { value: z.string() },
+  outputSchema: { result: z.string() },
+})
+export class ExampleTool extends ToolContext {
+  async execute(input: { value: string }) {
+    return { result: input.value };
+  }
+}
+
+/**
+ * Export all tools from this register.
+ * Add them to your App's tools array: `tools: [...<%= className %>Tools]`
+ */
+export const <%= className %>Tools = [ExampleTool];

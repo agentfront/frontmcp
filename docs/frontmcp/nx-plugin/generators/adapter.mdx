@@ -1,0 +1,49 @@
+---
+title: Adapter Generator
+slug: nx-plugin/generators/adapter
+icon: plug
+description: Generate an @Adapter class extending DynamicAdapter
+---
+
+Generates an `@Adapter` class that dynamically provides tools, resources, and prompts from external sources.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:adapter github --project crm
+```
+
+## Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | — | **Required.** The name of the adapter |
+| `project` | `string` | — | **Required.** The project to add the adapter to |
+| `directory` | `string` | — | Subdirectory within `src/adapters/` |
+
+## Generated Code
+
+```ts
+import { Adapter, DynamicAdapter, type AdapterFetchResult } from '@frontmcp/sdk';
+
+export interface GithubAdapterOptions {
+  // TODO: define adapter options
+}
+
+@Adapter({
+  name: 'github',
+  description: 'TODO: describe what this adapter does',
+})
+export class GithubAdapter extends DynamicAdapter<GithubAdapterOptions> {
+  async fetch(): Promise<AdapterFetchResult> {
+    // TODO: implement — return tools, resources, and/or prompts
+    return {
+      tools: [],
+      resources: [],
+      prompts: [],
+    };
+  }
+}
+```
+
+The `fetch()` method is called at startup. Return arrays of tools, resources, and prompts to dynamically register capabilities.
