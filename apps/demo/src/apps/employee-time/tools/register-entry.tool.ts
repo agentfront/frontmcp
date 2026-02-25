@@ -1,19 +1,21 @@
-import {Tool, ToolContext} from '@frontmcp/sdk';
-import {z} from 'zod';
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
 import EmployeeRedisProvider from '../providers/redis.provider';
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
-import {openKey as siteOpenKey} from '../utils/keys';
+import { openKey as siteOpenKey } from '../utils/keys';
 
-function nowMs() { return Date.now(); }
+function nowMs() {
+  return Date.now();
+}
 
 @Tool({
   name: 'register-entry',
   description: 'Register start of a work session for an employee (now) at a site',
   inputSchema: { employeeId: z.string().min(1), siteId: z.string().min(1) },
-  outputSchema: { employeeId: z.string(), startedAt: z.number()}
+  outputSchema: { employeeId: z.string(), startedAt: z.number() },
 })
 export default class RegisterEntryTool extends ToolContext {
-  async execute(input: { employeeId: string, siteId: string }) {
+  async execute(input: { employeeId: string; siteId: string }) {
     const redis = this.get(EmployeeRedisProvider);
     const dir = this.get(EmployeeDirectoryProvider);
     const { employeeId, siteId } = input;

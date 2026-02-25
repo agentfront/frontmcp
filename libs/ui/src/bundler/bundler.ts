@@ -458,9 +458,9 @@ export class InMemoryBundler {
 
     // Determine data placeholders for hybrid mode
     const dataPlaceholder =
-      opts.buildMode === 'hybrid' ? opts.hybridOptions?.placeholder ?? HYBRID_DATA_PLACEHOLDER : undefined;
+      opts.buildMode === 'hybrid' ? (opts.hybridOptions?.placeholder ?? HYBRID_DATA_PLACEHOLDER) : undefined;
     const inputPlaceholder =
-      opts.buildMode === 'hybrid' ? opts.hybridOptions?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER : undefined;
+      opts.buildMode === 'hybrid' ? (opts.hybridOptions?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER) : undefined;
 
     return {
       html,
@@ -711,9 +711,9 @@ export class InMemoryBundler {
 
     // Determine data placeholders for hybrid mode
     const dataPlaceholder =
-      opts.buildMode === 'hybrid' ? opts.hybridOptions?.placeholder ?? HYBRID_DATA_PLACEHOLDER : undefined;
+      opts.buildMode === 'hybrid' ? (opts.hybridOptions?.placeholder ?? HYBRID_DATA_PLACEHOLDER) : undefined;
     const inputPlaceholder =
-      opts.buildMode === 'hybrid' ? opts.hybridOptions?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER : undefined;
+      opts.buildMode === 'hybrid' ? (opts.hybridOptions?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER) : undefined;
 
     return {
       html,

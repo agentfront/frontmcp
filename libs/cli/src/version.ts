@@ -1,5 +1,5 @@
-import {readFileSync} from 'fs';
-import {join} from 'path';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 export function getSelfVersion(): string {
   const pkgPath = join(__dirname, '../package.json');

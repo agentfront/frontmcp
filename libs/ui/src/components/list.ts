@@ -391,8 +391,8 @@ export function actionList(items: ActionItem[], className = ''): string {
         item.disabled
           ? 'opacity-50 cursor-not-allowed'
           : item.destructive
-          ? 'hover:bg-danger/5 text-danger cursor-pointer'
-          : 'hover:bg-gray-50 cursor-pointer',
+            ? 'hover:bg-danger/5 text-danger cursor-pointer'
+            : 'hover:bg-gray-50 cursor-pointer',
       ].join(' ');
 
       const iconHtml = item.icon
@@ -403,8 +403,8 @@ export function actionList(items: ActionItem[], className = ''): string {
       ${iconHtml}
       <div class="flex-1 min-w-0">
         <div class="font-medium ${item.destructive ? 'text-danger' : 'text-text-primary'}">${escapeHtml(
-        item.label,
-      )}</div>
+          item.label,
+        )}</div>
         ${item.description ? `<p class="text-sm text-text-secondary">${escapeHtml(item.description)}</p>` : ''}
       </div>
       <svg class="w-5 h-5 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

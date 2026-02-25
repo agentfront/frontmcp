@@ -448,4 +448,4 @@ export {
 } from './expression-extractor';
 
 // Handlebars types
-type HandlebarsTemplateDelegate = ReturnType<typeof import('handlebars')['compile']>;
+type HandlebarsTemplateDelegate = ReturnType<(typeof import('handlebars'))['compile']>;

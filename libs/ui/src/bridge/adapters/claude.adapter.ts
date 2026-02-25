@@ -22,9 +22,7 @@ const CLAUDE_DOMAINS = ['claude.ai', 'anthropic.com'];
  */
 function isValidClaudeDomain(hostname: string): boolean {
   const lowerHost = hostname.toLowerCase();
-  return CLAUDE_DOMAINS.some(domain =>
-    lowerHost === domain || lowerHost.endsWith('.' + domain)
-  );
+  return CLAUDE_DOMAINS.some((domain) => lowerHost === domain || lowerHost.endsWith('.' + domain));
 }
 
 /**

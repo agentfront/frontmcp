@@ -17,7 +17,10 @@ export type FlowExecuteStagesOf<N extends FlowName> = ExtendFlows[N]['executeSta
 export type FlowControlType = 'respond' | 'fail' | 'abort' | 'next' | 'handled';
 
 export class FlowControl extends Error {
-  constructor(public readonly type: FlowControlType, public readonly output: any) {
+  constructor(
+    public readonly type: FlowControlType,
+    public readonly output: any,
+  ) {
     super();
   }
 

@@ -172,7 +172,7 @@ export class ConfigService<TConfig extends object = Record<string, string>> {
       return value;
     }
     const num = Number(value);
-    return isNaN(num) ? defaultValue ?? NaN : num;
+    return isNaN(num) ? (defaultValue ?? NaN) : num;
   }
 
   /**

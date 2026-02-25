@@ -1,4 +1,4 @@
-import {Provider, ProviderScope} from '@frontmcp/sdk';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 @Provider({
   name: 'expense-config',
@@ -20,7 +20,7 @@ export default class ExpenseConfigProvider {
     console.log('ExpenseConfigProvider');
   }
 
-  get<T extends keyof typeof this.config>(key: T): typeof this.config[T] {
+  get<T extends keyof typeof this.config>(key: T): (typeof this.config)[T] {
     return this.config[key];
   }
 }

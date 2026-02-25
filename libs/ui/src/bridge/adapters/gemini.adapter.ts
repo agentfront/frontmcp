@@ -20,9 +20,7 @@ const GEMINI_DOMAINS = ['gemini.google.com', 'bard.google.com'];
  */
 function isValidGeminiDomain(hostname: string): boolean {
   const lowerHost = hostname.toLowerCase();
-  return GEMINI_DOMAINS.some(domain =>
-    lowerHost === domain || lowerHost.endsWith('.' + domain)
-  );
+  return GEMINI_DOMAINS.some((domain) => lowerHost === domain || lowerHost.endsWith('.' + domain));
 }
 
 /**

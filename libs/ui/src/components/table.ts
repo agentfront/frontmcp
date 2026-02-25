@@ -314,8 +314,8 @@ export function pagination(options: PaginationOptions): string {
     const stateClasses = disabled
       ? 'text-gray-300 cursor-not-allowed'
       : active
-      ? 'bg-primary text-white'
-      : 'text-text-primary hover:bg-gray-100';
+        ? 'bg-primary text-white'
+        : 'text-text-primary hover:bg-gray-100';
 
     if (disabled) {
       return `<span class="${baseClasses} ${stateClasses}">${label}</span>`;

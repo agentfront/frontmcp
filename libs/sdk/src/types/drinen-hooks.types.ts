@@ -2,7 +2,6 @@ import { Type } from '../common';
 
 export type AnyStage = string & {};
 
-
 export interface GenericHook<Ctx = unknown> {
   providedBy: string;
   priority?(): number;

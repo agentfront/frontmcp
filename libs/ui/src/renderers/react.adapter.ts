@@ -92,11 +92,7 @@ export class ReactRendererAdapter implements RendererAdapter {
     if (typeof content === 'string') {
       // Check for JSX patterns using safe substring checks instead of complex regex
       // The original regex /function\s+\w+\s*\([^)]*\)\s*\{[\s\S]*return\s*[\s\S]*</ was vulnerable to ReDoS
-      if (
-        content.includes('React.createElement') ||
-        content.includes('jsx(') ||
-        content.includes('jsxs(')
-      ) {
+      if (content.includes('React.createElement') || content.includes('jsx(') || content.includes('jsxs(')) {
         return true;
       }
       // Check for function pattern with return and JSX using a safer approach

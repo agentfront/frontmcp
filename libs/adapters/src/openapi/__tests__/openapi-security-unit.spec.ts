@@ -88,7 +88,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       await expect(
         createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
-            BearerAuth: () => ({ token: 'abc' } as any), // Returns object instead of string
+            BearerAuth: () => ({ token: 'abc' }) as any, // Returns object instead of string
           },
         }),
       ).rejects.toThrow(/authProviderMapper\['BearerAuth'\] must return a string or undefined.*returned: object/);

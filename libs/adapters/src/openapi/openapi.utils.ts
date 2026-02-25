@@ -278,8 +278,8 @@ export async function parseResponse(response: Response, options?: ParseResponseO
         typeof data === 'object' && data !== null && 'message' in data
           ? String((data as { message: unknown }).message)
           : typeof data === 'string'
-          ? data
-          : `HTTP ${response.status} error`,
+            ? data
+            : `HTTP ${response.status} error`,
     };
   }
 

@@ -1,6 +1,6 @@
-import {getSelfVersion} from "./version";
+import { getSelfVersion } from './version';
 
 const version = getSelfVersion();
-export const name = `frontmcp cli version ${version}`
+export const name = `frontmcp cli version ${version}`;
 
-console.log(`Hello, I'm ${name}`)
+console.log(`Hello, I'm ${name}`);

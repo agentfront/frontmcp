@@ -34,7 +34,10 @@ import { createImportMap } from './import-map';
  * Error thrown when a dependency cannot be resolved.
  */
 export class DependencyResolutionError extends Error {
-  constructor(public readonly packageName: string, public readonly reason: string) {
+  constructor(
+    public readonly packageName: string,
+    public readonly reason: string,
+  ) {
     super(`Failed to resolve dependency "${packageName}": ${reason}`);
     this.name = 'DependencyResolutionError';
   }
@@ -44,7 +47,10 @@ export class DependencyResolutionError extends Error {
  * Error thrown when no CDN provider is available for a package.
  */
 export class NoProviderError extends DependencyResolutionError {
-  constructor(packageName: string, public readonly platform: CDNPlatformType) {
+  constructor(
+    packageName: string,
+    public readonly platform: CDNPlatformType,
+  ) {
     super(packageName, `No CDN provider available for platform "${platform}"`);
     this.name = 'NoProviderError';
   }

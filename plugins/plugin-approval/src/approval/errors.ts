@@ -66,7 +66,10 @@ export class ApprovalRequiredError extends ApprovalError {
  * Error thrown when approval operation fails.
  */
 export class ApprovalOperationError extends ApprovalError {
-  constructor(public readonly operation: 'grant' | 'revoke' | 'query', public readonly reason: string) {
+  constructor(
+    public readonly operation: 'grant' | 'revoke' | 'query',
+    public readonly reason: string,
+  ) {
     super(`Approval ${operation} failed: ${reason}`);
     this.name = 'ApprovalOperationError';
   }
@@ -90,7 +93,10 @@ export class ApprovalOperationError extends ApprovalError {
  * Error thrown when approval scope is not allowed.
  */
 export class ApprovalScopeNotAllowedError extends ApprovalError {
-  constructor(public readonly requestedScope: ApprovalScope, public readonly allowedScopes: ApprovalScope[]) {
+  constructor(
+    public readonly requestedScope: ApprovalScope,
+    public readonly allowedScopes: ApprovalScope[],
+  ) {
     super(
       `Approval scope '${requestedScope}' is not allowed for this tool. ` +
         `Allowed scopes: ${allowedScopes.join(', ')}`,
@@ -118,7 +124,10 @@ export class ApprovalScopeNotAllowedError extends ApprovalError {
  * Error thrown when approval has expired.
  */
 export class ApprovalExpiredError extends ApprovalError {
-  constructor(public readonly toolId: string, public readonly expiredAt: number) {
+  constructor(
+    public readonly toolId: string,
+    public readonly expiredAt: number,
+  ) {
     super(`Approval for tool '${toolId}' expired at ${new Date(expiredAt).toISOString()}`);
     this.name = 'ApprovalExpiredError';
   }

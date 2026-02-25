@@ -233,7 +233,11 @@ export class LlmAdapterError extends Error {
  * Error thrown when rate limited by the provider.
  */
 export class LlmRateLimitError extends LlmAdapterError {
-  constructor(provider: string, public readonly retryAfter?: number, raw?: unknown) {
+  constructor(
+    provider: string,
+    public readonly retryAfter?: number,
+    raw?: unknown,
+  ) {
     super(`Rate limited by ${provider}`, provider, 'rate_limit', 429, raw);
     this.name = 'LlmRateLimitError';
   }

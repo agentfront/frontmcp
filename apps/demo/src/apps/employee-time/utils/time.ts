@@ -6,7 +6,9 @@ export function toMs(input: number | string | Date): number {
   return parsed;
 }
 
-export function pad2(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
+export function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
 
 export function formatDay(ms: number): string {
   const d = new Date(ms);
@@ -18,22 +20,22 @@ export function formatDay(ms: number): string {
 
 export function startOfDayMs(ms: number): number {
   const d = new Date(ms);
-  d.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
 export function endOfDayMs(ms: number): number {
   const d = new Date(ms);
-  d.setHours(23,59,59,999);
+  d.setHours(23, 59, 59, 999);
   return d.getTime();
 }
 
 export function startOfWeekMs(ms: number): number {
   const d = new Date(ms);
   const day = d.getDay(); // 0=Sun..6=Sat
-  const diffToMonday = (day === 0 ? -6 : 1 - day); // make Monday start
+  const diffToMonday = day === 0 ? -6 : 1 - day; // make Monday start
   d.setDate(d.getDate() + diffToMonday);
-  d.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
@@ -41,21 +43,21 @@ export function endOfWeekMs(ms: number): number {
   const start = startOfWeekMs(ms);
   const d = new Date(start);
   d.setDate(d.getDate() + 6);
-  d.setHours(23,59,59,999);
+  d.setHours(23, 59, 59, 999);
   return d.getTime();
 }
 
 export function startOfMonthMs(ms: number): number {
   const d = new Date(ms);
   d.setDate(1);
-  d.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
 export function endOfMonthMs(ms: number): number {
   const d = new Date(ms);
   d.setMonth(d.getMonth() + 1, 0); // last day of current month
-  d.setHours(23,59,59,999);
+  d.setHours(23, 59, 59, 999);
   return d.getTime();
 }
 

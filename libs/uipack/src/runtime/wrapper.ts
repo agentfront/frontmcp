@@ -1590,7 +1590,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   // No bridge included - React component handles state internally via hooks
 </script>`
       : hasEmbeddedData
-      ? `<script>
+        ? `<script>
   // Tool metadata (inline mode - data embedded, backward compat)
   window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
   window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};
@@ -1599,7 +1599,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   window.__mcpStructuredContent = ${helpers.jsonEmbed(embeddedData.structuredContent)};
   window.__mcpDataEmbedded = true;
 </script>`
-      : `<script>
+        : `<script>
   // Tool metadata (static mode - data injected by host at runtime)
   window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
   window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};

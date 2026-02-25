@@ -396,7 +396,10 @@ describe('Plugin Utils', () => {
 
       it('should filter dependencies based on type', () => {
         class TestPlugin implements PluginInterface {
-          constructor(public dep1: any, public primitive: string) {}
+          constructor(
+            public dep1: any,
+            public primitive: string,
+          ) {}
         }
 
         // Set metadata with mixed types
@@ -439,7 +442,10 @@ describe('Plugin Utils', () => {
           description: 'Test plugin',
         })
         class TestPlugin implements PluginInterface {
-          constructor(public dep1: any, public nullable: any) {}
+          constructor(
+            public dep1: any,
+            public nullable: any,
+          ) {}
         }
 
         // Set metadata with null
@@ -459,7 +465,10 @@ describe('Plugin Utils', () => {
           description: 'Test plugin',
         })
         class TestPlugin implements PluginInterface {
-          constructor(public dep1: any, public stringDep: string) {}
+          constructor(
+            public dep1: any,
+            public stringDep: string,
+          ) {}
         }
 
         // Set metadata with primitive type

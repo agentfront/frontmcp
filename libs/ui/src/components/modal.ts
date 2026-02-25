@@ -438,8 +438,8 @@ export function drawer(content: string, options: DrawerOptions): string {
 
       <!-- Drawer -->
       <div class="fixed ${positionClasses[position]} ${sizeClasses[position][size]} ${
-    fullSizeClasses[position]
-  } bg-white shadow-xl flex flex-col ${className}">
+        fullSizeClasses[position]
+      } bg-white shadow-xl flex flex-col ${className}">
         ${headerHtml}
         <div class="flex-1 overflow-y-auto p-4">
           ${content}

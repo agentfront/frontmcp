@@ -1,1 +1,1 @@
-export {Scope} from './scope.instance'
+export { Scope } from './scope.instance';

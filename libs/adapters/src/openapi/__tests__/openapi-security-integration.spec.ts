@@ -21,7 +21,7 @@ describe('OpenAPI Security Integration (Real SecurityResolver)', () => {
       requestId: 'test-request-id',
       sessionId: 'test-session-id',
       scopeId: 'test-scope',
-    } as FrontMcpContext);
+    }) as FrontMcpContext;
 
   // Tool with bearer auth security requirement
   const createBearerAuthTool = (): McpOpenAPITool => ({

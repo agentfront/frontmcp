@@ -87,7 +87,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
 
     case 'json': {
       res.setHeader('Content-Type', out.contentType);
-      res.status(out.status ?? 200 );
+      res.status(out.status ?? 200);
       if (typeof res.json !== 'function') {
         res.end(JSON.stringify(out.body));
       } else {
@@ -126,7 +126,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
       // Prefer AsyncIterable path — Node Readable is async-iterable too.
       const maybeIter = (out.stream as { [Symbol.asyncIterator]?: () => AsyncIterator<Uint8Array> })[
         Symbol.asyncIterator
-        ];
+      ];
       if (typeof maybeIter === 'function' && 'write' in res && typeof res.write === 'function') {
         for await (const chunk of out.stream as AsyncIterable<Uint8Array>) {
           res.write(chunk);
@@ -156,7 +156,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
 
       const maybeIter = (out.stream as { [Symbol.asyncIterator]?: () => AsyncIterator<Uint8Array | string> })[
         Symbol.asyncIterator
-        ];
+      ];
       if (typeof maybeIter === 'function' && 'write' in res && typeof res.write === 'function') {
         for await (const chunk of out.stream as AsyncIterable<Uint8Array | string>) {
           res.write(chunk);

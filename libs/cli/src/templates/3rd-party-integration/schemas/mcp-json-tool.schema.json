@@ -3,16 +3,7 @@
   "$id": "https://frontmcp.dev/schemas/mcp-json-tool.schema.json",
   "title": "FrontMCP JSON HTTP Tool",
   "type": "object",
-  "required": [
-    "name",
-    "version",
-    "description",
-    "servers",
-    "auth",
-    "request",
-    "input_schema",
-    "outputs"
-  ],
+  "required": ["name", "version", "description", "servers", "auth", "request", "input_schema", "outputs"],
   "additionalProperties": false,
   "properties": {
     "name": { "type": "string" },
@@ -227,10 +218,7 @@
             "properties": {
               "status": { "type": "string" },
               "headers": {
-                "oneOf": [
-                  { "type": "string" },
-                  { "type": "object" }
-                ]
+                "oneOf": [{ "type": "string" }, { "type": "object" }]
               },
               "body": {}
             },

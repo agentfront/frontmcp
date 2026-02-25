@@ -3,9 +3,4 @@ import { LogTransportInterface } from '../interfaces';
 import { LoggerRecord } from '../records';
 import { LogTransportMetadata } from '../metadata';
 
-
-export abstract class LoggerEntry extends BaseEntry<LoggerRecord, LogTransportInterface, LogTransportMetadata> {
-
-
-}
-
+export abstract class LoggerEntry extends BaseEntry<LoggerRecord, LogTransportInterface, LogTransportMetadata> {}

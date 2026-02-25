@@ -5,8 +5,7 @@ declare global {
   /**
    * Declarative metadata extends to an FrontMcpLogger decorator.
    */
-  export interface ExtendFrontMcpLoggerMetadata {
-  }
+  export interface ExtendFrontMcpLoggerMetadata {}
 }
 
 /**
@@ -30,10 +29,10 @@ export interface LogTransportMetadata extends ExtendFrontMcpLoggerMetadata {
   description?: string;
 }
 
-
-export const frontMcpLogTransportMetadataSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  description: z.string().optional(),
-} satisfies RawZodShape<LogTransportMetadata, ExtendFrontMcpLoggerMetadata>).passthrough();
-
+export const frontMcpLogTransportMetadataSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+  } satisfies RawZodShape<LogTransportMetadata, ExtendFrontMcpLoggerMetadata>)
+  .passthrough();
