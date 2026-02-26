@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/nx",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Nx plugin for FrontMCP — generators and executors for building MCP servers",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",

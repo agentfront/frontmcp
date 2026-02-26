@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-cache",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Cache plugin for FrontMCP - Redis, Vercel KV, and in-memory caching with automatic tool result caching",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "0.12.1",
+    "@frontmcp/sdk": "0.12.2",
     "zod": "^4.0.0"
   },
   "peerDependencies": {
