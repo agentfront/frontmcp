@@ -108,12 +108,11 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
     }
 
     // Search for skills
-    const limit = input.limit ?? 10;
     const results = await skillRegistry.search(input.query, {
       tags: input.tags,
       tools: input.tools,
-      topK: limit,
-      requireAllTools: input.requireAllTools ?? false,
+      topK: input.limit,
+      requireAllTools: input.requireAllTools,
     });
 
     // Store pre-filtered count for hasMore calculation
@@ -163,7 +162,7 @@ export class SearchSkillsTool extends ToolContext<typeof inputSchema, typeof out
     // - hasMore: true if pre-filtered results hit the limit (more results may exist)
     // Note: We use preFilteredCount for hasMore because visibility filtering is post-search
     const total = skills.length;
-    const hasMore = preFilteredCount >= limit;
+    const hasMore = preFilteredCount >= input.limit;
 
     // Generate guidance based on results
     const guidance = generateSearchGuidance(

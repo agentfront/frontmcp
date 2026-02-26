@@ -108,7 +108,7 @@ import { crmStore } from '../data/crm.store';
   outputSchema,
 })
 export default class ActivitiesLogTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.input<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
     const activity = crmStore.logActivity(input);
     return { activity };
   }
