@@ -38,7 +38,7 @@ export const searchToolInputSchema = {
     .describe('Minimum relevance threshold (default 0.1)'),
 };
 
-export type SearchToolInput = z.input<z.ZodObject<typeof searchToolInputSchema>>;
+export type SearchToolInput = z.infer<z.ZodObject<typeof searchToolInputSchema>>;
 
 export const searchToolOutputSchema = z.object({
   tools: z

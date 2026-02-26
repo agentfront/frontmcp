@@ -17,7 +17,7 @@ const outputSchema = z.object({
   totalResults: z.number(),
 });
 
-type SearchInput = z.input<z.ZodObject<typeof inputSchema>>;
+type SearchInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type SearchOutput = z.infer<typeof outputSchema>;
 
 // Mock documentation database

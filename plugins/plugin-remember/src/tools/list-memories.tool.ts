@@ -24,7 +24,7 @@ export const listMemoriesOutputSchema = z.object({
   truncated: z.boolean(),
 });
 
-export type ListMemoriesInput = z.input<z.ZodObject<typeof listMemoriesInputSchema>>;
+export type ListMemoriesInput = z.infer<z.ZodObject<typeof listMemoriesInputSchema>>;
 
 export type ListMemoriesOutput = z.infer<typeof listMemoriesOutputSchema>;
 

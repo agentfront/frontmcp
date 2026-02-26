@@ -363,7 +363,6 @@ describe('extractResultFromCallToolResult', () => {
     });
 
     it('should handle missing isError property (defaults to false)', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mcpResult: any = {
         content: [{ type: 'text', text: '{"data": "test"}' }],
       };

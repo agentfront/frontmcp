@@ -12,7 +12,7 @@ const mockCalculatorAdapter: AgentLlmAdapter = {
     try {
       // Simple safe math evaluation (only numbers and basic operators)
       const sanitized = expression.replace(/[^0-9+\-*/().]/g, '');
-      // eslint-disable-next-line no-eval
+
       const result = Function('"use strict"; return (' + sanitized + ')')();
 
       return {
@@ -79,7 +79,6 @@ export class CalculatorAgent extends AgentContext {
         };
       }
 
-      // eslint-disable-next-line no-eval
       const result = Function('"use strict"; return (' + sanitized + ')')();
 
       if (typeof result !== 'number' || isNaN(result)) {

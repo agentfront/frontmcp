@@ -1,4 +1,4 @@
-import { z, ZodType, ZodLiteral } from 'zod';
+import { z, ZodType } from 'zod';
 import { Notification, Request, Result } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerOptions } from '@modelcontextprotocol/sdk/server/index.js';

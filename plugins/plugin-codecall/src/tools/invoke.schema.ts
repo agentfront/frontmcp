@@ -26,7 +26,7 @@ export const invokeToolInputSchema = {
     ),
 };
 
-export type InvokeToolInput = z.input<z.ZodObject<typeof invokeToolInputSchema>>;
+export type InvokeToolInput = z.infer<z.ZodObject<typeof invokeToolInputSchema>>;
 
 // Use standard MCP CallToolResult schema - returns same format as direct tool call
 export const invokeToolOutputSchema = CallToolResultSchema;

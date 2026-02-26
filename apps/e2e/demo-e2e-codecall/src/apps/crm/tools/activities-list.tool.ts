@@ -26,7 +26,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class ActivitiesListTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const activities = crmStore.listActivities(input.userId);
     return { activities, count: activities.length };
   }

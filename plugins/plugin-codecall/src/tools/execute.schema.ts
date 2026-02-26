@@ -42,7 +42,7 @@ export const executeToolInputSchema = {
     ),
 };
 
-export type ExecuteToolInput = z.input<z.ZodObject<typeof executeToolInputSchema>>;
+export type ExecuteToolInput = z.infer<z.ZodObject<typeof executeToolInputSchema>>;
 
 /**
  * Shared "payload" schemas

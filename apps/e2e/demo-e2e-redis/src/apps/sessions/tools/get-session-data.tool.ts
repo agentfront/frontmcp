@@ -19,7 +19,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class GetSessionDataTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     // Use shared context session ID so data can be retrieved across tool calls
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);

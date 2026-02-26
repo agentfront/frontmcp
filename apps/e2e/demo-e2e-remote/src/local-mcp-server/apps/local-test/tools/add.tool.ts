@@ -11,7 +11,7 @@ const outputSchema = z.object({
   operation: z.string(),
 });
 
-type AddInput = z.input<z.ZodObject<typeof inputSchema>>;
+type AddInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type AddOutput = z.infer<typeof outputSchema>;
 
 @Tool({

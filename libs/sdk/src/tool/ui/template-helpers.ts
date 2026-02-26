@@ -7,7 +7,6 @@
  * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
  */
 
-import type { TemplateHelpers } from '../../common/metadata/tool-ui.metadata';
 // Import escapeHtml from @frontmcp/uipack/utils - single source of truth (no React needed)
 import { escapeHtml } from '@frontmcp/uipack/utils';
 

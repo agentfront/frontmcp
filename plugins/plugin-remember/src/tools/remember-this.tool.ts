@@ -31,7 +31,7 @@ export const rememberThisOutputSchema = z.object({
   expiresAt: z.number().optional(),
 });
 
-export type RememberThisInput = z.input<z.ZodObject<typeof rememberThisInputSchema>>;
+export type RememberThisInput = z.infer<z.ZodObject<typeof rememberThisInputSchema>>;
 
 export type RememberThisOutput = z.infer<typeof rememberThisOutputSchema>;
 

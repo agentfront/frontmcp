@@ -42,7 +42,7 @@ const outputSchema = z.object({
   hasMore: z.boolean(),
 });
 
-type Input = z.input<typeof inputSchema>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 const stateSchema = z.object({

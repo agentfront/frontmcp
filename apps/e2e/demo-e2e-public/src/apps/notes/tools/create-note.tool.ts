@@ -14,7 +14,7 @@ const outputSchema = z.object({
   createdAt: z.string(),
 });
 
-type CreateNoteInput = z.input<z.ZodObject<typeof inputSchema>>;
+type CreateNoteInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type CreateNoteOutput = z.infer<typeof outputSchema>;
 
 @Tool({

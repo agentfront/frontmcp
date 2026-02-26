@@ -10,7 +10,7 @@ const outputSchema = z.object({
   receivedAt: z.string(),
 });
 
-type EchoInput = z.input<z.ZodObject<typeof inputSchema>>;
+type EchoInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type EchoOutput = z.infer<typeof outputSchema>;
 
 @Tool({

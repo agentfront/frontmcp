@@ -9,7 +9,7 @@ const outputSchema = z.object({
   serverName: z.string(),
 });
 
-type PingInput = z.input<z.ZodObject<typeof inputSchema>>;
+type PingInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type PingOutput = z.infer<typeof outputSchema>;
 
 @Tool({

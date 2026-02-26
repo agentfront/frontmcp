@@ -37,7 +37,7 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas
-type FormInput = z.input<z.ZodObject<typeof inputSchema>>;
+type FormInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type FormOutput = z.infer<typeof outputSchema>;
 
 @Tool({

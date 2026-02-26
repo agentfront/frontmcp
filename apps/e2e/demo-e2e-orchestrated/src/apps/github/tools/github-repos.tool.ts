@@ -34,7 +34,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export class GitHubReposTool extends ToolContext {
-  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     // For E2E testing, check if the auth info contains federated provider claims
     // In a full implementation, this would use orchestration.tryGetToken('github')
     const authInfo = this.getAuthInfo();

@@ -28,7 +28,7 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas for proper typing
-type WeatherInput = z.input<z.ZodObject<typeof inputSchema>>;
+type WeatherInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type WeatherOutput = z.infer<typeof outputSchema>;
 
 // Weather condition icon mapping (using emoji for simplicity)

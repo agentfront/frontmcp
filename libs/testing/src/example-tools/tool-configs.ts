@@ -163,7 +163,7 @@ export const FULL_UI_TOOL_CONFIG = {
 /**
  * Generate output for the basic UI tool.
  */
-export function generateBasicUIToolOutput(input: z.input<typeof basicUIToolInputSchema>) {
+export function generateBasicUIToolOutput(input: z.infer<typeof basicUIToolInputSchema>) {
   return {
     message: `Hello, ${input.name}!`,
     timestamp: Date.now(),
@@ -173,7 +173,7 @@ export function generateBasicUIToolOutput(input: z.input<typeof basicUIToolInput
 /**
  * Generate output for the full UI tool.
  */
-export function generateFullUIToolOutput(input: z.input<typeof fullUIToolInputSchema>) {
+export function generateFullUIToolOutput(input: z.infer<typeof fullUIToolInputSchema>) {
   const items: string[] = [];
   for (let i = 1; i <= input.count; i++) {
     items.push(`Item ${i}`);

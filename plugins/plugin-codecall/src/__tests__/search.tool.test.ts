@@ -7,20 +7,19 @@ import { ToolSearchService } from '../services';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Tool: (config: any) => (target: any) => target,
   ToolContext: class MockToolContext {
     private services = new Map<unknown, unknown>();
     scope = {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+
     constructor(_args?: any) {
       // Intentionally empty - mock constructor
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     get(token: any): any {
       return this.services.get(token);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     setService(token: any, service: any) {
       this.services.set(token, service);
     }
@@ -39,12 +38,11 @@ jest.mock('../services', () => ({
 }));
 
 describe('SearchTool', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let tool: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     tool = new (SearchTool as any)();
     tool.setService(ToolSearchService, mockSearchService);
 

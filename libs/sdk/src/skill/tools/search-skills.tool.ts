@@ -42,7 +42,7 @@ const outputSchema = {
   guidance: z.string().describe('Suggested next action based on search results'),
 };
 
-type Input = z.input<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<z.ZodObject<typeof outputSchema>>;
 
 /**

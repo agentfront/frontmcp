@@ -26,7 +26,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class UsersGetTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const user = crmStore.getUser(input.id);
     return { user: user || null };
   }

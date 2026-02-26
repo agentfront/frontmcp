@@ -1,6 +1,6 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { AppConfigProvider, AppConfig } from '../providers/app-config.provider';
+import { AppConfigProvider } from '../providers/app-config.provider';
 
 const inputSchema = {};
 
@@ -13,7 +13,7 @@ const outputSchema = z.object({
   providerScope: z.string(),
 });
 
-type Input = z.input<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 // Singleton instance

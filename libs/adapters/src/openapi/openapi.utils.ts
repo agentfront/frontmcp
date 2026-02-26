@@ -116,7 +116,7 @@ export function buildRequest(
         const headerValue = coerceToString(value, mapper.key, 'header');
         // Validate header values for injection attacks
         // Check for: CR, LF, null byte, form feed, vertical tab
-        // eslint-disable-next-line no-control-regex
+
         if (/[\r\n\x00\f\v]/.test(headerValue)) {
           throw new Error(
             `Invalid header value for '${mapper.key}': contains control characters (possible header injection attack)`,

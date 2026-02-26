@@ -21,7 +21,6 @@ describe('ExtAppsAdapter', () => {
   afterEach(() => {
     // Restore window properties
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const win = window as any;
       delete win.__mcpPlatform;
       delete win.__extAppsInitialized;
@@ -85,32 +84,27 @@ describe('ExtAppsAdapter', () => {
       });
 
       it('should return true when __mcpPlatform is ext-apps', () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).__mcpPlatform = 'ext-apps';
         expect(adapter.canHandle()).toBe(true);
       });
 
       it('should return true when __extAppsInitialized is set', () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).__extAppsInitialized = true;
         expect(adapter.canHandle()).toBe(true);
       });
 
       describe('Claude exclusion', () => {
         it('should return false when __mcpPlatform is claude', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__mcpPlatform = 'claude';
           expect(adapter.canHandle()).toBe(false);
         });
 
         it('should return false when window.claude exists', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).claude = {};
           expect(adapter.canHandle()).toBe(false);
         });
 
         it('should return false when __claudeArtifact is set', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__claudeArtifact = true;
           expect(adapter.canHandle()).toBe(false);
         });
@@ -124,13 +118,11 @@ describe('ExtAppsAdapter', () => {
 
       describe('OpenAI exclusion', () => {
         it('should return false when openai.canvas exists', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).openai = { canvas: {} };
           expect(adapter.canHandle()).toBe(false);
         });
 
         it('should return false when openai.callTool is a function', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).openai = { callTool: () => {} };
           expect(adapter.canHandle()).toBe(false);
         });
@@ -138,7 +130,6 @@ describe('ExtAppsAdapter', () => {
 
       describe('priority over Claude when explicit marker is set', () => {
         it('should prioritize ext-apps marker even if Claude markers exist', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const win = window as any;
           win.__mcpPlatform = 'ext-apps';
           // Even if Claude globals exist, the explicit ext-apps marker wins
@@ -149,13 +140,11 @@ describe('ExtAppsAdapter', () => {
 
       describe('Claude MCP Apps mode', () => {
         it('should return true when __mcpAppsEnabled is set (Claude MCP Apps)', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__mcpAppsEnabled = true;
           expect(adapter.canHandle()).toBe(true);
         });
 
         it('should handle Claude MCP Apps even with Claude URL detected', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).__mcpAppsEnabled = true;
           // Note: URL detection happens after __mcpAppsEnabled check,
           // so MCP Apps mode takes precedence
@@ -163,7 +152,6 @@ describe('ExtAppsAdapter', () => {
         });
 
         it('should handle Claude MCP Apps even with Claude globals present', () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const win = window as any;
           win.__mcpAppsEnabled = true;
           win.claude = {};

@@ -35,7 +35,7 @@ export const describeToolInputSchema = {
     ),
 };
 
-export type DescribeToolInput = z.input<z.ZodObject<typeof describeToolInputSchema>>;
+export type DescribeToolInput = z.infer<z.ZodObject<typeof describeToolInputSchema>>;
 
 export const describeToolOutputSchema = z.object({
   tools: z

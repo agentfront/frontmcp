@@ -17,7 +17,7 @@ const deployOutputSchema = {
   timestamp: z.string(),
 };
 
-type DeployInput = z.input<z.ZodObject<typeof deployInputSchema>>;
+type DeployInput = z.infer<z.ZodObject<typeof deployInputSchema>>;
 type DeployOutput = z.infer<z.ZodObject<typeof deployOutputSchema>>;
 
 @Tool({
@@ -49,7 +49,7 @@ const rollbackOutputSchema = {
   rolledBackTo: z.string(),
 };
 
-type RollbackInput = z.input<z.ZodObject<typeof rollbackInputSchema>>;
+type RollbackInput = z.infer<z.ZodObject<typeof rollbackInputSchema>>;
 type RollbackOutput = z.infer<z.ZodObject<typeof rollbackOutputSchema>>;
 
 @Tool({

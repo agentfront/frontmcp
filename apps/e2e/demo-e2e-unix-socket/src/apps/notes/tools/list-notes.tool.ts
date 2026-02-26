@@ -16,7 +16,7 @@ const outputSchema = z.object({
   count: z.number(),
 });
 
-type ListNotesInput = z.input<z.ZodObject<typeof inputSchema>>;
+type ListNotesInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type ListNotesOutput = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -12,7 +12,7 @@ const outputSchema = z.object({
   completedAt: z.string(),
 });
 
-type SlowOperationInput = z.input<z.ZodObject<typeof inputSchema>>;
+type SlowOperationInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type SlowOperationOutput = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -27,7 +27,7 @@ export async function bundleWithEsbuild(
   // Lazy-load esbuild
   let esbuild: typeof import('esbuild');
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     esbuild = require('esbuild');
   } catch {
     throw new Error(

@@ -75,7 +75,7 @@ export { FrontMcpTool, FrontMcpTool as Tool, frontMcpTool, frontMcpTool as tool 
 type __Shape = z.ZodRawShape;
 type __AsZodObj<T> = T extends z.ZodRawShape ? z.ZodObject<T> : never;
 
-export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.input<__AsZodObj<I>> : never;
+export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.output<__AsZodObj<I>> : never;
 
 // ---------- output inference helpers for NEW schemas ----------
 

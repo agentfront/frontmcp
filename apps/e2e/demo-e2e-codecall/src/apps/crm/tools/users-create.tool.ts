@@ -27,7 +27,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class UsersCreateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const user = crmStore.createUser(input);
     return { user };
   }

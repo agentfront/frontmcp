@@ -20,7 +20,7 @@ const outputSchema = z.object({
   count: z.number(),
 });
 
-type Input = z.input<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<z.ZodObject<typeof inputSchema>>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -25,7 +25,7 @@ const inputSchema = {
 };
 
 /** Input type for sendElicitationResult tool */
-type SendElicitationResultInput = z.input<z.ZodObject<typeof inputSchema>>;
+type SendElicitationResultInput = z.infer<z.ZodObject<typeof inputSchema>>;
 
 /**
  * System tool for submitting elicitation results.

@@ -24,7 +24,7 @@ const outputSchema = z
   outputSchema,
 })
 export default class SessionInfoTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(_input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const authInfo = this.getAuthInfo() as Record<string, unknown>;
     const sessionId = authInfo.sessionId as string | undefined;
     const hasSession = !!sessionId && sessionId.length > 0;

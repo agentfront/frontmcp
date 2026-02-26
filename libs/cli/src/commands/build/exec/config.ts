@@ -52,7 +52,7 @@ export async function loadExecConfig(cwd: string): Promise<FrontmcpExecConfig> {
         return JSON.parse(content) as FrontmcpExecConfig;
       }
       // JS/MJS/CJS config — require it
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const mod = require(configPath);
       return (mod.default || mod) as FrontmcpExecConfig;
     }

@@ -7,20 +7,18 @@ import type { EnclaveExecutionResult } from '../services/enclave.service';
 
 // Mock the SDK - ToolContext with dependency injection
 jest.mock('@frontmcp/sdk', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Tool: (config: any) => (target: any) => target,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   Provider: (config: any) => (target: any) => target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
   // BaseConfig mock for CodeCallConfig to extend
   BaseConfig: class MockBaseConfig {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     protected options: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     constructor(options: any = {}) {
       this.options = options;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     get(key: string): any {
       return this.options[key];
     }
@@ -36,12 +34,10 @@ jest.mock('@frontmcp/sdk', () => ({
     authInfo = undefined;
     logger = undefined;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
     constructor(_args?: any) {
       // Mock constructor accepts optional args
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get<T>(token: any): T {
       const dep = this.dependencies.get(token);
       if (!dep) {
@@ -50,13 +46,12 @@ jest.mock('@frontmcp/sdk', () => ({
       return dep as T;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tryGet<T>(token: any): T | undefined {
       return this.dependencies.get(token) as T | undefined;
     }
 
     // Test helper to set dependencies
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     _setDependency(token: any, instance: any): void {
       this.dependencies.set(token, instance);
     }
@@ -144,7 +139,6 @@ function createExecuteTool(
     }>;
   } = {},
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tool = new (ExecuteTool as any)();
 
   const mockEnclave = createMockEnclaveService(options.enclaveResult);
@@ -167,7 +161,6 @@ function createExecuteTool(
 describe('ExecuteTool', () => {
   describe('Constructor Validation', () => {
     it('should instantiate ExecuteTool correctly', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (ExecuteTool as any)();
       expect(tool).toBeDefined();
     });
@@ -490,7 +483,7 @@ describe('ExecuteTool', () => {
 
       // Verify the environment has callTool
       expect(capturedEnv).toBeDefined();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect(typeof (capturedEnv as any).callTool).toBe('function');
     });
 
@@ -502,7 +495,6 @@ describe('ExecuteTool', () => {
         },
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -537,11 +529,9 @@ describe('ExecuteTool', () => {
         runFlowResult: null, // Tool not found
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let thrownError: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (env as any).callTool('nonexistent:tool', {});
         } catch (err) {
           thrownError = err;
@@ -576,7 +566,6 @@ describe('ExecuteTool', () => {
 
       const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -612,7 +601,6 @@ describe('ExecuteTool', () => {
 
       const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -633,7 +621,6 @@ describe('ExecuteTool', () => {
     it('should return undefined when tool not found', async () => {
       const { tool, mockEnclave } = createExecuteTool({ tools: [] });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -658,7 +645,6 @@ describe('ExecuteTool', () => {
         throw new Error('Registry unavailable');
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -689,7 +675,6 @@ describe('ExecuteTool', () => {
         resolvedVm: { timeoutMs: 5000, allowConsole: true },
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -709,7 +694,6 @@ describe('ExecuteTool', () => {
         return 5000;
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -724,7 +708,6 @@ describe('ExecuteTool', () => {
     it('should provide mcpLog function', async () => {
       const { tool, mockEnclave } = createExecuteTool();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;
@@ -739,7 +722,6 @@ describe('ExecuteTool', () => {
     it('should provide mcpNotify function', async () => {
       const { tool, mockEnclave } = createExecuteTool();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let capturedEnv: any;
       mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
         capturedEnv = env;

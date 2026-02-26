@@ -16,7 +16,7 @@ const inputSchema = {
   disableFallbacks: z.boolean().optional().describe('If true, disable fallbacks (direct lookup only)'),
 };
 
-type Input = z.input<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<z.ZodObject<typeof inputSchema>>;
 
 interface FallbackResult {
   key: string;

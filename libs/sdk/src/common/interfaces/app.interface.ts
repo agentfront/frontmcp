@@ -2,7 +2,7 @@ import { Type, ValueType } from '@frontmcp/di';
 import { AppMetadata, RemoteAppMetadata } from '../metadata';
 
 /** Marker interface for FrontMCP application classes */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+
 export interface AppInterface {}
 
 export type AppValueType<Provide> = ValueType<Provide> & AppMetadata;

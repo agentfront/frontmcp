@@ -33,7 +33,7 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas
-type ChartInput = z.input<z.ZodObject<typeof inputSchema>>;
+type ChartInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type ChartOutput = z.infer<typeof outputSchema>;
 
 @Tool({

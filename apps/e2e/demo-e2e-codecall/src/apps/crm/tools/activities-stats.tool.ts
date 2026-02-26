@@ -17,7 +17,7 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class ActivitiesStatsTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(_input: z.input<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     return crmStore.getActivityStats();
   }
 }

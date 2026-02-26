@@ -23,7 +23,7 @@ const outputSchema = z.object({
   userEmail: z.string().optional(),
 });
 
-type GetAuthInfoInput = z.input<z.ZodObject<typeof inputSchema>>;
+type GetAuthInfoInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type GetAuthInfoOutput = z.infer<typeof outputSchema>;
 
 @Tool({

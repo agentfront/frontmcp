@@ -23,7 +23,7 @@ export const forgetOutputSchema = z.object({
   existed: z.boolean(),
 });
 
-export type ForgetInput = z.input<z.ZodObject<typeof forgetInputSchema>>;
+export type ForgetInput = z.infer<z.ZodObject<typeof forgetInputSchema>>;
 
 export type ForgetOutput = z.infer<typeof forgetOutputSchema>;
 
