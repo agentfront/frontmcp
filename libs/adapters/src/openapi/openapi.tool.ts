@@ -130,7 +130,12 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     // 1. Inject transformed values (from inputTransforms)
     const transformContext: InputTransformContext = {
       ctx,
-      env: process.env,
+      env:
+        typeof globalThis !== 'undefined' &&
+        'process' in globalThis &&
+        (globalThis as { process?: { env?: unknown } }).process?.env
+          ? (globalThis as { process: { env: Record<string, string | undefined> } }).process.env
+          : {},
       tool: openapiTool,
     };
     const injectedInput = await injectTransformedValues(

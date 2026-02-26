@@ -1,0 +1,37 @@
+{
+  "name": "demo-e2e-browser",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-browser/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:browser"],
+  "targets": {
+    "serve": {
+      "executor": "@nx/vite:dev-server",
+      "options": {
+        "buildTarget": "demo-e2e-browser:build"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "dependsOn": ["^build"],
+      "outputs": ["{workspaceRoot}/dist/apps/e2e/demo-e2e-browser"],
+      "options": {
+        "outputPath": "dist/apps/e2e/demo-e2e-browser"
+      }
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --config=apps/e2e/demo-e2e-browser/playwright.config.ts"
+      },
+      "dependsOn": ["build"]
+    },
+    "e2e:ui": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --config=apps/e2e/demo-e2e-browser/playwright.config.ts --ui"
+      },
+      "dependsOn": ["build"]
+    }
+  }
+}

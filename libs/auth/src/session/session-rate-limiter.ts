@@ -70,8 +70,10 @@ export class SessionRateLimiter {
     const cleanupIntervalMs = config.cleanupIntervalMs ?? 60000;
     if (cleanupIntervalMs > 0) {
       this.cleanupTimer = setInterval(() => this.cleanup(), cleanupIntervalMs);
-      // Don't block process exit
-      this.cleanupTimer.unref();
+      // Don't block process exit (unref is Node.js-only)
+      if (typeof this.cleanupTimer.unref === 'function') {
+        this.cleanupTimer.unref();
+      }
     }
   }
 

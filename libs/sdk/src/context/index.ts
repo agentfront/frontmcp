@@ -28,7 +28,13 @@ export {
 } from './frontmcp-context';
 
 // =====================
-// FrontMcpContextStorage - AsyncLocalStorage wrapper
+// Context Storage Interface and Implementations
+// =====================
+export type { IContextStorage } from './context-storage.interface';
+export { BrowserContextStorage } from './context-storage.browser';
+
+// =====================
+// FrontMcpContextStorage - Platform-aware context storage wrapper
 // =====================
 export { FrontMcpContextStorage, ContextStorage } from './frontmcp-context-storage';
 

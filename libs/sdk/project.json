@@ -82,9 +82,83 @@
         }
       }
     },
+    "build-browser-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/sdk/dist/browser",
+        "main": "libs/sdk/src/browser.ts",
+        "tsConfig": "libs/sdk/tsconfig.lib.json",
+        "format": ["esm"],
+        "platform": "browser",
+        "bundle": true,
+        "thirdParty": true,
+        "minify": false,
+        "declaration": false,
+        "skipTypeCheck": true,
+        "external": ["zod", "reflect-metadata"],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "alias": {
+            "@frontmcp/auth": "./libs/auth/src/browser.ts",
+            "@swc/wasm": "./libs/sdk/src/browser/shims/empty.ts",
+            "@swc/core": "./libs/sdk/src/browser/shims/empty.ts",
+            "@swc/core-darwin-arm64": "./libs/sdk/src/browser/shims/empty.ts",
+            "node:async_hooks": "./libs/sdk/src/browser/shims/async-hooks.ts",
+            "node:crypto": "./libs/sdk/src/browser/shims/crypto.ts",
+            "node:fs": "./libs/sdk/src/browser/shims/fs.ts",
+            "node:fs/promises": "./libs/sdk/src/browser/shims/fs.ts",
+            "node:path": "./libs/sdk/src/browser/shims/path.ts",
+            "node:os": "./libs/sdk/src/browser/shims/os.ts",
+            "node:http": "./libs/sdk/src/browser/shims/http.ts",
+            "node:stream": "./libs/sdk/src/browser/shims/stream.ts",
+            "node:buffer": "./libs/sdk/src/browser/shims/empty.ts",
+            "node:process": "./libs/sdk/src/browser/shims/empty.ts",
+            "node:child_process": "./libs/sdk/src/browser/shims/empty.ts",
+            "node:events": "./libs/sdk/src/browser/shims/events.ts",
+            "node:url": "./libs/sdk/src/browser/shims/empty.ts",
+            "node:util": "./libs/sdk/src/browser/shims/empty.ts",
+            "async_hooks": "./libs/sdk/src/browser/shims/async-hooks.ts",
+            "assert": "./libs/sdk/src/browser/shims/empty.ts",
+            "child_process": "./libs/sdk/src/browser/shims/empty.ts",
+            "crypto": "./libs/sdk/src/browser/shims/crypto.ts",
+            "events": "./libs/sdk/src/browser/shims/events.ts",
+            "fs": "./libs/sdk/src/browser/shims/fs.ts",
+            "fs/promises": "./libs/sdk/src/browser/shims/fs.ts",
+            "http": "./libs/sdk/src/browser/shims/http.ts",
+            "http2": "./libs/sdk/src/browser/shims/empty.ts",
+            "os": "./libs/sdk/src/browser/shims/os.ts",
+            "path": "./libs/sdk/src/browser/shims/path.ts",
+            "stream": "./libs/sdk/src/browser/shims/stream.ts",
+            "tty": "./libs/sdk/src/browser/shims/empty.ts",
+            "url": "./libs/sdk/src/browser/shims/empty.ts",
+            "util": "./libs/sdk/src/browser/shims/empty.ts",
+            "ioredis": "./libs/sdk/src/browser/shims/empty.ts",
+            "express": "./libs/sdk/src/browser/shims/empty.ts",
+            "cors": "./libs/sdk/src/browser/shims/empty.ts",
+            "raw-body": "./libs/sdk/src/browser/shims/empty.ts",
+            "content-type": "./libs/sdk/src/browser/shims/empty.ts",
+            "@vercel/kv": "./libs/sdk/src/browser/shims/empty.ts"
+          },
+          "define": {
+            "process.env.NODE_ENV": "\"production\"",
+            "global": "globalThis"
+          }
+        }
+      }
+    },
+    "build-browser-umd": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-browser-esm"],
+      "outputs": ["{workspaceRoot}/libs/sdk/dist/browser/browser.js"],
+      "options": {
+        "command": "node scripts/build-browser-umd.mjs libs/sdk/src/browser.ts libs/sdk/dist/browser/browser.js FrontMCP --external=zod --external=reflect-metadata --alias:@frontmcp/auth=./libs/auth/src/browser.ts"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser-esm", "build-browser-umd"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json"
       }
