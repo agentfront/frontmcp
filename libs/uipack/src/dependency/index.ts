@@ -222,6 +222,12 @@ export {
 } from './template-loader';
 
 // ============================================
+// Import Rewriter
+// ============================================
+
+export { rewriteImportsToEsmSh, type RewriteImportsOptions, type RewriteImportsResult } from './import-rewriter';
+
+// ============================================
 // Template Processor
 // ============================================
 

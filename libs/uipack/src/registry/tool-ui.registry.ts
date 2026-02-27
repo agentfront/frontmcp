@@ -12,7 +12,7 @@
  * @packageDocumentation
  */
 
-import { createHash } from 'crypto';
+import { hashString } from '../renderers/utils/hash';
 import type { UITemplateConfig, WidgetManifest, BuildManifestResult } from '../types';
 import type { AIPlatformType, UIMetadata } from '../adapters';
 import { renderToolTemplateAsync, isReactComponent } from './render-template';
@@ -23,7 +23,7 @@ import {
   wrapLeanWidgetShell,
   wrapHybridWidgetShell,
 } from '../runtime/wrapper';
-import { buildToolWidgetManifest, detectUIType } from '../build';
+import { buildToolWidgetManifest, detectUIType } from '../build/widget-manifest';
 
 /**
  * Options for renderAndRegisterAsync (inline mode).
@@ -397,7 +397,7 @@ export default ${safeName};
 `.trim();
 
     // Generate hash for cache validation
-    const hash = createHash('sha256').update(code).digest('hex').substring(0, 16);
+    const hash = hashString(code);
 
     // Determine renderer type
     const type = detectedType === 'react' || detectedType === 'mdx' ? (detectedType as 'react' | 'mdx') : 'react'; // Default to react for function templates

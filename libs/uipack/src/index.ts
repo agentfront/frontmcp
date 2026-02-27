@@ -98,9 +98,11 @@ export {
   StaticBuilder,
   HybridBuilder,
   InlineBuilder,
-  // esbuild configuration
+  // CDN + esbuild configuration
   DEFAULT_EXTERNALS,
   CDN_URLS,
+  BABEL_STANDALONE_CDN,
+  FRONTMCP_UI_CDN,
   createTransformConfig,
   createExternalizedConfig,
   generateCdnScriptTags,
@@ -135,10 +137,12 @@ export {
   sanitizeCSPDomains,
   // Wrapper utilities
   type WrapToolUIFullOptions,
+  type GenerateBrowserResourceOptions,
   wrapToolUI,
   wrapToolUIMinimal,
   createTemplateHelpers,
   getToolUIMimeType,
+  generateBrowserResource,
   // Sanitizer
   type SanitizerFn,
   type SanitizeOptions,
@@ -283,25 +287,9 @@ export {
 } from './dependency';
 
 // ============================================
-// File-Based Component Caching
+// Note: File-based component caching has been removed.
+// Use URL-based or inline templates instead.
 // ============================================
-export {
-  // Component Builder
-  ComponentBuilder,
-  createFilesystemBuilder,
-  createRedisBuilder,
-  type ComponentBuildOptions,
-  type ComponentBuildResult,
-  // Storage
-  FilesystemStorage,
-  RedisStorage,
-  type BuildCacheStorage,
-  // Hash Calculator
-  sha256,
-  calculateComponentHash,
-  calculateQuickHash,
-  generateBuildId,
-} from './bundler/file-cache';
 
 // ============================================
 // TypeScript Type Fetching Engine

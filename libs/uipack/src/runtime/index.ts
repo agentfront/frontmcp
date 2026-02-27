@@ -70,6 +70,9 @@ export {
   createTemplateHelpers,
   buildOpenAIMeta,
   getToolUIMimeType,
+  // Browser resource generator (client-side rendering via @frontmcp/ui runtime)
+  type GenerateBrowserResourceOptions,
+  generateBrowserResource,
 } from './wrapper';
 
 // Input sanitization

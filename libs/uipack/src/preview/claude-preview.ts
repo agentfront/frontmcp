@@ -27,7 +27,7 @@ import type {
 } from './types';
 import type { BuilderResult, StaticBuildResult, HybridBuildResult, InlineBuildResult } from '../build/builders/types';
 import { injectHybridDataFull } from '../build/hybrid-data';
-import { CLOUDFLARE_CDN_URLS } from '../build/builders/esbuild-config';
+import { CLOUDFLARE_CDN_URLS } from '../build/builders/cdn-config';
 import { safeJsonForScript, escapeHtml } from '../utils';
 
 // ============================================

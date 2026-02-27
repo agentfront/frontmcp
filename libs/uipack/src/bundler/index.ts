@@ -1,24 +1,11 @@
 /**
  * In-Memory Bundler Module
  *
- * Provides caching, security validation, and sandboxing for UI component builds.
+ * Provides caching, security validation for UI component builds.
  * Used for building widget templates at both build-time and runtime.
- *
- * Features:
- * - Content-addressable caching
- * - Security validation and sandboxing
- * - File-based component caching (filesystem and Redis)
  *
  * Note: The main InMemoryBundler with SSR support is in @frontmcp/ui package
  * as it requires React for server-side rendering.
- *
- * @example
- * ```typescript
- * import { ComponentBuilder, createFilesystemBuilder } from '@frontmcp/uipack/bundler';
- *
- * const builder = createFilesystemBuilder({ cacheDir: '.cache' });
- * const result = await builder.buildComponent(options);
- * ```
  *
  * @packageDocumentation
  */
@@ -30,7 +17,6 @@
 // as they require React for SSR functionality.
 
 export { SecurityError } from './sandbox/policy';
-export { ExecutionError } from './sandbox/executor';
 
 // ============================================
 // Types
@@ -87,51 +73,3 @@ export type { CacheOptions, CacheStats } from './cache';
 // ============================================
 
 export { validateSource, validateImports, validateSize, mergePolicy, throwOnViolations } from './sandbox/policy';
-
-// ============================================
-// Execution Utilities
-// ============================================
-
-export { executeCode, executeDefault, isExecutionError } from './sandbox/executor';
-
-export type { ExecutionContext, ExecutionResult } from './sandbox/executor';
-
-// ============================================
-// File-Based Component Caching
-// ============================================
-
-export {
-  // Storage
-  type BuildCacheStorage,
-  type StorageOptions,
-  type CacheEntry as FileCacheEntry,
-  type CacheEntryMetadata,
-  DEFAULT_STORAGE_OPTIONS,
-  calculateManifestSize,
-  // Filesystem
-  FilesystemStorage,
-  createFilesystemStorage,
-  type FilesystemStorageOptions,
-  // Redis
-  RedisStorage,
-  createRedisStorage,
-  type RedisStorageOptions,
-  type RedisClient,
-  // Hash Calculator
-  sha256,
-  sha256Buffer,
-  hashFile,
-  hashFiles,
-  calculateComponentHash,
-  calculateQuickHash,
-  generateBuildId,
-  buildIdFromHash,
-  type ComponentHashOptions,
-  type ComponentHashResult,
-  // Component Builder
-  ComponentBuilder,
-  createFilesystemBuilder,
-  createRedisBuilder,
-  type ComponentBuildOptions,
-  type ComponentBuildResult,
-} from './file-cache';

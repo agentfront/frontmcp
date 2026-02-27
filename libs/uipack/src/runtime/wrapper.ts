@@ -2304,3 +2304,157 @@ export function wrapToolUIForClaude(options: WrapToolUIForClaudeOptions): string
 </body>
 </html>`;
 }
+
+// ============================================
+// Browser Resource Generator
+// ============================================
+
+/**
+ * Options for generating a browser resource HTML document.
+ */
+export interface GenerateBrowserResourceOptions {
+  /** Raw template content (JSX, MDX, or HTML source) */
+  content: string;
+
+  /** Content type hint */
+  contentType: 'jsx' | 'mdx' | 'html';
+
+  /** Tool name */
+  toolName: string;
+
+  /** Tool input data */
+  input?: Record<string, unknown>;
+
+  /** Tool output data */
+  output?: unknown;
+
+  /** Theme configuration (serialized to JSON) */
+  theme?: Record<string, unknown>;
+
+  /** HTML document title */
+  title?: string;
+
+  /** Custom import map entries to add */
+  importMapOverrides?: Record<string, string>;
+
+  /** Whether to include Tailwind CSS from CDN */
+  includeTailwind?: boolean;
+}
+
+/**
+ * Generate a browser resource HTML document that loads @frontmcp/ui
+ * runtime from esm.sh to handle content rendering client-side.
+ *
+ * The generated HTML:
+ * 1. Sets up an import map for React and dependencies
+ * 2. Injects config/data as `window.__frontmcp_config`
+ * 3. Loads @frontmcp/ui runtime which auto-detects content type and renders
+ *
+ * No server-side transpilation is needed — all processing happens in the browser.
+ *
+ * @param options - Resource generation options
+ * @returns Complete HTML document string
+ *
+ * @example
+ * ```typescript
+ * const html = generateBrowserResource({
+ *   content: `function WeatherWidget({ output }) {
+ *     return <Card title="Weather">{output.temperature}°F</Card>;
+ *   }`,
+ *   contentType: 'jsx',
+ *   toolName: 'get_weather',
+ *   output: { temperature: 72 },
+ * });
+ * ```
+ */
+export function generateBrowserResource(options: GenerateBrowserResourceOptions): string {
+  const {
+    content,
+    contentType,
+    toolName,
+    input = {},
+    output = {},
+    theme,
+    title,
+    importMapOverrides = {},
+    includeTailwind = true,
+  } = options;
+
+  const helpers = createTemplateHelpers();
+  const pageTitle = title || `${escapeHtml(toolName)} Widget`;
+
+  // Build import map
+  const importMap: Record<string, string> = {
+    react: 'https://esm.sh/react@19',
+    'react-dom': 'https://esm.sh/react-dom@19',
+    'react-dom/client': 'https://esm.sh/react-dom@19/client',
+    'react/jsx-runtime': 'https://esm.sh/react@19/jsx-runtime',
+    '@frontmcp/ui': 'https://esm.sh/@frontmcp/ui',
+    '@frontmcp/ui/runtime': 'https://esm.sh/@frontmcp/ui/runtime',
+    ...importMapOverrides,
+  };
+
+  const importMapJson = JSON.stringify({ imports: importMap }, null, 4);
+
+  // Build config object
+  const configObj: Record<string, unknown> = {
+    content,
+    contentType,
+    toolName,
+    input,
+    output,
+  };
+
+  if (theme) {
+    configObj['theme'] = theme;
+  }
+
+  const configJson = helpers.jsonEmbed(configObj);
+
+  // Tailwind script
+  const tailwindScript = includeTailwind ? '<script src="https://cdn.tailwindcss.com"></script>' : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  <script type="importmap">
+    ${importMapJson}
+  </script>
+  ${tailwindScript}
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; }
+    #root { min-height: 100px; }
+    .fmcp-loading { display: flex; align-items: center; justify-content: center; padding: 2rem; color: #6b7280; }
+    .fmcp-loading svg { animation: fmcp-spin 1s linear infinite; margin-right: 0.5rem; }
+    @keyframes fmcp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="antialiased">
+  <div id="root">
+    <div class="fmcp-loading">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle style="opacity:0.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path style="opacity:0.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>Loading...</span>
+    </div>
+  </div>
+
+  <script>
+    window.__frontmcp_config = ${configJson};
+  </script>
+
+  <script type="module">
+    import { boot } from '@frontmcp/ui/runtime';
+    boot(window.__frontmcp_config).catch(function(err) {
+      console.error('[FrontMCP] Boot failed:', err);
+      document.getElementById('root').innerHTML =
+        '<div style="padding:1rem;color:#ef4444">Failed to load widget: ' + err.message + '</div>';
+    });
+  </script>
+</body>
+</html>`;
+}

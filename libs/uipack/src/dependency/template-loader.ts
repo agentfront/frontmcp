@@ -11,8 +11,6 @@
  * @packageDocumentation
  */
 
-import { promises as fs } from 'fs';
-import { resolve as resolvePath, isAbsolute, sep } from 'path';
 import {
   detectTemplateMode,
   detectFormatFromPath,
@@ -22,7 +20,7 @@ import {
   type ResolvedTemplate,
   type UrlFetchResult,
 } from './types';
-import { sha256 } from '../bundler/file-cache/hash-calculator';
+import { hashString } from '../renderers/utils/hash';
 
 // ============================================
 // URL Template Cache
@@ -286,30 +284,11 @@ export interface ReadTemplateOptions {
  * });
  * ```
  */
-export async function readTemplateFromFile(filePath: string, options: ReadTemplateOptions = {}): Promise<string> {
-  const { basePath = process.cwd(), encoding = 'utf-8' } = options;
-
-  // Resolve to absolute path
-  const absolutePath = isAbsolute(filePath) ? filePath : resolvePath(basePath, filePath);
-
-  // Prevent path traversal attacks - ensure resolved path stays within base directory
-  const normalizedBase = resolvePath(basePath);
-  if (!absolutePath.startsWith(normalizedBase + sep) && absolutePath !== normalizedBase) {
-    throw new Error(`Template path escapes base directory: ${filePath}`);
-  }
-
-  try {
-    return await fs.readFile(absolutePath, encoding);
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code === 'ENOENT') {
-      throw new Error(`Template file not found: ${absolutePath}`);
-    }
-    if (err.code === 'EACCES') {
-      throw new Error(`Permission denied reading template file: ${absolutePath}`);
-    }
-    throw new Error(`Failed to read template file: ${absolutePath} - ${err.message}`);
-  }
+export async function readTemplateFromFile(_filePath: string, _options: ReadTemplateOptions = {}): Promise<string> {
+  throw new Error(
+    'File-based templates require server-side resolution. ' +
+      'Use URL-based templates or inline strings in browser environments.',
+  );
 }
 
 /**
@@ -319,8 +298,11 @@ export async function readTemplateFromFile(filePath: string, options: ReadTempla
  * @param basePath - Base path for resolving relative paths
  * @returns Absolute file path
  */
-export function resolveFilePath(filePath: string, basePath: string = process.cwd()): string {
-  return isAbsolute(filePath) ? filePath : resolvePath(basePath, filePath);
+export function resolveFilePath(_filePath: string, _basePath?: string): string {
+  throw new Error(
+    'File path resolution requires server-side APIs. ' +
+      'Use URL-based templates or inline strings in browser environments.',
+  );
 }
 
 // ============================================
@@ -386,7 +368,7 @@ export async function resolveTemplate(
   template: string,
   options: ResolveTemplateOptions = {},
 ): Promise<ResolvedTemplate> {
-  const { basePath = process.cwd(), skipCache = false, timeout = 30000, format: overrideFormat } = options;
+  const { skipCache = false, timeout = 30000, format: overrideFormat } = options;
 
   const source = detectTemplateSource(template);
 
@@ -401,11 +383,10 @@ export async function resolveTemplate(
       break;
 
     case 'file': {
-      const absolutePath = resolveFilePath(source.path, basePath);
-      content = await readTemplateFromFile(absolutePath);
-      format = overrideFormat ?? detectFormatFromPath(source.path);
-      metadata.resolvedPath = absolutePath;
-      break;
+      throw new Error(
+        'File-based templates require server-side resolution. ' +
+          'Use URL-based templates or inline strings in browser environments.',
+      );
     }
 
     case 'url': {
@@ -425,7 +406,7 @@ export async function resolveTemplate(
   }
 
   // Compute content hash
-  const hash = sha256(content);
+  const hash = hashString(content);
 
   return {
     source,

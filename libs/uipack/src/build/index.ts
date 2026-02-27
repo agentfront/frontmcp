@@ -537,11 +537,6 @@ export {
   // _meta field builders
   buildToolResponseMeta,
   getOutputModeForClient,
-  // File-based component building
-  buildFileComponent,
-  buildFileComponents,
-  needsFileComponentRebuild,
-  getCachedFileComponent,
   getPlatformFromClientInfo,
 } from './widget-manifest';
 
@@ -549,9 +544,6 @@ export type {
   BatchBuildOptions,
   BatchBuildResult,
   BuildMetaOptions,
-  // File-based component types
-  FileComponentBuildOptions,
-  FileComponentBuildResult,
 } from './widget-manifest';
 
 // Re-export runtime types for convenience
@@ -677,11 +669,13 @@ export {
   StaticBuilder,
   HybridBuilder,
   InlineBuilder,
-  // esbuild utilities
+  // CDN + esbuild utilities
   DEFAULT_EXTERNALS,
   EXTERNAL_GLOBALS,
   CDN_URLS,
   CLOUDFLARE_CDN_URLS,
+  BABEL_STANDALONE_CDN,
+  FRONTMCP_UI_CDN,
   createTransformConfig,
   createExternalizedConfig,
   createInlineConfig,
