@@ -1,0 +1,52 @@
+# <%= name %> — Agent Guidelines
+
+## Project Type
+
+FrontMCP monorepo — TypeScript-first framework for building MCP (Model Context Protocol) servers.
+
+## Architecture
+
+- **Monorepo**: Nx-based with `apps/`, `libs/`, `servers/` workspaces
+- **Language**: TypeScript with strict mode enabled
+- **Build system**: Nx (`npx nx build/test/serve <project>`)
+- **Testing**: Jest with 95%+ coverage requirement
+- **Package manager**: <%= packageManager %>
+
+## Code Generation
+
+**Always use Nx generators** — never create files manually:
+
+```bash
+npx nx g @frontmcp/nx:tool <Name> --project <lib>
+npx nx g @frontmcp/nx:resource <Name> --project <lib>
+npx nx g @frontmcp/nx:prompt <Name> --project <lib>
+npx nx g @frontmcp/nx:provider <Name> --project <lib>
+npx nx g @frontmcp/nx:app <name>
+npx nx g @frontmcp/nx:lib <name>
+npx nx g @frontmcp/nx:server <name>
+```
+
+See `CLAUDE.md` for the full list of 19 generators.
+
+## Key Decorators & Context Classes
+
+| Decorator | Context Class | Purpose |
+|-----------|---------------|---------|
+| `@Tool` | `ToolContext` | MCP tool with Zod input/output |
+| `@Resource` / `@ResourceTemplate` | `ResourceContext` | MCP resource |
+| `@Prompt` | `PromptContext` | MCP prompt returning `GetPromptResult` |
+| `@Provider` | — | DI provider with Symbol token |
+| `@App` | — | Application grouping tools/resources/prompts |
+| `@FrontMcp` | — | Server entry point |
+
+## Constraints
+
+- No `any` types — use `unknown` for generic defaults
+- No raw `node:crypto` or `fs` — use `@frontmcp/utils`
+- No non-null assertions (`!`) — throw proper errors
+- Zod v4 for all schema validation
+- `@frontmcp/testing` for test harnesses
+
+## Documentation Access
+
+The `.mcp.json` file configures a `frontmcp-docs` MCP server. Use the `SearchAgentFront` tool to search FrontMCP documentation.

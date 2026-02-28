@@ -1,4 +1,4 @@
-import { type Tree, updateJson, readJson } from '@nx/devkit';
+import { type Tree, updateJson } from '@nx/devkit';
 
 export interface AddUiEntryOptions {
   /** The UI package root, e.g. 'ui/components' */
