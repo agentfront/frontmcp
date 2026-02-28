@@ -6,10 +6,9 @@ const inputSchema = {
   entryId: z.string().describe('Vault entry ID'),
   appId: z.string().optional().describe('Filter by application ID'),
   providerId: z.string().optional().describe('Filter by provider ID (requires appId)'),
-}.refine((data) => !data.providerId || data.appId, {
-  message: 'providerId requires appId to be specified',
-  path: ['providerId'],
-});
+};
+
+type CredentialsInput = z.output<z.ZodObject<typeof inputSchema>>;
 
 const credentialSchema = z.object({
   appId: z.string(),
@@ -35,8 +34,12 @@ const outputSchema = z
   inputSchema,
   outputSchema,
 })
-export default class GetCredentialsTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
+export default class GetCredentialsTool extends ToolContext {
+  async execute(input: CredentialsInput): Promise<z.infer<typeof outputSchema>> {
+    if (input.providerId && !input.appId) {
+      throw new Error('providerId requires appId to be specified');
+    }
+
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 

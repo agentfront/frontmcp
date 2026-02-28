@@ -2,13 +2,14 @@
  * Get Weather Tool
  *
  * Demonstrates how to use Tool UI templates with @frontmcp/sdk.
- * This tool returns weather data with a rich HTML widget using
+ * This tool returns weather data with a rich React widget using
  * @frontmcp/ui components for display in OpenAI Apps SDK, ext-apps,
  * and other UI-capable hosts.
  */
 
+import React from 'react';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, descriptionList, badge } from '@frontmcp/ui';
+import { Card, Badge } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 // Define input/output schemas
@@ -42,6 +43,32 @@ const iconMap: Record<string, string> = {
   foggy: '🌫️',
 };
 
+function WeatherWidget({ output }: { output: WeatherOutput }) {
+  const tempSymbol = output.units === 'celsius' ? '°C' : '°F';
+  const weatherIcon = iconMap[output.icon] || '🌤️';
+  const badgeVariant = output.conditions === 'sunny' ? 'success' : output.conditions === 'rainy' ? 'info' : 'default';
+
+  return (
+    <Card title={output.location} subtitle="Current Weather" elevation={2}>
+      <div style={{ textAlign: 'center', padding: '24px 0' }}>
+        <div style={{ fontSize: '3.75rem', marginBottom: '8px' }}>{weatherIcon}</div>
+        <div style={{ fontSize: '3rem', fontWeight: 300, marginBottom: '8px' }}>
+          {output.temperature}
+          {tempSymbol}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <Badge label={output.conditions} variant={badgeVariant} />
+        </div>
+      </div>
+      <div style={{ marginTop: '16px' }}>
+        <div>Humidity: {output.humidity}%</div>
+        <div>Wind Speed: {output.windSpeed} km/h</div>
+        <div>Units: {output.units === 'celsius' ? 'Celsius' : 'Fahrenheit'}</div>
+      </div>
+    </Card>
+  );
+}
+
 @Tool({
   name: 'get_weather',
   description: 'Get current weather for a location. Returns temperature, conditions, humidity, and wind speed.',
@@ -56,50 +83,8 @@ const iconMap: Record<string, string> = {
     widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
     displayMode: 'inline',
     servingMode: 'static',
-    template: (ctx) => {
-      // ctx.input and ctx.output are typed from inputSchema and outputSchema
-      const { output, helpers } = ctx;
-      const tempSymbol = output.units === 'celsius' ? '°C' : '°F';
-      const weatherIcon = iconMap[output.icon] || '🌤️';
-
-      // Build weather details using @frontmcp/ui descriptionList component
-      const weatherDetails = descriptionList(
-        [
-          { term: 'Humidity', description: `${output.humidity}%` },
-          { term: 'Wind Speed', description: `${output.windSpeed} km/h` },
-          { term: 'Units', description: output.units === 'celsius' ? 'Celsius' : 'Fahrenheit' },
-        ],
-        { layout: 'grid', className: 'mt-4' },
-      );
-
-      // Build condition badge
-      const conditionBadge = badge(helpers.escapeHtml(output.conditions), {
-        variant: output.conditions === 'sunny' ? 'success' : output.conditions === 'rainy' ? 'info' : 'secondary',
-        size: 'md',
-      });
-
-      // Main temperature display
-      const temperatureDisplay = `
-        <div class="text-center py-6">
-          <div class="text-6xl mb-2">${weatherIcon}</div>
-          <div class="text-5xl font-light text-text-primary mb-2">
-            ${output.temperature}${tempSymbol}
-          </div>
-          <div class="flex justify-center">
-            ${conditionBadge}
-          </div>
-        </div>
-      `;
-
-      // Wrap in card component from @frontmcp/ui
-      return card(temperatureDisplay + weatherDetails, {
-        title: helpers.escapeHtml(output.location),
-        subtitle: 'Current Weather',
-        variant: 'elevated',
-        size: 'md',
-        className: 'p-4 max-w-sm mx-auto',
-      });
-    },
+    uiType: 'react',
+    template: WeatherWidget,
   },
   codecall: {
     visibleInListTools: true,
