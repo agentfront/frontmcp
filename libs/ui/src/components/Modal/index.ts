@@ -1,3 +1,3 @@
-export { FmcpModal } from './FmcpModal';
-export { FmcpModal as default } from './FmcpModal';
-export type { FmcpModalProps, FmcpModalSlotProps } from './FmcpModal';
+export { Modal } from './Modal';
+export { Modal as default } from './Modal';
+export type { ModalProps, ModalSlotProps } from './Modal';

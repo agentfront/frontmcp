@@ -1,3 +1,3 @@
-export { FmcpAlert } from './FmcpAlert';
-export { FmcpAlert as default } from './FmcpAlert';
-export type { FmcpAlertProps } from './FmcpAlert';
+export { Alert } from './Alert';
+export { Alert as default } from './Alert';
+export type { AlertProps } from './Alert';

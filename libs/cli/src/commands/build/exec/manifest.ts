@@ -27,6 +27,15 @@ export interface ExecManifest {
   setup?: {
     steps: ManifestSetupStep[];
   };
+  cli?: {
+    enabled: boolean;
+    cliBundle: string;
+    outputDefault: 'text' | 'json';
+    authRequired: boolean;
+    toolCount: number;
+    resourceCount: number;
+    promptCount: number;
+  };
 }
 
 export interface ManifestSetupStep {

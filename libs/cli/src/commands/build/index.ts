@@ -1,9 +1,9 @@
 import * as path from 'path';
-import { ParsedArgs } from '../../args';
-import { c } from '../../colors';
+import { ParsedArgs } from '../../core/args';
+import { c } from '../../core/colors';
 import { ensureDir, fileExists, runCmd, writeJSON } from '@frontmcp/utils';
-import { fsp, resolveEntry } from '../../utils/fs';
-import { REQUIRED_DECORATOR_FIELDS } from '../../tsconfig';
+import { fsp, resolveEntry } from '../../shared/fs';
+import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { AdapterName } from './types';
 import { bundleForServerless } from './bundler';

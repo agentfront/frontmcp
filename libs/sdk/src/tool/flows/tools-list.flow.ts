@@ -6,9 +6,18 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
 import { hasUIConfig } from '../ui';
-import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
-import { isUIType } from '@frontmcp/uipack/types';
-import type { AIPlatformType } from '@frontmcp/uipack/adapters';
+// TODO: Re-implement against new @frontmcp/uipack API after redesign
+// import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
+// import { isUIType } from '@frontmcp/uipack/types';
+// import type { AIPlatformType } from '@frontmcp/uipack/adapters';
+type UIType = string;
+type AIPlatformType = string;
+function buildCDNInfoForUIType(..._args: unknown[]): Record<string, unknown> {
+  return {};
+}
+function isUIType(_value: unknown): _value is UIType {
+  return typeof _value === 'string';
+}
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { ToolPaginationOptions } from '../../common/types/options/pagination';

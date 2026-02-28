@@ -20,12 +20,12 @@ Commands for building, testing, and debugging your FrontMCP server.
 | `dev` | Start in development mode (tsx --watch + async type-check) |
 | `build` | Compile entry with TypeScript (tsc) |
 | `build --exec` | Build distributable executable bundle (esbuild) |
+| `build --exec --cli` | Build CLI executable with subcommands per tool |
 | `test` | Run E2E tests with auto-injected Jest configuration |
 | `init` | Create or fix a tsconfig.json suitable for FrontMCP |
 | `doctor` | Check Node/npm versions and tsconfig requirements |
 | `inspector` | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`) |
 | `create [name]` | Scaffold a new FrontMCP project (interactive if name omitted) |
-| `template <type>` | Scaffold a template by type (e.g., `3rd-party-integration`) |
 | `socket <entry>` | Start Unix socket daemon for local MCP server |
 
 ---
@@ -73,6 +73,7 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 | Option | Description |
 | --- | --- |
 | `--exec` | Build distributable executable bundle |
+| `--cli` | Generate CLI with subcommands per tool (use with `--exec`) |
 | `-a, --adapter <name>` | Deployment adapter: `node`, `vercel`, `lambda`, `cloudflare` |
 
 ### Start Options
@@ -152,6 +153,9 @@ frontmcp build --out-dir build
 # Build distributable executable
 frontmcp build --exec
 
+# Build CLI executable with subcommands per tool
+frontmcp build --exec --cli
+
 # Run E2E tests sequentially
 frontmcp test --runInBand
 
@@ -179,9 +183,6 @@ npx frontmcp create my-mcp --target vercel
 
 # Scaffold an Nx monorepo workspace
 npx frontmcp create my-workspace --nx
-
-# Scaffold a template
-frontmcp template marketplace-3rd-tools
 ```
 
 ### Unix Socket

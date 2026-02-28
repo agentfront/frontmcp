@@ -20,7 +20,7 @@ Shipped to npm and loaded via esm.sh in the browser. Used by developers to build
 libs/ui/src/
 ├── bridge/             # MCP bridge runtime and adapters
 ├── theme/              # MUI theme system (FrontMcpThemeProvider)
-├── components/         # MUI-based React components (FmcpButton, FmcpCard, etc.)
+├── components/         # MUI-based React components (Button, Card, etc.)
 ├── renderer/           # Content renderers (mdx, html, react, pdf, csv)
 ├── react/              # MCP bridge hooks (useCallTool, useToolInput, etc.)
 ├── runtime/            # Content detection and Babel transpilation
@@ -34,8 +34,8 @@ libs/ui/src/
 import { FrontMcpThemeProvider, createFrontMcpTheme } from '@frontmcp/ui/theme';
 
 // Components
-import { FmcpButton, FmcpCard, FmcpAlert } from '@frontmcp/ui/components';
-import { FmcpButton } from '@frontmcp/ui/components/Button';
+import { Button, Card, Alert } from '@frontmcp/ui/components';
+import { Button } from '@frontmcp/ui/components/Button';
 
 // Renderer
 import { renderContent, detectContentType } from '@frontmcp/ui/renderer';

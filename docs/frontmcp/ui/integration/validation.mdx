@@ -106,7 +106,8 @@ const HtmxSchema = z.object({
 Create validated custom components:
 
 ```typescript
-import { validateOptions, escapeHtml } from '@frontmcp/ui/components';
+import { validateOptions } from '@frontmcp/uipack';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 import { z } from 'zod';
 
 // Define schema

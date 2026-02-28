@@ -400,5 +400,135 @@ else
   echo "Test 12: ⏭️  Skipped (Docker not available)"
 fi
 
+# Test 13: Build executable bundle (server-only)
+echo ""
+echo "Test 13: Build executable bundle (server-only)"
+cd "$TEST_DIR/test-docker-app"
+
+# Get the project name from package.json
+APP_NAME=$(node -e "console.log(require('./package.json').name)")
+
+if npx --registry "$VERDACCIO_URL" frontmcp build --exec 2>&1; then
+  echo "  ✅ frontmcp build --exec succeeded"
+else
+  echo "  ❌ frontmcp build --exec failed"
+  exit 1
+fi
+
+# Verify output artifacts
+if [ -f "dist/${APP_NAME}.bundle.js" ]; then
+  echo "  ✅ Server bundle exists: dist/${APP_NAME}.bundle.js"
+else
+  echo "  ❌ Server bundle not found: dist/${APP_NAME}.bundle.js"
+  exit 1
+fi
+
+if [ -f "dist/${APP_NAME}.manifest.json" ]; then
+  echo "  ✅ Manifest exists: dist/${APP_NAME}.manifest.json"
+else
+  echo "  ❌ Manifest not found: dist/${APP_NAME}.manifest.json"
+  exit 1
+fi
+
+if [ -f "dist/${APP_NAME}" ] && [ -x "dist/${APP_NAME}" ]; then
+  echo "  ✅ Runner script exists and is executable"
+else
+  echo "  ❌ Runner script not found or not executable: dist/${APP_NAME}"
+  exit 1
+fi
+
+if [ -f "dist/install-${APP_NAME}.sh" ]; then
+  echo "  ✅ Installer script exists: dist/install-${APP_NAME}.sh"
+else
+  echo "  ❌ Installer script not found: dist/install-${APP_NAME}.sh"
+  exit 1
+fi
+
+# Test 14: Build executable bundle with CLI
+echo ""
+echo "Test 14: Build executable bundle with --cli"
+cd "$TEST_DIR/test-docker-app"
+rm -rf dist
+
+if npx --registry "$VERDACCIO_URL" frontmcp build --exec --cli 2>&1; then
+  echo "  ✅ frontmcp build --exec --cli succeeded"
+else
+  echo "  ❌ frontmcp build --exec --cli failed"
+  exit 1
+fi
+
+# Verify CLI bundle exists
+if [ -f "dist/${APP_NAME}-cli.bundle.js" ]; then
+  echo "  ✅ CLI bundle exists: dist/${APP_NAME}-cli.bundle.js"
+else
+  echo "  ❌ CLI bundle not found: dist/${APP_NAME}-cli.bundle.js"
+  exit 1
+fi
+
+# Verify manifest has CLI metadata
+if command -v jq &> /dev/null; then
+  CLI_ENABLED=$(jq -r '.cli.enabled' "dist/${APP_NAME}.manifest.json" 2>/dev/null)
+  CLI_TOOL_COUNT=$(jq -r '.cli.toolCount' "dist/${APP_NAME}.manifest.json" 2>/dev/null)
+
+  if [ "$CLI_ENABLED" = "true" ]; then
+    echo "  ✅ Manifest cli.enabled = true"
+  else
+    echo "  ❌ Manifest cli.enabled != true (got: $CLI_ENABLED)"
+    exit 1
+  fi
+
+  if [ "$CLI_TOOL_COUNT" != "null" ] && [ "$CLI_TOOL_COUNT" != "0" ] && [ -n "$CLI_TOOL_COUNT" ]; then
+    echo "  ✅ Manifest cli.toolCount = $CLI_TOOL_COUNT"
+  else
+    echo "  ⚠️  Manifest cli.toolCount = $CLI_TOOL_COUNT (may be 0 if no tools)"
+  fi
+else
+  echo "  ⚠️  jq not installed, skipping manifest JSON checks"
+fi
+
+# Verify runner script references CLI bundle
+RUNNER_CONTENT=$(cat "dist/${APP_NAME}")
+if echo "$RUNNER_CONTENT" | grep -q "cli.bundle.js"; then
+  echo "  ✅ Runner script references CLI bundle"
+else
+  echo "  ❌ Runner script does not reference CLI bundle"
+  exit 1
+fi
+
+# Test 15: Run produced CLI --help
+echo ""
+echo "Test 15: Run produced CLI --help"
+cd "$TEST_DIR/test-docker-app"
+
+if node "dist/${APP_NAME}-cli.bundle.js" --help > /dev/null 2>&1; then
+  echo "  ✅ CLI --help exited successfully"
+  # Show output for debugging
+  node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1 | head -5 | sed 's/^/    /'
+else
+  echo "  ❌ CLI --help failed (exit code: $?)"
+  node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1 | tail -5 | sed 's/^/    /'
+  exit 1
+fi
+
+# Test 16: Run produced CLI tool subcommand --help (if tools exist)
+echo ""
+echo "Test 16: Run produced CLI subcommand --help"
+cd "$TEST_DIR/test-docker-app"
+
+# Get the first tool command from help output
+FIRST_CMD=$(node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1 | grep -E '^\s+\S+\s' | head -1 | awk '{print $1}' || true)
+
+if [ -n "$FIRST_CMD" ] && [ "$FIRST_CMD" != "help" ]; then
+  if node "dist/${APP_NAME}-cli.bundle.js" "$FIRST_CMD" --help > /dev/null 2>&1; then
+    echo "  ✅ CLI subcommand '$FIRST_CMD --help' exited successfully"
+  else
+    echo "  ⚠️  CLI subcommand '$FIRST_CMD --help' failed (may not have subcommands)"
+  fi
+else
+  echo "  ⚠️  No tool subcommands found in --help output (app may have no tools)"
+fi
+
+cd "$TEST_DIR"
+
 echo ""
 echo "🎉 All E2E tests passed!"

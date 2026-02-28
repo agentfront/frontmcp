@@ -1,3 +1,3 @@
-export { FmcpCard } from './FmcpCard';
-export { FmcpCard as default } from './FmcpCard';
-export type { FmcpCardProps, FmcpCardSlotProps } from './FmcpCard';
+export { Card } from './Card';
+export { Card as default } from './Card';
+export type { CardProps, CardSlotProps } from './Card';

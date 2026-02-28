@@ -1,3 +1,3 @@
-export { FmcpTextField } from './FmcpTextField';
-export { FmcpTextField as default } from './FmcpTextField';
-export type { FmcpTextFieldProps } from './FmcpTextField';
+export { TextField } from './TextField';
+export { TextField as default } from './TextField';
+export type { TextFieldProps } from './TextField';

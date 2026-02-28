@@ -16,7 +16,7 @@ FrontMCP UI is split into two packages:
 
 | Package            | Use Case                                        |
 | ------------------ | ----------------------------------------------- |
-| `@frontmcp/uipack` | HTML components, build tools, themes (no React) |
+| `@frontmcp/uipack` | HTML shell builder, import resolver, component loader (no React) |
 | `@frontmcp/ui`     | React components, hooks, SSR rendering          |
 
 <CodeGroup>
@@ -135,7 +135,7 @@ ui: {
 
 ```typescript title="src/tools/user-profile.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, button, alert } from '@frontmcp/ui/components';
+import { Card, Badge, Button, Alert } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({
@@ -190,7 +190,7 @@ Here's a full example combining multiple components:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, alert } from '@frontmcp/ui/components';
+import { Card, Badge, Alert } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 const inputSchema = {

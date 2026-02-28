@@ -11,7 +11,7 @@
  *
  * @example Components
  * ```typescript
- * import { FmcpButton, FmcpCard, FmcpAlert } from '@frontmcp/ui/components';
+ * import { Button, Card, Alert } from '@frontmcp/ui/components';
  * ```
  *
  * @example React hooks

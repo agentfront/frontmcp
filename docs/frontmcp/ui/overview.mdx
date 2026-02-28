@@ -11,7 +11,7 @@ FrontMCP UI is split into two packages to support different use cases:
 
 | Package              | Purpose                                                 | React Required |
 | -------------------- | ------------------------------------------------------- | -------------- |
-| **@frontmcp/uipack** | HTML components, build tools, themes, platform adapters | No             |
+| **@frontmcp/uipack** | HTML shell builder, import resolver, NPM component loader | No             |
 | **@frontmcp/ui**     | React components, hooks, SSR rendering                  | Yes            |
 
 <Info>
@@ -41,20 +41,20 @@ When your MCP tools return data, AI platforms typically display it as raw text o
 ## Key Features
 
 <CardGroup cols={2}>
-  <Card title="Multi-Framework Support" icon="layer-group">
-    Build widgets with HTML strings, React components, or MDX (Markdown + JSX). The renderer auto-detects your template type.
+  <Card title="HTML Shell Builder" icon="layer-group">
+    Generate self-contained HTML shells with CSP headers, data injection, and bridge runtime for MCP widgets.
   </Card>
   <Card title="Platform-Aware" icon="globe">
     Works across OpenAI, Claude, and Gemini with automatic platform detection and fallbacks for different capabilities.
   </Card>
-  <Card title="Built-in Components" icon="grid-2">
-    Pre-built components for buttons, cards, badges, alerts, forms, tables, and more with consistent styling.
+  <Card title="React Components" icon="grid-2">
+    Pre-built MUI-based components for buttons, cards, badges, alerts, forms, tables, and more with consistent styling.
   </Card>
-  <Card title="Theming System" icon="paintbrush">
-    Customize colors, typography, and spacing. Includes dark mode support and CSS variable integration.
+  <Card title="Import Resolver" icon="paintbrush">
+    Pluggable import resolution with esm.sh as default CDN. Resolve NPM packages for browser delivery automatically.
   </Card>
-  <Card title="Zod Validation" icon="shield-check">
-    All component inputs are validated with Zod schemas. Invalid options render helpful error boxes instead of crashing.
+  <Card title="NPM Component Loader" icon="shield-check">
+    Load components from npm, file, URL, or inline function sources with TypeScript type fetching from esm.sh.
   </Card>
   <Card title="HTMX Integration" icon="bolt">
     Add dynamic interactions without JavaScript using HTMX attributes for server-driven updates.
@@ -92,8 +92,8 @@ With `servingMode: 'auto'` (default), unsupported platforms automatically receiv
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│               FrontMCP UI Renderer                       │
-│  Auto-detects: HTML | React | MDX                       │
+│                 FrontMCP UI Pipeline                     │
+│  Shell → Component → Resolver                           │
 │  + Platform Detection + Response Format Selection       │
 └───────────────────────┬─────────────────────────────────┘
                         │
@@ -182,7 +182,7 @@ Add a visual widget to your tool in just a few lines:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge } from '@frontmcp/ui/components';
+import { Card, Badge } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({

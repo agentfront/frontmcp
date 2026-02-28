@@ -1,3 +1,3 @@
-export { FmcpList } from './FmcpList';
-export { FmcpList as default } from './FmcpList';
-export type { FmcpListProps, FmcpListItem } from './FmcpList';
+export { List } from './List';
+export { List as default } from './List';
+export type { ListProps, ListItemDef } from './List';

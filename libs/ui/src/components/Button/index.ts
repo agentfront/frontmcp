@@ -1,3 +1,3 @@
-export { FmcpButton } from './FmcpButton';
-export { FmcpButton as default } from './FmcpButton';
-export type { FmcpButtonProps, FmcpButtonVariant } from './FmcpButton';
+export { Button } from './Button';
+export { Button as default } from './Button';
+export type { ButtonProps, ButtonVariant } from './Button';

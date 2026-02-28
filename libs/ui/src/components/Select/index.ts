@@ -1,3 +1,3 @@
-export { FmcpSelect } from './FmcpSelect';
-export { FmcpSelect as default } from './FmcpSelect';
-export type { FmcpSelectProps, FmcpSelectOption } from './FmcpSelect';
+export { Select } from './Select';
+export { Select as default } from './Select';
+export type { SelectProps, SelectOption } from './Select';

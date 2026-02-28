@@ -1,29 +1,29 @@
-export { FmcpButton } from './Button';
-export type { FmcpButtonProps, FmcpButtonVariant } from './Button';
+export { Button } from './Button';
+export type { ButtonProps, ButtonVariant } from './Button';
 
-export { FmcpCard } from './Card';
-export type { FmcpCardProps, FmcpCardSlotProps } from './Card';
+export { Card } from './Card';
+export type { CardProps, CardSlotProps } from './Card';
 
-export { FmcpAlert } from './Alert';
-export type { FmcpAlertProps } from './Alert';
+export { Alert } from './Alert';
+export type { AlertProps } from './Alert';
 
-export { FmcpBadge } from './Badge';
-export type { FmcpBadgeProps, FmcpBadgeVariant } from './Badge';
+export { Badge } from './Badge';
+export type { BadgeProps, BadgeVariant } from './Badge';
 
-export { FmcpAvatar } from './Avatar';
-export type { FmcpAvatarProps } from './Avatar';
+export { Avatar } from './Avatar';
+export type { AvatarProps } from './Avatar';
 
-export { FmcpModal } from './Modal';
-export type { FmcpModalProps, FmcpModalSlotProps } from './Modal';
+export { Modal } from './Modal';
+export type { ModalProps, ModalSlotProps } from './Modal';
 
-export { FmcpTable } from './Table';
-export type { FmcpTableProps, FmcpTableColumn } from './Table';
+export { Table } from './Table';
+export type { TableProps, TableColumn } from './Table';
 
-export { FmcpTextField } from './TextField';
-export type { FmcpTextFieldProps } from './TextField';
+export { TextField } from './TextField';
+export type { TextFieldProps } from './TextField';
 
-export { FmcpSelect } from './Select';
-export type { FmcpSelectProps, FmcpSelectOption } from './Select';
+export { Select } from './Select';
+export type { SelectProps, SelectOption } from './Select';
 
-export { FmcpList } from './List';
-export type { FmcpListProps, FmcpListItem } from './List';
+export { List } from './List';
+export type { ListProps, ListItemDef } from './List';
