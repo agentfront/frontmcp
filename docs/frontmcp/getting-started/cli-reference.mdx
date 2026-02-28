@@ -15,18 +15,18 @@ frontmcp <command> [options]
 
 Commands for building, testing, and debugging your FrontMCP server.
 
-| Command | Description |
-| --- | --- |
-| `dev` | Start in development mode (tsx --watch + async type-check) |
-| `build` | Compile entry with TypeScript (tsc) |
-| `build --exec` | Build distributable executable bundle (esbuild) |
-| `build --exec --cli` | Build CLI executable with subcommands per tool |
-| `test` | Run E2E tests with auto-injected Jest configuration |
-| `init` | Create or fix a tsconfig.json suitable for FrontMCP |
-| `doctor` | Check Node/npm versions and tsconfig requirements |
-| `inspector` | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`) |
-| `create [name]` | Scaffold a new FrontMCP project (interactive if name omitted) |
-| `socket <entry>` | Start Unix socket daemon for local MCP server |
+| Command              | Description                                                   |
+| -------------------- | ------------------------------------------------------------- |
+| `dev`                | Start in development mode (tsx --watch + async type-check)    |
+| `build`              | Compile entry with TypeScript (tsc)                           |
+| `build --exec`       | Build distributable executable bundle (esbuild)               |
+| `build --exec --cli` | Build CLI executable with subcommands per tool                |
+| `test`               | Run E2E tests with auto-injected Jest configuration           |
+| `init`               | Create or fix a tsconfig.json suitable for FrontMCP           |
+| `doctor`             | Check Node/npm versions and tsconfig requirements             |
+| `inspector`          | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`)  |
+| `create [name]`      | Scaffold a new FrontMCP project (interactive if name omitted) |
+| `socket <entry>`     | Start Unix socket daemon for local MCP server                 |
 
 ---
 
@@ -34,15 +34,15 @@ Commands for building, testing, and debugging your FrontMCP server.
 
 Manage long-running MCP servers with automatic supervision, restart policies, and logging.
 
-| Command | Description |
-| --- | --- |
-| `start <name>` | Start a named MCP server with supervisor |
-| `stop <name>` | Stop a managed server (graceful by default) |
-| `restart <name>` | Restart a managed server |
-| `status [name]` | Show process status (detail if name given, table if omitted) |
-| `list` | List all managed processes |
-| `logs <name>` | Tail log output for a managed server |
-| `service <action>` | Install/uninstall systemd/launchd service |
+| Command            | Description                                                  |
+| ------------------ | ------------------------------------------------------------ |
+| `start <name>`     | Start a named MCP server with supervisor                     |
+| `stop <name>`      | Stop a managed server (graceful by default)                  |
+| `restart <name>`   | Restart a managed server                                     |
+| `status [name]`    | Show process status (detail if name given, table if omitted) |
+| `list`             | List all managed processes                                   |
+| `logs <name>`      | Tail log output for a managed server                         |
+| `service <action>` | Install/uninstall systemd/launchd service                    |
 
 ---
 
@@ -50,10 +50,10 @@ Manage long-running MCP servers with automatic supervision, restart policies, an
 
 Install, configure, and manage MCP apps from npm, local paths, or git repositories.
 
-| Command | Description |
-| --- | --- |
+| Command            | Description                                     |
+| ------------------ | ----------------------------------------------- |
 | `install <source>` | Install an MCP app from npm, local path, or git |
-| `uninstall <name>` | Remove an installed MCP app |
+| `uninstall <name>` | Remove an installed MCP app                     |
 | `configure <name>` | Re-run setup questionnaire for an installed app |
 
 ---
@@ -62,80 +62,80 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 
 ### General Options
 
-| Option | Description |
-| --- | --- |
-| `-h, --help` | Show help message |
+| Option                | Description                          |
+| --------------------- | ------------------------------------ |
+| `-h, --help`          | Show help message                    |
 | `-o, --out-dir <dir>` | Output directory (default: `./dist`) |
-| `-e, --entry <path>` | Manually specify entry file path |
+| `-e, --entry <path>`  | Manually specify entry file path     |
 
 ### Build Options
 
-| Option | Description |
-| --- | --- |
-| `--exec` | Build distributable executable bundle |
-| `--cli` | Generate CLI with subcommands per tool (use with `--exec`) |
+| Option                 | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| `--exec`               | Build distributable executable bundle                        |
+| `--cli`                | Generate CLI with subcommands per tool (use with `--exec`)   |
 | `-a, --adapter <name>` | Deployment adapter: `node`, `vercel`, `lambda`, `cloudflare` |
 
 ### Start Options
 
-| Option | Description |
-| --- | --- |
-| `-e, --entry <path>` | Entry file for the server |
-| `-p, --port <N>` | Port number for the server |
-| `-s, --socket <path>` | Unix socket path |
-| `--db <path>` | SQLite database path |
-| `--max-restarts <N>` | Maximum auto-restart attempts (default: `5`) |
+| Option                | Description                                  |
+| --------------------- | -------------------------------------------- |
+| `-e, --entry <path>`  | Entry file for the server                    |
+| `-p, --port <N>`      | Port number for the server                   |
+| `-s, --socket <path>` | Unix socket path                             |
+| `--db <path>`         | SQLite database path                         |
+| `--max-restarts <N>`  | Maximum auto-restart attempts (default: `5`) |
 
 ### Stop Options
 
-| Option | Description |
-| --- | --- |
+| Option        | Description                             |
+| ------------- | --------------------------------------- |
 | `-f, --force` | Force kill (SIGKILL instead of SIGTERM) |
 
 ### Logs Options
 
-| Option | Description |
-| --- | --- |
-| `-F, --follow` | Follow log output (like `tail -f`) |
+| Option            | Description                             |
+| ----------------- | --------------------------------------- |
+| `-F, --follow`    | Follow log output (like `tail -f`)      |
 | `-n, --lines <N>` | Number of lines to show (default: `50`) |
 
 ### Install Options
 
-| Option | Description |
-| --- | --- |
-| `--registry <url>` | npm registry URL for private packages |
-| `-y, --yes` | Silent mode (use defaults, skip questionnaire) |
-| `-p, --port <N>` | Override default port |
+| Option             | Description                                    |
+| ------------------ | ---------------------------------------------- |
+| `--registry <url>` | npm registry URL for private packages          |
+| `-y, --yes`        | Silent mode (use defaults, skip questionnaire) |
+| `-p, --port <N>`   | Override default port                          |
 
 ### Create Options
 
-| Option | Description |
-| --- | --- |
-| `-y, --yes` | Use defaults (non-interactive mode) |
-| `--target <target>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare` |
-| `--redis <setup>` | Redis setup: `docker`, `existing`, `none` (node target only) |
-| `--pm <pm>` | Package manager: `npm`, `yarn`, `pnpm` |
-| `--cicd` | Enable GitHub Actions CI/CD |
-| `--no-cicd` | Disable GitHub Actions CI/CD |
-| `--nx` | Scaffold an Nx monorepo workspace |
+| Option              | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `-y, --yes`         | Use defaults (non-interactive mode)                          |
+| `--target <target>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare`  |
+| `--redis <setup>`   | Redis setup: `docker`, `existing`, `none` (node target only) |
+| `--pm <pm>`         | Package manager: `npm`, `yarn`, `pnpm`                       |
+| `--cicd`            | Enable GitHub Actions CI/CD                                  |
+| `--no-cicd`         | Disable GitHub Actions CI/CD                                 |
+| `--nx`              | Scaffold an Nx monorepo workspace                            |
 
 ### Socket Options
 
-| Option | Description |
-| --- | --- |
+| Option                | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
 | `-s, --socket <path>` | Unix socket path (default: `~/.frontmcp/sockets/{app}.sock`) |
-| `--db <path>` | SQLite database path for persistence |
-| `-b, --background` | Run as background daemon (detached process) |
+| `--db <path>`         | SQLite database path for persistence                         |
+| `-b, --background`    | Run as background daemon (detached process)                  |
 
 ### Test Options
 
-| Option | Description |
-| --- | --- |
-| `-i, --runInBand` | Run tests sequentially (recommended for E2E) |
-| `-w, --watch` | Run tests in watch mode |
-| `-v, --verbose` | Show verbose test output |
-| `-t, --timeout <ms>` | Set test timeout (default: `60000ms`) |
-| `-c, --coverage` | Collect test coverage |
+| Option               | Description                                  |
+| -------------------- | -------------------------------------------- |
+| `-i, --runInBand`    | Run tests sequentially (recommended for E2E) |
+| `-w, --watch`        | Run tests in watch mode                      |
+| `-v, --verbose`      | Show verbose test output                     |
+| `-t, --timeout <ms>` | Set test timeout (default: `60000ms`)        |
+| `-c, --coverage`     | Collect test coverage                        |
 
 ---
 

@@ -43,14 +43,14 @@ export class Server {}
 
 ### Configuration Options
 
-| Option             | Type                 | Default         | Description                          |
-| ------------------ | -------------------- | --------------- | ------------------------------------ |
-| `provider`                    | `string`        | Required        | Base URL of the identity provider    |
-| `providerConfig.jwksUri`      | `string`        | Auto-discovered | Custom JWKS endpoint                 |
-| `providerConfig.jwks`         | `JSONWebKeySet` | -               | Inline JWKS for offline verification |
-| `expectedAudience` | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
-| `requiredScopes`   | `string[]`           | `[]`            | Scopes that must be present in token |
-| `allowAnonymous`   | `boolean`            | `false`         | Allow requests without tokens        |
+| Option                   | Type                 | Default         | Description                          |
+| ------------------------ | -------------------- | --------------- | ------------------------------------ |
+| `provider`               | `string`             | Required        | Base URL of the identity provider    |
+| `providerConfig.jwksUri` | `string`             | Auto-discovered | Custom JWKS endpoint                 |
+| `providerConfig.jwks`    | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `expectedAudience`       | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
+| `requiredScopes`         | `string[]`           | `[]`            | Scopes that must be present in token |
+| `allowAnonymous`         | `boolean`            | `false`         | Allow requests without tokens        |
 
 ### Provider Examples
 
@@ -158,14 +158,14 @@ export class Server {}
 
 ### Configuration Options
 
-| Option                | Type                        | Default      | Description                                |
-| --------------------- | --------------------------- | ------------ | ------------------------------------------ |
-| `provider`                    | `string`   | Required     | Upstream IdP base URL                      |
-| `clientId`                    | `string`   | Required     | OAuth client ID                            |
-| `clientSecret`                | `string`   | -            | OAuth client secret (confidential clients) |
-| `scopes`                      | `string[]` | `['openid']` | Scopes to request from IdP                 |
-| `providerConfig.dcrEnabled`   | `boolean`  | `false`      | Use Dynamic Client Registration            |
-| `consent`                     | `boolean`  | `false`      | Show consent UI after IdP login            |
+| Option                      | Type       | Default      | Description                                |
+| --------------------------- | ---------- | ------------ | ------------------------------------------ |
+| `provider`                  | `string`   | Required     | Upstream IdP base URL                      |
+| `clientId`                  | `string`   | Required     | OAuth client ID                            |
+| `clientSecret`              | `string`   | -            | OAuth client secret (confidential clients) |
+| `scopes`                    | `string[]` | `['openid']` | Scopes to request from IdP                 |
+| `providerConfig.dcrEnabled` | `boolean`  | `false`      | Use Dynamic Client Registration            |
+| `consent`                   | `boolean`  | `false`      | Show consent UI after IdP login            |
 
 ### When to Use Orchestrated Remote
 

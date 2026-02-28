@@ -20,15 +20,15 @@ export abstract class PromptContext {
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `metadata` | `PromptMetadata` | Prompt metadata (name, description, etc.) |
-| `args` | `Record<string, string>` | Arguments passed to the prompt |
-| `output` | `GetPromptResult \| undefined` | Prompt result (after execution) |
-| `promptName` | `string` | Prompt name |
-| `promptId` | `string` | Prompt ID |
-| `authInfo` | `AuthInfo` | Authentication information |
-| `runId` | `string` | Unique execution identifier |
+| Property     | Type                           | Description                               |
+| ------------ | ------------------------------ | ----------------------------------------- |
+| `metadata`   | `PromptMetadata`               | Prompt metadata (name, description, etc.) |
+| `args`       | `Record<string, string>`       | Arguments passed to the prompt            |
+| `output`     | `GetPromptResult \| undefined` | Prompt result (after execution)           |
+| `promptName` | `string`                       | Prompt name                               |
+| `promptId`   | `string`                       | Prompt ID                                 |
+| `authInfo`   | `AuthInfo`                     | Authentication information                |
+| `runId`      | `string`                       | Unique execution identifier               |
 
 ## Abstract Method
 
@@ -312,7 +312,7 @@ Please write a complete email including:
 
 ## Full Example
 
-```typescript
+````typescript
 import { Prompt, PromptContext, App, FrontMcp } from '@frontmcp/sdk';
 
 @Prompt({
@@ -394,7 +394,7 @@ class DocsApp {}
   apps: [DocsApp],
 })
 export default class DocGenServer {}
-```
+````
 
 ## Related
 

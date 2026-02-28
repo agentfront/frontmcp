@@ -9,8 +9,7 @@
 
 import type { ShellConfig, ShellResult } from '../shell/types';
 import type { ImportResolver } from '../resolver/types';
-import type { UIConfig, UISource, ResolvedComponent } from './types';
-import { isNpmSource, isImportSource, isFileSource, isFunctionSource } from './types';
+import type { UIConfig, ResolvedComponent } from './types';
 import { resolveUISource, generateMountScript } from './loader';
 import { buildShell } from '../shell/builder';
 import { createEsmShResolver } from '../resolver/esm-sh.resolver';

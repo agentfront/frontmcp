@@ -15,10 +15,10 @@ export class FrontMcpServerInstance extends FrontMcpServer {
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `config` | `HttpOptions` | HTTP configuration |
-| `host` | `HostServerAdapter` | Host adapter (Express, etc.) |
+| Property | Type                | Description                  |
+| -------- | ------------------- | ---------------------------- |
+| `config` | `HttpOptions`       | HTTP configuration           |
+| `host`   | `HostServerAdapter` | Host adapter (Express, etc.) |
 
 ## Methods
 
@@ -196,6 +196,7 @@ curl http://localhost:3001/health
 ```
 
 This is useful for:
+
 - Load balancer health checks
 - Kubernetes liveness probes
 - Monitoring systems

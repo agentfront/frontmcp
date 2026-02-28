@@ -9,19 +9,19 @@ FrontMCP uses TypeScript decorators as the primary API. Every component — serv
 
 ## Decorator Inventory
 
-| Decorator | Purpose | Base Class |
-| --- | --- | --- |
-| `@FrontMcp` | Server entry point | — |
-| `@App` | Capability container | — |
-| `@Tool` | AI-callable action | `ToolContext` |
-| `@Resource` / `@ResourceTemplate` | Data endpoint | `ResourceContext` |
-| `@Prompt` | Message template | `PromptContext` |
-| `@Agent` | LLM-powered actor | `AgentContext` |
-| `@Skill` | Workflow guide | `SkillContext` |
-| `@Provider` | DI service | — |
-| `@Plugin` | Extension | `DynamicPlugin` |
-| `@Adapter` | Dynamic capabilities | `DynamicAdapter` |
-| `@Flow` | Lifecycle pipeline | `FlowBase` |
+| Decorator                         | Purpose              | Base Class        |
+| --------------------------------- | -------------------- | ----------------- |
+| `@FrontMcp`                       | Server entry point   | —                 |
+| `@App`                            | Capability container | —                 |
+| `@Tool`                           | AI-callable action   | `ToolContext`     |
+| `@Resource` / `@ResourceTemplate` | Data endpoint        | `ResourceContext` |
+| `@Prompt`                         | Message template     | `PromptContext`   |
+| `@Agent`                          | LLM-powered actor    | `AgentContext`    |
+| `@Skill`                          | Workflow guide       | `SkillContext`    |
+| `@Provider`                       | DI service           | —                 |
+| `@Plugin`                         | Extension            | `DynamicPlugin`   |
+| `@Adapter`                        | Dynamic capabilities | `DynamicAdapter`  |
+| `@Flow`                           | Lifecycle pipeline   | `FlowBase`        |
 
 ---
 
@@ -79,6 +79,7 @@ const GreetTool = tool({
   inputSchema: { name: z.string() },
 })(({ name }) => `Hello, ${name}!`);
 ```
+
 </CodeGroup>
 
 ### @Resource — Data Endpoint
@@ -109,6 +110,7 @@ class UserResource extends ResourceContext {
   }
 }
 ```
+
 </CodeGroup>
 
 ### @Prompt — Message Template

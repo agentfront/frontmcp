@@ -3,7 +3,6 @@
  */
 
 import { resolveShellTemplate, clearShellTemplateCache } from '../custom-shell-resolver';
-import type { ResolveShellOptions } from '../custom-shell-resolver';
 import type { ImportResolver } from '../../resolver/types';
 
 // Mock global fetch

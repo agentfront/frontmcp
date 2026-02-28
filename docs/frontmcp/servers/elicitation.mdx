@@ -14,12 +14,12 @@ This feature implements the [MCP Elicitation specification](https://modelcontext
 
 In the Model Context Protocol, elicitation fills a critical gap:
 
-| Aspect           | Tool                              | Elicitation                           |
-| ---------------- | --------------------------------- | ------------------------------------- |
-| **Direction**    | Model triggers, server executes   | Server requests, user responds        |
-| **Interaction**  | One-way (model → server)          | Two-way (server ↔ user)               |
-| **Use case**     | Actions, calculations             | Confirmations, approvals, OAuth       |
-| **Blocking**     | No                                | Yes (waits for user response)         |
+| Aspect          | Tool                            | Elicitation                     |
+| --------------- | ------------------------------- | ------------------------------- |
+| **Direction**   | Model triggers, server executes | Server requests, user responds  |
+| **Interaction** | One-way (model → server)        | Two-way (server ↔ user)        |
+| **Use case**    | Actions, calculations           | Confirmations, approvals, OAuth |
+| **Blocking**    | No                              | Yes (waits for user response)   |
 
 Elicitation is ideal for:
 
@@ -185,6 +185,7 @@ const result = await this.elicit(
 </Warning>
 
 The token includes:
+
 - Encrypted session ID (AES-256-GCM)
 - Expiration timestamp (defaults to elicitation TTL)
 - HMAC signature for tamper detection
@@ -204,11 +205,11 @@ interface ElicitResult<T> {
 
 ### Status Values
 
-| Status    | Description                                      | Content Present |
-| --------- | ------------------------------------------------ | --------------- |
-| `accept`  | User submitted the form / completed the action   | Yes             |
-| `cancel`  | User cancelled the elicitation                   | No              |
-| `decline` | User declined to provide the requested input     | No              |
+| Status    | Description                                    | Content Present |
+| --------- | ---------------------------------------------- | --------------- |
+| `accept`  | User submitted the form / completed the action | Yes             |
+| `cancel`  | User cancelled the elicitation                 | No              |
+| `decline` | User declined to provide the requested input   | No              |
 
 ### Handling Responses
 
@@ -245,12 +246,12 @@ When the client returns an elicitation result with `action: 'accept'`, FrontMCP 
 
 ### Validation Behavior
 
-| Scenario | Validation | Result |
-|----------|------------|--------|
-| `accept` with valid content | ✅ Validated | Success |
-| `accept` with invalid content | ✅ Validated | `InvalidInputError` thrown |
-| `cancel` or `decline` | ⏭️ Skipped | Success (no content expected) |
-| No schema stored (backward compat) | ⏭️ Skipped | Success |
+| Scenario                           | Validation   | Result                        |
+| ---------------------------------- | ------------ | ----------------------------- |
+| `accept` with valid content        | ✅ Validated | Success                       |
+| `accept` with invalid content      | ✅ Validated | `InvalidInputError` thrown    |
+| `cancel` or `decline`              | ⏭️ Skipped   | Success (no content expected) |
+| No schema stored (backward compat) | ⏭️ Skipped   | Success                       |
 
 ### Error Handling
 
@@ -271,6 +272,7 @@ Invalid elicitation content throws the same `InvalidInputError` used for tool in
 ```
 
 The error includes:
+
 - **path**: The JSON path to the invalid field (e.g., `["user", "age"]`)
 - **message**: Human-readable validation error message
 
@@ -392,11 +394,11 @@ FrontMCP provides flow hooks to intercept elicitation requests and results. Hook
 
 ### Hook Types
 
-| Decorator | Description |
-|-----------|-------------|
-| `.Will('stage')` | Runs **before** the stage executes |
-| `.Did('stage')` | Runs **after** the stage completes |
-| `.Stage('stage')` | Runs **as** the stage (replaces default) |
+| Decorator          | Description                                       |
+| ------------------ | ------------------------------------------------- |
+| `.Will('stage')`   | Runs **before** the stage executes                |
+| `.Did('stage')`    | Runs **after** the stage completes                |
+| `.Stage('stage')`  | Runs **as** the stage (replaces default)          |
 | `.Around('stage')` | Wraps stage execution (call `next()` to continue) |
 
 ### ElicitationRequestHook
@@ -405,14 +407,14 @@ Intercepts the elicitation request flow before sending to the client.
 
 **Stages:**
 
-| Stage | Description |
-|-------|-------------|
-| `parseInput` | Parse and validate the elicitation parameters |
-| `validateRequest` | Validate mode requirements (URL mode needs elicitationId) |
-| `generateElicitId` | Generate unique elicitation ID |
-| `storePendingRecord` | Store pending elicitation in the store |
-| `buildRequestParams` | Build the MCP elicitation request parameters |
-| `finalize` | Final processing before sending |
+| Stage                | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `parseInput`         | Parse and validate the elicitation parameters             |
+| `validateRequest`    | Validate mode requirements (URL mode needs elicitationId) |
+| `generateElicitId`   | Generate unique elicitation ID                            |
+| `storePendingRecord` | Store pending elicitation in the store                    |
+| `buildRequestParams` | Build the MCP elicitation request parameters              |
+| `finalize`           | Final processing before sending                           |
 
 ### ElicitationResultHook
 
@@ -420,14 +422,14 @@ Intercepts the elicitation result flow when the user responds.
 
 **Stages:**
 
-| Stage | Description |
-|-------|-------------|
-| `parseInput` | Parse the result payload |
-| `lookupPending` | Lookup the pending elicitation record by session ID |
+| Stage             | Description                                                         |
+| ----------------- | ------------------------------------------------------------------- |
+| `parseInput`      | Parse the result payload                                            |
+| `lookupPending`   | Lookup the pending elicitation record by session ID                 |
 | `validateContent` | Validate content against stored schema (skipped for cancel/decline) |
-| `buildResult` | Build the typed result object |
-| `publishResult` | Publish result via pub/sub (for distributed deployments) |
-| `finalize` | Final processing and cleanup |
+| `buildResult`     | Build the typed result object                                       |
+| `publishResult`   | Publish result via pub/sub (for distributed deployments)            |
+| `finalize`        | Final processing and cleanup                                        |
 
 ### Example: Plugin with Elicitation Hooks
 
@@ -642,14 +644,14 @@ flowchart TB
 
 ### Client Compatibility
 
-| Client | Elicitation Support | Mechanism |
-|--------|---------------------|-----------|
-| Claude Desktop | ✅ Native | Standard MCP protocol |
-| Claude.ai | ✅ Native | Standard MCP protocol |
-| OpenAI ChatGPT | ✅ Automatic | Fallback via `sendElicitationResult` |
-| Google Gemini | ✅ Automatic | Fallback via `sendElicitationResult` |
-| Cursor | ✅ Automatic | Fallback via `sendElicitationResult` |
-| Custom Clients | Depends | Check `experimental.elicitation` capability |
+| Client         | Elicitation Support | Mechanism                                   |
+| -------------- | ------------------- | ------------------------------------------- |
+| Claude Desktop | ✅ Native           | Standard MCP protocol                       |
+| Claude.ai      | ✅ Native           | Standard MCP protocol                       |
+| OpenAI ChatGPT | ✅ Automatic        | Fallback via `sendElicitationResult`        |
+| Google Gemini  | ✅ Automatic        | Fallback via `sendElicitationResult`        |
+| Cursor         | ✅ Automatic        | Fallback via `sendElicitationResult`        |
+| Custom Clients | Depends             | Check `experimental.elicitation` capability |
 
 ### Fallback Response Format
 
@@ -698,11 +700,11 @@ This system tool is **automatically registered** for clients that don't support 
 
 **Input Schema:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `elicitId` | `string` | The elicitation ID from the pending request |
-| `action` | `'accept' \| 'cancel' \| 'decline'` | User's action |
-| `content` | `unknown` | User's response (required when action is `'accept'`) |
+| Parameter  | Type                                | Description                                          |
+| ---------- | ----------------------------------- | ---------------------------------------------------- |
+| `elicitId` | `string`                            | The elicitation ID from the pending request          |
+| `action`   | `'accept' \| 'cancel' \| 'decline'` | User's action                                        |
+| `content`  | `unknown`                           | User's response (required when action is `'accept'`) |
 
 ### Key Benefits
 
@@ -718,6 +720,7 @@ This system tool is **automatically registered** for clients that don't support 
 ### ElicitationNotSupportedError
 
 Thrown when:
+
 - Client doesn't support elicitation
 - Client doesn't support the requested mode (form/url)
 - No session is available
@@ -769,11 +772,11 @@ interface ElicitOptions {
 }
 ```
 
-| Option          | Description                                          | Default  |
-| --------------- | ---------------------------------------------------- | -------- |
-| `mode`          | Elicitation mode (`'form'` or `'url'`)               | `'form'` |
-| `ttl`           | Timeout in milliseconds before throwing              | 300000   |
-| `elicitationId` | Unique ID for URL mode correlation | Auto (form) / Required (url) |
+| Option          | Description                             | Default                      |
+| --------------- | --------------------------------------- | ---------------------------- |
+| `mode`          | Elicitation mode (`'form'` or `'url'`)  | `'form'`                     |
+| `ttl`           | Timeout in milliseconds before throwing | 300000                       |
+| `elicitationId` | Unique ID for URL mode correlation      | Auto (form) / Required (url) |
 
 ---
 
@@ -849,6 +852,7 @@ Configure Redis for distributed deployments.
 ```
 
 This is appropriate for:
+
 - Local development
 - Single-node deployments
 - Testing environments
@@ -858,6 +862,7 @@ This is appropriate for:
 If you cannot use Redis, configure your load balancer for session affinity to ensure requests from the same client always reach the same server:
 
 **Nginx:**
+
 ```nginx
 upstream backend {
   ip_hash;  # Sticky sessions by client IP
@@ -867,11 +872,13 @@ upstream backend {
 ```
 
 **AWS ALB:**
+
 - Enable "Stickiness" in target group settings
 - Use application-based cookie (recommended) or duration-based stickiness
 - Set appropriate stickiness duration (longer than your elicitation TTL)
 
 **Kubernetes (Ingress):**
+
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -917,14 +924,14 @@ class MyApp {}
 
 ### Deployment Mode Summary
 
-| Environment | Storage | Notes |
-|-------------|---------|-------|
-| Local development | In-memory | Automatic, no configuration needed |
-| Single-node production | In-memory | Works but shows warning |
-| Multi-node production | Redis | Configure `redis` in `@FrontMcp` |
-| Vercel Edge | Redis (required) | Use Upstash or similar |
-| Kubernetes | Redis | Use Redis cluster for HA |
-| Load balanced (no Redis) | Sticky sessions | Configure session affinity |
+| Environment              | Storage          | Notes                              |
+| ------------------------ | ---------------- | ---------------------------------- |
+| Local development        | In-memory        | Automatic, no configuration needed |
+| Single-node production   | In-memory        | Works but shows warning            |
+| Multi-node production    | Redis            | Configure `redis` in `@FrontMcp`   |
+| Vercel Edge              | Redis (required) | Use Upstash or similar             |
+| Kubernetes               | Redis            | Use Redis cluster for HA           |
+| Load balanced (no Redis) | Sticky sessions  | Configure session affinity         |
 
 ---
 
@@ -1230,10 +1237,10 @@ class DeleteFileTool extends ToolContext {
 
 Elicitation integrates with the MCP protocol via:
 
-| Flow                   | Description                                   |
-| ---------------------- | --------------------------------------------- |
-| `elicitation/create`   | Server sends elicitation request to client    |
-| Result callback        | Client sends result with action and content   |
+| Flow                 | Description                                 |
+| -------------------- | ------------------------------------------- |
+| `elicitation/create` | Server sends elicitation request to client  |
+| Result callback      | Client sends result with action and content |
 
 ### Client Capabilities
 

@@ -14,15 +14,15 @@ DirectClient is ideal for SDK integrations, unit testing, AI agent frameworks (L
 
 FrontMCP supports multiple ways to connect to MCP servers. Choose based on your use case:
 
-| Aspect | DirectClient | Stdio | HTTP (Streamable) |
-|--------|--------------|-------|-------------------|
-| **Use Case** | SDK access, testing, same-process | CLI tools, desktop clients | Remote servers, web apps |
-| **Connection** | In-process (no network) | Stdin/stdout pipes | HTTP/HTTPS requests |
-| **Process Model** | Same process | Separate process | Separate server |
-| **Latency** | Lowest | Low (IPC overhead) | Higher (network) |
-| **Session State** | In-memory | Per-process | Persistent (Redis) |
-| **Auth** | Direct token injection | Environment-based | Bearer tokens, OAuth |
-| **Best For** | Agent frameworks, tests | Claude Desktop, Cursor | Production APIs |
+| Aspect            | DirectClient                      | Stdio                      | HTTP (Streamable)        |
+| ----------------- | --------------------------------- | -------------------------- | ------------------------ |
+| **Use Case**      | SDK access, testing, same-process | CLI tools, desktop clients | Remote servers, web apps |
+| **Connection**    | In-process (no network)           | Stdin/stdout pipes         | HTTP/HTTPS requests      |
+| **Process Model** | Same process                      | Separate process           | Separate server          |
+| **Latency**       | Lowest                            | Low (IPC overhead)         | Higher (network)         |
+| **Session State** | In-memory                         | Per-process                | Persistent (Redis)       |
+| **Auth**          | Direct token injection            | Environment-based          | Bearer tokens, OAuth     |
+| **Best For**      | Agent frameworks, tests           | Claude Desktop, Cursor     | Production APIs          |
 
 ### When to Use DirectClient
 
@@ -368,13 +368,13 @@ const platform = client.getDetectedPlatform();
 
 DirectClient automatically formats tools and results based on the detected platform:
 
-| Platform | Tool Format | Result Format |
-|----------|-------------|---------------|
-| OpenAI | `{ type: 'function', function: {...} }` | Parsed JSON or string |
-| Claude | `{ name, description, input_schema }` | Content array |
-| LangChain | `{ name, description, schema }` | Parsed JSON |
-| Vercel AI | `{ [name]: { description, parameters } }` | Parsed JSON |
-| Raw | MCP native format | MCP CallToolResult |
+| Platform  | Tool Format                               | Result Format         |
+| --------- | ----------------------------------------- | --------------------- |
+| OpenAI    | `{ type: 'function', function: {...} }`   | Parsed JSON or string |
+| Claude    | `{ name, description, input_schema }`     | Content array         |
+| LangChain | `{ name, description, schema }`           | Parsed JSON           |
+| Vercel AI | `{ [name]: { description, parameters } }` | Parsed JSON           |
+| Raw       | MCP native format                         | MCP CallToolResult    |
 
 ---
 

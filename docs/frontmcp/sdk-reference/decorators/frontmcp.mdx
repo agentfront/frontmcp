@@ -26,17 +26,17 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `info` | `ServerInfoOptions` | Server metadata (name, version, description) |
-| `apps` | `AppType[]` | Array of app classes to register |
+| Property | Type                | Description                                  |
+| -------- | ------------------- | -------------------------------------------- |
+| `info`   | `ServerInfoOptions` | Server metadata (name, version, description) |
+| `apps`   | `AppType[]`         | Array of app classes to register             |
 
 ### Server Configuration
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `serve` | `boolean` | `true` | Auto-start HTTP server |
-| `http` | `HttpOptionsInput` | - | HTTP server configuration |
+| Property | Type               | Default | Description               |
+| -------- | ------------------ | ------- | ------------------------- |
+| `serve`  | `boolean`          | `true`  | Auto-start HTTP server    |
+| `http`   | `HttpOptionsInput` | -       | HTTP server configuration |
 
 ```typescript
 @FrontMcp({
@@ -53,10 +53,10 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Storage Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `redis` | `RedisOptionsInput` | Redis storage for sessions/state |
-| `pubsub` | `PubsubOptionsInput` | Pub/Sub for distributed events |
+| Property | Type                 | Description                      |
+| -------- | -------------------- | -------------------------------- |
+| `redis`  | `RedisOptionsInput`  | Redis storage for sessions/state |
+| `pubsub` | `PubsubOptionsInput` | Pub/Sub for distributed events   |
 
 ```typescript
 @FrontMcp({
@@ -73,8 +73,8 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Transport Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property    | Type                    | Description                |
+| ----------- | ----------------------- | -------------------------- |
 | `transport` | `TransportOptionsInput` | Session lifecycle settings |
 
 ```typescript
@@ -90,13 +90,13 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Shared Components
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `providers` | `ProviderType[]` | Gateway-level providers |
-| `tools` | `ToolType[]` | Shared tools across all apps |
-| `resources` | `ResourceType[]` | Shared resources |
-| `skills` | `SkillType[]` | Shared skills |
-| `plugins` | `PluginType[]` | Server-level plugins |
+| Property    | Type             | Description                  |
+| ----------- | ---------------- | ---------------------------- |
+| `providers` | `ProviderType[]` | Gateway-level providers      |
+| `tools`     | `ToolType[]`     | Shared tools across all apps |
+| `resources` | `ResourceType[]` | Shared resources             |
+| `skills`    | `SkillType[]`    | Shared skills                |
+| `plugins`   | `PluginType[]`   | Server-level plugins         |
 
 ```typescript
 @FrontMcp({
@@ -110,13 +110,13 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Feature Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `logging` | `LoggingOptionsInput` | Logging configuration |
-| `pagination` | `PaginationOptions` | List operation pagination |
-| `elicitation` | `ElicitationOptionsInput` | Interactive user input |
-| `skillsConfig` | `SkillsConfigOptionsInput` | Skills HTTP endpoints |
-| `extApps` | `ExtAppsOptionsInput` | MCP Apps widget configuration |
+| Property       | Type                       | Description                   |
+| -------------- | -------------------------- | ----------------------------- |
+| `logging`      | `LoggingOptionsInput`      | Logging configuration         |
+| `pagination`   | `PaginationOptions`        | List operation pagination     |
+| `elicitation`  | `ElicitationOptionsInput`  | Interactive user input        |
+| `skillsConfig` | `SkillsConfigOptionsInput` | Skills HTTP endpoints         |
+| `extApps`      | `ExtAppsOptionsInput`      | MCP Apps widget configuration |
 
 ```typescript
 @FrontMcp({

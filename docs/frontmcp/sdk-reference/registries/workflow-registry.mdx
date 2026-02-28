@@ -29,8 +29,8 @@ Get all workflows (local + dynamic).
 getWorkflows(includeHidden?: boolean): WorkflowEntry[]
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter       | Type      | Default | Description                         |
+| --------------- | --------- | ------- | ----------------------------------- |
 | `includeHidden` | `boolean` | `false` | Include hidden workflows in results |
 
 **Example:**
@@ -146,13 +146,13 @@ hasAny(): boolean
 
 When the jobs & workflows system is enabled, workflow capabilities are exposed through these MCP tools:
 
-| Tool | Description |
-|------|-------------|
-| `list-workflows` | List all registered workflows with optional filtering |
-| `execute-workflow` | Execute a workflow by name (inline or background) |
-| `get-workflow-status` | Get execution status with per-step results |
-| `register-workflow` | Register a dynamic workflow at runtime |
-| `remove-workflow` | Remove a dynamic workflow |
+| Tool                  | Description                                           |
+| --------------------- | ----------------------------------------------------- |
+| `list-workflows`      | List all registered workflows with optional filtering |
+| `execute-workflow`    | Execute a workflow by name (inline or background)     |
+| `get-workflow-status` | Get execution status with per-step results            |
+| `register-workflow`   | Register a dynamic workflow at runtime                |
+| `remove-workflow`     | Remove a dynamic workflow                             |
 
 ## Change Events
 

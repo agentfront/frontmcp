@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import type { ImportResolver, ResolverOptions, RewriteImportsResult } from './types';
+import type { ResolverOptions, RewriteImportsResult } from './types';
 import { parseImports, getPackageName } from './import-parser';
 import { createEsmShResolver } from './esm-sh.resolver';
 

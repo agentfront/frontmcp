@@ -14,13 +14,13 @@ Workflows execute jobs in dependency order with automatic cycle detection, paral
 
 Workflows handle orchestration that individual jobs cannot:
 
-| Aspect | Job | Workflow | Skill |
-| --- | --- | --- | --- |
-| **Purpose** | Single unit of work | Multi-step pipeline | AI instruction guide |
-| **Composition** | Standalone | Chains multiple jobs | References tools |
-| **Dependencies** | None | DAG with `dependsOn` | None |
-| **Parallelism** | Single execution | Bounded concurrent steps | None |
-| **Triggers** | On-demand | Manual, webhook, or event | On-demand |
+| Aspect           | Job                 | Workflow                  | Skill                |
+| ---------------- | ------------------- | ------------------------- | -------------------- |
+| **Purpose**      | Single unit of work | Multi-step pipeline       | AI instruction guide |
+| **Composition**  | Standalone          | Chains multiple jobs      | References tools     |
+| **Dependencies** | None                | DAG with `dependsOn`      | None                 |
+| **Parallelism**  | Single execution    | Bounded concurrent steps  | None                 |
+| **Triggers**     | On-demand           | Manual, webhook, or event | On-demand            |
 
 Workflows are ideal for:
 
@@ -129,16 +129,16 @@ interface WorkflowStep {
 }
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | — | **Required.** Unique step identifier |
-| `jobName` | `string` | — | **Required.** Name of the job to execute |
-| `dependsOn` | `string[]` | `[]` | Step IDs that must complete before this step runs |
-| `input` | `object \| function` | Workflow input | Static input or dynamic callback from previous step outputs |
-| `condition` | `function` | — | Skip step if returns `false` |
-| `continueOnError` | `boolean` | `false` | Continue workflow if this step fails |
-| `timeout` | `number` | Job default | Per-step timeout override in ms |
-| `retry` | `JobRetryConfig` | Job default | Per-step retry override |
+| Field             | Type                 | Default        | Description                                                 |
+| ----------------- | -------------------- | -------------- | ----------------------------------------------------------- |
+| `id`              | `string`             | —              | **Required.** Unique step identifier                        |
+| `jobName`         | `string`             | —              | **Required.** Name of the job to execute                    |
+| `dependsOn`       | `string[]`           | `[]`           | Step IDs that must complete before this step runs           |
+| `input`           | `object \| function` | Workflow input | Static input or dynamic callback from previous step outputs |
+| `condition`       | `function`           | —              | Skip step if returns `false`                                |
+| `continueOnError` | `boolean`            | `false`        | Continue workflow if this step fails                        |
+| `timeout`         | `number`             | Job default    | Per-step timeout override in ms                             |
+| `retry`           | `JobRetryConfig`     | Job default    | Per-step retry override                                     |
 
 ---
 
@@ -250,22 +250,22 @@ Steps with no mutual dependencies execute in parallel, bounded by `maxConcurrenc
 
 ## Configuration
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | — | **Required.** Unique workflow identifier |
-| `description` | `string` | — | Human-readable description |
-| `steps` | `WorkflowStep[]` | — | **Required.** Ordered step definitions (min 1) |
-| `trigger` | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered |
-| `webhook` | `WorkflowWebhookConfig` | — | Webhook configuration (when trigger is `'webhook'`) |
-| `timeout` | `number` | `600000` | Maximum total execution time in ms (10 min) |
-| `maxConcurrency` | `number` | `5` | Maximum parallel step concurrency |
-| `id` | `string` | `name` | Stable identifier for tracking |
-| `tags` | `string[]` | — | Categorization tags |
-| `labels` | `Record<string, string>` | — | Fine-grained key-value labels |
-| `hideFromDiscovery` | `boolean` | `false` | Hide from `list-workflows` |
-| `permissions` | `JobPermission[]` | — | RBAC permission rules |
-| `inputSchema` | `ZodShape` | — | Workflow-level input schema |
-| `outputSchema` | `ZodShape` | — | Workflow-level output schema |
+| Field               | Type                               | Default    | Description                                         |
+| ------------------- | ---------------------------------- | ---------- | --------------------------------------------------- |
+| `name`              | `string`                           | —          | **Required.** Unique workflow identifier            |
+| `description`       | `string`                           | —          | Human-readable description                          |
+| `steps`             | `WorkflowStep[]`                   | —          | **Required.** Ordered step definitions (min 1)      |
+| `trigger`           | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered                       |
+| `webhook`           | `WorkflowWebhookConfig`            | —          | Webhook configuration (when trigger is `'webhook'`) |
+| `timeout`           | `number`                           | `600000`   | Maximum total execution time in ms (10 min)         |
+| `maxConcurrency`    | `number`                           | `5`        | Maximum parallel step concurrency                   |
+| `id`                | `string`                           | `name`     | Stable identifier for tracking                      |
+| `tags`              | `string[]`                         | —          | Categorization tags                                 |
+| `labels`            | `Record<string, string>`           | —          | Fine-grained key-value labels                       |
+| `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list-workflows`                          |
+| `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                               |
+| `inputSchema`       | `ZodShape`                         | —          | Workflow-level input schema                         |
+| `outputSchema`      | `ZodShape`                         | —          | Workflow-level output schema                        |
 
 ### Webhook Configuration
 
@@ -281,11 +281,11 @@ interface WorkflowWebhookConfig {
 
 ## Triggers
 
-| Trigger | Description |
-| --- | --- |
-| `manual` | Triggered via `execute-workflow` tool or DirectClient |
+| Trigger   | Description                                               |
+| --------- | --------------------------------------------------------- |
+| `manual`  | Triggered via `execute-workflow` tool or DirectClient     |
 | `webhook` | Triggered by HTTP webhook with optional secret validation |
-| `event` | Triggered by internal events |
+| `event`   | Triggered by internal events                              |
 
 ---
 
@@ -338,13 +338,13 @@ steps: [
 
 When workflows are enabled, the following MCP tools are automatically registered:
 
-| Tool | Description |
-| --- | --- |
-| `list-workflows` | List registered workflows with optional filtering |
-| `execute-workflow` | Execute a workflow (inline or background) |
-| `get-workflow-status` | Get execution status with per-step results |
-| `register-workflow` | Register a dynamic workflow at runtime |
-| `remove-workflow` | Remove a dynamic workflow |
+| Tool                  | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `list-workflows`      | List registered workflows with optional filtering |
+| `execute-workflow`    | Execute a workflow (inline or background)         |
+| `get-workflow-status` | Get execution status with per-step results        |
+| `register-workflow`   | Register a dynamic workflow at runtime            |
+| `remove-workflow`     | Remove a dynamic workflow                         |
 
 ---
 

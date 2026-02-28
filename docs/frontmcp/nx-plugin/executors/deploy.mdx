@@ -31,18 +31,18 @@ nx deploy production
 
 ## Options
 
-| Option | Type | Description |
-| --- | --- | --- |
+| Option   | Type                                           | Description                              |
+| -------- | ---------------------------------------------- | ---------------------------------------- |
 | `target` | `node` \| `vercel` \| `lambda` \| `cloudflare` | **Required.** Deployment target platform |
 
 ## Platform Details
 
-| Target | What Happens |
-| --- | --- |
-| `node` | Builds Docker image, ready for `docker compose up` |
-| `vercel` | Runs `vercel deploy` using `vercel.json` config |
-| `lambda` | Runs `sam deploy` using `template.yaml` SAM template |
-| `cloudflare` | Runs `wrangler deploy` using `wrangler.toml` config |
+| Target       | What Happens                                         |
+| ------------ | ---------------------------------------------------- |
+| `node`       | Builds Docker image, ready for `docker compose up`   |
+| `vercel`     | Runs `vercel deploy` using `vercel.json` config      |
+| `lambda`     | Runs `sam deploy` using `template.yaml` SAM template |
+| `cloudflare` | Runs `wrangler deploy` using `wrangler.toml` config  |
 
 ## Workflow
 

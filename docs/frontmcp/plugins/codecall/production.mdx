@@ -55,11 +55,11 @@ Before deploying CodeCall to production, complete these steps:
 
 ### Throughput
 
-| Configuration                | Requests/sec | Notes                       |
-| ---------------------------- | ------------ | --------------------------- |
-| Single instance, TF-IDF     | ~500         | Bottleneck: VM isolation    |
-| Single instance, ML         | ~200         | Bottleneck: Model inference |
-| Multi-instance (4 pods)     | ~1,500+      | Near-linear scaling         |
+| Configuration           | Requests/sec | Notes                       |
+| ----------------------- | ------------ | --------------------------- |
+| Single instance, TF-IDF | ~500         | Bottleneck: VM isolation    |
+| Single instance, ML     | ~200         | Bottleneck: Model inference |
+| Multi-instance (4 pods) | ~1,500+      | Near-linear scaling         |
 
 <Note>
   Throughput depends heavily on script complexity and tool call latency. These numbers assume simple scripts with 1-3 tool calls.
@@ -466,13 +466,11 @@ CodeCallPlugin.init({
 ### Gradual Rollout
 
 1. **Phase 1:** Deploy with `mode: 'metadata_driven'`
-
    - All tools visible normally
    - Mark select tools for CodeCall
    - Monitor for issues
 
 2. **Phase 2:** Switch to `mode: 'codecall_opt_in'`
-
    - Tools opt into CodeCall
    - Both access methods work
    - Measure token savings

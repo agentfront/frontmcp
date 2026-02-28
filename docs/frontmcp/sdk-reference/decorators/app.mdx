@@ -38,26 +38,26 @@ function App(providedMetadata: LocalAppMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique application name |
+| Property | Type     | Description             |
+| -------- | -------- | ----------------------- |
+| `name`   | `string` | Unique application name |
 
 ### Optional Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `id` | `string` | Stable identifier for tracking |
-| `description` | `string` | Human-readable description |
+| Property      | Type     | Description                    |
+| ------------- | -------- | ------------------------------ |
+| `id`          | `string` | Stable identifier for tracking |
+| `description` | `string` | Human-readable description     |
 
 ### Components
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `tools` | `ToolType[]` | Tools defined by this app |
+| Property    | Type             | Description                   |
+| ----------- | ---------------- | ----------------------------- |
+| `tools`     | `ToolType[]`     | Tools defined by this app     |
 | `resources` | `ResourceType[]` | Resources defined by this app |
-| `prompts` | `PromptType[]` | Prompts defined by this app |
-| `agents` | `AgentType[]` | Agents defined by this app |
-| `skills` | `SkillType[]` | Skills defined by this app |
+| `prompts`   | `PromptType[]`   | Prompts defined by this app   |
+| `agents`    | `AgentType[]`    | Agents defined by this app    |
+| `skills`    | `SkillType[]`    | Skills defined by this app    |
 
 ```typescript
 @App({
@@ -73,12 +73,12 @@ class CrmApp {}
 
 ### Extension Points
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `providers` | `ProviderType[]` | App-scoped dependency providers |
-| `plugins` | `PluginType[]` | App-specific plugins |
-| `authProviders` | `AuthProviderType[]` | Authentication providers |
-| `adapters` | `AdapterType[]` | Framework adapters |
+| Property        | Type                 | Description                     |
+| --------------- | -------------------- | ------------------------------- |
+| `providers`     | `ProviderType[]`     | App-scoped dependency providers |
+| `plugins`       | `PluginType[]`       | App-specific plugins            |
+| `authProviders` | `AuthProviderType[]` | Authentication providers        |
+| `adapters`      | `AdapterType[]`      | Framework adapters              |
 
 ```typescript
 @App({
@@ -92,8 +92,8 @@ class CrmApp {}
 
 ### Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property | Type                      | Description                |
+| -------- | ------------------------- | -------------------------- |
 | `config` | `Record<string, unknown>` | App-specific configuration |
 
 ```typescript
@@ -149,6 +149,7 @@ export default class ECommercePlatform {}
 ## App Isolation
 
 Each app maintains its own:
+
 - Tool namespace (tools are prefixed with app name on conflict)
 - Provider scope (providers are isolated per app)
 - Auth context (apps can have different auth providers)

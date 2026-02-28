@@ -14,11 +14,11 @@ Elicitation errors are thrown during the MCP elicitation flow — the mechanism 
 
 Thrown when attempting to elicit from a client that does not support elicitation or when the transport is unavailable.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_NOT_SUPPORTED` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value                       |
+| ------------ | --------- | --------------------------- |
+| `code`       | `string`  | `ELICITATION_NOT_SUPPORTED` |
+| `statusCode` | `number`  | `400`                       |
+| `isPublic`   | `boolean` | `true`                      |
 
 ```typescript
 new ElicitationNotSupportedError(message?: string)
@@ -38,13 +38,13 @@ throw new ElicitationNotSupportedError('Client does not support elicitation');
 
 Thrown when an elicitation request times out waiting for the user's response.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_TIMEOUT` |
-| `statusCode` | `number` | `408` |
-| `isPublic` | `boolean` | `true` |
-| `elicitId` | `string` | The timed-out request ID |
-| `ttl` | `number` | The TTL that was exceeded (ms) |
+| Property     | Type      | Value                          |
+| ------------ | --------- | ------------------------------ |
+| `code`       | `string`  | `ELICITATION_TIMEOUT`          |
+| `statusCode` | `number`  | `408`                          |
+| `isPublic`   | `boolean` | `true`                         |
+| `elicitId`   | `string`  | The timed-out request ID       |
+| `ttl`        | `number`  | The TTL that was exceeded (ms) |
 
 ```typescript
 new ElicitationTimeoutError(elicitId: string, ttl: number)
@@ -65,17 +65,17 @@ throw new ElicitationTimeoutError('elicit_abc', 60000);
 
 Thrown when elicitation is requested but the client doesn't support the standard protocol. This is **not** a failure — it triggers the fallback flow where the tool returns instructions to the LLM, and the LLM uses `sendElicitationResult` to continue.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_FALLBACK` |
-| `statusCode` | `number` | `200` |
-| `isPublic` | `boolean` | `true` |
-| `elicitId` | `string` | Unique elicitation request ID |
-| `elicitMessage` | `string` | Message to display to user |
-| `schema` | `Record<string, unknown>` | JSON Schema for expected response |
-| `toolName` | `string` | Tool that requested elicitation |
-| `toolInput` | `unknown` | Original tool input args |
-| `ttl` | `number` | Time-to-live (ms) |
+| Property        | Type                      | Value                             |
+| --------------- | ------------------------- | --------------------------------- |
+| `code`          | `string`                  | `ELICITATION_FALLBACK`            |
+| `statusCode`    | `number`                  | `200`                             |
+| `isPublic`      | `boolean`                 | `true`                            |
+| `elicitId`      | `string`                  | Unique elicitation request ID     |
+| `elicitMessage` | `string`                  | Message to display to user        |
+| `schema`        | `Record<string, unknown>` | JSON Schema for expected response |
+| `toolName`      | `string`                  | Tool that requested elicitation   |
+| `toolInput`     | `unknown`                 | Original tool input args          |
+| `ttl`           | `number`                  | Time-to-live (ms)                 |
 
 ```typescript
 new ElicitationFallbackRequired(
@@ -98,11 +98,11 @@ This error has a `statusCode` of `200` because it is not a failure — it's a si
 
 Thrown when attempting to access the elicitation store before scope initialization has completed. Callers should `await scope.ready` before accessing `elicitationStore`.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_STORE_NOT_INITIALIZED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                               |
+| ------------ | --------- | ----------------------------------- |
+| `code`       | `string`  | `ELICITATION_STORE_NOT_INITIALIZED` |
+| `statusCode` | `number`  | `500`                               |
+| `isPublic`   | `boolean` | `false`                             |
 
 ```typescript
 new ElicitationStoreNotInitializedError()
@@ -114,11 +114,11 @@ new ElicitationStoreNotInitializedError()
 
 Thrown when elicitation is used but disabled in server configuration. Enable via `@FrontMcp({ elicitation: { enabled: true } })`.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_DISABLED` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `ELICITATION_DISABLED` |
+| `statusCode` | `number`  | `400`                  |
+| `isPublic`   | `boolean` | `true`                 |
 
 ```typescript
 new ElicitationDisabledError()
@@ -132,12 +132,12 @@ The internal message includes configuration guidance. The public message is: `"E
 
 Thrown when encryption or decryption of elicitation data fails — typically when the session ID is missing or key derivation fails.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_ENCRYPTION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                          |
+| --------------- | -------------------- | ------------------------------ |
+| `code`          | `string`             | `ELICITATION_ENCRYPTION_ERROR` |
+| `statusCode`    | `number`             | `500`                          |
+| `isPublic`      | `boolean`            | `false`                        |
+| `originalError` | `Error \| undefined` | The underlying cause           |
 
 ```typescript
 new ElicitationEncryptionError(message: string, originalError?: Error)
@@ -149,13 +149,13 @@ new ElicitationEncryptionError(message: string, originalError?: Error)
 
 Thrown when subscription to the elicitation pub/sub channel fails. This indicates a transport or infrastructure failure, not a user non-response (which would be a timeout).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_SUBSCRIPTION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `elicitId` | `string` | The elicitation request ID |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                            |
+| --------------- | -------------------- | -------------------------------- |
+| `code`          | `string`             | `ELICITATION_SUBSCRIPTION_ERROR` |
+| `statusCode`    | `number`             | `500`                            |
+| `isPublic`      | `boolean`            | `false`                          |
+| `elicitId`      | `string`             | The elicitation request ID       |
+| `originalError` | `Error \| undefined` | The underlying cause             |
 
 ```typescript
 new ElicitationSubscriptionError(elicitId: string, originalError?: Error)

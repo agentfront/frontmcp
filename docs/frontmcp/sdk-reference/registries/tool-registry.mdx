@@ -29,8 +29,8 @@ Get all tools (local + adopted).
 getTools(includeHidden?: boolean): ReadonlyArray<ToolEntry>
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter       | Type      | Default | Description                     |
+| --------------- | --------- | ------- | ------------------------------- |
 | `includeHidden` | `boolean` | `false` | Include hidden tools in results |
 
 **Example:**
@@ -51,8 +51,8 @@ Get tools appropriate for MCP listing with elicitation support filtering.
 getToolsForListing(supportsElicitation?: boolean): ReadonlyArray<ToolEntry>
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter             | Type      | Default | Description                         |
+| --------------------- | --------- | ------- | ----------------------------------- |
 | `supportsElicitation` | `boolean` | `false` | Whether client supports elicitation |
 
 **Example:**
@@ -257,13 +257,13 @@ interface ToolChangeEvent {
 
 The registry maintains O(1) lookup indexes:
 
-| Index | Key | Description |
-|-------|-----|-------------|
-| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
-| `byName` | `name` | Base name lookup (may return multiple) |
-| `byOwnerAndName` | `owner:name` | Scoped name lookup |
-| `byProviderAndName` | `provider:name` | Provider-scoped lookup |
-| `byOwner` | `ownerPath` | All tools by owner |
+| Index               | Key             | Description                            |
+| ------------------- | --------------- | -------------------------------------- |
+| `byQualifiedId`     | `qualifiedId`   | Unique identifier lookup               |
+| `byName`            | `name`          | Base name lookup (may return multiple) |
+| `byOwnerAndName`    | `owner:name`    | Scoped name lookup                     |
+| `byProviderAndName` | `provider:name` | Provider-scoped lookup                 |
+| `byOwner`           | `ownerPath`     | All tools by owner                     |
 
 ## Related
 

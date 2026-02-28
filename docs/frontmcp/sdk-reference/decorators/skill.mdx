@@ -49,37 +49,37 @@ function Skill(providedMetadata: SkillMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type | Constraints | Description |
-|----------|------|-------------|-------------|
-| `name` | `string` | kebab-case, 1-64 chars, no `--` | Unique skill identifier |
-| `description` | `string` | 1-1024 chars, no XML tags | Skill description |
-| `instructions` | `string \| { file: string } \| { url: string }` | | Skill instructions |
+| Property       | Type                                            | Constraints                     | Description             |
+| -------------- | ----------------------------------------------- | ------------------------------- | ----------------------- |
+| `name`         | `string`                                        | kebab-case, 1-64 chars, no `--` | Unique skill identifier |
+| `description`  | `string`                                        | 1-1024 chars, no XML tags       | Skill description       |
+| `instructions` | `string \| { file: string } \| { url: string }` |                                 | Skill instructions      |
 
 ### Optional Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `tools` | `SkillToolInput[]` | Tools used by the skill |
-| `id` | `string` | Stable identifier (defaults to `name`) |
-| `parameters` | `SkillParameter[]` | Input parameters |
-| `examples` | `SkillExample[]` | Usage examples |
-| `tags` | `string[]` | Categorization tags |
-| `priority` | `number` | Search ranking weight (default: `0`) |
-| `hideFromDiscovery` | `boolean` | Hide from search results (default: `false`) |
-| `visibility` | `'mcp' \| 'http' \| 'both'` | Discovery visibility (default: `'both'`) |
-| `toolValidation` | `'strict' \| 'warn' \| 'ignore'` | Tool reference validation mode (default: `'warn'`) |
+| Property            | Type                             | Description                                        |
+| ------------------- | -------------------------------- | -------------------------------------------------- |
+| `tools`             | `SkillToolInput[]`               | Tools used by the skill                            |
+| `id`                | `string`                         | Stable identifier (defaults to `name`)             |
+| `parameters`        | `SkillParameter[]`               | Input parameters                                   |
+| `examples`          | `SkillExample[]`                 | Usage examples                                     |
+| `tags`              | `string[]`                       | Categorization tags                                |
+| `priority`          | `number`                         | Search ranking weight (default: `0`)               |
+| `hideFromDiscovery` | `boolean`                        | Hide from search results (default: `false`)        |
+| `visibility`        | `'mcp' \| 'http' \| 'both'`      | Discovery visibility (default: `'both'`)           |
+| `toolValidation`    | `'strict' \| 'warn' \| 'ignore'` | Tool reference validation mode (default: `'warn'`) |
 
 ### Agent Skills Spec Properties
 
 These properties align with the [Anthropic Agent Skills specification](https://agentskills.io/specification):
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `license` | `string` | License name or reference (e.g. `'MIT'`, `'Apache-2.0'`) |
-| `compatibility` | `string` | Environment requirements (max 500 chars) |
-| `specMetadata` | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`) |
-| `allowedTools` | `string` | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
-| `resources` | `SkillResources` | Bundled resource directories (`scripts`, `references`, `assets`) |
+| Property        | Type                     | Description                                                       |
+| --------------- | ------------------------ | ----------------------------------------------------------------- |
+| `license`       | `string`                 | License name or reference (e.g. `'MIT'`, `'Apache-2.0'`)          |
+| `compatibility` | `string`                 | Environment requirements (max 500 chars)                          |
+| `specMetadata`  | `Record<string, string>` | Arbitrary key-value metadata (maps to spec `metadata`)            |
+| `allowedTools`  | `string`                 | Space-delimited pre-approved tools (maps to spec `allowed-tools`) |
+| `resources`     | `SkillResources`         | Bundled resource directories (`scripts`, `references`, `assets`)  |
 
 ## Instruction Sources
 

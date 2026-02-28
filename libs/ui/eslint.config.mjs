@@ -11,6 +11,9 @@ export default [
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
           ignoredDependencies: [
             '@swc/core', // Optional: used by SWC-based bundler at runtime
+            'react-dom', // Peer dep required for React rendering
+            '@emotion/react', // Peer dep required by @mui/material
+            '@emotion/styled', // Peer dep required by @mui/material
           ],
         },
       ],

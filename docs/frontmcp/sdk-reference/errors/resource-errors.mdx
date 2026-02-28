@@ -14,13 +14,13 @@ Resource errors cover failures related to MCP resources — not found, read fail
 
 Thrown when a requested resource URI does not match any registered resource.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `RESOURCE_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
-| `uri` | `string` | The requested URI |
-| `mcpErrorCode` | `number` | `-32002` |
+| Property       | Type      | Value                |
+| -------------- | --------- | -------------------- |
+| `code`         | `string`  | `RESOURCE_NOT_FOUND` |
+| `statusCode`   | `number`  | `404`                |
+| `isPublic`     | `boolean` | `true`               |
+| `uri`          | `string`  | The requested URI    |
+| `mcpErrorCode` | `number`  | `-32002`             |
 
 ```typescript
 new ResourceNotFoundError(uri: string)
@@ -47,12 +47,12 @@ throw new ResourceNotFoundError('file:///missing.txt');
 
 Thrown when reading a resource fails. This is an internal error — details are hidden from clients.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `RESOURCE_READ_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                 |
+| --------------- | -------------------- | --------------------- |
+| `code`          | `string`             | `RESOURCE_READ_ERROR` |
+| `statusCode`    | `number`             | `500`                 |
+| `isPublic`      | `boolean`            | `false`               |
+| `originalError` | `Error \| undefined` | The underlying cause  |
 
 ```typescript
 new ResourceReadError(uri: string, originalError?: Error)
@@ -76,11 +76,11 @@ try {
 
 Thrown when a resource URI does not conform to RFC 3986 or is otherwise malformed.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_RESOURCE_URI` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `INVALID_RESOURCE_URI` |
+| `statusCode` | `number`  | `400`                  |
+| `isPublic`   | `boolean` | `true`                 |
 
 ```typescript
 new InvalidResourceUriError(uri: string, reason?: string)

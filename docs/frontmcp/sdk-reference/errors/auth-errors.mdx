@@ -14,11 +14,11 @@ Auth errors are thrown when authentication or authorization fails at the request
 
 Thrown when a request is missing valid credentials.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `UNAUTHORIZED` |
-| `statusCode` | `number` | `401` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value          |
+| ------------ | --------- | -------------- |
+| `code`       | `string`  | `UNAUTHORIZED` |
+| `statusCode` | `number`  | `401`          |
+| `isPublic`   | `boolean` | `true`         |
 
 ```typescript
 new UnauthorizedError(message?: string)
@@ -38,13 +38,13 @@ throw new UnauthorizedError('Bearer token expired');
 
 Thrown when the authentication configuration is invalid (e.g., transparent mode on a parent with multiple child providers).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AUTH_CONFIGURATION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `true` |
-| `errors` | `string[]` | List of configuration errors |
-| `suggestion` | `string \| undefined` | How to fix the issue |
+| Property     | Type                  | Value                        |
+| ------------ | --------------------- | ---------------------------- |
+| `code`       | `string`              | `AUTH_CONFIGURATION_ERROR`   |
+| `statusCode` | `number`              | `500`                        |
+| `isPublic`   | `boolean`             | `true`                       |
+| `errors`     | `string[]`            | List of configuration errors |
+| `suggestion` | `string \| undefined` | How to fix the issue         |
 
 ```typescript
 new AuthConfigurationError(message: string, options?: {
@@ -70,11 +70,11 @@ throw new AuthConfigurationError('Invalid auth configuration', {
 
 Thrown when a request arrives without a valid session. This tells the client it needs to authenticate.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `SESSION_MISSING` |
-| `statusCode` | `number` | `401` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value             |
+| ------------ | --------- | ----------------- |
+| `code`       | `string`  | `SESSION_MISSING` |
+| `statusCode` | `number`  | `401`             |
+| `isPublic`   | `boolean` | `true`            |
 
 ```typescript
 new SessionMissingError(message?: string)
@@ -95,12 +95,12 @@ throw new SessionMissingError();
 
 Thrown when a client connects with an unsupported MCP protocol version.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `UNSUPPORTED_CLIENT_VERSION` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
-| `clientVersion` | `string` | The version string from the client |
+| Property        | Type      | Value                              |
+| --------------- | --------- | ---------------------------------- |
+| `code`          | `string`  | `UNSUPPORTED_CLIENT_VERSION`       |
+| `statusCode`    | `number`  | `400`                              |
+| `isPublic`      | `boolean` | `true`                             |
+| `clientVersion` | `string`  | The version string from the client |
 
 ```typescript
 new UnsupportedClientVersionError(version: string)
@@ -126,20 +126,20 @@ Thrown when a tool requires app-level authorization the user has not yet granted
 - **Stateful**: Returns an `auth_url` link for incremental authorization
 - **Stateless**: Returns an unauthorized error (user must re-authenticate)
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AUTHORIZATION_REQUIRED` |
-| `statusCode` | `number` | `403` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | App requiring authorization |
-| `toolId` | `string` | Tool that triggered the requirement |
-| `authUrl` | `string \| undefined` | Auth URL (stateful mode only) |
-| `requiredScopes` | `string[] \| undefined` | Scopes needed |
-| `sessionMode` | `'stateful' \| 'stateless'` | Session mode |
-| `supportsIncremental` | `boolean` | Whether incremental auth is available |
-| `elicitId` | `string \| undefined` | Elicit flow ID |
-| `vaultId` | `string \| undefined` | Vault ID for stateful sessions |
-| `pendingAuthId` | `string \| undefined` | Tracking ID |
+| Property              | Type                        | Value                                 |
+| --------------------- | --------------------------- | ------------------------------------- |
+| `code`                | `string`                    | `AUTHORIZATION_REQUIRED`              |
+| `statusCode`          | `number`                    | `403`                                 |
+| `isPublic`            | `boolean`                   | `true`                                |
+| `appId`               | `string`                    | App requiring authorization           |
+| `toolId`              | `string`                    | Tool that triggered the requirement   |
+| `authUrl`             | `string \| undefined`       | Auth URL (stateful mode only)         |
+| `requiredScopes`      | `string[] \| undefined`     | Scopes needed                         |
+| `sessionMode`         | `'stateful' \| 'stateless'` | Session mode                          |
+| `supportsIncremental` | `boolean`                   | Whether incremental auth is available |
+| `elicitId`            | `string \| undefined`       | Elicit flow ID                        |
+| `vaultId`             | `string \| undefined`       | Vault ID for stateful sessions        |
+| `pendingAuthId`       | `string \| undefined`       | Tracking ID                           |
 
 ```typescript
 new AuthorizationRequiredError(params: {
@@ -157,13 +157,13 @@ new AuthorizationRequiredError(params: {
 
 **Methods:**
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `toMcpError()` | MCP error with `_meta` | Includes authorization metadata for AI agents |
-| `toAuthorizationRequiredData()` | `AuthorizationRequiredData` | Structured data object |
-| `toElicitResponse()` | `ElicitResponse \| null` | Elicit response (stateful only) |
-| `canUseIncrementalAuth()` | `boolean` | Whether link-based auth is available |
-| `getUserFacingMessage()` | `string` | Message with auth link or re-auth instructions |
+| Method                          | Returns                     | Description                                    |
+| ------------------------------- | --------------------------- | ---------------------------------------------- |
+| `toMcpError()`                  | MCP error with `_meta`      | Includes authorization metadata for AI agents  |
+| `toAuthorizationRequiredData()` | `AuthorizationRequiredData` | Structured data object                         |
+| `toElicitResponse()`            | `ElicitResponse \| null`    | Elicit response (stateful only)                |
+| `canUseIncrementalAuth()`       | `boolean`                   | Whether link-based auth is available           |
+| `getUserFacingMessage()`        | `string`                    | Message with auth link or re-auth instructions |
 
 **Example (stateful):**
 

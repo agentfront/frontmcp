@@ -69,8 +69,8 @@ export async function runDoctor(): Promise<void> {
   try {
     const entry = await resolveEntry(cwd);
     console.log(`✅ entry detected: ${path.relative(cwd, entry)}`);
-  } catch (e: any) {
-    const firstLine = (e?.message as string | undefined)?.split('\n')?.[0] ?? 'entry not found';
+  } catch (e: unknown) {
+    const firstLine = e instanceof Error ? (e.message.split('\n')[0] ?? 'entry not found') : 'entry not found';
     console.log(`❌ entry not detected — ${firstLine}`);
   }
 

@@ -13,13 +13,13 @@ Use the Nx plugin when you want monorepo-scale development: shared libraries, mu
 
 ## When to Use the Nx Plugin
 
-| Scenario | Recommendation |
-| --- | --- |
-| Single MCP server | Use `npx frontmcp create` (standalone) |
-| Multiple apps sharing code | Use `@frontmcp/nx` (monorepo) |
-| Team with shared libraries | Use `@frontmcp/nx` (monorepo) |
-| Multiple deployment targets | Use `@frontmcp/nx` (monorepo) |
-| Existing Nx workspace | Add `@frontmcp/nx` |
+| Scenario                    | Recommendation                         |
+| --------------------------- | -------------------------------------- |
+| Single MCP server           | Use `npx frontmcp create` (standalone) |
+| Multiple apps sharing code  | Use `@frontmcp/nx` (monorepo)          |
+| Team with shared libraries  | Use `@frontmcp/nx` (monorepo)          |
+| Multiple deployment targets | Use `@frontmcp/nx` (monorepo)          |
+| Existing Nx workspace       | Add `@frontmcp/nx`                     |
 
 ## Architecture
 
@@ -46,32 +46,32 @@ graph TD
     style L2 fill:#7C3AED,color:#fff
 ```
 
-| Layer | Directory | Purpose |
-| --- | --- | --- |
-| **Apps** | `apps/` | FrontMCP applications with tools, resources, prompts |
-| **Libs** | `libs/` | Shared libraries (generic, plugin, adapter, tool-register) |
-| **Servers** | `servers/` | Deployment shells that compose apps for a target platform |
+| Layer       | Directory  | Purpose                                                    |
+| ----------- | ---------- | ---------------------------------------------------------- |
+| **Apps**    | `apps/`    | FrontMCP applications with tools, resources, prompts       |
+| **Libs**    | `libs/`    | Shared libraries (generic, plugin, adapter, tool-register) |
+| **Servers** | `servers/` | Deployment shells that compose apps for a target platform  |
 
 ## Feature Summary
 
 ### Generators (14)
 
-| Category | Generators |
-| --- | --- |
-| **Structural** | `workspace`, `app`, `lib`, `server` |
-| **Component** | `tool`, `resource`, `prompt`, `skill`, `agent`, `provider`, `plugin`, `adapter`, `auth-provider`, `flow` |
+| Category       | Generators                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------- |
+| **Structural** | `workspace`, `app`, `lib`, `server`                                                                      |
+| **Component**  | `tool`, `resource`, `prompt`, `skill`, `agent`, `provider`, `plugin`, `adapter`, `auth-provider`, `flow` |
 
 ### Executors (7)
 
-| Executor | Wraps | Cacheable |
-| --- | --- | --- |
-| `build` | `frontmcp build` | Yes |
-| `build-exec` | `frontmcp build --exec` | Yes |
-| `dev` | `frontmcp dev` | No (long-running) |
-| `serve` | `frontmcp start` | No (long-running) |
-| `test` | `frontmcp test` | Yes |
-| `inspector` | `frontmcp inspector` | No (long-running) |
-| `deploy` | Platform-specific | No |
+| Executor     | Wraps                   | Cacheable         |
+| ------------ | ----------------------- | ----------------- |
+| `build`      | `frontmcp build`        | Yes               |
+| `build-exec` | `frontmcp build --exec` | Yes               |
+| `dev`        | `frontmcp dev`          | No (long-running) |
+| `serve`      | `frontmcp start`        | No (long-running) |
+| `test`       | `frontmcp test`         | Yes               |
+| `inspector`  | `frontmcp inspector`    | No (long-running) |
+| `deploy`     | Platform-specific       | No                |
 
 ## Next Steps
 

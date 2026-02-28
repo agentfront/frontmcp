@@ -253,12 +253,12 @@ getActiveServer(): Server
 
 FrontMCP supports multiple provider scopes:
 
-| Scope | Description | Lifecycle |
-|-------|-------------|-----------|
-| `SINGLETON` | Shared across all requests | Server lifetime |
-| `SESSION` | Per-session instance | Session lifetime |
-| `REQUEST` | Per-request instance | Request lifetime |
-| `CONTEXT` | Per-execution context | Context lifetime |
+| Scope       | Description                | Lifecycle        |
+| ----------- | -------------------------- | ---------------- |
+| `SINGLETON` | Shared across all requests | Server lifetime  |
+| `SESSION`   | Per-session instance       | Session lifetime |
+| `REQUEST`   | Per-request instance       | Request lifetime |
+| `CONTEXT`   | Per-execution context      | Context lifetime |
 
 <Note>
 In distributed/serverless mode, `SESSION` is normalized to `CONTEXT` to avoid stale instances.
@@ -278,11 +278,11 @@ interface ProviderViews {
 
 ## Indexes
 
-| Index | Key | Description |
-|-------|-----|-------------|
-| `providedBy` | `Token` | Which registry provided each token |
-| `order` | `number` | Topological order for instantiation |
-| `registries` | `RegistryType` | Map of registries by kind |
+| Index        | Key            | Description                         |
+| ------------ | -------------- | ----------------------------------- |
+| `providedBy` | `Token`        | Which registry provided each token  |
+| `order`      | `number`       | Topological order for instantiation |
+| `registries` | `RegistryType` | Map of registries by kind           |
 
 ## Session Caching
 

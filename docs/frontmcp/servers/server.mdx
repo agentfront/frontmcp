@@ -147,13 +147,13 @@ http: {
 }
 ```
 
-| Field         | Description                                                                   |
-| ------------- | ----------------------------------------------------------------------------- |
-| `port`        | HTTP listening port (default: 3001)                                           |
-| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery                       |
-| `hostFactory` | Custom host implementation for advanced setups                                |
-| `socketPath`  | Unix socket path; when set, server listens on a socket instead of a TCP port  |
-| `cors`        | CORS configuration (see [CORS](#cors) below)                                  |
+| Field         | Description                                                                  |
+| ------------- | ---------------------------------------------------------------------------- |
+| `port`        | HTTP listening port (default: 3001)                                          |
+| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery                      |
+| `hostFactory` | Custom host implementation for advanced setups                               |
+| `socketPath`  | Unix socket path; when set, server listens on a socket instead of a TCP port |
+| `cors`        | CORS configuration (see [CORS](#cors) below)                                 |
 
 - **Port**: listening port for Streamable HTTP.
 - **entryPath**: your MCP JSON-RPC entry (`''` or `'/mcp'`). Must align with discovery.
@@ -165,11 +165,11 @@ http: {
 
 CORS is configured via the `http.cors` option. It supports three modes:
 
-| Value          | Behavior                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| `undefined`    | **Default** — permissive CORS enabled (`origin: true`, `credentials: false`)                |
-| `false`        | CORS disabled entirely (no CORS headers are sent)                                          |
-| `CorsOptions`  | Custom CORS configuration                                                                  |
+| Value         | Behavior                                                                     |
+| ------------- | ---------------------------------------------------------------------------- |
+| `undefined`   | **Default** — permissive CORS enabled (`origin: true`, `credentials: false`) |
+| `false`       | CORS disabled entirely (no CORS headers are sent)                            |
+| `CorsOptions` | Custom CORS configuration                                                    |
 
 ```typescript
 interface CorsOptions {
@@ -183,11 +183,11 @@ interface CorsOptions {
 }
 ```
 
-| Field         | Type                                             | Default   | Description                                                    |
-| ------------- | ------------------------------------------------ | --------- | -------------------------------------------------------------- |
-| `origin`      | `boolean \| string \| string[] \| function`      | —         | Allowed origins; `true` reflects the request `Origin` header. Defaults to `true` only via the built-in `DEFAULT_CORS` when `cors` is omitted entirely.  |
-| `credentials` | `boolean`                                        | `false`   | Whether to allow credentials (cookies, authorization headers)  |
-| `maxAge`      | `number`                                         | —         | How long (in seconds) browsers may cache preflight responses   |
+| Field         | Type                                        | Default | Description                                                                                                                                            |
+| ------------- | ------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `origin`      | `boolean \| string \| string[] \| function` | —       | Allowed origins; `true` reflects the request `Origin` header. Defaults to `true` only via the built-in `DEFAULT_CORS` when `cors` is omitted entirely. |
+| `credentials` | `boolean`                                   | `false` | Whether to allow credentials (cookies, authorization headers)                                                                                          |
+| `maxAge`      | `number`                                    | —       | How long (in seconds) browsers may cache preflight responses                                                                                           |
 
 <Warning>
 The permissive default (`origin: true`, `credentials: false`) only applies when using the **built-in Express adapter** (i.e. no `hostFactory`). When a custom `hostFactory` is provided, the factory receives the full `http` config (including `cors`) but is responsible for applying CORS itself — FrontMCP does not install CORS middleware automatically.
@@ -230,6 +230,7 @@ FrontMCP automatically adds `Mcp-Session-Id` (alongside `WWW-Authenticate`) to t
   },
 })
 ```
+
 </CodeGroup>
 
 ---
@@ -264,20 +265,20 @@ The `transport` config controls session lifecycle, protocol presets, and session
 
 ### Session Lifecycle
 
-| Option              | Default      | Description                                                                 |
-| ------------------- | ------------ | --------------------------------------------------------------------------- |
-| `platformDetection` | `undefined`  | Platform detection config; set `customOnly: true` to skip built-in mappings |
+| Option              | Default     | Description                                                                 |
+| ------------------- | ----------- | --------------------------------------------------------------------------- |
+| `platformDetection` | `undefined` | Platform detection config; set `customOnly: true` to skip built-in mappings |
 
 ### Protocol Presets
 
 Use protocol presets for simplified configuration, or provide a custom config object for fine-grained control:
 
-| Preset          | Description                                      | Legacy SSE | SSE | Streamable | JSON | Stateless | Strict Session |
-| --------------- | ------------------------------------------------ | ---------- | --- | ---------- | ---- | --------- | -------------- |
-| `legacy`        | **Default** - Modern + legacy SSE support        | ✅         | ✅  | ✅         | ❌   | ❌        | ✅             |
-| `modern`        | SSE + streamable HTTP with strict sessions       | ❌         | ✅  | ✅         | ❌   | ❌        | ✅             |
-| `stateless-api` | No sessions, pure request/response               | ❌         | ❌  | ❌         | ❌   | ✅        | ❌             |
-| `full`          | All protocols enabled, maximum compatibility     | ✅         | ✅  | ✅         | ✅   | ✅        | ❌             |
+| Preset          | Description                                  | Legacy SSE | SSE | Streamable | JSON | Stateless | Strict Session |
+| --------------- | -------------------------------------------- | ---------- | --- | ---------- | ---- | --------- | -------------- |
+| `legacy`        | **Default** - Modern + legacy SSE support    | ✅         | ✅  | ✅         | ❌   | ❌        | ✅             |
+| `modern`        | SSE + streamable HTTP with strict sessions   | ❌         | ✅  | ✅         | ❌   | ❌        | ✅             |
+| `stateless-api` | No sessions, pure request/response           | ❌         | ❌  | ❌         | ❌   | ✅        | ❌             |
+| `full`          | All protocols enabled, maximum compatibility | ✅         | ✅  | ✅         | ✅   | ✅        | ❌             |
 
 <CodeGroup>
 ```ts Using a Preset
@@ -302,18 +303,19 @@ Use protocol presets for simplified configuration, or provide a custom config ob
   },
 })
 ```
+
 </CodeGroup>
 
 ### Protocol Options (for custom config)
 
-| Option          | Default (legacy) | Description                                                |
-| --------------- | ---------------- | ---------------------------------------------------------- |
-| `sse`           | `true`           | Enable SSE listener for server-initiated messages          |
-| `streamable`    | `true`           | Enable streamable HTTP transport (POST with SSE response)  |
-| `json`          | `false`          | Enable JSON-only responses (stateful HTTP)                 |
-| `stateless`     | `false`          | Enable stateless HTTP mode (no session required)           |
-| `legacy`        | `true`           | Enable legacy SSE transport for older clients              |
-| `strictSession` | `true`           | Require session ID for streamable HTTP                     |
+| Option          | Default (legacy) | Description                                               |
+| --------------- | ---------------- | --------------------------------------------------------- |
+| `sse`           | `true`           | Enable SSE listener for server-initiated messages         |
+| `streamable`    | `true`           | Enable streamable HTTP transport (POST with SSE response) |
+| `json`          | `false`          | Enable JSON-only responses (stateful HTTP)                |
+| `stateless`     | `false`          | Enable stateless HTTP mode (no session required)          |
+| `legacy`        | `true`           | Enable legacy SSE transport for older clients             |
+| `strictSession` | `true`           | Require session ID for streamable HTTP                    |
 
 <Tip>
 Use `protocol: 'legacy'` (the default) for maximum backwards compatibility with older MCP clients. Use `protocol: 'modern'` when you only need to support newer Streamable HTTP clients.
@@ -470,17 +472,17 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
 
 ### Migration Mapping
 
-| Old Path                                     | New Path                                |
-| -------------------------------------------- | --------------------------------------- |
-| `session.platformDetection`                  | `transport.platformDetection`           |
-| `auth.transport.enableLegacySSE`             | `transport.protocol.legacy`             |
-| `auth.transport.enableSseListener`           | `transport.protocol.sse`                |
-| `auth.transport.enableStreamableHttp`        | `transport.protocol.streamable`         |
-| `auth.transport.enableStatelessHttp`         | `transport.protocol.stateless`          |
-| `auth.transport.enableStatefulHttp`          | `transport.protocol.json`               |
-| `auth.transport.requireSessionForStreamable` | `transport.protocol.strictSession`      |
-| `auth.transport.recreation`                  | `transport.persistence`                 |
-| `auth.transport.recreation.redis`            | `redis` (top-level)                     |
+| Old Path                                     | New Path                           |
+| -------------------------------------------- | ---------------------------------- |
+| `session.platformDetection`                  | `transport.platformDetection`      |
+| `auth.transport.enableLegacySSE`             | `transport.protocol.legacy`        |
+| `auth.transport.enableSseListener`           | `transport.protocol.sse`           |
+| `auth.transport.enableStreamableHttp`        | `transport.protocol.streamable`    |
+| `auth.transport.enableStatelessHttp`         | `transport.protocol.stateless`     |
+| `auth.transport.enableStatefulHttp`          | `transport.protocol.json`          |
+| `auth.transport.requireSessionForStreamable` | `transport.protocol.strictSession` |
+| `auth.transport.recreation`                  | `transport.persistence`            |
+| `auth.transport.recreation.redis`            | `redis` (top-level)                |
 
 <Tip>
 Instead of individual flags, use a **protocol preset**: `'legacy'` (default), `'modern'`, `'stateless-api'`, or `'full'`.
