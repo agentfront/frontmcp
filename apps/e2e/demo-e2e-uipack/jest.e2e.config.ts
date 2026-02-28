@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
 
 const config: Config.InitialOptions = {
-  displayName: 'demo-e2e-ui',
+  displayName: 'demo-e2e-uipack',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
   testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
@@ -37,7 +37,7 @@ const config: Config.InitialOptions = {
     '^@frontmcp/uipack$': '<rootDir>/../../../libs/uipack/src/index.ts',
     '^@frontmcp/uipack/(.*)$': '<rootDir>/../../../libs/uipack/src/$1/index.ts',
   },
-  coverageDirectory: '../../../coverage/e2e/demo-e2e-ui',
+  coverageDirectory: '../../../coverage/e2e/demo-e2e-uipack',
   ...e2eCoveragePreset,
 };
 
