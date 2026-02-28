@@ -6,15 +6,8 @@
  */
 
 import React from 'react';
-import {
-  Card,
-  Badge,
-  McpBridgeProvider,
-  useToolInput,
-  useToolOutput,
-  useTheme,
-  useMcpBridgeContext,
-} from '@frontmcp/ui/react';
+import { Card, Badge } from '@frontmcp/ui/components';
+import { McpBridgeProvider, useToolInput, useToolOutput, useTheme, useMcpBridgeContext } from '@frontmcp/ui/react';
 
 // Type definitions
 interface DataPoint {
@@ -83,7 +76,7 @@ export function ChartCardWithHooks({
   // No data state
   if (!output || !output.data || output.data.length === 0) {
     return (
-      <Card title={title} variant={theme === 'dark' ? 'elevated' : 'default'}>
+      <Card title={title} elevation={theme === 'dark' ? 3 : 1}>
         <div className="text-center py-6">
           <div className="text-5xl font-light text-text-primary mb-3">--</div>
           <p className="text-sm text-text-secondary">No chart data available</p>
@@ -98,15 +91,11 @@ export function ChartCardWithHooks({
     <Card
       title={title}
       subtitle={`${data.length} data points`}
-      variant={theme === 'dark' ? 'elevated' : 'default'}
-      size="md"
-      className="max-w-lg mx-auto"
+      elevation={theme === 'dark' ? 3 : 1}
       footer={
         <div className="flex justify-between items-center">
           <p className="text-xs text-text-secondary">Using @frontmcp/ui hooks</p>
-          <Badge variant="info" size="sm">
-            Max: {maxValue}
-          </Badge>
+          <Badge variant="info" size="small" label={`Max: ${maxValue}`} />
         </div>
       }
     >

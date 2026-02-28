@@ -5,10 +5,8 @@
  */
 
 import React, { useState } from 'react';
+import { Card, Badge, Button } from '@frontmcp/ui/components';
 import {
-  Card,
-  Badge,
-  Button,
   McpBridgeProvider,
   useToolInput,
   useToolOutput,
@@ -127,7 +125,7 @@ export function FormCardWithHooks({
   // No data state
   if (!output || fields.length === 0) {
     return (
-      <Card title="Dynamic Form" variant={theme === 'dark' ? 'elevated' : 'default'}>
+      <Card title="Dynamic Form" elevation={theme === 'dark' ? 3 : 1}>
         <div className="text-center py-6">
           <div className="text-5xl font-light text-text-primary mb-3">--</div>
           <p className="text-sm text-text-secondary">No form fields configured</p>
@@ -156,17 +154,11 @@ export function FormCardWithHooks({
     <Card
       title="Dynamic Form"
       subtitle={`${fields.length} fields (${requiredCount} required)`}
-      variant={theme === 'dark' ? 'elevated' : 'default'}
-      size="md"
-      className="max-w-md mx-auto"
+      elevation={theme === 'dark' ? 3 : 1}
       footer={
         <div className="flex justify-between items-center">
           <p className="text-xs text-text-secondary">Using @frontmcp/ui hooks</p>
-          {submitted && (
-            <Badge variant="success" size="sm">
-              Submitted
-            </Badge>
-          )}
+          {submitted && <Badge variant="success" size="small" label="Submitted" />}
         </div>
       }
     >
@@ -187,7 +179,7 @@ export function FormCardWithHooks({
         ))}
 
         <div className="pt-4">
-          <Button type="submit" variant="primary" className="w-full" disabled={submitted}>
+          <Button type="submit" variant="primary" fullWidth disabled={submitted}>
             {submitted ? 'Submitted!' : submitLabel}
           </Button>
         </div>
