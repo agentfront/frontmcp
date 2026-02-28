@@ -1,0 +1,71 @@
+{
+  "name": "@frontmcp/ui-pages",
+  "version": "0.1.0",
+  "description": "FrontMCP UI Pages - Full-page React components for MCP tool authors",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "ui",
+    "pages",
+    "agentfront",
+    "frontmcp",
+    "react",
+    "mui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./*": {
+      "development": "./src/*/index.ts",
+      "require": {
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/*/index.js"
+      },
+      "import": {
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/esm/*/index.mjs"
+      }
+    },
+    "./esm": null
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@mui/material": "^6.0.0 || ^7.0.0",
+    "@emotion/react": "^11.0.0",
+    "@emotion/styled": "^11.0.0",
+    "@frontmcp/ui": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.3"
+  }
+}

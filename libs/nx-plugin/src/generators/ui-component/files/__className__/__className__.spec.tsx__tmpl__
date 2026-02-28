@@ -1,0 +1,11 @@
+import { <%= className %> } from './<%= className %>';
+
+describe('<%= className %>', () => {
+  it('should be defined', () => {
+    expect(<%= className %>).toBeDefined();
+  });
+
+  it('should be a function component', () => {
+    expect(typeof <%= className %>).toBe('function');
+  });
+});

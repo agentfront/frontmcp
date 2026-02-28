@@ -348,7 +348,10 @@
               "frontmcp/nx-plugin/generators/auth-provider",
               "frontmcp/nx-plugin/generators/flow",
               "frontmcp/nx-plugin/generators/job",
-              "frontmcp/nx-plugin/generators/workflow"
+              "frontmcp/nx-plugin/generators/workflow",
+              "frontmcp/nx-plugin/generators/ui-component",
+              "frontmcp/nx-plugin/generators/ui-page",
+              "frontmcp/nx-plugin/generators/ui-shell"
             ]
           },
           {

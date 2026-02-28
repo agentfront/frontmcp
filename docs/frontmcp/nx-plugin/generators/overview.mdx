@@ -2,7 +2,7 @@
 title: Generators Overview
 slug: nx-plugin/generators/overview
 icon: wand-magic-sparkles
-description: All 16 FrontMCP Nx generators for scaffolding projects and components
+description: All 19 FrontMCP Nx generators for scaffolding projects and components
 ---
 
 Generators scaffold code following FrontMCP conventions. Run them with:
@@ -40,3 +40,13 @@ These add components to existing projects:
 | [`flow`](/frontmcp/nx-plugin/generators/flow)                   | Generate a `@Flow` class                      | `src/flows/<name>.flow.ts`         |
 | [`job`](/frontmcp/nx-plugin/generators/job)                     | Generate a `@Job` class                       | `src/jobs/<name>.job.ts`           |
 | [`workflow`](/frontmcp/nx-plugin/generators/workflow)           | Generate a `@Workflow` class                  | `src/workflows/<name>.workflow.ts` |
+
+## UI Generators
+
+These add entries to the shared UI packages in `ui/`:
+
+| Generator                                                           | Description                                  | Output                        |
+| ------------------------------------------------------------------- | -------------------------------------------- | ----------------------------- |
+| [`ui-component`](/frontmcp/nx-plugin/generators/ui-component)       | Add a component to `ui/components/`          | `ui/components/src/<Name>/`   |
+| [`ui-page`](/frontmcp/nx-plugin/generators/ui-page)                 | Add a page to `ui/pages/`                    | `ui/pages/src/<Name>/`        |
+| [`ui-shell`](/frontmcp/nx-plugin/generators/ui-shell)               | Add a shell to `ui/shells/`                  | `ui/shells/src/<name>/`       |

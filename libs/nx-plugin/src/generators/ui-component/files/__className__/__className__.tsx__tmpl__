@@ -1,0 +1,14 @@
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+
+export interface <%= className %>Props {
+  // TODO: define props
+}
+
+export function <%= className %>(props: <%= className %>Props) {
+  return (
+    <Box>
+      <Typography>TODO: implement <%= className %></Typography>
+    </Box>
+  );
+}

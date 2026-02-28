@@ -89,6 +89,12 @@
     }
   },
   "release": {
-    "projects": ["libs/*", "plugins/*"]
+    "projects": ["libs/*", "plugins/*"],
+    "groups": {
+      "ui": {
+        "projects": ["ui-*"],
+        "releaseTagPattern": "{projectName}@{version}"
+      }
+    }
   }
 }
