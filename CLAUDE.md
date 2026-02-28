@@ -17,18 +17,6 @@ Located in `/libs/*`:
 
 > **Note:** `ast-guard`, `vectoriadb`, `enclave-vm`, `json-schema-to-zod-v3`, and `mcp-from-openapi` have been moved to external repositories.
 
-### UI Packages (in `ui/` workspace)
-
-- **@frontmcp/ui-components** (`ui/components`) - Reusable MUI-based React components for tool authors
-- **@frontmcp/ui-pages** (`ui/pages`) - Full-page React components for tool authors
-- **@frontmcp/ui-shells** (`ui/shells`) - Server-side HTML shell templates (no React)
-
-**Generators** to add new entries to existing UI packages:
-
-- `nx g @frontmcp/nx:ui-component <Name>` — PascalCase React component in `ui/components/`
-- `nx g @frontmcp/nx:ui-page <Name>` — PascalCase page in `ui/pages/`
-- `nx g @frontmcp/nx:ui-shell <name>` — kebab-case shell in `ui/shells/`
-
 ### Demo Apps
 
 Located in `/apps/*`:

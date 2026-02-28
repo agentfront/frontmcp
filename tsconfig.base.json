@@ -70,13 +70,7 @@
       "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
       "@frontmcp/auth": ["libs/auth/src/index.ts"],
       "@frontmcp/storage-sqlite": ["libs/storage-sqlite/src/index.ts"],
-      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"],
-      "@frontmcp/ui-components": ["ui/components/src/index.ts"],
-      "@frontmcp/ui-components/*": ["ui/components/src/*/index.ts"],
-      "@frontmcp/ui-pages": ["ui/pages/src/index.ts"],
-      "@frontmcp/ui-pages/*": ["ui/pages/src/*/index.ts"],
-      "@frontmcp/ui-shells": ["ui/shells/src/index.ts"],
-      "@frontmcp/ui-shells/*": ["ui/shells/src/*/index.ts"]
+      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

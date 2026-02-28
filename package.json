@@ -24,8 +24,8 @@
     "perf:fetch-baseline": "node scripts/perf-fetch-baseline.mjs",
     "perf:publish-baseline": "node scripts/perf-publish-baseline.mjs",
     "test:pw": "npx playwright test --config apps/e2e/demo-e2e-uipack/playwright.config.ts",
-    "build:ui": "nx run-many -t build --projects='ui-*'",
-    "publish:ui": "nx run-many -t publish --projects='ui-*'"
+    "build:ui": "nx run-many -t build --projects='@frontmcp/ui'",
+    "publish:ui": "nx run-many -t publish --projects='@frontmcp/ui'"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": "prettier --write"
@@ -119,8 +119,7 @@
   "workspaces": [
     "apps/*",
     "libs/*",
-    "plugins/*",
-    "ui/*"
+    "plugins/*"
   ],
   "nx": {
     "includedScripts": []
