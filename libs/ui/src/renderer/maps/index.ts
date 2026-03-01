@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
@@ -76,7 +76,10 @@ interface ReactLeafletModule {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const lazyReactLeaflet = createLazyImport<ReactLeafletModule>('react-leaflet', async () => {
-  const mod = await runtimeImportWithFallback('react-leaflet', esmShUrl('react-leaflet@5'));
+  const mod = await runtimeImportWithFallback(
+    'react-leaflet',
+    esmShUrl('react-leaflet@5', { external: ['react', 'react-dom'] }),
+  );
   return mod as unknown as ReactLeafletModule;
 });
 

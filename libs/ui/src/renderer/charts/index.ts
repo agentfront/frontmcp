@@ -67,7 +67,7 @@ interface RechartsModule {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const lazyRecharts = createLazyImport<RechartsModule>('recharts', async () => {
-  const mod = await runtimeImportWithFallback('recharts', esmShUrl('recharts@2'));
+  const mod = await runtimeImportWithFallback('recharts', esmShUrl('recharts@2', { external: ['react', 'react-dom'] }));
   return mod as unknown as RechartsModule;
 });
 

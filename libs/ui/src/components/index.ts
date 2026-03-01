@@ -27,3 +27,6 @@ export type { SelectProps, SelectOption } from './Select';
 
 export { List } from './List';
 export type { ListProps, ListItemDef } from './List';
+
+export { Loader, LoaderProvider, LoaderContext, useLoaderContext } from './Loader';
+export type { LoaderProps, LoaderVariant, CustomLoaderRender, LoaderContextValue } from './Loader';

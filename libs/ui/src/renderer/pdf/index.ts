@@ -21,7 +21,10 @@ interface ReactPdfModule {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const lazyReactPdf = createLazyImport<ReactPdfModule>('react-pdf', async () => {
-  const mod = await runtimeImportWithFallback('react-pdf', esmShUrl('react-pdf@9'));
+  const mod = await runtimeImportWithFallback(
+    'react-pdf',
+    esmShUrl('react-pdf@9', { external: ['react', 'react-dom'] }),
+  );
   return mod as unknown as ReactPdfModule;
 });
 

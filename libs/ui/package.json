@@ -179,6 +179,17 @@
         "default": "./dist/esm/components/List/index.mjs"
       }
     },
+    "./components/Loader": {
+      "development": "./src/components/Loader/index.ts",
+      "require": {
+        "types": "./dist/components/Loader/index.d.ts",
+        "default": "./dist/components/Loader/index.js"
+      },
+      "import": {
+        "types": "./dist/components/Loader/index.d.ts",
+        "default": "./dist/esm/components/Loader/index.mjs"
+      }
+    },
     "./renderer": {
       "development": "./src/renderer/index.ts",
       "require": {

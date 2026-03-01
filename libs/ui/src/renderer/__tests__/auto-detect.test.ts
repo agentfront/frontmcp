@@ -9,7 +9,7 @@ import {
   getRenderer,
   getRegisteredRenderers,
 } from '../auto-detect';
-import type { ContentRenderer, RenderOptions } from '../types';
+import type { ContentRenderer } from '../types';
 import React from 'react';
 
 // ============================================

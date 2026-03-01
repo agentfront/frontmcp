@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { navigateToRenderer, navigateToPreview, getPreviewFrame } from './helpers';
+import { navigateToRenderer, navigateToPreview } from './helpers';
 
 const RENDERER_IDS = [
   'charts',

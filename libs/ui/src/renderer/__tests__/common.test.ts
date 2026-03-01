@@ -2,7 +2,7 @@
  * Common Utilities Tests
  */
 
-import { createLazyImport, type LazyImport } from '../common/lazy-import';
+import { createLazyImport } from '../common/lazy-import';
 import { injectStylesheet } from '../common/inject-stylesheet';
 
 // ============================================

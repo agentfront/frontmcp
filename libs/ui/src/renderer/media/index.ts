@@ -1,6 +1,5 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import Box from '@mui/material/Box';
-import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
 import { styled } from '@mui/material/styles';
 import { createLazyImport, runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
@@ -48,7 +47,10 @@ interface ReactPlayerModule {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const lazyReactPlayer = createLazyImport<ReactPlayerModule>('react-player', async () => {
-  const mod = await runtimeImportWithFallback('react-player', esmShUrl('react-player@2'));
+  const mod = await runtimeImportWithFallback(
+    'react-player',
+    esmShUrl('react-player@2', { external: ['react', 'react-dom'] }),
+  );
   return mod as unknown as ReactPlayerModule;
 });
 

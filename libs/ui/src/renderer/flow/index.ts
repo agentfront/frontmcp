@@ -1,13 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
-import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import { createLazyImport, runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
+import { injectStylesheet } from '../common/inject-stylesheet';
 import { useRendererTheme } from '../common/use-renderer-theme';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
+
+// ============================================
+// Constants
+// ============================================
+
+const XYFLOW_CSS_URL = 'https://esm.sh/@xyflow/react@12/dist/style.css';
+const XYFLOW_CSS_ID = 'fmcp-xyflow-css';
 
 // ============================================
 // Types
@@ -64,7 +71,10 @@ interface XYFlowModule {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const lazyXYFlow = createLazyImport<XYFlowModule>('@xyflow/react', async () => {
-  const mod = await runtimeImportWithFallback('@xyflow/react', esmShUrl('@xyflow/react@12'));
+  const mod = await runtimeImportWithFallback(
+    '@xyflow/react',
+    esmShUrl('@xyflow/react@12', { external: ['react', 'react-dom'] }),
+  );
   return mod as unknown as XYFlowModule;
 });
 
@@ -92,6 +102,10 @@ interface FlowViewProps {
 }
 
 function FlowView({ config, className }: FlowViewProps): React.ReactElement {
+  useEffect(() => {
+    injectStylesheet(XYFLOW_CSS_URL, XYFLOW_CSS_ID);
+  }, []);
+
   const themeValues = useRendererTheme();
   const xyflow = useLazyModule(lazyXYFlow);
   const height = config.height ?? 500;

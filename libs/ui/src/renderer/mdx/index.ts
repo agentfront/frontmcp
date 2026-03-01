@@ -26,7 +26,10 @@ interface ReactMarkdownProps {
 const lazyReactMarkdown = createLazyImport<{ default: React.ComponentType<ReactMarkdownProps> }>(
   'react-markdown',
   async () => {
-    const mod = await runtimeImportWithFallback('react-markdown', esmShUrl('react-markdown@9'));
+    const mod = await runtimeImportWithFallback(
+      'react-markdown',
+      esmShUrl('react-markdown@9', { external: ['react', 'react-dom'] }),
+    );
     return mod as unknown as { default: React.ComponentType<ReactMarkdownProps> };
   },
 );
