@@ -72,11 +72,12 @@ export function ChartCardWithHooks({
 
   const theme = useTheme();
   const title = input?.title || 'Chart';
+  const cardElevation = theme === 'dark' ? 3 : 1;
 
   // No data state
   if (!output || !output.data || output.data.length === 0) {
     return (
-      <Card title={title} elevation={theme === 'dark' ? 3 : 1}>
+      <Card title={title} elevation={cardElevation}>
         <div className="text-center py-6">
           <div className="text-5xl font-light text-text-primary mb-3">--</div>
           <p className="text-sm text-text-secondary">No chart data available</p>
@@ -91,7 +92,7 @@ export function ChartCardWithHooks({
     <Card
       title={title}
       subtitle={`${data.length} data points`}
-      elevation={theme === 'dark' ? 3 : 1}
+      elevation={cardElevation}
       footer={
         <div className="flex justify-between items-center">
           <p className="text-xs text-text-secondary">Using @frontmcp/ui hooks</p>

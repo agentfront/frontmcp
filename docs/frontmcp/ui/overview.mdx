@@ -182,7 +182,6 @@ Add a visual widget to your tool in just a few lines:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { Card, Badge } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({
@@ -192,14 +191,15 @@ import { z } from 'zod';
     location: z.string().describe('City name'),
   },
   ui: {
-    template: (ctx) => card(`
-      <div class="text-4xl mb-4">🌤️</div>
-      <div class="text-2xl font-bold">${ctx.output.temperature}°C</div>
-      <div class="text-gray-600">${ctx.output.conditions}</div>
-    `, {
-      title: ctx.output.location,
-      subtitle: 'Current Weather',
-    }),
+    template: (ctx) => `
+      <div style="border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
+        <h3 style="margin:0 0 4px;">${ctx.helpers.escapeHtml(ctx.output.location)}</h3>
+        <p style="color:#718096; margin:0 0 12px;">Current Weather</p>
+        <div style="font-size:2.5rem; margin-bottom:8px;">🌤️</div>
+        <div style="font-size:1.5rem; font-weight:bold;">${ctx.output.temperature}°C</div>
+        <div style="color:#718096;">${ctx.helpers.escapeHtml(ctx.output.conditions)}</div>
+      </div>
+    `,
   },
 })
 export class GetWeatherTool extends ToolContext {

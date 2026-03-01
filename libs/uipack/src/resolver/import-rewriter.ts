@@ -76,6 +76,8 @@ export function rewriteImports(source: string, options: ResolverOptions = {}): R
     const doubleQuotePattern = new RegExp(`((?:import|export)\\s+(?:[^'"]*\\s+)?from\\s+)"${escaped}"`, 'g');
     const dynamicSinglePattern = new RegExp(`(import\\s*\\(\\s*)'${escaped}'`, 'g');
     const dynamicDoublePattern = new RegExp(`(import\\s*\\(\\s*)"${escaped}"`, 'g');
+    const sideEffectSinglePattern = new RegExp(`(import\\s+)'${escaped}'`, 'g');
+    const sideEffectDoublePattern = new RegExp(`(import\\s+)"${escaped}"`, 'g');
 
     const beforeLength = code.length;
 
@@ -83,7 +85,9 @@ export function rewriteImports(source: string, options: ResolverOptions = {}): R
       .replace(singleQuotePattern, `$1'${cdnUrl}'`)
       .replace(doubleQuotePattern, `$1"${cdnUrl}"`)
       .replace(dynamicSinglePattern, `$1'${cdnUrl}'`)
-      .replace(dynamicDoublePattern, `$1"${cdnUrl}"`);
+      .replace(dynamicDoublePattern, `$1"${cdnUrl}"`)
+      .replace(sideEffectSinglePattern, `$1'${cdnUrl}'`)
+      .replace(sideEffectDoublePattern, `$1"${cdnUrl}"`);
 
     if (code.length !== beforeLength || code !== source) {
       rewrites.set(specifier, cdnUrl);

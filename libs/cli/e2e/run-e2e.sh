@@ -500,13 +500,13 @@ echo ""
 echo "Test 15: Run produced CLI --help"
 cd "$TEST_DIR/test-docker-app"
 
-if node "dist/${APP_NAME}-cli.bundle.js" --help > /dev/null 2>&1; then
+help_output=$(node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1) && help_exit=0 || help_exit=$?
+if [ "$help_exit" -eq 0 ]; then
   echo "  ✅ CLI --help exited successfully"
-  # Show output for debugging
-  node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1 | head -5 | sed 's/^/    /'
+  echo "$help_output" | head -5 | sed 's/^/    /'
 else
-  echo "  ❌ CLI --help failed (exit code: $?)"
-  node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1 | tail -5 | sed 's/^/    /'
+  echo "  ❌ CLI --help failed (exit code: $help_exit)"
+  echo "$help_output" | tail -5 | sed 's/^/    /'
   exit 1
 fi
 

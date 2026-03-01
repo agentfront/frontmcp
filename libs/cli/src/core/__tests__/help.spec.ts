@@ -62,7 +62,8 @@ describe('customizeHelp', () => {
 
   it('should show subcommand help for build', () => {
     const program = createProgram();
-    const buildCmd = program.commands.find((c) => c.name() === 'build')!;
+    const buildCmd = program.commands.find((c) => c.name() === 'build');
+    if (!buildCmd) throw new Error('Expected build command to exist');
     let output = '';
     buildCmd.configureOutput({ writeOut: (str) => (output += str) });
     buildCmd.outputHelp();

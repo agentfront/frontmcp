@@ -15,7 +15,18 @@
 /**
  * Content types supported by the browser runtime.
  */
-export type RuntimeContentType = 'jsx' | 'mdx' | 'html';
+export type RuntimeContentType =
+  | 'jsx'
+  | 'mdx'
+  | 'html'
+  | 'chart'
+  | 'mermaid'
+  | 'flow'
+  | 'math'
+  | 'map'
+  | 'image'
+  | 'video'
+  | 'audio';
 
 // ============================================
 // Detection Patterns
@@ -63,6 +74,62 @@ const MDX_PATTERNS = [
   /(?:\*\*|__).+?(?:\*\*|__)/,
 ];
 
+/**
+ * Patterns that indicate chart JSON content.
+ */
+const CHART_PATTERN = /^\s*\{[\s\S]*"type"\s*:\s*"(?:bar|line|area|pie|scatter|radar|composed)"[\s\S]*"data"\s*:/;
+
+/**
+ * Patterns that indicate mermaid diagram content.
+ */
+const MERMAID_PATTERN =
+  /^\s*(?:graph|sequenceDiagram|classDiagram|stateDiagram|flowchart|erDiagram|gantt|pie|journey|gitGraph)\b/;
+
+/**
+ * Patterns that indicate ReactFlow JSON content.
+ */
+const FLOW_PATTERN = /^\s*\{[\s\S]*"nodes"\s*:\s*\[[\s\S]*"edges"\s*:\s*\[/;
+
+/**
+ * Patterns that indicate math/LaTeX content.
+ */
+const MATH_PATTERNS = [
+  /\$\$.+?\$\$/s,
+  /\$[^$\n]+?\$/,
+  /\\\[[\s\S]+?\\\]/,
+  /\\\([\s\S]+?\\\)/,
+  /\\begin\{(?:equation|align|gather|matrix|pmatrix|bmatrix|cases)\}/,
+];
+
+/**
+ * Patterns that indicate GeoJSON / map content.
+ */
+const MAP_PATTERN =
+  /^\s*\{[\s\S]*"type"\s*:\s*"(?:FeatureCollection|Feature|Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)"/;
+
+/**
+ * Image URL / data URI patterns.
+ */
+const IMAGE_PATTERNS = [
+  /^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml)[;,]/,
+  /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|avif|ico)(?:\?.*)?$/i,
+];
+
+/**
+ * Media URL patterns (video/audio).
+ */
+const VIDEO_PATTERNS = [
+  /^https?:\/\/.+\.(?:mp4|webm|ogg|mov)(?:\?.*)?$/i,
+  /^https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|vimeo\.com)\//i,
+  /^data:video\//,
+];
+
+const AUDIO_PATTERNS = [
+  /^https?:\/\/.+\.(?:mp3|wav|ogg|aac|flac|m4a)(?:\?.*)?$/i,
+  /^https?:\/\/(?:www\.)?soundcloud\.com\//i,
+  /^data:audio\//,
+];
+
 // ============================================
 // Detection Functions
 // ============================================
@@ -71,9 +138,17 @@ const MDX_PATTERNS = [
  * Detect the content type of a source string.
  *
  * Priority:
- * 1. JSX — if the content contains JSX-specific patterns (capitalized tags, hooks, React imports)
- * 2. MDX — if the content contains Markdown patterns (headings, frontmatter, lists)
- * 3. HTML — fallback for everything else
+ * 1. Chart JSON
+ * 2. Flow JSON
+ * 3. Map/GeoJSON
+ * 4. Mermaid diagram syntax
+ * 5. Math/LaTeX
+ * 6. Image URL/data URI
+ * 7. Video URL
+ * 8. Audio URL
+ * 9. JSX
+ * 10. MDX/Markdown
+ * 11. HTML (fallback)
  *
  * @param content - Source content to analyze
  * @returns Detected content type
@@ -83,6 +158,8 @@ const MDX_PATTERNS = [
  * detectContentType('<Card title="Hello" />');      // 'jsx'
  * detectContentType('# Hello World\n\nSome text');  // 'mdx'
  * detectContentType('<div class="foo">bar</div>');  // 'html'
+ * detectContentType('graph TD; A-->B');              // 'mermaid'
+ * detectContentType('$$E = mc^2$$');                 // 'math'
  * ```
  */
 export function detectContentType(content: string): RuntimeContentType {
@@ -92,7 +169,21 @@ export function detectContentType(content: string): RuntimeContentType {
 
   const trimmed = content.trim();
 
-  // Check for JSX patterns (highest priority)
+  // Structured JSON types (check before text-based)
+  if (CHART_PATTERN.test(trimmed)) return 'chart';
+  if (FLOW_PATTERN.test(trimmed)) return 'flow';
+  if (MAP_PATTERN.test(trimmed)) return 'map';
+
+  // Diagram / math syntax
+  if (MERMAID_PATTERN.test(trimmed)) return 'mermaid';
+  if (MATH_PATTERNS.some((p) => p.test(trimmed))) return 'math';
+
+  // Media types (usually single-line URLs)
+  if (IMAGE_PATTERNS.some((p) => p.test(trimmed))) return 'image';
+  if (VIDEO_PATTERNS.some((p) => p.test(trimmed))) return 'video';
+  if (AUDIO_PATTERNS.some((p) => p.test(trimmed))) return 'audio';
+
+  // Check for JSX patterns (highest priority among text types)
   const jsxScore = countMatches(trimmed, JSX_PATTERNS);
 
   // Check for MDX/Markdown patterns

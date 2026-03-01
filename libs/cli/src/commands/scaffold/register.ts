@@ -12,15 +12,20 @@ export function registerScaffoldCommands(program: Command): void {
     .option('--cicd', 'Enable GitHub Actions CI/CD')
     .option('--no-cicd', 'Disable GitHub Actions CI/CD')
     .option('--nx', 'Scaffold an Nx monorepo instead of standalone project')
-    .action(async (name: string | undefined, options) => {
-      const { runCreate } = await import('./create.js');
-      await runCreate(name, {
-        yes: options.yes,
-        target: options.target,
-        redis: options.redis,
-        cicd: options.cicd,
-        pm: options.pm,
-        nx: options.nx,
-      });
-    });
+    .action(
+      async (
+        name: string | undefined,
+        options: { yes?: boolean; target?: string; redis?: string; pm?: string; cicd?: boolean; nx?: boolean },
+      ) => {
+        const { runCreate } = await import('./create.js');
+        await runCreate(name, {
+          yes: options.yes,
+          target: options.target,
+          redis: options.redis,
+          cicd: options.cicd,
+          pm: options.pm,
+          nx: options.nx,
+        });
+      },
+    );
 }

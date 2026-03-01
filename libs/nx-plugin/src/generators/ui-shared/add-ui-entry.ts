@@ -57,8 +57,10 @@ export function addUiEntry(tree: Tree, options: AddUiEntryOptions): void {
   if (tree.exists(barrelPath)) {
     const existing = tree.read(barrelPath, 'utf-8') ?? '';
     const exportLine = `export * from './${entryName}';\n`;
-    if (!existing.includes(`./${entryName}'`)) {
-      tree.write(barrelPath, existing + exportLine);
+    const duplicatePattern = new RegExp(`^export \\* from '\\./${entryName}';?$`, 'm');
+    if (!duplicatePattern.test(existing)) {
+      const normalized = existing.endsWith('\n') || existing === '' ? existing : existing + '\n';
+      tree.write(barrelPath, normalized + exportLine);
     }
   }
 }

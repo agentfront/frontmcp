@@ -135,7 +135,6 @@ ui: {
 
 ```typescript title="src/tools/user-profile.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { Card, Badge, Button, Alert } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({
@@ -148,27 +147,29 @@ import { z } from 'zod';
     template: (ctx) => {
       const { output, helpers } = ctx;
 
-      return card(`
-        <div class="flex items-center gap-4">
-          <img
-            src="${helpers.escapeHtml(output.avatar)}"
-            class="w-16 h-16 rounded-full"
-            alt="Avatar"
-          />
-          <div>
-            <h2 class="text-xl font-bold">
-              ${helpers.escapeHtml(output.name)}
-            </h2>
-            <p class="text-gray-600">
-              ${helpers.escapeHtml(output.email)}
-            </p>
+      return `
+        <div style="border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
+          <h3 style="margin:0 0 12px;">User Profile</h3>
+          <div style="display:flex; align-items:center; gap:16px;">
+            <img
+              src="${helpers.escapeHtml(output.avatar)}"
+              style="width:64px; height:64px; border-radius:50%;"
+              alt="Avatar"
+            />
+            <div>
+              <h2 style="font-size:1.25rem; font-weight:bold; margin:0;">
+                ${helpers.escapeHtml(output.name)}
+              </h2>
+              <p style="color:#718096; margin:4px 0 0;">
+                ${helpers.escapeHtml(output.email)}
+              </p>
+            </div>
+            <span style="background:#3182ce; color:#fff; padding:2px 10px; border-radius:9999px; font-size:0.875rem;">
+              ${helpers.escapeHtml(output.role)}
+            </span>
           </div>
-          ${badge(output.role, { variant: 'primary', pill: true })}
         </div>
-      `, {
-        title: 'User Profile',
-        footer: button('Edit Profile', { variant: 'outline', size: 'sm' }),
-      });
+      `;
     },
   },
 })

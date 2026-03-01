@@ -211,7 +211,7 @@ frontmcp socket ./src/main.ts --background --db ./data.db
 
 ### Architecture
 
-```
+```text
 libs/cli/src/
 ├── core/               # CLI entry, program factory, args, help, bridge
 │   ├── cli.ts          # Entry point (bin)

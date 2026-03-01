@@ -1,4 +1,4 @@
-// file: libs/cli/src/utils/fs.ts
+// file: libs/cli/src/shared/fs.ts
 // CLI-specific file system utilities
 
 import * as path from 'path';

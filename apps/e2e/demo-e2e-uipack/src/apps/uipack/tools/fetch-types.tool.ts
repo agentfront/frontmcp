@@ -3,9 +3,15 @@ import { z } from 'zod';
 import { createTypeFetcher } from '@frontmcp/uipack';
 
 const inputSchema = {
-  imports: z.array(z.string()).describe('Array of import statements to fetch types for'),
-  maxDepth: z.number().optional().default(2).describe('Maximum depth for recursive dependency resolution'),
-  timeout: z.number().optional().default(10000).describe('Timeout in milliseconds per request'),
+  imports: z.array(z.string()).max(50).describe('Array of import statements to fetch types for'),
+  maxDepth: z
+    .number()
+    .min(1)
+    .max(10)
+    .optional()
+    .default(2)
+    .describe('Maximum depth for recursive dependency resolution'),
+  timeout: z.number().min(1000).max(30000).optional().default(10000).describe('Timeout in milliseconds per request'),
 };
 
 const outputSchema = z.object({

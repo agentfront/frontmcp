@@ -4,8 +4,8 @@ import { getVault } from '../data/vault.store';
 
 const inputSchema = {
   entryId: z.string().describe('Vault entry ID'),
-  appId: z.string().optional().describe('Filter by application ID'),
-  providerId: z.string().optional().describe('Filter by provider ID (requires appId)'),
+  appId: z.string().min(1).optional().describe('Filter by application ID'),
+  providerId: z.string().min(1).optional().describe('Filter by provider ID (requires appId)'),
 };
 
 type CredentialsInput = z.output<z.ZodObject<typeof inputSchema>>;

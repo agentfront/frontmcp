@@ -1,4 +1,4 @@
-import { isProcessAlive } from '../pidfile';
+import { isProcessAlive, readPidFile, removePidFile } from '../pidfile';
 
 describe('pm.pidfile', () => {
   describe('isProcessAlive', () => {
@@ -14,8 +14,6 @@ describe('pm.pidfile', () => {
 
   describe('readPidFile', () => {
     it('should return null for non-existent file', () => {
-      // Import directly - uses real paths but we use a name that won't exist
-      const { readPidFile } = require('../pidfile');
       const result = readPidFile('__nonexistent_test_app_' + Date.now());
       expect(result).toBeNull();
     });
@@ -23,7 +21,6 @@ describe('pm.pidfile', () => {
 
   describe('removePidFile', () => {
     it('should not throw for non-existent file', () => {
-      const { removePidFile } = require('../pidfile');
       expect(() => removePidFile('__nonexistent_test_app_' + Date.now())).not.toThrow();
     });
   });

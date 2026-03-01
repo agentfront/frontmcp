@@ -160,7 +160,8 @@ describe('addUiEntry', () => {
       addUiEntry(tree, defaultOptions);
       addUiEntry(tree, defaultOptions);
 
-      const barrel = tree.read('ui/components/src/index.ts', 'utf-8')!;
+      const barrel = tree.read('ui/components/src/index.ts', 'utf-8');
+      if (!barrel) throw new Error('Expected barrel index.ts to exist');
       const matches = barrel.match(/export \* from '\.\/LoginForm'/g);
       expect(matches).toHaveLength(1);
     });

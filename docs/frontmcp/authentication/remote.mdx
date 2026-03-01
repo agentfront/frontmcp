@@ -165,7 +165,7 @@ export class Server {}
 | `clientSecret`              | `string`   | -            | OAuth client secret (confidential clients) |
 | `scopes`                    | `string[]` | `['openid']` | Scopes to request from IdP                 |
 | `providerConfig.dcrEnabled` | `boolean`  | `false`      | Use Dynamic Client Registration            |
-| `consent`                   | `boolean`  | `false`      | Show consent UI after IdP login            |
+| `consent`                   | `ConsentConfig` | `{ enabled: false }` | Show consent UI after IdP login       |
 
 ### When to Use Orchestrated Remote
 

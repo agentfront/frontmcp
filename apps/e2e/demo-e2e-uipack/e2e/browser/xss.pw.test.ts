@@ -66,11 +66,11 @@ test.describe('Unicode Safety', () => {
       output: { text: 'line\u2028separator\u2029paragraph' },
     });
 
-    await page.goto(url);
-
     // Page should load without JS errors
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto(url);
 
     // Content should render
     const appEl = page.locator('#app');

@@ -9,7 +9,7 @@ export function registerPackageCommands(program: Command): void {
     .option('--registry <url>', 'npm registry URL for private packages')
     .option('-y, --yes', 'Silent mode (use defaults, skip questionnaire)')
     .option('-p, --port <N>', 'Override default port', parseInt)
-    .action(async (source: string, options) => {
+    .action(async (source: string, options: { registry?: string; yes?: boolean; port?: number }) => {
       const { runInstall } = await import('./install.js');
       await runInstall(toParsedArgs('install', [source], options));
     });
@@ -28,7 +28,7 @@ export function registerPackageCommands(program: Command): void {
     .description('Re-run setup questionnaire for an installed app')
     .argument('<name>', 'App name')
     .option('-y, --yes', 'Silent mode (use defaults)')
-    .action(async (name: string, options) => {
+    .action(async (name: string, options: { yes?: boolean }) => {
       const { runConfigure } = await import('./configure.js');
       await runConfigure(toParsedArgs('configure', [name], options));
     });

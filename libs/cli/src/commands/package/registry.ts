@@ -16,7 +16,8 @@ export function readRegistry(): FrontmcpRegistry {
     if (!fs.existsSync(filePath)) return emptyRegistry();
     const content = fs.readFileSync(filePath, 'utf-8');
     return JSON.parse(content) as FrontmcpRegistry;
-  } catch {
+  } catch (err) {
+    console.error(`Failed to read registry at ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
     return emptyRegistry();
   }
 }

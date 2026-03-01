@@ -30,8 +30,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/cli.ts",
-    "dev-inspect": "tsx src/cli.ts inspector",
+    "dev": "tsx src/core/cli.ts",
+    "dev-inspect": "tsx src/core/cli.ts inspector",
     "prepare": "npm run build"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-// file: libs/cli/src/utils/env.ts
+// file: libs/cli/src/shared/env.ts
 // CLI-specific environment loading utilities
 
 import * as fs from 'fs';

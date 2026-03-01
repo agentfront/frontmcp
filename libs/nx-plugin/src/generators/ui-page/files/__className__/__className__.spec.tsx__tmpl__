@@ -1,3 +1,4 @@
+import { render } from '@testing-library/react';
 import { <%= className %> } from './<%= className %>';
 
 describe('<%= className %>', () => {
@@ -7,5 +8,10 @@ describe('<%= className %>', () => {
 
   it('should be a function component', () => {
     expect(typeof <%= className %>).toBe('function');
+  });
+
+  it('should render without crashing', () => {
+    const { container } = render(<<%= className %> />);
+    expect(container).toBeTruthy();
   });
 });

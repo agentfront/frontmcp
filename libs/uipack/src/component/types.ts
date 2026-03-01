@@ -25,6 +25,7 @@ export interface FileSource {
 /** Mode 3: Direct URL import */
 export interface ImportSource {
   import: string;
+  exportName?: string;
 }
 
 /** Mode 4: Inline template function */

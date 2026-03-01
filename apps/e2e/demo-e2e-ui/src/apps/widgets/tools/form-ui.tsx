@@ -114,6 +114,7 @@ export function FormCardWithHooks({
 
   const theme = useTheme();
   const [sendMessage] = useSendMessage();
+  const cardElevation = theme === 'dark' ? 3 : 1;
 
   // Form state
   const [formValues, setFormValues] = useState<Record<string, string>>({});
@@ -125,7 +126,7 @@ export function FormCardWithHooks({
   // No data state
   if (!output || fields.length === 0) {
     return (
-      <Card title="Dynamic Form" elevation={theme === 'dark' ? 3 : 1}>
+      <Card title="Dynamic Form" elevation={cardElevation}>
         <div className="text-center py-6">
           <div className="text-5xl font-light text-text-primary mb-3">--</div>
           <p className="text-sm text-text-secondary">No form fields configured</p>
@@ -154,7 +155,7 @@ export function FormCardWithHooks({
     <Card
       title="Dynamic Form"
       subtitle={`${fields.length} fields (${requiredCount} required)`}
-      elevation={theme === 'dark' ? 3 : 1}
+      elevation={cardElevation}
       footer={
         <div className="flex justify-between items-center">
           <p className="text-xs text-text-secondary">Using @frontmcp/ui hooks</p>

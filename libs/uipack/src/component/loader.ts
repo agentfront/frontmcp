@@ -92,7 +92,7 @@ function resolveImportSource(source: ImportSource): ResolvedComponent {
   return {
     mode: 'module',
     url: source.import,
-    exportName: 'default',
+    exportName: source.exportName ?? 'default',
     meta: { ...DEFAULT_META },
     peerDependencies: [],
   };

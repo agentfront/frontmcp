@@ -10,8 +10,8 @@ import { createProgram } from './program';
 import { c } from './colors';
 
 async function main(): Promise<void> {
-  const program = createProgram();
   try {
+    const program = createProgram();
     await program.parseAsync(process.argv);
   } catch (err: unknown) {
     console.error('\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)));

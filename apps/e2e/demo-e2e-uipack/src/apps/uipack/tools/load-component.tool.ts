@@ -42,7 +42,7 @@ export default class LoadComponentTool extends ToolContext<typeof inputSchema, t
         if (!input.importUrl) {
           throw new Error('importUrl is required for import source');
         }
-        source = { import: input.importUrl };
+        source = { import: input.importUrl, exportName: input.exportName };
         break;
       case 'function':
         source = (_input: unknown, _output: unknown) => '<div>Function component rendered</div>';

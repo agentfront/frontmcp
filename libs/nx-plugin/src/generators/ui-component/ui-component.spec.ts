@@ -76,7 +76,8 @@ describe('ui-component generator', () => {
   it('should generate correct component file content', async () => {
     await uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true });
 
-    const content = tree.read('ui/components/src/LoginForm/LoginForm.tsx', 'utf-8')!;
+    const content = tree.read('ui/components/src/LoginForm/LoginForm.tsx', 'utf-8');
+    if (!content) throw new Error('Expected LoginForm.tsx to exist');
     expect(content).toContain("import React from 'react'");
     expect(content).toContain("import { Box, Typography } from '@mui/material'");
     expect(content).toContain('export interface LoginFormProps');
@@ -86,7 +87,8 @@ describe('ui-component generator', () => {
   it('should generate index barrel with correct exports', async () => {
     await uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true });
 
-    const index = tree.read('ui/components/src/LoginForm/index.ts', 'utf-8')!;
+    const index = tree.read('ui/components/src/LoginForm/index.ts', 'utf-8');
+    if (!index) throw new Error('Expected LoginForm/index.ts to exist');
     expect(index).toContain("export { LoginForm } from './LoginForm'");
     expect(index).toContain("export { LoginForm as default } from './LoginForm'");
     expect(index).toContain("export type { LoginFormProps } from './LoginForm'");
@@ -100,7 +102,8 @@ describe('ui-component generator', () => {
     const cjs = project.targets['build-cjs'].options.additionalEntryPoints;
     expect(cjs.filter((e: string) => e.includes('LoginForm'))).toHaveLength(1);
 
-    const barrel = tree.read('ui/components/src/index.ts', 'utf-8')!;
+    const barrel = tree.read('ui/components/src/index.ts', 'utf-8');
+    if (!barrel) throw new Error('Expected barrel index.ts to exist');
     const matches = barrel.match(/export \* from '\.\/LoginForm'/g);
     expect(matches).toHaveLength(1);
   });
@@ -108,7 +111,7 @@ describe('ui-component generator', () => {
   it('should not crash when project.json is missing', async () => {
     tree.delete('ui/components/project.json');
 
-    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.not.toThrow();
+    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.toBeUndefined();
 
     expect(tree.exists('ui/components/src/LoginForm/LoginForm.tsx')).toBe(true);
   });
@@ -116,7 +119,7 @@ describe('ui-component generator', () => {
   it('should not crash when tsconfig.base.json is missing', async () => {
     tree.delete('tsconfig.base.json');
 
-    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.not.toThrow();
+    await expect(uiComponentGenerator(tree, { name: 'LoginForm', skipFormat: true })).resolves.toBeUndefined();
 
     expect(tree.exists('ui/components/src/LoginForm/LoginForm.tsx')).toBe(true);
   });
