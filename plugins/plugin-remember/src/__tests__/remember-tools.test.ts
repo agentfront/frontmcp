@@ -1,6 +1,7 @@
 // file: plugins/plugin-remember/src/__tests__/remember-tools.test.ts
 
 import 'reflect-metadata';
+import { z } from 'zod';
 import { rememberThisInputSchema, rememberThisOutputSchema } from '../tools/remember-this.tool';
 import { recallInputSchema, recallOutputSchema } from '../tools/recall.tool';
 import { forgetInputSchema, forgetOutputSchema } from '../tools/forget.tool';
@@ -9,15 +10,16 @@ import { listMemoriesInputSchema, listMemoriesOutputSchema } from '../tools/list
 describe('Remember Tools', () => {
   describe('RememberThisTool', () => {
     describe('schema validation', () => {
+      const rememberThisSchema = z.object(rememberThisInputSchema);
       it('should validate valid input', () => {
         const input = { key: 'test_key', value: 'test_value' };
-        const result = rememberThisInputSchema.safeParse(input);
+        const result = rememberThisSchema.safeParse(input);
         expect(result.success).toBe(true);
       });
 
       it('should require non-empty key', () => {
         const input = { key: '', value: 'test' };
-        const result = rememberThisInputSchema.safeParse(input);
+        const result = rememberThisSchema.safeParse(input);
         expect(result.success).toBe(false);
       });
 
@@ -30,7 +32,7 @@ describe('Remember Tools', () => {
           { key: 'k', value: null },
         ];
         inputs.forEach((input) => {
-          const result = rememberThisInputSchema.safeParse(input);
+          const result = rememberThisSchema.safeParse(input);
           expect(result.success).toBe(true);
         });
       });
@@ -38,30 +40,30 @@ describe('Remember Tools', () => {
       it('should accept valid scope values', () => {
         const scopes = ['session', 'user', 'tool', 'global'];
         scopes.forEach((scope) => {
-          const result = rememberThisInputSchema.safeParse({ key: 'k', value: 'v', scope });
+          const result = rememberThisSchema.safeParse({ key: 'k', value: 'v', scope });
           expect(result.success).toBe(true);
         });
       });
 
       it('should reject invalid scope', () => {
-        const result = rememberThisInputSchema.safeParse({ key: 'k', value: 'v', scope: 'invalid' });
+        const result = rememberThisSchema.safeParse({ key: 'k', value: 'v', scope: 'invalid' });
         expect(result.success).toBe(false);
       });
 
       it('should accept positive ttl', () => {
-        const result = rememberThisInputSchema.safeParse({ key: 'k', value: 'v', ttl: 3600 });
+        const result = rememberThisSchema.safeParse({ key: 'k', value: 'v', ttl: 3600 });
         expect(result.success).toBe(true);
       });
 
       it('should reject non-positive ttl', () => {
-        expect(rememberThisInputSchema.safeParse({ key: 'k', value: 'v', ttl: 0 }).success).toBe(false);
-        expect(rememberThisInputSchema.safeParse({ key: 'k', value: 'v', ttl: -1 }).success).toBe(false);
+        expect(rememberThisSchema.safeParse({ key: 'k', value: 'v', ttl: 0 }).success).toBe(false);
+        expect(rememberThisSchema.safeParse({ key: 'k', value: 'v', ttl: -1 }).success).toBe(false);
       });
 
       it('should accept valid brand values', () => {
         const brands = ['preference', 'cache', 'state', 'conversation', 'custom'];
         brands.forEach((brand) => {
-          const result = rememberThisInputSchema.safeParse({ key: 'k', value: 'v', brand });
+          const result = rememberThisSchema.safeParse({ key: 'k', value: 'v', brand });
           expect(result.success).toBe(true);
         });
       });
@@ -114,18 +116,20 @@ describe('Remember Tools', () => {
 
   describe('ForgetTool', () => {
     describe('schema validation', () => {
+      const forgetSchema = z.object(forgetInputSchema);
+
       it('should validate valid input', () => {
-        const result = forgetInputSchema.safeParse({ key: 'test_key' });
+        const result = forgetSchema.safeParse({ key: 'test_key' });
         expect(result.success).toBe(true);
       });
 
       it('should require non-empty key', () => {
-        const result = forgetInputSchema.safeParse({ key: '' });
+        const result = forgetSchema.safeParse({ key: '' });
         expect(result.success).toBe(false);
       });
 
       it('should accept valid scope', () => {
-        const result = forgetInputSchema.safeParse({ key: 'k', scope: 'user' });
+        const result = forgetSchema.safeParse({ key: 'k', scope: 'user' });
         expect(result.success).toBe(true);
       });
 
@@ -139,34 +143,36 @@ describe('Remember Tools', () => {
 
   describe('ListMemoriesTool', () => {
     describe('schema validation', () => {
+      const listMemoriesSchema = z.object(listMemoriesInputSchema);
+
       it('should validate empty input', () => {
-        const result = listMemoriesInputSchema.safeParse({});
+        const result = listMemoriesSchema.safeParse({});
         expect(result.success).toBe(true);
       });
 
       it('should accept valid scope', () => {
-        const result = listMemoriesInputSchema.safeParse({ scope: 'user' });
+        const result = listMemoriesSchema.safeParse({ scope: 'user' });
         expect(result.success).toBe(true);
       });
 
       it('should accept pattern', () => {
-        const result = listMemoriesInputSchema.safeParse({ pattern: 'user_*' });
+        const result = listMemoriesSchema.safeParse({ pattern: 'user_*' });
         expect(result.success).toBe(true);
       });
 
       it('should accept valid limit', () => {
-        const result = listMemoriesInputSchema.safeParse({ limit: 25 });
+        const result = listMemoriesSchema.safeParse({ limit: 25 });
         expect(result.success).toBe(true);
       });
 
       it('should reject limit over 100', () => {
-        const result = listMemoriesInputSchema.safeParse({ limit: 101 });
+        const result = listMemoriesSchema.safeParse({ limit: 101 });
         expect(result.success).toBe(false);
       });
 
       it('should reject non-positive limit', () => {
-        expect(listMemoriesInputSchema.safeParse({ limit: 0 }).success).toBe(false);
-        expect(listMemoriesInputSchema.safeParse({ limit: -1 }).success).toBe(false);
+        expect(listMemoriesSchema.safeParse({ limit: 0 }).success).toBe(false);
+        expect(listMemoriesSchema.safeParse({ limit: -1 }).success).toBe(false);
       });
 
       it('should validate output', () => {

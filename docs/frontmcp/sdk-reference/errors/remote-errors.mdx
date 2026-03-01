@@ -14,14 +14,14 @@ Remote errors are thrown when interacting with remote MCP servers via the `@App(
 
 Thrown when the initial connection to a remote MCP server fails.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_CONNECTION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `appId` | `string` | Remote app identifier |
-| `url` | `string` | Target URL |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                     |
+| --------------- | -------------------- | ------------------------- |
+| `code`          | `string`             | `REMOTE_CONNECTION_ERROR` |
+| `statusCode`    | `number`             | `500`                     |
+| `isPublic`      | `boolean`            | `false`                   |
+| `appId`         | `string`             | Remote app identifier     |
+| `url`           | `string`             | Target URL                |
+| `originalError` | `Error \| undefined` | The underlying cause      |
 
 ```typescript
 new RemoteConnectionError(appId: string, url: string, originalError?: Error)
@@ -33,13 +33,13 @@ new RemoteConnectionError(appId: string, url: string, originalError?: Error)
 
 Thrown when a remote MCP server disconnects unexpectedly.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_DISCONNECT_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `appId` | `string` | Remote app identifier |
-| `reason` | `string \| undefined` | Disconnect reason |
+| Property     | Type                  | Value                     |
+| ------------ | --------------------- | ------------------------- |
+| `code`       | `string`              | `REMOTE_DISCONNECT_ERROR` |
+| `statusCode` | `number`              | `500`                     |
+| `isPublic`   | `boolean`             | `false`                   |
+| `appId`      | `string`              | Remote app identifier     |
+| `reason`     | `string \| undefined` | Disconnect reason         |
 
 ```typescript
 new RemoteDisconnectError(appId: string, reason?: string)
@@ -51,15 +51,15 @@ new RemoteDisconnectError(appId: string, reason?: string)
 
 Thrown when a remote MCP operation exceeds the configured timeout.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_TIMEOUT_ERROR` |
-| `statusCode` | `number` | `504` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `operation` | `string` | The operation that timed out |
-| `timeoutMs` | `number` | Configured timeout |
-| `mcpErrorCode` | `number` | `-32603` |
+| Property       | Type      | Value                        |
+| -------------- | --------- | ---------------------------- |
+| `code`         | `string`  | `REMOTE_TIMEOUT_ERROR`       |
+| `statusCode`   | `number`  | `504`                        |
+| `isPublic`     | `boolean` | `true`                       |
+| `appId`        | `string`  | Remote app identifier        |
+| `operation`    | `string`  | The operation that timed out |
+| `timeoutMs`    | `number`  | Configured timeout           |
+| `mcpErrorCode` | `number`  | `-32603`                     |
 
 ```typescript
 new RemoteTimeoutError(appId: string, operation: string, timeoutMs: number)
@@ -79,14 +79,14 @@ throw new RemoteTimeoutError('slack', 'tools/call', 30000);
 
 Thrown when a tool is not found on the remote server.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_TOOL_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `toolName` | `string` | The missing tool |
-| `mcpErrorCode` | `number` | `-32601` |
+| Property       | Type      | Value                   |
+| -------------- | --------- | ----------------------- |
+| `code`         | `string`  | `REMOTE_TOOL_NOT_FOUND` |
+| `statusCode`   | `number`  | `404`                   |
+| `isPublic`     | `boolean` | `true`                  |
+| `appId`        | `string`  | Remote app identifier   |
+| `toolName`     | `string`  | The missing tool        |
+| `mcpErrorCode` | `number`  | `-32601`                |
 
 ```typescript
 new RemoteToolNotFoundError(appId: string, toolName: string)
@@ -98,14 +98,14 @@ new RemoteToolNotFoundError(appId: string, toolName: string)
 
 Thrown when a resource is not found on the remote server.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_RESOURCE_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `uri` | `string` | The missing resource URI |
-| `mcpErrorCode` | `number` | `-32002` |
+| Property       | Type      | Value                       |
+| -------------- | --------- | --------------------------- |
+| `code`         | `string`  | `REMOTE_RESOURCE_NOT_FOUND` |
+| `statusCode`   | `number`  | `404`                       |
+| `isPublic`     | `boolean` | `true`                      |
+| `appId`        | `string`  | Remote app identifier       |
+| `uri`          | `string`  | The missing resource URI    |
+| `mcpErrorCode` | `number`  | `-32002`                    |
 
 ```typescript
 new RemoteResourceNotFoundError(appId: string, uri: string)
@@ -117,14 +117,14 @@ new RemoteResourceNotFoundError(appId: string, uri: string)
 
 Thrown when a prompt is not found on the remote server.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_PROMPT_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `promptName` | `string` | The missing prompt |
-| `mcpErrorCode` | `number` | `-32601` |
+| Property       | Type      | Value                     |
+| -------------- | --------- | ------------------------- |
+| `code`         | `string`  | `REMOTE_PROMPT_NOT_FOUND` |
+| `statusCode`   | `number`  | `404`                     |
+| `isPublic`     | `boolean` | `true`                    |
+| `appId`        | `string`  | Remote app identifier     |
+| `promptName`   | `string`  | The missing prompt        |
+| `mcpErrorCode` | `number`  | `-32601`                  |
 
 ```typescript
 new RemotePromptNotFoundError(appId: string, promptName: string)
@@ -136,14 +136,14 @@ new RemotePromptNotFoundError(appId: string, promptName: string)
 
 Thrown when authentication to a remote server fails (missing credentials).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_AUTH_ERROR` |
-| `statusCode` | `number` | `401` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `details` | `string \| undefined` | Additional details |
-| `mcpErrorCode` | `number` | `-32001` |
+| Property       | Type                  | Value                 |
+| -------------- | --------------------- | --------------------- |
+| `code`         | `string`              | `REMOTE_AUTH_ERROR`   |
+| `statusCode`   | `number`              | `401`                 |
+| `isPublic`     | `boolean`             | `true`                |
+| `appId`        | `string`              | Remote app identifier |
+| `details`      | `string \| undefined` | Additional details    |
+| `mcpErrorCode` | `number`              | `-32001`              |
 
 ```typescript
 new RemoteAuthError(appId: string, details?: string)
@@ -155,14 +155,14 @@ new RemoteAuthError(appId: string, details?: string)
 
 Thrown when authorization to a remote resource/tool fails (insufficient credentials).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_AUTHORIZATION_ERROR` |
-| `statusCode` | `number` | `403` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `resource` | `string \| undefined` | The denied resource |
-| `mcpErrorCode` | `number` | `-32003` |
+| Property       | Type                  | Value                        |
+| -------------- | --------------------- | ---------------------------- |
+| `code`         | `string`              | `REMOTE_AUTHORIZATION_ERROR` |
+| `statusCode`   | `number`              | `403`                        |
+| `isPublic`     | `boolean`             | `true`                       |
+| `appId`        | `string`              | Remote app identifier        |
+| `resource`     | `string \| undefined` | The denied resource          |
+| `mcpErrorCode` | `number`              | `-32003`                     |
 
 ```typescript
 new RemoteAuthorizationError(appId: string, resource?: string)
@@ -174,15 +174,15 @@ new RemoteAuthorizationError(appId: string, resource?: string)
 
 Thrown when a remote tool execution fails.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_TOOL_EXECUTION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `toolName` | `string` | The failed tool |
-| `originalError` | `Error \| undefined` | The underlying cause |
-| `mcpErrorCode` | `number` | `-32603` |
+| Property        | Type                 | Value                         |
+| --------------- | -------------------- | ----------------------------- |
+| `code`          | `string`             | `REMOTE_TOOL_EXECUTION_ERROR` |
+| `statusCode`    | `number`             | `500`                         |
+| `isPublic`      | `boolean`            | `true`                        |
+| `appId`         | `string`             | Remote app identifier         |
+| `toolName`      | `string`             | The failed tool               |
+| `originalError` | `Error \| undefined` | The underlying cause          |
+| `mcpErrorCode`  | `number`             | `-32603`                      |
 
 ```typescript
 new RemoteToolExecutionError(appId: string, toolName: string, originalError?: Error)
@@ -194,15 +194,15 @@ new RemoteToolExecutionError(appId: string, toolName: string, originalError?: Er
 
 Thrown when reading a remote resource fails.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_RESOURCE_READ_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `uri` | `string` | The resource URI |
-| `originalError` | `Error \| undefined` | The underlying cause |
-| `mcpErrorCode` | `number` | `-32603` |
+| Property        | Type                 | Value                        |
+| --------------- | -------------------- | ---------------------------- |
+| `code`          | `string`             | `REMOTE_RESOURCE_READ_ERROR` |
+| `statusCode`    | `number`             | `500`                        |
+| `isPublic`      | `boolean`            | `true`                       |
+| `appId`         | `string`             | Remote app identifier        |
+| `uri`           | `string`             | The resource URI             |
+| `originalError` | `Error \| undefined` | The underlying cause         |
+| `mcpErrorCode`  | `number`             | `-32603`                     |
 
 ```typescript
 new RemoteResourceReadError(appId: string, uri: string, originalError?: Error)
@@ -214,15 +214,15 @@ new RemoteResourceReadError(appId: string, uri: string, originalError?: Error)
 
 Thrown when getting a remote prompt fails.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_PROMPT_GET_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `promptName` | `string` | The prompt name |
-| `originalError` | `Error \| undefined` | The underlying cause |
-| `mcpErrorCode` | `number` | `-32603` |
+| Property        | Type                 | Value                     |
+| --------------- | -------------------- | ------------------------- |
+| `code`          | `string`             | `REMOTE_PROMPT_GET_ERROR` |
+| `statusCode`    | `number`             | `500`                     |
+| `isPublic`      | `boolean`            | `true`                    |
+| `appId`         | `string`             | Remote app identifier     |
+| `promptName`    | `string`             | The prompt name           |
+| `originalError` | `Error \| undefined` | The underlying cause      |
+| `mcpErrorCode`  | `number`             | `-32603`                  |
 
 ```typescript
 new RemotePromptGetError(appId: string, promptName: string, originalError?: Error)
@@ -234,14 +234,14 @@ new RemotePromptGetError(appId: string, promptName: string, originalError?: Erro
 
 Thrown when transport initialization fails for a remote app.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_TRANSPORT_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `appId` | `string` | Remote app identifier |
-| `transportType` | `string` | The transport type |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                    |
+| --------------- | -------------------- | ------------------------ |
+| `code`          | `string`             | `REMOTE_TRANSPORT_ERROR` |
+| `statusCode`    | `number`             | `500`                    |
+| `isPublic`      | `boolean`            | `false`                  |
+| `appId`         | `string`             | Remote app identifier    |
+| `transportType` | `string`             | The transport type       |
+| `originalError` | `Error \| undefined` | The underlying cause     |
 
 ```typescript
 new RemoteTransportError(appId: string, transportType: string, originalError?: Error)
@@ -253,12 +253,12 @@ new RemoteTransportError(appId: string, transportType: string, originalError?: E
 
 Thrown when an unsupported transport type is specified for a remote app.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_UNSUPPORTED_TRANSPORT` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
-| `transportType` | `string` | The unsupported type |
+| Property        | Type      | Value                          |
+| --------------- | --------- | ------------------------------ |
+| `code`          | `string`  | `REMOTE_UNSUPPORTED_TRANSPORT` |
+| `statusCode`    | `number`  | `400`                          |
+| `isPublic`      | `boolean` | `true`                         |
+| `transportType` | `string`  | The unsupported type           |
 
 ```typescript
 new RemoteUnsupportedTransportError(transportType: string)
@@ -270,13 +270,13 @@ new RemoteUnsupportedTransportError(transportType: string)
 
 Thrown when capability discovery fails for a remote server.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_CAPABILITY_DISCOVERY_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `appId` | `string` | Remote app identifier |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                               |
+| --------------- | -------------------- | ----------------------------------- |
+| `code`          | `string`             | `REMOTE_CAPABILITY_DISCOVERY_ERROR` |
+| `statusCode`    | `number`             | `500`                               |
+| `isPublic`      | `boolean`            | `false`                             |
+| `appId`         | `string`             | Remote app identifier               |
+| `originalError` | `Error \| undefined` | The underlying cause                |
 
 ```typescript
 new RemoteCapabilityDiscoveryError(appId: string, originalError?: Error)
@@ -288,13 +288,13 @@ new RemoteCapabilityDiscoveryError(appId: string, originalError?: Error)
 
 Thrown when a remote server doesn't support a required capability.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_CAPABILITY_NOT_SUPPORTED` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `capability` | `string` | The missing capability |
+| Property     | Type      | Value                             |
+| ------------ | --------- | --------------------------------- |
+| `code`       | `string`  | `REMOTE_CAPABILITY_NOT_SUPPORTED` |
+| `statusCode` | `number`  | `400`                             |
+| `isPublic`   | `boolean` | `true`                            |
+| `appId`      | `string`  | Remote app identifier             |
+| `capability` | `string`  | The missing capability            |
 
 ```typescript
 new RemoteCapabilityNotSupportedError(appId: string, capability: string)
@@ -306,14 +306,14 @@ new RemoteCapabilityNotSupportedError(appId: string, capability: string)
 
 Thrown when a remote app's configuration is invalid.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_CONFIGURATION_ERROR` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
-| `configField` | `string \| undefined` | The invalid field |
-| `details` | `string \| undefined` | Additional details |
+| Property      | Type                  | Value                        |
+| ------------- | --------------------- | ---------------------------- |
+| `code`        | `string`              | `REMOTE_CONFIGURATION_ERROR` |
+| `statusCode`  | `number`              | `400`                        |
+| `isPublic`    | `boolean`             | `true`                       |
+| `appId`       | `string`              | Remote app identifier        |
+| `configField` | `string \| undefined` | The invalid field            |
+| `details`     | `string \| undefined` | Additional details           |
 
 ```typescript
 new RemoteConfigurationError(appId: string, configField?: string, details?: string)
@@ -325,12 +325,12 @@ new RemoteConfigurationError(appId: string, configField?: string, details?: stri
 
 Thrown when an operation is attempted on a remote app that is not connected.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REMOTE_NOT_CONNECTED` |
-| `statusCode` | `number` | `503` |
-| `isPublic` | `boolean` | `true` |
-| `appId` | `string` | Remote app identifier |
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `REMOTE_NOT_CONNECTED` |
+| `statusCode` | `number`  | `503`                  |
+| `isPublic`   | `boolean` | `true`                 |
+| `appId`      | `string`  | Remote app identifier  |
 
 ```typescript
 new RemoteNotConnectedError(appId: string)
@@ -342,13 +342,13 @@ new RemoteNotConnectedError(appId: string)
 
 Thrown when retry configuration is invalid (e.g., `maxAttempts < 1`).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_RETRY_OPTIONS` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `option` | `string` | The invalid option name |
-| `value` | `unknown` | The invalid value |
+| Property     | Type      | Value                   |
+| ------------ | --------- | ----------------------- |
+| `code`       | `string`  | `INVALID_RETRY_OPTIONS` |
+| `statusCode` | `number`  | `500`                   |
+| `isPublic`   | `boolean` | `false`                 |
+| `option`     | `string`  | The invalid option name |
+| `value`      | `unknown` | The invalid value       |
 
 ```typescript
 new InvalidRetryOptionsError(option: string, value: unknown, reason: string)

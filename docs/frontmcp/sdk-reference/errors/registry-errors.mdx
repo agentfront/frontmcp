@@ -14,11 +14,11 @@ Registry errors are thrown by the FrontMCP registry system — the internal data
 
 Thrown when a registry definition is not found by its token.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REGISTRY_DEFINITION_NOT_FOUND` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                           |
+| ------------ | --------- | ------------------------------- |
+| `code`       | `string`  | `REGISTRY_DEFINITION_NOT_FOUND` |
+| `statusCode` | `number`  | `500`                           |
+| `isPublic`   | `boolean` | `false`                         |
 
 ```typescript
 new RegistryDefinitionNotFoundError(registryName: string, tokenName: string)
@@ -39,11 +39,11 @@ throw new RegistryDefinitionNotFoundError('ToolRegistry', 'my_tool');
 
 Thrown when a registry graph entry is not found by its token.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REGISTRY_GRAPH_ENTRY_NOT_FOUND` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                            |
+| ------------ | --------- | -------------------------------- |
+| `code`       | `string`  | `REGISTRY_GRAPH_ENTRY_NOT_FOUND` |
+| `statusCode` | `number`  | `500`                            |
+| `isPublic`   | `boolean` | `false`                          |
 
 ```typescript
 new RegistryGraphEntryNotFoundError(registryName: string, tokenName: string)
@@ -55,11 +55,11 @@ new RegistryGraphEntryNotFoundError(registryName: string, tokenName: string)
 
 Thrown when an entity references a dependency that is not registered.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `REGISTRY_DEPENDENCY_NOT_REGISTERED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                                |
+| ------------ | --------- | ------------------------------------ |
+| `code`       | `string`  | `REGISTRY_DEPENDENCY_NOT_REGISTERED` |
+| `statusCode` | `number`  | `500`                                |
+| `isPublic`   | `boolean` | `false`                              |
 
 ```typescript
 new RegistryDependencyNotRegisteredError(entityType: string, tokenName: string, depName: string)
@@ -80,11 +80,11 @@ throw new RegistryDependencyNotRegisteredError('Tool', 'my_tool', 'DatabaseServi
 
 Thrown when a registry entry has an invalid or unsupported kind.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_REGISTRY_KIND` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                   |
+| ------------ | --------- | ----------------------- |
+| `code`       | `string`  | `INVALID_REGISTRY_KIND` |
+| `statusCode` | `number`  | `500`                   |
+| `isPublic`   | `boolean` | `false`                 |
 
 ```typescript
 new InvalidRegistryKindError(entityType: string, kind?: string)
@@ -96,11 +96,11 @@ new InvalidRegistryKindError(entityType: string, kind?: string)
 
 Thrown when name disambiguation exceeds the maximum number of attempts.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `NAME_DISAMBIGUATION_FAILED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                        |
+| ------------ | --------- | ---------------------------- |
+| `code`       | `string`  | `NAME_DISAMBIGUATION_FAILED` |
+| `statusCode` | `number`  | `500`                        |
+| `isPublic`   | `boolean` | `false`                      |
 
 ```typescript
 new NameDisambiguationError(candidate: string, maxAttempts: number)
@@ -121,11 +121,11 @@ throw new NameDisambiguationError('my_tool', 100);
 
 Thrown when a registry entry fails validation (e.g., missing a required property).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ENTRY_VALIDATION_FAILED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                     |
+| ------------ | --------- | ------------------------- |
+| `code`       | `string`  | `ENTRY_VALIDATION_FAILED` |
+| `statusCode` | `number`  | `500`                     |
+| `isPublic`   | `boolean` | `false`                   |
 
 ```typescript
 new EntryValidationError(entryType: string, details: string)
@@ -137,11 +137,11 @@ new EntryValidationError(entryType: string, details: string)
 
 Thrown when a flow is not found in the flow registry.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `FLOW_NOT_REGISTERED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                 |
+| ------------ | --------- | --------------------- |
+| `code`       | `string`  | `FLOW_NOT_REGISTERED` |
+| `statusCode` | `number`  | `500`                 |
+| `isPublic`   | `boolean` | `false`               |
 
 ```typescript
 new FlowNotRegisteredError(flowName: string)
@@ -162,11 +162,11 @@ throw new FlowNotRegisteredError('tools:call-tool');
 
 Thrown when a hook has an unsupported owner kind.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `UNSUPPORTED_HOOK_OWNER_KIND` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                         |
+| ------------ | --------- | ----------------------------- |
+| `code`       | `string`  | `UNSUPPORTED_HOOK_OWNER_KIND` |
+| `statusCode` | `number`  | `500`                         |
+| `isPublic`   | `boolean` | `false`                       |
 
 ```typescript
 new UnsupportedHookOwnerKindError(kind: string)
@@ -178,11 +178,11 @@ new UnsupportedHookOwnerKindError(kind: string)
 
 Thrown when a hook is registered with a flow that is not supported by the entry type (e.g., a tool hook on a resource class).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_HOOK_FLOW` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value               |
+| ------------ | --------- | ------------------- |
+| `code`       | `string`  | `INVALID_HOOK_FLOW` |
+| `statusCode` | `number`  | `500`               |
+| `isPublic`   | `boolean` | `false`             |
 
 ```typescript
 new InvalidHookFlowError(message: string)

@@ -73,10 +73,10 @@ Every tool, resource, prompt, agent, and skill runs within a context class. Thes
 
 FrontMCP implements a flexible three-tier authentication system supporting public access, token pass-through, and full OAuth 2.1 orchestration.
 
-| Mode | Description | Best For |
-|------|-------------|----------|
-| **Public** | No auth required, anonymous sessions | Development, testing, public APIs |
-| **Transparent** | Pass-through tokens from external IdPs | Existing Auth0, Okta, Azure AD setups |
+| Mode             | Description                             | Best For                                    |
+| ---------------- | --------------------------------------- | ------------------------------------------- |
+| **Public**       | No auth required, anonymous sessions    | Development, testing, public APIs           |
+| **Transparent**  | Pass-through tokens from external IdPs  | Existing Auth0, Okta, Azure AD setups       |
 | **Orchestrated** | Full OAuth 2.1 server (local or remote) | Multi-app, federated auth, progressive auth |
 
 <CardGroup cols={2}>
@@ -104,11 +104,11 @@ FrontMCP implements a flexible three-tier authentication system supporting publi
 
 Options for running your FrontMCP server in development and production.
 
-| Target | Use Case | Session Storage |
-|--------|----------|-----------------|
-| **Local Dev** | Development and testing | In-memory |
-| **Production Build** | Long-running server | Redis or Vercel KV |
-| **Serverless** | Edge/Lambda deployments | External storage required |
+| Target               | Use Case                | Session Storage           |
+| -------------------- | ----------------------- | ------------------------- |
+| **Local Dev**        | Development and testing | In-memory                 |
+| **Production Build** | Long-running server     | Redis or Vercel KV        |
+| **Serverless**       | Edge/Lambda deployments | External storage required |
 
 <CardGroup cols={2}>
   <Card title="Local Development" icon="laptop-code" href="/frontmcp/deployment/local-dev-server">

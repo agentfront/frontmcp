@@ -14,12 +14,12 @@ Validation errors are thrown when input parameters fail schema validation, when 
 
 Thrown when input parameters fail Zod schema validation. This is a public error — validation details are included in the response to help clients fix their requests.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_INPUT` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
-| `validationErrors` | `any` | Zod validation error details |
+| Property           | Type      | Value                        |
+| ------------------ | --------- | ---------------------------- |
+| `code`             | `string`  | `INVALID_INPUT`              |
+| `statusCode`       | `number`  | `400`                        |
+| `isPublic`         | `boolean` | `true`                       |
+| `validationErrors` | `any`     | Zod validation error details |
 
 ```typescript
 new InvalidInputError(message?: string, validationErrors?: any)
@@ -42,11 +42,11 @@ throw new InvalidInputError('Validation failed', {
 
 Thrown when a tool's output does not match the declared output schema. This is an internal error — schema details are not exposed to clients.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_OUTPUT` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value            |
+| ------------ | --------- | ---------------- |
+| `code`       | `string`  | `INVALID_OUTPUT` |
+| `statusCode` | `number`  | `500`            |
+| `isPublic`   | `boolean` | `false`          |
 
 ```typescript
 new InvalidOutputError(errorId?: string)
@@ -69,11 +69,11 @@ throw new InvalidOutputError('req_abc123');
 
 Thrown when a request uses the wrong HTTP method (e.g., GET instead of POST).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_METHOD` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value            |
+| ------------ | --------- | ---------------- |
+| `code`       | `string`  | `INVALID_METHOD` |
+| `statusCode` | `number`  | `400`            |
+| `isPublic`   | `boolean` | `true`           |
 
 ```typescript
 new InvalidMethodError(method: string, expected: string)
@@ -94,11 +94,11 @@ throw new InvalidMethodError('GET', 'POST');
 
 Thrown when a required prompt argument is not provided by the caller.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `MISSING_PROMPT_ARGUMENT` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value                     |
+| ------------ | --------- | ------------------------- |
+| `code`       | `string`  | `MISSING_PROMPT_ARGUMENT` |
+| `statusCode` | `number`  | `400`                     |
+| `isPublic`   | `boolean` | `true`                    |
 
 ```typescript
 new MissingPromptArgumentError(argName: string)

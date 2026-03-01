@@ -11,6 +11,7 @@ The **ConfigPlugin** supports loading configuration from YAML files via the `loa
 ## Overview
 
 When `loadYaml` is enabled, the `loadConfig` function:
+
 1. Loads and parses YAML config files using [js-yaml](https://www.npmjs.com/package/js-yaml) (v4.1.1+)
 2. Merges YAML config with environment variables (env vars take precedence)
 3. Validates the merged config against your Zod schema
@@ -103,21 +104,22 @@ console.log(config.database.url);
 
 ### loadYaml
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
+| Property   | Type      | Default | Description                     |
+| ---------- | --------- | ------- | ------------------------------- |
 | `loadYaml` | `boolean` | `false` | Enable YAML config file loading |
 
 When `false` (default), only environment variables and `.env` files are loaded. Set to `true` to also load YAML configuration.
 
 ### configPath
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
+| Property     | Type     | Default        | Description                                     |
+| ------------ | -------- | -------------- | ----------------------------------------------- |
 | `configPath` | `string` | `'config.yml'` | Path to YAML config file relative to `basePath` |
 
 ### Accepted File Extensions
 
 The loader automatically tries these extensions in order:
+
 - `.yml`
 - `.yaml`
 - No extension (if `configPath` includes the extension)

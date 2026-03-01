@@ -10,8 +10,8 @@
 // Import escapeHtml from @frontmcp/uipack/utils - single source of truth (no React needed)
 import { escapeHtml } from '@frontmcp/uipack/utils';
 
-// Re-export createTemplateHelpers from @frontmcp/uipack (no React needed)
-export { createTemplateHelpers } from '@frontmcp/uipack/runtime';
+// Re-export createTemplateHelpers from @frontmcp/uipack shell module
+export { createTemplateHelpers } from '@frontmcp/uipack/shell';
 
 // ============================================
 // Individual Helper Functions (Backwards Compatibility)

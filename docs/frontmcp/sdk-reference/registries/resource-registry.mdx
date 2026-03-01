@@ -32,8 +32,8 @@ Get all static resources (not templates).
 getResources(includeHidden?: boolean): ReadonlyArray<ResourceEntry>
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter       | Type      | Default | Description              |
+| --------------- | --------- | ------- | ------------------------ |
 | `includeHidden` | `boolean` | `false` | Include hidden resources |
 
 **Example:**
@@ -279,13 +279,13 @@ interface ResourceChangeEvent {
 
 ## Indexes
 
-| Index | Key | Description |
-|-------|-----|-------------|
-| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
-| `byName` | `name` | Base name lookup |
-| `byUri` | `uri` | Static resource URI lookup |
-| `byUriTemplate` | `uriTemplate` | Template URI lookup |
-| `byOwner` | `ownerPath` | All resources by owner |
+| Index           | Key           | Description                |
+| --------------- | ------------- | -------------------------- |
+| `byQualifiedId` | `qualifiedId` | Unique identifier lookup   |
+| `byName`        | `name`        | Base name lookup           |
+| `byUri`         | `uri`         | Static resource URI lookup |
+| `byUriTemplate` | `uriTemplate` | Template URI lookup        |
+| `byOwner`       | `ownerPath`   | All resources by owner     |
 
 ## Static vs Template Resources
 

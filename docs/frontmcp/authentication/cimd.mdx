@@ -29,6 +29,7 @@ sequenceDiagram
 ```
 
 **Flow:**
+
 1. Client sends OAuth request with `client_id` set to an HTTPS URL (e.g., `https://example.com/oauth/client-metadata.json`)
 2. Authorization server detects this is a CIMD URL and fetches the document
 3. Client's server returns a JSON metadata document
@@ -89,11 +90,11 @@ sequenceDiagram
 
 FrontMCP uses a three-layer identity model to separate concerns:
 
-| Layer | What It Identifies | How It's Represented | Purpose |
-|-------|-------------------|---------------------|---------|
-| **CLIENT** | The MCP client application | CIMD URL (e.g., `https://mcpclient.ai/oauth/metadata.json`) | Verifies which app is requesting access |
-| **USER** | The person authorizing | OAuth token claims (`sub`, `name`, `email`) | Identifies who is granting permissions |
-| **PERMISSIONS** | What can be accessed | OAuth scopes + authorized apps/tools | Controls what actions are allowed |
+| Layer           | What It Identifies         | How It's Represented                                        | Purpose                                 |
+| --------------- | -------------------------- | ----------------------------------------------------------- | --------------------------------------- |
+| **CLIENT**      | The MCP client application | CIMD URL (e.g., `https://mcpclient.ai/oauth/metadata.json`) | Verifies which app is requesting access |
+| **USER**        | The person authorizing     | OAuth token claims (`sub`, `name`, `email`)                 | Identifies who is granting permissions  |
+| **PERMISSIONS** | What can be accessed       | OAuth scopes + authorized apps/tools                        | Controls what actions are allowed       |
 
 ```mermaid
 flowchart TB
@@ -119,18 +120,19 @@ flowchart TB
 
 CIMD changes **how clients are registered**, not the OAuth flow itself. You still get an access token with user identity.
 
-| Aspect | Standard OAuth | CIMD |
-|--------|---------------|------|
-| **Client Registration** | Pre-register with server, get `client_id` | Self-host metadata at a URL |
-| **Client ID Format** | Opaque string (`client_abc123`) | HTTPS URL (`https://mcpclient.ai/oauth/metadata.json`) |
-| **Metadata Storage** | On authorization server's database | Hosted by the client |
-| **Adding New Clients** | Requires server admin action | Client just publishes JSON file |
-| **Token Contains** | User identity + scopes | Same! User identity + scopes |
-| **Who Approves** | End user via consent screen | Same! End user via consent screen |
+| Aspect                  | Standard OAuth                            | CIMD                                                   |
+| ----------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| **Client Registration** | Pre-register with server, get `client_id` | Self-host metadata at a URL                            |
+| **Client ID Format**    | Opaque string (`client_abc123`)           | HTTPS URL (`https://mcpclient.ai/oauth/metadata.json`) |
+| **Metadata Storage**    | On authorization server's database        | Hosted by the client                                   |
+| **Adding New Clients**  | Requires server admin action              | Client just publishes JSON file                        |
+| **Token Contains**      | User identity + scopes                    | Same! User identity + scopes                           |
+| **Who Approves**        | End user via consent screen               | Same! End user via consent screen                      |
 
 ### What Stays the Same
 
 The core OAuth flow is identical:
+
 1. User authenticates
 2. User consents to permissions
 3. Token is issued with user identity and scopes
@@ -139,6 +141,7 @@ The core OAuth flow is identical:
 ### What Changes
 
 Only the **client identification** step:
+
 - **Standard**: Server looks up `client_id` in its database
 - **CIMD**: Server fetches metadata from the `client_id` URL
 
@@ -154,23 +157,24 @@ CIMD is configured through the `auth.cimd` option when creating a FrontMCP serve
 import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
-  name: 'my-mcp-server',
-  auth: {
-    mode: 'local',
-    cimd: {
-      enabled: true,
-      security: {
-        blockPrivateIPs: true,
-        allowedDomains: ['*.verified-clients.mcp']
-      }
-    }
-  }
+name: 'my-mcp-server',
+auth: {
+mode: 'local',
+cimd: {
+enabled: true,
+security: {
+blockPrivateIPs: true,
+allowedDomains: ['*.verified-clients.mcp']
+}
+}
+}
 })
 class MyServer {}
 
 @App({ name: 'my-app' })
 class MyApp {}
-```
+
+````
   </Tab>
   <Tab title="Functional Pattern">
 ```typescript
@@ -189,7 +193,8 @@ const server = createFrontMcpServer({
     }
   }
 });
-```
+````
+
   </Tab>
 </Tabs>
 
@@ -201,12 +206,12 @@ const server = createFrontMcpServer({
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
-  name: 'my-mcp-server',
-  auth: {
-    mode: 'local',
-    cimd: {
-      // Enable/disable CIMD support
-      enabled: true,
+name: 'my-mcp-server',
+auth: {
+mode: 'local',
+cimd: {
+// Enable/disable CIMD support
+enabled: true,
 
       // Cache settings
       cache: {
@@ -229,10 +234,12 @@ import { FrontMcp } from '@frontmcp/sdk';
         maxResponseSizeBytes: 65536,
       },
     }
-  }
+
+}
 })
 class MyServer {}
-```
+
+````
   </Tab>
   <Tab title="Minimal Example">
 ```typescript
@@ -249,7 +256,8 @@ import { FrontMcp } from '@frontmcp/sdk';
   }
 })
 class MyServer {}
-```
+````
+
   </Tab>
 </Tabs>
 
@@ -259,26 +267,26 @@ CIMD is **enabled by default** when using orchestrated auth mode. The framework 
 
 ### Security Settings
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `blockPrivateIPs` | `true` | Block private/internal IP addresses (SSRF protection) |
-| `allowedDomains` | `undefined` | If set, only these domains can host CIMD documents |
-| `blockedDomains` | `undefined` | These domains cannot host CIMD documents |
-| `warnOnLocalhostRedirects` | `true` | Log warning for localhost-only redirect URIs |
+| Option                     | Default     | Description                                           |
+| -------------------------- | ----------- | ----------------------------------------------------- |
+| `blockPrivateIPs`          | `true`      | Block private/internal IP addresses (SSRF protection) |
+| `allowedDomains`           | `undefined` | If set, only these domains can host CIMD documents    |
+| `blockedDomains`           | `undefined` | These domains cannot host CIMD documents              |
+| `warnOnLocalhostRedirects` | `true`      | Log warning for localhost-only redirect URIs          |
 
 ### Cache Settings
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `defaultTtlMs` | `3600000` (1 hour) | Default cache TTL when no headers present |
-| `maxTtlMs` | `86400000` (24 hours) | Maximum TTL even if server suggests longer |
-| `minTtlMs` | `60000` (1 minute) | Minimum TTL even if server suggests shorter |
+| Option         | Default               | Description                                 |
+| -------------- | --------------------- | ------------------------------------------- |
+| `defaultTtlMs` | `3600000` (1 hour)    | Default cache TTL when no headers present   |
+| `maxTtlMs`     | `86400000` (24 hours) | Maximum TTL even if server suggests longer  |
+| `minTtlMs`     | `60000` (1 minute)    | Minimum TTL even if server suggests shorter |
 
 ### Network Settings
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `timeoutMs` | `5000` (5s) | Request timeout |
+| Option                 | Default        | Description                |
+| ---------------------- | -------------- | -------------------------- |
+| `timeoutMs`            | `5000` (5s)    | Request timeout            |
 | `maxResponseSizeBytes` | `65536` (64KB) | Maximum response body size |
 
 ## Client Metadata Document Format
@@ -307,29 +315,29 @@ The metadata document is a JSON file hosted at the client's URL:
 
 ### Required Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `client_id` | `string` | **MUST** match the URL from which this document was fetched |
-| `client_name` | `string` | Human-readable name of the client |
-| `redirect_uris` | `string[]` | Array of allowed redirect URIs (at least one required) |
+| Field           | Type       | Description                                                 |
+| --------------- | ---------- | ----------------------------------------------------------- |
+| `client_id`     | `string`   | **MUST** match the URL from which this document was fetched |
+| `client_name`   | `string`   | Human-readable name of the client                           |
+| `redirect_uris` | `string[]` | Array of allowed redirect URIs (at least one required)      |
 
 ### Optional Fields
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `token_endpoint_auth_method` | `string` | `"none"` | Auth method: `none`, `client_secret_basic`, `client_secret_post`, `private_key_jwt` |
-| `grant_types` | `string[]` | `["authorization_code"]` | OAuth grant types |
-| `response_types` | `string[]` | `["code"]` | OAuth response types |
-| `client_uri` | `string` | - | URL of the client's home page |
-| `logo_uri` | `string` | - | URL of the client's logo image |
-| `jwks_uri` | `string` | - | URL of the client's JWKS (for `private_key_jwt`) |
-| `jwks` | `object` | - | Inline JWKS `{ keys: [...] }` |
-| `tos_uri` | `string` | - | URL of the terms of service |
-| `policy_uri` | `string` | - | URL of the privacy policy |
-| `scope` | `string` | - | Requested OAuth scopes |
-| `contacts` | `string[]` | - | Array of contact email addresses |
-| `software_id` | `string` | - | Unique identifier for the client software |
-| `software_version` | `string` | - | Version of the client software |
+| Field                        | Type       | Default                  | Description                                                                         |
+| ---------------------------- | ---------- | ------------------------ | ----------------------------------------------------------------------------------- |
+| `token_endpoint_auth_method` | `string`   | `"none"`                 | Auth method: `none`, `client_secret_basic`, `client_secret_post`, `private_key_jwt` |
+| `grant_types`                | `string[]` | `["authorization_code"]` | OAuth grant types                                                                   |
+| `response_types`             | `string[]` | `["code"]`               | OAuth response types                                                                |
+| `client_uri`                 | `string`   | -                        | URL of the client's home page                                                       |
+| `logo_uri`                   | `string`   | -                        | URL of the client's logo image                                                      |
+| `jwks_uri`                   | `string`   | -                        | URL of the client's JWKS (for `private_key_jwt`)                                    |
+| `jwks`                       | `object`   | -                        | Inline JWKS `{ keys: [...] }`                                                       |
+| `tos_uri`                    | `string`   | -                        | URL of the terms of service                                                         |
+| `policy_uri`                 | `string`   | -                        | URL of the privacy policy                                                           |
+| `scope`                      | `string`   | -                        | Requested OAuth scopes                                                              |
+| `contacts`                   | `string[]` | -                        | Array of contact email addresses                                                    |
+| `software_id`                | `string`   | -                        | Unique identifier for the client software                                           |
+| `software_version`           | `string`   | -                        | Version of the client software                                                      |
 
 ## Security Features
 
@@ -339,28 +347,29 @@ When `security.blockPrivateIPs` is enabled (default), the following addresses ar
 
 **IPv4 Blocked Ranges:**
 
-| Range | Description |
-|-------|-------------|
-| `127.0.0.0/8` | Loopback addresses |
-| `10.0.0.0/8` | Private Class A |
-| `172.16.0.0/12` | Private Class B (172.16.x.x - 172.31.x.x) |
-| `192.168.0.0/16` | Private Class C |
-| `169.254.0.0/16` | Link-local addresses |
-| `0.0.0.0/8` | Current network |
-| `224.0.0.0/4` | Multicast (224.x.x.x - 239.x.x.x) |
-| `255.255.255.255` | Broadcast |
+| Range             | Description                               |
+| ----------------- | ----------------------------------------- |
+| `127.0.0.0/8`     | Loopback addresses                        |
+| `10.0.0.0/8`      | Private Class A                           |
+| `172.16.0.0/12`   | Private Class B (172.16.x.x - 172.31.x.x) |
+| `192.168.0.0/16`  | Private Class C                           |
+| `169.254.0.0/16`  | Link-local addresses                      |
+| `0.0.0.0/8`       | Current network                           |
+| `224.0.0.0/4`     | Multicast (224.x.x.x - 239.x.x.x)         |
+| `255.255.255.255` | Broadcast                                 |
 
 **IPv6 Blocked Ranges:**
 
-| Range | Description |
-|-------|-------------|
-| `::1` | Loopback |
-| `::` | Unspecified |
-| `fe80::/10` | Link-local |
-| `fc00::/7` | Unique local (ULA) |
+| Range            | Description                              |
+| ---------------- | ---------------------------------------- |
+| `::1`            | Loopback                                 |
+| `::`             | Unspecified                              |
+| `fe80::/10`      | Link-local                               |
+| `fc00::/7`       | Unique local (ULA)                       |
 | `::ffff:x.x.x.x` | IPv4-mapped (checked against IPv4 rules) |
 
 **Hostname Blocking:**
+
 - `localhost`
 - `localhost.localdomain`
 - `*.localhost`
@@ -380,6 +389,7 @@ security: {
 ```
 
 Domain matching supports:
+
 - **Exact match**: `example.com` matches only `example.com`
 - **Subdomain match**: `example.com` also matches `sub.example.com`
 - **Wildcard**: `*.example.com` matches `sub.example.com` and `example.com`
@@ -426,16 +436,16 @@ finalTtl = Math.max(minTtlMs, Math.min(maxTtlMs, serverSuggestedTtl))
 
 ### Error Classes
 
-| Error | HTTP Status | Description |
-|-------|-------------|-------------|
-| `InvalidClientIdUrlError` | 400 | Invalid CIMD URL format (HTTP, missing path, etc.) |
-| `CimdFetchError` | 502 | Failed to fetch document (network error, HTTP error) |
-| `CimdValidationError` | 400 | Document failed schema validation |
-| `CimdClientIdMismatchError` | 400 | `client_id` in document doesn't match URL |
-| `CimdSecurityError` | 403 | URL blocked by security policy |
-| `RedirectUriMismatchError` | 400 | `redirect_uri` not registered for client |
-| `CimdResponseTooLargeError` | 502 | Response exceeds size limit |
-| `CimdDisabledError` | 400 | CIMD disabled but CIMD client_id used |
+| Error                       | HTTP Status | Description                                          |
+| --------------------------- | ----------- | ---------------------------------------------------- |
+| `InvalidClientIdUrlError`   | 400         | Invalid CIMD URL format (HTTP, missing path, etc.)   |
+| `CimdFetchError`            | 502         | Failed to fetch document (network error, HTTP error) |
+| `CimdValidationError`       | 400         | Document failed schema validation                    |
+| `CimdClientIdMismatchError` | 400         | `client_id` in document doesn't match URL            |
+| `CimdSecurityError`         | 403         | URL blocked by security policy                       |
+| `RedirectUriMismatchError`  | 400         | `redirect_uri` not registered for client             |
+| `CimdResponseTooLargeError` | 502         | Response exceeds size limit                          |
+| `CimdDisabledError`         | 400         | CIMD disabled but CIMD client_id used                |
 
 ### Understanding Error Responses
 
@@ -514,6 +524,7 @@ function handleCimdError(error: unknown) {
     2. Verify the URL has a path (e.g., `/oauth/client.json`)
     3. Check if your domain is blocked or not in the allow list
     4. Verify the URL is publicly accessible
+
   </Accordion>
   <Accordion title="Document fetch failed">
     **Symptoms**: Server cannot retrieve the client metadata document.
@@ -529,6 +540,7 @@ function handleCimdError(error: unknown) {
     2. Check that the document is valid JSON
     3. Ensure the document is under 64KB
     4. Verify SSL certificate is valid and trusted
+
   </Accordion>
   <Accordion title="Redirect URI mismatch">
     **Symptoms**: Authorization fails with "redirect_uri not registered" error.
@@ -542,6 +554,7 @@ function handleCimdError(error: unknown) {
     1. Ensure the exact `redirect_uri` is listed in the `redirect_uris` array
     2. Check for trailing slash consistency
     3. Include both development (localhost) and production URIs in the document
+
   </Accordion>
 </AccordionGroup>
 

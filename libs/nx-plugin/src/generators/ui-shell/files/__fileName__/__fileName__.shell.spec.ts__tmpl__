@@ -1,0 +1,11 @@
+import { build<%= className %>Shell } from './<%= fileName %>.shell';
+
+describe('build<%= className %>Shell', () => {
+  it('should be defined', () => {
+    expect(build<%= className %>Shell).toBeDefined();
+  });
+
+  it('should be a function', () => {
+    expect(typeof build<%= className %>Shell).toBe('function');
+  });
+});

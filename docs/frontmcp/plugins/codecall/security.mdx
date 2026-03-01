@@ -230,16 +230,16 @@ CodeCall uses the **AgentScript preset** - the most restrictive preset designed 
 
 The AgentScript preset enforces these rules:
 
-| Rule | Setting | Rationale |
-| --- | --- | --- |
-| **Allowed globals** | `callTool`, `getTool`, `codecallContext`, `Math`, `JSON`, `Array`, `Object`, `String`, `Number`, `Date`, `console` (optional) | Whitelist-only access to safe built-ins |
-| **`for` loops** | Allowed | Bounded iteration with `maxIterations` enforcement |
-| **`for-of` loops** | Allowed | Bounded by array length + `maxIterations` |
-| **`while` loops** | Blocked | Unbounded — risk of infinite loops |
-| **`do-while` loops** | Blocked | Unbounded — risk of infinite loops |
-| **`for-in` loops** | Blocked | Walks prototype chain — security risk |
-| **Arrow functions** | Allowed | No recursion risk (anonymous) |
-| **Function declarations** | Blocked | Enables recursion and hoisting tricks |
+| Rule                      | Setting                                                                                                                       | Rationale                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Allowed globals**       | `callTool`, `getTool`, `codecallContext`, `Math`, `JSON`, `Array`, `Object`, `String`, `Number`, `Date`, `console` (optional) | Whitelist-only access to safe built-ins            |
+| **`for` loops**           | Allowed                                                                                                                       | Bounded iteration with `maxIterations` enforcement |
+| **`for-of` loops**        | Allowed                                                                                                                       | Bounded by array length + `maxIterations`          |
+| **`while` loops**         | Blocked                                                                                                                       | Unbounded — risk of infinite loops                 |
+| **`do-while` loops**      | Blocked                                                                                                                       | Unbounded — risk of infinite loops                 |
+| **`for-in` loops**        | Blocked                                                                                                                       | Walks prototype chain — security risk              |
+| **Arrow functions**       | Allowed                                                                                                                       | No recursion risk (anonymous)                      |
+| **Function declarations** | Blocked                                                                                                                       | Enables recursion and hoisting tricks              |
 
 ### What's Allowed
 

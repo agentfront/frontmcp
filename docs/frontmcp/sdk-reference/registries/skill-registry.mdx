@@ -32,10 +32,10 @@ Get all skills with optional filtering.
 getSkills(options?: GetSkillsOptions): ReadonlyArray<SkillEntry>
 ```
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `includeHidden` | `boolean` | Include hidden skills |
-| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
+| Option          | Type                        | Description           |
+| --------------- | --------------------------- | --------------------- |
+| `includeHidden` | `boolean`                   | Include hidden skills |
+| `visibility`    | `'mcp' \| 'http' \| 'both'` | Filter by visibility  |
 
 **Example:**
 
@@ -55,11 +55,11 @@ Search skills using TF-IDF text matching.
 search(query: string, options?: SearchOptions): Promise<SearchResult[]>
 ```
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `limit` | `number` | Maximum results to return |
-| `minScore` | `number` | Minimum relevance score |
-| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
+| Option       | Type                        | Description               |
+| ------------ | --------------------------- | ------------------------- |
+| `limit`      | `number`                    | Maximum results to return |
+| `minScore`   | `number`                    | Minimum relevance score   |
+| `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility      |
 
 **Example:**
 
@@ -98,10 +98,10 @@ List skills with pagination support.
 listSkills(options?: ListOptions): Promise<SkillListResult>
 ```
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `offset` | `number` | Starting index |
-| `limit` | `number` | Maximum results |
+| Option       | Type                        | Description          |
+| ------------ | --------------------------- | -------------------- |
+| `offset`     | `number`                    | Starting index       |
+| `limit`      | `number`                    | Maximum results      |
 | `visibility` | `'mcp' \| 'http' \| 'both'` | Filter by visibility |
 
 **Example:**
@@ -269,19 +269,19 @@ interface SkillChangeEvent {
 
 Each skill in the registry is a `SkillEntry` with these accessor methods:
 
-| Method | Return Type | Description |
-|--------|-------------|-------------|
-| `getDescription()` | `string` | Skill description |
-| `getToolRefs()` | `SkillToolRef[]` | Normalized tool references |
-| `getToolNames()` | `string[]` | Tool name strings |
-| `getTags()` | `string[]` | Categorization tags |
-| `getPriority()` | `number` | Search ranking priority |
-| `isHidden()` | `boolean` | Whether hidden from discovery |
-| `getLicense()` | `string \| undefined` | License (per Agent Skills spec) |
-| `getCompatibility()` | `string \| undefined` | Compatibility notes (per Agent Skills spec) |
-| `getSpecMetadata()` | `Record<string, string> \| undefined` | Arbitrary metadata (per Agent Skills spec) |
-| `getAllowedTools()` | `string \| undefined` | Pre-approved tools (per Agent Skills spec) |
-| `getResources()` | `SkillResources \| undefined` | Bundled resource directories |
+| Method               | Return Type                           | Description                                 |
+| -------------------- | ------------------------------------- | ------------------------------------------- |
+| `getDescription()`   | `string`                              | Skill description                           |
+| `getToolRefs()`      | `SkillToolRef[]`                      | Normalized tool references                  |
+| `getToolNames()`     | `string[]`                            | Tool name strings                           |
+| `getTags()`          | `string[]`                            | Categorization tags                         |
+| `getPriority()`      | `number`                              | Search ranking priority                     |
+| `isHidden()`         | `boolean`                             | Whether hidden from discovery               |
+| `getLicense()`       | `string \| undefined`                 | License (per Agent Skills spec)             |
+| `getCompatibility()` | `string \| undefined`                 | Compatibility notes (per Agent Skills spec) |
+| `getSpecMetadata()`  | `Record<string, string> \| undefined` | Arbitrary metadata (per Agent Skills spec)  |
+| `getAllowedTools()`  | `string \| undefined`                 | Pre-approved tools (per Agent Skills spec)  |
+| `getResources()`     | `SkillResources \| undefined`         | Bundled resource directories                |
 
 ```typescript
 const skill = registry.findByName('review-pr');
@@ -296,11 +296,11 @@ if (skill) {
 
 Skills can have different visibility modes:
 
-| Visibility | Description |
-|------------|-------------|
-| `mcp` | Available only via MCP protocol |
-| `http` | Available only via HTTP API |
-| `both` | Available via both MCP and HTTP |
+| Visibility | Description                     |
+| ---------- | ------------------------------- |
+| `mcp`      | Available only via MCP protocol |
+| `http`     | Available only via HTTP API     |
+| `both`     | Available via both MCP and HTTP |
 
 ```typescript
 @Skill({

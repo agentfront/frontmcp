@@ -409,18 +409,18 @@ await oauthServer.stop();
 
 ### MockOAuthServerOptions
 
-| Option                   | Type           | Default      | Description                                   |
-| ------------------------ | -------------- | ------------ | --------------------------------------------- |
-| `port`                   | `number`       | Random       | Port to listen on                             |
-| `issuer`                 | `string`       | Auto         | Issuer URL for tokens                         |
-| `debug`                  | `boolean`      | `false`      | Enable debug logging                          |
-| `autoApprove`            | `boolean`      | `false`      | Auto-approve authorization requests           |
-| `testUser`               | `MockTestUser` | -            | User to return on authorization               |
-| `clientId`               | `string`       | -            | Expected client ID for validation             |
-| `clientSecret`           | `string`       | -            | Client secret (for confidential clients)      |
-| `validRedirectUris`      | `string[]`     | -            | Allowed redirect URIs (supports wildcards)    |
-| `accessTokenTtlSeconds`  | `number`       | `3600`       | Access token lifetime                         |
-| `refreshTokenTtlSeconds` | `number`       | `2592000`    | Refresh token lifetime (30 days)              |
+| Option                   | Type           | Default   | Description                                |
+| ------------------------ | -------------- | --------- | ------------------------------------------ |
+| `port`                   | `number`       | Random    | Port to listen on                          |
+| `issuer`                 | `string`       | Auto      | Issuer URL for tokens                      |
+| `debug`                  | `boolean`      | `false`   | Enable debug logging                       |
+| `autoApprove`            | `boolean`      | `false`   | Auto-approve authorization requests        |
+| `testUser`               | `MockTestUser` | -         | User to return on authorization            |
+| `clientId`               | `string`       | -         | Expected client ID for validation          |
+| `clientSecret`           | `string`       | -         | Client secret (for confidential clients)   |
+| `validRedirectUris`      | `string[]`     | -         | Allowed redirect URIs (supports wildcards) |
+| `accessTokenTtlSeconds`  | `number`       | `3600`    | Access token lifetime                      |
+| `refreshTokenTtlSeconds` | `number`       | `2592000` | Refresh token lifetime (30 days)           |
 
 ### MockTestUser Interface
 
@@ -447,15 +447,15 @@ interface MockOAuthServerInfo {
 
 ### Available Endpoints
 
-| Endpoint                                  | Method | Description                            |
-| ----------------------------------------- | ------ | -------------------------------------- |
-| `/.well-known/jwks.json`                  | GET    | Public signing keys                    |
-| `/.well-known/openid-configuration`       | GET    | OIDC discovery document                |
-| `/.well-known/oauth-authorization-server` | GET    | OAuth metadata                         |
-| `/oauth/authorize`                        | GET    | Authorization endpoint                 |
-| `/oauth/authorize/submit`                 | POST   | Authorization form submission          |
-| `/oauth/token`                            | POST   | Token endpoint                         |
-| `/userinfo`                               | GET    | User info endpoint                     |
+| Endpoint                                  | Method | Description                   |
+| ----------------------------------------- | ------ | ----------------------------- |
+| `/.well-known/jwks.json`                  | GET    | Public signing keys           |
+| `/.well-known/openid-configuration`       | GET    | OIDC discovery document       |
+| `/.well-known/oauth-authorization-server` | GET    | OAuth metadata                |
+| `/oauth/authorize`                        | GET    | Authorization endpoint        |
+| `/oauth/authorize/submit`                 | POST   | Authorization form submission |
+| `/oauth/token`                            | POST   | Token endpoint                |
+| `/userinfo`                               | GET    | User info endpoint            |
 
 ### Supported Grant Types
 

@@ -25,8 +25,37 @@ import {
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
-import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
-import { isUIRenderFailure } from '@frontmcp/uipack/registry';
+// TODO: Re-implement against new @frontmcp/uipack API after redesign
+// import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
+// import { isUIRenderFailure } from '@frontmcp/uipack/registry';
+type ToolResponseContent = {
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+  format?: string;
+  contentCleared?: boolean;
+  _meta?: Record<string, unknown>;
+};
+function resolveServingMode(..._args: unknown[]): {
+  mode: string;
+  supportsUI: boolean;
+  effectiveMode: string | null;
+  useStructuredContent: boolean;
+  reason?: string;
+} {
+  return {
+    mode: 'inline',
+    supportsUI: false,
+    effectiveMode: null,
+    useStructuredContent: false,
+    reason: 'UI module not yet re-implemented',
+  };
+}
+function buildToolResponseContent(..._args: unknown[]): ToolResponseContent {
+  return { content: [{ type: 'text' as const, text: '' }] };
+}
+function isUIRenderFailure(_result: unknown): _result is { reason: string } {
+  return false;
+}
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 /**
@@ -655,7 +684,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       // Resolve the effective serving mode based on configuration and client capabilities
       // Default is 'auto' which selects the best mode for the platform
-      const configuredMode = tool.metadata.ui.servingMode ?? 'auto';
+      const configuredMode = tool.metadata.ui?.servingMode ?? 'auto';
       const resolvedMode = resolveServingMode({
         configuredMode,
         platformType,
@@ -689,14 +718,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // For hybrid mode: build the component payload
         const componentPayload = scope.toolUI.buildHybridComponentPayload({
           toolName: tool.metadata.name,
-          template: tool.metadata.ui.template,
+          template: tool.metadata.ui?.template,
           uiConfig: tool.metadata.ui,
         });
 
         if (componentPayload) {
           uiMeta = {
             'ui/component': componentPayload,
-            'ui/type': componentPayload.type,
+            'ui/type': componentPayload['type'],
           };
         }
 
@@ -704,8 +733,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           tool: tool.metadata.name,
           platform: platformType,
           hasComponent: !!componentPayload,
-          componentType: componentPayload?.type,
-          componentHash: componentPayload?.hash,
+          componentType: componentPayload?.['type'],
+          componentHash: componentPayload?.['hash'],
         });
       } else {
         // For inline mode (default): render HTML with data embedded

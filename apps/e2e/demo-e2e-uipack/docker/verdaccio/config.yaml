@@ -1,0 +1,36 @@
+# Verdaccio configuration for E2E component rendering tests
+storage: /verdaccio/storage
+
+auth:
+  htpasswd:
+    file: /verdaccio/storage/htpasswd
+    max_users: 1000
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: false
+
+packages:
+  # Local packages - allow anonymous publish for e2e testing
+  "@frontmcp/*":
+    access: $all
+    publish: $anonymous
+    unpublish: $anonymous
+
+  # Proxy to npm for everything else (react, @mui/material, @emotion, etc.)
+  "**":
+    access: $all
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+middlewares:
+  audit:
+    enabled: true
+
+log:
+  type: stdout
+  format: pretty
+  level: warn

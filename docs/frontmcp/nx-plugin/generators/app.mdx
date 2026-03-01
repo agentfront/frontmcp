@@ -15,11 +15,11 @@ nx g @frontmcp/nx:app my-app
 
 ## Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | — | **Required.** The name of the application |
-| `directory` | `string` | `apps/<name>` | The directory of the application |
-| `tags` | `string` | — | Comma-separated tags for the project |
+| Option      | Type     | Default       | Description                               |
+| ----------- | -------- | ------------- | ----------------------------------------- |
+| `name`      | `string` | —             | **Required.** The name of the application |
+| `directory` | `string` | `apps/<name>` | The directory of the application          |
+| `tags`      | `string` | —             | Comma-separated tags for the project      |
 
 ## Generated Files
 
@@ -67,13 +67,13 @@ export default class Server {}
 
 The generated `project.json` includes these targets:
 
-| Target | Executor | Description |
-| --- | --- | --- |
-| `build` | `@frontmcp/nx:build` | Compile to dist/ |
-| `dev` | `@frontmcp/nx:dev` | Development mode with watch |
-| `serve` | `@frontmcp/nx:serve` | Run application server |
-| `test` | `@frontmcp/nx:test` | Run Jest tests |
-| `inspector` | `@frontmcp/nx:inspector` | Launch MCP Inspector |
+| Target      | Executor                 | Description                 |
+| ----------- | ------------------------ | --------------------------- |
+| `build`     | `@frontmcp/nx:build`     | Compile to dist/            |
+| `dev`       | `@frontmcp/nx:dev`       | Development mode with watch |
+| `serve`     | `@frontmcp/nx:serve`     | Run application server      |
+| `test`      | `@frontmcp/nx:test`      | Run Jest tests              |
+| `inspector` | `@frontmcp/nx:inspector` | Launch MCP Inspector        |
 
 ## Example
 

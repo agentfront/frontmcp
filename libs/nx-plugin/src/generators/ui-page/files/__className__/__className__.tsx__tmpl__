@@ -1,0 +1,16 @@
+import { Box, Typography } from '@mui/material';
+
+export interface <%= className %>Props {
+  title?: string;
+}
+
+export function <%= className %>({ title = '<%= className %>' }: <%= className %>Props) {
+  return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4">{title}</Typography>
+      <Typography variant="body1" sx={{ mt: 2 }}>
+        TODO: implement <%= className %>
+      </Typography>
+    </Box>
+  );
+}

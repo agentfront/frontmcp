@@ -133,13 +133,13 @@ When using orchestrated mode with federated authentication, FrontMCP stores prov
 
 ### Interface Methods
 
-| Method | Description |
-|--------|-------------|
-| `storeTokens(authorizationId, providerId, tokens)` | Store tokens for a provider |
-| `getTokens(authorizationId, providerId)` | Retrieve tokens for a provider |
-| `deleteTokens(authorizationId, providerId)` | Delete tokens for a provider |
-| `getProviderIds(authorizationId)` | Get all provider IDs with stored tokens |
-| `migrateTokens(fromAuthId, toAuthId)` | Migrate tokens between authorization IDs |
+| Method                                             | Description                              |
+| -------------------------------------------------- | ---------------------------------------- |
+| `storeTokens(authorizationId, providerId, tokens)` | Store tokens for a provider              |
+| `getTokens(authorizationId, providerId)`           | Retrieve tokens for a provider           |
+| `deleteTokens(authorizationId, providerId)`        | Delete tokens for a provider             |
+| `getProviderIds(authorizationId)`                  | Get all provider IDs with stored tokens  |
+| `migrateTokens(fromAuthId, toAuthId)`              | Migrate tokens between authorization IDs |
 
 ### Token Migration
 

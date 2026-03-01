@@ -1,5 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/search.tool.test.ts
 
+import { z } from 'zod';
 import SearchTool from '../tools/search.tool';
 import type { SearchToolOutput } from '../tools/search.schema';
 import { searchToolInputSchema } from '../tools/search.schema';
@@ -529,9 +530,10 @@ describe('SearchTool', () => {
   describe('Input Schema Validation', () => {
     // Note: The SDK's Tool decorator handles input validation at runtime.
     // These tests validate the schema directly since the mock bypasses the decorator.
+    const schema = z.object(searchToolInputSchema);
 
     it('should reject query string below minimum length', () => {
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: ['a'], // min length is 2
       });
       expect(result.success).toBe(false);
@@ -539,14 +541,14 @@ describe('SearchTool', () => {
 
     it('should reject query string exceeding maximum length', () => {
       const tooLongQuery = 'a'.repeat(257); // max length is 256
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: [tooLongQuery],
       });
       expect(result.success).toBe(false);
     });
 
     it('should reject empty queries array', () => {
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: [], // min array length is 1
       });
       expect(result.success).toBe(false);
@@ -554,14 +556,14 @@ describe('SearchTool', () => {
 
     it('should reject queries array exceeding maximum length', () => {
       const elevenQueries = Array.from({ length: 11 }, (_, i) => `query ${i}`); // max is 10
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: elevenQueries,
       });
       expect(result.success).toBe(false);
     });
 
     it('should reject minRelevanceScore below valid range', () => {
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: ['find users'],
         minRelevanceScore: -0.1, // min is 0
       });
@@ -569,7 +571,7 @@ describe('SearchTool', () => {
     });
 
     it('should reject minRelevanceScore above valid range', () => {
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: ['find users'],
         minRelevanceScore: 1.5, // max is 1
       });
@@ -577,7 +579,7 @@ describe('SearchTool', () => {
     });
 
     it('should accept valid input', () => {
-      const result = searchToolInputSchema.safeParse({
+      const result = schema.safeParse({
         queries: ['find users', 'list orders'],
         minRelevanceScore: 0.5,
         topK: 10,

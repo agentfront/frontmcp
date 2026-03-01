@@ -14,11 +14,11 @@ Auth internal errors are thrown by the authentication infrastructure — encrypt
 
 Thrown when the encryption context is not set before an operation that requires it.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ENCRYPTION_CONTEXT_NOT_SET` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                        |
+| ------------ | --------- | ---------------------------- |
+| `code`       | `string`  | `ENCRYPTION_CONTEXT_NOT_SET` |
+| `statusCode` | `number`  | `500`                        |
+| `isPublic`   | `boolean` | `false`                      |
 
 ```typescript
 new EncryptionContextNotSetError()
@@ -30,11 +30,11 @@ new EncryptionContextNotSetError()
 
 Thrown when the encryption key is not configured.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ENCRYPTION_KEY_NOT_CONFIGURED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                           |
+| ------------ | --------- | ------------------------------- |
+| `code`       | `string`  | `ENCRYPTION_KEY_NOT_CONFIGURED` |
+| `statusCode` | `number`  | `500`                           |
+| `isPublic`   | `boolean` | `false`                         |
 
 ```typescript
 new EncryptionKeyNotConfiguredError()
@@ -46,11 +46,11 @@ new EncryptionKeyNotConfiguredError()
 
 Thrown when loading a credential vault fails.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `VAULT_LOAD_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property        | Type                 | Value                |
+| --------------- | -------------------- | -------------------- |
+| `code`          | `string`             | `VAULT_LOAD_ERROR`   |
+| `statusCode`    | `number`             | `500`                |
+| `isPublic`      | `boolean`            | `false`              |
 | `originalError` | `Error \| undefined` | The underlying cause |
 
 ```typescript
@@ -72,11 +72,11 @@ throw new VaultLoadError('user_123', new Error('Redis connection timeout'));
 
 Thrown when a vault entity is not found.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `VAULT_NOT_FOUND` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value             |
+| ------------ | --------- | ----------------- |
+| `code`       | `string`  | `VAULT_NOT_FOUND` |
+| `statusCode` | `number`  | `500`             |
+| `isPublic`   | `boolean` | `false`           |
 
 ```typescript
 new VaultNotFoundError(entityType: string, id: string)
@@ -97,11 +97,11 @@ throw new VaultNotFoundError('credential', 'slack_oauth');
 
 Thrown when a token is not available (e.g., expired or not yet obtained).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `TOKEN_NOT_AVAILABLE` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                 |
+| ------------ | --------- | --------------------- |
+| `code`       | `string`  | `TOKEN_NOT_AVAILABLE` |
+| `statusCode` | `number`  | `500`                 |
+| `isPublic`   | `boolean` | `false`               |
 
 ```typescript
 new TokenNotAvailableError(message: string)
@@ -113,11 +113,11 @@ new TokenNotAvailableError(message: string)
 
 Thrown when a token store is required but not configured.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `TOKEN_STORE_REQUIRED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `TOKEN_STORE_REQUIRED` |
+| `statusCode` | `number`  | `500`                  |
+| `isPublic`   | `boolean` | `false`                |
 
 ```typescript
 new TokenStoreRequiredError(context: string)
@@ -138,11 +138,11 @@ throw new TokenStoreRequiredError('orchestrated auth');
 
 Thrown when a potential token leak is detected (e.g., token appearing in logs or responses).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `TOKEN_LEAK_DETECTED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                 |
+| ------------ | --------- | --------------------- |
+| `code`       | `string`  | `TOKEN_LEAK_DETECTED` |
+| `statusCode` | `number`  | `500`                 |
+| `isPublic`   | `boolean` | `false`               |
 
 ```typescript
 new TokenLeakDetectedError(detail: string)
@@ -154,11 +154,11 @@ new TokenLeakDetectedError(detail: string)
 
 Thrown when no provider ID is available during auth flow.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `NO_PROVIDER_ID` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value            |
+| ------------ | --------- | ---------------- |
+| `code`       | `string`  | `NO_PROVIDER_ID` |
+| `statusCode` | `number`  | `500`            |
+| `isPublic`   | `boolean` | `false`          |
 
 ```typescript
 new NoProviderIdError(message: string)
@@ -170,11 +170,11 @@ new NoProviderIdError(message: string)
 
 Thrown when attempting to register a credential provider that is already registered.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `CREDENTIAL_PROVIDER_ALREADY_REGISTERED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                                    |
+| ------------ | --------- | ---------------------------------------- |
+| `code`       | `string`  | `CREDENTIAL_PROVIDER_ALREADY_REGISTERED` |
+| `statusCode` | `number`  | `500`                                    |
+| `isPublic`   | `boolean` | `false`                                  |
 
 ```typescript
 new CredentialProviderAlreadyRegisteredError(name: string)
@@ -186,11 +186,11 @@ new CredentialProviderAlreadyRegisteredError(name: string)
 
 Thrown when auth providers are not configured.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AUTH_PROVIDERS_NOT_CONFIGURED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                           |
+| ------------ | --------- | ------------------------------- |
+| `code`       | `string`  | `AUTH_PROVIDERS_NOT_CONFIGURED` |
+| `statusCode` | `number`  | `500`                           |
+| `isPublic`   | `boolean` | `false`                         |
 
 ```typescript
 new AuthProvidersNotConfiguredError()
@@ -202,11 +202,11 @@ new AuthProvidersNotConfiguredError()
 
 Thrown when orchestrated auth is not available in the current context.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ORCHESTRATED_AUTH_NOT_AVAILABLE` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                             |
+| ------------ | --------- | --------------------------------- |
+| `code`       | `string`  | `ORCHESTRATED_AUTH_NOT_AVAILABLE` |
+| `statusCode` | `number`  | `500`                             |
+| `isPublic`   | `boolean` | `false`                           |
 
 ```typescript
 new OrchestratedAuthNotAvailableError()
@@ -218,11 +218,11 @@ new OrchestratedAuthNotAvailableError()
 
 Thrown when a session secret is required but not configured.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `SESSION_SECRET_REQUIRED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                     |
+| ------------ | --------- | ------------------------- |
+| `code`       | `string`  | `SESSION_SECRET_REQUIRED` |
+| `statusCode` | `number`  | `500`                     |
+| `isPublic`   | `boolean` | `false`                   |
 
 ```typescript
 new SessionSecretRequiredError(component: string)
@@ -243,11 +243,11 @@ throw new SessionSecretRequiredError('session encryption');
 
 Thrown when a session ID is empty.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `SESSION_ID_EMPTY` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value              |
+| ------------ | --------- | ------------------ |
+| `code`       | `string`  | `SESSION_ID_EMPTY` |
+| `statusCode` | `number`  | `500`              |
+| `isPublic`   | `boolean` | `false`            |
 
 ```typescript
 new SessionIdEmptyError(storeName: string)
@@ -259,11 +259,11 @@ new SessionIdEmptyError(storeName: string)
 
 Thrown when the elicitation secret is required but not configured.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ELICITATION_SECRET_REQUIRED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                         |
+| ------------ | --------- | ----------------------------- |
+| `code`       | `string`  | `ELICITATION_SECRET_REQUIRED` |
+| `statusCode` | `number`  | `500`                         |
+| `isPublic`   | `boolean` | `false`                       |
 
 ```typescript
 new ElicitationSecretRequiredError()
@@ -275,11 +275,11 @@ new ElicitationSecretRequiredError()
 
 Thrown when scope access is denied for a provider.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `SCOPE_DENIED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value          |
+| ------------ | --------- | -------------- |
+| `code`       | `string`  | `SCOPE_DENIED` |
+| `statusCode` | `number`  | `500`          |
+| `isPublic`   | `boolean` | `false`        |
 
 ```typescript
 new ScopeDeniedError(providerId: string)
@@ -291,11 +291,11 @@ new ScopeDeniedError(providerId: string)
 
 Thrown when an in-memory store is required but not available.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INMEMORY_STORE_REQUIRED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                     |
+| ------------ | --------- | ------------------------- |
+| `code`       | `string`  | `INMEMORY_STORE_REQUIRED` |
+| `statusCode` | `number`  | `500`                     |
+| `isPublic`   | `boolean` | `false`                   |
 
 ```typescript
 new InMemoryStoreRequiredError(component: string)
@@ -307,11 +307,11 @@ new InMemoryStoreRequiredError(component: string)
 
 Thrown when the orchestrator JWKS endpoint is not available.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `ORCHESTRATOR_JWKS_NOT_AVAILABLE` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                             |
+| ------------ | --------- | --------------------------------- |
+| `code`       | `string`  | `ORCHESTRATOR_JWKS_NOT_AVAILABLE` |
+| `statusCode` | `number`  | `500`                             |
+| `isPublic`   | `boolean` | `false`                           |
 
 ```typescript
 new OrchestratorJwksNotAvailableError()

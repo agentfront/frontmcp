@@ -74,14 +74,14 @@ provider.setToolValidator(new SkillToolValidator(toolRegistry));
 
 The provider uses weighted TF-IDF indexing to improve search relevance:
 
-| Field | Weight | Description |
-|-------|--------|-------------|
-| Description | 3x | Most important for matching |
-| Tags | 2x | Category and topic signals |
-| Tools | 1x | Tool name and purpose |
-| Name | 1x | Skill identifier |
-| Parameters | 1x | Parameter names and descriptions |
-| Examples | 1x | Scenario descriptions |
+| Field       | Weight | Description                      |
+| ----------- | ------ | -------------------------------- |
+| Description | 3x     | Most important for matching      |
+| Tags        | 2x     | Category and topic signals       |
+| Tools       | 1x     | Tool name and purpose            |
+| Name        | 1x     | Skill identifier                 |
+| Parameters  | 1x     | Parameter names and descriptions |
+| Examples    | 1x     | Scenario descriptions            |
 
 ### Stop Words
 
@@ -158,6 +158,7 @@ interface StoredSkillContent extends SkillContent {
 ```
 
 These fields are:
+
 - Indexed for search (tags with 2x weight)
 - Used for filtering (`tags`, `hideFromDiscovery`)
 - Used for sorting (`priority`)

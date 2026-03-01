@@ -16,6 +16,7 @@ Role-based authorization lets you control which tools users can see and execute 
 ## What You'll Build
 
 An authorization plugin that:
+
 - Extends tool metadata to include required roles
 - Filters the tool list based on user roles
 - Works with any authentication provider
@@ -376,6 +377,7 @@ test('should show admin tools to admins', async ({ mcp, auth }) => {
     requiredRoles: ['ADMIN']  // Inconsistent casing
     requiredRoles: ['admin-level-2']  // Too specific
     ```
+
   </Accordion>
 
   <Accordion title="Default to Deny">
@@ -387,6 +389,7 @@ test('should show admin tools to admins', async ({ mcp, auth }) => {
       return hasRole(userRoles, 'authenticated');
     }
     ```
+
   </Accordion>
 
   <Accordion title="Combine with Execution Hooks">
@@ -401,6 +404,7 @@ test('should show admin tools to admins', async ({ mcp, auth }) => {
       // Re-validate roles here
     }
     ```
+
   </Accordion>
 </AccordionGroup>
 

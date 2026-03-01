@@ -37,11 +37,11 @@ frontmcp socket ./src/main.ts --background
 
 ### CLI Flags
 
-| Flag | Alias | Description |
-|------|-------|-------------|
-| `--socket <path>` | `-s` | Custom socket file path. Defaults to `~/.frontmcp/sockets/{app-name}.sock` |
-| `--db <path>` | | SQLite database path for persistent sessions and events |
-| `--background` | `-b` | Detach and run as a background daemon |
+| Flag              | Alias | Description                                                                |
+| ----------------- | ----- | -------------------------------------------------------------------------- |
+| `--socket <path>` | `-s`  | Custom socket file path. Defaults to `~/.frontmcp/sockets/{app-name}.sock` |
+| `--db <path>`     |       | SQLite database path for persistent sessions and events                    |
+| `--background`    | `-b`  | Detach and run as a background daemon                                      |
 
 <Tip>
 When no `--socket` path is given, the CLI automatically creates the socket at `~/.frontmcp/sockets/{app-name}.sock`, where `{app-name}` is derived from the parent directory of your entry file.
@@ -117,12 +117,12 @@ const handle = await FrontMcpInstance.runUnixSocket({
 
 ### SQLite Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `path` | `string` | *required* | Path to the `.sqlite` database file |
-| `encryption.secret` | `string` | — | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
-| `walMode` | `boolean` | `true` | Enable WAL mode for better read concurrency |
-| `ttlCleanupIntervalMs` | `number` | `60000` | Interval in ms for purging expired keys |
+| Option                 | Type      | Default    | Description                                           |
+| ---------------------- | --------- | ---------- | ----------------------------------------------------- |
+| `path`                 | `string`  | _required_ | Path to the `.sqlite` database file                   |
+| `encryption.secret`    | `string`  | —          | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
+| `walMode`              | `boolean` | `true`     | Enable WAL mode for better read concurrency           |
+| `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys               |
 
 ---
 
@@ -194,6 +194,7 @@ Point your MCP client config at the socket file:
   }
 }
 ```
+
 </CodeGroup>
 
 ---
@@ -251,6 +252,7 @@ kill $(cat /tmp/my-app.sock.pid)
     # Risky — may exceed 104 bytes on deep home directories
     /Users/longusername/deeply/nested/project/path/.frontmcp/sockets/my-very-long-app-name.sock
     ```
+
   </Accordion>
 
   <Accordion title="Use the default socket directory">
@@ -267,6 +269,7 @@ kill $(cat /tmp/my-app.sock.pid)
     ```bash
     rm -f /tmp/my-app.sock /tmp/my-app.sock.pid
     ```
+
   </Accordion>
 
   <Accordion title="Use SQLite for persistence">

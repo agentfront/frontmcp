@@ -19,7 +19,7 @@ const sessionRequestCounts = new Map<string, number>();
   outputSchema,
 })
 export default class GetSessionInfoTool extends ToolContext {
-  async execute(_input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: Record<string, never>): Promise<z.infer<typeof outputSchema>> {
     const authInfo = this.getAuthInfo();
     const sessionId = authInfo.sessionId ?? 'no-session';
     const hasSession = !!authInfo.sessionId;

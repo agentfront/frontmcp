@@ -91,4 +91,35 @@ describe('workspace generator', () => {
     const callback = await workspaceGenerator(tree, { name: 'my-project', skipInstall: false });
     expect(typeof callback).toBe('function');
   });
+
+  it('should generate AI agent configuration files', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    expect(tree.exists('my-project/CLAUDE.md')).toBe(true);
+    expect(tree.exists('my-project/AGENTS.md')).toBe(true);
+    expect(tree.exists('my-project/.mcp.json')).toBe(true);
+    expect(tree.exists('my-project/.cursorrules')).toBe(true);
+  });
+
+  it('should configure frontmcp-docs MCP server in .mcp.json', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    const mcpJson = readJson(tree, 'my-project/.mcp.json');
+    expect(mcpJson.mcpServers['frontmcp-docs']).toBeDefined();
+    expect(mcpJson.mcpServers['frontmcp-docs'].url).toBe('https://docs.agentfront.dev/mcp');
+  });
+
+  it('should include workspace name in CLAUDE.md', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    const claudeMd = tree.read('my-project/CLAUDE.md', 'utf-8');
+    expect(claudeMd).toContain('my-project');
+  });
+
+  it('should include package manager in AGENTS.md', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', packageManager: 'yarn', skipInstall: true });
+
+    const agentsMd = tree.read('my-project/AGENTS.md', 'utf-8');
+    expect(agentsMd).toContain('yarn');
+  });
 });

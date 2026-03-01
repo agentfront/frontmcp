@@ -1,0 +1,2 @@
+export { build<%= className %>Shell } from './<%= fileName %>.shell';
+export type { <%= className %>ShellOptions } from './<%= fileName %>.shell';

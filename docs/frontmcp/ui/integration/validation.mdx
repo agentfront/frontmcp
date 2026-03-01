@@ -106,7 +106,7 @@ const HtmxSchema = z.object({
 Create validated custom components:
 
 ```typescript
-import { validateOptions, escapeHtml } from '@frontmcp/ui/components';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 import { z } from 'zod';
 
 // Define schema
@@ -117,19 +117,18 @@ const MyComponentSchema = z.object({
 
 type MyComponentOptions = z.infer<typeof MyComponentSchema>;
 
-// Create component
+// Create component with inline validation
 export function myComponent(content: string, options: MyComponentOptions = {}): string {
-  // Validate options
-  const validation = validateOptions(options, {
-    schema: MyComponentSchema,
-    componentName: 'myComponent',
-  });
+  const result = MyComponentSchema.safeParse(options);
 
-  if (!validation.success) {
-    return validation.error; // Return error box
+  if (!result.success) {
+    const errors = result.error.issues.map((i) => i.message).join(', ');
+    return `<div style="border:1px solid red; padding:8px; color:red;">
+      myComponent: invalid options — ${escapeHtml(errors)}
+    </div>`;
   }
 
-  const { variant = 'light', size = 'md' } = validation.data;
+  const { variant = 'light', size = 'md' } = result.data;
 
   // Build HTML with validated options
   return `<div class="my-component my-component--${variant} my-component--${size}">

@@ -50,30 +50,32 @@ describe('Tool Schemas', () => {
   });
 
   describe('listToolsInputSchema', () => {
+    const schema = z.object(listToolsInputSchema);
+
     it('should parse empty input with defaults', () => {
-      const result = listToolsInputSchema.parse({});
+      const result = schema.parse({});
       expect(result.includePlugins).toBe(true);
       expect(result.includeSchemas).toBe(false);
       expect(result.filter).toBeUndefined();
     });
 
     it('should parse filter option', () => {
-      const result = listToolsInputSchema.parse({ filter: 'my-.*' });
+      const result = schema.parse({ filter: 'my-.*' });
       expect(result.filter).toBe('my-.*');
     });
 
     it('should parse includePlugins option', () => {
-      const result = listToolsInputSchema.parse({ includePlugins: false });
+      const result = schema.parse({ includePlugins: false });
       expect(result.includePlugins).toBe(false);
     });
 
     it('should parse includeSchemas option', () => {
-      const result = listToolsInputSchema.parse({ includeSchemas: true });
+      const result = schema.parse({ includeSchemas: true });
       expect(result.includeSchemas).toBe(true);
     });
 
     it('should parse all options', () => {
-      const result = listToolsInputSchema.parse({
+      const result = schema.parse({
         filter: 'test',
         includePlugins: false,
         includeSchemas: true,
@@ -137,24 +139,26 @@ describe('Tool Schemas', () => {
   });
 
   describe('listResourcesInputSchema', () => {
+    const schema = z.object(listResourcesInputSchema);
+
     it('should parse empty input with defaults', () => {
-      const result = listResourcesInputSchema.parse({});
+      const result = schema.parse({});
       expect(result.includeTemplates).toBe(true);
       expect(result.filter).toBeUndefined();
     });
 
     it('should parse filter option', () => {
-      const result = listResourcesInputSchema.parse({ filter: 'file://.*' });
+      const result = schema.parse({ filter: 'file://.*' });
       expect(result.filter).toBe('file://.*');
     });
 
     it('should parse includeTemplates option', () => {
-      const result = listResourcesInputSchema.parse({ includeTemplates: false });
+      const result = schema.parse({ includeTemplates: false });
       expect(result.includeTemplates).toBe(false);
     });
 
     it('should parse both options', () => {
-      const result = listResourcesInputSchema.parse({
+      const result = schema.parse({
         filter: 'test',
         includeTemplates: false,
       });

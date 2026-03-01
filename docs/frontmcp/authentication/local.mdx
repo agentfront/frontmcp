@@ -27,13 +27,13 @@ export class Server {}
 
 ## Configuration Options
 
-| Option               | Type                        | Default              | Description                      |
-| -------------------- | --------------------------- | -------------------- | -------------------------------- |
-| `consent`            | `ConsentConfig`                    | `{ enabled: false }` | Consent UI configuration         |
-| `tokenStorage`       | `'memory' \| { redis: RedisConfig }` | `'memory'`         | Token storage backend            |
-| `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated access     |
-| `anonymousScopes`    | `string[]`                  | `['anonymous']`      | Scopes for anonymous sessions    |
-| `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization config |
+| Option               | Type                                 | Default              | Description                      |
+| -------------------- | ------------------------------------ | -------------------- | -------------------------------- |
+| `consent`            | `ConsentConfig`                      | `{ enabled: false }` | Consent UI configuration         |
+| `tokenStorage`       | `'memory' \| { redis: RedisConfig }` | `'memory'`           | Token storage backend            |
+| `allowDefaultPublic` | `boolean`                            | `false`              | Allow unauthenticated access     |
+| `anonymousScopes`    | `string[]`                           | `['anonymous']`      | Scopes for anonymous sessions    |
+| `incrementalAuth`    | `IncrementalAuthConfig`              | `{ enabled: true }`  | Progressive authorization config |
 
 ---
 
@@ -80,14 +80,14 @@ grant_type=authorization_code
 
 The callback endpoint processes the user's response from the authorization page and creates an authorization code. It executes through the following stages:
 
-| Stage                   | Description                                            |
-| ----------------------- | ------------------------------------------------------ |
-| `parseInput`            | Extract query parameters (email, pending_auth_id, etc.) |
-| `validatePendingAuth`   | Verify pending auth record and validate providers      |
-| `handleIncrementalAuth` | Process progressive authorization for apps             |
-| `handleFederatedAuth`   | Chain through federated identity providers             |
-| `createAuthorizationCode` | Generate authorization code with consent data        |
-| `redirectToClient`      | Redirect user back to client with code                 |
+| Stage                     | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| `parseInput`              | Extract query parameters (email, pending_auth_id, etc.) |
+| `validatePendingAuth`     | Verify pending auth record and validate providers       |
+| `handleIncrementalAuth`   | Process progressive authorization for apps              |
+| `handleFederatedAuth`     | Chain through federated identity providers              |
+| `createAuthorizationCode` | Generate authorization code with consent data           |
+| `redirectToClient`        | Redirect user back to client with code                  |
 
 #### Callback Query Parameters
 

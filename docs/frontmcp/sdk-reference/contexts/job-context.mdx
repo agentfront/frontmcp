@@ -17,22 +17,22 @@ export abstract class JobContext<
 
 ## Type Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `InSchema` | Input schema type (Zod shape) |
-| `OutSchema` | Output schema type |
-| `In` | Inferred input type |
-| `Out` | Inferred output type |
+| Parameter   | Description                   |
+| ----------- | ----------------------------- |
+| `InSchema`  | Input schema type (Zod shape) |
+| `OutSchema` | Output schema type            |
+| `In`        | Inferred input type           |
+| `Out`       | Inferred output type          |
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `metadata` | `JobMetadata` | Job metadata (name, description, retry, etc.) |
-| `input` | `In` | Parsed and validated input |
-| `output` | `Out \| undefined` | Job output (after execution) |
-| `jobName` | `string` | Job name |
-| `jobId` | `string` | Job ID (or name if not specified) |
+| Property   | Type               | Description                                   |
+| ---------- | ------------------ | --------------------------------------------- |
+| `metadata` | `JobMetadata`      | Job metadata (name, description, retry, etc.) |
+| `input`    | `In`               | Parsed and validated input                    |
+| `output`   | `Out \| undefined` | Job output (after execution)                  |
+| `jobName`  | `string`           | Job name                                      |
+| `jobId`    | `string`           | Job ID (or name if not specified)             |
 
 ## Abstract Method
 
@@ -162,16 +162,16 @@ async execute(input) {
 
 From `ExecutionContextBase`:
 
-| Method | Description |
-|--------|-------------|
-| `get(token)` | Resolve a required dependency |
-| `tryGet(token)` | Resolve an optional dependency (returns `undefined` if not found) |
-| `scope` | Access the current scope |
-| `logger` | Scoped logger instance |
-| `getAuthInfo()` | Get authentication context |
-| `fail(error)` | Fail execution with an error |
-| `mark(stage)` | Mark current execution stage |
-| `fetch(url, options?)` | Context-aware HTTP fetch |
+| Method                 | Description                                                       |
+| ---------------------- | ----------------------------------------------------------------- |
+| `get(token)`           | Resolve a required dependency                                     |
+| `tryGet(token)`        | Resolve an optional dependency (returns `undefined` if not found) |
+| `scope`                | Access the current scope                                          |
+| `logger`               | Scoped logger instance                                            |
+| `getAuthInfo()`        | Get authentication context                                        |
+| `fail(error)`          | Fail execution with an error                                      |
+| `mark(stage)`          | Mark current execution stage                                      |
+| `fetch(url, options?)` | Context-aware HTTP fetch                                          |
 
 ## Full Example
 

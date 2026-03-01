@@ -16,6 +16,7 @@ Multi-tenant applications need to ensure users can only access data for their au
 ## What You'll Build
 
 A site authorization plugin that:
+
 - Validates users can only access their authorized sites
 - Supports admin-only tools within sites
 - Works with tools that have a `siteId` input parameter
@@ -385,6 +386,7 @@ export default class EnterpriseApp {}
 ```
 
 This gives you:
+
 1. **Role-based filtering** - Users only see tools for their roles
 2. **Site-based validation** - Users can only access their authorized sites
 
@@ -438,6 +440,7 @@ test('should require admin for admin tools', async ({ mcp }) => {
       // other fields...
     }
     ```
+
   </Accordion>
 
   <Accordion title="Use demo mode carefully">
@@ -448,6 +451,7 @@ test('should require admin for admin tools', async ({ mcp }) => {
       demoAllowAllIfNoClaims: process.env.NODE_ENV !== 'production',
     })
     ```
+
   </Accordion>
 
   <Accordion title="Log authorization failures">
@@ -459,6 +463,7 @@ test('should require admin for admin tools', async ({ mcp }) => {
       throw new Error(`Not authorized for site ${siteId}`);
     }
     ```
+
   </Accordion>
 
   <Accordion title="Consider caching site access">
@@ -475,6 +480,7 @@ test('should require admin for admin tools', async ({ mcp }) => {
       // ... fetch and cache
     }
     ```
+
   </Accordion>
 </AccordionGroup>
 

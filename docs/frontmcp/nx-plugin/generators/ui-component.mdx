@@ -1,0 +1,76 @@
+---
+title: UI Component Generator
+slug: nx-plugin/generators/ui-component
+icon: puzzle-piece
+description: Add a reusable MUI-based React component to ui/components/
+---
+
+Generates a React component inside the `@frontmcp/ui-components` package with an MUI scaffold, spec file, and barrel index.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:ui-component LoginForm
+```
+
+## Options
+
+| Option       | Type      | Default | Description                              |
+| ------------ | --------- | ------- | ---------------------------------------- |
+| `name`       | `string`  | —       | **Required.** Component name (PascalCase or kebab-case — auto-converted to PascalCase) |
+| `description`| `string`  | `""`    | Optional description for the component   |
+| `skipFormat` | `boolean` | `false` | Skip running Prettier after generation   |
+
+## Generated Files
+
+```
+ui/components/src/LoginForm/
+  index.ts
+  LoginForm.tsx
+  LoginForm.spec.tsx
+```
+
+```tsx LoginForm.tsx
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+
+export interface LoginFormProps {
+  // TODO: define props
+}
+
+export function LoginForm(props: LoginFormProps) {
+  return (
+    <Box>
+      <Typography>TODO: implement LoginForm</Typography>
+    </Box>
+  );
+}
+```
+
+```ts index.ts
+export { LoginForm } from './LoginForm';
+export { LoginForm as default } from './LoginForm';
+export type { LoginFormProps } from './LoginForm';
+```
+
+## Auto-Updates
+
+The generator also updates three files in your workspace:
+
+1. **`ui/components/project.json`** — adds the entry to `additionalEntryPoints` in both `build-cjs` and `build-esm` targets
+2. **`tsconfig.base.json`** — adds a path alias `@frontmcp/ui-components/LoginForm`
+3. **`ui/components/src/index.ts`** — appends `export * from './LoginForm'`
+
+## Consuming
+
+```ts
+import { LoginForm } from '@frontmcp/ui-components/LoginForm';
+```
+
+## Example
+
+```bash
+# Kebab-case input is auto-converted to PascalCase
+nx g @frontmcp/nx:ui-component my-widget
+# Creates: ui/components/src/MyWidget/MyWidget.tsx
+```

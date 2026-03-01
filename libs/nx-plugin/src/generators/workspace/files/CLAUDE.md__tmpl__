@@ -1,0 +1,216 @@
+# <%= name %> — FrontMCP Workspace
+
+This is a **FrontMCP** monorepo — a TypeScript-first framework for building production-grade MCP (Model Context Protocol) servers with decorators, dependency injection, and strict type safety.
+
+## Monorepo Structure
+
+```
+<%= name %>/
+  apps/          # MCP application definitions (@App decorator)
+  libs/          # Shared libraries (tools, resources, providers)
+  servers/       # Deployment shells (Express/Fastify adapters)
+```
+
+## Key Commands
+
+```bash
+# Build / test / serve a specific project
+npx nx build <project>
+npx nx test <project>
+npx nx serve <project>
+
+# Run across all projects
+npx nx run-many -t build
+npx nx run-many -t test
+
+# Start dev server with watch mode
+npx nx dev <server-project>
+```
+
+## Nx Generators
+
+Always use generators to scaffold new code — never create files manually.
+
+### Structural generators
+
+| Generator | Command | Description |
+|-----------|---------|-------------|
+| workspace | `npx nx g @frontmcp/nx:workspace <name>` | New FrontMCP monorepo |
+| app | `npx nx g @frontmcp/nx:app <name>` | MCP application |
+| lib | `npx nx g @frontmcp/nx:lib <name>` | Shared library |
+| server | `npx nx g @frontmcp/nx:server <name>` | Deployment shell |
+
+### Component generators (use `--project` to target a library)
+
+| Generator | Command | Description |
+|-----------|---------|-------------|
+| tool | `npx nx g @frontmcp/nx:tool <Name> --project <lib>` | MCP tool with Zod schemas |
+| resource | `npx nx g @frontmcp/nx:resource <Name> --project <lib>` | MCP resource |
+| prompt | `npx nx g @frontmcp/nx:prompt <Name> --project <lib>` | MCP prompt |
+| skill | `npx nx g @frontmcp/nx:skill <Name> --project <lib>` | Composite skill |
+| agent | `npx nx g @frontmcp/nx:agent <Name> --project <lib>` | Agent definition |
+| provider | `npx nx g @frontmcp/nx:provider <Name> --project <lib>` | DI provider |
+| plugin | `npx nx g @frontmcp/nx:plugin <Name> --project <lib>` | Plugin |
+| adapter | `npx nx g @frontmcp/nx:adapter <Name> --project <lib>` | Framework adapter |
+| auth-provider | `npx nx g @frontmcp/nx:auth-provider <Name> --project <lib>` | Auth provider |
+| flow | `npx nx g @frontmcp/nx:flow <Name> --project <lib>` | Flow definition |
+| job | `npx nx g @frontmcp/nx:job <Name> --project <lib>` | Background job |
+| workflow | `npx nx g @frontmcp/nx:workflow <Name> --project <lib>` | Multi-step workflow |
+
+### UI generators
+
+| Generator | Command | Description |
+|-----------|---------|-------------|
+| ui-component | `npx nx g @frontmcp/nx:ui-component <Name>` | React component (PascalCase) |
+| ui-page | `npx nx g @frontmcp/nx:ui-page <Name>` | Full-page React component |
+| ui-shell | `npx nx g @frontmcp/nx:ui-shell <name>` | Server-side HTML shell (kebab-case) |
+
+## Architecture Patterns
+
+### Server entry point (`main.ts`)
+
+```typescript
+import { FrontMcp, StdioTransport } from '@frontmcp/sdk';
+import { MyApp } from './my-app.app';
+
+@FrontMcp({
+  name: 'my-server',
+  version: '1.0.0',
+  apps: [MyApp],
+})
+class MyServer {}
+
+new StdioTransport(MyServer).start();
+```
+
+### App definition
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import { MyTool } from './tools/my-tool.tool';
+import { MyResource } from './resources/my-resource.resource';
+
+@App({
+  tools: [MyTool],
+  resources: [MyResource],
+  prompts: [],
+  providers: [],
+})
+export class MyApp {}
+```
+
+### Tool (most common pattern)
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const inputSchema = z.object({
+  query: z.string().describe('Search query'),
+});
+
+const outputSchema = z.object({
+  results: z.array(z.string()),
+});
+
+@Tool({
+  name: 'search',
+  description: 'Search for items',
+  inputSchema,
+  outputSchema,
+})
+export class SearchTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input: z.infer<typeof inputSchema>) {
+    const results = ['result1', 'result2'];
+    return { results };
+  }
+}
+```
+
+### Resource
+
+```typescript
+import { Resource, ResourceContext } from '@frontmcp/sdk';
+
+@Resource({
+  uri: 'myapp://config',
+  name: 'App Configuration',
+  mimeType: 'application/json',
+})
+export class ConfigResource extends ResourceContext {
+  async read() {
+    return { uri: 'myapp://config', text: JSON.stringify({ key: 'value' }) };
+  }
+}
+```
+
+### Resource Template (dynamic URIs)
+
+```typescript
+import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  uriTemplate: 'myapp://users/{userId}',
+  name: 'User Profile',
+  mimeType: 'application/json',
+})
+export class UserResource extends ResourceContext<{ userId: string }> {
+  async read(params: { userId: string }) {
+    return { uri: `myapp://users/${params.userId}`, text: JSON.stringify({ id: params.userId }) };
+  }
+}
+```
+
+### Prompt
+
+```typescript
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+
+@Prompt({
+  name: 'summarize',
+  description: 'Summarize content',
+})
+export class SummarizePrompt extends PromptContext {
+  async execute(args: Record<string, string>): Promise<GetPromptResult> {
+    return {
+      messages: [
+        { role: 'user', content: { type: 'text', text: `Summarize: ${args['content']}` } },
+      ],
+    };
+  }
+}
+```
+
+### Provider (dependency injection)
+
+```typescript
+import { Provider } from '@frontmcp/sdk';
+
+export const DB_TOKEN = Symbol('DB');
+
+@Provider({ token: DB_TOKEN })
+export class DatabaseProvider {
+  provide() {
+    return new DatabaseClient({ url: process.env['DATABASE_URL'] });
+  }
+}
+
+// In a tool, access via this.get(DB_TOKEN):
+async execute(input) {
+  const db = this.get(DB_TOKEN);
+}
+```
+
+## Code Conventions
+
+- **TypeScript strict mode** — no `any` types without justification; prefer `unknown`
+- **Zod v4** for all input/output schema validation
+- **`@frontmcp/utils`** for crypto and file-system operations (never use `node:crypto` or `fs` directly)
+- **95%+ test coverage** required (statements, branches, functions, lines)
+- **`@frontmcp/testing`** for test harnesses (`createTestHarness`, `createToolTestHarness`)
+- **No non-null assertions** (`!`) — throw proper errors instead
+
+## Documentation
+
+This workspace includes a `.mcp.json` that configures the **frontmcp-docs** MCP server. AI coding agents can use the `SearchAgentFront` tool to search the full FrontMCP documentation at any time.

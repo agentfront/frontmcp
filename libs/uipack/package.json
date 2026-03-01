@@ -1,7 +1,7 @@
 {
   "name": "@frontmcp/uipack",
   "version": "0.12.1",
-  "description": "FrontMCP UIpack - Bundling, build tools, and platform adapters for MCP UI development (React-free core)",
+  "description": "FrontMCP UIpack - HTML shell builder, pluggable import resolver, and NPM component loader for MCP UI (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
   "license": "Apache-2.0",
@@ -9,10 +9,7 @@
     "mcp",
     "ui",
     "bundler",
-    "esbuild",
-    "swc",
-    "tailwind",
-    "htmx",
+    "template",
     "agentfront",
     "frontmcp",
     "framework",
@@ -60,12 +57,6 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "0.12.1",
-    "@swc/core": "^1.5.0",
-    "@enclave-vm/core": "^2.11.1",
-    "dompurify": "^3.3.1",
-    "esbuild": "^0.27.3",
-    "handlebars": "^4.7.8",
     "zod": "^4.0.0"
   },
   "devDependencies": {
