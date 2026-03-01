@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import type { DeploymentTarget, RedisSetup, PackageManager } from './create.js';
 
 export function registerScaffoldCommands(program: Command): void {
   program
@@ -20,10 +21,10 @@ export function registerScaffoldCommands(program: Command): void {
         const { runCreate } = await import('./create.js');
         await runCreate(name, {
           yes: options.yes,
-          target: options.target,
-          redis: options.redis,
+          target: options.target as DeploymentTarget | undefined,
+          redis: options.redis as RedisSetup | undefined,
           cicd: options.cicd,
-          pm: options.pm,
+          pm: options.pm as PackageManager | undefined,
           nx: options.nx,
         });
       },

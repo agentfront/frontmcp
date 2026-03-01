@@ -108,7 +108,7 @@ async function doLoadBabel(): Promise<BabelStandalone> {
 
   // Try ESM import first
   try {
-    const module = await import(/* webpackIgnore: true */ BABEL_STANDALONE_CDN);
+    const module = await import(/* @vite-ignore */ /* webpackIgnore: true */ BABEL_STANDALONE_CDN);
     if (module && typeof module.transform === 'function') {
       return module as BabelStandalone;
     }

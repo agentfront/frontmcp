@@ -4,7 +4,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import { styled } from '@mui/material/styles';
-import { createLazyImport, runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
+import { createLazyImport, runtimeImportWithFallback, esmShUrl, ESM_SH_BASE } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
 
@@ -16,7 +16,7 @@ import type { ContentRenderer, RenderOptions } from '../types';
 interface ReactPdfModule {
   Document: React.ComponentType<any>;
   Page: React.ComponentType<any>;
-  pdfjs?: { GlobalWorkerOptions: { workerSrc: string } };
+  pdfjs?: { version?: string; GlobalWorkerOptions: { workerSrc: string } };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -25,6 +25,14 @@ const lazyReactPdf = createLazyImport<ReactPdfModule>('react-pdf', async () => {
     'react-pdf',
     esmShUrl('react-pdf@9', { external: ['react', 'react-dom'] }),
   );
+
+  // Configure PDF.js worker — the default bare specifier 'pdf.worker.mjs'
+  // can't be resolved in browser environments. Use the CDN worker instead.
+  const pdfjs = (mod as Record<string, unknown>)['pdfjs'] as ReactPdfModule['pdfjs'];
+  if (pdfjs?.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = `${ESM_SH_BASE}pdfjs-dist@${pdfjs.version ?? '4'}/build/pdf.worker.min.mjs?raw`;
+  }
+
   return mod as unknown as ReactPdfModule;
 });
 

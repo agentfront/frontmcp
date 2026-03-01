@@ -1,12 +1,77 @@
 import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
 const root = resolve(__dirname, '../../..');
 
+const RENDERER_DEPS = [
+  'recharts',
+  'mermaid',
+  '@xyflow/react',
+  'katex',
+  'react-leaflet',
+  'leaflet',
+  'react-player',
+  'react-pdf',
+  'pdfjs-dist',
+  'dompurify',
+  'react-markdown',
+  'remark-gfm',
+  'rehype-highlight',
+  'rehype-raw',
+];
+
+/**
+ * Vite plugin that transforms `runtimeImport` in lazy-import.ts to use
+ * static `import()` calls for known renderer dependencies.
+ *
+ * This is necessary because `new Function('s', 'return import(s)')` creates
+ * native browser `import()` calls that bypass Vite's transform pipeline.
+ * Browsers cannot resolve bare specifiers (like `'recharts'`) natively.
+ */
+function rendererDepsPlugin(): Plugin {
+  return {
+    name: 'renderer-deps-resolver',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.includes('lazy-import')) return;
+
+      // Regex matches the runtimeImport function — tolerant of whitespace/formatting
+      const fnRegex =
+        /export\s+function\s+runtimeImport\(\s*specifier\s*:\s*string\s*\)\s*:\s*Promise<Record<string,\s*unknown>>\s*\{[^}]*new\s+Function\([^)]*\)[^}]*\}/;
+
+      if (!fnRegex.test(code)) {
+        console.warn('[renderer-deps-resolver] ⚠ Could not match runtimeImport in', id);
+        return;
+      }
+
+      const cases = RENDERER_DEPS.map(
+        (dep) => `    case ${JSON.stringify(dep)}: return import(${JSON.stringify(dep)});`,
+      ).join('\n');
+
+      const replacement = [
+        'export function runtimeImport(specifier: string): Promise<Record<string, unknown>> {',
+        '  switch (specifier) {',
+        cases,
+        '    default: {',
+        '      // eslint-disable-next-line @typescript-eslint/no-implied-eval',
+        "      const dynamicImport = new Function('s', 'return import(s)') as (s: string) => Promise<Record<string, unknown>>;",
+        '      return dynamicImport(specifier);',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n');
+
+      console.log('[renderer-deps-resolver] ✓ Transformed runtimeImport in', id.split('/').slice(-3).join('/'));
+      return code.replace(fnRegex, replacement);
+    },
+  };
+}
+
 export default defineConfig({
   root: __dirname,
-  plugins: [react()],
+  plugins: [rendererDepsPlugin(), react()],
   resolve: {
     alias: {
       '@frontmcp/ui/renderer': resolve(root, 'libs/ui/src/renderer/index.ts'),

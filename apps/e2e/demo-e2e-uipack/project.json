@@ -56,6 +56,14 @@
         "command": "npx playwright test --config apps/e2e/demo-e2e-uipack/playwright.config.ts",
         "cwd": "{workspaceRoot}"
       }
+    },
+    "test:pw:components": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "npx playwright test --config apps/e2e/demo-e2e-uipack/playwright.config.ts --grep 'Component Rendering'",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }

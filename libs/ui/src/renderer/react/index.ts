@@ -13,6 +13,8 @@ import { transpileJsx } from '../../runtime/babel-runtime';
  * Detect whether content looks like a React/JSX component source.
  */
 export function isReactJsx(content: string): boolean {
+  // Markdown headings indicate MDX content, not raw JSX source
+  if (/^#{1,6}\s+\S/m.test(content)) return false;
   return /(?:function|const|class)\s+\w+/.test(content) && /(?:return|=>)\s*[\s(]*</.test(content);
 }
 

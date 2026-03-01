@@ -15,7 +15,13 @@ export function useLazyModule<T>(lazy: LazyImport<T>): T | undefined {
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
-    if (lazy.getState().status === 'loaded') return;
+    if (lazy.getState().status === 'loaded') {
+      // Module loaded between render (where lazy.get() returned undefined) and this
+      // effect firing. This happens when modules resolve from browser memory cache (0ms).
+      // Without this forceUpdate, the component stays stuck on "Loading..." forever.
+      forceUpdate((n) => n + 1);
+      return;
+    }
     lazy.load().then(
       () => forceUpdate((n) => n + 1),
       () => forceUpdate((n) => n + 1),

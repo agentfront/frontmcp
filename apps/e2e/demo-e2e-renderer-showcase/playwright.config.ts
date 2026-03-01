@@ -7,6 +7,12 @@ export default defineConfig({
   workers: 1,
   timeout: 30_000,
   retries: 1,
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.02,
+      animations: 'disabled',
+    },
+  },
   use: {
     headless: true,
     baseURL: 'http://localhost:4400',
