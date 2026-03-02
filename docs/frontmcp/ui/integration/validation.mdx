@@ -11,13 +11,10 @@ Every component validates its options using a Zod schema with `.strict()` mode:
 
 ```typescript
 // Inside button component
-const validation = validateOptions(options, {
-  schema: ButtonOptionsSchema,
-  componentName: 'button',
-});
+const result = ButtonOptionsSchema.safeParse(options);
 
-if (!validation.success) {
-  return validation.error; // Renders error box HTML
+if (!result.success) {
+  return renderValidationError('button', result.error);
 }
 ```
 
@@ -101,7 +98,7 @@ const HtmxSchema = z.object({
 }).strict();
 ```
 
-## Using validateOptions
+## Inline Zod Validation
 
 Create validated custom components:
 
@@ -246,16 +243,16 @@ Validation helps with security but isn't a complete solution:
 ```typescript
 // ✅ Good - validates options AND escapes content
 function card(content: string, options: CardOptions = {}): string {
-  const validation = validateOptions(options, { schema: CardOptionsSchema, componentName: 'card' });
-  if (!validation.success) return validation.error;
+  const result = CardOptionsSchema.safeParse(options);
+  if (!result.success) return renderValidationError('card', result.error);
 
   return `<div class="card">${escapeHtml(content)}</div>`;
 }
 
 // ❌ Bad - validates but doesn't escape
 function card(content: string, options: CardOptions = {}): string {
-  const validation = validateOptions(options, { schema: CardOptionsSchema, componentName: 'card' });
-  if (!validation.success) return validation.error;
+  const result = CardOptionsSchema.safeParse(options);
+  if (!result.success) return renderValidationError('card', result.error);
 
   return `<div class="card">${content}</div>`; // XSS vulnerability!
 }

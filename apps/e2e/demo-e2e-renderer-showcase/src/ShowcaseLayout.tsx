@@ -20,8 +20,10 @@ interface ShowcaseLayoutProps {
 
 export function ShowcaseLayout({ groupId, exampleIndex, themeMode, onToggleTheme, onNavigate }: ShowcaseLayoutProps) {
   const group = getGroup(groupId) || RENDERER_GROUPS[0];
-  const fixture = group.fixtures[exampleIndex] || group.fixtures[0];
-  const safeIndex = group.fixtures.indexOf(fixture);
+  if (!group.fixtures.length) return null;
+  const clampedIndex = Math.max(0, Math.min(exampleIndex, group.fixtures.length - 1));
+  const fixture = group.fixtures[clampedIndex];
+  const safeIndex = clampedIndex;
 
   return (
     <FrontMcpThemeProvider theme={{ mode: themeMode }}>

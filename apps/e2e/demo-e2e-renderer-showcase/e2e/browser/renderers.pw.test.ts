@@ -146,6 +146,20 @@ test.describe('Renderer Showcase - Render-Only Mode', () => {
     await expect(wrapper.locator('img, .fmcp-image').first()).toBeVisible({ timeout: 10_000 });
   });
 
+  test('video: should render video or fallback', async ({ page }) => {
+    await navigateToPreview(page, 'video', 0);
+    const wrapper = page.locator('[data-testid="preview-content"]');
+    await expect(wrapper).toBeVisible();
+    await expect(wrapper.locator('video, .fmcp-video, .MuiAlert-root').first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('audio: should render audio or fallback', async ({ page }) => {
+    await navigateToPreview(page, 'audio', 0);
+    const wrapper = page.locator('[data-testid="preview-content"]');
+    await expect(wrapper).toBeVisible();
+    await expect(wrapper.locator('audio, .fmcp-audio, .MuiAlert-root').first()).toBeVisible({ timeout: 10_000 });
+  });
+
   test('csv: should render table', async ({ page }) => {
     await navigateToPreview(page, 'csv', 0);
     const wrapper = page.locator('[data-testid="preview-content"]');

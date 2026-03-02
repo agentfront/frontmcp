@@ -12,6 +12,14 @@ interface SourcePanelProps {
 }
 
 export function SourcePanel({ group, selectedIndex, onSelectExample }: SourcePanelProps) {
+  if (!group.fixtures.length) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography color="text.secondary">No examples available</Typography>
+      </Box>
+    );
+  }
+
   const fixture = group.fixtures[selectedIndex] || group.fixtures[0];
 
   return (

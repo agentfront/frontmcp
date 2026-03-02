@@ -132,7 +132,7 @@ Limit `csp.resourceDomains` and `csp.connectDomains` to only the hosts your widg
 Need a richer layout than a single card? `@frontmcp/uipack` ships `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview` helpers so your responses match OpenAI Apps SDK expectations without manual HTML.
 
 ```typescript
-import { resourceWidget } from '@frontmcp/ui/components';
+import { resourceWidget } from '@frontmcp/uipack';
 
 const widget = resourceWidget({
   type: 'document',
@@ -196,7 +196,7 @@ import { z } from 'zod';
         <h3 style="margin:0 0 4px;">${ctx.helpers.escapeHtml(ctx.output.location)}</h3>
         <p style="color:#718096; margin:0 0 12px;">Current Weather</p>
         <div style="font-size:2.5rem; margin-bottom:8px;">🌤️</div>
-        <div style="font-size:1.5rem; font-weight:bold;">${ctx.output.temperature}°C</div>
+        <div style="font-size:1.5rem; font-weight:bold;">${ctx.helpers.escapeHtml(String(ctx.output.temperature))}°C</div>
         <div style="color:#718096;">${ctx.helpers.escapeHtml(ctx.output.conditions)}</div>
       </div>
     `,

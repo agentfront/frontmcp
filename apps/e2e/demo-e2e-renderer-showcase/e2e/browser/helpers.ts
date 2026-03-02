@@ -23,6 +23,7 @@ export async function getPreviewFrame(page: Page) {
   const iframe = page.locator('[data-testid="preview-iframe"]');
   await iframe.waitFor({ state: 'attached' });
   const frame = await iframe.contentFrame();
+  if (!frame) throw new Error('Preview iframe has no accessible content frame');
   return frame;
 }
 

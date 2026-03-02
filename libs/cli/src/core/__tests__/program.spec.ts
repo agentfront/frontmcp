@@ -119,7 +119,7 @@ describe('createProgram', () => {
     await expect(program.parseAsync(['node', 'frontmcp', '--help'])).rejects.toThrow('(outputHelp)');
   });
 
-  it('should not throw on --version', async () => {
+  it('should exit via throw on --version (commander exitOverride)', async () => {
     const program = createProgram();
     program.exitOverride();
     program.configureOutput({ writeOut: () => {} });

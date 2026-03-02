@@ -30,6 +30,7 @@ export function PreviewPanel({ groupId, exampleIndex }: PreviewPanelProps) {
           key={`${groupId}-${exampleIndex}`}
           src={src}
           data-testid="preview-iframe"
+          sandbox="allow-scripts allow-same-origin"
           style={{
             width: '100%',
             height: '100%',

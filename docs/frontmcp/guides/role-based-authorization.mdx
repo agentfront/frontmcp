@@ -386,7 +386,7 @@ test('should show admin tools to admins', async ({ mcp, auth }) => {
     ```typescript
     // In plugin: deny if no authorization specified
     if (!metadata.authorization) {
-      return hasRole(userRoles, 'authenticated');
+      return userRoles.includes('authenticated');
     }
     ```
 
