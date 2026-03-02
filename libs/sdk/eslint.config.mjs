@@ -11,6 +11,7 @@ export default [
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
           // LangChain packages are used in agent/adapters but nx checker doesn't trace through internal imports
           ignoredDependencies: [
+            '@types/cors', // Type-only dep for CORS options typing
             '@langchain/core', // Used in langchain.adapter.ts
             '@langchain/openai', // Used in providers/index.ts for built-in OpenAI support
             '@langchain/anthropic', // Used in providers/index.ts for built-in Anthropic support
