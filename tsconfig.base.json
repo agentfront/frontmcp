@@ -57,6 +57,7 @@
       "@frontmcp/uipack/component": ["libs/uipack/src/component/index.ts"],
       "@frontmcp/uipack/resolver": ["libs/uipack/src/resolver/index.ts"],
       "@frontmcp/ui": ["libs/ui/src/index.ts"],
+      "@frontmcp/ui/theme": ["libs/ui/src/theme/index.ts"],
       "@frontmcp/ui/components": ["libs/ui/src/components/index.ts"],
       "@frontmcp/ui/layouts": ["libs/ui/src/layouts/index.ts"],
       "@frontmcp/ui/pages": ["libs/ui/src/pages/index.ts"],
