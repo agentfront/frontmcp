@@ -1,5 +1,5 @@
 import { ClassType, FactoryType, Type, ValueType } from '@frontmcp/di';
-import { ProviderType } from '../interfaces';
+import { ProviderType, ResourceType } from '../interfaces';
 import { PluginMetadata } from '../metadata';
 
 export enum PluginKind {
@@ -14,24 +14,28 @@ export interface PluginClassTokenRecord {
   provide: Type;
   metadata: PluginMetadata;
   providers?: ProviderType[];
+  resources?: ResourceType[];
 }
 
 export interface PluginClassRecord extends ClassType<any> {
   kind: PluginKind.CLASS;
   metadata: PluginMetadata;
   providers?: ProviderType[];
+  resources?: ResourceType[];
 }
 
 export interface PluginFactoryRecord extends FactoryType<any, any[]> {
   kind: PluginKind.FACTORY;
   metadata: PluginMetadata;
   providers?: ProviderType[];
+  resources?: ResourceType[];
 }
 
 export interface PluginValueRecord extends ValueType<any> {
   kind: PluginKind.VALUE;
   metadata: PluginMetadata;
   providers?: ProviderType[];
+  resources?: ResourceType[];
 }
 
 export type PluginRecord = PluginClassTokenRecord | PluginClassRecord | PluginFactoryRecord | PluginValueRecord;

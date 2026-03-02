@@ -77,3 +77,9 @@ export { DirectMcpServerImpl } from './direct-server';
 
 export { create, clearCreateCache } from './create';
 export type { CreateConfig } from './create.types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Server Registry — global named server instances
+// ─────────────────────────────────────────────────────────────────────────────
+
+export { ServerRegistry } from './server-registry';

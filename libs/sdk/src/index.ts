@@ -249,6 +249,8 @@ export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectReque
 export { create, clearCreateCache } from './direct';
 export type { CreateConfig } from './direct';
 
+export { ServerRegistry } from './direct';
+
 // In-memory server for MCP SDK Client integration
 export { createInMemoryServer } from './transport';
 export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';

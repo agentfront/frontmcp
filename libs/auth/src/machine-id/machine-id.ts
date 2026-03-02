@@ -19,19 +19,37 @@ import { randomUUID, mkdir, writeFile, readFileSync } from '@frontmcp/utils';
 
 const DEFAULT_MACHINE_ID_PATH = '.frontmcp/machine-id';
 
+/** Safe accessor for process.env — returns undefined in browser environments */
+function getEnv(key: string): string | undefined {
+  try {
+    return typeof process !== 'undefined' && process.env ? process.env[key] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Safe accessor for process.cwd() — returns '/' in browser environments */
+function getCwd(): string {
+  try {
+    return typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '/';
+  } catch {
+    return '/';
+  }
+}
+
 /**
  * Check if dev persistence is enabled (non-production mode)
  */
 function isDevPersistenceEnabled(): boolean {
-  return process.env['NODE_ENV'] !== 'production';
+  return getEnv('NODE_ENV') !== 'production';
 }
 
 /**
  * Resolve the machine ID file path
  */
 function resolveMachineIdPath(): string {
-  const machineIdPath = process.env['MACHINE_ID_PATH'] ?? DEFAULT_MACHINE_ID_PATH;
-  return path.isAbsolute(machineIdPath) ? machineIdPath : path.resolve(process.cwd(), machineIdPath);
+  const machineIdPath = getEnv('MACHINE_ID_PATH') ?? DEFAULT_MACHINE_ID_PATH;
+  return path.isAbsolute(machineIdPath) ? machineIdPath : path.resolve(getCwd(), machineIdPath);
 }
 
 /**
@@ -100,7 +118,7 @@ function saveMachineIdAsync(machineId: string): void {
  */
 const machineId = (() => {
   // 1. Check env var (highest priority - supports Redis, K8s, etc.)
-  const envMachineId = process.env['MACHINE_ID'];
+  const envMachineId = getEnv('MACHINE_ID');
   if (envMachineId) {
     return envMachineId;
   }

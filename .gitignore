@@ -77,4 +77,7 @@ apps/*/src/**/*.d.ts.map
 
 # Performance test results (generated)
 perf-results/
-/test-results/.last-run.json
+
+# Playwright
+test-results/
+playwright-report/

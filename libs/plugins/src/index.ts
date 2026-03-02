@@ -15,6 +15,7 @@
  * See docs/draft/docs/extensibility/config-yaml.mdx for migration details.
  */
 
+export * from '@frontmcp/plugin-approval';
 export * from '@frontmcp/plugin-cache';
 export * from '@frontmcp/plugin-codecall';
 export * from '@frontmcp/plugin-dashboard';

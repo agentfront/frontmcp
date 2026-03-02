@@ -7,14 +7,15 @@
  */
 
 // Naming utilities
-export { NameCase, splitWords, toCase, sepFor, shortHash, ensureMaxLen, idFromString } from './naming';
+export type { NameCase } from './naming';
+export { splitWords, toCase, sepFor, shortHash, ensureMaxLen, idFromString } from './naming';
 
 // URI utilities
+export type { ParsedUriTemplate } from './uri';
 export {
   isValidMcpUri,
   extractUriScheme,
   isValidMcpUriTemplate,
-  ParsedUriTemplate,
   parseUriTemplate,
   matchUriTemplate,
   expandUriTemplate,
@@ -87,10 +88,10 @@ export {
   isNode,
   isBrowser,
   assertNode,
-  CryptoProvider,
-  EncBlob,
+  type CryptoProvider,
+  type EncBlob,
   // Encrypted blob helpers
-  EncryptedBlob,
+  type EncryptedBlob,
   EncryptedBlobError,
   encryptValue,
   decryptValue,
@@ -196,19 +197,19 @@ export {
   createMemoryStorage,
   getDetectedStorageType,
   // Types
-  StorageAdapter,
-  NamespacedStorage,
-  RootStorage,
-  SetOptions,
-  SetEntry,
-  MessageHandler,
-  Unsubscribe,
-  MemoryAdapterOptions,
-  RedisAdapterOptions,
-  VercelKvAdapterOptions,
-  UpstashAdapterOptions,
-  StorageType,
-  StorageConfig,
+  type StorageAdapter,
+  type NamespacedStorage,
+  type RootStorage,
+  type SetOptions,
+  type SetEntry,
+  type MessageHandler,
+  type Unsubscribe,
+  type MemoryAdapterOptions,
+  type RedisAdapterOptions,
+  type VercelKvAdapterOptions,
+  type UpstashAdapterOptions,
+  type StorageType,
+  type StorageConfig,
   // Namespace
   NamespacedStorageImpl,
   createRootStorage,

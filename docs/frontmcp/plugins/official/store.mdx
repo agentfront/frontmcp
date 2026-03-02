@@ -1,0 +1,114 @@
+---
+title: Store Plugin
+description: Reactive state management for MCP tools via pluggable store adapters.
+---
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-store
+```
+
+## Basic Usage
+
+```typescript
+import { createValtioStore } from '@frontmcp/plugin-store';
+
+const counterStore = createValtioStore({ count: 0, history: [] as number[] });
+
+// Read state
+counterStore.getState(); // { count: 0, history: [] }
+
+// Update nested value
+counterStore.setState(['count'], 1);
+counterStore.getState(['count']); // 1
+
+// Subscribe to changes
+const unsubscribe = counterStore.subscribe(() => {
+  console.log('State changed:', counterStore.getState());
+});
+```
+
+## `createValtioStore<T>(initialState: T): StoreAdapter<T>`
+
+Creates a reactive store backed by [Valtio](https://valtio.dev). Returns a `StoreAdapter<T>` interface.
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `initialState` | `T extends object` | The initial state object. Must be a non-null object. |
+
+### Returns
+
+A `StoreAdapter<T>` with the following methods:
+
+## `StoreAdapter<T>` Interface
+
+### `getState(): T`
+
+Returns a snapshot of the full state tree.
+
+### `getState(path: string[]): unknown`
+
+Returns the value at a nested path. Supports array index notation (`[0]`, `[1]`).
+
+```typescript
+const store = createValtioStore({ users: [{ name: 'Alice' }] });
+store.getState(['users', '[0]', 'name']); // 'Alice'
+```
+
+Returns `undefined` for invalid paths.
+
+### `setState(path: string[], value: unknown): void`
+
+Sets a value at the given path. Creates intermediate objects as needed.
+
+- **Empty path** (`[]`): Replaces root state. The value must be a non-null object; throws `TypeError` otherwise.
+- **Array index path**: Expects the parent to be an array; throws `TypeError` if the parent at that path segment is not an array.
+
+```typescript
+// Set nested value
+store.setState(['count'], 42);
+
+// Replace root state
+store.setState([], { count: 0, history: [] });
+
+// Array index notation
+store.setState(['users', '[0]', 'name'], 'Bob');
+```
+
+### `subscribe(listener: () => void): () => void`
+
+Subscribes to state changes. Returns an unsubscribe function.
+
+```typescript
+const unsubscribe = store.subscribe(() => {
+  console.log('changed:', store.getState());
+});
+
+// Later: stop listening
+unsubscribe();
+```
+
+### `dispose(): void`
+
+Cleans up store resources. No-op for the Valtio adapter.
+
+## Error Handling
+
+`setState` throws `TypeError` in two cases:
+
+1. **Root replacement with non-object**: `setState([], 'string')` throws `TypeError: Root state must be a non-null object`.
+2. **Array index on non-array**: `setState(['notAnArray', '[0]'], value)` throws `TypeError: Expected array at path segment "[0]", but found object`.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cache Plugin" icon="bolt" href="/frontmcp/plugins/docs/official/cache">
+    Response caching
+  </Card>
+  <Card title="Remember Plugin" icon="brain" href="/frontmcp/plugins/docs/official/remember">
+    Persistent memory
+  </Card>
+</CardGroup>

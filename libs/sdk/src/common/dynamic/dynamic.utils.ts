@@ -1,4 +1,4 @@
-import { ProviderType } from "../interfaces";
+import { ProviderType, ResourceType } from '../interfaces';
 
 export function collectDynamicProviders<T>(klass: any, options: T): ProviderType[] {
   // walk the prototype chain so parent plugins can contribute
@@ -12,6 +12,21 @@ export function collectDynamicProviders<T>(klass: any, options: T): ProviderType
     const k = chain[i];
     if (typeof k.dynamicProviders === 'function') {
       out.push(...(k.dynamicProviders(options) ?? []));
+    }
+  }
+  return out;
+}
+
+export function collectDynamicResources<T>(klass: any, options: T): ResourceType[] {
+  const chain: any[] = [];
+  for (let k = klass; k && k !== Function.prototype; k = Object.getPrototypeOf(k)) {
+    chain.push(k);
+  }
+  const out: ResourceType[] = [];
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const k = chain[i];
+    if (typeof k.dynamicResources === 'function') {
+      out.push(...(k.dynamicResources(options) ?? []));
     }
   }
   return out;

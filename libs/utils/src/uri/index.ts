@@ -1,6 +1,6 @@
 export { isValidMcpUri, extractUriScheme, isValidMcpUriTemplate } from './uri-validation';
+export type { ParsedUriTemplate } from './uri-template';
 export {
-  ParsedUriTemplate,
   parseUriTemplate,
   matchUriTemplate,
   expandUriTemplate,

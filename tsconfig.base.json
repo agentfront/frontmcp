@@ -33,6 +33,7 @@
       "@frontmcp/plugin-codecall": ["plugins/plugin-codecall/src/index.ts"],
       "@frontmcp/plugin-dashboard": ["plugins/plugin-dashboard/src/index.ts"],
       "@frontmcp/plugin-remember": ["plugins/plugin-remember/src/index.ts"],
+      "@frontmcp/plugin-store": ["plugins/plugin-store/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "@frontmcp/uipack": ["libs/uipack/src/index.ts"],
@@ -67,7 +68,10 @@
       "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
       "@frontmcp/auth": ["libs/auth/src/index.ts"],
       "@frontmcp/storage-sqlite": ["libs/storage-sqlite/src/index.ts"],
-      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"]
+      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"],
+      "@frontmcp/react": ["libs/react/src/index.ts"],
+      "@frontmcp/react/ai": ["libs/react/src/ai/index.ts"],
+      "@frontmcp/react/router": ["libs/react/src/router/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

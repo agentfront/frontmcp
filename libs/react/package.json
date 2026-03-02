@@ -1,0 +1,105 @@
+{
+  "name": "@frontmcp/react",
+  "version": "0.9.0",
+  "description": "React hooks, components, and AI SDK integration for FrontMCP",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "react",
+    "hooks",
+    "ai",
+    "tools",
+    "openai",
+    "claude",
+    "vercel-ai",
+    "agentfront",
+    "frontmcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "browser": {
+        "import": "./dist/browser/index.mjs",
+        "default": "./dist/browser/index.js"
+      },
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./ai": {
+      "browser": {
+        "import": "./dist/browser/ai/index.mjs",
+        "default": "./dist/browser/ai/index.js"
+      },
+      "development": "./src/ai/index.ts",
+      "require": {
+        "types": "./dist/ai/index.d.ts",
+        "default": "./dist/ai/index.js"
+      },
+      "import": {
+        "types": "./dist/ai/index.d.ts",
+        "default": "./dist/esm/ai/index.mjs"
+      }
+    },
+    "./router": {
+      "browser": {
+        "import": "./dist/browser/router/index.mjs",
+        "default": "./dist/browser/router/index.js"
+      },
+      "development": "./src/router/index.ts",
+      "require": {
+        "types": "./dist/router/index.d.ts",
+        "default": "./dist/router/index.js"
+      },
+      "import": {
+        "types": "./dist/router/index.d.ts",
+        "default": "./dist/esm/router/index.mjs"
+      }
+    },
+    "./browser": {
+      "import": "./dist/browser/index.mjs",
+      "default": "./dist/browser/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@frontmcp/sdk": "0.9.0",
+    "zod": "^4.0.0",
+    "react-router-dom": "^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-router-dom": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@frontmcp/utils": "0.9.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

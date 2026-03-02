@@ -155,7 +155,8 @@ export default class PluginRegistry
       await adapters.ready;
 
       const tools = new ToolRegistry(providers, rec.metadata.tools ?? [], pluginOwner);
-      const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);
+      const allResources = [...(rec.metadata.resources ?? []), ...(rec.resources ?? [])];
+      const resources = new ResourceRegistry(providers, allResources, pluginOwner);
       const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? [], pluginOwner);
       const skills = new SkillRegistry(providers, rec.metadata.skills ?? [], pluginOwner);
 

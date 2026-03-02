@@ -1,7 +1,10 @@
 /**
- * FrontMcpContextStorage - AsyncLocalStorage wrapper for unified context
+ * FrontMcpContextStorage - Context storage wrapper for unified context
  *
- * Provides concurrent-safe context propagation using Node.js AsyncLocalStorage.
+ * Provides concurrent-safe context propagation using:
+ * - Node.js: AsyncLocalStorage from `node:async_hooks`
+ * - Browser: Stack-based BrowserContextStorage
+ *
  * Access through DI only - never use static imports to access the storage directly.
  *
  * @example
@@ -18,7 +21,6 @@
  * ```
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
 import { FrontMcpContext, FrontMcpContextArgs } from './frontmcp-context';
@@ -26,17 +28,35 @@ import { parseTraceContext } from './trace-context';
 import { extractMetadata } from './metadata.utils';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
+import type { IContextStorage } from './context-storage.interface';
+import { BrowserContextStorage } from './context-storage.browser';
 
 /**
- * Module-level AsyncLocalStorage instance.
+ * Create the appropriate context storage for the current runtime.
+ * - Node.js: Uses AsyncLocalStorage for concurrent-safe context propagation
+ * - Browser: Uses stack-based storage (single-threaded)
+ */
+function createContextStorage(): IContextStorage<FrontMcpContext> {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { AsyncLocalStorage } = require('node:async_hooks') as {
+      AsyncLocalStorage: new <T>() => IContextStorage<T>;
+    };
+    return new AsyncLocalStorage<FrontMcpContext>();
+  }
+  return new BrowserContextStorage<FrontMcpContext>();
+}
+
+/**
+ * Module-level context storage instance.
  *
  * This is the ONLY place where the storage is created.
  * Access should be through DI, not through static imports.
  */
-const frontmcpContextStorage = new AsyncLocalStorage<FrontMcpContext>();
+const frontmcpContextStorage = createContextStorage();
 
 /**
- * FrontMcpContextStorage provides unified context via AsyncLocalStorage.
+ * FrontMcpContextStorage provides unified context via platform-appropriate storage.
  *
  * This is a GLOBAL-scoped provider because it manages the storage itself,
  * not the per-context data. The actual FrontMcpContext is accessed via
@@ -44,7 +64,7 @@ const frontmcpContextStorage = new AsyncLocalStorage<FrontMcpContext>();
  */
 @Provider({
   name: 'FrontMcpContextStorage',
-  description: 'Manages unified context via AsyncLocalStorage',
+  description: 'Manages unified context via platform-appropriate storage',
   scope: ProviderScope.GLOBAL,
 })
 export class FrontMcpContextStorage {

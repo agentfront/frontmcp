@@ -155,8 +155,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.host = 'localhost';
     this.issuer = this.deriveIssuer(options);
 
-    if (process.env['JWT_SECRET']) {
-      this.secret = new TextEncoder().encode(process.env['JWT_SECRET']);
+    const jwtSecret = typeof process !== 'undefined' && process.env ? process.env['JWT_SECRET'] : undefined;
+    if (jwtSecret) {
+      this.secret = new TextEncoder().encode(jwtSecret);
     } else {
       this.logger.warn('JWT_SECRET is not set, using default secret');
       this.secret = DEFAULT_NO_AUTH_SECRET;

@@ -13,7 +13,7 @@ export interface InputTransformContext {
   /** FrontMCP request context with authInfo, sessionId, traceId, etc. */
   ctx: FrontMcpContext;
   /** Environment variables */
-  env: NodeJS.ProcessEnv;
+  env: Record<string, string | undefined>;
   /** The OpenAPI tool being executed */
   tool: McpOpenAPITool;
 }

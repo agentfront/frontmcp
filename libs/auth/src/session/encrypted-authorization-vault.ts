@@ -25,7 +25,6 @@
 
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { EncryptionContextNotSetError, VaultLoadError, VaultNotFoundError } from '../errors/auth-internal.errors';
 import { VaultEncryption, encryptedDataSchema } from './vault-encryption';
 import type { EncryptedData, VaultSensitiveData } from './vault-encryption';
@@ -88,10 +87,74 @@ export interface EncryptionContext {
 }
 
 /**
- * Module-level AsyncLocalStorage for request-scoped encryption context.
+ * Platform-agnostic context storage interface.
+ */
+interface ContextStorageLike<T> {
+  run<R>(store: T, fn: () => R): R;
+  getStore(): T | undefined;
+}
+
+/**
+ * Stack-based context storage for browser environments.
+ */
+class StackContextStorage<T> implements ContextStorageLike<T> {
+  private readonly stack: (T | undefined)[] = [];
+
+  run<R>(store: T, fn: () => R): R {
+    const index = this.stack.length;
+    this.stack[index] = store;
+    try {
+      const result = fn();
+      if (result instanceof Promise) {
+        return result.then(
+          (value: unknown) => {
+            this.stack[index] = undefined;
+            return value;
+          },
+          (error: unknown) => {
+            this.stack[index] = undefined;
+            throw error;
+          },
+        ) as R;
+      }
+      this.stack[index] = undefined;
+      return result;
+    } catch (error) {
+      this.stack[index] = undefined;
+      throw error;
+    }
+  }
+
+  getStore(): T | undefined {
+    for (let i = this.stack.length - 1; i >= 0; i--) {
+      if (this.stack[i] !== undefined) {
+        return this.stack[i];
+      }
+    }
+    return undefined;
+  }
+}
+
+/**
+ * Create the appropriate context storage for the current runtime.
+ */
+function createEncryptionContextStorage(): ContextStorageLike<EncryptionContext> {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { AsyncLocalStorage } = require('node:async_hooks') as {
+      AsyncLocalStorage: new <T>() => ContextStorageLike<T>;
+    };
+    return new AsyncLocalStorage<EncryptionContext>();
+  }
+  return new StackContextStorage<EncryptionContext>();
+}
+
+/**
+ * Module-level context storage for request-scoped encryption context.
+ * Uses AsyncLocalStorage in Node.js, stack-based storage in browser.
  * This ensures concurrent requests don't interfere with each other's encryption keys.
  */
-const encryptionContextStorage = new AsyncLocalStorage<EncryptionContext>();
+const encryptionContextStorage = createEncryptionContextStorage();
 
 // ============================================
 // Encrypted Redis Vault Implementation
