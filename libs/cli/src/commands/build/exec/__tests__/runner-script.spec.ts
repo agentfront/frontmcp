@@ -42,4 +42,30 @@ describe('runner-script', () => {
       expect(script).toContain('app.bundle.js');
     });
   });
+
+  describe('generateRunnerScript (CLI mode)', () => {
+    it('should dispatch to CLI bundle when cliMode is true', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, true);
+
+      expect(script).toContain('my-app-cli.bundle.js');
+      expect(script).not.toContain('BUNDLE="${SCRIPT_DIR}/my-app.bundle.js"');
+    });
+
+    it('should include --cli in comment when cliMode is true', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, true);
+
+      expect(script).toContain('CLI Executable');
+      expect(script).toContain('--cli');
+    });
+
+    it('should use server bundle when cliMode is false', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false);
+
+      expect(script).toContain('my-app.bundle.js');
+      expect(script).not.toContain('my-app-cli.bundle.js');
+    });
+  });
 });

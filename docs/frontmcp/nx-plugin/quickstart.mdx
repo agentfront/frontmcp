@@ -15,6 +15,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     This scaffolds the full monorepo structure with a sample app.
+
   </Step>
 
   <Step title="Generate an app">
@@ -23,6 +24,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Creates `apps/crm/` with a main entry point, app class, and sample tool.
+
   </Step>
 
   <Step title="Add a tool">
@@ -31,6 +33,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Creates `apps/crm/src/tools/fetch-contacts.tool.ts` — edit the `execute()` method to add your logic.
+
   </Step>
 
   <Step title="Generate a shared library">
@@ -39,6 +42,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Creates `libs/shared-utils/` — use it for code shared across apps.
+
   </Step>
 
   <Step title="Generate a server">
@@ -47,6 +51,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Creates `servers/production/` with a Dockerfile, docker-compose.yml, and an entry point that composes the CRM app.
+
   </Step>
 
   <Step title="Start development">
@@ -55,6 +60,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Starts the CRM app in development mode with hot-reload.
+
   </Step>
 
   <Step title="Build for production">
@@ -63,6 +69,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Compiles the production server to `servers/production/dist/`.
+
   </Step>
 
   <Step title="Run tests">
@@ -71,6 +78,7 @@ This walkthrough takes you from an empty directory to a running multi-app MCP se
     ```
 
     Runs E2E tests for the CRM app using `@frontmcp/testing`.
+
   </Step>
 </Steps>
 
@@ -115,15 +123,15 @@ my-platform/
 
 ## Common Commands
 
-| Command | Description |
-| --- | --- |
-| `nx dev <app>` | Start an app with hot-reload |
-| `nx build <project>` | Build an app or server |
-| `nx test <project>` | Run tests |
-| `nx inspector <app>` | Launch MCP Inspector |
-| `nx graph` | Visualize dependency graph |
-| `nx affected -t test` | Test only affected projects |
-| `nx run-many -t build` | Build all projects |
+| Command                | Description                  |
+| ---------------------- | ---------------------------- |
+| `nx dev <app>`         | Start an app with hot-reload |
+| `nx build <project>`   | Build an app or server       |
+| `nx test <project>`    | Run tests                    |
+| `nx inspector <app>`   | Launch MCP Inspector         |
+| `nx graph`             | Visualize dependency graph   |
+| `nx affected -t test`  | Test only affected projects  |
+| `nx run-many -t build` | Build all projects           |
 
 ---
 

@@ -9,11 +9,11 @@ FrontMCP supports three integration modes depending on how you want to deploy an
 
 ## Overview
 
-| Mode | Use Case | Transport | Entry Point |
-|------|----------|-----------|-------------|
-| **SDK Mode** | Embed in agent code | In-process | `connect()`, `connectOpenAI()`, etc. |
-| **Server Mode** | Standalone HTTP server | HTTP (SSE, Streamable) | `@FrontMcp` with `http.port` |
-| **Handler Mode** | Serverless functions | HTTP (stateless) | `createHandler()` or `FRONTMCP_SERVERLESS=1` |
+| Mode             | Use Case               | Transport              | Entry Point                                  |
+| ---------------- | ---------------------- | ---------------------- | -------------------------------------------- |
+| **SDK Mode**     | Embed in agent code    | In-process             | `connect()`, `connectOpenAI()`, etc.         |
+| **Server Mode**  | Standalone HTTP server | HTTP (SSE, Streamable) | `@FrontMcp` with `http.port`                 |
+| **Handler Mode** | Serverless functions   | HTTP (stateless)       | `createHandler()` or `FRONTMCP_SERVERLESS=1` |
 
 ---
 
@@ -27,13 +27,13 @@ Use SDK mode when your agent code directly calls FrontMCP tools without HTTP. Th
 
 ### Entry Points
 
-| Function | Platform | Tool Format |
-|----------|----------|-------------|
-| `connect()` | Auto-detect | Based on clientInfo |
-| `connectOpenAI()` | OpenAI | `[{ type: 'function', function: { name, parameters } }]` |
-| `connectClaude()` | Anthropic | `[{ name, input_schema }]` |
-| `connectLangChain()` | LangChain | `[{ name, schema }]` |
-| `connectVercelAI()` | Vercel AI | `{ [name]: { parameters } }` |
+| Function             | Platform    | Tool Format                                              |
+| -------------------- | ----------- | -------------------------------------------------------- |
+| `connect()`          | Auto-detect | Based on clientInfo                                      |
+| `connectOpenAI()`    | OpenAI      | `[{ type: 'function', function: { name, parameters } }]` |
+| `connectClaude()`    | Anthropic   | `[{ name, input_schema }]`                               |
+| `connectLangChain()` | LangChain   | `[{ name, schema }]`                                     |
+| `connectVercelAI()`  | Vercel AI   | `{ [name]: { parameters } }`                             |
 
 ### Benefits
 
@@ -154,12 +154,12 @@ export default class Server {}
 
 Server mode supports multiple transport protocols:
 
-| Protocol | Description | Use Case |
-|----------|-------------|----------|
-| `legacy` | SSE + Streamable + Legacy SSE | Maximum compatibility (default) |
-| `modern` | SSE + Streamable HTTP | Newer MCP clients |
-| `stateless-api` | No sessions, request/response | Simple API access |
-| `full` | All protocols enabled | Maximum flexibility |
+| Protocol        | Description                   | Use Case                        |
+| --------------- | ----------------------------- | ------------------------------- |
+| `legacy`        | SSE + Streamable + Legacy SSE | Maximum compatibility (default) |
+| `modern`        | SSE + Streamable HTTP         | Newer MCP clients               |
+| `stateless-api` | No sessions, request/response | Simple API access               |
+| `full`          | All protocols enabled         | Maximum flexibility             |
 
 <CodeGroup>
 ```ts Default (Legacy)
@@ -188,6 +188,7 @@ Server mode supports multiple transport protocols:
   },
 })
 ```
+
 </CodeGroup>
 
 ### Session Storage
@@ -276,6 +277,7 @@ export default async function handler(req, res) {
     # Deploy
     vercel deploy
     ```
+
   </Tab>
   <Tab title="AWS Lambda">
     ```bash
@@ -289,6 +291,7 @@ export default async function handler(req, res) {
     frontmcp build --adapter lambda
     cd ci && sam build && sam deploy
     ```
+
   </Tab>
   <Tab title="Cloudflare">
     ```bash
@@ -299,6 +302,7 @@ export default async function handler(req, res) {
     frontmcp build --adapter cloudflare
     wrangler deploy
     ```
+
   </Tab>
 </Tabs>
 
@@ -346,15 +350,15 @@ Serverless environments require distributed storage. In-memory storage does not 
 
 ## Comparison Table
 
-| Feature | SDK Mode | Server Mode | Handler Mode |
-|---------|----------|-------------|--------------|
-| **Network** | In-process | HTTP | HTTP (stateless) |
-| **Use Case** | Embedded agents | Standalone server | Serverless platforms |
-| **Session** | In-memory | Configurable | Distributed required |
-| **Entry Point** | `connect()` | `@FrontMcp` | `createHandler()` |
-| **Scaling** | Single process | Horizontal | Auto-scaling |
-| **Auth** | Token injection | OAuth/JWT | OAuth/JWT |
-| **Cold Start** | None | None | Platform-dependent |
+| Feature         | SDK Mode        | Server Mode       | Handler Mode         |
+| --------------- | --------------- | ----------------- | -------------------- |
+| **Network**     | In-process      | HTTP              | HTTP (stateless)     |
+| **Use Case**    | Embedded agents | Standalone server | Serverless platforms |
+| **Session**     | In-memory       | Configurable      | Distributed required |
+| **Entry Point** | `connect()`     | `@FrontMcp`       | `createHandler()`    |
+| **Scaling**     | Single process  | Horizontal        | Auto-scaling         |
+| **Auth**        | Token injection | OAuth/JWT         | OAuth/JWT            |
+| **Cold Start**  | None            | None              | Platform-dependent   |
 
 ---
 
@@ -372,6 +376,7 @@ Serverless environments require distributed storage. In-memory storage does not 
     **Not recommended when:**
     - External clients need to connect to your server
     - You need Claude Desktop compatibility
+
   </Accordion>
 
   <Accordion title="When to use Server Mode">
@@ -384,6 +389,7 @@ Serverless environments require distributed storage. In-memory storage does not 
     **Not recommended when:**
     - You're deploying to serverless platforms
     - Your agent code runs in the same process
+
   </Accordion>
 
   <Accordion title="When to use Handler Mode">
@@ -396,6 +402,7 @@ Serverless environments require distributed storage. In-memory storage does not 
     - You need persistent WebSocket connections
     - Cold start latency is unacceptable
     - In-memory session state is required
+
   </Accordion>
 </AccordionGroup>
 

@@ -8,7 +8,28 @@
  * @packageDocumentation
  */
 
-import type { CDNDependency, FileBundleOptions } from '../dependency/types';
+import type { CDNDependency } from '../resolver/types';
+import type { CustomShellSource } from '../shell/custom-shell-types';
+
+/**
+ * Configuration options for bundling file-based components.
+ */
+export interface FileBundleOptions {
+  /** Minify the bundled output */
+  minify?: boolean;
+  /** Generate source maps for debugging */
+  sourceMaps?: boolean;
+  /** Target JavaScript version */
+  target?: 'es2018' | 'es2019' | 'es2020' | 'es2021' | 'es2022' | 'esnext';
+  /** Enable tree shaking */
+  treeShake?: boolean;
+  /** JSX factory function */
+  jsxFactory?: string;
+  /** JSX fragment factory */
+  jsxFragment?: string;
+  /** JSX import source for automatic runtime */
+  jsxImportSource?: string;
+}
 
 // ============================================
 // Content Security Policy
@@ -739,6 +760,29 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * ```
    */
   fileBundleOptions?: FileBundleOptions;
+
+  /**
+   * Custom HTML shell template with placeholders.
+   *
+   * Instead of the default HTML document, use a custom template
+   * containing `{{CONTENT}}` (required) and optional `{{CSP}}`,
+   * `{{DATA}}`, `{{BRIDGE}}`, `{{TITLE}}` placeholders.
+   *
+   * Source: inline string, URL, or npm package.
+   *
+   * @example
+   * ```typescript
+   * // Inline
+   * customShell: { inline: '<html><head>{{CSP}}{{DATA}}</head><body>{{CONTENT}}</body></html>' }
+   *
+   * // URL
+   * customShell: { url: 'https://cdn.example.com/my-shell.html' }
+   *
+   * // NPM
+   * customShell: { npm: '@acme/mcp-shell-template' }
+   * ```
+   */
+  customShell?: CustomShellSource;
 }
 
 /**

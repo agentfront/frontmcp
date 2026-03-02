@@ -660,6 +660,7 @@ test.describe('Expense API OpenAPI Adapter', () => {
     // Don't use invalid types
     { id: 123, amount: 'fifty dollars' }  // Wrong!
     ```
+
   </Accordion>
 
   <Accordion title="Verify request details">
@@ -672,6 +673,7 @@ test.describe('Expense API OpenAPI Adapter', () => {
     expect(calls[0].headers['content-type']).toBe('application/json');
     expect(calls[0].body).toEqual(expectedBody);
     ```
+
   </Accordion>
 
   <Accordion title="Test all error codes">

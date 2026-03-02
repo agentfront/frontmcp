@@ -10,7 +10,7 @@ const outputSchema = z.object({
   scope: z.literal('isolated'),
 });
 
-type Input = z.output<typeof inputSchema>;
+type Input = z.output<z.ZodObject<typeof inputSchema>>;
 type Output = z.output<typeof outputSchema>;
 
 @Tool({

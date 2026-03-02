@@ -23,20 +23,21 @@
   },
   "main": "./dist/src/index.js",
   "bin": {
-    "frontmcp": "./dist/src/cli.js"
+    "frontmcp": "./dist/src/core/cli.js"
   },
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/cli.ts",
-    "dev-inspect": "tsx src/cli.ts inspector",
+    "dev": "tsx src/core/cli.ts",
+    "dev-inspect": "tsx src/core/cli.ts inspector",
     "prepare": "npm run build"
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
     "@frontmcp/utils": "0.12.1",
+    "commander": "^13.0.0",
     "tslib": "^2.3.0",
     "@rspack/core": "^1.7.6",
     "esbuild": "^0.27.3"

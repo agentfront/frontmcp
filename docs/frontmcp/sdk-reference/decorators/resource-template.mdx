@@ -39,19 +39,19 @@ function ResourceTemplate(providedMetadata: ResourceTemplateMetadata): ClassDeco
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique resource identifier |
-| `uriTemplate` | `string` | RFC 6570 URI template |
+| Property      | Type     | Description                |
+| ------------- | -------- | -------------------------- |
+| `name`        | `string` | Unique resource identifier |
+| `uriTemplate` | `string` | RFC 6570 URI template      |
 
 ### Optional Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `title` | `string` | Human-readable title |
-| `description` | `string` | Resource description |
-| `mimeType` | `string` | MIME type for all matching resources |
-| `icons` | `Icon[]` | Icons for display |
+| Property      | Type     | Description                          |
+| ------------- | -------- | ------------------------------------ |
+| `title`       | `string` | Human-readable title                 |
+| `description` | `string` | Resource description                 |
+| `mimeType`    | `string` | MIME type for all matching resources |
+| `icons`       | `Icon[]` | Icons for display                    |
 
 ## URI Template Syntax
 
@@ -115,10 +115,10 @@ const userProfile = resourceTemplate({
 
 ## vs Static Resource
 
-| Feature | `@Resource` | `@ResourceTemplate` |
-|---------|-------------|---------------------|
-| URI | Fixed | Template with parameters |
-| Params | None | Extracted from URI |
+| Feature  | `@Resource`     | `@ResourceTemplate`          |
+| -------- | --------------- | ---------------------------- |
+| URI      | Fixed           | Template with parameters     |
+| Params   | None            | Extracted from URI           |
 | Use case | Single resource | Collection/dynamic resources |
 
 ```typescript

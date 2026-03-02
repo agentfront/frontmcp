@@ -32,8 +32,8 @@ Get all agents (local + adopted).
 getAgents(includeHidden?: boolean): ReadonlyArray<AgentEntry>
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter       | Type      | Default | Description           |
+| --------------- | --------- | ------- | --------------------- |
 | `includeHidden` | `boolean` | `false` | Include hidden agents |
 
 **Example:**
@@ -219,12 +219,12 @@ interface AgentChangeEvent {
 
 ## Indexes
 
-| Index | Key | Description |
-|-------|-----|-------------|
-| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
-| `byId` | `id` | Agent ID lookup (unique to AgentRegistry) |
-| `byName` | `name` | Base name lookup |
-| `byOwner` | `ownerPath` | All agents by owner |
+| Index           | Key           | Description                               |
+| --------------- | ------------- | ----------------------------------------- |
+| `byQualifiedId` | `qualifiedId` | Unique identifier lookup                  |
+| `byId`          | `id`          | Agent ID lookup (unique to AgentRegistry) |
+| `byName`        | `name`        | Base name lookup                          |
+| `byOwner`       | `ownerPath`   | All agents by owner                       |
 
 ## Agent Visibility
 

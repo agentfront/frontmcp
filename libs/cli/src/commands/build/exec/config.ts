@@ -6,6 +6,19 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { SetupDefinition } from './setup';
 
+export interface CliConfig {
+  enabled: boolean;
+  outputDefault?: 'text' | 'json';
+  authRequired?: boolean;
+  description?: string;
+  excludeTools?: string[];
+  nativeDeps?: {
+    brew?: string[];
+    apt?: string[];
+    npm?: string[];
+  };
+}
+
 export interface FrontmcpExecConfig {
   name: string;
   version?: string;
@@ -30,6 +43,7 @@ export interface FrontmcpExecConfig {
     minify?: boolean;
   };
   setup?: SetupDefinition;
+  cli?: CliConfig;
 }
 
 const CONFIG_FILENAMES = [

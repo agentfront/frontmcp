@@ -6,12 +6,12 @@ icon: "code-branch"
 
 ## Hook Types
 
-| Decorator | Timing | Use Case |
-|-----------|--------|----------|
-| `@Stage` | Define execution stage | Custom flow steps |
-| `@Will` | Before stage executes | Pre-processing, validation |
-| `@Did` | After stage executes | Post-processing, logging |
-| `@Around` | Wraps stage execution | Caching, error handling |
+| Decorator | Timing                 | Use Case                   |
+| --------- | ---------------------- | -------------------------- |
+| `@Stage`  | Define execution stage | Custom flow steps          |
+| `@Will`   | Before stage executes  | Pre-processing, validation |
+| `@Did`    | After stage executes   | Post-processing, logging   |
+| `@Around` | Wraps stage execution  | Caching, error handling    |
 
 ## FlowHooksOf
 
@@ -37,15 +37,15 @@ class MyHooks {
 
 ## Available Flows
 
-| Flow Name | Description |
-|-----------|-------------|
-| `tools:call-tool` | Tool execution |
-| `tools:list-tools` | List tools |
-| `resources:read-resource` | Read resource |
-| `resources:list-resources` | List resources |
-| `prompts:get-prompt` | Get prompt |
-| `prompts:list-prompts` | List prompts |
-| `http:request` | HTTP request handling |
+| Flow Name                  | Description           |
+| -------------------------- | --------------------- |
+| `tools:call-tool`          | Tool execution        |
+| `tools:list-tools`         | List tools            |
+| `resources:read-resource`  | Read resource         |
+| `resources:list-resources` | List resources        |
+| `prompts:get-prompt`       | Get prompt            |
+| `prompts:list-prompts`     | List prompts          |
+| `http:request`             | HTTP request handling |
 
 ## @Will (Before Hook)
 

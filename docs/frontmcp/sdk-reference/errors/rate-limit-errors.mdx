@@ -14,11 +14,11 @@ Rate limit errors are thrown when a client exceeds request rate limits or usage 
 
 Thrown when a client exceeds the configured request rate limit.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `RATE_LIMIT_EXCEEDED` |
-| `statusCode` | `number` | `429` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value                 |
+| ------------ | --------- | --------------------- |
+| `code`       | `string`  | `RATE_LIMIT_EXCEEDED` |
+| `statusCode` | `number`  | `429`                 |
+| `isPublic`   | `boolean` | `true`                |
 
 ```typescript
 new RateLimitError(retryAfter?: number)
@@ -44,11 +44,11 @@ throw new RateLimitError();
 
 Thrown when a client exceeds a usage quota (e.g., monthly API calls, storage).
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `QUOTA_EXCEEDED` |
-| `statusCode` | `number` | `429` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value            |
+| ------------ | --------- | ---------------- |
+| `code`       | `string`  | `QUOTA_EXCEEDED` |
+| `statusCode` | `number`  | `429`            |
+| `isPublic`   | `boolean` | `true`           |
 
 ```typescript
 new QuotaExceededError(quotaType?: string)

@@ -11,13 +11,10 @@ Every component validates its options using a Zod schema with `.strict()` mode:
 
 ```typescript
 // Inside button component
-const validation = validateOptions(options, {
-  schema: ButtonOptionsSchema,
-  componentName: 'button',
-});
+const result = ButtonOptionsSchema.safeParse(options);
 
-if (!validation.success) {
-  return validation.error; // Renders error box HTML
+if (!result.success) {
+  return renderValidationError('button', result.error);
 }
 ```
 
@@ -101,12 +98,12 @@ const HtmxSchema = z.object({
 }).strict();
 ```
 
-## Using validateOptions
+## Inline Zod Validation
 
 Create validated custom components:
 
 ```typescript
-import { validateOptions, escapeHtml } from '@frontmcp/ui/components';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 import { z } from 'zod';
 
 // Define schema
@@ -117,19 +114,18 @@ const MyComponentSchema = z.object({
 
 type MyComponentOptions = z.infer<typeof MyComponentSchema>;
 
-// Create component
+// Create component with inline validation
 export function myComponent(content: string, options: MyComponentOptions = {}): string {
-  // Validate options
-  const validation = validateOptions(options, {
-    schema: MyComponentSchema,
-    componentName: 'myComponent',
-  });
+  const result = MyComponentSchema.safeParse(options);
 
-  if (!validation.success) {
-    return validation.error; // Return error box
+  if (!result.success) {
+    const errors = result.error.issues.map((i) => i.message).join(', ');
+    return `<div style="border:1px solid red; padding:8px; color:red;">
+      myComponent: invalid options — ${escapeHtml(errors)}
+    </div>`;
   }
 
-  const { variant = 'light', size = 'md' } = validation.data;
+  const { variant = 'light', size = 'md' } = result.data;
 
   // Build HTML with validated options
   return `<div class="my-component my-component--${variant} my-component--${size}">
@@ -247,16 +243,16 @@ Validation helps with security but isn't a complete solution:
 ```typescript
 // ✅ Good - validates options AND escapes content
 function card(content: string, options: CardOptions = {}): string {
-  const validation = validateOptions(options, { schema: CardOptionsSchema, componentName: 'card' });
-  if (!validation.success) return validation.error;
+  const result = CardOptionsSchema.safeParse(options);
+  if (!result.success) return renderValidationError('card', result.error);
 
   return `<div class="card">${escapeHtml(content)}</div>`;
 }
 
 // ❌ Bad - validates but doesn't escape
 function card(content: string, options: CardOptions = {}): string {
-  const validation = validateOptions(options, { schema: CardOptionsSchema, componentName: 'card' });
-  if (!validation.success) return validation.error;
+  const result = CardOptionsSchema.safeParse(options);
+  if (!result.success) return renderValidationError('card', result.error);
 
   return `<div class="card">${content}</div>`; // XSS vulnerability!
 }

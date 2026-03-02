@@ -16,6 +16,7 @@ Beyond tools, FrontMCP supports **prompts** (reusable LLM instructions) and **re
 ## What You'll Build
 
 An expense management app with:
+
 - A **prompt** that generates expense reports
 - A **resource template** that fetches expense details by ID
 - A **static resource** that returns expense policies
@@ -105,12 +106,13 @@ arguments: [
 
 Prompts return an object with:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `description` | `string` | Human-readable summary of the prompt |
-| `messages` | `PromptMessage[]` | Array of messages to send to the LLM |
+| Property      | Type              | Description                          |
+| ------------- | ----------------- | ------------------------------------ |
+| `description` | `string`          | Human-readable summary of the prompt |
+| `messages`    | `PromptMessage[]` | Array of messages to send to the LLM |
 
 Each message has:
+
 - `role`: `'user'` or `'assistant'`
 - `content`: Object with `type: 'text'` and `text: string`
 
@@ -402,6 +404,7 @@ export { default as CategorizeExpensePrompt } from './categorize-expense.prompt'
     name: 'helper'
     uri: 'data://item/{id}'
     ```
+
   </Accordion>
 
   <Accordion title="Provide detailed descriptions">
@@ -410,6 +413,7 @@ export { default as CategorizeExpensePrompt } from './categorize-expense.prompt'
     ```typescript
     description: 'Generate an expense report summary for a given time period, including totals, breakdowns, and anomaly detection'
     ```
+
   </Accordion>
 
   <Accordion title="Use appropriate MIME types">
@@ -418,6 +422,7 @@ export { default as CategorizeExpensePrompt } from './categorize-expense.prompt'
     - `text/markdown` for formatted text
     - `application/json` for structured data
     - `text/plain` for simple text
+
   </Accordion>
 
   <Accordion title="Validate URI template parameters">
@@ -431,6 +436,7 @@ export { default as CategorizeExpensePrompt } from './categorize-expense.prompt'
       // ...
     }
     ```
+
   </Accordion>
 </AccordionGroup>
 

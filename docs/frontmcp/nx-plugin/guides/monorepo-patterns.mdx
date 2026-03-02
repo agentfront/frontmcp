@@ -18,11 +18,11 @@ my-platform/
 └── servers/       # Deployment shells (infrastructure)
 ```
 
-| Layer | Contains | Depends On |
-| --- | --- | --- |
+| Layer       | Contains                                  | Depends On |
+| ----------- | ----------------------------------------- | ---------- |
 | **Servers** | Entry points, Docker/Vercel/Lambda config | Apps, Libs |
-| **Apps** | Tools, resources, prompts, skills, agents | Libs |
-| **Libs** | Shared utilities, plugins, adapters | Other Libs |
+| **Apps**    | Tools, resources, prompts, skills, agents | Libs       |
+| **Libs**    | Shared utilities, plugins, adapters       | Other Libs |
 
 <Info>
 Servers never contain business logic — they only compose apps. Apps never contain infrastructure config — they only define capabilities. Libs are reusable across both.

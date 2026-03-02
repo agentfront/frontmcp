@@ -15,12 +15,12 @@ Flows are part of the FrontMCP execution model. They provide hook points for cro
 
 Flows give you fine-grained control over request processing without modifying tool, resource, or prompt code directly.
 
-| Aspect | Flow | Tool | Plugin |
-| --- | --- | --- | --- |
-| **Purpose** | Request lifecycle management | Execute actions | Cross-cutting extensions |
-| **Scope** | Per-request pipeline | Single action | Across all requests |
-| **Customization** | Stage-level hooks | Execute method | Registration hooks |
-| **Use case** | Logging, caching, auth checks | Business logic | Feature extensions |
+| Aspect            | Flow                          | Tool            | Plugin                   |
+| ----------------- | ----------------------------- | --------------- | ------------------------ |
+| **Purpose**       | Request lifecycle management  | Execute actions | Cross-cutting extensions |
+| **Scope**         | Per-request pipeline          | Single action   | Across all requests      |
+| **Customization** | Stage-level hooks             | Execute method  | Registration hooks       |
+| **Use case**      | Logging, caching, auth checks | Business logic  | Feature extensions       |
 
 Flows are ideal for:
 
@@ -46,13 +46,13 @@ graph LR
     C -.->|error| E
 ```
 
-| Stage | Purpose | Example |
-| --- | --- | --- |
-| **pre** | Validation, auth checks, input transformation | Check API key, parse headers |
-| **execute** | Run the core operation (tool, resource, prompt) | Call `execute()` on the tool |
-| **post** | Transform output, apply caching, logging | Cache response, format output |
-| **finalize** | Send response, cleanup | Emit response to client, release resources |
-| **error** | Handle failures from any stage | Log error, return formatted error response |
+| Stage        | Purpose                                         | Example                                    |
+| ------------ | ----------------------------------------------- | ------------------------------------------ |
+| **pre**      | Validation, auth checks, input transformation   | Check API key, parse headers               |
+| **execute**  | Run the core operation (tool, resource, prompt) | Call `execute()` on the tool               |
+| **post**     | Transform output, apply caching, logging        | Cache response, format output              |
+| **finalize** | Send response, cleanup                          | Emit response to client, release resources |
+| **error**    | Handle failures from any stage                  | Log error, return formatted error response |
 
 ---
 
@@ -60,15 +60,15 @@ graph LR
 
 FrontMCP provides built-in flows for all MCP protocol operations:
 
-| Flow Name | Trigger | Description |
-| --- | --- | --- |
-| `tools:call-tool` | `tools/call` request | Execute a tool with validated arguments |
-| `tools:list-tools` | `tools/list` request | List all available tools |
-| `resources:read-resource` | `resources/read` request | Read a resource by URI |
-| `resources:list-resources` | `resources/list` request | List all available resources |
-| `resources:subscribe` | `resources/subscribe` request | Subscribe to resource changes |
-| `prompts:get-prompt` | `prompts/get` request | Generate a prompt with arguments |
-| `prompts:list-prompts` | `prompts/list` request | List all available prompts |
+| Flow Name                  | Trigger                       | Description                             |
+| -------------------------- | ----------------------------- | --------------------------------------- |
+| `tools:call-tool`          | `tools/call` request          | Execute a tool with validated arguments |
+| `tools:list-tools`         | `tools/list` request          | List all available tools                |
+| `resources:read-resource`  | `resources/read` request      | Read a resource by URI                  |
+| `resources:list-resources` | `resources/list` request      | List all available resources            |
+| `resources:subscribe`      | `resources/subscribe` request | Subscribe to resource changes           |
+| `prompts:get-prompt`       | `prompts/get` request         | Generate a prompt with arguments        |
+| `prompts:list-prompts`     | `prompts/list` request        | List all available prompts              |
 
 ---
 
@@ -140,11 +140,11 @@ You don't need to create a full custom flow to customize behavior. Use **hooks**
 
 ### Hook Types
 
-| Hook Type | When It Runs | Use Case |
-| --- | --- | --- |
-| **Will** | Before a stage executes | Validate, transform input |
-| **Did** | After a stage completes | Log, cache, transform output |
-| **Around** | Wraps the entire stage | Timing, retry logic, circuit breakers |
+| Hook Type  | When It Runs            | Use Case                              |
+| ---------- | ----------------------- | ------------------------------------- |
+| **Will**   | Before a stage executes | Validate, transform input             |
+| **Did**    | After a stage completes | Log, cache, transform output          |
+| **Around** | Wraps the entire stage  | Timing, retry logic, circuit breakers |
 
 ### Applying Hooks
 
@@ -214,12 +214,12 @@ For a complete guide to hooks, see the [Hooks decorator reference](/frontmcp/sdk
 
 Within flow stages, you have access to control methods:
 
-| Method | Description |
-| --- | --- |
-| `this.respond(value)` | End the flow and send a response to the client |
-| `this.fail(message)` | Abort the flow with an error |
-| `this.state.get(key)` | Read from flow state |
-| `this.state.set(key, value)` | Write to flow state |
+| Method                       | Description                                    |
+| ---------------------------- | ---------------------------------------------- |
+| `this.respond(value)`        | End the flow and send a response to the client |
+| `this.fail(message)`         | Abort the flow with an error                   |
+| `this.state.get(key)`        | Read from flow state                           |
+| `this.state.set(key, value)` | Write to flow state                            |
 
 ### State Management
 

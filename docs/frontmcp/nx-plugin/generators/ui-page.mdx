@@ -1,0 +1,79 @@
+---
+title: UI Page Generator
+slug: nx-plugin/generators/ui-page
+icon: file
+description: Add a full-page React component to ui/pages/
+---
+
+Generates a full-page React component inside the `@frontmcp/ui-pages` package with an MUI scaffold, spec file, and barrel index.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:ui-page AdminDashboard
+```
+
+## Options
+
+| Option       | Type      | Default | Description                              |
+| ------------ | --------- | ------- | ---------------------------------------- |
+| `name`       | `string`  | —       | **Required.** Page name (PascalCase or kebab-case — auto-converted to PascalCase) |
+| `description`| `string`  | `""`    | Optional description for the page        |
+| `skipFormat` | `boolean` | `false` | Skip running Prettier after generation   |
+
+## Generated Files
+
+```
+ui/pages/src/AdminDashboard/
+  index.ts
+  AdminDashboard.tsx
+  AdminDashboard.spec.tsx
+```
+
+```tsx AdminDashboard.tsx
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+
+export interface AdminDashboardProps {
+  title?: string;
+}
+
+export function AdminDashboard({ title = 'AdminDashboard' }: AdminDashboardProps) {
+  return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4">{title}</Typography>
+      <Typography variant="body1" sx={{ mt: 2 }}>
+        TODO: implement AdminDashboard
+      </Typography>
+    </Box>
+  );
+}
+```
+
+```ts index.ts
+export { AdminDashboard } from './AdminDashboard';
+export { AdminDashboard as default } from './AdminDashboard';
+export type { AdminDashboardProps } from './AdminDashboard';
+```
+
+## Auto-Updates
+
+The generator also updates three files in your workspace:
+
+1. **`ui/pages/project.json`** — adds the entry to `additionalEntryPoints` in both `build-cjs` and `build-esm` targets
+2. **`tsconfig.base.json`** — adds a path alias `@frontmcp/ui-pages/AdminDashboard`
+3. **`ui/pages/src/index.ts`** — appends `export * from './AdminDashboard'`
+
+## Consuming
+
+```ts
+import { AdminDashboard } from '@frontmcp/ui-pages/AdminDashboard';
+```
+
+## Example
+
+```bash
+# Kebab-case input is auto-converted to PascalCase
+nx g @frontmcp/nx:ui-page settings-page
+# Creates: ui/pages/src/SettingsPage/SettingsPage.tsx
+```

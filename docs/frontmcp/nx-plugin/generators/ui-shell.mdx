@@ -1,0 +1,77 @@
+---
+title: UI Shell Generator
+slug: nx-plugin/generators/ui-shell
+icon: terminal
+description: Add a server-side HTML shell template to ui/shells/
+---
+
+Generates a server-side HTML shell builder inside the `@frontmcp/ui-shells` package. Shells use `buildShell` from `@frontmcp/uipack` — no React dependency.
+
+## Usage
+
+```bash
+nx g @frontmcp/nx:ui-shell admin-dashboard
+```
+
+## Options
+
+| Option       | Type      | Default | Description                              |
+| ------------ | --------- | ------- | ---------------------------------------- |
+| `name`       | `string`  | —       | **Required.** Shell name (kebab-case or PascalCase — auto-converted to kebab-case for files) |
+| `description`| `string`  | `""`    | Optional description for the shell       |
+| `skipFormat` | `boolean` | `false` | Skip running Prettier after generation   |
+
+## Generated Files
+
+```
+ui/shells/src/admin-dashboard/
+  index.ts
+  admin-dashboard.shell.ts
+  admin-dashboard.shell.spec.ts
+```
+
+```ts admin-dashboard.shell.ts
+import { buildShell } from '@frontmcp/uipack';
+
+export interface AdminDashboardShellOptions {
+  toolName: string;
+  input?: unknown;
+  output?: unknown;
+}
+
+export function buildAdminDashboardShell(options: AdminDashboardShellOptions) {
+  const content = `<div id="app">TODO: implement ${options.toolName} shell</div>`;
+  return buildShell(content, {
+    toolName: options.toolName,
+    input: options.input,
+    output: options.output,
+  });
+}
+```
+
+```ts index.ts
+export { buildAdminDashboardShell } from './admin-dashboard.shell';
+export type { AdminDashboardShellOptions } from './admin-dashboard.shell';
+```
+
+## Auto-Updates
+
+The generator also updates three files in your workspace:
+
+1. **`ui/shells/project.json`** — adds the entry to `additionalEntryPoints` in both `build-cjs` and `build-esm` targets
+2. **`tsconfig.base.json`** — adds a path alias `@frontmcp/ui-shells/admin-dashboard`
+3. **`ui/shells/src/index.ts`** — appends `export * from './admin-dashboard'`
+
+## Consuming
+
+```ts
+import { buildAdminDashboardShell } from '@frontmcp/ui-shells/admin-dashboard';
+```
+
+## Example
+
+```bash
+# PascalCase input is auto-converted to kebab-case
+nx g @frontmcp/nx:ui-shell MyDashboard
+# Creates: ui/shells/src/my-dashboard/my-dashboard.shell.ts
+```

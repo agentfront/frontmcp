@@ -4,48 +4,79 @@
  * Provides UI template rendering and platform-specific metadata generation
  * for MCP tool responses.
  *
- * Three serving modes:
- * - **inline**: HTML is rendered per-request and embedded in _meta['ui/html']
- * - **static**: Static widget is pre-compiled at startup, client fetches via resources/read
- * - **hybrid**: Shell (React + renderer) cached at startup, component + data in response
+ * NOTE: Core registry functionality was removed from @frontmcp/uipack during redesign.
+ * Stub implementations are provided until re-implementation against the new API.
  *
- * NOTE: Core Tool UI functionality is in @frontmcp/uipack/registry for standalone usage.
- * This module re-exports from @frontmcp/uipack for backwards compatibility.
+ * TODO: Re-implement against new @frontmcp/uipack shell/resolver/component API
  */
 
 // ============================================
-// Core Registry (from @frontmcp/uipack/registry)
+// Shared types & URI utilities (from ui-shared.ts)
 // ============================================
 export {
-  // Registry
   ToolUIRegistry,
-  // Template rendering
-  renderToolTemplateAsync,
-  renderToolTemplate,
-  hasUIConfig,
-  isReactComponent,
-  containsMdxSyntax,
-  // URI utilities
   UI_RESOURCE_SCHEME,
   isUIResourceUri,
   isStaticWidgetUri,
   parseWidgetUri,
   buildStaticWidgetUri,
   getUIResourceMimeType,
-} from '@frontmcp/uipack/registry';
+} from './ui-shared';
+export type { ParsedWidgetUri } from './ui-shared';
 
-export type {
-  // Registry types
-  RenderOptions,
-  UIRenderResult,
-  CompileStaticWidgetOptions,
-  HybridComponentPayload,
-  BuildHybridComponentPayloadOptions,
-  // Template types
-  RenderTemplateOptions,
-  // URI types
-  ParsedWidgetUri,
-} from '@frontmcp/uipack/registry';
+// ============================================
+// Stub exports for registry functions
+// (previously from @frontmcp/uipack/registry)
+// ============================================
+
+export function renderToolTemplateAsync(..._args: unknown[]): Promise<string> {
+  return Promise.resolve('');
+}
+
+export function renderToolTemplate(..._args: unknown[]): string {
+  return '';
+}
+
+/** Check if a tool entry has UI configuration */
+export function hasUIConfig(tool: unknown): boolean {
+  if (typeof tool !== 'object' || tool === null) return false;
+  const metadata = (tool as Record<string, unknown>)['ui'];
+  return metadata !== undefined && metadata !== null;
+}
+
+export function isReactComponent(_template: unknown): boolean {
+  return false;
+}
+
+export function containsMdxSyntax(_content: string): boolean {
+  return false;
+}
+
+// Stub types (previously from @frontmcp/uipack/registry)
+export interface RenderOptions {
+  [key: string]: unknown;
+}
+
+export interface UIRenderResult {
+  html: string;
+  [key: string]: unknown;
+}
+
+export interface CompileStaticWidgetOptions {
+  [key: string]: unknown;
+}
+
+export interface HybridComponentPayload {
+  [key: string]: unknown;
+}
+
+export interface BuildHybridComponentPayloadOptions {
+  [key: string]: unknown;
+}
+
+export interface RenderTemplateOptions {
+  [key: string]: unknown;
+}
 
 // ============================================
 // Platform Adapters (from @frontmcp/ui/adapters)
@@ -69,9 +100,7 @@ export {
 // ============================================
 // SDK-Specific (MCP Integration)
 // ============================================
-// UI Resource Handler - SDK-specific functions for MCP resource handling
 export { handleUIResourceRead, createUIResourceHandler } from './ui-resource.handler';
 export type { UIResourceHandleResult, UIResourceHandlerOptions, HandleUIResourceOptions } from './ui-resource.handler';
 
-// UI Resource Templates (for capability advertisement)
 export { StaticWidgetResourceTemplate } from './ui-resource-template';

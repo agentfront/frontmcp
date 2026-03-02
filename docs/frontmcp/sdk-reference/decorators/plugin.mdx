@@ -46,34 +46,34 @@ function Plugin(providedMetadata: PluginMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique plugin identifier |
+| Property | Type     | Description              |
+| -------- | -------- | ------------------------ |
+| `name`   | `string` | Unique plugin identifier |
 
 ### Optional Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `id` | `string` | Stable identifier |
-| `description` | `string` | Plugin description |
-| `scope` | `'app' \| 'server'` | Plugin scope level |
+| Property      | Type                | Description        |
+| ------------- | ------------------- | ------------------ |
+| `id`          | `string`            | Stable identifier  |
+| `description` | `string`            | Plugin description |
+| `scope`       | `'app' \| 'server'` | Plugin scope level |
 
 ### Components
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `providers` | `ProviderType[]` | Plugin providers |
-| `tools` | `ToolType[]` | Plugin tools |
-| `resources` | `ResourceType[]` | Plugin resources |
-| `prompts` | `PromptType[]` | Plugin prompts |
-| `skills` | `SkillType[]` | Plugin skills |
-| `adapters` | `AdapterType[]` | Framework adapters |
-| `plugins` | `PluginType[]` | Nested plugins |
+| Property    | Type             | Description        |
+| ----------- | ---------------- | ------------------ |
+| `providers` | `ProviderType[]` | Plugin providers   |
+| `tools`     | `ToolType[]`     | Plugin tools       |
+| `resources` | `ResourceType[]` | Plugin resources   |
+| `prompts`   | `PromptType[]`   | Plugin prompts     |
+| `skills`    | `SkillType[]`    | Plugin skills      |
+| `adapters`  | `AdapterType[]`  | Framework adapters |
+| `plugins`   | `PluginType[]`   | Nested plugins     |
 
 ### Extensions
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property            | Type                 | Description                       |
+| ------------------- | -------------------- | --------------------------------- |
 | `contextExtensions` | `ContextExtension[]` | Add properties to context classes |
 
 ## Context Extensions

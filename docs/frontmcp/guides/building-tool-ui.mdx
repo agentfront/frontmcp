@@ -33,6 +33,7 @@ pnpm add @frontmcp/ui
 ```bash yarn
 yarn add @frontmcp/ui
 ```
+
 </CodeGroup>
 
 ---
@@ -254,11 +255,11 @@ template: (ctx) => {
 
 ### Available Helpers
 
-| Helper | Description |
-|--------|-------------|
-| `escapeHtml(str)` | Escape HTML entities to prevent XSS |
-| `formatDate(date)` | Format a date string |
-| `formatNumber(num, options)` | Format numbers with locale support |
+| Helper                       | Description                         |
+| ---------------------------- | ----------------------------------- |
+| `escapeHtml(str)`            | Escape HTML entities to prevent XSS |
+| `formatDate(date)`           | Format a date string                |
+| `formatNumber(num, options)` | Format numbers with locale support  |
 
 <Warning>
 Always use `helpers.escapeHtml()` when rendering user-provided data to prevent XSS vulnerabilities.

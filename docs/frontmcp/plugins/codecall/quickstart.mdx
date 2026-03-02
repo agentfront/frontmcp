@@ -33,6 +33,7 @@ icon: rocket
     yarn add @frontmcp/plugin-codecall
     ```
     </CodeGroup>
+
   </Step>
 
   <Step title="Create Tools with CodeCall Metadata">
@@ -86,6 +87,7 @@ icon: rocket
       The `codecall` metadata is per-tool. You can mix CodeCall-enabled tools with regular tools
       that remain visible in `tools/list` as usual.
     </Tip>
+
   </Step>
 
   <Step title="Wire Up CodeCallPlugin in Your App">
@@ -121,6 +123,7 @@ icon: rocket
     | `mode` | `'codecall_only'` | Only the 4 meta-tools appear in `tools/list`. Recommended for large toolsets. |
     | `vm.preset` | `'secure'` | Bank-grade sandbox defaults: strict AST validation, short timeouts, no network access. |
     | `embedding.strategy` | `'tfidf'` | Fast local embeddings with no external API. Great for getting started. |
+
   </Step>
 
   <Step title="Start the Dev Server">
@@ -148,6 +151,7 @@ icon: rocket
 
     In the Inspector, point to your running server and you will see the 4 CodeCall meta-tools
     instead of `users:list` and `users:get`.
+
   </Step>
 
   <Step title="Try the Search-Describe-Execute Flow">
@@ -238,6 +242,7 @@ icon: rocket
       }
     }
     ```
+
   </Step>
 </Steps>
 

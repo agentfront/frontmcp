@@ -14,12 +14,12 @@ Agent errors cover the full lifecycle of agent operations — from not-found and
 
 Thrown when a requested agent is not registered.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
-| `agentId` | `string` | The requested agent ID |
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `AGENT_NOT_FOUND`      |
+| `statusCode` | `number`  | `404`                  |
+| `isPublic`   | `boolean` | `true`                 |
+| `agentId`    | `string`  | The requested agent ID |
 
 ```typescript
 new AgentNotFoundError(agentId: string)
@@ -39,13 +39,13 @@ throw new AgentNotFoundError('code-reviewer');
 
 Thrown when an agent's execution fails unexpectedly. This is an internal error.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_EXECUTION_FAILED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `agentId` | `string` | The agent that failed |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                    |
+| --------------- | -------------------- | ------------------------ |
+| `code`          | `string`             | `AGENT_EXECUTION_FAILED` |
+| `statusCode`    | `number`             | `500`                    |
+| `isPublic`      | `boolean`            | `false`                  |
+| `agentId`       | `string`             | The agent that failed    |
+| `originalError` | `Error \| undefined` | The underlying cause     |
 
 ```typescript
 new AgentExecutionError(agentId: string, cause?: Error)
@@ -69,14 +69,14 @@ try {
 
 Thrown when an agent exceeds its maximum iteration count.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_LOOP_EXCEEDED` |
-| `statusCode` | `number` | `400` |
-| `isPublic` | `boolean` | `true` |
-| `agentId` | `string` | The agent that looped |
-| `maxIterations` | `number` | Configured maximum |
-| `actualIterations` | `number` | How many iterations ran |
+| Property           | Type      | Value                   |
+| ------------------ | --------- | ----------------------- |
+| `code`             | `string`  | `AGENT_LOOP_EXCEEDED`   |
+| `statusCode`       | `number`  | `400`                   |
+| `isPublic`         | `boolean` | `true`                  |
+| `agentId`          | `string`  | The agent that looped   |
+| `maxIterations`    | `number`  | Configured maximum      |
+| `actualIterations` | `number`  | How many iterations ran |
 
 ```typescript
 new AgentLoopExceededError(agentId: string, maxIterations: number, actualIterations?: number)
@@ -96,13 +96,13 @@ throw new AgentLoopExceededError('planner', 10, 11);
 
 Thrown when an agent exceeds its configured timeout.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_TIMEOUT` |
-| `statusCode` | `number` | `408` |
-| `isPublic` | `boolean` | `true` |
-| `agentId` | `string` | The timed-out agent |
-| `timeoutMs` | `number` | Configured timeout in milliseconds |
+| Property     | Type      | Value                              |
+| ------------ | --------- | ---------------------------------- |
+| `code`       | `string`  | `AGENT_TIMEOUT`                    |
+| `statusCode` | `number`  | `408`                              |
+| `isPublic`   | `boolean` | `true`                             |
+| `agentId`    | `string`  | The timed-out agent                |
+| `timeoutMs`  | `number`  | Configured timeout in milliseconds |
 
 ```typescript
 new AgentTimeoutError(agentId: string, timeoutMs: number)
@@ -122,13 +122,13 @@ throw new AgentTimeoutError('planner', 30000);
 
 Thrown when an agent attempts to invoke another agent it doesn't have visibility to.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_VISIBILITY_DENIED` |
-| `statusCode` | `number` | `403` |
-| `isPublic` | `boolean` | `true` |
-| `requestingAgentId` | `string` | The caller agent |
-| `targetAgentId` | `string` | The target agent |
+| Property            | Type      | Value                     |
+| ------------------- | --------- | ------------------------- |
+| `code`              | `string`  | `AGENT_VISIBILITY_DENIED` |
+| `statusCode`        | `number`  | `403`                     |
+| `isPublic`          | `boolean` | `true`                    |
+| `requestingAgentId` | `string`  | The caller agent          |
+| `targetAgentId`     | `string`  | The target agent          |
 
 ```typescript
 new AgentVisibilityError(requestingAgentId: string, targetAgentId: string)
@@ -148,13 +148,13 @@ throw new AgentVisibilityError('assistant', 'admin-agent');
 
 Thrown when the LLM adapter (e.g., OpenAI, Anthropic) fails during agent execution. This is an internal error.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_LLM_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `agentId` | `string` | The agent using the adapter |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                       |
+| --------------- | -------------------- | --------------------------- |
+| `code`          | `string`             | `AGENT_LLM_ERROR`           |
+| `statusCode`    | `number`             | `500`                       |
+| `isPublic`      | `boolean`            | `false`                     |
+| `agentId`       | `string`             | The agent using the adapter |
+| `originalError` | `Error \| undefined` | The underlying cause        |
 
 ```typescript
 new AgentLlmError(agentId: string, cause?: Error)
@@ -174,13 +174,13 @@ throw new AgentLlmError('planner', new Error('Rate limited by provider'));
 
 Thrown when an agent has invalid configuration.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_CONFIGURATION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `true` |
-| `agentId` | `string \| undefined` | The misconfigured agent |
-| `configErrors` | `string[]` | List of configuration errors |
+| Property       | Type                  | Value                        |
+| -------------- | --------------------- | ---------------------------- |
+| `code`         | `string`              | `AGENT_CONFIGURATION_ERROR`  |
+| `statusCode`   | `number`              | `500`                        |
+| `isPublic`     | `boolean`             | `true`                       |
+| `agentId`      | `string \| undefined` | The misconfigured agent      |
+| `configErrors` | `string[]`            | List of configuration errors |
 
 ```typescript
 new AgentConfigurationError(message: string, options?: {
@@ -206,12 +206,12 @@ throw new AgentConfigurationError('Missing model configuration', {
 
 Thrown when an agent doesn't have an LLM adapter configured. This is an internal error.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_NOT_CONFIGURED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `agentName` | `string` | The unconfigured agent |
+| Property     | Type      | Value                  |
+| ------------ | --------- | ---------------------- |
+| `code`       | `string`  | `AGENT_NOT_CONFIGURED` |
+| `statusCode` | `number`  | `500`                  |
+| `isPublic`   | `boolean` | `false`                |
+| `agentName`  | `string`  | The unconfigured agent |
 
 ```typescript
 new AgentNotConfiguredError(agentName: string)
@@ -232,14 +232,14 @@ throw new AgentNotConfiguredError('planner');
 
 Thrown when a tool is not found in the agent's allowed tool scope. This is an internal error.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `AGENT_TOOL_NOT_FOUND` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `agentName` | `string` | The agent that requested the tool |
-| `toolName` | `string` | The missing tool |
-| `availableTools` | `string[]` | Tools available to the agent |
+| Property         | Type       | Value                             |
+| ---------------- | ---------- | --------------------------------- |
+| `code`           | `string`   | `AGENT_TOOL_NOT_FOUND`            |
+| `statusCode`     | `number`   | `500`                             |
+| `isPublic`       | `boolean`  | `false`                           |
+| `agentName`      | `string`   | The agent that requested the tool |
+| `toolName`       | `string`   | The missing tool                  |
+| `availableTools` | `string[]` | Tools available to the agent      |
 
 ```typescript
 new AgentToolNotFoundError(agentName: string, toolName: string, availableTools: string[])

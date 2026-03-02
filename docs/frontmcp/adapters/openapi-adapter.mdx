@@ -532,12 +532,12 @@ OpenapiAdapter.init({
 });
 ```
 
-| Mode         | Description                                                         |
-| ------------ | ------------------------------------------------------------------- |
-| `'none'`     | No modification (default)                                           |
-| `'jsonSchema'` | Append full JSON Schema to description                            |
-| `'summary'`  | Append human-readable summary (e.g., "Returns: object with status, data, items (array)") |
-| `'compact'`  | Append one-line type summary (e.g., "Returns: \{ status: number, data: object \}") |
+| Mode           | Description                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `'none'`       | No modification (default)                                                                |
+| `'jsonSchema'` | Append full JSON Schema to description                                                   |
+| `'summary'`    | Append human-readable summary (e.g., "Returns: object with status, data, items (array)") |
+| `'compact'`    | Append one-line type summary (e.g., "Returns: \{ status: number, data: object \}")       |
 
 #### Custom Schema Formatter
 
@@ -703,13 +703,13 @@ OpenapiAdapter.init({
 
 **Post-tool transform context:**
 
-| Property         | Type              | Description                         |
-| ---------------- | ----------------- | ----------------------------------- |
-| `ctx`            | `FrontMcpContext` | Full request context                |
-| `tool`           | `McpOpenAPITool`  | Tool definition                     |
-| `status`         | `number`          | HTTP response status code           |
-| `ok`             | `boolean`         | Whether response was successful     |
-| `adapterOptions` | `object`          | Adapter configuration               |
+| Property         | Type              | Description                     |
+| ---------------- | ----------------- | ------------------------------- |
+| `ctx`            | `FrontMcpContext` | Full request context            |
+| `tool`           | `McpOpenAPITool`  | Tool definition                 |
+| `status`         | `number`          | HTTP response status code       |
+| `ok`             | `boolean`         | Whether response was successful |
+| `adapterOptions` | `object`          | Adapter configuration           |
 
 <Check>
   **Error Handling:** Transform failures are logged and the original data is returned, ensuring graceful degradation.
