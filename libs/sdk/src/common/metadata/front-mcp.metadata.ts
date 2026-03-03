@@ -195,6 +195,23 @@ export interface FrontMcpBaseMetadata {
   sqlite?: SqliteOptionsInput;
 
   /**
+   * UI rendering configuration.
+   * Controls CDN overrides for widget import resolution.
+   *
+   * @example Override @frontmcp/ui to load from local dev server
+   * ```typescript
+   * ui: {
+   *   cdnOverrides: {
+   *     '@frontmcp/ui': 'http://localhost:5173/@frontmcp/ui',
+   *   },
+   * }
+   * ```
+   */
+  ui?: {
+    cdnOverrides?: Record<string, string>;
+  };
+
+  /**
    * Jobs and workflows configuration.
    * Enables the jobs/workflows system for saved, discoverable, triggerable executions.
    *
@@ -241,6 +258,11 @@ export const frontMcpBaseSchema = z.object({
   skillsConfig: skillsConfigOptionsSchema.optional(),
   extApps: extAppsOptionsSchema.optional(),
   sqlite: sqliteOptionsSchema.optional(),
+  ui: z
+    .object({
+      cdnOverrides: z.record(z.string(), z.string()).optional(),
+    })
+    .optional(),
   jobs: z
     .object({
       enabled: z.boolean(),

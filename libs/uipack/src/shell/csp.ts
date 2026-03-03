@@ -16,6 +16,7 @@ export const DEFAULT_CDN_DOMAINS = [
   'https://cdnjs.cloudflare.com',
   'https://fonts.googleapis.com',
   'https://fonts.gstatic.com',
+  'https://esm.sh',
 ] as const;
 
 /**
@@ -27,7 +28,8 @@ export const DEFAULT_CSP_DIRECTIVES = [
   `style-src 'self' 'unsafe-inline' ${DEFAULT_CDN_DOMAINS.join(' ')}`,
   `img-src 'self' data: ${DEFAULT_CDN_DOMAINS.join(' ')}`,
   `font-src 'self' data: ${DEFAULT_CDN_DOMAINS.join(' ')}`,
-  "connect-src 'none'",
+  `connect-src ${DEFAULT_CDN_DOMAINS.join(' ')}`,
+  "object-src 'self' data:",
 ] as const;
 
 /**
@@ -40,6 +42,7 @@ export const RESTRICTIVE_CSP_DIRECTIVES = [
   "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'none'",
+  "object-src 'self' data:",
 ] as const;
 
 /**
@@ -70,8 +73,10 @@ export function buildCSPDirectives(csp?: CSPConfig): string[] {
   if (validConnectDomains.length) {
     directives.push(`connect-src ${validConnectDomains.join(' ')}`);
   } else {
-    directives.push("connect-src 'none'");
+    directives.push(`connect-src ${allResourceDomains.join(' ')}`);
   }
+
+  directives.push("object-src 'self' data:");
 
   return directives;
 }

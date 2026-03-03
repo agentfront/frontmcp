@@ -24,5 +24,8 @@ export { isNpmSource, isFileSource, isImportSource, isFunctionSource, FRONTMCP_M
 // Loader
 export { resolveUISource, generateMountScript } from './loader';
 
+// Transpiler
+export { transpileReactSource, bundleFileSource, extractDefaultExportName } from './transpiler';
+
 // Renderer
 export { renderComponent } from './renderer';

@@ -205,7 +205,17 @@ export class Scope extends ScopeEntry {
       this.registerSendElicitationResultTool(scopeRef);
     }
 
-    this.toolUIRegistry = new ToolUIRegistry();
+    // Create UI import resolver with CDN overrides if configured
+    let uiResolver: import('@frontmcp/uipack/resolver').ImportResolver | undefined;
+    const cdnOverrides = this.metadata.ui?.cdnOverrides;
+    if (cdnOverrides && Object.keys(cdnOverrides).length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createResolverWithOverrides } = require('@frontmcp/uipack/resolver');
+      uiResolver = createResolverWithOverrides(cdnOverrides);
+      this.logger.verbose('Created UI resolver with CDN overrides', { overrides: Object.keys(cdnOverrides) });
+    }
+
+    this.toolUIRegistry = new ToolUIRegistry(uiResolver);
 
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeResources.ready;

@@ -4,11 +4,11 @@
  * Provides UI template rendering and platform-specific metadata generation
  * for MCP tool responses.
  *
- * NOTE: Core registry functionality was removed from @frontmcp/uipack during redesign.
- * Stub implementations are provided until re-implementation against the new API.
- *
- * TODO: Re-implement against new @frontmcp/uipack shell/resolver/component API
+ * Delegates to @frontmcp/uipack/adapters for rendering, content detection,
+ * and protocol-aligned response formatting.
  */
+
+import { detectUIType, renderToolTemplate as uipackRenderToolTemplate } from '@frontmcp/uipack/adapters';
 
 // ============================================
 // Shared types & URI utilities (from ui-shared.ts)
@@ -25,16 +25,29 @@ export {
 export type { ParsedWidgetUri } from './ui-shared';
 
 // ============================================
-// Stub exports for registry functions
-// (previously from @frontmcp/uipack/registry)
+// Registry functions (delegating to @frontmcp/uipack)
 // ============================================
 
-export function renderToolTemplateAsync(..._args: unknown[]): Promise<string> {
-  return Promise.resolve('');
+export function renderToolTemplateAsync(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  template: unknown,
+  platformType?: string,
+): Promise<string> {
+  const result = uipackRenderToolTemplate({ toolName, input, output, template, platformType });
+  return Promise.resolve(result.html);
 }
 
-export function renderToolTemplate(..._args: unknown[]): string {
-  return '';
+export function renderToolTemplate(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  template: unknown,
+  platformType?: string,
+): string {
+  const result = uipackRenderToolTemplate({ toolName, input, output, template, platformType });
+  return result.html;
 }
 
 /** Check if a tool entry has UI configuration */
@@ -44,15 +57,16 @@ export function hasUIConfig(tool: unknown): boolean {
   return metadata !== undefined && metadata !== null;
 }
 
-export function isReactComponent(_template: unknown): boolean {
-  return false;
+export function isReactComponent(template: unknown): boolean {
+  return detectUIType(template) === 'react';
 }
 
-export function containsMdxSyntax(_content: string): boolean {
-  return false;
+export function containsMdxSyntax(content: string): boolean {
+  // MDX markers: import/export statements, JSX in markdown
+  return /^(import|export)\s/m.test(content) || /<[A-Z]/.test(content);
 }
 
-// Stub types (previously from @frontmcp/uipack/registry)
+// Types for registry operations
 export interface RenderOptions {
   [key: string]: unknown;
 }

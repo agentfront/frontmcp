@@ -20,6 +20,10 @@ export interface NpmSource {
 export interface FileSource {
   file: string;
   inline?: boolean;
+  /** Component export name (default: auto-detected from source or 'default') */
+  exportName?: string;
+  /** Override peer dependencies (default: ['react', 'react-dom'] for .tsx/.jsx) */
+  peerDependencies?: string[];
 }
 
 /** Mode 3: Direct URL import */
@@ -91,10 +95,16 @@ export interface ResolvedComponent {
   url?: string;
   /** For inline mode: the HTML content */
   html?: string;
+  /** Transpiled module source code (for inline module rendering of .tsx/.jsx files) */
+  code?: string;
+  /** External import specifiers found in the transpiled code */
+  imports?: string[];
   /** Export name for the component (default: 'default') */
   exportName: string;
   /** Detected metadata */
   meta: ComponentMeta;
   /** Peer dependencies that need to be loaded */
   peerDependencies: string[];
+  /** Whether the code is fully bundled with mount code included */
+  bundled?: boolean;
 }

@@ -25,14 +25,8 @@
 
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import type { AIPlatformType } from '../../notification/notification.service';
-// TODO: Re-implement against new @frontmcp/uipack API after redesign
-// import { createDefaultBaseTemplate } from '@frontmcp/uipack/base-template';
-// import { ... } from '@frontmcp/uipack/registry';
+import { createDefaultBaseTemplate } from '@frontmcp/uipack/adapters';
 import { type ToolUIRegistry, isUIResourceUri, parseWidgetUri, getUIResourceMimeType } from './ui-shared';
-
-function createDefaultBaseTemplate(_options: { toolName: string }): string {
-  return `<!DOCTYPE html><html><body><div id="root">Placeholder widget for ${_options.toolName}</div></body></html>`;
-}
 
 /**
  * Result of handling a UI resource request

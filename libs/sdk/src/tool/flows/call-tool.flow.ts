@@ -25,37 +25,12 @@ import {
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
-// TODO: Re-implement against new @frontmcp/uipack API after redesign
-// import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
-// import { isUIRenderFailure } from '@frontmcp/uipack/registry';
-type ToolResponseContent = {
-  content: Array<{ type: 'text'; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  format?: string;
-  contentCleared?: boolean;
-  _meta?: Record<string, unknown>;
-};
-function resolveServingMode(..._args: unknown[]): {
-  mode: string;
-  supportsUI: boolean;
-  effectiveMode: string | null;
-  useStructuredContent: boolean;
-  reason?: string;
-} {
-  return {
-    mode: 'inline',
-    supportsUI: false,
-    effectiveMode: null,
-    useStructuredContent: false,
-    reason: 'UI module not yet re-implemented',
-  };
-}
-function buildToolResponseContent(..._args: unknown[]): ToolResponseContent {
-  return { content: [{ type: 'text' as const, text: '' }] };
-}
-function isUIRenderFailure(_result: unknown): _result is { reason: string } {
-  return false;
-}
+import {
+  resolveServingMode,
+  buildToolResponseContent,
+  isUIRenderFailure,
+  type ToolResponseContent,
+} from '@frontmcp/uipack/adapters';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 /**

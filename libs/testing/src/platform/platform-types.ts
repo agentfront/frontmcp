@@ -61,11 +61,11 @@ export function getPlatformMetaNamespace(platform: TestPlatformType): PlatformMe
 /**
  * Get the expected MIME type for a platform.
  *
- * - OpenAI uses `text/html+skybridge`
- * - All other platforms use `text/html+mcp`
+ * - OpenAI uses `text/html;profile=mcp-app`
+ * - All other platforms use `text/html;profile=mcp-app`
  */
 export function getPlatformMimeType(platform: TestPlatformType): string {
-  return platform === 'openai' ? 'text/html+skybridge' : 'text/html+mcp';
+  return 'text/html;profile=mcp-app';
 }
 
 /**

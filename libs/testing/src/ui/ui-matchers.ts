@@ -473,8 +473,8 @@ const toHaveOnlyNamespacedMeta: MatcherFunction<[namespace: string]> = function 
  * @param platform - The platform type to check for
  *
  * MIME types:
- * - OpenAI: text/html+skybridge
- * - Others: text/html+mcp
+ * - OpenAI: text/html;profile=mcp-app
+ * - Others: text/html;profile=mcp-app
  */
 const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
   const meta = extractMeta(received);

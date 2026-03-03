@@ -9,7 +9,7 @@
 
 import type { ImportResolver, ResolvedImport } from '../resolver/types';
 import { createEsmShResolver } from '../resolver/esm-sh.resolver';
-import { getPackageName } from '../resolver/import-parser';
+import { getPackageName, parseImports } from '../resolver/import-parser';
 import type {
   UISource,
   NpmSource,
@@ -21,6 +21,7 @@ import type {
 } from './types';
 import { isNpmSource, isFileSource, isImportSource, isFunctionSource, FRONTMCP_META_KEY } from './types';
 import { safeJsonForScript } from '../utils';
+import { bundleFileSource, extractDefaultExportName } from './transpiler';
 
 const DEFAULT_META: ComponentMeta = {
   mcpAware: false,
@@ -99,9 +100,36 @@ function resolveImportSource(source: ImportSource): ResolvedComponent {
 }
 
 function resolveFileSource(source: FileSource): ResolvedComponent {
-  // File sources are resolved at a higher level (server-side file reading).
-  // Here we just pass through the path as a URL for now.
-  // In inline mode, the content would be read and inlined.
+  const path = require('path') as typeof import('path');
+  const ext = path.extname(source.file).toLowerCase();
+
+  // React source files (.tsx/.jsx) — bundle with esbuild, embed as inline module
+  if (ext === '.tsx' || ext === '.jsx') {
+    const fs = require('fs') as typeof import('fs');
+    const filePath = path.isAbsolute(source.file) ? source.file : path.resolve(process.cwd(), source.file);
+    const rawSource = fs.readFileSync(filePath, 'utf-8');
+
+    // Extract name from RAW source (before bundling changes export structure)
+    const componentName = source.exportName || extractDefaultExportName(rawSource) || 'Component';
+
+    // Bundle: workspace deps resolved locally, react external
+    const bundled = bundleFileSource(rawSource, source.file, path.dirname(filePath), componentName);
+
+    // Parse bundled output for remaining external imports (react/react-dom subpaths)
+    const parsed = parseImports(bundled.code);
+
+    return {
+      mode: 'module',
+      code: bundled.code,
+      imports: [...new Set(parsed.externalImports.map((i) => i.specifier))],
+      exportName: componentName,
+      meta: { mcpAware: true, renderer: 'react' },
+      peerDependencies: source.peerDependencies || ['react', 'react-dom'],
+      bundled: true,
+    };
+  }
+
+  // Non-React file sources — existing behavior
   if (source.inline) {
     return {
       mode: 'inline',

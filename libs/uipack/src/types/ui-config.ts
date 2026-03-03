@@ -10,6 +10,7 @@
 
 import type { CDNDependency } from '../resolver/types';
 import type { CustomShellSource } from '../shell/custom-shell-types';
+import type { FileSource } from '../component/types';
 
 /**
  * Configuration options for bundling file-based components.
@@ -293,9 +294,10 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
    * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
    * - React component: `MyWidget` - receives props with input/output/helpers
+   * - FileSource object: `{ file: './my-widget.tsx' }` - transpiled client-side via esm.sh CDN
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  template: TemplateBuilderFn<In, Out> | string | ((props: any) => any);
+  template: TemplateBuilderFn<In, Out> | string | ((props: any) => any) | FileSource;
 
   /**
    * Content Security Policy for the sandboxed widget.

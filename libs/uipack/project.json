@@ -27,7 +27,8 @@
           "libs/uipack/src/shell/index.ts",
           "libs/uipack/src/types/index.ts",
           "libs/uipack/src/typings/index.ts",
-          "libs/uipack/src/utils/index.ts"
+          "libs/uipack/src/utils/index.ts",
+          "libs/uipack/src/adapters/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
@@ -64,7 +65,8 @@
           "libs/uipack/src/shell/index.ts",
           "libs/uipack/src/types/index.ts",
           "libs/uipack/src/typings/index.ts",
-          "libs/uipack/src/utils/index.ts"
+          "libs/uipack/src/utils/index.ts",
+          "libs/uipack/src/adapters/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },

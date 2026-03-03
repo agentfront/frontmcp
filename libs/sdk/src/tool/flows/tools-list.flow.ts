@@ -6,18 +6,8 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
 import { hasUIConfig } from '../ui';
-// TODO: Re-implement against new @frontmcp/uipack API after redesign
-// import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
-// import { isUIType } from '@frontmcp/uipack/types';
-// import type { AIPlatformType } from '@frontmcp/uipack/adapters';
-type UIType = string;
-type AIPlatformType = string;
-function buildCDNInfoForUIType(..._args: unknown[]): Record<string, unknown> {
-  return {};
-}
-function isUIType(_value: unknown): _value is UIType {
-  return typeof _value === 'string';
-}
+import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
+import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { ToolPaginationOptions } from '../../common/types/options/pagination';
@@ -503,12 +493,17 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               meta['openai/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
             }
           } else if (isExtApps) {
-            // SEP-1865 MCP Apps specification uses ui/* keys only
-            meta['ui/resourceUri'] = widgetUri;
-            meta['ui/mimeType'] = 'text/html+mcp';
+            // MCP Apps specification — nested _meta.ui object per spec
+            const uiMeta: Record<string, unknown> = {
+              resourceUri: widgetUri,
+            };
+
+            // Add CSP from tool UI config
+            if (uiConfig.csp) {
+              uiMeta['csp'] = uiConfig.csp;
+            }
 
             // Add widget capabilities if configured (for ext-apps initialization)
-            // Map flattened config to spec-compliant structure (ExtAppsWidgetCapabilities)
             if (uiConfig.widgetCapabilities) {
               const capabilities: { tools?: { listChanged?: boolean }; supportsPartialInput?: boolean } = {};
 
@@ -520,26 +515,32 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               }
 
               if (Object.keys(capabilities).length > 0) {
-                meta['ui/capabilities'] = capabilities;
+                uiMeta['capabilities'] = capabilities;
               }
             }
 
-            // Add manifest info for ext-apps (uses ui/* namespace)
-            meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
+            meta['ui'] = uiMeta;
+
+            // Additional FrontMCP extension keys (outside ui namespace)
             if (manifest) {
-              meta['ui/type'] = manifest.uiType;
-              meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
-              meta['ui/displayMode'] = manifest.displayMode;
-              meta['ui/bundlingMode'] = manifest.bundlingMode;
-            } else if (uiConfig.template) {
-              meta['ui/type'] = uiType;
+              meta['frontmcp/type'] = manifest.uiType;
+              meta['frontmcp/cdn'] = buildCDNInfoForUIType(uiType);
+              meta['frontmcp/displayMode'] = manifest.displayMode;
             }
           } else {
-            // Generic MCP clients (Claude, Cursor, etc.) - use ui/* namespace only
-            meta['ui/resourceUri'] = widgetUri;
-            meta['ui/mimeType'] = 'text/html+mcp';
+            // Generic MCP clients (Claude, Cursor, etc.) — nested _meta.ui object per spec
+            const uiMeta: Record<string, unknown> = {
+              resourceUri: widgetUri,
+            };
 
-            // Add invocation status if configured (use ui/* namespace)
+            // Add CSP from tool UI config
+            if (uiConfig.csp) {
+              uiMeta['csp'] = uiConfig.csp;
+            }
+
+            meta['ui'] = uiMeta;
+
+            // Add invocation status if configured
             if (uiConfig.invocationStatus?.invoking) {
               meta['ui/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
             }
@@ -547,15 +548,13 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               meta['ui/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
             }
 
-            // Add manifest/CDN info
-            meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
+            // Additional FrontMCP extension keys (outside ui namespace)
             if (manifest) {
-              meta['ui/type'] = manifest.uiType;
-              meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
-              meta['ui/displayMode'] = manifest.displayMode;
-              meta['ui/bundlingMode'] = manifest.bundlingMode;
+              meta['frontmcp/type'] = manifest.uiType;
+              meta['frontmcp/cdn'] = buildCDNInfoForUIType(uiType);
+              meta['frontmcp/displayMode'] = manifest.displayMode;
             } else if (uiConfig.template) {
-              meta['ui/type'] = uiType;
+              meta['frontmcp/type'] = uiType;
             }
           }
 

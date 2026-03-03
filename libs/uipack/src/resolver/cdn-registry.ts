@@ -11,7 +11,7 @@ import type { CDNRegistry, CDNRegistryEntry, CDNProvider } from './types';
 
 /**
  * Built-in CDN registry for popular packages.
- * Cloudflare CDN (cdnjs.cloudflare.com) is prioritized for maximum compatibility.
+ * esm.sh is prioritized as the primary CDN for ESM module loading.
  */
 export const DEFAULT_CDN_REGISTRY: CDNRegistry = {
   react: {
@@ -39,7 +39,7 @@ export const DEFAULT_CDN_REGISTRY: CDNRegistry = {
         crossorigin: 'anonymous',
       },
     },
-    preferredProviders: ['cloudflare', 'jsdelivr', 'unpkg', 'esm.sh'],
+    preferredProviders: ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
     metadata: {
       description: 'A JavaScript library for building user interfaces',
       homepage: 'https://react.dev',
@@ -76,7 +76,7 @@ export const DEFAULT_CDN_REGISTRY: CDNRegistry = {
         peerDependencies: ['react'],
       },
     },
-    preferredProviders: ['cloudflare', 'jsdelivr', 'unpkg', 'esm.sh'],
+    preferredProviders: ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
     metadata: {
       description: 'React package for working with the DOM',
       homepage: 'https://react.dev',
@@ -104,7 +104,7 @@ export const DEFAULT_CDN_REGISTRY: CDNRegistry = {
         crossorigin: 'anonymous',
       },
     },
-    preferredProviders: ['cloudflare', 'jsdelivr', 'unpkg'],
+    preferredProviders: ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
     metadata: {
       description: 'Simple yet flexible JavaScript charting library',
       homepage: 'https://www.chartjs.org',
@@ -133,7 +133,7 @@ export const DEFAULT_CDN_REGISTRY: CDNRegistry = {
         crossorigin: 'anonymous',
       },
     },
-    preferredProviders: ['cloudflare', 'jsdelivr', 'unpkg'],
+    preferredProviders: ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
     metadata: {
       description: 'Data-Driven Documents',
       homepage: 'https://d3js.org',
@@ -162,7 +162,7 @@ export const DEFAULT_CDN_REGISTRY: CDNRegistry = {
         crossorigin: 'anonymous',
       },
     },
-    preferredProviders: ['cloudflare', 'jsdelivr', 'unpkg'],
+    preferredProviders: ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
     metadata: {
       description: 'A modern JavaScript utility library',
       homepage: 'https://lodash.com',
@@ -186,7 +186,7 @@ export function lookupPackage(
  */
 export function getPackageCDNUrl(
   packageName: string,
-  providerOrder: CDNProvider[] = ['cloudflare', 'jsdelivr', 'unpkg', 'esm.sh'],
+  providerOrder: CDNProvider[] = ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
   registry: CDNRegistry = DEFAULT_CDN_REGISTRY,
 ): string | undefined {
   const entry = lookupPackage(packageName, registry);

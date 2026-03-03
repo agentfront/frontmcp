@@ -37,7 +37,7 @@ export {
 } from './cdn-registry';
 
 // esm.sh Resolver
-export { createEsmShResolver, type EsmShResolverOptions } from './esm-sh.resolver';
+export { createEsmShResolver, createResolverWithOverrides, type EsmShResolverOptions } from './esm-sh.resolver';
 
 // Import Parser
 export { parseImports, extractExternalPackages, getPackageName } from './import-parser';

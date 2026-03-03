@@ -38,11 +38,51 @@ const DEFAULT_FALLBACK_CDN = 'https://esm.sh';
  * // { value: 'https://esm.sh/react@18.3.1', type: 'url' }
  * ```
  */
+/**
+ * Create an import resolver that applies URL overrides before falling back to the base resolver.
+ *
+ * Supports exact matches and prefix matches:
+ * - Exact: `{ '@frontmcp/ui': 'http://localhost:5173/@frontmcp/ui' }`
+ * - Prefix: `@frontmcp/ui/components` matches `@frontmcp/ui` prefix → appends `/components`
+ *
+ * @example
+ * ```typescript
+ * const resolver = createResolverWithOverrides({
+ *   '@frontmcp/ui': 'http://localhost:5173/@frontmcp/ui',
+ * });
+ * resolver.resolve('@frontmcp/ui/components');
+ * // { value: 'http://localhost:5173/@frontmcp/ui/components', type: 'url' }
+ * ```
+ */
+export function createResolverWithOverrides(
+  overrides: Record<string, string>,
+  baseOptions?: EsmShResolverOptions,
+): ImportResolver & { overrides: Record<string, string> } {
+  const base = createEsmShResolver(baseOptions);
+  return {
+    overrides,
+    resolve(specifier: string, context?: ResolveContext): ResolvedImport | null {
+      // Exact match
+      if (overrides[specifier]) {
+        return { value: overrides[specifier], type: 'url' };
+      }
+      // Prefix match: '@frontmcp/ui' → '@frontmcp/ui/components'
+      for (const [prefix, url] of Object.entries(overrides)) {
+        if (specifier.startsWith(prefix + '/')) {
+          const subpath = specifier.slice(prefix.length);
+          return { value: url + subpath, type: 'url' };
+        }
+      }
+      return base.resolve(specifier, context);
+    },
+  };
+}
+
 export function createEsmShResolver(options: EsmShResolverOptions = {}): ImportResolver {
   const {
     fallbackCdnBase = DEFAULT_FALLBACK_CDN,
     registry = DEFAULT_CDN_REGISTRY,
-    providerOrder = ['cloudflare', 'jsdelivr', 'unpkg', 'esm.sh'],
+    providerOrder = ['esm.sh', 'cloudflare', 'jsdelivr', 'unpkg'],
   } = options;
 
   return {

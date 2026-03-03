@@ -117,3 +117,8 @@ export {
 // Component (NPM Component Loader)
 // ============================================
 export * from './component';
+
+// ============================================
+// Adapters (SDK Integration Layer)
+// ============================================
+export * from './adapters';
