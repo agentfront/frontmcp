@@ -4,7 +4,7 @@ import { renderAndWaitForContent, assertNotLoading, assertNoErrorAlert } from '.
 // ─── Charts (recharts) ──────────────────────────────────────────────────────
 
 test.describe('Screenshot: Charts', () => {
-  for (const [idx, name] of (['bar', 'line', 'area', 'pie'] as const).entries()) {
+  (['bar', 'line', 'area', 'pie'] as const).forEach((name, idx) => {
     test(`charts-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'charts', idx);
       await assertNotLoading(w);
@@ -13,13 +13,13 @@ test.describe('Screenshot: Charts', () => {
       await page.waitForTimeout(500); // animation settle
       await expect(page).toHaveScreenshot(`charts-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
 
 // ─── Mermaid ────────────────────────────────────────────────────────────────
 
 test.describe('Screenshot: Mermaid', () => {
-  for (const [idx, name] of (['flowchart', 'sequence', 'class', 'er'] as const).entries()) {
+  (['flowchart', 'sequence', 'class', 'er'] as const).forEach((name, idx) => {
     test(`mermaid-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'mermaid', idx);
       await assertNotLoading(w);
@@ -28,13 +28,13 @@ test.describe('Screenshot: Mermaid', () => {
       await page.waitForTimeout(500);
       await expect(page).toHaveScreenshot(`mermaid-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
 
 // ─── Flow (@xyflow/react) ───────────────────────────────────────────────────
 
 test.describe('Screenshot: Flow', () => {
-  for (const [idx, name] of (['pipeline', 'branching'] as const).entries()) {
+  (['pipeline', 'branching'] as const).forEach((name, idx) => {
     test(`flow-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'flow', idx);
       await assertNotLoading(w);
@@ -43,13 +43,13 @@ test.describe('Screenshot: Flow', () => {
       await page.waitForTimeout(500);
       await expect(page).toHaveScreenshot(`flow-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
 
 // ─── Math (KaTeX) ───────────────────────────────────────────────────────────
 
 test.describe('Screenshot: Math', () => {
-  for (const [idx, name] of (['display', 'inline', 'mixed'] as const).entries()) {
+  (['display', 'inline', 'mixed'] as const).forEach((name, idx) => {
     test(`math-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'math', idx);
       await assertNotLoading(w);
@@ -58,13 +58,13 @@ test.describe('Screenshot: Math', () => {
       await page.waitForTimeout(300);
       await expect(page).toHaveScreenshot(`math-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
 
 // ─── CSV ────────────────────────────────────────────────────────────────────
 
 test.describe('Screenshot: CSV', () => {
-  for (const [idx, name] of (['comma', 'tab'] as const).entries()) {
+  (['comma', 'tab'] as const).forEach((name, idx) => {
     test(`csv-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'csv', idx);
       await assertNotLoading(w);
@@ -73,13 +73,13 @@ test.describe('Screenshot: CSV', () => {
       await page.waitForTimeout(300);
       await expect(page).toHaveScreenshot(`csv-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
 
 // ─── MDX ────────────────────────────────────────────────────────────────────
 
 test.describe('Screenshot: MDX', () => {
-  for (const [idx, name] of (['headings', 'code-blocks', 'tables'] as const).entries()) {
+  (['headings', 'code-blocks', 'tables'] as const).forEach((name, idx) => {
     test(`mdx-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'mdx', idx);
       await assertNotLoading(w);
@@ -88,13 +88,13 @@ test.describe('Screenshot: MDX', () => {
       await page.waitForTimeout(300);
       await expect(page).toHaveScreenshot(`mdx-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
 
 // ─── HTML ───────────────────────────────────────────────────────────────────
 
 test.describe('Screenshot: HTML', () => {
-  for (const [idx, name] of (['styled-div', 'table'] as const).entries()) {
+  (['styled-div', 'table'] as const).forEach((name, idx) => {
     test(`html-${name}`, async ({ page }) => {
       const w = await renderAndWaitForContent(page, 'html', idx);
       await assertNotLoading(w);
@@ -103,5 +103,5 @@ test.describe('Screenshot: HTML', () => {
       await page.waitForTimeout(300);
       await expect(page).toHaveScreenshot(`html-${name}.png`, { maxDiffPixelRatio: 0.02 });
     });
-  }
+  });
 });
