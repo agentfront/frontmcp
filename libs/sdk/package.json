@@ -81,6 +81,7 @@
     }
   },
   "dependencies": {
+    "@types/cors": "^2.8.17",
     "@frontmcp/utils": "0.12.1",
     "@frontmcp/di": "0.12.1",
     "@frontmcp/uipack": "0.12.1",
