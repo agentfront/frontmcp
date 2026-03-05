@@ -11,6 +11,7 @@ import { createTemplateHelpers } from '../shell/data-injector';
 import { renderComponent } from '../component/renderer';
 import { detectUIType } from './type-detector';
 import { wrapDetectedContent } from './content-renderers';
+import { MCP_APPS_MIME_TYPE } from './constants';
 import type { FileSource } from '../component/types';
 import type { ImportResolver } from '../resolver/types';
 
@@ -104,16 +105,13 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
   } else if (typeof template === 'function') {
     // Check if it's a React component
     if (uiType === 'react') {
-      // Delegate to component renderer
-      const result = renderComponent(
-        {
-          source: template as (input: unknown, output: unknown) => string,
-        },
-        shellConfig,
-      );
-      html = result.html;
-      hash = result.hash;
-      size = result.size;
+      // React functional component passed as function reference.
+      // Cannot be called directly (hooks require React render context).
+      // Generate a client-side shell with data injection for widget mounting.
+      const shellResult = buildShell('<div id="root"></div>', shellConfig);
+      html = shellResult.html;
+      hash = shellResult.hash;
+      size = shellResult.size;
     } else {
       // HTML template builder function
       const helpers = createTemplateHelpers();
@@ -125,7 +123,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
       if (wrapped) {
         html = wrapped;
       } else {
-        // Plain text/json result — wrap in shell
+        // Plain text/json/html result — wrap in shell
         const textContent =
           typeof rawResult === 'string' ? rawResult : `<pre>${JSON.stringify(rawResult, null, 2)}</pre>`;
         const shellResult = buildShell(textContent, shellConfig);
@@ -149,10 +147,11 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
   }
 
   // Build platform-specific meta
-  const htmlKey = platformType === 'openai' ? 'openai/html' : 'ui/html';
+  const htmlKey = 'ui/html';
   const meta: Record<string, unknown> = {
     [htmlKey]: html,
     'ui/type': uiType,
+    'ui/mimeType': MCP_APPS_MIME_TYPE,
   };
 
   return {

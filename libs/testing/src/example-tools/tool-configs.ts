@@ -192,17 +192,15 @@ export function generateFullUIToolOutput(input: z.infer<typeof fullUIToolInputSc
 
 /**
  * Expected meta keys for OpenAI platform in tools/list response.
+ * OpenAI now uses the standard ui/* namespace like all other platforms.
  */
-export const EXPECTED_OPENAI_TOOLS_LIST_META_KEYS = [
-  'openai/outputTemplate',
-  'openai/resultCanProduceWidget',
-  'openai/widgetAccessible',
-] as const;
+export const EXPECTED_OPENAI_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mimeType', 'ui/cdn', 'ui/type'] as const;
 
 /**
  * Expected meta keys for OpenAI platform in tools/call response.
+ * OpenAI now uses the standard ui/* namespace like all other platforms.
  */
-export const EXPECTED_OPENAI_TOOL_CALL_META_KEYS = ['openai/html', 'openai/mimeType', 'openai/type'] as const;
+export const EXPECTED_OPENAI_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', 'ui/type'] as const;
 
 /**
  * Expected meta keys for ext-apps platform in tools/list response (SEP-1865).

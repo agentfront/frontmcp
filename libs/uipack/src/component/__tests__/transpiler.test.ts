@@ -4,7 +4,7 @@
  * Tests for transpileReactSource(), bundleFileSource(), and extractDefaultExportName().
  */
 
-import { transpileReactSource, bundleFileSource, extractDefaultExportName } from '../transpiler';
+import { transpileReactSource, extractDefaultExportName } from '../transpiler';
 
 describe('transpileReactSource', () => {
   it('should transpile TSX to React.createElement calls', () => {

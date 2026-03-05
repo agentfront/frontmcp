@@ -74,7 +74,7 @@ export function buildToolResponseContent(options: BuildToolResponseContentOption
 
   // Add HTML content via platform-specific _meta key
   if (htmlContent && servingMode === 'inline') {
-    const htmlKey = platformType === 'openai' ? 'openai/html' : 'ui/html';
+    const htmlKey = 'ui/html';
     result._meta = {
       [htmlKey]: htmlContent,
     };

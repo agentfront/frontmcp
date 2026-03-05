@@ -68,8 +68,19 @@ export class ToolUIRegistry {
   }
 
   async compileHybridWidgetAsync(options: Record<string, unknown>): Promise<void> {
-    // Hybrid compiles the shell but not data
-    await this.compileStaticWidgetAsync(options);
+    // Hybrid compiles the shell but not data.
+    // Template functions may fail at startup (no real data available),
+    // so set a fallback manifest to ensure buildHybridComponentPayload works.
+    try {
+      await this.compileStaticWidgetAsync(options);
+    } catch {
+      const toolName = options['toolName'] as string;
+      const template = options['template'];
+      if (toolName && template) {
+        const uiType = uipackDetectUIType(template);
+        this.manifests.set(toolName, { uiType, hash: '', size: 0 });
+      }
+    }
   }
 
   buildHybridComponentPayload(options: Record<string, unknown>): Record<string, unknown> | undefined {

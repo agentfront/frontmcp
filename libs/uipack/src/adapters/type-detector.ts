@@ -40,6 +40,12 @@ export function detectUIType(template: unknown): UIType {
       return 'react';
     }
 
+    // React functional component heuristic: named function starting with uppercase
+    // follows React's naming convention (components must start with uppercase)
+    if (template.name && /^[A-Z]/.test(template.name)) {
+      return 'react';
+    }
+
     // Regular function → treated as HTML template builder
     return 'html';
   }

@@ -383,9 +383,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         );
       }
 
-      // Only OpenAI ChatGPT uses openai/* meta keys
-      // ext-apps (SEP-1865) uses ui/* keys per the MCP Apps specification
-      const isOpenAIPlatform = platformType === 'openai';
+      // All platforms now use ui/* keys per the MCP Apps specification
 
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
         // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
@@ -426,7 +424,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         }
 
         // Add _meta for tools with UI configuration
-        // OpenAI platforms use openai/* keys, other platforms use ui/* keys only
+        // All platforms use ui/* keys per the MCP Apps specification
         if (hasUIConfig(tool.metadata)) {
           const uiConfig = tool.metadata.ui;
           if (!uiConfig) {
@@ -468,31 +466,14 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // Use centralized type guard from @frontmcp/ui/types
           const uiType: UIType = manifest?.uiType ?? (isUIType(detectedType) ? detectedType : 'auto');
 
-          // Build meta keys based on platform type:
-          // - OpenAI: openai/* keys only (ChatGPT proprietary format)
-          // - ext-apps: ui/* keys only per SEP-1865 MCP Apps specification
-          // - Other platforms: ui/* keys only (Claude, Cursor, etc.)
+          // Build meta keys — all platforms use ui/* namespace per MCP Apps specification
           const meta: Record<string, unknown> = {};
           const isExtApps = platformType === 'ext-apps';
 
           // Use custom resourceUri from config if provided, otherwise auto-generate
           const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
 
-          if (isOpenAIPlatform) {
-            // OpenAI-specific meta keys for ChatGPT widget discovery
-            // ChatGPT only understands openai/* keys - don't mix with ui/* keys
-            meta['openai/outputTemplate'] = widgetUri;
-            meta['openai/resultCanProduceWidget'] = true;
-            meta['openai/widgetAccessible'] = uiConfig.widgetAccessible ?? false;
-
-            // Add invocation status if configured
-            if (uiConfig.invocationStatus?.invoking) {
-              meta['openai/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
-            }
-            if (uiConfig.invocationStatus?.invoked) {
-              meta['openai/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
-            }
-          } else if (isExtApps) {
+          if (isExtApps) {
             // MCP Apps specification — nested _meta.ui object per spec
             const uiMeta: Record<string, unknown> = {
               resourceUri: widgetUri,

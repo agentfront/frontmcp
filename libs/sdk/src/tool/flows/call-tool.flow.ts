@@ -29,6 +29,7 @@ import {
   resolveServingMode,
   buildToolResponseContent,
   isUIRenderFailure,
+  MCP_APPS_MIME_TYPE,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
@@ -701,6 +702,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           uiMeta = {
             'ui/component': componentPayload,
             'ui/type': componentPayload['type'],
+            'ui/mimeType': MCP_APPS_MIME_TYPE,
           };
         }
 
@@ -738,8 +740,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           uiMeta = {};
         } else {
           // Extract HTML from platform-specific meta key
-          const htmlKey =
-            platformType === 'openai' ? 'openai/html' : platformType === 'ext-apps' ? 'ui/html' : 'frontmcp/html';
+          const htmlKey = 'ui/html';
           htmlContent = uiRenderResult?.meta?.[htmlKey] as string | undefined;
           // Fallback to ui/html for compatibility
           if (!htmlContent) {

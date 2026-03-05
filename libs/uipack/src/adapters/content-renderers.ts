@@ -122,7 +122,9 @@ export function wrapDetectedContent(value: unknown): string | undefined {
     case 'pdf':
       return buildPdfHtml(value as string);
     case 'html':
-      return value as string;
+      // Return undefined so the caller wraps HTML fragments in buildShell
+      // (chart/mermaid/pdf already include buildShell wrapping)
+      return undefined;
     default:
       return undefined;
   }

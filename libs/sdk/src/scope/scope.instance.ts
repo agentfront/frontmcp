@@ -331,6 +331,7 @@ export class Scope extends ScopeEntry {
             try {
               await this.toolUIRegistry.compileHybridWidgetAsync({
                 toolName: tool.metadata.name,
+                template: uiConfig.template,
                 uiConfig,
               });
               hybridCompiledCount++;

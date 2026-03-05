@@ -355,7 +355,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * Whether the widget can invoke tools via the MCP bridge.
    * When true, the widget gains access to `window.mcpBridge.callTool()`.
-   * Maps to OpenAI's `openai/widgetAccessible` annotation.
+   * Exposed in `_meta.ui` for platform discovery.
    *
    * Default: false
    */
@@ -373,13 +373,13 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Human-readable description shown to users about what the widget does.
-   * Maps to OpenAI's `openai/widgetDescription` annotation.
+   * Exposed in `_meta.ui` for platform discovery.
    */
   widgetDescription?: string;
 
   /**
-   * Status messages shown during tool invocation (OpenAI ChatGPT specific).
-   * Maps to OpenAI's `openai/toolInvocation/invoking` and `openai/toolInvocation/invoked`.
+   * Status messages shown during tool invocation.
+   * Exposed via `ui/toolInvocation/invoking` and `ui/toolInvocation/invoked` meta keys.
    *
    * @example
    * ```typescript

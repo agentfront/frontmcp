@@ -59,7 +59,21 @@ export function resolveServingMode(options: ResolveServingModeOptions): ServingM
   }
 
   // Determine effective mode
-  const effectiveMode = configuredMode === 'auto' ? 'inline' : configuredMode;
+  let effectiveMode: string | null = configuredMode === 'auto' ? 'inline' : configuredMode;
+
+  // Hybrid mode is only supported by widget-capable platforms
+  if (effectiveMode === 'hybrid') {
+    const hybridCapable = platformType === 'openai' || platformType === 'ext-apps' || platformType === 'cursor';
+    if (!hybridCapable) {
+      return {
+        mode: configuredMode,
+        supportsUI: false,
+        effectiveMode: null,
+        useStructuredContent: false,
+        reason: `Platform ${platformType} does not support hybrid serving mode`,
+      };
+    }
+  }
 
   // Determine if structuredContent should be included
   const useStructuredContent =

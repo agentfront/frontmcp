@@ -518,8 +518,8 @@ export interface WidgetManifest {
  *     // Widget can call tools
  *     'ui/widgetAccessible': true,
  *
- *     // OpenAI-specific CSP
- *     'openai/widgetCSP': { connect_domains: ['api.weather.com'] },
+ *     // CSP configuration
+ *     'ui/csp': { connect_domains: ['api.weather.com'] },
  *   }
  * }
  * ```
@@ -579,43 +579,15 @@ export interface UIMetaFields {
 }
 
 /**
- * OpenAI-specific meta fields.
- * These are in addition to the standard UI fields.
+ * @deprecated OpenAI now uses the standard ui/* namespace. Use UIMetaFields instead.
+ * Kept for backwards compatibility with external consumers.
  */
-export interface OpenAIMetaFields {
-  /**
-   * OpenAI CSP configuration.
-   * Maps to `_meta['openai/widgetCSP']`.
-   */
-  'openai/widgetCSP'?: {
-    connect_domains?: string[];
-    resource_domains?: string[];
-  };
-
-  /**
-   * OpenAI widget accessible flag.
-   * Maps to `_meta['openai/widgetAccessible']`.
-   */
-  'openai/widgetAccessible'?: boolean;
-
-  /**
-   * OpenAI widget description.
-   * Maps to `_meta['openai/widgetDescription']`.
-   */
-  'openai/widgetDescription'?: string;
-
-  /**
-   * OpenAI display mode.
-   * Maps to `_meta['openai/displayMode']`.
-   */
-  'openai/displayMode'?: 'inline' | 'fullscreen' | 'pip';
-}
+export type OpenAIMetaFields = Record<string, never>;
 
 /**
  * Combined meta fields for tool responses.
- * Includes both standard UI fields and platform-specific fields.
  */
-export type ToolResponseMeta = Partial<UIMetaFields> & Partial<OpenAIMetaFields> & Record<string, unknown>;
+export type ToolResponseMeta = Partial<UIMetaFields> & Record<string, unknown>;
 
 // ============================================
 // Widget Configuration
@@ -804,7 +776,7 @@ export interface WidgetConfig<Input = Record<string, unknown>, Output = unknown>
 
   /**
    * Human-readable description shown to users.
-   * Maps to OpenAI's `openai/widgetDescription`.
+   * Exposed in `_meta.ui` for platform discovery.
    */
   widgetDescription?: string;
 

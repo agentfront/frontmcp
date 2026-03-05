@@ -158,7 +158,7 @@ describe('renderToolTemplate', () => {
       expect(result.meta).not.toHaveProperty('openai/html');
     });
 
-    it('should use openai/html key for openai platform', () => {
+    it('should use ui/html key for openai platform (unified namespace)', () => {
       const result = renderToolTemplate({
         toolName: 'test_tool',
         input: {},
@@ -167,8 +167,8 @@ describe('renderToolTemplate', () => {
         platformType: 'openai',
       });
 
-      expect(result.meta).toHaveProperty('openai/html');
-      expect(result.meta).not.toHaveProperty('ui/html');
+      expect(result.meta).toHaveProperty('ui/html');
+      expect(result.meta).not.toHaveProperty('openai/html');
     });
   });
 

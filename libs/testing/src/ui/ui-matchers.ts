@@ -6,8 +6,7 @@
  * from @frontmcp/ui/adapters. Key fields include:
  * - `ui/html`: Inline rendered HTML (universal)
  * - `ui/mimeType`: MIME type for the HTML content
- * - `openai/outputTemplate`: Resource URI for widget template (OpenAI)
- * - `openai/widgetAccessible`: Whether widget can invoke tools (OpenAI)
+ * - `ui`: Nested UI object with resourceUri, csp, etc.
  *
  * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
  *
@@ -195,7 +194,7 @@ const toBeXssSafe: MatcherFunction<[]> = function (received) {
 
 /**
  * Check if tool result has widget metadata.
- * Checks for ui/html (universal), openai/outputTemplate, or ui/mimeType.
+ * Checks for ui/html, ui/mimeType, or nested ui object with resourceUri.
  */
 const toHaveWidgetMetadata: MatcherFunction<[]> = function (received) {
   const meta = extractMeta(received);
@@ -209,17 +208,17 @@ const toHaveWidgetMetadata: MatcherFunction<[]> = function (received) {
 
   // Check for any widget-related metadata fields
   const hasUiHtml = Boolean(meta['ui/html']);
-  const hasOutputTemplate = Boolean(meta['openai/outputTemplate']);
   const hasMimeType = Boolean(meta['ui/mimeType']);
+  const hasUiObject = Boolean(meta['ui'] && typeof meta['ui'] === 'object');
 
-  const pass = hasUiHtml || hasOutputTemplate || hasMimeType;
+  const pass = hasUiHtml || hasMimeType || hasUiObject;
 
   return {
     pass,
     message: () =>
       pass
         ? 'Expected result not to have widget metadata'
-        : 'Expected _meta to have widget metadata (ui/html, openai/outputTemplate, or ui/mimeType)',
+        : 'Expected _meta to have widget metadata (ui/html, ui/mimeType, or ui object)',
   };
 };
 
@@ -318,8 +317,7 @@ const toHaveProperHtmlStructure: MatcherFunction<[]> = function (received) {
  * @param platform - The platform type to check for
  *
  * This matcher verifies:
- * - OpenAI: Has openai/* keys, no ui/* or frontmcp/* keys
- * - Others (ext-apps, claude, cursor, etc.): Has ui/* keys, no openai/* or frontmcp/* keys
+ * - All platforms: Has ui/* keys, no openai/* or frontmcp/* keys
  */
 const toHavePlatformMeta: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
   const meta = extractMeta(received);
@@ -363,7 +361,7 @@ const toHavePlatformMeta: MatcherFunction<[platform: TestPlatformType]> = functi
 
 /**
  * Check if _meta has a specific key.
- * @param key - The meta key to look for (e.g., 'ui/html', 'openai/mimeType')
+ * @param key - The meta key to look for (e.g., 'ui/html', 'ui/mimeType')
  */
 const toHaveMetaKey: MatcherFunction<[key: string]> = function (received, key) {
   const meta = extractMeta(received);
@@ -473,8 +471,7 @@ const toHaveOnlyNamespacedMeta: MatcherFunction<[namespace: string]> = function 
  * @param platform - The platform type to check for
  *
  * MIME types:
- * - OpenAI: text/html;profile=mcp-app
- * - Others: text/html;profile=mcp-app
+ * - All platforms: text/html;profile=mcp-app
  */
 const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
   const meta = extractMeta(received);
@@ -488,17 +485,8 @@ const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = fu
     };
   }
 
-  // Determine which key to check based on platform
-  let mimeTypeKey: string;
-  switch (platform) {
-    case 'openai':
-      mimeTypeKey = 'openai/mimeType';
-      break;
-    default:
-      // All non-OpenAI platforms use ui/* namespace
-      mimeTypeKey = 'ui/mimeType';
-  }
-
+  // All platforms use ui/* namespace
+  const mimeTypeKey = 'ui/mimeType';
   const actualMimeType = meta[mimeTypeKey];
   const pass = actualMimeType === expectedMimeType;
 
@@ -516,8 +504,7 @@ const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = fu
  * @param platform - The platform type to check for
  *
  * HTML keys:
- * - OpenAI: openai/html
- * - Others (ext-apps, claude, cursor, etc.): ui/html
+ * - All platforms: ui/html
  */
 const toHavePlatformHtml: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
   const meta = extractMeta(received);
@@ -529,17 +516,8 @@ const toHavePlatformHtml: MatcherFunction<[platform: TestPlatformType]> = functi
     };
   }
 
-  // Determine which key to check based on platform
-  let htmlKey: string;
-  switch (platform) {
-    case 'openai':
-      htmlKey = 'openai/html';
-      break;
-    default:
-      // All non-OpenAI platforms use ui/* namespace
-      htmlKey = 'ui/html';
-  }
-
+  // All platforms use ui/* namespace
+  const htmlKey = 'ui/html';
   const html = meta[htmlKey];
   const pass = typeof html === 'string' && html.length > 0;
 

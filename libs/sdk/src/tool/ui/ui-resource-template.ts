@@ -23,7 +23,7 @@ import { escapeHtml } from './template-helpers';
  *
  * URI format: ui://widget/{toolName}.html
  *
- * This is the format OpenAI expects in tools/list _meta.openai/outputTemplate.
+ * This is the format used in tools/list _meta.ui.resourceUri per the MCP Apps spec.
  * When OpenAI fetches this resource, we return the pre-compiled static HTML for the tool.
  *
  * The widget includes:
