@@ -4483,6 +4483,13 @@
   dependencies:
     "@types/node" "*"
 
+"@types/cors@^2.8.17":
+  version "2.8.19"
+  resolved "https://registry.yarnpkg.com/@types/cors/-/cors-2.8.19.tgz#d93ea2673fd8c9f697367f5eeefc2bbfa94f0342"
+  integrity sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg==
+  dependencies:
+    "@types/node" "*"
+
 "@types/d3-array@*", "@types/d3-array@^3.0.3":
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/@types/d3-array/-/d3-array-3.2.2.tgz#e02151464d02d4a1b44646d0fcdb93faf88fde8c"
