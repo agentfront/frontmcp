@@ -23,11 +23,12 @@ export async function bundleWithEsbuild(
   entryPath: string,
   outDir: string,
   config: FrontmcpExecConfig,
+  options?: { selfContained?: boolean; outputName?: string },
 ): Promise<BundleResult> {
   // Lazy-load esbuild
   let esbuild: typeof import('esbuild');
   try {
-     
+
     esbuild = require('esbuild');
   } catch {
     throw new Error(
@@ -35,14 +36,20 @@ export async function bundleWithEsbuild(
     );
   }
 
-  const bundleName = `${config.name}.bundle.js`;
+  const bundleName = `${options?.outputName || config.name}.bundle.js`;
   const bundlePath = path.join(outDir, bundleName);
 
-  const external = [
-    ...DEFAULT_EXTERNALS,
-    ...(config.dependencies?.nativeAddons || []),
-    ...(config.esbuild?.external || []),
-  ];
+  // In self-contained mode (SEA), only keep true native addons external
+  const external = options?.selfContained
+    ? [
+        ...DEFAULT_EXTERNALS,
+        ...(config.dependencies?.nativeAddons || []),
+      ]
+    : [
+        ...DEFAULT_EXTERNALS,
+        ...(config.dependencies?.nativeAddons || []),
+        ...(config.esbuild?.external || []),
+      ];
 
   await esbuild.build({
     entryPoints: [entryPath],

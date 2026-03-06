@@ -387,6 +387,49 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
   .or(frontMcpSplitByAppSchema)
   .transform(applyAutoTransportPersistence);
 
+/**
+ * Lite config parser for CLI mode.
+ * Validates only fields needed for tool/resource execution, skipping
+ * transport persistence, HTTP, redis, elicitation, ext-apps, sqlite, UI, jobs.
+ * This reduces cold-start Zod parsing overhead by ~20-40ms.
+ */
+const frontMcpLiteSchema = z.object({
+  info: serverInfoOptionsSchema,
+  providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
+  resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
+  skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
+  plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
+  apps: z.array(annotatedFrontMcpAppSchema),
+  serve: z.boolean().optional().default(false),
+  splitByApp: z.boolean().optional().default(false),
+  auth: authOptionsSchema.optional(),
+  logging: loggingOptionsSchema.optional(),
+  skillsConfig: skillsConfigOptionsSchema.optional(),
+  // Pass through without deep validation — not used in CLI mode
+  http: z.any().optional(),
+  redis: z.any().optional(),
+  pubsub: z.any().optional(),
+  transport: z
+    .any()
+    .optional()
+    .transform((val) => val ?? transportOptionsSchema.parse({})),
+  pagination: z.any().optional(),
+  elicitation: z.any().optional(),
+  extApps: z.any().optional(),
+  sqlite: z.any().optional(),
+  ui: z.any().optional(),
+  jobs: z.any().optional(),
+});
+
+/**
+ * Parse config with minimal validation for CLI mode.
+ * Skips transport auto-persistence and deep validation of unused subsystems.
+ */
+export function parseFrontMcpConfigLite(input: FrontMcpConfigInput): FrontMcpConfigType {
+  return frontMcpLiteSchema.parse(input) as unknown as FrontMcpConfigType;
+}
+
 export type FrontMcpMultiAppConfig = z.infer<typeof frontMcpMultiAppSchema>;
 export type FrontMcpSplitByAppConfig = z.infer<typeof frontMcpSplitByAppSchema>;
 

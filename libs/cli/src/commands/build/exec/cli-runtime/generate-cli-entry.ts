@@ -25,6 +25,8 @@ export interface CliEntryOptions {
   nativeDeps: NonNullable<CliConfig['nativeDeps']>;
   schema: ExtractedSchema;
   oauthConfig?: OAuthConfig;
+  /** When true, generate static requires that esbuild can resolve (for SEA builds). */
+  selfContained?: boolean;
 }
 
 /**
@@ -61,8 +63,10 @@ export function generateCliEntry(options: CliEntryOptions): string {
     (t) => !excludeTools.includes(t.name) && !SYSTEM_TOOL_NAMES.has(t.name),
   );
 
+  const selfContained = !!options.selfContained;
+
   const sections: string[] = [
-    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig),
+    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig, selfContained),
     generateToolCommands(filteredTools, appName),
     generateResourceCommands(schema),
     generateTemplateCommands(schema.resourceTemplates),
@@ -95,6 +99,7 @@ function generateHeader(
   authRequired: boolean,
   capabilities: ExtractedCapabilities,
   oauthConfig?: OAuthConfig,
+  selfContained?: boolean,
 ): string {
   const hasOAuth = !!oauthConfig;
 
@@ -120,26 +125,46 @@ function generateHeader(
 
 var { Command, Option } = require('commander');
 var path = require('path');
+var fs = require('fs');
+var os = require('os');
 var fmt = require('./output-formatter');
 ${authRequired ? "var sessions = require('./session-manager');\nvar creds = require('./credential-store');" : ''}
 ${hasOAuth ? "var oauthHelper = require('./oauth-helper');" : ''}
 
+var APP_NAME = ${JSON.stringify(appName)};
 var SCRIPT_DIR = __dirname;
-var SERVER_BUNDLE = path.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});
+${selfContained
+    ? `// Self-contained: server bundle and SDK are inlined by esbuild
+var SERVER_BUNDLE = '../${serverBundleFilename}';`
+    : `var SERVER_BUNDLE = path.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});`}
 
 var _client = null;
 async function getClient() {
   if (_client) return _client;
-  var mod = require(SERVER_BUNDLE);
+
+  // Try daemon first — Unix socket HTTP (~5-15ms vs ~420ms in-process)
+  var socketPath = path.join(os.homedir(), '.frontmcp', 'sockets', APP_NAME + '.sock');
+  if (fs.existsSync(socketPath)) {
+    try {
+      var daemonClient = require('./daemon-client');
+      var dc = daemonClient.createDaemonClient(socketPath);
+      await dc.ping();
+      _client = dc;
+      return _client;
+    } catch (_) { /* daemon not available, fall through */ }
+  }
+
+  // Fallback: in-process connect (with CLI mode for faster init)
+  var mod = require(${selfContained ? `'../${serverBundleFilename}'` : 'SERVER_BUNDLE'});
   var configOrClass = mod.default || mod;
   var sdk = require('@frontmcp/sdk');
   var connect = sdk.connect || sdk.direct.connect;${authRequired ? `
   var sessionName = sessions.getActiveSessionName();
   var store = creds.createCredentialStore();
   var credBlob = await store.get(sessionName);
-  var connectOpts = credBlob ? { authToken: credBlob.token } : {};
+  var connectOpts = credBlob ? { authToken: credBlob.token, mode: 'cli' } : { mode: 'cli' };
   _client = await connect(configOrClass, connectOpts);` : `
-  _client = await connect(configOrClass);`}
+  _client = await connect(configOrClass, { mode: 'cli' });`}
   return _client;
 }
 
@@ -1051,47 +1076,93 @@ function generateDaemonCommands(appName: string, _serverBundleFilename: string):
 
 daemonCmd
   .command('start')
-  .description('Start as a background daemon')
-  .option('-p, --port <port>', 'Port number', function(v) { return parseInt(v, 10); })
+  .description('Start as a background daemon (Unix socket)')
+  .option('--idle-timeout <ms>', 'Auto-stop after idle period (ms, 0 to disable)', function(v) { return parseInt(v, 10); }, 300000)
   .action(async function(opts) {
     var { spawn } = require('child_process');
-    var fs = require('fs');
-    var os = require('os');
-    var pidDir = require('path').join(os.homedir(), '.frontmcp', 'pids');
-    var logDir = require('path').join(os.homedir(), '.frontmcp', 'logs');
+    var pathMod = require('path');
+    var pidDir = pathMod.join(os.homedir(), '.frontmcp', 'pids');
+    var logDir = pathMod.join(os.homedir(), '.frontmcp', 'logs');
+    var socketDir = pathMod.join(os.homedir(), '.frontmcp', 'sockets');
     fs.mkdirSync(pidDir, { recursive: true });
     fs.mkdirSync(logDir, { recursive: true });
+    fs.mkdirSync(socketDir, { recursive: true });
 
-    var env = Object.assign({}, process.env);
-    if (opts.port) env.PORT = String(opts.port);
+    var socketPath = pathMod.join(socketDir, ${JSON.stringify(appName)} + '.sock');
 
-    var logPath = require('path').join(logDir, ${JSON.stringify(appName)} + '.log');
+    // Clean up stale socket file
+    try { fs.unlinkSync(socketPath); } catch (_) { /* ok */ }
+
+    // Check if already running
+    var pidPath = pathMod.join(pidDir, ${JSON.stringify(appName)} + '.pid');
+    try {
+      var existing = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
+      process.kill(existing.pid, 0);
+      console.log('Daemon already running (PID: ' + existing.pid + ').');
+      return;
+    } catch (_) { /* not running, proceed */ }
+
+    var env = Object.assign({}, process.env, {
+      FRONTMCP_DAEMON_SOCKET: socketPath,
+      FRONTMCP_DAEMON_IDLE_TIMEOUT: String(opts.idleTimeout)
+    });
+
+    var logPath = pathMod.join(logDir, ${JSON.stringify(appName)} + '.log');
     var out = fs.openSync(logPath, 'a');
     var err = fs.openSync(logPath, 'a');
 
-    var child = spawn('node', [SERVER_BUNDLE], {
+    // Start the daemon using runUnixSocket via a small wrapper script
+    var daemonScript = 'var mod = require(' + JSON.stringify(SERVER_BUNDLE) + ');' +
+      'var sdk = require("@frontmcp/sdk");' +
+      'var FrontMcpInstance = sdk.FrontMcpInstance || sdk.default.FrontMcpInstance;' +
+      'var config = mod.default || mod;' +
+      'FrontMcpInstance.runUnixSocket(Object.assign({}, config, { socketPath: ' + JSON.stringify(socketPath) + ' }))' +
+      '.then(function() { console.log("Daemon listening on " + ' + JSON.stringify(socketPath) + '); })' +
+      '.catch(function(e) { console.error("Daemon failed:", e); process.exit(1); });';
+
+    var child = spawn('node', ['-e', daemonScript], {
       detached: true,
       stdio: ['ignore', out, err],
       env: env
     });
 
-    var pidPath = require('path').join(pidDir, ${JSON.stringify(appName)} + '.pid');
-    fs.writeFileSync(pidPath, JSON.stringify({ pid: child.pid, startedAt: new Date().toISOString() }));
+    fs.writeFileSync(pidPath, JSON.stringify({
+      pid: child.pid,
+      socketPath: socketPath,
+      startedAt: new Date().toISOString()
+    }));
     child.unref();
-    console.log('Daemon started (PID: ' + child.pid + '). Logs: ' + logPath);
+
+    // Wait for socket file to appear (max 5s)
+    var waited = 0;
+    while (!fs.existsSync(socketPath) && waited < 5000) {
+      await new Promise(function(r) { setTimeout(r, 100); });
+      waited += 100;
+    }
+
+    if (fs.existsSync(socketPath)) {
+      console.log('Daemon started (PID: ' + child.pid + '). Socket: ' + socketPath);
+      console.log('Logs: ' + logPath);
+    } else {
+      console.log('Daemon started (PID: ' + child.pid + ') but socket not yet available.');
+      console.log('Check logs: ' + logPath);
+    }
   });
 
 daemonCmd
   .command('stop')
   .description('Stop the daemon')
   .action(function() {
-    var fs = require('fs');
-    var os = require('os');
-    var pidPath = require('path').join(os.homedir(), '.frontmcp', 'pids', ${JSON.stringify(appName)} + '.pid');
+    var pathMod = require('path');
+    var pidPath = pathMod.join(os.homedir(), '.frontmcp', 'pids', ${JSON.stringify(appName)} + '.pid');
     try {
       var data = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
       process.kill(data.pid, 'SIGTERM');
       fs.unlinkSync(pidPath);
+      // Clean up socket file
+      if (data.socketPath) {
+        try { fs.unlinkSync(data.socketPath); } catch (_) { /* ok */ }
+      }
       console.log('Daemon stopped (PID: ' + data.pid + ').');
     } catch (e) {
       console.log('No running daemon found.');
@@ -1102,13 +1173,18 @@ daemonCmd
   .command('status')
   .description('Check daemon status')
   .action(function() {
-    var fs = require('fs');
-    var os = require('os');
-    var pidPath = require('path').join(os.homedir(), '.frontmcp', 'pids', ${JSON.stringify(appName)} + '.pid');
+    var pathMod = require('path');
+    var pidPath = pathMod.join(os.homedir(), '.frontmcp', 'pids', ${JSON.stringify(appName)} + '.pid');
     try {
       var data = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
-      try { process.kill(data.pid, 0); console.log('Running (PID: ' + data.pid + ', started: ' + data.startedAt + ')'); }
-      catch (_) { console.log('Not running (stale PID file).'); fs.unlinkSync(pidPath); }
+      try {
+        process.kill(data.pid, 0);
+        var socketStatus = data.socketPath && fs.existsSync(data.socketPath) ? ', socket: active' : '';
+        console.log('Running (PID: ' + data.pid + ', started: ' + data.startedAt + socketStatus + ')');
+      } catch (_) {
+        console.log('Not running (stale PID file).');
+        fs.unlinkSync(pidPath);
+      }
     } catch (_) { console.log('Not running.'); }
   });
 
@@ -1117,9 +1193,8 @@ daemonCmd
   .description('Tail daemon logs')
   .option('-n, --lines <n>', 'Number of lines', function(v) { return parseInt(v, 10); }, 50)
   .action(function(opts) {
-    var fs = require('fs');
-    var os = require('os');
-    var logPath = require('path').join(os.homedir(), '.frontmcp', 'logs', ${JSON.stringify(appName)} + '.log');
+    var pathMod = require('path');
+    var logPath = pathMod.join(os.homedir(), '.frontmcp', 'logs', ${JSON.stringify(appName)} + '.log');
     try {
       var content = fs.readFileSync(logPath, 'utf8');
       var lines = content.split('\\n');

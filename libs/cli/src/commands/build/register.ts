@@ -10,6 +10,7 @@ export function registerBuildCommands(program: Command): void {
     .option('-a, --adapter <name>', 'Deployment adapter: node, vercel, lambda, cloudflare')
     .option('--exec', 'Build distributable executable bundle (esbuild)')
     .option('--cli', 'Generate CLI with subcommands per tool (use with --exec)')
+    .option('--sea', 'Build as single executable binary (use with --exec, Node.js 20.13+ required)')
     .action(async (options) => {
       options.outDir = options.outDir || 'dist';
       const { runBuild } = await import('./index.js');

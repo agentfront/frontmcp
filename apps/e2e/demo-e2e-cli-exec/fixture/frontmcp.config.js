@@ -21,6 +21,9 @@ module.exports = {
       '@modelcontextprotocol/sdk/*',
     ],
   },
+  sea: {
+    enabled: true,
+  },
   cli: {
     enabled: true,
     outputDefault: 'text',

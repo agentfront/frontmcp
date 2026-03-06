@@ -37,11 +37,15 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
   const rawConfig = await loadExecConfig(cwd);
   const config = normalizeConfig(rawConfig);
   const cliEnabled = opts.cli || config.cli?.enabled;
+  const seaEnabled = opts.sea || config.sea?.enabled;
 
   console.log(`${c('cyan', '[build:exec]')} name: ${config.name}`);
   console.log(`${c('cyan', '[build:exec]')} version: ${config.version}`);
   if (cliEnabled) {
     console.log(`${c('cyan', '[build:exec]')} CLI mode: enabled`);
+  }
+  if (seaEnabled) {
+    console.log(`${c('cyan', '[build:exec]')} SEA mode: enabled (single executable)`);
   }
 
   // 2. Resolve entry
@@ -99,6 +103,7 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
     path.basename(entry).replace(/\.tsx?$/, '.js'),
   );
 
+  // Always build non-self-contained first (schema extraction needs host SDK)
   const bundleResult = await bundleWithEsbuild(compiledEntry, outDir, config);
   console.log(
     `${c('green', '[build:exec]')} bundle created: ${path.relative(cwd, bundleResult.bundlePath)} (${formatSize(bundleResult.bundleSize)})`,
@@ -119,6 +124,7 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
     const { generateSessionManagerSource } = await import('./cli-runtime/session-manager.js');
     const { generateCredentialStoreSource } = await import('./cli-runtime/credential-store.js');
     const { generateOAuthHelperSource } = await import('./cli-runtime/oauth-helper.js');
+    const { generateDaemonClientSource } = await import('./cli-runtime/daemon-client.js');
     const { bundleCliWithEsbuild } = await import('./cli-runtime/cli-bundler.js');
 
     // Extract schemas from server bundle
@@ -176,6 +182,10 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
       path.join(tempDir, 'oauth-helper.js'),
       generateOAuthHelperSource(config.name),
     );
+    fs.writeFileSync(
+      path.join(tempDir, 'daemon-client.js'),
+      generateDaemonClientSource(),
+    );
 
     // Generate CLI entry
     const cliEntrySource = generateCliEntry({
@@ -189,6 +199,7 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
       nativeDeps,
       schema,
       oauthConfig,
+      selfContained: !!seaEnabled,
     });
 
     const cliEntryPath = path.join(tempDir, 'cli-entry.js');
@@ -196,7 +207,9 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
 
     // Bundle CLI
     console.log(`${c('cyan', '[build:exec]')} bundling CLI...`);
-    const cliResult = await bundleCliWithEsbuild(cliEntryPath, outDir, config);
+    const cliResult = await bundleCliWithEsbuild(cliEntryPath, outDir, config, {
+      selfContained: !!seaEnabled,
+    });
     cliBundlePath = cliResult.bundlePath;
     console.log(
       `${c('green', '[build:exec]')} CLI bundle: ${path.relative(cwd, cliResult.bundlePath)} (${formatSize(cliResult.bundleSize)})`,
@@ -222,15 +235,47 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
     };
   }
 
-  // 8. Write manifest
+  // 8. Build SEA binaries if enabled
+  let seaServerResult: { executablePath: string; executableSize: number } | undefined;
+  let seaCliResult: { executablePath: string; executableSize: number } | undefined;
+  if (seaEnabled) {
+    const { buildSea } = await import('./sea-builder.js');
+
+    // Rebuild server bundle as self-contained for SEA (inlines all deps)
+    // Use a temp filename so the original non-self-contained bundle is preserved
+    const seaTempName = `${config.name}.sea-temp`;
+    console.log(`${c('cyan', '[build:sea]')} rebuilding server bundle (self-contained)...`);
+    const seaBundle = await bundleWithEsbuild(compiledEntry, outDir, config, {
+      selfContained: true,
+      outputName: seaTempName,
+    });
+
+    console.log(`${c('cyan', '[build:sea]')} building server SEA binary...`);
+    seaServerResult = await buildSea(seaBundle.bundlePath, outDir, config.name);
+    // Clean up temp self-contained bundle
+    fs.unlinkSync(seaBundle.bundlePath);
+    console.log(
+      `${c('green', '[build:sea]')} server binary: ${path.relative(cwd, seaServerResult.executablePath)} (${formatSize(seaServerResult.executableSize)})`,
+    );
+
+    if (cliBundlePath) {
+      console.log(`${c('cyan', '[build:sea]')} building CLI SEA binary...`);
+      seaCliResult = await buildSea(cliBundlePath, outDir, `${config.name}-cli`);
+      console.log(
+        `${c('green', '[build:sea]')} CLI binary: ${path.relative(cwd, seaCliResult.executablePath)} (${formatSize(seaCliResult.executableSize)})`,
+      );
+    }
+  }
+
+  // 9. Write manifest
   const manifestPath = path.join(outDir, `${config.name}.manifest.json`);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
   console.log(
     `${c('green', '[build:exec]')} manifest: ${path.relative(cwd, manifestPath)}`,
   );
 
-  // 9. Generate runner script (dispatches to CLI bundle if CLI mode)
-  const runnerContent = generateRunnerScript(config, !!cliEnabled);
+  // 10. Generate runner script (dispatches to CLI bundle or SEA binary)
+  const runnerContent = generateRunnerScript(config, !!cliEnabled, !!seaEnabled);
   const runnerPath = path.join(outDir, config.name);
   fs.writeFileSync(runnerPath, runnerContent, { mode: 0o755 });
   console.log(
@@ -245,13 +290,15 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
     `${c('green', '[build:exec]')} installer: ${path.relative(cwd, installerPath)}`,
   );
 
-  // 11. Clean up intermediate compiled files
+  // 12. Clean up intermediate compiled files
   const keepFiles = new Set([
     `${config.name}.bundle.js`,
     `${config.name}-cli.bundle.js`,
     `${config.name}.manifest.json`,
     config.name,
     `install-${config.name}.sh`,
+    `${config.name}-bin`,
+    `${config.name}-cli-bin`,
   ]);
 
   const allFiles = fs.readdirSync(outDir);
@@ -272,13 +319,19 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
     );
   }
 
-  // 12. Print summary
+  // 13. Print summary
   console.log(`\n${c('green', 'Executable build completed.')}`);
   console.log(`\n${c('bold', 'Output:')}`);
   console.log(`  ${path.relative(cwd, bundleResult.bundlePath)}  ${c('gray', `(${formatSize(bundleResult.bundleSize)})`)}`);
   if (cliBundlePath) {
     const cliStat = fs.statSync(cliBundlePath);
     console.log(`  ${path.relative(cwd, cliBundlePath)}  ${c('gray', `(${formatSize(cliStat.size)})`)}`);
+  }
+  if (seaServerResult) {
+    console.log(`  ${path.relative(cwd, seaServerResult.executablePath)}  ${c('gray', `(${formatSize(seaServerResult.executableSize)})`)}`);
+  }
+  if (seaCliResult) {
+    console.log(`  ${path.relative(cwd, seaCliResult.executablePath)}  ${c('gray', `(${formatSize(seaCliResult.executableSize)})`)}`);
   }
   console.log(`  ${path.relative(cwd, manifestPath)}`);
   console.log(`  ${path.relative(cwd, runnerPath)}`);
@@ -289,6 +342,9 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
     console.log(`${c('gray', 'Start server:')} ./${path.relative(cwd, runnerPath)} serve`);
   } else {
     console.log(`\n${c('gray', 'Run the server:')} ./${path.relative(cwd, runnerPath)}`);
+  }
+  if (seaServerResult || seaCliResult) {
+    console.log(`\n${c('yellow', 'Note:')} SEA binaries are native executables. Run directly (not via bash).`);
   }
   console.log(`${c('gray', 'Install to system:')} bash ./${path.relative(cwd, installerPath)}`);
 }

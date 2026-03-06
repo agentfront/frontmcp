@@ -51,6 +51,8 @@ export interface ParsedArgs {
   exec?: boolean;
   // Build --exec --cli flag
   cli?: boolean;
+  // Build --exec --sea flag
+  sea?: boolean;
   // Process Manager flags
   port?: number;
   force?: boolean;

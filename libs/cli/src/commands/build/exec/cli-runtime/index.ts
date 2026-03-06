@@ -52,6 +52,10 @@ export {
 } from './oauth-helper';
 
 export {
+  generateDaemonClientSource,
+} from './daemon-client';
+
+export {
   bundleCliWithEsbuild,
   type CliBundleResult,
 } from './cli-bundler';

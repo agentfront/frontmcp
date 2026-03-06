@@ -54,6 +54,9 @@ export interface FrontmcpExecConfig {
   };
   setup?: SetupDefinition;
   cli?: CliConfig;
+  sea?: {
+    enabled?: boolean;
+  };
 }
 
 const CONFIG_FILENAMES = [
