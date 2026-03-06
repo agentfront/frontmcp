@@ -2,6 +2,7 @@ import {
   formatToolResult,
   formatResourceResult,
   formatPromptResult,
+  formatSubscriptionEvent,
   generateOutputFormatterSource,
 } from '../cli-runtime/output-formatter';
 
@@ -175,13 +176,66 @@ describe('formatPromptResult', () => {
   });
 });
 
+describe('formatSubscriptionEvent', () => {
+  it('should return JSON in json mode', () => {
+    const event = { type: 'resource_updated', uri: 'file://test.txt', timestamp: '2024-01-01T00:00:00Z' };
+    const output = formatSubscriptionEvent(event, 'json');
+    expect(JSON.parse(output)).toEqual(event);
+  });
+
+  it('should format resource_updated events in text mode', () => {
+    const event = { type: 'resource_updated', uri: 'file://test.txt', timestamp: '2024-01-01T00:00:00Z' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toContain('Resource updated: file://test.txt');
+    expect(output).toContain('[2024-01-01T00:00:00Z]');
+  });
+
+  it('should format notification events in text mode', () => {
+    const event = { type: 'notification', method: 'resources/updated', params: { uri: 'test' }, timestamp: '2024-01-01T00:00:00Z' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toContain('Notification: resources/updated');
+    expect(output).toContain('"uri":"test"');
+  });
+
+  it('should format notification without params', () => {
+    const event = { type: 'notification', method: 'ping' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toBe('Notification: ping');
+  });
+
+  it('should handle unknown event types', () => {
+    const event = { type: 'custom_event', data: 'test' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toContain('custom_event:');
+  });
+
+  it('should handle missing uri in resource_updated', () => {
+    const event = { type: 'resource_updated' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toContain('Resource updated: unknown');
+  });
+
+  it('should handle missing timestamp', () => {
+    const event = { type: 'resource_updated', uri: 'file://a.txt' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toBe('Resource updated: file://a.txt');
+    expect(output).not.toContain('[');
+  });
+});
+
 describe('generateOutputFormatterSource', () => {
   it('should return valid JavaScript source', () => {
     const source = generateOutputFormatterSource();
     expect(source).toContain('function formatToolResult');
     expect(source).toContain('function formatResourceResult');
     expect(source).toContain('function formatPromptResult');
+    expect(source).toContain('function formatSubscriptionEvent');
     expect(source).toContain('module.exports');
+  });
+
+  it('should export formatSubscriptionEvent', () => {
+    const source = generateOutputFormatterSource();
+    expect(source).toContain('formatSubscriptionEvent');
   });
 
   it('should be evaluable JavaScript', () => {

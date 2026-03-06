@@ -259,4 +259,58 @@ describe('extractSchemas', () => {
 
     expect(schema.tools[0].description).toBe('');
   });
+
+  describe('capabilities detection', () => {
+    it('should detect skills capability from searchSkills tool', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [
+          { name: 'searchSkills', description: 'Search skills' },
+          { name: 'loadSkills', description: 'Load skills' },
+          { name: 'my_tool', description: 'My tool' },
+        ],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities.skills).toBe(true);
+      expect(schema.capabilities.jobs).toBe(false);
+      expect(schema.capabilities.workflows).toBe(false);
+    });
+
+    it('should detect jobs capability from execute-job tool', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [
+          { name: 'execute-job', description: 'Execute job' },
+          { name: 'get-job-status', description: 'Job status' },
+        ],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities.jobs).toBe(true);
+      expect(schema.capabilities.skills).toBe(false);
+      expect(schema.capabilities.workflows).toBe(false);
+    });
+
+    it('should detect workflows capability from execute-workflow tool', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [
+          { name: 'execute-workflow', description: 'Execute workflow' },
+          { name: 'get-workflow-status', description: 'Workflow status' },
+        ],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities.workflows).toBe(true);
+      expect(schema.capabilities.skills).toBe(false);
+      expect(schema.capabilities.jobs).toBe(false);
+    });
+
+    it('should set all capabilities to false when no system tools present', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [{ name: 'my_tool', description: 'My tool' }],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities).toEqual({ skills: false, jobs: false, workflows: false });
+    });
+  });
 });

@@ -48,10 +48,19 @@ jest.mock('../setup', () => ({
 // CLI runtime mocks (virtual: for dynamic import() paths with .js extension)
 jest.mock('../cli-runtime/schema-extractor.js', () => ({
   extractSchemas: jest.fn(),
+  SYSTEM_TOOL_NAMES: new Set([
+    'searchSkills', 'loadSkills',
+    'list-jobs', 'execute-job', 'get-job-status', 'register-job', 'remove-job',
+    'list-workflows', 'execute-workflow', 'get-workflow-status', 'register-workflow', 'remove-workflow',
+  ]),
 }), { virtual: true });
 
 jest.mock('../cli-runtime/generate-cli-entry.js', () => ({
   generateCliEntry: jest.fn(),
+  resolveToolCommandName: jest.fn().mockImplementation((name: string) => {
+    const cmdName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z])([A-Z][a-z])/g, '$1-$2').toLowerCase().replace(/_/g, '-');
+    return { cmdName, wasRenamed: false };
+  }),
 }), { virtual: true });
 
 jest.mock('../cli-runtime/output-formatter.js', () => ({
@@ -64,6 +73,10 @@ jest.mock('../cli-runtime/session-manager.js', () => ({
 
 jest.mock('../cli-runtime/credential-store.js', () => ({
   generateCredentialStoreSource: jest.fn(),
+}), { virtual: true });
+
+jest.mock('../cli-runtime/oauth-helper.js', () => ({
+  generateOAuthHelperSource: jest.fn(),
 }), { virtual: true });
 
 jest.mock('../cli-runtime/cli-bundler.js', () => ({
@@ -90,14 +103,17 @@ function getCliMocks() {
   const outputFormatter = require('../cli-runtime/output-formatter.js');
   const sessionManager = require('../cli-runtime/session-manager.js');
   const credentialStore = require('../cli-runtime/credential-store.js');
+  const oauthHelper = require('../cli-runtime/oauth-helper.js');
   const cliBundler = require('../cli-runtime/cli-bundler.js');
 
   return {
     extractSchemas: schemaExtractor.extractSchemas as jest.Mock,
     generateCliEntry: cliEntry.generateCliEntry as jest.Mock,
+    resolveToolCommandName: cliEntry.resolveToolCommandName as jest.Mock,
     generateOutputFormatterSource: outputFormatter.generateOutputFormatterSource as jest.Mock,
     generateSessionManagerSource: sessionManager.generateSessionManagerSource as jest.Mock,
     generateCredentialStoreSource: credentialStore.generateCredentialStoreSource as jest.Mock,
+    generateOAuthHelperSource: oauthHelper.generateOAuthHelperSource as jest.Mock,
     bundleCliWithEsbuild: cliBundler.bundleCliWithEsbuild as jest.Mock,
   };
 }
@@ -164,12 +180,14 @@ beforeEach(() => {
         arguments: [{ name: 'code', required: true }],
       },
     ],
+    capabilities: { skills: false, jobs: false, workflows: false },
   });
 
   cli.generateCliEntry.mockReturnValue('// generated CLI entry\nvar { Command } = require("commander");');
   cli.generateOutputFormatterSource.mockReturnValue('// output formatter\nmodule.exports = {};');
   cli.generateSessionManagerSource.mockReturnValue('// session manager\nmodule.exports = {};');
   cli.generateCredentialStoreSource.mockReturnValue('// credential store\nmodule.exports = {};');
+  cli.generateOAuthHelperSource.mockReturnValue('// oauth helper\nmodule.exports = {};');
 
   cli.bundleCliWithEsbuild.mockImplementation(async (_entry: string, outDirPath: string, config: { name: string }) => {
     const bundlePath = path.join(outDirPath, `${config.name}-cli.bundle.js`);
@@ -277,7 +295,9 @@ describe('buildExec() integration', () => {
         expect(manifest.cli.cliBundle).toBe('test-app-cli.bundle.js');
         expect(manifest.cli.toolCount).toBe(2);
         expect(manifest.cli.resourceCount).toBe(1);
+        expect(manifest.cli.templateCount).toBe(0);
         expect(manifest.cli.promptCount).toBe(1);
+        expect(manifest.cli.oauthEnabled).toBe(false);
       } finally {
         process.chdir(originalCwd);
       }

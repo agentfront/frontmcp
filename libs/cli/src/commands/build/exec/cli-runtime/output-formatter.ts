@@ -76,6 +76,34 @@ export function formatPromptResult(result: Record<string, unknown>, mode: Output
     .join('\n\n');
 }
 
+export interface SubscriptionEvent {
+  type: string;
+  uri?: string;
+  method?: string;
+  params?: unknown;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Format a subscription event for terminal output.
+ */
+export function formatSubscriptionEvent(event: SubscriptionEvent, mode: OutputMode): string {
+  if (mode === 'json') {
+    return JSON.stringify(event, null, 2);
+  }
+
+  const ts = event.timestamp ? `[${event.timestamp}] ` : '';
+  if (event.type === 'resource_updated') {
+    return `${ts}Resource updated: ${event.uri || 'unknown'}`;
+  }
+  if (event.type === 'notification') {
+    const detail = event.params ? ' ' + JSON.stringify(event.params) : '';
+    return `${ts}Notification: ${event.method || 'unknown'}${detail}`;
+  }
+  return `${ts}${event.type}: ${JSON.stringify(event)}`;
+}
+
 function formatTextOutput(result: CallToolResult): string {
   if (!result.content || result.content.length === 0) {
     return result.isError ? '(error: no content)' : '(no output)';
@@ -153,6 +181,19 @@ function formatPromptResult(result, mode) {
   }).join('\\n\\n');
 }
 
-module.exports = { formatToolResult, formatResourceResult, formatPromptResult };
+function formatSubscriptionEvent(event, mode) {
+  if (mode === 'json') return JSON.stringify(event, null, 2);
+  var ts = event.timestamp ? '[' + event.timestamp + '] ' : '';
+  if (event.type === 'resource_updated') {
+    return ts + 'Resource updated: ' + (event.uri || 'unknown');
+  }
+  if (event.type === 'notification') {
+    var detail = event.params ? ' ' + JSON.stringify(event.params) : '';
+    return ts + 'Notification: ' + (event.method || 'unknown') + detail;
+  }
+  return ts + event.type + ': ' + JSON.stringify(event);
+}
+
+module.exports = { formatToolResult, formatResourceResult, formatPromptResult, formatSubscriptionEvent };
 `.trim();
 }

@@ -139,6 +139,98 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 
 ---
 
+## Generated Executable CLI
+
+When you build with `--exec --cli`, the output is a self-contained executable whose commands are auto-generated from your MCP server's tools, resources, prompts, and templates.
+
+### Building
+
+```bash
+frontmcp build --exec --cli
+```
+
+This produces a standalone binary in `dist/` that can be distributed without Node.js.
+
+### Global Options
+
+| Option             | Description                                     | Default  |
+| ------------------ | ----------------------------------------------- | -------- |
+| `--output <mode>`  | Output format: `text` or `json`                 | `text`   |
+| `-h, --help`       | Show grouped help (Tools, Resources, Auth, etc) | —        |
+| `-V, --version`    | Print version                                   | —        |
+
+### Command Groups
+
+The generated CLI organizes commands into five groups:
+
+**Tools** — Each MCP tool becomes a kebab-case subcommand. Flags are derived from the tool's input schema. Object-typed parameters accept JSON strings.
+
+**Resources & Prompts** — `resource list`, `resource read <uri>`, `template list`, `template <name>`, `prompt list`, `prompt <name>`.
+
+**Auth** — `login`, `logout`, `sessions list`, `sessions switch <name>`, `connect --token <TOKEN>`.
+
+**Subscriptions** — `subscribe resource <uri>`, `subscribe notification <name>`.
+
+**System** — `serve`, `daemon start|stop|status|logs`, `doctor`, `install`, `uninstall`.
+
+### Example Session
+
+```bash
+# View all available commands grouped by category
+./myapp --help
+
+# Run a tool subcommand
+./myapp search-users --query "alice" --limit 10
+
+# List and read resources
+./myapp resource list
+./myapp resource read "file://config.json"
+
+# Read a resource template with parameters
+./myapp template user-profile --user-id 42
+
+# OAuth login and session management
+./myapp login --server https://auth.example.com
+./myapp sessions list
+./myapp sessions switch production
+
+# Stream resource updates
+./myapp subscribe resource "file://config.json"
+
+# JSON output mode
+./myapp search-users --query "alice" --output json
+```
+
+### Configuration
+
+Control the generated CLI via the `cli` block in `frontmcp.config.js`:
+
+```js
+module.exports = {
+  name: 'myapp',
+  cli: {
+    enabled: true,
+    outputDefault: 'text',
+    authRequired: false,
+    description: 'My MCP CLI',
+    excludeTools: [],
+    oauth: {
+      serverUrl: 'https://auth.example.com',
+      clientId: 'my-app',
+      defaultScope: 'read write',
+      portRange: [17830, 17850],
+      timeout: 120000,
+    },
+  },
+};
+```
+
+### Tool Name Conflicts
+
+If a tool name collides with a built-in command (`login`, `logout`, `serve`, `connect`, `doctor`, `install`, `uninstall`, `resource`, `template`, `prompt`, `subscribe`, `sessions`, `daemon`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
+
+---
+
 ## Examples
 
 ### Development

@@ -3,9 +3,16 @@
  * This creates a commander.js-based CLI where each MCP tool is a subcommand.
  */
 
-import { CliConfig } from '../config';
-import { ExtractedSchema, ExtractedTool, ExtractedPrompt } from './schema-extractor';
+import { CliConfig, OAuthConfig } from '../config';
+import { ExtractedSchema, ExtractedTool, ExtractedPrompt, ExtractedResourceTemplate, ExtractedCapabilities, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
+
+export const RESERVED_COMMANDS = new Set([
+  'resource', 'template', 'prompt', 'subscribe',
+  'login', 'logout', 'connect', 'serve', 'daemon',
+  'doctor', 'install', 'uninstall', 'sessions', 'help', 'version',
+  'skills', 'job', 'workflow',
+]);
 
 export interface CliEntryOptions {
   appName: string;
@@ -17,6 +24,19 @@ export interface CliEntryOptions {
   excludeTools: string[];
   nativeDeps: NonNullable<CliConfig['nativeDeps']>;
   schema: ExtractedSchema;
+  oauthConfig?: OAuthConfig;
+}
+
+/**
+ * Resolve tool command name, appending '-tool' suffix if it conflicts with a built-in command.
+ * Returns { cmdName, wasRenamed } so the caller can log a warning at build time.
+ */
+export function resolveToolCommandName(toolName: string): { cmdName: string; wasRenamed: boolean } {
+  const cmdName = camelToKebab(toolName).replace(/_/g, '-');
+  if (RESERVED_COMMANDS.has(cmdName)) {
+    return { cmdName: `${cmdName}-tool`, wasRenamed: true };
+  }
+  return { cmdName, wasRenamed: false };
 }
 
 /**
@@ -31,18 +51,31 @@ export function generateCliEntry(options: CliEntryOptions): string {
     outputDefault,
     schema,
     excludeTools,
+    oauthConfig,
+    authRequired,
   } = options;
 
+  const capabilities = schema.capabilities;
+
   const filteredTools = schema.tools.filter(
-    (t) => !excludeTools.includes(t.name),
+    (t) => !excludeTools.includes(t.name) && !SYSTEM_TOOL_NAMES.has(t.name),
   );
 
   const sections: string[] = [
-    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault),
-    generateToolCommands(filteredTools),
+    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig),
+    generateToolCommands(filteredTools, appName),
     generateResourceCommands(schema),
+    generateTemplateCommands(schema.resourceTemplates),
     generatePromptCommands(schema.prompts),
-    generateSessionCommands(),
+    capabilities.skills ? generateSkillsCommands() : '',
+    capabilities.jobs ? generateJobCommands() : '',
+    capabilities.workflows ? generateWorkflowCommands() : '',
+    generateSubscribeCommands(),
+    ...(authRequired ? [
+      generateLoginCommand(appName, oauthConfig),
+      generateLogoutCommand(appName),
+      generateSessionCommands(),
+    ] : []),
     generateServeCommand(serverBundleFilename),
     generateDoctorCommand(appName, options.nativeDeps),
     generateInstallCommand(appName, options.nativeDeps),
@@ -50,7 +83,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
     generateFooter(),
   ];
 
-  return sections.join('\n\n');
+  return sections.filter(Boolean).join('\n\n');
 }
 
 function generateHeader(
@@ -59,15 +92,37 @@ function generateHeader(
   description: string,
   serverBundleFilename: string,
   outputDefault: string,
+  authRequired: boolean,
+  capabilities: ExtractedCapabilities,
+  oauthConfig?: OAuthConfig,
 ): string {
-  return `#!/usr/bin/env node
-'use strict';
+  const hasOAuth = !!oauthConfig;
 
-var { Command } = require('commander');
+  // Build the group routing map dynamically
+  const skillsRouting = capabilities.skills ? `\n      else if (name === 'skills') groups['Skills'].push(sub);` : '';
+  const jobsRouting = capabilities.jobs ? `\n      else if (name === 'job') groups['Jobs'].push(sub);` : '';
+  const workflowsRouting = capabilities.workflows ? `\n      else if (name === 'workflow') groups['Workflows'].push(sub);` : '';
+  const authRouting = authRequired ? `\n      else if (['login', 'logout', 'sessions', 'connect'].indexOf(name) !== -1) groups['Auth'].push(sub);` : '';
+
+  // Build the groups object dynamically
+  const groupEntries: string[] = [
+    `      'Tools': []`,
+    `      'Resources & Prompts': []`,
+  ];
+  if (capabilities.skills) groupEntries.push(`      'Skills': []`);
+  if (capabilities.jobs) groupEntries.push(`      'Jobs': []`);
+  if (capabilities.workflows) groupEntries.push(`      'Workflows': []`);
+  if (authRequired) groupEntries.push(`      'Auth': []`);
+  groupEntries.push(`      'Subscriptions': []`);
+  groupEntries.push(`      'System': []`);
+
+  return `'use strict';
+
+var { Command, Option } = require('commander');
 var path = require('path');
 var fmt = require('./output-formatter');
-var sessions = require('./session-manager');
-var creds = require('./credential-store');
+${authRequired ? "var sessions = require('./session-manager');\nvar creds = require('./credential-store');" : ''}
+${hasOAuth ? "var oauthHelper = require('./oauth-helper');" : ''}
 
 var SCRIPT_DIR = __dirname;
 var SERVER_BUNDLE = path.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});
@@ -78,8 +133,13 @@ async function getClient() {
   var mod = require(SERVER_BUNDLE);
   var configOrClass = mod.default || mod;
   var sdk = require('@frontmcp/sdk');
-  var connect = sdk.connect || sdk.direct.connect;
-  _client = await connect(configOrClass);
+  var connect = sdk.connect || sdk.direct.connect;${authRequired ? `
+  var sessionName = sessions.getActiveSessionName();
+  var store = creds.createCredentialStore();
+  var credBlob = await store.get(sessionName);
+  var connectOpts = credBlob ? { authToken: credBlob.token } : {};
+  _client = await connect(configOrClass, connectOpts);` : `
+  _client = await connect(configOrClass);`}
   return _client;
 }
 
@@ -88,14 +148,59 @@ program
   .name(${JSON.stringify(appName)})
   .version(${JSON.stringify(appVersion)})
   .description(${JSON.stringify(description || `${appName} CLI`)})
-  .option('--output <mode>', 'Output format: text or json', ${JSON.stringify(outputDefault)});`;
+  .option('--output <mode>', 'Output format: text or json', ${JSON.stringify(outputDefault)});
+
+program.configureHelp({
+  sortSubcommands: false,
+  formatHelp: function(cmd, helper) {
+    var groups = {
+${groupEntries.join(',\n')}
+    };
+    var toolCmdNames = cmd._toolCommandNames || [];
+    cmd.commands.forEach(function(sub) {
+      var name = sub.name();
+      if (toolCmdNames.indexOf(name) !== -1) groups['Tools'].push(sub);
+      else if (['resource', 'template', 'prompt'].indexOf(name) !== -1) groups['Resources & Prompts'].push(sub);${skillsRouting}${jobsRouting}${workflowsRouting}${authRouting}
+      else if (name === 'subscribe') groups['Subscriptions'].push(sub);
+      else groups['System'].push(sub);
+    });
+    var termWidth = helper.padWidth(cmd, helper);
+    var lines = [];
+    lines.push('Usage: ' + helper.commandUsage(cmd));
+    lines.push('');
+    var desc = helper.commandDescription(cmd);
+    if (desc) { lines.push(desc); lines.push(''); }
+    var globalOpts = helper.formatHelp ? helper.visibleOptions(cmd) : [];
+    if (globalOpts.length > 0) {
+      lines.push('Options:');
+      globalOpts.forEach(function(opt) {
+        lines.push('  ' + helper.optionTerm(opt).padEnd(termWidth) + '  ' + helper.optionDescription(opt));
+      });
+      lines.push('');
+    }
+    Object.keys(groups).forEach(function(groupName) {
+      var cmds = groups[groupName];
+      if (cmds.length === 0) return;
+      lines.push(groupName + ':');
+      cmds.forEach(function(sub) {
+        lines.push('  ' + helper.subcommandTerm(sub).padEnd(termWidth) + '  ' + helper.subcommandDescription(sub));
+      });
+      lines.push('');
+    });
+    return lines.join('\\n');
+  }
+});
+
+program.action(function() { program.outputHelp(); });`;
 }
 
-function generateToolCommands(tools: ExtractedTool[]): string {
-  if (tools.length === 0) return '// No tools extracted';
+function generateToolCommands(tools: ExtractedTool[], appName: string): string {
+  if (tools.length === 0) return '// No tools extracted\nprogram._toolCommandNames = [];';
 
+  const cmdNames: string[] = [];
   const commands = tools.map((tool) => {
-    const cmdName = camelToKebab(tool.name).replace(/_/g, '-');
+    const { cmdName } = resolveToolCommandName(tool.name);
+    cmdNames.push(cmdName);
     const { options } = schemaToCommander(tool.inputSchema);
     const optionLines = options.map((o) => `  ${generateOptionCode(o)}`).join('\n');
 
@@ -113,30 +218,52 @@ ${optionLines}
       var mode = program.opts().output || ${JSON.stringify('text')};
       console.log(fmt.formatToolResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
+      var meta = err && err._meta ? err._meta : (err && err.data && err.data._meta ? err.data._meta : null);
+      if (meta && meta.authorization_required) {
+        console.error('Authorization required' + (meta.app ? ' for ' + meta.app : ''));
+        if (meta.auth_url) console.error('Authorize at: ' + meta.auth_url);
+        console.error('Or run: ' + ${JSON.stringify(appName)} + ' login');
+      } else {
+        console.error('Error:', err.message || err);
+      }
       process.exitCode = 1;
     }
   });`;
   });
 
-  return commands.join('\n\n');
+  return `program._toolCommandNames = ${JSON.stringify(cmdNames)};\n\n${commands.join('\n\n')}`;
 }
 
 function generateArgMapping(tool: ExtractedTool): string {
-  const props = (tool.inputSchema as Record<string, unknown>).properties as Record<string, unknown> | undefined;
+  const props = (tool.inputSchema as Record<string, unknown>).properties as Record<string, Record<string, unknown>> | undefined;
   if (!props) return '';
 
   const mappings = Object.keys(props).map((propName) => {
+    const propSchema = props[propName];
     const kebab = camelToKebab(propName);
     // Commander converts kebab-case flags to camelCase in opts()
     const camel = kebabToCamel(kebab);
+
+    // Resolve type for object detection
+    let propType = propSchema?.type as string | string[] | undefined;
+    if (Array.isArray(propType)) {
+      propType = propType.find((t: string) => t !== 'null') || propType[0];
+    }
+
+    if (propType === 'object') {
+      return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) {
+        try { args[${JSON.stringify(propName)}] = JSON.parse(rawOpts[${JSON.stringify(camel)}]); }
+        catch (_jsonErr) { console.error('Invalid JSON for --${kebab}'); process.exitCode = 1; return; }
+      }`;
+    }
+
     return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) args[${JSON.stringify(propName)}] = rawOpts[${JSON.stringify(camel)}];`;
   });
 
   return mappings.join('\n      ');
 }
 
-function generateResourceCommands(schema: ExtractedSchema): string {
+function generateResourceCommands(_schema: ExtractedSchema): string {
   return `var resourceCmd = program.command('resource').description('Resource operations');
 
 resourceCmd
@@ -176,6 +303,72 @@ resourceCmd
       process.exitCode = 1;
     }
   });`;
+}
+
+function generateTemplateCommands(templates: ExtractedResourceTemplate[]): string {
+  if (!templates || templates.length === 0) return '// No resource templates extracted';
+
+  const subcommands = templates.map((tmpl) => {
+    const cmdName = camelToKebab(tmpl.name).replace(/_/g, '-');
+    // Extract {param} placeholders from URI template
+    const paramNames = extractTemplateParams(tmpl.uriTemplate);
+    const optionLines = paramNames
+      .map((p) => `  .requiredOption('--${camelToKebab(p)} <value>', 'Template parameter: ${p}')`)
+      .join('\n');
+
+    const paramMapping = paramNames
+      .map((p) => {
+        const camel = kebabToCamel(camelToKebab(p));
+        return `uri = uri.replace('{${p}}', encodeURIComponent(rawOpts[${JSON.stringify(camel)}]));`;
+      })
+      .join('\n      ');
+
+    return `templateCmd
+  .command(${JSON.stringify(cmdName)})
+  .description(${JSON.stringify(tmpl.description || `Read resource from template: ${tmpl.uriTemplate}`)})
+${optionLines}
+  .action(async function(opts) {
+    try {
+      var client = await getClient();
+      var rawOpts = this.opts();
+      var uri = ${JSON.stringify(tmpl.uriTemplate)};
+      ${paramMapping}
+      var result = await client.readResource(uri);
+      var mode = program.opts().output || 'text';
+      console.log(fmt.formatResourceResult(result, mode));
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+  });
+
+  return `var templateCmd = program.command('template').description('Resource template operations');
+
+templateCmd
+  .command('list')
+  .description('List available resource templates')
+  .action(async function() {
+    try {
+      var client = await getClient();
+      var result = await client.listResourceTemplates();
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        var templates = result.resourceTemplates || [];
+        if (templates.length === 0) { console.log('No resource templates available.'); return; }
+        templates.forEach(function(t) {
+          console.log('  ' + t.uriTemplate + (t.description ? ' - ' + t.description : ''));
+        });
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+${subcommands.join('\n\n')}`;
 }
 
 function generatePromptCommands(prompts: ExtractedPrompt[]): string {
@@ -240,6 +433,369 @@ promptCmd
   });
 
 ${subcommands.join('\n\n')}`;
+}
+
+function generateSkillsCommands(): string {
+  return `var skillsCmd = program.command('skills').description('Skill operations');
+
+skillsCmd
+  .command('search [query]')
+  .description('Search for skills')
+  .action(async function(query) {
+    try {
+      var client = await getClient();
+      var result = await client.searchSkills(query || '');
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        var skills = result.skills || result || [];
+        if (Array.isArray(skills) && skills.length === 0) { console.log('No skills found.'); return; }
+        if (Array.isArray(skills)) {
+          skills.forEach(function(s) {
+            console.log('  ' + (s.name || s.id || JSON.stringify(s)));
+          });
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+skillsCmd
+  .command('load <ids...>')
+  .description('Load skills by ID')
+  .action(async function(ids) {
+    try {
+      var client = await getClient();
+      var result = await client.loadSkills(ids);
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log('Loaded ' + ids.length + ' skill(s).');
+        if (result && typeof result === 'object') {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+skillsCmd
+  .command('list')
+  .description('List available skills')
+  .action(async function() {
+    try {
+      var client = await getClient();
+      var result = await client.listSkills();
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        var skills = result.skills || result || [];
+        if (Array.isArray(skills) && skills.length === 0) { console.log('No skills available.'); return; }
+        if (Array.isArray(skills)) {
+          skills.forEach(function(s) {
+            console.log('  ' + (s.name || s.id || JSON.stringify(s)));
+          });
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+}
+
+function generateJobCommands(): string {
+  return `var jobCmd = program.command('job').description('Job operations');
+
+jobCmd
+  .command('list')
+  .description('List available jobs')
+  .action(async function() {
+    try {
+      var client = await getClient();
+      var result = await client.listJobs();
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        var jobs = result.jobs || result || [];
+        if (Array.isArray(jobs) && jobs.length === 0) { console.log('No jobs available.'); return; }
+        if (Array.isArray(jobs)) {
+          jobs.forEach(function(j) {
+            console.log('  ' + (j.name || j.id || JSON.stringify(j)));
+          });
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+jobCmd
+  .command('run <name>')
+  .description('Run a job by name')
+  .option('--input <json>', 'Job input as JSON string')
+  .option('--background', 'Run in background mode')
+  .action(async function(name, opts) {
+    try {
+      var client = await getClient();
+      var input = {};
+      if (opts.input) {
+        try { input = JSON.parse(opts.input); }
+        catch (_) { console.error('Invalid JSON for --input'); process.exitCode = 1; return; }
+      }
+      var result = await client.executeJob(name, input, { background: !!opts.background });
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        if (opts.background && result && result.runId) {
+          console.log('Job started. Run ID: ' + result.runId);
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+jobCmd
+  .command('status <runId>')
+  .description('Get the status of a job run')
+  .action(async function(runId) {
+    try {
+      var client = await getClient();
+      var result = await client.getJobStatus(runId);
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log('Status: ' + (result.status || JSON.stringify(result)));
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+}
+
+function generateWorkflowCommands(): string {
+  return `var workflowCmd = program.command('workflow').description('Workflow operations');
+
+workflowCmd
+  .command('list')
+  .description('List available workflows')
+  .action(async function() {
+    try {
+      var client = await getClient();
+      var result = await client.listWorkflows();
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        var workflows = result.workflows || result || [];
+        if (Array.isArray(workflows) && workflows.length === 0) { console.log('No workflows available.'); return; }
+        if (Array.isArray(workflows)) {
+          workflows.forEach(function(w) {
+            console.log('  ' + (w.name || w.id || JSON.stringify(w)));
+          });
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+workflowCmd
+  .command('run <name>')
+  .description('Run a workflow by name')
+  .option('--input <json>', 'Workflow input as JSON string')
+  .option('--background', 'Run in background mode')
+  .action(async function(name, opts) {
+    try {
+      var client = await getClient();
+      var input = {};
+      if (opts.input) {
+        try { input = JSON.parse(opts.input); }
+        catch (_) { console.error('Invalid JSON for --input'); process.exitCode = 1; return; }
+      }
+      var result = await client.executeWorkflow(name, input, { background: !!opts.background });
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        if (opts.background && result && result.runId) {
+          console.log('Workflow started. Run ID: ' + result.runId);
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+workflowCmd
+  .command('status <runId>')
+  .description('Get the status of a workflow run')
+  .action(async function(runId) {
+    try {
+      var client = await getClient();
+      var result = await client.getWorkflowStatus(runId);
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log('Status: ' + (result.status || JSON.stringify(result)));
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+}
+
+function generateSubscribeCommands(): string {
+  return `var subscribeCmd = program.command('subscribe').description('Subscribe to updates');
+
+subscribeCmd
+  .command('resource <uri>')
+  .description('Stream resource updates (Ctrl+C to stop)')
+  .action(async function(uri) {
+    try {
+      var client = await getClient();
+      await client.subscribeResource(uri);
+      var mode = program.opts().output || 'text';
+      console.log('Subscribed to resource: ' + uri);
+      console.log('Waiting for updates... (Ctrl+C to stop)\\n');
+      client.onResourceUpdated(function(event) {
+        console.log(fmt.formatSubscriptionEvent({ type: 'resource_updated', uri: event.uri, timestamp: new Date().toISOString() }, mode));
+      });
+      process.on('SIGINT', async function() {
+        console.log('\\nUnsubscribing...');
+        try { await client.unsubscribeResource(uri); } catch (_) { /* ok */ }
+        process.exit(0);
+      });
+      // Keep process alive
+      await new Promise(function() {});
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+subscribeCmd
+  .command('notification <name>')
+  .description('Stream notifications (Ctrl+C to stop)')
+  .action(async function(name) {
+    try {
+      var client = await getClient();
+      var mode = program.opts().output || 'text';
+      console.log('Listening for notification: ' + name);
+      console.log('Waiting for events... (Ctrl+C to stop)\\n');
+      client.onNotification(function(notification) {
+        if (notification.method === name || name === '*') {
+          console.log(fmt.formatSubscriptionEvent({ type: 'notification', method: notification.method, params: notification.params, timestamp: new Date().toISOString() }, mode));
+        }
+      });
+      process.on('SIGINT', function() {
+        console.log('\\nStopping...');
+        process.exit(0);
+      });
+      // Keep process alive
+      await new Promise(function() {});
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+}
+
+function generateLoginCommand(appName: string, oauthConfig?: OAuthConfig): string {
+  const serverUrl = oauthConfig?.serverUrl || '';
+  const clientId = oauthConfig?.clientId || appName;
+  const defaultScope = oauthConfig?.defaultScope || '';
+  const portStart = oauthConfig?.portRange?.[0] ?? 17830;
+  const portEnd = oauthConfig?.portRange?.[1] ?? 17850;
+  const timeout = oauthConfig?.timeout ?? 120000;
+
+  return `program
+  .command('login')
+  .description('Authenticate via OAuth')
+  .option('--server <url>', 'Server URL for OAuth'${serverUrl ? `, ${JSON.stringify(serverUrl)}` : ''})
+  .option('--session <name>', 'Session name', 'default')
+  .option('--scope <scopes>', 'OAuth scopes'${defaultScope ? `, ${JSON.stringify(defaultScope)}` : ''})
+  .option('--no-browser', 'Print URL instead of opening browser')
+  .action(async function(opts) {
+    var serverUrl = opts.server || process.env.FRONTMCP_SERVER_URL || ${JSON.stringify(serverUrl)};
+    if (!serverUrl) {
+      console.error('Server URL required. Use --server <url> or set FRONTMCP_SERVER_URL.');
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      var oauthHelper = require('./oauth-helper');
+      var result = await oauthHelper.startOAuthLogin({
+        serverUrl: serverUrl,
+        clientId: ${JSON.stringify(clientId)},
+        scope: opts.scope || ${JSON.stringify(defaultScope)},
+        portStart: ${portStart},
+        portEnd: ${portEnd},
+        timeout: ${timeout},
+        noBrowser: !opts.browser
+      });
+      var sessionName = opts.session || 'default';
+      var store = creds.createCredentialStore();
+      await store.set(sessionName, result);
+      sessions.getOrCreateSession(sessionName);
+      console.log('Logged in successfully. Session: ' + sessionName);
+    } catch (err) {
+      console.error('Login failed:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+}
+
+function generateLogoutCommand(_appName: string): string {
+  return `program
+  .command('logout')
+  .description('Clear stored credentials')
+  .option('--session <name>', 'Session to log out')
+  .option('--all', 'Log out of all sessions')
+  .action(async function(opts) {
+    var store = creds.createCredentialStore();
+    if (opts.all) {
+      var allSessions = await store.list();
+      for (var i = 0; i < allSessions.length; i++) {
+        await store.delete(allSessions[i]);
+      }
+      console.log('Logged out of ' + allSessions.length + ' session(s).');
+    } else {
+      var sessionName = opts.session || sessions.getActiveSessionName();
+      await store.delete(sessionName);
+      console.log('Logged out of session: ' + sessionName);
+    }
+  });`;
 }
 
 function generateSessionCommands(): string {
@@ -490,7 +1046,7 @@ program
   });`;
 }
 
-function generateDaemonCommands(appName: string, serverBundleFilename: string): string {
+function generateDaemonCommands(appName: string, _serverBundleFilename: string): string {
   return `var daemonCmd = program.command('daemon').description('Daemon management');
 
 daemonCmd
@@ -578,6 +1134,15 @@ function generateFooter(): string {
   console.error('Fatal:', err.message || err);
   process.exit(1);
 });`;
+}
+
+/**
+ * Extract {param} placeholders from a URI template string.
+ */
+export function extractTemplateParams(uriTemplate: string): string[] {
+  const matches = uriTemplate.match(/\{([^}]+)\}/g);
+  if (!matches) return [];
+  return matches.map((m) => m.slice(1, -1));
 }
 
 function kebabToCamel(str: string): string {

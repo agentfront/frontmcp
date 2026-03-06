@@ -113,26 +113,48 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
   if (cliEnabled) {
     console.log(`${c('cyan', '[build:exec]')} extracting schemas for CLI...`);
 
-    const { extractSchemas } = await import('./cli-runtime/schema-extractor.js');
-    const { generateCliEntry } = await import('./cli-runtime/generate-cli-entry.js');
+    const { extractSchemas, SYSTEM_TOOL_NAMES } = await import('./cli-runtime/schema-extractor.js');
+    const { generateCliEntry, resolveToolCommandName } = await import('./cli-runtime/generate-cli-entry.js');
     const { generateOutputFormatterSource } = await import('./cli-runtime/output-formatter.js');
     const { generateSessionManagerSource } = await import('./cli-runtime/session-manager.js');
     const { generateCredentialStoreSource } = await import('./cli-runtime/credential-store.js');
+    const { generateOAuthHelperSource } = await import('./cli-runtime/oauth-helper.js');
     const { bundleCliWithEsbuild } = await import('./cli-runtime/cli-bundler.js');
 
     // Extract schemas from server bundle
     const schema = await extractSchemas(bundleResult.bundlePath);
 
+    const capabilities = schema.capabilities;
+    const userToolCount = schema.tools.filter(
+      (t) => !SYSTEM_TOOL_NAMES.has(t.name),
+    ).length;
+
     console.log(
-      `${c('cyan', '[build:exec]')} extracted: ${schema.tools.length} tools, ${schema.resources.length} resources, ${schema.prompts.length} prompts`,
+      `${c('cyan', '[build:exec]')} extracted: ${schema.tools.length} tools (${userToolCount} user), ${schema.resources.length} resources, ${schema.resourceTemplates.length} templates, ${schema.prompts.length} prompts`,
     );
+    if (capabilities.skills) console.log(`${c('cyan', '[build:exec]')} capability: skills`);
+    if (capabilities.jobs) console.log(`${c('cyan', '[build:exec]')} capability: jobs`);
+    if (capabilities.workflows) console.log(`${c('cyan', '[build:exec]')} capability: workflows`);
+
+    // Log tool name conflicts
+    const cliConfig = config.cli || { enabled: true };
+    const excludeTools = cliConfig.excludeTools || [];
+    schema.tools
+      .filter((t) => !excludeTools.includes(t.name))
+      .forEach((t) => {
+        const { wasRenamed, cmdName } = resolveToolCommandName(t.name);
+        if (wasRenamed) {
+          console.log(
+            `${c('yellow', '[build:exec]')} Tool "${t.name}" conflicts with built-in command, mapped to "${cmdName}"`,
+          );
+        }
+      });
 
     // Generate runtime modules
-    const cliConfig = config.cli || { enabled: true };
     const outputDefault = cliConfig.outputDefault || 'text';
     const authRequired = cliConfig.authRequired ?? false;
-    const excludeTools = cliConfig.excludeTools || [];
     const nativeDeps = cliConfig.nativeDeps || {};
+    const oauthConfig = cliConfig.oauth;
 
     // Write runtime modules to temp files for bundling
     const tempDir = path.join(outDir, '__cli_temp');
@@ -150,6 +172,10 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
       path.join(tempDir, 'credential-store.js'),
       generateCredentialStoreSource(config.name),
     );
+    fs.writeFileSync(
+      path.join(tempDir, 'oauth-helper.js'),
+      generateOAuthHelperSource(config.name),
+    );
 
     // Generate CLI entry
     const cliEntrySource = generateCliEntry({
@@ -162,6 +188,7 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
       excludeTools,
       nativeDeps,
       schema,
+      oauthConfig,
     });
 
     const cliEntryPath = path.join(tempDir, 'cli-entry.js');
@@ -184,9 +211,14 @@ export async function buildExec(opts: ParsedArgs): Promise<void> {
       cliBundle: `${config.name}-cli.bundle.js`,
       outputDefault,
       authRequired,
-      toolCount: schema.tools.length,
+      toolCount: userToolCount,
       resourceCount: schema.resources.length,
+      templateCount: schema.resourceTemplates.length,
       promptCount: schema.prompts.length,
+      oauthEnabled: !!oauthConfig,
+      skillsEnabled: capabilities.skills || undefined,
+      jobsEnabled: capabilities.jobs || undefined,
+      workflowsEnabled: capabilities.workflows || undefined,
     };
   }
 

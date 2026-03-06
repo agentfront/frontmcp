@@ -52,6 +52,11 @@ import type { Scope } from '../scope/scope.instance';
 import { PublicMcpError } from '../errors';
 import { randomUUID } from '@frontmcp/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import {
+  SkillsSearchResultSchema,
+  SkillsLoadResultSchema,
+  SkillsListResultSchema,
+} from '../transport/mcp-handlers/skills-mcp.types';
 /**
  * DirectClient implementation that wraps an MCP client.
  *
@@ -333,9 +338,8 @@ export class DirectClientImpl implements DirectClient {
   // 1. Skills are FrontMCP-specific extensions, not part of the MCP protocol
   // 2. The server performs full schema validation using SkillsSearchResultSchema,
   //    SkillsLoadResultSchema, and SkillsListResultSchema
-  // 3. The MCP SDK's client.request() requires a schema parameter, but we rely on
-  //    server-side validation for these custom methods
-  // 4. This avoids duplicating schema definitions in both client and server
+  // 3. The MCP SDK's client.request() validates responses using these schemas
+  // 4. Schemas are shared between client and server
   // ─────────────────────────────────────────────────────────────────────────────
 
   /**
@@ -346,8 +350,7 @@ export class DirectClientImpl implements DirectClient {
    * @returns Search results with matching skills
    *
    * @remarks
-   * Response validation is performed server-side using `SkillsSearchResultSchema`.
-   * The client trusts the server response for FrontMCP-specific extensions.
+   * Response is validated using `SkillsSearchResultSchema`.
    */
   async searchSkills(query: string, options?: SearchSkillsOptions): Promise<SearchSkillsResult> {
     return this.mcpClient.request(
@@ -358,8 +361,7 @@ export class DirectClientImpl implements DirectClient {
           ...options,
         },
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any, // Server-side validation via SkillsSearchResultSchema
+      SkillsSearchResultSchema,
     );
   }
 
@@ -371,8 +373,7 @@ export class DirectClientImpl implements DirectClient {
    * @returns Loaded skills with instructions, tools, and metadata
    *
    * @remarks
-   * Response validation is performed server-side using `SkillsLoadResultSchema`.
-   * The client trusts the server response for FrontMCP-specific extensions.
+   * Response is validated using `SkillsLoadResultSchema`.
    */
   async loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult> {
     return this.mcpClient.request(
@@ -383,8 +384,7 @@ export class DirectClientImpl implements DirectClient {
           ...options,
         },
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any, // Server-side validation via SkillsLoadResultSchema
+      SkillsLoadResultSchema,
     );
   }
 
@@ -395,8 +395,7 @@ export class DirectClientImpl implements DirectClient {
    * @returns Paginated list of skills
    *
    * @remarks
-   * Response validation is performed server-side using `SkillsListResultSchema`.
-   * The client trusts the server response for FrontMCP-specific extensions.
+   * Response is validated using `SkillsListResultSchema`.
    */
   async listSkills(options?: ListSkillsOptions): Promise<ListSkillsResult> {
     return this.mcpClient.request(
@@ -404,8 +403,7 @@ export class DirectClientImpl implements DirectClient {
         method: 'skills/list',
         params: options ?? {},
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any, // Server-side validation via SkillsListResultSchema
+      SkillsListResultSchema,
     );
   }
 

@@ -33,12 +33,35 @@ export interface ExtractedPrompt {
   }>;
 }
 
+export interface ExtractedCapabilities {
+  skills: boolean;
+  jobs: boolean;
+  workflows: boolean;
+}
+
 export interface ExtractedSchema {
   tools: ExtractedTool[];
   resources: ExtractedResource[];
   resourceTemplates: ExtractedResourceTemplate[];
   prompts: ExtractedPrompt[];
+  capabilities: ExtractedCapabilities;
 }
+
+/** Known system tool names injected by SDK features (skills, jobs, workflows). */
+export const SYSTEM_TOOL_NAMES = new Set([
+  'searchSkills',
+  'loadSkills',
+  'list-jobs',
+  'execute-job',
+  'get-job-status',
+  'register-job',
+  'remove-job',
+  'list-workflows',
+  'execute-workflow',
+  'get-workflow-status',
+  'register-workflow',
+  'remove-workflow',
+]);
 
 /**
  * Extract schemas from a compiled server bundle.
@@ -65,7 +88,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
   }
 
   const client = await connect(configOrClass) as {
-    listTools(): Promise<{ tools: Array<{ name: string; description?: string; inputSchema?: unknown }> }>;
+    listTools(): Promise<unknown>;
     listResources(): Promise<{ resources: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> }>;
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;
     listPrompts(): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: unknown[] }> }>;
@@ -73,8 +96,8 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
   };
 
   try {
-    const [toolsResult, resourcesResult, promptsResult] = await Promise.all([
-      client.listTools().catch(() => ({ tools: [] })),
+    const [toolsRaw, resourcesResult, promptsResult] = await Promise.all([
+      client.listTools().catch(() => []),
       client.listResources().catch(() => ({ resources: [] })),
       client.listPrompts().catch(() => ({ prompts: [] })),
     ]);
@@ -93,7 +116,13 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
       }
     }
 
-    const tools: ExtractedTool[] = (toolsResult.tools || []).map((t) => ({
+    // DirectClient.listTools() returns FormattedTools (array) directly,
+    // not { tools: [...] } like the raw MCP client
+    const toolsList = Array.isArray(toolsRaw)
+      ? toolsRaw as Array<{ name: string; description?: string; inputSchema?: unknown }>
+      : ((toolsRaw as { tools?: unknown[] })?.tools || []) as Array<{ name: string; description?: string; inputSchema?: unknown }>;
+
+    const tools: ExtractedTool[] = toolsList.map((t) => ({
       name: t.name,
       description: t.description || '',
       inputSchema: (t.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
@@ -112,7 +141,14 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
       arguments: p.arguments as ExtractedPrompt['arguments'],
     }));
 
-    return { tools, resources, resourceTemplates, prompts };
+    const toolNameSet = new Set(tools.map((t) => t.name));
+    const capabilities: ExtractedCapabilities = {
+      skills: toolNameSet.has('searchSkills') || toolNameSet.has('loadSkills'),
+      jobs: toolNameSet.has('execute-job') || toolNameSet.has('get-job-status'),
+      workflows: toolNameSet.has('execute-workflow') || toolNameSet.has('get-workflow-status'),
+    };
+
+    return { tools, resources, resourceTemplates, prompts, capabilities };
   } finally {
     await client.close().catch(() => {});
   }

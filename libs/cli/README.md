@@ -158,6 +158,98 @@ frontmcp build --exec               # Single-file executable bundle
 frontmcp build --exec --cli         # CLI with subcommands per tool
 ```
 
+### Generated CLI Features
+
+When built with `--exec --cli`, the output is a standalone executable with auto-generated commands derived from your MCP server's tools, resources, prompts, and templates. The CLI groups commands into five categories visible in `--help` output:
+
+**Tool subcommands** — each MCP tool becomes a kebab-case subcommand with flags generated from its input schema:
+
+```bash
+./myapp search-users --query "alice" --limit 10
+./myapp send-email --to "bob@example.com" --body '{"html": true}'
+```
+
+Object-typed parameters accept JSON strings that are automatically parsed.
+
+**Resources & Prompts:**
+
+```bash
+./myapp resource list                          # List available resources
+./myapp resource read "file://config.json"     # Read a resource by URI
+./myapp template list                          # List resource templates
+./myapp template user-profile --user-id 42     # Read a template with parameters
+./myapp prompt list                            # List available prompts
+./myapp prompt greeting --name "Alice"         # Execute a prompt with arguments
+```
+
+**Auth & Sessions:**
+
+```bash
+./myapp login --server https://auth.example.com   # OAuth PKCE login
+./myapp logout --all                               # Clear all stored credentials
+./myapp sessions list                              # List saved sessions
+./myapp sessions switch production                 # Switch active session
+./myapp connect --token <TOKEN>                    # Connect with a bearer token
+```
+
+**Subscriptions:**
+
+```bash
+./myapp subscribe resource "file://config.json"   # Stream resource updates
+./myapp subscribe notification "db/changed"        # Stream named notifications
+```
+
+**System:**
+
+```bash
+./myapp serve                     # Start MCP server (stdio transport)
+./myapp daemon start              # Start as background daemon
+./myapp daemon stop               # Stop the daemon
+./myapp daemon status             # Show daemon status
+./myapp daemon logs               # Tail daemon logs
+./myapp doctor                    # Check runtime dependencies
+./myapp install                   # Install shell completions
+./myapp uninstall                 # Remove shell completions
+```
+
+**Global option:** `--output <text|json>` controls the output format for all commands (default set by `cli.outputDefault` in config).
+
+**Tool name conflict resolution:** if a tool name collides with a built-in command (e.g., `login`, `serve`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
+
+**Auth token injection:** when `cli.authRequired` is `true` in config, an active OAuth token is automatically injected into tool/resource/prompt calls.
+
+### `frontmcp.config.js` — CLI Options
+
+The `cli` block in your config controls CLI generation:
+
+```js
+// frontmcp.config.js
+module.exports = {
+  name: 'myapp',
+  version: '1.0.0',
+  cli: {
+    enabled: true,
+    outputDefault: 'text', // 'text' | 'json'
+    authRequired: false, // inject OAuth tokens into calls
+    description: 'My MCP CLI',
+    excludeTools: [], // tool names to hide from CLI
+    nativeDeps: {
+      // checked by `doctor` command
+      brew: [],
+      apt: [],
+      npm: [],
+    },
+    oauth: {
+      serverUrl: 'https://auth.example.com',
+      clientId: 'my-app',
+      defaultScope: 'read write',
+      portRange: [17830, 17850], // local callback port range
+      timeout: 120000, // login timeout (ms)
+    },
+  },
+};
+```
+
 ### Process Management
 
 ```bash
@@ -221,6 +313,20 @@ libs/cli/src/
 │   └── help.ts         # Custom grouped help formatter
 ├── commands/
 │   ├── build/          # build, build --exec, build --exec --cli
+│   │   └── exec/
+│   │       ├── cli-runtime/            # Generated CLI runtime modules
+│   │       │   ├── generate-cli-entry.ts   # Code-gen for Commander CLI entry
+│   │       │   ├── oauth-helper.ts         # OAuth PKCE login/logout helpers
+│   │       │   ├── output-formatter.ts     # Text/JSON output formatting
+│   │       │   ├── credential-store.ts     # Token persistence
+│   │       │   ├── session-manager.ts      # Multi-session management
+│   │       │   ├── schema-extractor.ts     # MCP schema → CLI metadata
+│   │       │   ├── schema-to-commander.ts  # Schema → Commander options
+│   │       │   ├── cli-bundler.ts          # esbuild bundling for CLI
+│   │       │   └── index.ts               # Barrel exports
+│   │       ├── config.ts               # frontmcp.config.js loader
+│   │       ├── manifest.ts             # Build manifest generation
+│   │       └── index.ts                # Exec build orchestrator
 │   ├── dev/            # dev, test, init, doctor, inspector
 │   ├── pm/             # start, stop, restart, status, list, logs, service, socket
 │   ├── package/        # install, uninstall, configure

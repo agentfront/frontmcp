@@ -167,6 +167,31 @@ export function camelToKebab(str: string): string {
  * Generate commander option code string for embedding in generated CLI entry.
  */
 export function generateOptionCode(opt: CommanderOption): string {
+  // When choices are present, use addOption(new Option(...).choices([...])) pattern
+  // because .choices() is a method on Option, not on Command
+  if (opt.choices) {
+    const parts: string[] = [];
+    parts.push(`.addOption(new Option('${opt.flags}', '${escapeStr(opt.description)}')`);
+
+    if (opt.coercion === 'parseInt') {
+      parts.push(`.argParser((v) => parseInt(v, 10))`);
+    } else if (opt.coercion === 'parseFloat') {
+      parts.push(`.argParser((v) => parseFloat(v))`);
+    }
+
+    if (opt.defaultValue !== undefined && !opt.required) {
+      parts.push(`.default(${JSON.stringify(opt.defaultValue)})`);
+    }
+
+    if (opt.required) {
+      parts.push(`.makeOptionMandatory()`);
+    }
+
+    parts.push(`.choices(${JSON.stringify(opt.choices)})`);
+    parts.push(')');
+    return parts.join('');
+  }
+
   const parts: string[] = [];
 
   if (opt.required) {
@@ -187,13 +212,7 @@ export function generateOptionCode(opt: CommanderOption): string {
 
   parts.push(')');
 
-  let code = parts.join('');
-
-  if (opt.choices) {
-    code += `.choices(${JSON.stringify(opt.choices)})`;
-  }
-
-  return code;
+  return parts.join('');
 }
 
 function escapeStr(s: string): string {

@@ -6,6 +6,15 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { SetupDefinition } from './setup';
 
+export interface OAuthConfig {
+  serverUrl?: string;
+  clientId?: string;
+  defaultScope?: string;
+  portRange?: [number, number];
+  defaultPort?: number;
+  timeout?: number;
+}
+
 export interface CliConfig {
   enabled: boolean;
   outputDefault?: 'text' | 'json';
@@ -17,6 +26,7 @@ export interface CliConfig {
     apt?: string[];
     npm?: string[];
   };
+  oauth?: OAuthConfig;
 }
 
 export interface FrontmcpExecConfig {

@@ -12,6 +12,7 @@ function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
     resources: [],
     resourceTemplates: [],
     prompts: [],
+    capabilities: { skills: false, jobs: false, workflows: false },
     ...overrides,
   };
 }
@@ -282,14 +283,24 @@ describe('generated CLI smoke tests', () => {
       expect(source).toContain("require('./output-formatter')");
     });
 
-    it('should require session-manager module', () => {
-      const source = generateCliEntry(makeOptions());
+    it('should require session-manager module when authRequired', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true }));
       expect(source).toContain("require('./session-manager')");
     });
 
-    it('should require credential-store module', () => {
-      const source = generateCliEntry(makeOptions());
+    it('should require credential-store module when authRequired', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true }));
       expect(source).toContain("require('./credential-store')");
+    });
+
+    it('should not require session-manager module when authRequired is false', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: false }));
+      expect(source).not.toContain("require('./session-manager')");
+    });
+
+    it('should not require credential-store module when authRequired is false', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: false }));
+      expect(source).not.toContain("require('./credential-store')");
     });
 
     it('should reference the server bundle filename', () => {

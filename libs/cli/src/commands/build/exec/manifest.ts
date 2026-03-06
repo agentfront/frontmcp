@@ -34,7 +34,12 @@ export interface ExecManifest {
     authRequired: boolean;
     toolCount: number;
     resourceCount: number;
+    templateCount: number;
     promptCount: number;
+    oauthEnabled: boolean;
+    skillsEnabled?: boolean;
+    jobsEnabled?: boolean;
+    workflowsEnabled?: boolean;
   };
 }
 

@@ -196,14 +196,14 @@ describe('OpenapiAdapter - Schema Transform Branch Coverage', () => {
       schemaTransforms: {
         input: {
           perTool: {
-            get_users: (schema) => {
+            get_users: ((schema) => {
               // Remove secret from input schema
               if (schema.type === 'object' && schema.properties) {
                 const { secret, ...rest } = schema.properties as Record<string, unknown>;
                 return { ...schema, properties: rest };
               }
               return schema;
-            },
+            }) as any,
           },
         },
       },
@@ -249,14 +249,14 @@ describe('OpenapiAdapter - Schema Transform Branch Coverage', () => {
       schemaTransforms: {
         output: {
           perTool: {
-            get_users: (schema) => {
+            get_users: ((schema) => {
               // Remove internal from output schema
               if (schema?.type === 'object' && schema.properties) {
                 const { internal, ...rest } = schema.properties as Record<string, unknown>;
                 return { ...schema, properties: rest };
               }
               return schema;
-            },
+            }) as any,
           },
         },
       },
