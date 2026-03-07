@@ -97,6 +97,36 @@ describe('formatToolResult', () => {
       const output = formatToolResult(result, 'text');
       expect(output).toBe('');
     });
+
+    it('should handle text block with undefined text (fallback to empty)', () => {
+      const result = { content: [{ type: 'text' }] };
+      const output = formatToolResult(result, 'text');
+      expect(output).toBe('');
+    });
+
+    it('should handle image block with no data', () => {
+      const result = { content: [{ type: 'image', mimeType: 'image/png' }] };
+      const output = formatToolResult(result, 'text');
+      expect(output).toContain('[Image: image/png, 0 chars base64]');
+    });
+
+    it('should handle image block with no mimeType', () => {
+      const result = { content: [{ type: 'image', data: 'abc' }] };
+      const output = formatToolResult(result, 'text');
+      expect(output).toContain('[Image: unknown');
+    });
+
+    it('should handle resource block with no uri', () => {
+      const result = { content: [{ type: 'resource' }] };
+      const output = formatToolResult(result, 'text');
+      expect(output).toContain('[Resource: unknown]');
+    });
+
+    it('should handle audio block with no mimeType', () => {
+      const result = { content: [{ type: 'audio' }] };
+      const output = formatToolResult(result, 'text');
+      expect(output).toContain('[Audio: unknown]');
+    });
   });
 });
 
@@ -136,6 +166,21 @@ describe('formatResourceResult', () => {
     const output = formatResourceResult(result, 'text');
     expect(output).toBe('(empty resource)');
   });
+
+  it('should JSON.stringify content block with no text, uri, or binary data', () => {
+    const result = { contents: [{ type: 'custom', metadata: 'test' }] };
+    const output = formatResourceResult(result, 'text');
+    expect(output).toContain('"type"');
+    expect(output).toContain('"custom"');
+  });
+
+  it('should fall through to JSON when data is present but mimeType is missing', () => {
+    const result = { contents: [{ data: 'base64stuff' }] };
+    const output = formatResourceResult(result, 'text');
+    // Without both data AND mimeType, falls through to JSON.stringify
+    expect(output).toContain('"data"');
+    expect(output).toContain('"base64stuff"');
+  });
 });
 
 describe('formatPromptResult', () => {
@@ -161,6 +206,20 @@ describe('formatPromptResult', () => {
     const result = { messages: [{ content: { text: 'test' } }] };
     const output = formatPromptResult(result, 'text');
     expect(output).toContain('[unknown] test');
+  });
+
+  it('should JSON.stringify content when text is missing', () => {
+    const result = { messages: [{ role: 'user', content: { data: 'binary' } }] };
+    const output = formatPromptResult(result, 'text');
+    expect(output).toContain('[user]');
+    expect(output).toContain('"data"');
+    expect(output).toContain('"binary"');
+  });
+
+  it('should JSON.stringify content when content has no text property', () => {
+    const result = { messages: [{ role: 'assistant', content: {} }] };
+    const output = formatPromptResult(result, 'text');
+    expect(output).toContain('[assistant]');
   });
 
   it('should handle empty messages', () => {
@@ -220,6 +279,12 @@ describe('formatSubscriptionEvent', () => {
     const output = formatSubscriptionEvent(event, 'text');
     expect(output).toBe('Resource updated: file://a.txt');
     expect(output).not.toContain('[');
+  });
+
+  it('should handle notification with missing method', () => {
+    const event = { type: 'notification' };
+    const output = formatSubscriptionEvent(event, 'text');
+    expect(output).toContain('Notification: unknown');
   });
 });
 

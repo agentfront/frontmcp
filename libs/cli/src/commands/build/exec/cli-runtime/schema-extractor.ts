@@ -33,6 +33,13 @@ export interface ExtractedPrompt {
   }>;
 }
 
+export interface ExtractedJob {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  tags?: string[];
+}
+
 export interface ExtractedCapabilities {
   skills: boolean;
   jobs: boolean;
@@ -44,6 +51,7 @@ export interface ExtractedSchema {
   resources: ExtractedResource[];
   resourceTemplates: ExtractedResourceTemplate[];
   prompts: ExtractedPrompt[];
+  jobs: ExtractedJob[];
   capabilities: ExtractedCapabilities;
 }
 
@@ -92,6 +100,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     listResources(): Promise<{ resources: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> }>;
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;
     listPrompts(): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: unknown[] }> }>;
+    listJobs?(): Promise<{ jobs: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown>; tags?: string[] }>; count: number }>;
     close(): Promise<void>;
   };
 
@@ -148,7 +157,23 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
       workflows: toolNameSet.has('execute-workflow') || toolNameSet.has('get-workflow-status'),
     };
 
-    return { tools, resources, resourceTemplates, prompts, capabilities };
+    // Extract job schemas if jobs capability is available
+    let jobs: ExtractedJob[] = [];
+    if (capabilities.jobs && client.listJobs) {
+      try {
+        const jobsResult = await client.listJobs();
+        jobs = (jobsResult.jobs || []).map((j) => ({
+          name: j.name,
+          description: j.description,
+          inputSchema: j.inputSchema,
+          tags: j.tags,
+        }));
+      } catch {
+        // Jobs listing not available at build time
+      }
+    }
+
+    return { tools, resources, resourceTemplates, prompts, jobs, capabilities };
   } finally {
     await client.close().catch(() => {});
   }

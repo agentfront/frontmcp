@@ -84,6 +84,9 @@ export class DirectClientImpl implements DirectClient {
   // Resource update handlers
   private resourceUpdateHandlers: Set<(uri: string) => void> = new Set();
 
+  // Generic notification handlers
+  private notificationHandlers: Set<(notification: { method: string; params?: unknown }) => void> = new Set();
+
   private constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mcpClient: any,
@@ -200,13 +203,27 @@ export class DirectClientImpl implements DirectClient {
       if (typeof mcpClient.setNotificationHandler === 'function') {
         mcpClient.setNotificationHandler(
           ResourceUpdatedNotificationSchema,
-          (notification: { params?: { uri?: string } }) => {
+          (notification: { method?: string; params?: { uri?: string } }) => {
             const uri = notification.params?.uri;
             if (uri) {
               this.resourceUpdateHandlers.forEach((h) => h(uri));
             }
+            // Also forward to generic notification handlers
+            this.notificationHandlers.forEach((h) =>
+              h({
+                method: notification.method ?? 'notifications/resources/updated',
+                params: notification.params,
+              }),
+            );
           },
         );
+      }
+
+      // Fallback handler for generic notifications (used by onNotification)
+      if (typeof mcpClient.setNotificationHandler === 'function') {
+        mcpClient.fallbackNotificationHandler = (notification: { method: string; params?: unknown }) => {
+          this.notificationHandlers.forEach((h) => h(notification));
+        };
       }
 
       // Handler for elicitation requests (server-to-client request, not notification)
@@ -456,6 +473,13 @@ export class DirectClientImpl implements DirectClient {
     this.resourceUpdateHandlers.add(handler);
     return () => {
       this.resourceUpdateHandlers.delete(handler);
+    };
+  }
+
+  onNotification(handler: (notification: { method: string; params?: unknown }) => void): () => void {
+    this.notificationHandlers.add(handler);
+    return () => {
+      this.notificationHandlers.delete(handler);
     };
   }
 

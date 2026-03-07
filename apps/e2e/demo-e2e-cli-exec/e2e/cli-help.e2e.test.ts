@@ -70,4 +70,16 @@ describe('CLI Exec Help & Discovery', () => {
     expect(toolsSection).not.toContain('execute-job');
     expect(toolsSection).not.toContain('get-job-status');
   });
+
+  it('job run --help should list process-data as a subcommand', () => {
+    const { stdout, exitCode } = runCli(['job', 'run', '--help']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('process-data');
+  });
+
+  it('job run process-data --help should show --payload option', () => {
+    const { stdout, exitCode } = runCli(['job', 'run', 'process-data', '--help']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('--payload');
+  });
 });

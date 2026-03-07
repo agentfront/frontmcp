@@ -152,4 +152,27 @@ describe('bundleCliWithEsbuild', () => {
     const buildArgs = mockEsbuildBuild.mock.calls[0][0];
     expect(buildArgs.define).toEqual({ 'process.env.NODE_ENV': '"production"' });
   });
+
+  it('should omit server bundle and SDK from externals in selfContained mode', async () => {
+    await bundleCliWithEsbuild('/tmp/cli-entry.js', '/tmp/out', defaultConfig, { selfContained: true });
+
+    const buildArgs = mockEsbuildBuild.mock.calls[0][0];
+    expect(buildArgs.external).not.toContain('./my-app.bundle.js');
+    expect(buildArgs.external).not.toContain('@frontmcp/sdk');
+    expect(buildArgs.external).toContain('better-sqlite3');
+    expect(buildArgs.external).toContain('fsevents');
+  });
+});
+
+describe('bundleCliWithEsbuild - esbuild not installed', () => {
+  it('should throw when esbuild is not installed', async () => {
+    jest.resetModules();
+    jest.doMock('esbuild', () => { throw new Error('Cannot find module'); }, { virtual: true });
+    jest.doMock('fs', () => ({ statSync: jest.fn() }));
+
+    const mod = require('../cli-runtime/cli-bundler');
+
+    await expect(mod.bundleCliWithEsbuild('/tmp/entry.js', '/tmp/out', { name: 'test' }))
+      .rejects.toThrow('esbuild is required');
+  });
 });

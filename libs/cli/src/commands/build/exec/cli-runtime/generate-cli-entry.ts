@@ -4,7 +4,7 @@
  */
 
 import { CliConfig, OAuthConfig } from '../config';
-import { ExtractedSchema, ExtractedTool, ExtractedPrompt, ExtractedResourceTemplate, ExtractedCapabilities, SYSTEM_TOOL_NAMES } from './schema-extractor';
+import { ExtractedSchema, ExtractedTool, ExtractedPrompt, ExtractedResourceTemplate, ExtractedCapabilities, ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
 
 export const RESERVED_COMMANDS = new Set([
@@ -72,7 +72,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
     generateTemplateCommands(schema.resourceTemplates),
     generatePromptCommands(schema.prompts),
     capabilities.skills ? generateSkillsCommands() : '',
-    capabilities.jobs ? generateJobCommands() : '',
+    capabilities.jobs ? generateJobCommands(schema.jobs) : '',
     capabilities.workflows ? generateWorkflowCommands() : '',
     generateSubscribeCommands(),
     ...(authRequired ? [
@@ -82,7 +82,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
     ] : []),
     generateServeCommand(serverBundleFilename),
     generateDoctorCommand(appName, options.nativeDeps),
-    generateInstallCommand(appName, options.nativeDeps),
+    generateInstallCommand(appName, options.nativeDeps, selfContained),
     generateDaemonCommands(appName, serverBundleFilename),
     generateFooter(),
   ];
@@ -133,6 +133,7 @@ ${hasOAuth ? "var oauthHelper = require('./oauth-helper');" : ''}
 
 var APP_NAME = ${JSON.stringify(appName)};
 var SCRIPT_DIR = __dirname;
+var FRONTMCP_HOME = process.env.FRONTMCP_HOME || path.join(os.homedir(), '.frontmcp');
 ${selfContained
     ? `// Self-contained: server bundle and SDK are inlined by esbuild
 var SERVER_BUNDLE = '../${serverBundleFilename}';`
@@ -143,7 +144,7 @@ async function getClient() {
   if (_client) return _client;
 
   // Try daemon first — Unix socket HTTP (~5-15ms vs ~420ms in-process)
-  var socketPath = path.join(os.homedir(), '.frontmcp', 'sockets', APP_NAME + '.sock');
+  var socketPath = path.join(FRONTMCP_HOME, 'sockets', APP_NAME + '.sock');
   if (fs.existsSync(socketPath)) {
     try {
       var daemonClient = require('./daemon-client');
@@ -283,6 +284,33 @@ function generateArgMapping(tool: ExtractedTool): string {
     }
 
     return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) args[${JSON.stringify(propName)}] = rawOpts[${JSON.stringify(camel)}];`;
+  });
+
+  return mappings.join('\n      ');
+}
+
+function generateJobArgMapping(inputSchema: Record<string, unknown>): string {
+  const props = (inputSchema as Record<string, unknown>).properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props) return '';
+
+  const mappings = Object.keys(props).map((propName) => {
+    const propSchema = props[propName];
+    const kebab = camelToKebab(propName);
+    const camel = kebabToCamel(kebab);
+
+    let propType = propSchema?.type as string | string[] | undefined;
+    if (Array.isArray(propType)) {
+      propType = propType.find((t: string) => t !== 'null') || propType[0];
+    }
+
+    if (propType === 'object') {
+      return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) {
+        try { input[${JSON.stringify(propName)}] = JSON.parse(rawOpts[${JSON.stringify(camel)}]); }
+        catch (_jsonErr) { console.error('Invalid JSON for --${kebab}'); process.exitCode = 1; return; }
+      }`;
+    }
+
+    return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) input[${JSON.stringify(propName)}] = rawOpts[${JSON.stringify(camel)}];`;
   });
 
   return mappings.join('\n      ');
@@ -540,7 +568,108 @@ skillsCmd
   });`;
 }
 
-function generateJobCommands(): string {
+function generateJobCommands(jobs: ExtractedJob[]): string {
+  // Generate typed 'run' subcommands for each known job
+  const runSubcommands = jobs.map((job) => {
+    const jobCmdName = camelToKebab(job.name).replace(/_/g, '-');
+
+    if (job.inputSchema) {
+      const { options } = schemaToCommander(job.inputSchema);
+      const optionLines = options.map((o) => `  ${generateOptionCode(o)}`).join('\n');
+      const argMapping = generateJobArgMapping(job.inputSchema);
+
+      return `jobRunCmd
+  .command(${JSON.stringify(jobCmdName)})
+  .description(${JSON.stringify(job.description || `Run the ${job.name} job`)})
+${optionLines}
+  .option('--background', 'Run in background mode')
+  .action(async function(opts) {
+    try {
+      var client = await getClient();
+      var input = {};
+      var rawOpts = this.opts();
+      ${argMapping}
+      var result = await client.executeJob(${JSON.stringify(job.name)}, input, { background: !!rawOpts.background });
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        if (rawOpts.background && result && result.runId) {
+          console.log('Job started. Run ID: ' + result.runId);
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+    }
+
+    // No inputSchema — fall back to generic --input <json>
+    return `jobRunCmd
+  .command(${JSON.stringify(jobCmdName)})
+  .description(${JSON.stringify(job.description || `Run the ${job.name} job`)})
+  .option('--input <json>', 'Job input as JSON string')
+  .option('--background', 'Run in background mode')
+  .action(async function(opts) {
+    try {
+      var client = await getClient();
+      var input = {};
+      if (opts.input) {
+        try { input = JSON.parse(opts.input); }
+        catch (_) { console.error('Invalid JSON for --input'); process.exitCode = 1; return; }
+      }
+      var result = await client.executeJob(${JSON.stringify(job.name)}, input, { background: !!opts.background });
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        if (opts.background && result && result.runId) {
+          console.log('Job started. Run ID: ' + result.runId);
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+  });
+
+  // Generic fallback 'run' for jobs not known at build time
+  const genericRun = `jobRunCmd
+  .command('_run <name>')
+  .description('Run a job by name (generic)')
+  .option('--input <json>', 'Job input as JSON string')
+  .option('--background', 'Run in background mode')
+  .action(async function(name, opts) {
+    try {
+      var client = await getClient();
+      var input = {};
+      if (opts.input) {
+        try { input = JSON.parse(opts.input); }
+        catch (_) { console.error('Invalid JSON for --input'); process.exitCode = 1; return; }
+      }
+      var result = await client.executeJob(name, input, { background: !!opts.background });
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        if (opts.background && result && result.runId) {
+          console.log('Job started. Run ID: ' + result.runId);
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });`;
+
   return `var jobCmd = program.command('job').description('Job operations');
 
 jobCmd
@@ -570,9 +699,12 @@ jobCmd
     }
   });
 
-jobCmd
-  .command('run <name>')
-  .description('Run a job by name')
+var jobRunCmd = jobCmd.command('run').description('Run a job');
+
+${runSubcommands.join('\n\n')}
+
+${jobs.length > 0 ? genericRun : `jobRunCmd
+  .argument('<name>', 'Job name')
   .option('--input <json>', 'Job input as JSON string')
   .option('--background', 'Run in background mode')
   .action(async function(name, opts) {
@@ -598,7 +730,7 @@ jobCmd
       console.error('Error:', err.message || err);
       process.exitCode = 1;
     }
-  });
+  });`}
 
 jobCmd
   .command('status <runId>')
@@ -713,8 +845,8 @@ subscribeCmd
       var mode = program.opts().output || 'text';
       console.log('Subscribed to resource: ' + uri);
       console.log('Waiting for updates... (Ctrl+C to stop)\\n');
-      client.onResourceUpdated(function(event) {
-        console.log(fmt.formatSubscriptionEvent({ type: 'resource_updated', uri: event.uri, timestamp: new Date().toISOString() }, mode));
+      client.onResourceUpdated(function(uri) {
+        console.log(fmt.formatSubscriptionEvent({ type: 'resource_updated', uri: uri, timestamp: new Date().toISOString() }, mode));
       });
       process.on('SIGINT', async function() {
         console.log('\\nUnsubscribing...');
@@ -957,9 +1089,9 @@ ${checks.join(',\n')}
       }
     }
 
-    // Check ~/.frontmcp directory
+    // Check FRONTMCP_HOME directory
     var fs = require('fs');
-    var appDir = require('path').join(require('os').homedir(), '.frontmcp', 'apps', ${JSON.stringify(appName)});
+    var appDir = require('path').join(FRONTMCP_HOME, 'apps', ${JSON.stringify(appName)});
     if (fs.existsSync(appDir)) {
       console.log('  [ok] App directory: ' + appDir);
     } else {
@@ -978,6 +1110,7 @@ ${checks.join(',\n')}
 function generateInstallCommand(
   appName: string,
   nativeDeps: NonNullable<CliConfig['nativeDeps']>,
+  selfContained?: boolean,
 ): string {
   const depEntries: string[] = [];
   if (nativeDeps.brew?.length) {
@@ -994,19 +1127,24 @@ function generateInstallCommand(
   return `program
   .command('install')
   .description('Install to ~/.frontmcp/ and set up dependencies')
-  .action(async function() {
+  .option('--prefix <path>', 'Installation prefix directory')
+  .option('--bin-dir <path>', 'Directory for symlink (default: ~/.local/bin or /usr/local/bin)')
+  .action(async function(opts) {
     var fs = require('fs');
     var pathMod = require('path');
     var os = require('os');
     var exec = require('child_process').execSync;
-    var appDir = pathMod.join(os.homedir(), '.frontmcp', 'apps', ${JSON.stringify(appName)});
+    var installBase = opts.prefix || FRONTMCP_HOME;
+    var appDir = pathMod.join(installBase, 'apps', ${JSON.stringify(appName)});
     var dirs = ['', '/data', '/sessions', '/credentials'].map(function(s) { return appDir + s; });
 
     console.log('Installing ${appName}...');
     dirs.forEach(function(d) { fs.mkdirSync(d, { recursive: true }); });
 
     // Copy bundle files
-    var files = fs.readdirSync(SCRIPT_DIR).filter(function(f) { return f.endsWith('.js') || f.endsWith('.json'); });
+    var files = fs.readdirSync(SCRIPT_DIR).filter(function(f) {
+      return f.endsWith('.js') || f.endsWith('.json')${selfContained ? " || f.endsWith('-bin')" : ''};
+    });
     files.forEach(function(f) {
       fs.copyFileSync(pathMod.join(SCRIPT_DIR, f), pathMod.join(appDir, f));
     });
@@ -1026,15 +1164,19 @@ ${depEntries.join(',\n')}
       }
     }
 
+    // Set execute permission on the entry point
+    var entryFile = pathMod.join(appDir, ${JSON.stringify(selfContained ? `${appName}-cli-bin` : `${appName}-cli.bundle.js`)});
+    try { fs.chmodSync(entryFile, 0o755); } catch (_) { /* ok */ }
+
     // Create symlink
-    var binDirs = ['/usr/local/bin', pathMod.join(os.homedir(), '.local', 'bin')];
+    var binDirs = opts.binDir ? [opts.binDir] : ['/usr/local/bin', pathMod.join(os.homedir(), '.local', 'bin')];
     var linked = false;
     for (var j = 0; j < binDirs.length && !linked; j++) {
       try {
         fs.mkdirSync(binDirs[j], { recursive: true });
         var linkPath = pathMod.join(binDirs[j], ${JSON.stringify(appName)});
         try { fs.unlinkSync(linkPath); } catch (_) { /* ok */ }
-        fs.symlinkSync(pathMod.join(appDir, '${appName}-cli.bundle.js'), linkPath);
+        fs.symlinkSync(entryFile, linkPath);
         console.log('  Symlinked: ' + linkPath);
         linked = true;
       } catch (_) { /* try next */ }
@@ -1046,21 +1188,26 @@ ${depEntries.join(',\n')}
 program
   .command('uninstall')
   .description('Remove from ~/.frontmcp/ and clean up')
-  .action(async function() {
+  .option('--prefix <path>', 'Installation prefix directory')
+  .option('--bin-dir <path>', 'Directory where symlink was created')
+  .action(async function(opts) {
     var fs = require('fs');
     var pathMod = require('path');
     var os = require('os');
-    var appDir = pathMod.join(os.homedir(), '.frontmcp', 'apps', ${JSON.stringify(appName)});
+    var uninstallBase = opts.prefix || FRONTMCP_HOME;
+    var appDir = pathMod.join(uninstallBase, 'apps', ${JSON.stringify(appName)});
 
-    // Remove credentials
-    var store = creds.createCredentialStore();
-    var credSessions = await store.list();
-    for (var i = 0; i < credSessions.length; i++) {
-      await store.delete(credSessions[i]);
+    // Remove credentials (if auth is enabled)
+    if (typeof creds !== 'undefined') {
+      var store = creds.createCredentialStore();
+      var credSessions = await store.list();
+      for (var i = 0; i < credSessions.length; i++) {
+        await store.delete(credSessions[i]);
+      }
     }
 
     // Remove symlink
-    var binDirs = ['/usr/local/bin', pathMod.join(os.homedir(), '.local', 'bin')];
+    var binDirs = opts.binDir ? [opts.binDir] : ['/usr/local/bin', pathMod.join(os.homedir(), '.local', 'bin')];
     binDirs.forEach(function(d) {
       try { fs.unlinkSync(pathMod.join(d, ${JSON.stringify(appName)})); } catch (_) { /* ok */ }
     });
@@ -1071,7 +1218,7 @@ program
   });`;
 }
 
-function generateDaemonCommands(appName: string, _serverBundleFilename: string): string {
+function generateDaemonCommands(appName: string, serverBundleFilename: string): string {
   return `var daemonCmd = program.command('daemon').description('Daemon management');
 
 daemonCmd
@@ -1081,9 +1228,9 @@ daemonCmd
   .action(async function(opts) {
     var { spawn } = require('child_process');
     var pathMod = require('path');
-    var pidDir = pathMod.join(os.homedir(), '.frontmcp', 'pids');
-    var logDir = pathMod.join(os.homedir(), '.frontmcp', 'logs');
-    var socketDir = pathMod.join(os.homedir(), '.frontmcp', 'sockets');
+    var pidDir = pathMod.join(FRONTMCP_HOME, 'pids');
+    var logDir = pathMod.join(FRONTMCP_HOME, 'logs');
+    var socketDir = pathMod.join(FRONTMCP_HOME, 'sockets');
     fs.mkdirSync(pidDir, { recursive: true });
     fs.mkdirSync(logDir, { recursive: true });
     fs.mkdirSync(socketDir, { recursive: true });
@@ -1112,7 +1259,9 @@ daemonCmd
     var err = fs.openSync(logPath, 'a');
 
     // Start the daemon using runUnixSocket via a small wrapper script
-    var daemonScript = 'var mod = require(' + JSON.stringify(SERVER_BUNDLE) + ');' +
+    // Always use absolute path for the server bundle (SCRIPT_DIR resolves to __dirname at runtime)
+    var serverBundlePath = pathMod.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});
+    var daemonScript = 'var mod = require(' + JSON.stringify(serverBundlePath) + ');' +
       'var sdk = require("@frontmcp/sdk");' +
       'var FrontMcpInstance = sdk.FrontMcpInstance || sdk.default.FrontMcpInstance;' +
       'var config = mod.default || mod;' +
@@ -1154,7 +1303,7 @@ daemonCmd
   .description('Stop the daemon')
   .action(function() {
     var pathMod = require('path');
-    var pidPath = pathMod.join(os.homedir(), '.frontmcp', 'pids', ${JSON.stringify(appName)} + '.pid');
+    var pidPath = pathMod.join(FRONTMCP_HOME, 'pids', ${JSON.stringify(appName)} + '.pid');
     try {
       var data = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
       process.kill(data.pid, 'SIGTERM');
@@ -1174,7 +1323,7 @@ daemonCmd
   .description('Check daemon status')
   .action(function() {
     var pathMod = require('path');
-    var pidPath = pathMod.join(os.homedir(), '.frontmcp', 'pids', ${JSON.stringify(appName)} + '.pid');
+    var pidPath = pathMod.join(FRONTMCP_HOME, 'pids', ${JSON.stringify(appName)} + '.pid');
     try {
       var data = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
       try {
@@ -1194,7 +1343,7 @@ daemonCmd
   .option('-n, --lines <n>', 'Number of lines', function(v) { return parseInt(v, 10); }, 50)
   .action(function(opts) {
     var pathMod = require('path');
-    var logPath = pathMod.join(os.homedir(), '.frontmcp', 'logs', ${JSON.stringify(appName)} + '.log');
+    var logPath = pathMod.join(FRONTMCP_HOME, 'logs', ${JSON.stringify(appName)} + '.log');
     try {
       var content = fs.readFileSync(logPath, 'utf8');
       var lines = content.split('\\n');

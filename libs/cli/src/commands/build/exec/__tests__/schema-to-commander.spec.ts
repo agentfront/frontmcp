@@ -136,6 +136,56 @@ describe('schemaToCommander', () => {
     });
   });
 
+  it('should convert array of floats with parseFloat coercion', () => {
+    const result = schemaToCommander({
+      type: 'object',
+      properties: {
+        values: {
+          type: 'array',
+          description: 'Float values',
+          items: { type: 'number' },
+        },
+      },
+    });
+
+    expect(result.options[0]).toMatchObject({
+      flags: '--values <items...>',
+      variadic: true,
+      coercion: 'parseFloat',
+    });
+  });
+
+  it('should convert array of strings with no coercion', () => {
+    const result = schemaToCommander({
+      type: 'object',
+      properties: {
+        names: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    });
+
+    expect(result.options[0]).toMatchObject({
+      variadic: true,
+    });
+    expect(result.options[0].coercion).toBeUndefined();
+  });
+
+  it('should convert array with no items schema', () => {
+    const result = schemaToCommander({
+      type: 'object',
+      properties: {
+        data: { type: 'array' },
+      },
+    });
+
+    expect(result.options[0]).toMatchObject({
+      variadic: true,
+    });
+    expect(result.options[0].coercion).toBeUndefined();
+  });
+
   it('should convert object property to JSON string', () => {
     const result = schemaToCommander({
       type: 'object',
@@ -147,6 +197,20 @@ describe('schemaToCommander', () => {
     expect(result.options[0]).toMatchObject({
       flags: '--config <json>',
       description: 'Configuration (JSON string)',
+    });
+  });
+
+  it('should convert object property without description', () => {
+    const result = schemaToCommander({
+      type: 'object',
+      properties: {
+        data: { type: 'object' },
+      },
+    });
+
+    expect(result.options[0]).toMatchObject({
+      flags: '--data <json>',
+      description: '(JSON string)',
     });
   });
 
@@ -253,6 +317,30 @@ describe('schemaToCommander', () => {
     });
 
     expect(result.options[0].choices).toEqual(['1', '2', '3']);
+  });
+
+  it('should skip property with no type field', () => {
+    const result = schemaToCommander({
+      type: 'object',
+      properties: {
+        noType: { description: 'No type specified' },
+      },
+    });
+
+    expect(result.options).toHaveLength(0);
+    expect(result.skipped).toEqual(['noType']);
+  });
+
+  it('should skip property with null type', () => {
+    const result = schemaToCommander({
+      type: 'object',
+      properties: {
+        nullProp: { type: 'null' as string, description: 'Null type' },
+      },
+    });
+
+    expect(result.options).toHaveLength(0);
+    expect(result.skipped).toEqual(['nullProp']);
   });
 });
 

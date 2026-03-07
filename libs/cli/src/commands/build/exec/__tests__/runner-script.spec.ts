@@ -68,4 +68,74 @@ describe('runner-script', () => {
       expect(script).not.toContain('my-app-cli.bundle.js');
     });
   });
+
+  describe('generateRunnerScript (SEA mode)', () => {
+    it('should reference binary name in SEA server mode', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false, true);
+
+      expect(script).toContain('my-app-bin');
+      expect(script).not.toContain('command -v node');
+    });
+
+    it('should reference cli binary in SEA CLI mode', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, true, true);
+
+      expect(script).toContain('my-app-cli-bin');
+    });
+
+    it('should include --sea in comment', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false, true);
+
+      expect(script).toContain('--sea');
+      expect(script).toContain('single executable');
+    });
+
+    it('should load .env in SEA mode', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false, true);
+
+      expect(script).toContain('.env');
+      expect(script).toContain('source');
+    });
+
+    it('should check binary exists in SEA mode', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false, true);
+
+      expect(script).toContain('Binary not found');
+    });
+
+    it('should not check for Node.js in SEA mode', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false, true);
+
+      expect(script).not.toContain('command -v node');
+      expect(script).not.toContain('NODE_MAJOR');
+    });
+
+    it('should exec binary directly in SEA mode', () => {
+      const config: FrontmcpExecConfig = { name: 'my-app' };
+      const script = generateRunnerScript(config, false, true);
+
+      expect(script).toContain('exec "${BINARY}"');
+      expect(script).not.toContain('exec node');
+    });
+  });
+
+  describe('extractMinMajor fallback', () => {
+    it('should default min Node major to 22 when version has no digits', () => {
+      const config: FrontmcpExecConfig = { name: 'app', nodeVersion: 'latest' };
+      const script = generateRunnerScript(config);
+      expect(script).toContain('-lt "22"');
+    });
+
+    it('should extract min major from nodeVersion string', () => {
+      const config: FrontmcpExecConfig = { name: 'app', nodeVersion: '>=20.0.0' };
+      const script = generateRunnerScript(config);
+      expect(script).toContain('-lt "20"');
+    });
+  });
 });

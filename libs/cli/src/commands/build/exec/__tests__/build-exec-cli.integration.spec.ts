@@ -41,47 +41,59 @@ jest.mock('../../../../shared/fs', () => ({
   resolveEntry: jest.fn().mockResolvedValue('/fake/src/main.ts'),
 }));
 
-jest.mock('../setup', () => ({
-  validateStepGraph: jest.fn().mockReturnValue([]),
-}));
+jest.mock('../setup', () => {
+  const actual = jest.requireActual('../setup');
+  return {
+    ...actual,
+    validateStepGraph: jest.fn().mockReturnValue([]),
+  };
+});
 
-// CLI runtime mocks (virtual: for dynamic import() paths with .js extension)
-jest.mock('../cli-runtime/schema-extractor.js', () => ({
+// CLI runtime mocks — mock actual modules (dynamic import('./x.js') resolves to ./x.ts in jest)
+jest.mock('../cli-runtime/schema-extractor', () => ({
   extractSchemas: jest.fn(),
   SYSTEM_TOOL_NAMES: new Set([
     'searchSkills', 'loadSkills',
     'list-jobs', 'execute-job', 'get-job-status', 'register-job', 'remove-job',
     'list-workflows', 'execute-workflow', 'get-workflow-status', 'register-workflow', 'remove-workflow',
   ]),
-}), { virtual: true });
+}));
 
-jest.mock('../cli-runtime/generate-cli-entry.js', () => ({
+jest.mock('../cli-runtime/generate-cli-entry', () => ({
   generateCliEntry: jest.fn(),
   resolveToolCommandName: jest.fn().mockImplementation((name: string) => {
     const cmdName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z])([A-Z][a-z])/g, '$1-$2').toLowerCase().replace(/_/g, '-');
     return { cmdName, wasRenamed: false };
   }),
-}), { virtual: true });
+}));
 
-jest.mock('../cli-runtime/output-formatter.js', () => ({
+jest.mock('../cli-runtime/output-formatter', () => ({
   generateOutputFormatterSource: jest.fn(),
-}), { virtual: true });
+}));
 
-jest.mock('../cli-runtime/session-manager.js', () => ({
+jest.mock('../cli-runtime/session-manager', () => ({
   generateSessionManagerSource: jest.fn(),
-}), { virtual: true });
+}));
 
-jest.mock('../cli-runtime/credential-store.js', () => ({
+jest.mock('../cli-runtime/credential-store', () => ({
   generateCredentialStoreSource: jest.fn(),
-}), { virtual: true });
+}));
 
-jest.mock('../cli-runtime/oauth-helper.js', () => ({
+jest.mock('../cli-runtime/oauth-helper', () => ({
   generateOAuthHelperSource: jest.fn(),
-}), { virtual: true });
+}));
 
-jest.mock('../cli-runtime/cli-bundler.js', () => ({
+jest.mock('../cli-runtime/cli-bundler', () => ({
   bundleCliWithEsbuild: jest.fn(),
-}), { virtual: true });
+}));
+
+jest.mock('../cli-runtime/daemon-client', () => ({
+  generateDaemonClientSource: jest.fn().mockReturnValue('// daemon client\nmodule.exports = {};'),
+}));
+
+jest.mock('../sea-builder', () => ({
+  buildSea: jest.fn(),
+}));
 
 // ---- Imports (after mocks are set up) ----
 
@@ -89,22 +101,24 @@ import { buildExec } from '../index';
 import { loadExecConfig } from '../config';
 import { bundleWithEsbuild } from '../esbuild-bundler';
 import { runCmd, fileExists } from '@frontmcp/utils';
+import { validateStepGraph } from '../setup';
 
 // Get typed mock references
 const mockLoadExecConfig = loadExecConfig as jest.MockedFunction<typeof loadExecConfig>;
 const mockBundleWithEsbuild = bundleWithEsbuild as jest.MockedFunction<typeof bundleWithEsbuild>;
 const mockRunCmd = runCmd as jest.MockedFunction<typeof runCmd>;
 const mockFileExists = fileExists as jest.MockedFunction<typeof fileExists>;
+const mockValidateStepGraph = validateStepGraph as jest.MockedFunction<typeof validateStepGraph>;
 
-// CLI runtime mock references (loaded lazily since they're virtual mocks)
+// CLI runtime mock references
 function getCliMocks() {
-  const schemaExtractor = require('../cli-runtime/schema-extractor.js');
-  const cliEntry = require('../cli-runtime/generate-cli-entry.js');
-  const outputFormatter = require('../cli-runtime/output-formatter.js');
-  const sessionManager = require('../cli-runtime/session-manager.js');
-  const credentialStore = require('../cli-runtime/credential-store.js');
-  const oauthHelper = require('../cli-runtime/oauth-helper.js');
-  const cliBundler = require('../cli-runtime/cli-bundler.js');
+  const schemaExtractor = require('../cli-runtime/schema-extractor');
+  const cliEntry = require('../cli-runtime/generate-cli-entry');
+  const outputFormatter = require('../cli-runtime/output-formatter');
+  const sessionManager = require('../cli-runtime/session-manager');
+  const credentialStore = require('../cli-runtime/credential-store');
+  const oauthHelper = require('../cli-runtime/oauth-helper');
+  const cliBundler = require('../cli-runtime/cli-bundler');
 
   return {
     extractSchemas: schemaExtractor.extractSchemas as jest.Mock,
@@ -140,10 +154,19 @@ beforeEach(() => {
   mockRunCmd.mockResolvedValue(undefined);
 
   // Mock esbuild bundler: write a fake bundle file
-  mockBundleWithEsbuild.mockImplementation(async (_entry: string, outDirPath: string, config: { name: string }) => {
-    const bundlePath = path.join(outDirPath, `${config.name}.bundle.js`);
+  mockBundleWithEsbuild.mockImplementation(async (_entry: string, outDirPath: string, config: { name: string }, options?: { outputName?: string }) => {
+    const name = options?.outputName || config.name;
+    const bundlePath = path.join(outDirPath, `${name}.bundle.js`);
     fs.writeFileSync(bundlePath, '// fake server bundle\nmodule.exports = {};');
     return { bundlePath, bundleSize: 1024 };
+  });
+
+  // Setup SEA builder mock
+  const seaBuilder = require('../sea-builder');
+  (seaBuilder.buildSea as jest.Mock).mockImplementation(async (_bundlePath: string, seaOutDir: string, appName: string) => {
+    const executablePath = path.join(seaOutDir, `${appName}-bin`);
+    fs.writeFileSync(executablePath, '// fake SEA binary');
+    return { executablePath, executableSize: 50000 };
   });
 
   // Setup CLI runtime module mocks
@@ -443,6 +466,154 @@ describe('buildExec() integration', () => {
         expect(args).toContain('tsc');
         expect(args).toContain('--module');
         expect(args).toContain('commonjs');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should use --project flag when tsconfig.json exists', async () => {
+      mockFileExists.mockResolvedValue(true);
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false } as any);
+
+        const args = mockRunCmd.mock.calls[0][1];
+        expect(args).toContain('--project');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should use entry from opts and pass to resolveEntry', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false, entry: 'src/custom.ts' } as any);
+
+        const { resolveEntry } = require('../../../../shared/fs');
+        expect(resolveEntry).toHaveBeenCalledWith(expect.any(String), 'src/custom.ts');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('setup validation', () => {
+    it('should log warnings but continue when validateStepGraph returns warnings', async () => {
+      mockValidateStepGraph.mockReturnValue(['Warning: step "b" may be unreachable']);
+      mockLoadExecConfig.mockResolvedValue({
+        name: 'test-app',
+        version: '2.0.0',
+        setup: { steps: [{ id: 'a', prompt: 'A' }] },
+      });
+
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        // Should not throw
+        await buildExec({ outDir, cli: false } as any);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should throw on real validation errors from validateStepGraph', async () => {
+      mockValidateStepGraph.mockReturnValue(['Step "a": next target "b" does not exist']);
+      mockLoadExecConfig.mockResolvedValue({
+        name: 'test-app',
+        version: '2.0.0',
+        setup: { steps: [{ id: 'a', prompt: 'A' }] },
+      });
+
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await expect(buildExec({ outDir, cli: false } as any))
+          .rejects.toThrow('Setup questionnaire has validation errors');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('SEA mode', () => {
+    it('should call buildSea for server bundle in SEA mode', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false, sea: true } as any);
+
+        const seaBuilder = require('../sea-builder');
+        expect(seaBuilder.buildSea).toHaveBeenCalledTimes(1);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should rebuild selfContained bundle before SEA', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false, sea: true } as any);
+
+        // First call: non-self-contained, second: self-contained for SEA
+        expect(mockBundleWithEsbuild).toHaveBeenCalledTimes(2);
+        const secondCall = mockBundleWithEsbuild.mock.calls[1];
+        expect(secondCall[3]).toEqual(expect.objectContaining({ selfContained: true }));
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should call buildSea for CLI bundle when both sea and cli enabled', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: true, sea: true } as any);
+
+        const seaBuilder = require('../sea-builder');
+        // Once for server, once for CLI
+        expect(seaBuilder.buildSea).toHaveBeenCalledTimes(2);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should generate SEA runner script', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false, sea: true } as any);
+
+        const runnerContent = fs.readFileSync(path.join(outDir, 'test-app'), 'utf-8');
+        expect(runnerContent).toContain('single executable');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('installer script', () => {
+    it('should generate installer script', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false } as any);
+
+        const installerPath = path.join(outDir, 'install-test-app.sh');
+        expect(fs.existsSync(installerPath)).toBe(true);
+        const content = fs.readFileSync(installerPath, 'utf-8');
+        expect(content).toContain('#!/usr/bin/env bash');
       } finally {
         process.chdir(originalCwd);
       }

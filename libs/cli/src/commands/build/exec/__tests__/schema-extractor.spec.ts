@@ -222,6 +222,15 @@ describe('extractSchemas', () => {
     expect(schema.tools).toEqual([]);
   });
 
+  it('should handle close() rejection gracefully', async () => {
+    mockClose.mockRejectedValue(new Error('close failed'));
+
+    const schema = await extractSchemas('/fake/bundle.js');
+
+    expect(schema.tools).toEqual([]);
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
   it('should pass the config/class from bundle to connect()', async () => {
     await extractSchemas('/fake/bundle.js');
 
@@ -312,5 +321,161 @@ describe('extractSchemas', () => {
       const schema = await extractSchemas('/fake/bundle.js');
       expect(schema.capabilities).toEqual({ skills: false, jobs: false, workflows: false });
     });
+
+    it('should detect skills capability from loadSkills only (without searchSkills)', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [{ name: 'loadSkills', description: 'Load skills' }],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities.skills).toBe(true);
+    });
+
+    it('should detect jobs capability from get-job-status only (without execute-job)', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [{ name: 'get-job-status', description: 'Job status' }],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities.jobs).toBe(true);
+    });
+
+    it('should detect workflows capability from get-workflow-status only (without execute-workflow)', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [{ name: 'get-workflow-status', description: 'Workflow status' }],
+      });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+      expect(schema.capabilities.workflows).toBe(true);
+    });
+  });
+
+  describe('listTools array format', () => {
+    it('should handle listTools returning array directly (not {tools:[]})', async () => {
+      mockListTools.mockResolvedValue([
+        { name: 'direct_tool', description: 'Direct' },
+      ]);
+
+      const schema = await extractSchemas('/fake/bundle.js');
+
+      expect(schema.tools).toHaveLength(1);
+      expect(schema.tools[0].name).toBe('direct_tool');
+      expect(schema.tools[0].description).toBe('Direct');
+    });
+
+    it('should handle listTools returning object without .tools property', async () => {
+      mockListTools.mockResolvedValue({ data: 'something' });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+
+      expect(schema.tools).toEqual([]);
+    });
+  });
+
+  describe('jobs extraction', () => {
+    it('should extract jobs when capability is detected', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [
+          { name: 'execute-job', description: 'Execute' },
+          { name: 'get-job-status', description: 'Status' },
+        ],
+      });
+
+      const mockListJobs = jest.fn().mockResolvedValue({
+        jobs: [
+          { name: 'cleanup', description: 'Cleanup job', inputSchema: { type: 'object' }, tags: ['maintenance'] },
+        ],
+        count: 1,
+      });
+      mockConnect.mockResolvedValue({ ...mockClient, listJobs: mockListJobs });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+
+      expect(schema.capabilities.jobs).toBe(true);
+      expect(schema.jobs).toHaveLength(1);
+      expect(schema.jobs[0].name).toBe('cleanup');
+      expect(schema.jobs[0].tags).toEqual(['maintenance']);
+    });
+
+    it('should default to empty jobs when listJobs fails', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [
+          { name: 'execute-job', description: 'Execute' },
+          { name: 'get-job-status', description: 'Status' },
+        ],
+      });
+
+      const mockListJobs = jest.fn().mockRejectedValue(new Error('not available'));
+      mockConnect.mockResolvedValue({ ...mockClient, listJobs: mockListJobs });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+
+      expect(schema.capabilities.jobs).toBe(true);
+      expect(schema.jobs).toEqual([]);
+    });
+
+    it('should skip jobs extraction when listJobs is not available on client', async () => {
+      mockListTools.mockResolvedValue({
+        tools: [
+          { name: 'execute-job', description: 'Execute' },
+          { name: 'get-job-status', description: 'Status' },
+        ],
+      });
+
+      // Client without listJobs method
+      mockConnect.mockResolvedValue({ ...mockClient });
+
+      const schema = await extractSchemas('/fake/bundle.js');
+
+      expect(schema.capabilities.jobs).toBe(true);
+      expect(schema.jobs).toEqual([]);
+    });
+  });
+});
+
+describe('extractSchemas - SDK errors', () => {
+  it('should throw when @frontmcp/sdk require fails', async () => {
+    jest.resetModules();
+    jest.doMock('@frontmcp/sdk', () => { throw new Error('Cannot find module'); }, { virtual: true });
+    jest.doMock('/fake/bundle.js', () => ({ default: class {} }), { virtual: true });
+
+    const { extractSchemas: isolatedExtract } = require('../cli-runtime/schema-extractor');
+
+    await expect(isolatedExtract('/fake/bundle.js'))
+      .rejects.toThrow('@frontmcp/sdk is required');
+  });
+
+  it('should throw when SDK has no connect()', async () => {
+    jest.resetModules();
+    jest.doMock('@frontmcp/sdk', () => ({ other: true }), { virtual: true });
+    jest.doMock('/fake/bundle.js', () => ({ default: class {} }), { virtual: true });
+
+    const { extractSchemas: isolatedExtract } = require('../cli-runtime/schema-extractor');
+
+    await expect(isolatedExtract('/fake/bundle.js'))
+      .rejects.toThrow('@frontmcp/sdk is required');
+  });
+
+  it('should use sdk.direct.connect when sdk.connect is not available', async () => {
+    jest.resetModules();
+
+    const mockDirectConnect = jest.fn().mockResolvedValue({
+      listTools: jest.fn().mockResolvedValue({ tools: [{ name: 'tool1', description: 'Test' }] }),
+      listResources: jest.fn().mockResolvedValue({ resources: [] }),
+      listResourceTemplates: undefined,
+      listPrompts: jest.fn().mockResolvedValue({ prompts: [] }),
+      close: jest.fn().mockResolvedValue(undefined),
+    });
+    jest.doMock('@frontmcp/sdk', () => ({
+      direct: { connect: mockDirectConnect },
+    }), { virtual: true });
+    jest.doMock('/fake/bundle.js', () => ({ default: class FakeServer {} }), { virtual: true });
+
+    const { extractSchemas: isolatedExtract } = require('../cli-runtime/schema-extractor');
+    const schema = await isolatedExtract('/fake/bundle.js');
+
+    expect(mockDirectConnect).toHaveBeenCalledTimes(1);
+    expect(schema.tools).toHaveLength(1);
+    expect(schema.tools[0].name).toBe('tool1');
   });
 });

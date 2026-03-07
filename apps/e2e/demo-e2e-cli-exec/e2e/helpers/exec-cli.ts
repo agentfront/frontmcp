@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -56,13 +56,13 @@ export interface CliResult {
   exitCode: number;
 }
 
-export function runCli(args: string[]): CliResult {
+export function runCli(args: string[], extraEnv?: Record<string, string>): CliResult {
   try {
     const stdout = execFileSync('node', [CLI_BUNDLE, ...args], {
       cwd: DIST_DIR,
       timeout: 30000,
       encoding: 'utf-8',
-      env: { ...process.env, NODE_ENV: 'test' },
+      env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     });
     return { stdout: stdout.toString(), stderr: '', exitCode: 0 };
   } catch (err: unknown) {
@@ -73,4 +73,32 @@ export function runCli(args: string[]): CliResult {
       exitCode: error.status ?? 1,
     };
   }
+}
+
+export function spawnCli(args: string[], timeoutMs = 3000, extraEnv?: Record<string, string>): Promise<CliResult> {
+  return new Promise((resolve) => {
+    const child = spawn('node', [CLI_BUNDLE, ...args], {
+      cwd: DIST_DIR,
+      env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    const timer = setTimeout(() => {
+      child.kill('SIGINT');
+    }, timeoutMs);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr, exitCode: code ?? 0 });
+    });
+  });
 }

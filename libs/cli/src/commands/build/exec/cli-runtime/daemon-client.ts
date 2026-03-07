@@ -148,6 +148,14 @@ function createDaemonClient(socketPath) {
     unsubscribeResource: function(uri) {
       return call('resources/unsubscribe', { uri: uri });
     },
+    onResourceUpdated: function() {
+      console.warn('Resource subscriptions are not supported in daemon mode (HTTP-based, no push).');
+      return function() {};
+    },
+    onNotification: function() {
+      console.warn('Notifications are not supported in daemon mode (HTTP-based, no push).');
+      return function() {};
+    },
     close: function() {
       return Promise.resolve();
     }

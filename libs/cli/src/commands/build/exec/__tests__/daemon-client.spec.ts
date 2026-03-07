@@ -153,7 +153,7 @@ describe('generateDaemonClientSource', () => {
   it('should be parseable as JavaScript', () => {
     // Verify the generated source is valid JS by creating a function from it
     expect(() => {
-      // eslint-disable-next-line no-new-func
+       
       new Function(source);
     }).not.toThrow();
   });

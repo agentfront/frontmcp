@@ -13,6 +13,7 @@ function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
     resources: [],
     resourceTemplates: [],
     prompts: [],
+    jobs: [],
     capabilities: { skills: false, jobs: false, workflows: false },
     ...overrides,
   };
@@ -724,7 +725,7 @@ describe('generateCliEntry', () => {
       }));
 
       expect(source).toContain("'job'");
-      expect(source).toContain("'run <name>'");
+      expect(source).toContain("'run'");
       expect(source).toContain("'status <runId>'");
       expect(source).toContain('listJobs');
       expect(source).toContain('executeJob');
@@ -927,6 +928,128 @@ describe('generateCliEntry', () => {
       serverBundleFilename: 'custom-server.bundle.js',
     }));
     expect(source).toContain('custom-server.bundle.js');
+  });
+
+  it('should define FRONTMCP_HOME variable', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('FRONTMCP_HOME');
+    expect(source).toContain('.frontmcp');
+  });
+
+  it('should use relative require path in selfContained mode', () => {
+    const source = generateCliEntry(makeOptions({ selfContained: true }));
+    expect(source).toContain("'../test-app.bundle.js'");
+    expect(source).toContain('Self-contained');
+  });
+
+  it('should use path.join for server bundle in non-selfContained mode', () => {
+    const source = generateCliEntry(makeOptions({ selfContained: false }));
+    expect(source).toContain('path.join(SCRIPT_DIR');
+  });
+
+  describe('install/uninstall commands', () => {
+    it('should include --prefix and --bin-dir options in install command', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain("'--prefix <path>'");
+      expect(source).toContain("'--bin-dir <path>'");
+    });
+
+    it('should include --prefix and --bin-dir options in uninstall command', () => {
+      const source = generateCliEntry(makeOptions());
+      // Both install and uninstall have these options
+      const installIdx = source.indexOf("'install'");
+      const uninstallIdx = source.indexOf("'uninstall'");
+      expect(installIdx).toBeGreaterThan(-1);
+      expect(uninstallIdx).toBeGreaterThan(-1);
+      const uninstallSection = source.slice(uninstallIdx);
+      expect(uninstallSection).toContain("'--prefix <path>'");
+      expect(uninstallSection).toContain("'--bin-dir <path>'");
+    });
+  });
+
+  describe('job arg mapping with object types', () => {
+    it('should use JSON.parse for object-typed job input properties', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          capabilities: { skills: false, jobs: true, workflows: false },
+          jobs: [
+            {
+              name: 'process-data',
+              description: 'Process data',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  config: { type: 'object', description: 'Configuration' },
+                },
+              },
+            },
+          ],
+        }),
+      }));
+
+      expect(source).toContain('JSON.parse');
+      expect(source).toContain('Invalid JSON for --config');
+    });
+
+    it('should handle nullable object type in job input', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          capabilities: { skills: false, jobs: true, workflows: false },
+          jobs: [
+            {
+              name: 'nullable-job',
+              description: 'Job with nullable object',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  data: { type: ['object', 'null'], description: 'Optional data' },
+                },
+              },
+            },
+          ],
+        }),
+      }));
+
+      expect(source).toContain('JSON.parse');
+    });
+
+    it('should generate typed run subcommands for jobs with inputSchema', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          capabilities: { skills: false, jobs: true, workflows: false },
+          jobs: [
+            {
+              name: 'send-email',
+              description: 'Send email',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  to: { type: 'string', description: 'Recipient' },
+                  subject: { type: 'string', description: 'Subject line' },
+                },
+                required: ['to'],
+              },
+            },
+          ],
+        }),
+      }));
+
+      expect(source).toContain('"send-email"');
+      expect(source).toContain("'--to <value>'");
+      expect(source).toContain("'--subject <value>'");
+      expect(source).toContain('executeJob("send-email"');
+    });
+  });
+
+  describe('skills list command', () => {
+    it('should generate skills list subcommand with listSkills', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
+      }));
+
+      expect(source).toContain("'list'");
+      expect(source).toContain('listSkills');
+    });
   });
 });
 
