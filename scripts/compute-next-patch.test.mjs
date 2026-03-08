@@ -152,4 +152,3 @@ test('rejects missing release-line argument', async () => {
   assert.equal(out.code, 1);
   assert.match(out.stderr, /Usage:/i);
 });
-

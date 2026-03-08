@@ -1,0 +1,591 @@
+---
+title: Feature Flags Plugin
+description: Dynamic capability gating with Split.io, LaunchDarkly, Unleash, and custom adapters.
+icon: flag
+---
+
+The Feature Flags Plugin gates tools, resources, prompts, and skills based on feature flag evaluation — enabling progressive rollouts, A/B testing, and dynamic capability management for FrontMCP servers.
+
+## Why Use Feature Flags?
+
+<CardGroup cols={2}>
+  <Card title="Declarative Gating" icon="toggle-on">
+    Annotate capabilities with `featureFlag` metadata — no conditional logic in your tool code
+  </Card>
+  <Card title="Multiple Providers" icon="plug">
+    Split.io, LaunchDarkly, Unleash, static flags, or your own custom adapter
+  </Card>
+
+  <Card title="Per-User Targeting" icon="user">
+    Evaluate flags per user or session via auth context for targeted rollouts
+  </Card>
+
+  <Card title="Execution Gate" icon="shield">
+    Blocks direct `tool/call` invocations that bypass the list filter — no sneaking past disabled flags
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-feature-flags
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Hook Registration">
+    The plugin registers hooks on list flows for tools, resources, prompts, and skills
+  </Step>
+  <Step title="Metadata Collection">
+    When capabilities are listed, the plugin collects `featureFlag` refs from each entry's metadata
+  </Step>
+
+  <Step title="Batch Evaluation">
+    Flags are batch-evaluated via the configured adapter in a single call
+  </Step>
+
+  <Step title="Capability Filtering">
+    Capabilities with disabled flags are filtered out before reaching the client. An execution gate also blocks direct `tool/call` for disabled flags.
+  </Step>
+</Steps>
+
+---
+
+## Quick Start
+
+### Basic Setup
+
+<CodeGroup>
+
+```ts Class-based App
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { FeatureFlagPlugin } from '@frontmcp/plugin-feature-flags';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [
+    FeatureFlagPlugin.init({
+      adapter: 'static',
+      flags: { 'beta-search': true, 'experimental-agent': false },
+    }),
+  ],
+  tools: [/* your tools */],
+})
+class MyApp {}
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+})
+export default class Server {}
+```
+
+```ts FrontMcp decorator
+import { FrontMcp } from '@frontmcp/sdk';
+import { FeatureFlagPlugin } from '@frontmcp/plugin-feature-flags';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  plugins: [
+    FeatureFlagPlugin.init({
+      adapter: 'static',
+      flags: { 'beta-search': true, 'experimental-agent': false },
+    }),
+  ],
+})
+export default class Server {}
+```
+
+</CodeGroup>
+
+### Annotating a Tool
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'beta-search',
+  description: 'Search with beta features enabled',
+  inputSchema: { query: z.string() },
+  featureFlag: 'beta-search', // Hidden when flag is off
+})
+export default class BetaSearchTool extends ToolContext {
+  async execute(input: { query: string }) {
+    return `Beta results for: ${input.query}`;
+  }
+}
+```
+
+### Programmatic Flag Checks
+
+The plugin extends all execution contexts with `this.featureFlags`:
+
+```ts
+@Tool({
+  name: 'smart-tool',
+  description: 'A tool that adapts based on flags',
+  inputSchema: { query: z.string() },
+})
+export default class SmartTool extends ToolContext {
+  async execute(input: { query: string }) {
+    const useBeta = await this.featureFlags.isEnabled('beta-algorithm');
+
+    if (useBeta) {
+      return this.betaSearch(input.query);
+    }
+    return this.standardSearch(input.query);
+  }
+}
+```
+
+---
+
+## Adapters
+
+### Static
+
+Best for: Development, testing, and demos with fixed flag values.
+
+```ts
+FeatureFlagPlugin.init({
+  adapter: 'static',
+  flags: {
+    'beta-search': true,
+    'experimental-agent': false,
+    'premium-feature': true,
+  },
+})
+```
+
+### Split.io
+
+```ts
+FeatureFlagPlugin.init({
+  adapter: 'splitio',
+  config: {
+    apiKey: process.env.SPLITIO_API_KEY!,
+  },
+})
+```
+
+<Info>
+Requires the `@splitsoftware/splitio` peer dependency:
+```bash
+npm install @splitsoftware/splitio
+```
+</Info>
+
+### LaunchDarkly
+
+```ts
+FeatureFlagPlugin.init({
+  adapter: 'launchdarkly',
+  config: {
+    sdkKey: process.env.LAUNCHDARKLY_SDK_KEY!,
+  },
+})
+```
+
+<Info>
+Requires the `@launchdarkly/node-server-sdk` peer dependency:
+```bash
+npm install @launchdarkly/node-server-sdk
+```
+</Info>
+
+### Unleash
+
+```ts
+FeatureFlagPlugin.init({
+  adapter: 'unleash',
+  config: {
+    url: process.env.UNLEASH_URL!,
+    appName: 'my-mcp-server',
+    apiKey: process.env.UNLEASH_API_KEY,
+  },
+})
+```
+
+<Info>
+Requires the `unleash-client` peer dependency:
+```bash
+npm install unleash-client
+```
+</Info>
+
+### Custom
+
+Provide your own adapter implementing the `FeatureFlagAdapter` interface:
+
+```ts
+import type { FeatureFlagAdapter } from '@frontmcp/plugin-feature-flags';
+
+const myAdapter: FeatureFlagAdapter = {
+  async initialize() { /* connect to your service */ },
+  async isEnabled(flagKey, context) {
+    return await myService.checkFlag(flagKey, context.userId);
+  },
+  async getVariant(flagKey, context) {
+    const variant = await myService.getVariant(flagKey, context.userId);
+    return { name: variant.name, value: variant.value, enabled: variant.enabled };
+  },
+  async evaluateFlags(flagKeys, context) {
+    const results = new Map<string, boolean>();
+    for (const key of flagKeys) {
+      results.set(key, await myService.checkFlag(key, context.userId));
+    }
+    return results;
+  },
+  async destroy() { /* cleanup */ },
+};
+
+FeatureFlagPlugin.init({
+  adapter: 'custom',
+  adapterInstance: myAdapter,
+})
+```
+
+The `FeatureFlagAdapter` interface:
+
+```ts
+interface FeatureFlagAdapter {
+  initialize(): Promise<void>;
+  isEnabled(flagKey: string, context: FeatureFlagContext): Promise<boolean>;
+  getVariant(flagKey: string, context: FeatureFlagContext): Promise<FeatureFlagVariant>;
+  evaluateFlags(flagKeys: string[], context: FeatureFlagContext): Promise<Map<string, boolean>>;
+  destroy(): Promise<void>;
+}
+```
+
+---
+
+## Annotating Capabilities
+
+Add `featureFlag` to any tool, resource, prompt, or skill metadata. Capabilities with disabled flags are hidden from `list` responses and blocked from direct invocation.
+
+### String Shorthand
+
+```ts
+@Tool({ name: 'beta-search', featureFlag: 'beta-search' })
+@Resource({ uri: 'data://beta', featureFlag: 'beta-data' })
+@Prompt({ name: 'beta-prompt', featureFlag: 'beta-prompt' })
+@Skill({ name: 'beta-skill', featureFlag: 'beta-skill' })
+```
+
+### Object Form
+
+Use the object form to specify a `defaultValue` — the fallback when the adapter throws or the flag is unknown:
+
+```ts
+@Tool({
+  name: 'critical-tool',
+  featureFlag: { key: 'critical-tool', defaultValue: true }, // fail-open
+})
+```
+
+### FeatureFlagRef Fields
+
+| Field          | Type      | Description                                             |
+| -------------- | --------- | ------------------------------------------------------- |
+| `key`          | `string`  | The flag key to evaluate                                |
+| `defaultValue` | `boolean` | Fallback value when evaluation fails (default: `false`) |
+
+When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false`.
+
+---
+
+## Plugin Options
+
+<ParamField path="adapter" type="'static' | 'splitio' | 'launchdarkly' | 'unleash' | 'custom'" required>
+  The feature flag provider to use
+</ParamField>
+
+<ParamField path="flags" type="Record<string, boolean | FeatureFlagVariant>">
+  Static flag values (only used with `adapter: 'static'`)
+</ParamField>
+
+<ParamField path="config" type="object">
+  Provider-specific configuration (varies by adapter):
+  - **Split.io**: `{ apiKey: string }`
+  - **LaunchDarkly**: `{ sdkKey: string }`
+  - **Unleash**: `{ url: string, appName: string, apiKey?: string }`
+</ParamField>
+
+<ParamField path="adapterInstance" type="FeatureFlagAdapter">
+  Custom adapter instance (only used with `adapter: 'custom'`)
+</ParamField>
+
+<ParamField path="defaultValue" type="boolean" default="false">
+  Global fallback when the adapter throws an error during evaluation
+</ParamField>
+
+<ParamField path="cacheStrategy" type="'session' | 'request' | 'none'" default="'none'">
+  How to cache flag evaluation results:
+  - `session` — cache per session, expires after `cacheTtlMs`
+  - `request` — cache per request lifecycle
+  - `none` — no caching, evaluate every time
+</ParamField>
+
+<ParamField path="cacheTtlMs" type="number" default="30000">
+  Cache TTL in milliseconds (used with `cacheStrategy: 'session'`)
+</ParamField>
+
+<ParamField path="userIdResolver" type="(ctx: FrontMcpContext) => string | undefined">
+  Custom function to extract the user ID from the request context. By default, the plugin reads `authInfo.extra.sub`, `authInfo.extra.userId`, or `authInfo.clientId`.
+</ParamField>
+
+<ParamField path="attributesResolver" type="(ctx: FrontMcpContext) => Record<string, unknown>">
+  Custom function to extract targeting attributes from the request context. Attributes are passed to the adapter for per-user targeting rules.
+</ParamField>
+
+---
+
+## API Reference
+
+### FeatureFlagAccessor Methods
+
+Access via `this.featureFlags` in any execution context (ToolContext, AgentContext, etc.).
+
+<ParamField path="isEnabled(flagKey, defaultValue?)" type="Promise<boolean>">
+  Check if a feature flag is enabled. Uses caching if configured.
+
+```ts
+const enabled = await this.featureFlags.isEnabled('beta-feature');
+const safe = await this.featureFlags.isEnabled('critical-feature', true); // fail-open
+```
+
+</ParamField>
+
+<ParamField path="getVariant(flagKey)" type="Promise<FeatureFlagVariant>">
+  Get the variant for a multi-variate flag
+
+```ts
+const variant = await this.featureFlags.getVariant('search-algorithm');
+console.log(variant.name);    // e.g., 'v2'
+console.log(variant.value);   // e.g., { boost: 1.5 }
+console.log(variant.enabled); // true
+```
+
+</ParamField>
+
+<ParamField path="evaluateFlags(flagKeys)" type="Promise<Map<string, boolean>>">
+  Batch evaluate multiple flags at once
+
+```ts
+const results = await this.featureFlags.evaluateFlags(['flag-a', 'flag-b', 'flag-c']);
+if (results.get('flag-a')) {
+  // flag-a is enabled
+}
+```
+
+</ParamField>
+
+<ParamField path="resolveRef(ref)" type="Promise<boolean>">
+  Resolve a `FeatureFlagRef` (string or object) to a boolean
+
+```ts
+const ref = { key: 'my-flag', defaultValue: true };
+const enabled = await this.featureFlags.resolveRef(ref);
+```
+
+</ParamField>
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use static adapter for development">
+    The static adapter requires no external dependencies and gives you instant, predictable flag values during development. Switch to a real adapter (Split.io, LaunchDarkly, Unleash) for staging and production.
+
+    ```ts
+    FeatureFlagPlugin.init({
+      adapter: 'static',
+      flags: { 'beta-tools': true, 'experimental-agent': true },
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="Set defaultValue to control failure behavior">
+    When the adapter throws (network error, service down), `defaultValue` controls whether the flag is treated as enabled or disabled. Set it globally or per-flag:
+
+    ```ts
+    // Global default: treat unknown flags as disabled
+    FeatureFlagPlugin.init({
+      adapter: 'launchdarkly',
+      config: { sdkKey: '...' },
+      defaultValue: false,
+    })
+
+    // Per-flag: critical features should fail-open
+    @Tool({
+      name: 'core-tool',
+      featureFlag: { key: 'core-tool', defaultValue: true },
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="Use caching with external adapters">
+    External adapters involve network calls. Use `cacheStrategy: 'session'` to avoid repeated evaluations:
+
+    ```ts
+    FeatureFlagPlugin.init({
+      adapter: 'splitio',
+      config: { apiKey: '...' },
+      cacheStrategy: 'session',
+      cacheTtlMs: 30000, // 30 seconds
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="Use object-form for critical features">
+    For features that should remain available even when the flag service is down, use the object form with `defaultValue: true`:
+
+    ```ts
+    @Tool({
+      name: 'payment-processor',
+      featureFlag: { key: 'payment-processor', defaultValue: true },
+    })
+    ```
+
+    This ensures the tool stays available if the adapter throws.
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Complete Example
+
+```ts
+import { FrontMcp, App, Tool, ToolContext, Resource, ResourceContext, Prompt, PromptContext } from '@frontmcp/sdk';
+import { FeatureFlagPlugin } from '@frontmcp/plugin-feature-flags';
+import { z } from 'zod';
+
+// Configure with static adapter
+const featureFlagPlugin = FeatureFlagPlugin.init({
+  adapter: 'static',
+  flags: {
+    'beta-search': true,
+    'experimental-agent': false,
+    'premium-reports': true,
+  },
+  defaultValue: false,
+});
+
+// Tool gated by a feature flag
+@Tool({
+  name: 'beta-search',
+  description: 'Search with beta algorithm',
+  inputSchema: { query: z.string() },
+  featureFlag: 'beta-search',
+})
+class BetaSearchTool extends ToolContext {
+  async execute(input: { query: string }) {
+    return `Beta results for: ${input.query}`;
+  }
+}
+
+// Tool with fail-open behavior
+@Tool({
+  name: 'always-on-tool',
+  description: 'A tool that defaults to enabled',
+  inputSchema: { input: z.string() },
+  featureFlag: { key: 'always-on', defaultValue: true },
+})
+class AlwaysOnTool extends ToolContext {
+  async execute(input: { input: string }) {
+    return `Processed: ${input.input}`;
+  }
+}
+
+// Tool with programmatic flag check
+@Tool({
+  name: 'adaptive-tool',
+  description: 'Adapts behavior based on flags',
+  inputSchema: { data: z.string() },
+})
+class AdaptiveTool extends ToolContext {
+  async execute(input: { data: string }) {
+    const usePremium = await this.featureFlags.isEnabled('premium-reports');
+
+    if (usePremium) {
+      return `Premium report for: ${input.data}`;
+    }
+    return `Standard report for: ${input.data}`;
+  }
+}
+
+// Resource gated by feature flag
+@Resource({
+  uri: 'report://premium-status',
+  name: 'Premium Status Report',
+  featureFlag: 'premium-reports',
+})
+class PremiumStatusResource extends ResourceContext {
+  async read() {
+    return { contents: [{ uri: 'report://premium-status', text: 'Premium data...' }] };
+  }
+}
+
+// Prompt gated by feature flag
+@Prompt({
+  name: 'experimental-analysis',
+  description: 'Experimental analysis prompt',
+  featureFlag: 'experimental-agent',
+})
+class ExperimentalPrompt extends PromptContext {
+  async execute() {
+    return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Analyze...' } }] };
+  }
+}
+
+@App({
+  id: 'flagged-app',
+  name: 'Flagged App',
+  plugins: [featureFlagPlugin],
+  tools: [BetaSearchTool, AlwaysOnTool, AdaptiveTool],
+  resources: [PremiumStatusResource],
+  prompts: [ExperimentalPrompt],
+})
+class FlaggedApp {}
+
+@FrontMcp({
+  info: { name: 'Feature Flag Server', version: '1.0.0' },
+  apps: [FlaggedApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+---
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Source Code"
+    icon="github"
+    href="https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-feature-flags"
+  >
+    View the feature flags plugin source code
+  </Card>
+
+  <Card title="Plugin Guide" icon="puzzle-piece" href="/frontmcp/extensibility/plugins">
+    Learn more about FrontMCP plugins
+  </Card>
+
+  <Card title="Remember Plugin" icon="brain" href="/frontmcp/plugins/remember-plugin">
+    For session memory storage
+  </Card>
+
+  <Card title="Approval Plugin" icon="shield-check" href="/frontmcp/plugins/approval-plugin">
+    For tool authorization workflows
+  </Card>
+</CardGroup>

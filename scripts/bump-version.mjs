@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import fs from "node:fs/promises";
-import path from "node:path";
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 /**
  * Bump version script for libraries
@@ -15,12 +15,12 @@ import path from "node:path";
 const [, , libName, bumpType] = process.argv;
 
 if (!libName || !bumpType) {
-  console.error("Usage: node scripts/bump-version.mjs <library-name> <bump-type>");
-  console.error("Bump types: major, minor, patch");
+  console.error('Usage: node scripts/bump-version.mjs <library-name> <bump-type>');
+  console.error('Bump types: major, minor, patch');
   process.exit(1);
 }
 
-if (!["major", "minor", "patch"].includes(bumpType)) {
+if (!['major', 'minor', 'patch'].includes(bumpType)) {
   console.error(`Invalid bump type: ${bumpType}. Must be: major, minor, or patch`);
   process.exit(1);
 }
@@ -29,11 +29,9 @@ if (!["major", "minor", "patch"].includes(bumpType)) {
  * Get all library directories in libs/
  */
 async function getAllLibs() {
-  const libsDir = path.join(process.cwd(), "libs");
+  const libsDir = path.join(process.cwd(), 'libs');
   const entries = await fs.readdir(libsDir, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 }
 
 /**
@@ -41,21 +39,23 @@ async function getAllLibs() {
  */
 async function updateDependenciesInPackage(pkgPath, packageName, newVersion) {
   try {
-    const content = await fs.readFile(pkgPath, "utf8");
+    const content = await fs.readFile(pkgPath, 'utf8');
     const pkg = JSON.parse(content);
     let updated = false;
 
-    for (const depType of ["dependencies", "devDependencies", "peerDependencies"]) {
+    for (const depType of ['dependencies', 'devDependencies', 'peerDependencies']) {
       if (pkg[depType] && pkg[depType][packageName]) {
         const oldDep = pkg[depType][packageName];
         pkg[depType][packageName] = newVersion;
         updated = true;
-        console.log(`  ✓ Updated ${depType}.${packageName}: ${oldDep} → ${newVersion} in ${path.basename(path.dirname(pkgPath))}`);
+        console.log(
+          `  ✓ Updated ${depType}.${packageName}: ${oldDep} → ${newVersion} in ${path.basename(path.dirname(pkgPath))}`,
+        );
       }
     }
 
     if (updated) {
-      await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+      await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
     }
 
     return updated;
@@ -65,11 +65,11 @@ async function updateDependenciesInPackage(pkgPath, packageName, newVersion) {
   }
 }
 
-const libPath = path.join(process.cwd(), "libs", libName, "package.json");
+const libPath = path.join(process.cwd(), 'libs', libName, 'package.json');
 
 try {
   // Read current package.json
-  const content = await fs.readFile(libPath, "utf8");
+  const content = await fs.readFile(libPath, 'utf8');
   const pkg = JSON.parse(content);
 
   const packageName = pkg.name;
@@ -80,7 +80,7 @@ try {
   }
 
   // Parse version
-  const [major, minor, patch] = oldVersion.split(".").map(Number);
+  const [major, minor, patch] = oldVersion.split('.').map(Number);
 
   if (isNaN(major) || isNaN(minor) || isNaN(patch)) {
     console.error(`Invalid semver format in ${libPath}: ${oldVersion}`);
@@ -90,13 +90,13 @@ try {
   // Bump version
   let newVersion;
   switch (bumpType) {
-    case "major":
+    case 'major':
       newVersion = `${major + 1}.0.0`;
       break;
-    case "minor":
+    case 'minor':
       newVersion = `${major}.${minor + 1}.0`;
       break;
-    case "patch":
+    case 'patch':
       newVersion = `${major}.${minor}.${patch + 1}`;
       break;
   }
@@ -104,7 +104,7 @@ try {
   pkg.version = newVersion;
 
   // Write updated package.json
-  await fs.writeFile(libPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+  await fs.writeFile(libPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 
   console.log(`✓ Bumped ${libName} from ${oldVersion} to ${newVersion}`);
 
@@ -117,13 +117,13 @@ try {
   for (const lib of allLibs) {
     if (lib === libName) continue; // Skip the library we just bumped
 
-    const otherPkgPath = path.join(process.cwd(), "libs", lib, "package.json");
+    const otherPkgPath = path.join(process.cwd(), 'libs', lib, 'package.json');
     const wasUpdated = await updateDependenciesInPackage(otherPkgPath, packageName, newVersion);
     if (wasUpdated) updatedCount++;
   }
 
   // Also check root package.json
-  const rootPkgPath = path.join(process.cwd(), "package.json");
+  const rootPkgPath = path.join(process.cwd(), 'package.json');
   const rootUpdated = await updateDependenciesInPackage(rootPkgPath, packageName, newVersion);
   if (rootUpdated) updatedCount++;
 
@@ -138,7 +138,6 @@ try {
     await fs.appendFile(process.env.GITHUB_OUTPUT, `new_version=${newVersion}\n`);
     await fs.appendFile(process.env.GITHUB_OUTPUT, `old_version=${oldVersion}\n`);
   }
-
 } catch (error) {
   console.error(`Error bumping version for ${libName}:`, error.message);
   process.exit(1);

@@ -5,9 +5,8 @@ import DescribeTool from '../tools/describe.tool';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Tool: (config: any) => (target: any) => target,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   Provider: (config: any) => (target: any) => target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
   ToolContext: class MockToolContext {
@@ -16,7 +15,7 @@ jest.mock('@frontmcp/sdk', () => ({
         getTools: jest.fn(() => []),
       },
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+
     constructor(_args?: any) {
       // Mock constructor accepts optional args
     }
@@ -48,7 +47,6 @@ function createMockTool(overrides: {
 
 // Helper to create a configured DescribeTool instance
 function createDescribeTool(tools: ReturnType<typeof createMockTool>[] = []) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tool = new (DescribeTool as any)();
   tool.scope.tools.getTools = jest.fn(() => tools);
   return tool;

@@ -111,13 +111,23 @@ try {
     {
       cwd: ROOT,
       stdio: 'inherit',
-    }
+    },
   );
 
   console.log('\nCoverage reports generated successfully:');
   console.log(`  HTML:  ${MERGED_DIR}/index.html`);
   console.log(`  LCOV:  ${MERGED_DIR}/lcov.info`);
   console.log(`  JSON:  ${MERGED_DIR}/coverage-final.json`);
+
+  // Display per-library coverage status
+  try {
+    execSync(`node "${join(__dirname, 'coverage-status.mjs')}" --merged`, {
+      cwd: ROOT,
+      stdio: 'inherit',
+    });
+  } catch {
+    // Non-fatal — the merge itself succeeded
+  }
 } catch (error) {
   console.error('\nError merging coverage:', error.message);
   process.exit(1);

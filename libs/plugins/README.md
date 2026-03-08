@@ -4,6 +4,17 @@ Official plugin collection for FrontMCP servers.
 
 [![NPM](https://img.shields.io/npm/v/@frontmcp/plugins.svg)](https://www.npmjs.com/package/@frontmcp/plugins)
 
+> **DEPRECATED**
+>
+> `@frontmcp/plugins` is an aggregator meta-package that will **no longer be published** from v1.0.0 onward.
+> Please install individual plugin packages directly instead.
+>
+> | Instead of                                           | Use                                                          |
+> | ---------------------------------------------------- | ------------------------------------------------------------ |
+> | `npm install @frontmcp/plugins`                      | `npm install @frontmcp/plugin-cache` (etc.)                  |
+> | `import { CachePlugin } from '@frontmcp/plugins'`    | `import { CachePlugin } from '@frontmcp/plugin-cache'`       |
+> | `import { RememberPlugin } from '@frontmcp/plugins'` | `import { RememberPlugin } from '@frontmcp/plugin-remember'` |
+
 ## Install
 
 ```bash

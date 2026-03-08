@@ -11,8 +11,8 @@ export default [
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-empty-function': 'warn',
-      '@typescript-eslint/no-empty-interface': 'warn',
+      '@typescript-eslint/no-empty-function': 'off',
+      '@typescript-eslint/no-empty-interface': 'off',
       '@typescript-eslint/no-empty-object-type': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -26,7 +26,14 @@ export default [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '@frontmcp/sdk', '@frontmcp/auth', '@frontmcp/utils', '@frontmcp/uipack', '@frontmcp/uipack/*'],
+          allow: [
+            '^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$',
+            '@frontmcp/sdk',
+            '@frontmcp/auth',
+            '@frontmcp/utils',
+            '@frontmcp/uipack',
+            '@frontmcp/uipack/*',
+          ],
           depConstraints: [
             {
               sourceTag: '*',
@@ -46,10 +53,19 @@ export default [
   },
   {
     // Relax rules for test files
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/__test-utils__/**/*.ts', '**/fixtures/**/*.ts', '**/mocks/**/*.ts', '**/*.mock.ts'],
+    files: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/__tests__/**/*.ts',
+      '**/__test-utils__/**/*.ts',
+      '**/fixtures/**/*.ts',
+      '**/mocks/**/*.ts',
+      '**/*.mock.ts',
+    ],
     rules: {
       '@typescript-eslint/no-empty-function': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       'no-unused-private-class-members': 'off',
     },

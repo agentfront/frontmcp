@@ -91,8 +91,8 @@ function loadReports() {
 
   // Load individual project reports
   const dirs = readdirSync(baseDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => dirent.name);
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) => dirent.name);
 
   for (const dir of dirs) {
     const reportPath = join(baseDir, dir, 'report.json');
@@ -250,7 +250,7 @@ function updateRelease(tag, baselineContent) {
     // Only look for header within reasonable proximity (200 chars before marker)
     const searchStart = Math.max(0, startIdx - 200);
     const sectionStart = newBody.indexOf('## Performance Baseline', searchStart);
-    const actualStart = (sectionStart !== -1 && sectionStart < startIdx) ? sectionStart : startIdx;
+    const actualStart = sectionStart !== -1 && sectionStart < startIdx ? sectionStart : startIdx;
     const actualEnd = endIdx + BASELINE_END_MARKER.length;
 
     // Also remove any trailing stats after the end marker
