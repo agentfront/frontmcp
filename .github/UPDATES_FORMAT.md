@@ -205,19 +205,16 @@ When only an independent library was released (rare):
 ### How Codex Generates Updates
 
 1. **Reads context:**
-
    - `independent-libs.json` - Which independent libs are published
    - `commits.txt` - All commits since last release
    - `diff.patch` - All code changes
 
 2. **Creates FrontMCP update:**
-
    - Groups all synchronized package changes
    - Uses version from `version.txt`
    - Creates one comprehensive update
 
 3. **Creates independent updates:**
-
    - For each library in `independent-libs.json`:
      - Filters commits to `libs/{lib}/` path
      - Filters diff to `libs/{lib}/` path

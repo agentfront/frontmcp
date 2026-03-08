@@ -288,9 +288,9 @@ Use the object form to specify a `defaultValue` — the fallback when the adapte
 
 ### FeatureFlagRef Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `key` | `string` | The flag key to evaluate |
+| Field          | Type      | Description                                             |
+| -------------- | --------- | ------------------------------------------------------- |
+| `key`          | `string`  | The flag key to evaluate                                |
 | `defaultValue` | `boolean` | Fallback value when evaluation fails (default: `false`) |
 
 When using the string shorthand (`featureFlag: 'key'`), `defaultValue` is `false`.
@@ -407,6 +407,7 @@ const enabled = await this.featureFlags.resolveRef(ref);
       flags: { 'beta-tools': true, 'experimental-agent': true },
     })
     ```
+
   </Accordion>
 
   <Accordion title="Set defaultValue to control failure behavior">
@@ -426,6 +427,7 @@ const enabled = await this.featureFlags.resolveRef(ref);
       featureFlag: { key: 'core-tool', defaultValue: true },
     })
     ```
+
   </Accordion>
 
   <Accordion title="Use caching with external adapters">
@@ -439,6 +441,7 @@ const enabled = await this.featureFlags.resolveRef(ref);
       cacheTtlMs: 30000, // 30 seconds
     })
     ```
+
   </Accordion>
 
   <Accordion title="Use object-form for critical features">
@@ -452,6 +455,7 @@ const enabled = await this.featureFlags.resolveRef(ref);
     ```
 
     This ensures the tool stays available if the adapter throws.
+
   </Accordion>
 </AccordionGroup>
 

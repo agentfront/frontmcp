@@ -820,6 +820,7 @@ OpenapiAdapter.init({
 ```
 
 When a spec change is detected (via SHA-256 content hash), the adapter:
+
 1. Resets its internal generator
 2. Calls `fetch()` to regenerate all tools
 3. Notifies subscribers via `onUpdate()`

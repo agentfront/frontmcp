@@ -33,13 +33,11 @@ The invokeTool function orchestrates the entire lifecycle:
 ## Files in this folder
 
 - tool.record.ts
-
   - ToolRecord interface: canonical in-process representation of a tool.
   - Includes id, name, description, zod input/output schemas, execute function, hooksByStage, optional tags, and optional examples.
   - The `examples` array provides usage examples for discovery and LLM understanding (description, input, optional output).
 
 - tool.context.ts
-
   - ToolInvokeContext class holding identity (tool/session/request), user, DI provider views, input/output payloads with
     history, scratchpad, error, and timing.
   - DI helpers:
@@ -51,7 +49,6 @@ The invokeTool function orchestrates the entire lifecycle:
     - retryAfter(ms, reason?) → signal backoff
 
 - tool.hook.ts
-
   - ToolHookStage enum: full list of lifecycle stages.
   - ToolHook interface: optional priority(), filter(ctx), stage methods, and aroundExecute wrapper.
   - Utility arrays:
@@ -64,19 +61,16 @@ The invokeTool function orchestrates the entire lifecycle:
     - collectHooksForStage(stage, tool, resolve, globalHooksByStage?)
 
 - tool.invoke.ts
-
   - invokeTool(options): the orchestrator that executes a tool end-to-end with hooks.
   - wrapWithAround: composes aroundExecute hooks into a nested wrapper chain.
   - willBindProvidersStage: lets hooks bind request/session-scoped providers.
   - Error handling for ControlRespond/ControlAbort/ControlRetryAfter, onError, and finalization.
 
 - tool.types.ts
-
   - Tool type: extends MCP Tool with id, providedBy, preHook, postHook.
   - ToolResolveFn: resolve a class/type token to an instance (DI bridge).
 
 - tool.registry.ts
-
   - Simple ToolRegistry to collect Tool[] (e.g., from adapters). Has addInline/addValidated/list.
 
 - tool.validation.ts

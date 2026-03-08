@@ -34,14 +34,14 @@ Commands for building, testing, and debugging your FrontMCP server.
 
 Manage long-running MCP servers with automatic supervision, restart policies, and logging.
 
-| Command            | Description                                                  |
-| ------------------ | ------------------------------------------------------------ |
-| `start <name>`     | Start a named MCP server with supervisor                     |
-| `stop <name>`      | Stop a managed server (graceful by default)                  |
-| `restart <name>`   | Restart a managed server                                     |
-| `status [name]`    | Show process status (detail if name given, table if omitted) |
-| `list`             | List all managed processes                                   |
-| `logs <name>`      | Tail log output for a managed server                         |
+| Command                   | Description                                                       |
+| ------------------------- | ----------------------------------------------------------------- |
+| `start <name>`            | Start a named MCP server with supervisor                          |
+| `stop <name>`             | Stop a managed server (graceful by default)                       |
+| `restart <name>`          | Restart a managed server                                          |
+| `status [name]`           | Show process status (detail if name given, table if omitted)      |
+| `list`                    | List all managed processes                                        |
+| `logs <name>`             | Tail log output for a managed server                              |
 | `service <action> [name]` | Install/uninstall systemd/launchd service (optional service name) |
 
 ---
@@ -153,11 +153,11 @@ This produces a standalone binary in `dist/` that can be distributed without Nod
 
 ### Global Options
 
-| Option             | Description                                     | Default  |
-| ------------------ | ----------------------------------------------- | -------- |
-| `--output <mode>`  | Output format: `text` or `json`                 | `text`   |
-| `-h, --help`       | Show grouped help (Tools, Resources, Auth, etc) | —        |
-| `-V, --version`    | Print version                                   | —        |
+| Option            | Description                                     | Default |
+| ----------------- | ----------------------------------------------- | ------- |
+| `--output <mode>` | Output format: `text` or `json`                 | `text`  |
+| `-h, --help`      | Show grouped help (Tools, Resources, Auth, etc) | —       |
+| `-V, --version`   | Print version                                   | —       |
 
 ### Command Groups
 

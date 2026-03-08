@@ -111,7 +111,7 @@ try {
     {
       cwd: ROOT,
       stdio: 'inherit',
-    }
+    },
   );
 
   console.log('\nCoverage reports generated successfully:');

@@ -158,14 +158,14 @@ export class Server {}
 
 ### Configuration Options
 
-| Option                      | Type       | Default      | Description                                |
-| --------------------------- | ---------- | ------------ | ------------------------------------------ |
-| `provider`                  | `string`   | Required     | Upstream IdP base URL                      |
-| `clientId`                  | `string`   | Required     | OAuth client ID                            |
-| `clientSecret`              | `string`   | -            | OAuth client secret (confidential clients) |
-| `scopes`                    | `string[]` | `['openid']` | Scopes to request from IdP                 |
-| `providerConfig.dcrEnabled` | `boolean`  | `false`      | Use Dynamic Client Registration            |
-| `consent`                   | `ConsentConfig` | `{ enabled: false }` | Show consent UI after IdP login       |
+| Option                      | Type            | Default              | Description                                |
+| --------------------------- | --------------- | -------------------- | ------------------------------------------ |
+| `provider`                  | `string`        | Required             | Upstream IdP base URL                      |
+| `clientId`                  | `string`        | Required             | OAuth client ID                            |
+| `clientSecret`              | `string`        | -                    | OAuth client secret (confidential clients) |
+| `scopes`                    | `string[]`      | `['openid']`         | Scopes to request from IdP                 |
+| `providerConfig.dcrEnabled` | `boolean`       | `false`              | Use Dynamic Client Registration            |
+| `consent`                   | `ConsentConfig` | `{ enabled: false }` | Show consent UI after IdP login            |
 
 ### When to Use Orchestrated Remote
 

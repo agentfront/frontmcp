@@ -270,7 +270,7 @@ console.log('');
 
 // Header
 console.log(
-  `${colors.bold}${pad('Library', COL.lib)}│${pad(' Stmts', COL.pct)}│${pad(' Branch', COL.pct)}│${pad(' Funcs', COL.pct)}│${pad(' Lines', COL.pct)}│${pad(' Files', COL.files)}│${pad(' Source', COL.source)}${colors.reset}`
+  `${colors.bold}${pad('Library', COL.lib)}│${pad(' Stmts', COL.pct)}│${pad(' Branch', COL.pct)}│${pad(' Funcs', COL.pct)}│${pad(' Lines', COL.pct)}│${pad(' Files', COL.files)}│${pad(' Source', COL.source)}${colors.reset}`,
 );
 console.log(sep);
 
@@ -282,7 +282,7 @@ for (const r of results) {
   const lC = colorize(r.lines);
 
   console.log(
-    `${pad(r.library, COL.lib)}│ ${sC}${fmtPct(r.stmts)}${colors.reset}   │ ${bC}${fmtPct(r.branches)}${colors.reset}   │ ${fC}${fmtPct(r.funcs)}${colors.reset}   │ ${lC}${fmtPct(r.lines)}${colors.reset}   │${padNum(String(r.files), COL.files - 1)} │ ${r.source}`
+    `${pad(r.library, COL.lib)}│ ${sC}${fmtPct(r.stmts)}${colors.reset}   │ ${bC}${fmtPct(r.branches)}${colors.reset}   │ ${fC}${fmtPct(r.funcs)}${colors.reset}   │ ${lC}${fmtPct(r.lines)}${colors.reset}   │${padNum(String(r.files), COL.files - 1)} │ ${r.source}`,
   );
 }
 
@@ -294,7 +294,7 @@ const tFC = colorize(totals.funcs);
 const tLC = colorize(totals.lines);
 
 console.log(
-  `${colors.bold}${pad('TOTAL', COL.lib)}${colors.reset}│ ${tSC}${fmtPct(totals.stmts)}${colors.reset}   │ ${tBC}${fmtPct(totals.branches)}${colors.reset}   │ ${tFC}${fmtPct(totals.funcs)}${colors.reset}   │ ${tLC}${fmtPct(totals.lines)}${colors.reset}   │${padNum(String(totals.files), COL.files - 1)} │`
+  `${colors.bold}${pad('TOTAL', COL.lib)}${colors.reset}│ ${tSC}${fmtPct(totals.stmts)}${colors.reset}   │ ${tBC}${fmtPct(totals.branches)}${colors.reset}   │ ${tFC}${fmtPct(totals.funcs)}${colors.reset}   │ ${tLC}${fmtPct(totals.lines)}${colors.reset}   │${padNum(String(totals.files), COL.files - 1)} │`,
 );
 
 console.log('');

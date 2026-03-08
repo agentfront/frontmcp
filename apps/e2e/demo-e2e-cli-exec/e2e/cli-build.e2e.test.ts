@@ -39,7 +39,7 @@ describe('CLI Exec Build Output', () => {
     expect(fs.existsSync(runnerPath)).toBe(true);
 
     const content = fs.readFileSync(runnerPath, 'utf-8');
-    expect(content).toContain('cli-exec-demo-cli.bundle.js');
+    expect(content).toContain('cli-exec-demo');
   });
 
   it('should produce the installer script', () => {

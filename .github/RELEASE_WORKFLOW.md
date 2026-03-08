@@ -312,13 +312,11 @@ node scripts/remove-blog-drafts.mjs
 ### For Maintainers
 
 1. **Develop on main branch**
-
    - Make changes to code
    - PRs merged to main trigger draft docs updates automatically
    - Draft docs accumulate changes for next release
 
 2. **Create release branch**
-
    - Go to Actions → "Create release branch"
    - Select version bump type (patch/minor/major)
    - Workflow creates `next/{version}` branch
@@ -330,14 +328,12 @@ node scripts/remove-blog-drafts.mjs
      - Opens PR to main
 
 3. **Review and update release branch**
-
    - Review the auto-generated PR
    - Make any additional changes to `next/{version}` branch
    - Changes to code trigger live docs updates via Codex
    - Live docs are updated in production immediately
 
 4. **Merge release PR**
-
    - When ready, merge the PR to main
    - Automatically:
      - Publishes all packages to npm

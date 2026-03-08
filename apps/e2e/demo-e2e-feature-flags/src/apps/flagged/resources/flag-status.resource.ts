@@ -14,7 +14,7 @@ const outputSchema = z.object({
   mimeType: 'application/json',
   featureFlag: 'flag-for-resource',
 })
-export default class FlagStatusResource extends ResourceContext<Record<string, string>, typeof outputSchema> {
+export default class FlagStatusResource extends ResourceContext<Record<string, string>, z.infer<typeof outputSchema>> {
   async execute(): Promise<z.infer<typeof outputSchema>> {
     return {
       type: 'text' as const,

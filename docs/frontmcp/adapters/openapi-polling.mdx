@@ -193,10 +193,10 @@ Tool rebuilds are serialized through a promise chain (`rebuildChain`). If the sp
 
 The poller tracks three health states:
 
-| State | Meaning |
-|-------|---------|
-| `unknown` | Initial state before the first poll completes |
-| `healthy` | Last poll succeeded |
+| State       | Meaning                                           |
+| ----------- | ------------------------------------------------- |
+| `unknown`   | Initial state before the first poll completes     |
+| `healthy`   | Last poll succeeded                               |
 | `unhealthy` | Consecutive failures reached `unhealthyThreshold` |
 
 When the poller transitions to `unhealthy`, the adapter logs an error. When it recovers (next successful poll), the adapter logs recovery. Tools remain available during unhealthy periods — only updates are paused.
@@ -297,6 +297,7 @@ export default class MultiApiApp {}
     - **Production:** 60-300 seconds to minimize load on spec servers
 
     Shorter intervals mean faster detection but more network traffic. Most spec changes are infrequent, so 60 seconds is a good default.
+
   </Accordion>
 
   <Accordion title="Use ETag-aware spec servers">
@@ -314,12 +315,14 @@ export default class MultiApiApp {}
       },
     }
     ```
+
   </Accordion>
 
   <Accordion title="Handle unhealthy state">
     Monitor the adapter logs for unhealthy state messages. When the poller becomes unhealthy, existing tools continue working — only new changes won't be detected until the poller recovers.
 
     Consider connecting the poller health to your monitoring system by subscribing to updates and tracking intervals.
+
   </Accordion>
 
   <Accordion title="Test polling in CI">
@@ -348,6 +351,7 @@ export default class MultiApiApp {}
       polling: { enabled: true },
     });
     ```
+
   </Accordion>
 
   <Accordion title="Updates not firing after spec change">
@@ -357,12 +361,14 @@ export default class MultiApiApp {}
     2. **Poll interval hasn't elapsed** — Wait for at least one full `intervalMs` cycle after the spec change.
     3. **Poller is unhealthy** — Check logs for consecutive failure messages. The spec server may be down.
     4. **No subscriber** — Call `adapter.onUpdate(cb)` before `startPolling()` to ensure you don't miss the initial update.
+
   </Accordion>
 
   <Accordion title="Too many rebuilds">
     **Cause:** The spec server returns slightly different content on each request (e.g., timestamps, random IDs in the response).
 
     **Solution:** Ensure your spec endpoint returns stable, deterministic content. If you can't control the server, increase `intervalMs` to reduce rebuild frequency.
+
   </Accordion>
 
   <Accordion title="Poller marked unhealthy">
@@ -373,6 +379,7 @@ export default class MultiApiApp {}
     2. Check if authentication headers are needed in `polling.headers`
     3. Increase `fetchTimeoutMs` if the server is slow
     4. Increase `retry.maxRetries` for transient failures
+
   </Accordion>
 </AccordionGroup>
 

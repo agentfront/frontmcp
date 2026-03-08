@@ -32,10 +32,10 @@ nx build-exec my-app
 
 ## Options
 
-| Option       | Type      | Description                                      |
-| ------------ | --------- | ------------------------------------------------ |
-| `entry`      | `string`  | Entry file path                                  |
-| `outputPath` | `string`  | Output directory path                            |
+| Option       | Type      | Description                                       |
+| ------------ | --------- | ------------------------------------------------- |
+| `entry`      | `string`  | Entry file path                                   |
+| `outputPath` | `string`  | Output directory path                             |
 | `cli`        | `boolean` | Generate CLI with subcommands per tool (optional) |
 
 ## CLI Mode
@@ -60,14 +60,14 @@ Pass `cli: true` (or use `frontmcp build --exec --cli`) to generate a standalone
 
 ### Output Files
 
-| Mode          | Output                         | Description                          |
-| ------------- | ------------------------------ | ------------------------------------ |
-| Server only   | `dist/{name}-server.cjs`       | Single-file MCP server bundle        |
-| Server only   | `dist/{name}-runner.sh`        | Shell runner with env/port setup     |
-| CLI mode      | `dist/{name}-server.cjs`       | Single-file MCP server bundle        |
-| CLI mode      | `dist/{name}-cli.cjs`          | Generated Commander CLI entry        |
-| CLI mode      | `dist/{name}-runner.sh`        | Shell runner for the CLI             |
-| CLI mode      | `dist/{name}-installer.sh`     | Install script (optional)            |
+| Mode        | Output                     | Description                      |
+| ----------- | -------------------------- | -------------------------------- |
+| Server only | `dist/{name}-server.cjs`   | Single-file MCP server bundle    |
+| Server only | `dist/{name}-runner.sh`    | Shell runner with env/port setup |
+| CLI mode    | `dist/{name}-server.cjs`   | Single-file MCP server bundle    |
+| CLI mode    | `dist/{name}-cli.cjs`      | Generated Commander CLI entry    |
+| CLI mode    | `dist/{name}-runner.sh`    | Shell runner for the CLI         |
+| CLI mode    | `dist/{name}-installer.sh` | Install script (optional)        |
 
 ### `frontmcp.config.js` — CLI Options
 
@@ -100,19 +100,19 @@ module.exports = {
 };
 ```
 
-| CLI Config Key     | Type       | Description                                    | Default   |
-| ------------------ | ---------- | ---------------------------------------------- | --------- |
-| `enabled`          | `boolean`  | Enable CLI generation                          | `false`   |
-| `outputDefault`    | `string`   | Default output format (`text` or `json`)       | `'text'`  |
-| `authRequired`     | `boolean`  | Auto-inject OAuth token into all calls         | `false`   |
-| `description`      | `string`   | CLI description shown in `--help`              | app name  |
-| `excludeTools`     | `string[]` | Tool names to exclude from the generated CLI   | `[]`      |
-| `nativeDeps`       | `object`   | System dependencies for `doctor` command       | `{}`      |
-| `oauth.serverUrl`  | `string`   | OAuth authorization server URL                 | —         |
-| `oauth.clientId`   | `string`   | OAuth client ID                                | —         |
-| `oauth.defaultScope` | `string` | Default OAuth scopes                           | —         |
-| `oauth.portRange`  | `[number, number]` | Port range for local PKCE callback     | `[17830, 17850]` |
-| `oauth.timeout`    | `number`   | Login flow timeout in ms                       | `120000`  |
+| CLI Config Key       | Type               | Description                                  | Default          |
+| -------------------- | ------------------ | -------------------------------------------- | ---------------- |
+| `enabled`            | `boolean`          | Enable CLI generation                        | `false`          |
+| `outputDefault`      | `string`           | Default output format (`text` or `json`)     | `'text'`         |
+| `authRequired`       | `boolean`          | Auto-inject OAuth token into all calls       | `false`          |
+| `description`        | `string`           | CLI description shown in `--help`            | app name         |
+| `excludeTools`       | `string[]`         | Tool names to exclude from the generated CLI | `[]`             |
+| `nativeDeps`         | `object`           | System dependencies for `doctor` command     | `{}`             |
+| `oauth.serverUrl`    | `string`           | OAuth authorization server URL               | —                |
+| `oauth.clientId`     | `string`           | OAuth client ID                              | —                |
+| `oauth.defaultScope` | `string`           | Default OAuth scopes                         | —                |
+| `oauth.portRange`    | `[number, number]` | Port range for local PKCE callback           | `[17830, 17850]` |
+| `oauth.timeout`      | `number`           | Login flow timeout in ms                     | `120000`         |
 
 ## Caching
 

@@ -59,7 +59,7 @@ export function resolveServingMode(options: ResolveServingModeOptions): ServingM
   }
 
   // Determine effective mode
-  let effectiveMode: string | null = configuredMode === 'auto' ? 'inline' : configuredMode;
+  const effectiveMode: string | null = configuredMode === 'auto' ? 'inline' : configuredMode;
 
   // Hybrid mode is only supported by widget-capable platforms
   if (effectiveMode === 'hybrid') {
