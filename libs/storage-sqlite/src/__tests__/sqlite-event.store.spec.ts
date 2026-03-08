@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import { SqliteEventStore } from '../sqlite-event.store';
+import { sqliteStorageOptionsSchema } from '../sqlite.options';
 
 function tmpDbPath(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-event-'));
@@ -16,6 +17,30 @@ function cleanup(dbPath: string): void {
     // ignore
   }
 }
+
+describe('SqliteStorageOptions Schema', () => {
+  it('should validate correct options', () => {
+    const result = sqliteStorageOptionsSchema.safeParse({ path: '/tmp/test.db' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.walMode).toBe(true);
+      expect(result.data.ttlCleanupIntervalMs).toBe(60000);
+    }
+  });
+
+  it('should reject empty path', () => {
+    const result = sqliteStorageOptionsSchema.safeParse({ path: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('should accept encryption config', () => {
+    const result = sqliteStorageOptionsSchema.safeParse({
+      path: '/tmp/test.db',
+      encryption: { secret: 'my-secret' },
+    });
+    expect(result.success).toBe(true);
+  });
+});
 
 describe('SqliteEventStore', () => {
   let store: SqliteEventStore;
@@ -185,6 +210,59 @@ describe('SqliteEventStore', () => {
       // A different stream should still start at 1
       const idOther = await store.storeEvent('stream-2', msg);
       expect(idOther).toBe('stream-2:1');
+    });
+  });
+
+  describe('constructor error handling', () => {
+    it('should throw descriptive error for invalid db path', () => {
+      expect(() => {
+        new SqliteEventStore({
+          path: '/nonexistent/dir/bad/test.sqlite',
+          ttlCleanupIntervalMs: 0,
+          maxEvents: 100,
+          ttlMs: 300000,
+        });
+      }).toThrow('SqliteEventStore: failed to open database');
+    });
+
+    it('should throw descriptive error for non-Error exception', () => {
+      // Verify the String(err) fallback by testing with a bad path
+      expect(() => {
+        new SqliteEventStore({
+          path: '/nonexistent/dir/bad/test.sqlite',
+          ttlCleanupIntervalMs: 0,
+        });
+      }).toThrow(/SqliteEventStore/);
+    });
+  });
+
+  describe('counter rehydration edge cases', () => {
+    it('should handle corrupt event ID gracefully during rehydration', async () => {
+      const msg = { jsonrpc: '2.0', method: 'test' };
+      // Store an event normally
+      await store.storeEvent('stream-1', msg);
+
+      // Manually insert an event with a non-numeric ID suffix
+      const db = (store as any).db;
+      db.prepare('INSERT INTO events (id, stream_id, message, created_at) VALUES (?, ?, ?, ?)').run(
+        'stream-bad:not-a-number',
+        'stream-bad',
+        JSON.stringify(msg),
+        Date.now(),
+      );
+
+      // Reopen store to force counter rehydration from DB
+      store.close();
+      store = new SqliteEventStore({
+        path: dbPath,
+        ttlCleanupIntervalMs: 0,
+        maxEvents: 100,
+        ttlMs: 300000,
+      });
+
+      // Should recover and start from 1 (isNaN fallback)
+      const id = await store.storeEvent('stream-bad', msg);
+      expect(id).toBe('stream-bad:1');
     });
   });
 

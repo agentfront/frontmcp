@@ -43,4 +43,9 @@ describe('flow generator', () => {
 
     expect(tree.exists('apps/my-app/src/flows/custom/http-request.flow.ts')).toBe(true);
   });
+
+  it('should export default', async () => {
+    const mod = await import('./flow');
+    expect(mod.default).toBe(flowGenerator);
+  });
 });

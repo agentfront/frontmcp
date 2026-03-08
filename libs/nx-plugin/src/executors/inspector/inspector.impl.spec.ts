@@ -106,4 +106,41 @@ describe('inspector executor', () => {
     mockChild.emit('close', 0);
     await done;
   });
+
+  it('should use npx.cmd on win32', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
+    const mockChild = createMockChild();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = inspectorExecutor({}, mockContext);
+    await gen.next();
+
+    expect(mockSpawn).toHaveBeenCalledWith('npx.cmd', expect.any(Array), expect.anything());
+
+    const done = gen.next();
+    mockChild.emit('close', 0);
+    await done;
+
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
+  });
+
+  it('should not kill child if already killed', async () => {
+    const mockChild = createMockChild();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = inspectorExecutor({}, mockContext);
+    await gen.next();
+
+    mockChild.killed = true;
+
+    const secondPromise = gen.next();
+    mockChild.emit('close', 0);
+    await secondPromise;
+
+    await gen.next();
+
+    expect(mockChild.kill).not.toHaveBeenCalled();
+  });
 });

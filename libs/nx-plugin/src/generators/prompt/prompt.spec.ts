@@ -39,4 +39,9 @@ describe('prompt generator', () => {
     const content = tree.read('apps/my-app/src/prompts/summarize.prompt.ts', 'utf-8');
     expect(content).toContain('class SummarizePrompt extends PromptContext');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./prompt');
+    expect(mod.default).toBe(promptGenerator);
+  });
 });

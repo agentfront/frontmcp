@@ -79,6 +79,21 @@
       "factory": "./src/generators/workflow/workflow",
       "schema": "./src/generators/workflow/schema.json",
       "description": "Generate a @Workflow class"
+    },
+    "ui-component": {
+      "factory": "./src/generators/ui-component/ui-component",
+      "schema": "./src/generators/ui-component/schema.json",
+      "description": "Add a UI component entry to ui/components"
+    },
+    "ui-page": {
+      "factory": "./src/generators/ui-page/ui-page",
+      "schema": "./src/generators/ui-page/schema.json",
+      "description": "Add a UI page entry to ui/pages"
+    },
+    "ui-shell": {
+      "factory": "./src/generators/ui-shell/ui-shell",
+      "schema": "./src/generators/ui-shell/schema.json",
+      "description": "Add a shell template entry to ui/shells"
     }
   }
 }

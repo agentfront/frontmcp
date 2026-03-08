@@ -61,7 +61,7 @@ export class SqliteEventStore implements EventStoreInterface {
 
   constructor(options: SqliteEventStoreOptions) {
     // Lazy require
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
     try {
       this.db = new BetterSqlite3(options.path);

@@ -1,8 +1,7 @@
 import type { Config } from '@jest/types';
 import { createRequire } from 'module';
 
-// eslint-disable-next-line
-// @ts-ignore
+// @ts-expect-error createRequire with import.meta.url
 const require = createRequire(import.meta.url);
 const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
 
@@ -36,7 +35,6 @@ const config: Config.InitialOptions = {
     '^@frontmcp/testing$': '<rootDir>/../../../libs/testing/src/index.ts',
     '^@frontmcp/sdk$': '<rootDir>/../../../libs/sdk/src/index.ts',
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
-    '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
     '^@frontmcp/auth$': '<rootDir>/../../../libs/auth/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../../../libs/utils/src/index.ts',
   },

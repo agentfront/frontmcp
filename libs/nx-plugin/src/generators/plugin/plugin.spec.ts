@@ -41,4 +41,9 @@ describe('plugin generator', () => {
     const content = tree.read('libs/my-lib/src/plugins/cache.plugin.ts', 'utf-8');
     expect(content).toContain('class CachePlugin extends DynamicPlugin');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./plugin');
+    expect(mod.default).toBe(pluginGenerator);
+  });
 });

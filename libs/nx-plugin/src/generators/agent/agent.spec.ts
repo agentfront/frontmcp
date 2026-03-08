@@ -48,4 +48,9 @@ describe('agent generator', () => {
     const content = tree.read('apps/my-app/src/agents/researcher.agent.ts', 'utf-8');
     expect(content).toContain('class ResearcherAgent extends AgentContext');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./agent');
+    expect(mod.default).toBe(agentGenerator);
+  });
 });

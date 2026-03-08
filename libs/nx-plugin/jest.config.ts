@@ -29,15 +29,16 @@ module.exports = {
       },
     ],
   },
+  silent: true,
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/nx-plugin',
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts', '!src/**/files/**'],
   coverageThreshold: {
     global: {
-      statements: 95,
-      branches: 90,
-      functions: 85,
-      lines: 95,
+      statements: 98,
+      branches: 92,
+      functions: 98,
+      lines: 99,
     },
   },
 };

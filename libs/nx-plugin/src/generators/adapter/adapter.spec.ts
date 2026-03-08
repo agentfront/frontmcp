@@ -33,4 +33,9 @@ describe('adapter generator', () => {
 
     expect(tree.exists('libs/my-lib/src/adapters/external/openapi.adapter.ts')).toBe(true);
   });
+
+  it('should export default', async () => {
+    const mod = await import('./adapter');
+    expect(mod.default).toBe(adapterGenerator);
+  });
 });

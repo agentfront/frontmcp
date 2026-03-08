@@ -91,6 +91,19 @@ describe('SqliteSessionStore', () => {
     expect(result).toBeNull();
   });
 
+  it('should use custom defaultTtlMs', async () => {
+    const customStore = new SqliteSessionStore({
+      path: dbPath,
+      defaultTtlMs: 5000,
+      keyPrefix: 'custom-ttl:',
+      ttlCleanupIntervalMs: 0,
+    });
+
+    await customStore.set('sess-1', { createdAt: Date.now() });
+    expect(await customStore.get('sess-1')).not.toBeNull();
+    customStore.close();
+  });
+
   it('should use custom key prefix', () => {
     const customStore = new SqliteSessionStore({
       path: dbPath,

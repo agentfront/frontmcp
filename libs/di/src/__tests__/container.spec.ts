@@ -4,7 +4,6 @@
 
 import 'reflect-metadata';
 import { DiContainer, type DiContainerOptions } from '../registry/container.js';
-import { ProviderKind } from '../records/provider.record.js';
 import { ProviderScope } from '../metadata/provider.metadata.js';
 import { DESIGN_PARAMTYPES, META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 import type { ProviderTokens } from '../utils/provider.utils.js';
@@ -1374,6 +1373,195 @@ describe('DiContainer', () => {
 
       const instance = container.get(TOKEN) as AsyncAsyncImpl;
       expect(instance.ready).toBe(true);
+    });
+  });
+
+  describe('resolve() with sync init on non-registered class', () => {
+    it('should resolve non-registered class with sync init()', async () => {
+      class NonRegistered {
+        initialized = false;
+        init() {
+          this.initialized = true;
+        }
+      }
+
+      const container = createContainer([]);
+      await container.ready;
+
+      const instance = container.resolve(NonRegistered);
+      expect(instance).toBeInstanceOf(NonRegistered);
+      expect(instance.initialized).toBe(true);
+    });
+
+    it('should throw when resolve() has async init()', async () => {
+      class AsyncNonRegistered {
+        async init() {
+          await new Promise((r) => setTimeout(r, 1));
+        }
+      }
+
+      const container = createContainer([]);
+      await container.ready;
+
+      expect(() => container.resolve(AsyncNonRegistered)).toThrow(/async init/);
+    });
+
+    it('should throw for non-class non-registered token', async () => {
+      const TOKEN = Symbol('unresolvable');
+      const container = createContainer([]);
+      await container.ready;
+
+      expect(() => container.resolve(TOKEN)).toThrow(/not a registered GLOBAL provider/);
+    });
+  });
+
+  describe('buildViews with pre-built context providers', () => {
+    it('should reuse pre-built CONTEXT providers', async () => {
+      class CtxService {
+        value = 'default';
+      }
+      Reflect.defineMetadata(TEST_TOKENS.type, true, CtxService);
+      Reflect.defineMetadata(TEST_TOKENS.scope, ProviderScope.CONTEXT, CtxService);
+
+      const container = createContainer([CtxService]);
+      await container.ready;
+
+      const prebuilt = new CtxService();
+      prebuilt.value = 'prebuilt';
+      const prePlannedMap = new Map<any, any>();
+      prePlannedMap.set(CtxService, prebuilt);
+
+      const views = await container.buildViews('session1', prePlannedMap);
+      const service = container.getScoped(CtxService, views);
+
+      expect(service.value).toBe('prebuilt');
+      expect(service).toBe(prebuilt);
+    });
+  });
+
+  describe('multi-level dependency chains', () => {
+    it('should initialize in correct topological order', async () => {
+      const initOrder: string[] = [];
+
+      class ServiceA {
+        constructor() {
+          initOrder.push('A');
+        }
+        value = 'A';
+      }
+      class ServiceB {
+        constructor(public dep: ServiceA) {
+          initOrder.push('B');
+        }
+      }
+      class ServiceC {
+        constructor(public dep: ServiceB) {
+          initOrder.push('C');
+        }
+      }
+
+      Reflect.defineMetadata(DESIGN_PARAMTYPES, [ServiceA], ServiceB);
+      Reflect.defineMetadata(DESIGN_PARAMTYPES, [ServiceB], ServiceC);
+
+      const container = createContainer([ServiceC, ServiceA, ServiceB]);
+      await container.ready;
+
+      // Should be in dependency order regardless of registration order
+      expect(initOrder).toEqual(['A', 'B', 'C']);
+
+      const c = container.get(ServiceC);
+      expect(c.dep.dep.value).toBe('A');
+    });
+  });
+
+  describe('GLOBAL FACTORY with dependencies', () => {
+    it('should resolve factory deps from hierarchy', async () => {
+      class Config {
+        host = 'localhost';
+      }
+      Reflect.defineMetadata(TEST_TOKENS.type, true, Config);
+      Reflect.defineMetadata(TEST_TOKENS.scope, ProviderScope.GLOBAL, Config);
+
+      const TOKEN = Symbol('pool');
+      const container = createContainer([
+        Config,
+        {
+          provide: TOKEN,
+          useFactory: (config: Config) => ({ url: `http://${config.host}` }),
+          inject: () => [Config],
+          metadata: { name: 'Pool', scope: ProviderScope.GLOBAL },
+        },
+      ]);
+      await container.ready;
+
+      const pool = container.get<{ url: string }>(TOKEN);
+      expect(pool.url).toBe('http://localhost');
+    });
+  });
+
+  describe('GLOBAL CLASS provider with init()', () => {
+    it('should call sync init() on GLOBAL CLASS_TOKEN provider', async () => {
+      class InitService {
+        ready = false;
+        init() {
+          this.ready = true;
+        }
+      }
+
+      const container = createContainer([InitService]);
+      await container.ready;
+
+      const inst = container.get(InitService);
+      expect(inst.ready).toBe(true);
+    });
+
+    it('should call async init() on GLOBAL CLASS_TOKEN provider', async () => {
+      class AsyncInitService {
+        ready = false;
+        async init() {
+          await new Promise((r) => setTimeout(r, 1));
+          this.ready = true;
+        }
+      }
+
+      const container = createContainer([AsyncInitService]);
+      await container.ready;
+
+      const inst = container.get(AsyncInitService);
+      expect(inst.ready).toBe(true);
+    });
+  });
+
+  describe('resolveFactoryArg scoped paths', () => {
+    it('should resolve CONTEXT dep via buildIntoStore for factory args', async () => {
+      class GlobalConfig {
+        host = 'localhost';
+      }
+      Reflect.defineMetadata(TEST_TOKENS.type, true, GlobalConfig);
+      Reflect.defineMetadata(TEST_TOKENS.scope, ProviderScope.GLOBAL, GlobalConfig);
+
+      class CtxDep {
+        value = 'ctx-value';
+      }
+      Reflect.defineMetadata(TEST_TOKENS.type, true, CtxDep);
+      Reflect.defineMetadata(TEST_TOKENS.scope, ProviderScope.CONTEXT, CtxDep);
+
+      const TOKEN = Symbol('ctx-factory');
+      const container = createContainer([
+        GlobalConfig,
+        CtxDep,
+        {
+          provide: TOKEN,
+          useFactory: (dep: CtxDep) => ({ fromDep: dep.value }),
+          inject: () => [CtxDep],
+          metadata: { name: 'CtxFactory', scope: ProviderScope.CONTEXT },
+        },
+      ]);
+      await container.ready;
+
+      const views = await container.buildViews('s1');
+      const result = container.getScoped<{ fromDep: string }>(TOKEN, views);
+      expect(result.fromDep).toBe('ctx-value');
     });
   });
 });
