@@ -165,7 +165,7 @@ export function forceJwtSecurity(spec: OpenAPIDocument, options: ForceSecurityOp
     const methods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
 
     for (const method of methods) {
-      const operation = (pathItem as any)[method] as OpenAPIV3.OperationObject | undefined;
+      const operation = (pathItem as Record<string, unknown>)[method] as OpenAPIV3.OperationObject | undefined;
       if (!operation) continue;
 
       // If operations filter is specified, only apply to matching operationIds
@@ -217,7 +217,7 @@ export function removeSecurityFromOperations(spec: OpenAPIDocument, operations?:
     const methods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
 
     for (const method of methods) {
-      const operation = (pathItem as any)[method] as OpenAPIV3.OperationObject | undefined;
+      const operation = (pathItem as Record<string, unknown>)[method] as OpenAPIV3.OperationObject | undefined;
       if (!operation) continue;
 
       // If operations filter is specified, only apply to matching operationIds

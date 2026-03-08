@@ -858,6 +858,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         // Serialize rebuilds to prevent races
         this.rebuildChain = this.rebuildChain
           .then(async () => {
+            const previousGenerator = this.generator;
             try {
               // Force re-init of generator
               this.generator = undefined;
@@ -865,6 +866,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
               this.updateCallback?.(response);
               this.logger.info('OpenAPI spec updated, tools rebuilt');
             } catch (error) {
+              this.generator = previousGenerator;
               this.logger.error(`Failed to rebuild tools after spec change: ${(error as Error).message}`);
             }
           })
