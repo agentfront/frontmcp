@@ -1,7 +1,15 @@
 // file: libs/sdk/src/prompt/prompt.utils.ts
 
 import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
-import { PromptMetadata, FrontMcpPromptTokens, PromptType, PromptRecord, PromptKind, PromptEntry } from '../common';
+import {
+  PromptMetadata,
+  FrontMcpPromptTokens,
+  PromptType,
+  PromptRecord,
+  PromptKind,
+  PromptEntry,
+  extendedPromptMetadata,
+} from '../common';
 import { GetPromptResult, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidEntityError } from '../errors';
 
@@ -9,6 +17,8 @@ import { InvalidEntityError } from '../errors';
  * Collect metadata from a class decorated with @FrontMcpPrompt
  */
 export function collectPromptMetadata(cls: PromptType): PromptMetadata {
+  const extended = getMetadata(extendedPromptMetadata, cls);
+  const seed = (extended ? { ...extended } : {}) as PromptMetadata;
   return Object.entries(FrontMcpPromptTokens).reduce((metadata, [key, token]) => {
     const value = getMetadata(token, cls);
     if (value !== undefined) {
@@ -17,7 +27,7 @@ export function collectPromptMetadata(cls: PromptType): PromptMetadata {
       });
     }
     return metadata;
-  }, {} as PromptMetadata);
+  }, seed);
 }
 
 /**

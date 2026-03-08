@@ -32,6 +32,7 @@
       "@frontmcp/plugin-cache": ["plugins/plugin-cache/src/index.ts"],
       "@frontmcp/plugin-codecall": ["plugins/plugin-codecall/src/index.ts"],
       "@frontmcp/plugin-dashboard": ["plugins/plugin-dashboard/src/index.ts"],
+      "@frontmcp/plugin-feature-flags": ["plugins/plugin-feature-flags/src/index.ts"],
       "@frontmcp/plugin-remember": ["plugins/plugin-remember/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],
