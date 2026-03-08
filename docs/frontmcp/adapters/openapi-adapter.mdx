@@ -123,6 +123,10 @@ export default class MyApiApp {}
   Transform output schemas and response data. Supports built-in modes (move schema to description) and custom transforms at both pre-tool (schema) and post-tool (response) levels. See [Output Transforms](#output-transforms).
 </ParamField>
 
+<ParamField path="polling" type="SpecPollerOptions & { enabled: boolean }">
+  Enable live polling to auto-detect spec changes and rebuild tools at runtime. Requires `url` option (not `spec`). See [Polling & Live Updates](/frontmcp/adapters/openapi-polling) for full configuration reference.
+</ParamField>
+
 <ParamField path="descriptionMode" type="'summaryOnly' | 'descriptionOnly' | 'combined' | 'full'">
   How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
 </ParamField>
@@ -798,6 +802,40 @@ OpenapiAdapter.init({
   },
 });
 ```
+
+## Polling & Live Updates
+
+The adapter can automatically detect changes to your OpenAPI spec and rebuild tools at runtime — no server restart required.
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  polling: {
+    enabled: true,
+    intervalMs: 60000, // Poll every minute
+  },
+});
+```
+
+When a spec change is detected (via SHA-256 content hash), the adapter:
+1. Resets its internal generator
+2. Calls `fetch()` to regenerate all tools
+3. Notifies subscribers via `onUpdate()`
+
+Subscribe to updates for logging, metrics, or downstream notifications:
+
+```ts
+adapter.onUpdate((response) => {
+  console.log(`Tools rebuilt: ${response.tools?.length} tools`);
+});
+adapter.startPolling();
+```
+
+<Info>
+  For complete configuration options (retry, health monitoring, change detection strategies, and best practices), see the [Polling & Live Updates](/frontmcp/adapters/openapi-polling) guide.
+</Info>
 
 ## How It Works
 

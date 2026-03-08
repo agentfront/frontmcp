@@ -191,7 +191,11 @@
               },
               {
                 "group": "Adapters",
-                "pages": ["frontmcp/adapters/overview", "frontmcp/adapters/openapi-adapter"]
+                "pages": [
+                  "frontmcp/adapters/overview",
+                  "frontmcp/adapters/openapi-adapter",
+                  "frontmcp/adapters/openapi-polling"
+                ]
               }
             ]
           },

@@ -4,7 +4,6 @@
 
 import 'reflect-metadata';
 import { DiContainer, type DiContainerOptions } from '../registry/container.js';
-import { ProviderKind } from '../records/provider.record.js';
 import { ProviderScope } from '../metadata/provider.metadata.js';
 import { DESIGN_PARAMTYPES, META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 import type { ProviderTokens } from '../utils/provider.utils.js';

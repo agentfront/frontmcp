@@ -31,7 +31,6 @@ import type {
   ProviderTokens,
   ProviderUserInfo,
   ProviderPkce,
-  CompletedProvider,
 } from '../federated-auth.session';
 import { AuthFlowError } from '../../errors/auth-internal.errors';
 

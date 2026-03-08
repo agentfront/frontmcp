@@ -515,6 +515,53 @@ export default class ToolRegistry
   }
 
   /**
+   * Replace all tools owned by the given owner.
+   * Clears local rows, rebuilds from new list, reindexes, and emits 'reset'.
+   * Used by adapter polling to hot-swap tools when specs change.
+   */
+  replaceAll(list: ToolType[], owner: EntryOwnerRef): void {
+    // Clear local rows and instances
+    this.localRows = [];
+    this.instances.clear();
+
+    // Clear internal maps from base class
+    this.tokens.clear();
+    this.defs.clear();
+    this.graph.clear();
+
+    // Rebuild from new list
+    const { tokens, defs, graph } = this.buildMap(list);
+    for (const [key, val] of defs) {
+      this.defs.set(key, val);
+      this.graph.set(key, graph.get(key) ?? new Set());
+    }
+    for (const t of tokens) {
+      this.tokens.add(t);
+    }
+
+    // Rebuild graph dependencies
+    this.buildGraph();
+
+    // Recreate instances and local rows
+    for (const token of this.tokens) {
+      const rec = this.defs.get(token)!;
+      const ti = new ToolInstance(rec, this.providers, owner);
+      this.instances.set(token as Token<ToolInstance>, ti);
+
+      const lineage: EntryLineage = owner ? [owner] : [];
+      const row = this.makeRow(token, ti, lineage, this);
+      this.localRows.push(row);
+    }
+
+    // Update owner reference
+    this.owner = owner;
+
+    // Rebuild indexes and notify
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
    * Type guard to check if a ToolEntry has the required properties for registration.
    * Validates that the tool has record with provide, kind, metadata, and a valid name.
    */

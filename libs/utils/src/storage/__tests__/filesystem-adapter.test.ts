@@ -4,7 +4,7 @@
 
 import { FileSystemStorageAdapter } from '../adapters/filesystem';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
-import { rm, mkdtemp, fileExists, readJSON } from '../../fs';
+import { rm, mkdtemp, fileExists } from '../../fs';
 import * as path from 'path';
 import * as os from 'os';
 

@@ -15,6 +15,7 @@ import {
 import { OpenAPIToolGenerator, McpOpenAPITool } from 'mcp-from-openapi';
 import { createOpenApiTool } from './openapi.tool';
 import { validateSecurityConfiguration } from './openapi.security';
+import { OpenApiSpecPoller } from './openapi-spec-poller';
 
 /** Reserved keys that cannot be used as inputKey (prototype pollution protection) */
 const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];
@@ -42,12 +43,23 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   private generator?: OpenAPIToolGenerator;
   private logger: FrontMcpLogger;
   public options: OpenApiAdapterOptions;
+  private poller: OpenApiSpecPoller | null = null;
+  private specHash: string | null = null;
+  private updateCallback: ((response: FrontMcpAdapterResponse) => void) | null = null;
+  private rebuildChain: Promise<void> = Promise.resolve();
 
   constructor(options: OpenApiAdapterOptions) {
     super();
     this.options = options;
     // Use provided logger or create console fallback
     this.logger = options.logger ?? createConsoleLogger(`openapi:${options.name}`);
+
+    // Validate: polling requires URL-based options
+    if (options.polling?.enabled && !('url' in options)) {
+      throw new Error(
+        `[OpenAPI Adapter: ${options.name}] Polling requires URL-based options (use 'url' instead of 'spec').`,
+      );
+    }
   }
 
   /**
@@ -813,5 +825,76 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       return schema.type.join(' | ');
     }
     return (schema.type as string) || 'any';
+  }
+
+  // ============================================================================
+  // Polling Lifecycle
+  // ============================================================================
+
+  /**
+   * Register a callback for when the adapter's tools are updated via polling.
+   * Returns an unsubscribe function.
+   */
+  onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
+    this.updateCallback = callback;
+    return () => {
+      this.updateCallback = null;
+    };
+  }
+
+  /**
+   * Start polling for spec changes.
+   * Creates the poller and on spec change, re-runs fetch() and calls the update callback.
+   * Rebuilds are serialized via a Promise chain to prevent races.
+   */
+  startPolling(): void {
+    if (this.poller) return;
+
+    const polling = this.options.polling;
+    if (!polling?.enabled || !('url' in this.options)) return;
+
+    this.poller = new OpenApiSpecPoller(this.options.url, polling, {
+      onChanged: (_spec: string, _hash: string) => {
+        // Serialize rebuilds to prevent races
+        this.rebuildChain = this.rebuildChain
+          .then(async () => {
+            try {
+              // Force re-init of generator
+              this.generator = undefined;
+              const response = await this.fetch();
+              this.updateCallback?.(response);
+              this.logger.info('OpenAPI spec updated, tools rebuilt');
+            } catch (error) {
+              this.logger.error(`Failed to rebuild tools after spec change: ${(error as Error).message}`);
+            }
+          })
+          .catch((error) => {
+            this.logger.error(`Rebuild chain error: ${(error as Error).message}`);
+          });
+      },
+      onError: (error: Error) => {
+        this.logger.warn(`OpenAPI spec poll error: ${error.message}`);
+      },
+      onUnhealthy: (failures: number) => {
+        this.logger.error(`OpenAPI spec poller unhealthy after ${failures} consecutive failures`);
+      },
+      onRecovered: () => {
+        this.logger.info('OpenAPI spec poller recovered');
+      },
+    });
+
+    this.poller.start();
+    this.logger.info(`Started polling OpenAPI spec at ${this.options.polling?.intervalMs ?? 60000}ms intervals`);
+  }
+
+  /**
+   * Stop polling for spec changes.
+   */
+  stopPolling(): void {
+    if (this.poller) {
+      this.poller.dispose();
+      this.poller = null;
+      this.logger.info('Stopped polling OpenAPI spec');
+    }
   }
 }

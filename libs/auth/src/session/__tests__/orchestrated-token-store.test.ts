@@ -6,7 +6,7 @@
  */
 
 import { InMemoryOrchestratedTokenStore } from '../orchestrated-token.store';
-import { randomBytes, hkdfSha256 } from '@frontmcp/utils';
+import { randomBytes } from '@frontmcp/utils';
 
 // ---------------------------------------------------------------------------
 // Helpers
