@@ -122,4 +122,9 @@ describe('workspace generator', () => {
     const agentsMd = tree.read('my-project/AGENTS.md', 'utf-8');
     expect(agentsMd).toContain('yarn');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./workspace');
+    expect(mod.default).toBe(workspaceGenerator);
+  });
 });

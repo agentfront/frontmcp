@@ -47,4 +47,9 @@ describe('tool generator', () => {
     const content = tree.read('apps/my-app/src/tools/my-calculator.tool.ts', 'utf-8');
     expect(content).toContain('class MyCalculatorTool');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./tool');
+    expect(mod.default).toBe(toolGenerator);
+  });
 });

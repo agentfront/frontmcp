@@ -118,4 +118,9 @@ describe('ui-page generator', () => {
 
     expect(tree.exists('ui/pages/src/AdminDashboard/AdminDashboard.tsx')).toBe(true);
   });
+
+  it('should export default', async () => {
+    const mod = await import('./ui-page');
+    expect(mod.default).toBe(uiPageGenerator);
+  });
 });

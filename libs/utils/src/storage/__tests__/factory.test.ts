@@ -310,6 +310,55 @@ describe('Storage Factory', () => {
     });
   });
 
+  describe('adapter creation fallback', () => {
+    let consoleWarnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should fallback to memory when redis adapter creation fails', async () => {
+      // redis adapter requires ioredis which may not load correctly with bad config
+      const storage = await createStorage({
+        type: 'redis',
+        redis: { url: 'redis://nonexistent-host:9999' },
+        fallback: 'memory',
+      });
+
+      // Should have fallen back to memory
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to memory'));
+      expect(await storage.ping()).toBe(true);
+
+      await storage.disconnect();
+    });
+
+    it('should throw when redis creation fails with error fallback', async () => {
+      await expect(
+        createStorage({
+          type: 'redis',
+          redis: { url: 'redis://nonexistent-host:9999' },
+          fallback: 'error',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('should fallback to memory when unknown type with memory fallback', async () => {
+      const storage = await createStorage({
+        type: 'unknown-type' as never,
+        fallback: 'memory',
+      });
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to memory'));
+      expect(await storage.ping()).toBe(true);
+
+      await storage.disconnect();
+    });
+  });
+
   describe('integration', () => {
     it('should support full workflow', async () => {
       const storage = await createStorage({ type: 'memory' });

@@ -123,4 +123,9 @@ describe('ui-component generator', () => {
 
     expect(tree.exists('ui/components/src/LoginForm/LoginForm.tsx')).toBe(true);
   });
+
+  it('should export default', async () => {
+    const mod = await import('./ui-component');
+    expect(mod.default).toBe(uiComponentGenerator);
+  });
 });

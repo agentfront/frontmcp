@@ -70,4 +70,22 @@ describe('deploy executor', () => {
       }),
     );
   });
+
+  it('should fallback to empty strings when context properties are missing', async () => {
+    const sparseContext = {
+      root: '/workspace',
+      projectName: undefined,
+      projectsConfigurations: undefined,
+      cwd: '/workspace',
+      isVerbose: false,
+      projectGraph: { nodes: {}, dependencies: {} },
+      nxJsonConfiguration: {},
+    } as any;
+
+    await deployExecutor({ target: 'node' }, sparseContext);
+    expect(execSync).toHaveBeenCalledWith(
+      'docker compose up --build -d',
+      expect.objectContaining({ cwd: '/workspace/' }),
+    );
+  });
 });

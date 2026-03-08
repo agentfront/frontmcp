@@ -116,4 +116,9 @@ describe('ui-shell generator', () => {
 
     expect(tree.exists('ui/shells/src/admin-dashboard/admin-dashboard.shell.ts')).toBe(true);
   });
+
+  it('should export default', async () => {
+    const mod = await import('./ui-shell');
+    expect(mod.default).toBe(uiShellGenerator);
+  });
 });

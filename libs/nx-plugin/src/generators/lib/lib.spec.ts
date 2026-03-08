@@ -118,4 +118,9 @@ describe('lib generator', () => {
       expect(tree.exists('tsconfig.base.json')).toBe(false);
     });
   });
+
+  it('should export default', async () => {
+    const mod = await import('./lib');
+    expect(mod.default).toBe(libGenerator);
+  });
 });

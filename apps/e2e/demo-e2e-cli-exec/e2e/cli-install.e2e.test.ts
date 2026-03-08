@@ -55,7 +55,7 @@ describe('CLI Exec Install/Uninstall Commands', () => {
     const jsEntry = path.join(appDir, `${appName}-cli.bundle.js`);
     const entryFile = fs.existsSync(seaEntry) ? seaEntry : jsEntry;
     const stats = fs.statSync(entryFile);
-    // eslint-disable-next-line no-bitwise
+
     expect(stats.mode & 0o111).not.toBe(0);
   });
 
