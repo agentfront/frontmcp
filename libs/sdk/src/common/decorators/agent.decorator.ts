@@ -113,7 +113,7 @@ export { FrontMcpAgent, FrontMcpAgent as Agent, frontMcpAgent, frontMcpAgent as 
 
 // ---------- zod helpers ----------
 type __Shape = z.ZodRawShape;
-type __AsZodObj<T> = T extends z.ZodObject<any> ? T : T extends z.ZodRawShape ? z.ZodObject<T> : never;
+type __AsZodObj<T> = T extends z.ZodRawShape ? z.ZodObject<T> : never;
 
 /**
  * Infers the input type from an agent's inputSchema.
@@ -133,14 +133,14 @@ type __InferZod<S> = S extends z.ZodType ? z.infer<S> : S extends z.ZodRawShape 
 type __InferFromSingleSchema<S> = S extends 'string'
   ? string
   : S extends 'number'
-  ? number
-  : S extends 'boolean'
-  ? boolean
-  : S extends 'date'
-  ? Date
-  : S extends z.ZodType | z.ZodRawShape
-  ? __InferZod<S>
-  : any;
+    ? number
+    : S extends 'boolean'
+      ? boolean
+      : S extends 'date'
+        ? Date
+        : S extends z.ZodType | z.ZodRawShape
+          ? __InferZod<S>
+          : any;
 
 /**
  * Infers a tuple/array of output types from an array of schemas.
@@ -166,13 +166,13 @@ type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);
 type __A<C extends __Ctor> = C extends new (...a: infer A) => any
   ? A
   : C extends abstract new (...a: infer A) => any
-  ? A
-  : never;
+    ? A
+    : never;
 type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
   ? R
   : C extends abstract new (...a: any[]) => infer R
-  ? R
-  : never;
+    ? R
+    : never;
 type __Param<C extends __Ctor> = __R<C> extends { execute: (arg: infer P, ...r: any) => any } ? P : never;
 type __Return<C extends __Ctor> = __R<C> extends { execute: (...a: any) => infer R } ? R : never;
 type __Unwrap<T> = T extends Promise<infer U> ? U : T;
@@ -181,50 +181,53 @@ type __IsAny<T> = 0 extends 1 & T ? true : false;
 // ---------- friendly branded errors ----------
 
 // Check if param is the base class default (indicates no override, using default execute())
-type __IsBaseClassDefault<P> = P extends Record<string, unknown>
-  ? Record<string, unknown> extends P
-    ? true // P is exactly Record<string, unknown> - no override
-    : false
-  : false;
+type __IsBaseClassDefault<P> =
+  P extends Record<string, unknown>
+    ? Record<string, unknown> extends P
+      ? true // P is exactly Record<string, unknown> - no override
+      : false
+    : false;
 
 // execute param must exactly match In (and not be any), or be the base class default
-type __MustParam<C extends __Ctor, In> = __IsAny<In> extends true
-  ? unknown
-  : __IsAny<__Param<C>> extends true
-  ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
-  : __IsBaseClassDefault<__Param<C>> extends true
-  ? unknown // Allow base class default - user is using default execute()
-  : __Param<C> extends In
-  ? In extends __Param<C>
+type __MustParam<C extends __Ctor, In> =
+  __IsAny<In> extends true
     ? unknown
-    : {
-        'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
-        expected_input_type: In;
-        actual_parameter_type: __Param<C>;
-      }
-  : {
-      'execute() parameter error': 'Parameter type does not match the input schema.';
-      expected_input_type: In;
-      actual_parameter_type: __Param<C>;
-    };
+    : __IsAny<__Param<C>> extends true
+      ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
+      : __IsBaseClassDefault<__Param<C>> extends true
+        ? unknown // Allow base class default - user is using default execute()
+        : __Param<C> extends In
+          ? In extends __Param<C>
+            ? unknown
+            : {
+                'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
+                expected_input_type: In;
+                actual_parameter_type: __Param<C>;
+              }
+          : {
+              'execute() parameter error': 'Parameter type does not match the input schema.';
+              expected_input_type: In;
+              actual_parameter_type: __Param<C>;
+            };
 
 // execute return must be Out or Promise<Out>
-type __MustReturn<C extends __Ctor, Out> = __IsAny<Out> extends true
-  ? unknown
-  : __Unwrap<__Return<C>> extends Out
-  ? unknown
-  : {
-      'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
-      expected_output_type: Out;
-      'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
-    };
+type __MustReturn<C extends __Ctor, Out> =
+  __IsAny<Out> extends true
+    ? unknown
+    : __Unwrap<__Return<C>> extends Out
+      ? unknown
+      : {
+          'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
+          expected_output_type: Out;
+          'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
+        };
 
 // Rewrapped constructor with updated AgentContext generic params
 type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
   ? C & (abstract new (...a: __A<C>) => AgentContextBase & __R<C>)
   : C extends new (...a: __A<C>) => __R<C>
-  ? C & (new (...a: __A<C>) => AgentContextBase & __R<C>)
-  : never;
+    ? C & (new (...a: __A<C>) => AgentContextBase & __R<C>)
+    : never;
 
 // Output schema constraint types
 type __PrimitiveOutputType =
@@ -250,7 +253,7 @@ type __OutputSchema = __AgentSingleOutputType | __AgentSingleOutputType[];
 /**
  * Agent metadata options with type constraints.
  */
-export type AgentMetadataOptions<I extends __Shape, O extends __OutputSchema> = AgentMetadata<I | z.ZodObject<I>, O>;
+export type AgentMetadataOptions<I extends __Shape, O extends __OutputSchema> = AgentMetadata<I, O>;
 
 declare module '@frontmcp/sdk' {
   // ---------- the decorator (overloads) ----------

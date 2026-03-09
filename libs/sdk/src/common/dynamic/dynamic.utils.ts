@@ -1,4 +1,4 @@
-import { ProviderType } from "../interfaces";
+import { ProviderType } from '../interfaces';
 
 export function collectDynamicProviders<T>(klass: any, options: T): ProviderType[] {
   // walk the prototype chain so parent plugins can contribute

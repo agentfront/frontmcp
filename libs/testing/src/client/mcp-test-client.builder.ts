@@ -152,7 +152,7 @@ export class McpTestClientBuilder {
    *   .withCapabilities({
    *     sampling: {},
    *     experimental: {
-   *       'io.modelcontextprotocol/ui': { mimeTypes: ['text/html+mcp'] }
+   *       'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] }
    *     }
    *   })
    *   .buildAndConnect();

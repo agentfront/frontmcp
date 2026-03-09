@@ -277,12 +277,4 @@ describe('FrontMcpContextStorage', () => {
       expect(result).toBe('async-result');
     });
   });
-
-  describe('ContextStorage alias', () => {
-    it('should export ContextStorage as alias', async () => {
-      const { ContextStorage } = await import('../frontmcp-context-storage');
-
-      expect(ContextStorage).toBe(FrontMcpContextStorage);
-    });
-  });
 });

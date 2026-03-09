@@ -946,14 +946,9 @@ export default class ProviderRegistry
       await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);
     }
 
-    // Return views with backwards-compatible aliases
-    // All three (context, session, request) point to the same map
     return {
       global,
       context: contextStore,
-      // Backwards compatibility aliases
-      session: contextStore,
-      request: contextStore,
     };
   }
 

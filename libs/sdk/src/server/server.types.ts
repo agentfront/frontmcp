@@ -1,14 +1,9 @@
-import {AuthInfo} from '@modelcontextprotocol/sdk/server/auth/types.js';
-import {
-  Authorization,
-  ServerRequest,
-  SessionIdPayload,
-  UserClaim,
-} from '../common';
-import {LocalTransportAdapter} from '../transport/adapters/transport.local.adapter';
-import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {SSEServerTransport} from '../transport/legacy/legacy.sse.tranporter';
-import {Scope} from '../scope';
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
+import { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { SSEServerTransport } from '../transport/adapters/base-sse-transport';
+import { Scope } from '../scope';
 
 export interface ScopedServerRequest extends ServerRequest {
   authScope: Scope;

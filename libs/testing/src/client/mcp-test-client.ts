@@ -978,16 +978,9 @@ export class McpTestClient {
     const isError = !response.success || raw.isError === true;
 
     // Check for Tool UI response - has UI metadata in _meta
-    // Platform-specific HTML keys:
-    // - OpenAI: openai/html
-    // - ext-apps: ui/html
-    // - Others: frontmcp/html (+ ui/html for compatibility)
+    // All platforms use ui/* namespace per MCP Apps specification
     const meta = raw._meta as Record<string, unknown> | undefined;
-    const hasUI =
-      meta?.['ui/html'] !== undefined ||
-      meta?.['ui/component'] !== undefined ||
-      meta?.['openai/html'] !== undefined ||
-      meta?.['frontmcp/html'] !== undefined;
+    const hasUI = meta?.['ui/html'] !== undefined || meta?.['ui/component'] !== undefined;
     const structuredContent = (raw as Record<string, unknown>)['structuredContent'];
 
     return {

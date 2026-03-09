@@ -31,7 +31,7 @@ declare global {
    * options (e.g., cache, codecall) since agents are exposed as tools.
    * Uses interface for declaration merging support.
    */
-  interface ExtendFrontMcpAgentMetadata extends ExtendFrontMcpToolMetadata {}
+  type ExtendFrontMcpAgentMetadata = ExtendFrontMcpToolMetadata;
 }
 
 // ============================================================================

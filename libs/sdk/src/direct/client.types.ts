@@ -625,6 +625,14 @@ export interface DirectClient {
    */
   onResourceUpdated(handler: (uri: string) => void): () => void;
 
+  /**
+   * Register a handler for generic notifications.
+   *
+   * @param handler - Function called when any notification is received
+   * @returns Unsubscribe function
+   */
+  onNotification(handler: (notification: { method: string; params?: unknown }) => void): () => void;
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Logging Operations
   // ─────────────────────────────────────────────────────────────────────────────

@@ -40,11 +40,11 @@ export type PublicAccessConfigInput = z.input<typeof publicAccessConfigSchema>;
 // ============================================
 
 /**
- * Local signing configuration (for orchestrated local type)
+ * Local signing configuration (for local auth mode)
  */
 export const localSigningConfigSchema = z.object({
   /**
-   * Private key for signing orchestrated tokens
+   * Private key for signing tokens
    * @default auto-generated
    */
   signKey: jwkSchema.or(z.instanceof(Uint8Array)).optional(),
@@ -56,7 +56,7 @@ export const localSigningConfigSchema = z.object({
   jwks: jsonWebKeySetSchema.optional(),
 
   /**
-   * Issuer identifier for orchestrated tokens
+   * Issuer identifier for tokens
    * @default auto-derived from server URL
    */
   issuer: z.string().optional(),
@@ -66,11 +66,61 @@ export type LocalSigningConfig = z.infer<typeof localSigningConfigSchema>;
 export type LocalSigningConfigInput = z.input<typeof localSigningConfigSchema>;
 
 // ============================================
-// REMOTE PROVIDER CONFIG
+// PROVIDER CONFIG (advanced sub-object)
 // ============================================
 
 /**
- * Remote OAuth provider configuration (for orchestrated remote and transparent)
+ * Advanced provider configuration options.
+ * These are less commonly used and are grouped into an optional sub-object.
+ */
+export const providerConfigSchema = z.object({
+  /** Provider display name */
+  name: z.string().optional(),
+
+  /**
+   * Unique identifier for this provider
+   * @default derived from provider URL
+   */
+  id: z.string().optional(),
+
+  /**
+   * Inline JWKS for offline token verification
+   * Falls back to fetching from provider's /.well-known/jwks.json
+   */
+  jwks: jsonWebKeySetSchema.optional(),
+
+  /** Custom JWKS URI if not at standard path */
+  jwksUri: z.string().url().optional(),
+
+  /**
+   * Enable Dynamic Client Registration (DCR)
+   * @default false
+   */
+  dcrEnabled: z.boolean().default(false),
+
+  /** Authorization endpoint override */
+  authEndpoint: z.string().url().optional(),
+
+  /** Token endpoint override */
+  tokenEndpoint: z.string().url().optional(),
+
+  /** Registration endpoint override (for DCR) */
+  registrationEndpoint: z.string().url().optional(),
+
+  /** User info endpoint override */
+  userInfoEndpoint: z.string().url().optional(),
+});
+
+export type ProviderConfig = z.infer<typeof providerConfigSchema>;
+export type ProviderConfigInput = z.input<typeof providerConfigSchema>;
+
+// ============================================
+// REMOTE PROVIDER CONFIG (legacy, kept for internal use)
+// ============================================
+
+/**
+ * Remote OAuth provider configuration (internal, full flat shape)
+ * Used internally after flattening for compatibility.
  */
 export const remoteProviderConfigSchema = z.object({
   /**
@@ -102,12 +152,12 @@ export const remoteProviderConfigSchema = z.object({
   jwksUri: z.string().url().optional(),
 
   /**
-   * Client ID for this MCP server (for orchestrated mode)
+   * Client ID for this MCP server
    */
   clientId: z.string().optional(),
 
   /**
-   * Client secret (for confidential clients in orchestrated mode)
+   * Client secret (for confidential clients)
    */
   clientSecret: z.string().optional(),
 
@@ -147,16 +197,46 @@ export type RemoteProviderConfig = z.infer<typeof remoteProviderConfigSchema>;
 export type RemoteProviderConfigInput = z.input<typeof remoteProviderConfigSchema>;
 
 // ============================================
-// TOKEN STORAGE CONFIG
+// FLATTENED REMOTE FIELDS
+// Shared between transparent and remote modes
 // ============================================
 
 /**
- * Token storage configuration for orchestrated mode
+ * Flattened remote provider fields for top-level use in auth schemas.
+ * Basic fields (provider, clientId, clientSecret, scopes) are at top level.
+ * Advanced fields are in the optional providerConfig sub-object.
  */
-export const tokenStorageConfigSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('memory') }),
-  z.object({ type: z.literal('redis'), config: redisConfigSchema }),
-]);
+export const flatRemoteProviderFields = {
+  /**
+   * OAuth provider base URL (required)
+   * @example 'https://auth.example.com'
+   */
+  provider: z.string().url(),
+
+  /** Client ID for this MCP server */
+  clientId: z.string().optional(),
+
+  /** Client secret (for confidential clients) */
+  clientSecret: z.string().optional(),
+
+  /** Scopes to request from the upstream provider */
+  scopes: z.array(z.string()).optional(),
+
+  /** Advanced provider configuration */
+  providerConfig: providerConfigSchema.optional(),
+};
+
+// ============================================
+// TOKEN STORAGE CONFIG (BC-030: simplified)
+// ============================================
+
+/**
+ * Token storage configuration for local/remote modes.
+ *
+ * Simple string 'memory' for in-memory storage,
+ * or an object with redis config for Redis storage.
+ */
+export const tokenStorageConfigSchema = z.union([z.literal('memory'), z.object({ redis: redisConfigSchema })]);
 
 export type TokenStorageConfig = z.infer<typeof tokenStorageConfigSchema>;
 export type TokenStorageConfigInput = z.input<typeof tokenStorageConfigSchema>;

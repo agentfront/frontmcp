@@ -1,5 +1,13 @@
 import { Ctor, Reference } from '@frontmcp/di';
-import { AdapterEntry, AdapterInterface, AdapterKind, AdapterRecord, EntryOwnerRef, FrontMcpLogger } from '../common';
+import {
+  AdapterEntry,
+  AdapterInterface,
+  AdapterKind,
+  AdapterRecord,
+  EntryOwnerRef,
+  FrontMcpAdapterResponse,
+  FrontMcpLogger,
+} from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
@@ -14,6 +22,7 @@ export class AdapterInstance extends AdapterEntry {
   private adapterResources: ResourceRegistry | null = null;
   private adapterPrompts: PromptRegistry | null = null;
   private logger?: FrontMcpLogger;
+  private unsubscribeUpdate?: () => void;
 
   constructor(record: AdapterRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(record);
@@ -101,5 +110,36 @@ export class AdapterInstance extends AdapterEntry {
     await Promise.all([this.adapterTools.ready, this.adapterResources.ready, this.adapterPrompts.ready]);
 
     this.logger?.debug(`Adapter "${adapter.options.name}" registries initialized`);
+
+    // Subscribe to adapter updates (e.g., OpenAPI spec polling)
+    if (typeof adapter.onUpdate === 'function') {
+      this.unsubscribeUpdate = adapter.onUpdate((response) => {
+        this.handleAdapterUpdate(response, owner);
+      });
+    }
+
+    // Start polling if adapter supports it
+    if (typeof adapter.startPolling === 'function') {
+      adapter.startPolling();
+      this.logger?.debug(`Adapter "${adapter.options.name}" polling started`);
+    }
+  }
+
+  /**
+   * Handle adapter update (e.g., from spec polling).
+   * Replaces all tools/resources/prompts in the child registries.
+   */
+  private handleAdapterUpdate(response: FrontMcpAdapterResponse, owner: EntryOwnerRef): void {
+    this.logger?.debug(`Adapter update received: ${response.tools?.length ?? 0} tool(s)`);
+
+    if (response.tools && this.adapterTools) {
+      this.adapterTools.replaceAll(response.tools, owner);
+    }
+    if (response.resources && this.adapterResources) {
+      this.adapterResources.replaceAll(response.resources, owner);
+    }
+    if (response.prompts && this.adapterPrompts) {
+      this.adapterPrompts.replaceAll(response.prompts, owner);
+    }
   }
 }

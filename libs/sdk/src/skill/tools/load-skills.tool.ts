@@ -237,8 +237,3 @@ export class LoadSkillsTool extends ToolContext<typeof inputSchema, typeof outpu
     };
   }
 }
-
-/**
- * @deprecated Use LoadSkillsTool instead
- */
-export { LoadSkillsTool as LoadSkillTool };

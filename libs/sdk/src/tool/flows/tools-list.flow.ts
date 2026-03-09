@@ -6,9 +6,8 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
 import { hasUIConfig } from '../ui';
-import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
-import { isUIType } from '@frontmcp/uipack/types';
-import type { AIPlatformType } from '@frontmcp/uipack/adapters';
+import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
+import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { ToolPaginationOptions } from '../../common/types/options/pagination';
@@ -384,9 +383,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         );
       }
 
-      // Only OpenAI ChatGPT uses openai/* meta keys
-      // ext-apps (SEP-1865) uses ui/* keys per the MCP Apps specification
-      const isOpenAIPlatform = platformType === 'openai';
+      // All platforms now use ui/* keys per the MCP Apps specification
 
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
         // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
@@ -427,7 +424,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         }
 
         // Add _meta for tools with UI configuration
-        // OpenAI platforms use openai/* keys, other platforms use ui/* keys only
+        // All platforms use ui/* keys per the MCP Apps specification
         if (hasUIConfig(tool.metadata)) {
           const uiConfig = tool.metadata.ui;
           if (!uiConfig) {
@@ -469,37 +466,25 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // Use centralized type guard from @frontmcp/ui/types
           const uiType: UIType = manifest?.uiType ?? (isUIType(detectedType) ? detectedType : 'auto');
 
-          // Build meta keys based on platform type:
-          // - OpenAI: openai/* keys only (ChatGPT proprietary format)
-          // - ext-apps: ui/* keys only per SEP-1865 MCP Apps specification
-          // - Other platforms: ui/* keys only (Claude, Cursor, etc.)
+          // Build meta keys — all platforms use ui/* namespace per MCP Apps specification
           const meta: Record<string, unknown> = {};
           const isExtApps = platformType === 'ext-apps';
 
           // Use custom resourceUri from config if provided, otherwise auto-generate
           const widgetUri = uiConfig.resourceUri || `ui://widget/${encodeURIComponent(finalName)}.html`;
 
-          if (isOpenAIPlatform) {
-            // OpenAI-specific meta keys for ChatGPT widget discovery
-            // ChatGPT only understands openai/* keys - don't mix with ui/* keys
-            meta['openai/outputTemplate'] = widgetUri;
-            meta['openai/resultCanProduceWidget'] = true;
-            meta['openai/widgetAccessible'] = uiConfig.widgetAccessible ?? false;
+          if (isExtApps) {
+            // MCP Apps specification — nested _meta.ui object per spec
+            const uiMeta: Record<string, unknown> = {
+              resourceUri: widgetUri,
+            };
 
-            // Add invocation status if configured
-            if (uiConfig.invocationStatus?.invoking) {
-              meta['openai/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
+            // Add CSP from tool UI config
+            if (uiConfig.csp) {
+              uiMeta['csp'] = uiConfig.csp;
             }
-            if (uiConfig.invocationStatus?.invoked) {
-              meta['openai/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
-            }
-          } else if (isExtApps) {
-            // SEP-1865 MCP Apps specification uses ui/* keys only
-            meta['ui/resourceUri'] = widgetUri;
-            meta['ui/mimeType'] = 'text/html+mcp';
 
             // Add widget capabilities if configured (for ext-apps initialization)
-            // Map flattened config to spec-compliant structure (ExtAppsWidgetCapabilities)
             if (uiConfig.widgetCapabilities) {
               const capabilities: { tools?: { listChanged?: boolean }; supportsPartialInput?: boolean } = {};
 
@@ -511,26 +496,32 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               }
 
               if (Object.keys(capabilities).length > 0) {
-                meta['ui/capabilities'] = capabilities;
+                uiMeta['capabilities'] = capabilities;
               }
             }
 
-            // Add manifest info for ext-apps (uses ui/* namespace)
-            meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
+            meta['ui'] = uiMeta;
+
+            // Additional FrontMCP extension keys (outside ui namespace)
             if (manifest) {
-              meta['ui/type'] = manifest.uiType;
-              meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
-              meta['ui/displayMode'] = manifest.displayMode;
-              meta['ui/bundlingMode'] = manifest.bundlingMode;
-            } else if (uiConfig.template) {
-              meta['ui/type'] = uiType;
+              meta['frontmcp/type'] = manifest.uiType;
+              meta['frontmcp/cdn'] = buildCDNInfoForUIType(uiType);
+              meta['frontmcp/displayMode'] = manifest.displayMode;
             }
           } else {
-            // Generic MCP clients (Claude, Cursor, etc.) - use ui/* namespace only
-            meta['ui/resourceUri'] = widgetUri;
-            meta['ui/mimeType'] = 'text/html+mcp';
+            // Generic MCP clients (Claude, Cursor, etc.) — nested _meta.ui object per spec
+            const uiMeta: Record<string, unknown> = {
+              resourceUri: widgetUri,
+            };
 
-            // Add invocation status if configured (use ui/* namespace)
+            // Add CSP from tool UI config
+            if (uiConfig.csp) {
+              uiMeta['csp'] = uiConfig.csp;
+            }
+
+            meta['ui'] = uiMeta;
+
+            // Add invocation status if configured
             if (uiConfig.invocationStatus?.invoking) {
               meta['ui/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
             }
@@ -538,15 +529,13 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               meta['ui/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
             }
 
-            // Add manifest/CDN info
-            meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
+            // Additional FrontMCP extension keys (outside ui namespace)
             if (manifest) {
-              meta['ui/type'] = manifest.uiType;
-              meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
-              meta['ui/displayMode'] = manifest.displayMode;
-              meta['ui/bundlingMode'] = manifest.bundlingMode;
+              meta['frontmcp/type'] = manifest.uiType;
+              meta['frontmcp/cdn'] = buildCDNInfoForUIType(uiType);
+              meta['frontmcp/displayMode'] = manifest.displayMode;
             } else if (uiConfig.template) {
-              meta['ui/type'] = uiType;
+              meta['frontmcp/type'] = uiType;
             }
           }
 

@@ -6,8 +6,7 @@ declare global {
   /**
    * Declarative metadata extends to McpPrompt decorator.
    */
-  export interface ExtendFrontMcpPromptMetadata {
-  }
+  export interface ExtendFrontMcpPromptMetadata {}
 }
 
 interface PromptArgument {
@@ -25,21 +24,22 @@ interface PromptArgument {
   required?: boolean;
 }
 
-const promptArgumentSchema = z.object({
-  /**
-   * The name of the argument.
-   */
-  name: z.string(),
-  /**
-   * A human-readable description of the argument.
-   */
-  description: z.optional(z.string()),
-  /**
-   * Whether this argument must be provided.
-   */
-  required: z.optional(z.boolean()),
-}).passthrough();
-
+const promptArgumentSchema = z
+  .object({
+    /**
+     * The name of the argument.
+     */
+    name: z.string(),
+    /**
+     * A human-readable description of the argument.
+     */
+    description: z.optional(z.string()),
+    /**
+     * Whether this argument must be provided.
+     */
+    required: z.optional(z.boolean()),
+  })
+  .passthrough();
 
 /**
  * A known resource that the server is capable of reading.
@@ -67,7 +67,7 @@ export interface FrontMcpPromptMetadata extends ExtendFrontMcpPromptMetadata {
   /**
    * A list of arguments to use for templating the prompt.
    */
-  arguments: PromptArgument[],
+  arguments: PromptArgument[];
 
   /**
    * A list of icons that can be used to represent this resource template.
@@ -75,16 +75,14 @@ export interface FrontMcpPromptMetadata extends ExtendFrontMcpPromptMetadata {
   icons?: Icon[];
 }
 
+export const frontMcpPromptMetadataSchema = z
+  .object({
+    name: z.string().min(1),
+    title: z.string().optional(),
+    description: z.string().optional(),
+    arguments: z.array(promptArgumentSchema).optional(),
+    icons: z.array(IconSchema).optional(),
+  } satisfies RawZodShape<FrontMcpPromptMetadata, ExtendFrontMcpPromptMetadata>)
+  .passthrough();
 
-export const frontMcpPromptMetadataSchema = z.object({
-  name: z.string().min(1),
-  title: z.string().optional(),
-  description: z.string().optional(),
-  arguments: z.array(promptArgumentSchema).optional(),
-  icons: z.array(IconSchema).optional(),
-} satisfies RawZodShape<FrontMcpPromptMetadata, ExtendFrontMcpPromptMetadata>).passthrough();
-
-
-export {
-  FrontMcpPromptMetadata as PromptMetadata,
-};
+export { FrontMcpPromptMetadata as PromptMetadata };

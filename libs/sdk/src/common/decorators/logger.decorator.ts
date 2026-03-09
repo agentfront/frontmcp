@@ -1,9 +1,6 @@
 import 'reflect-metadata';
 import { FrontMcpLogTransportTokens } from '../tokens';
-import {
-  LogTransportMetadata,
-  frontMcpLogTransportMetadataSchema,
-} from '../metadata';
+import { LogTransportMetadata, frontMcpLogTransportMetadataSchema } from '../metadata';
 
 /**
  * Decorator that marks a class as a FrontMcpLogger module and provides metadata
@@ -19,7 +16,4 @@ function FrontMcpLogTransport(providedMetadata: LogTransportMetadata): ClassDeco
   };
 }
 
-export {
-  FrontMcpLogTransport,
-  FrontMcpLogTransport as LogTransport,
-};
+export { FrontMcpLogTransport, FrontMcpLogTransport as LogTransport };

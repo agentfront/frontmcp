@@ -5,15 +5,7 @@
  * These tests ensure helpers handle edge cases like null/undefined values.
  */
 
-import {
-  escapeHtml,
-  formatDate,
-  formatCurrency,
-  uniqueId,
-  jsonEmbed,
-  createTemplateHelpersLocal,
-  resetIdCounter,
-} from '../template-helpers';
+import { escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed, resetIdCounter } from '../template-helpers';
 
 describe('escapeHtml', () => {
   describe('null and undefined handling', () => {
@@ -185,24 +177,5 @@ describe('jsonEmbed', () => {
   it('should handle arrays', () => {
     const result = jsonEmbed([1, 2, 3]);
     expect(result).toBe('[1,2,3]');
-  });
-});
-
-describe('createTemplateHelpersLocal', () => {
-  it('should return object with all helpers', () => {
-    const helpers = createTemplateHelpersLocal();
-
-    expect(typeof helpers.escapeHtml).toBe('function');
-    expect(typeof helpers.formatDate).toBe('function');
-    expect(typeof helpers.formatCurrency).toBe('function');
-    expect(typeof helpers.uniqueId).toBe('function');
-    expect(typeof helpers.jsonEmbed).toBe('function');
-  });
-
-  it('should have escapeHtml that handles undefined', () => {
-    const helpers = createTemplateHelpersLocal();
-    // This is the key test for the bug fix
-    expect(helpers.escapeHtml(undefined)).toBe('');
-    expect(helpers.escapeHtml(null)).toBe('');
   });
 });

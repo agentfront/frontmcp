@@ -1,14 +1,8 @@
-import {
-  isInitializedNotification,
-  InitializedNotificationSchema,
-  InitializeResultSchema,
-  InitializedNotification,
-  Result,
-} from '@modelcontextprotocol/sdk/types.js';
+import { InitializedNotificationSchema, InitializedNotification, Result } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function initializedNotificationHandler(
-  options: McpHandlerOptions
+  options: McpHandlerOptions,
 ): McpHandler<InitializedNotification, Result> {
   return {
     requestSchema: InitializedNotificationSchema,

@@ -88,10 +88,10 @@ export default class WellKnownJwksFlow extends FlowBase<typeof name> {
     const options = this.scope.auth.options;
     if (options && isTransparentMode(options)) {
       // Transparent mode - use remote provider's JWKS
-      if (options.remote.jwks && options.remote.jwks.keys.length) {
-        this.respond(httpRespond.json(options.remote.jwks));
+      if (options.providerConfig?.jwks && options.providerConfig.jwks.keys.length) {
+        this.respond(httpRespond.json(options.providerConfig.jwks));
       } else {
-        const location = options.remote.jwksUri ?? `${options.remote.provider}/.well-known/jwks.json`;
+        const location = options.providerConfig?.jwksUri ?? `${options.provider}/.well-known/jwks.json`;
         this.respond(httpRespond.redirect(location));
       }
     } else {

@@ -48,7 +48,7 @@ export interface ClientCapabilities {
   experimental?: {
     /** MCP Apps (ext-apps) extension capability */
     'io.modelcontextprotocol/ui'?: {
-      /** Supported MIME types (e.g., ['text/html+mcp']) */
+      /** Supported MIME types (e.g., ['text/html;profile=mcp-app']) */
       mimeTypes?: string[];
     };
     [key: string]: unknown;

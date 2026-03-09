@@ -4,7 +4,7 @@ import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
+import { SSEServerTransport } from './base-sse-transport';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 import { RecreateableSSEServerTransport } from './sse-transport';
 import { ZodType } from 'zod';

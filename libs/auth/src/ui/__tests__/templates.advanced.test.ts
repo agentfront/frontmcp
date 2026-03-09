@@ -175,7 +175,7 @@ describe('Template Edge Cases', () => {
           {
             providerId: 'multi',
             providerName: 'Multi App Provider',
-            mode: 'orchestrated',
+            mode: 'local',
             appIds: ['app1', 'app2', 'app3'],
           },
         ],

@@ -48,14 +48,14 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
     }
 
     if (isTransparentMode(options)) {
-      return options.remote.id ?? urlToSafeId(options.remote.provider);
+      return options.providerConfig?.id ?? urlToSafeId(options.provider);
     }
 
     if (isOrchestratedMode(options)) {
       if (isOrchestratedRemote(options)) {
-        return options.remote.id ?? urlToSafeId(options.remote.provider);
+        return options.providerConfig?.id ?? urlToSafeId(options.provider);
       }
-      // Local orchestrated – match detection defaults
+      // Local mode – match detection defaults
       return options.local?.issuer ?? 'local';
     }
 

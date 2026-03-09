@@ -51,11 +51,17 @@ export abstract class ToolEntry<
   abstract get providers(): ProviderRegistry;
 
   inputSchema: InSchema;
-  // This is whatever JSON-schema-ish thing you store for input; keeping type loose
+  /**
+   * Raw JSON Schema for input, set internally by OpenAPI adapter or remote tools.
+   * Not part of the user-facing decorator API (removed in v1.0.0).
+   */
   rawInputSchema: unknown;
   // This is your *metadata* outputSchema (literals / zod / raw shapes / arrays)
   outputSchema?: OutSchema;
-  // Raw JSON Schema for output (for tool/list to expose)
+  /**
+   * Raw JSON Schema for output, set internally by OpenAPI adapter or remote tools.
+   * Not part of the user-facing decorator API (removed in v1.0.0).
+   */
   rawOutputSchema?: unknown;
 
   /**
@@ -75,8 +81,11 @@ export abstract class ToolEntry<
     return this.rawOutputSchema;
   }
 
+  /** Cached JSON Schema result (undefined = not yet computed) */
+  private _cachedInputJsonSchema?: Record<string, unknown> | null;
+
   /**
-   * Get the tool's input schema as JSON Schema.
+   * Get the tool's input schema as JSON Schema (cached after first call).
    * Returns rawInputSchema if available, otherwise converts from Zod schema shape.
    *
    * This is the single source of truth for tool input schema conversion.
@@ -85,6 +94,14 @@ export abstract class ToolEntry<
    * @returns JSON Schema object or null if no schema is available
    */
   getInputJsonSchema(): Record<string, unknown> | null {
+    if (this._cachedInputJsonSchema !== undefined) return this._cachedInputJsonSchema;
+
+    const result = this.computeInputJsonSchema();
+    this._cachedInputJsonSchema = result;
+    return result;
+  }
+
+  private computeInputJsonSchema(): Record<string, unknown> | null {
     // Prefer rawInputSchema if already in JSON Schema format
     if (this.rawInputSchema) {
       // Validate that rawInputSchema is actually an object before casting

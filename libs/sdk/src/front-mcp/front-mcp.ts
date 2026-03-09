@@ -6,6 +6,7 @@ import {
   FrontMcpServer,
   ScopeEntry,
   frontMcpMetadataSchema,
+  parseFrontMcpConfigLite,
 } from '../common';
 import { ScopeRegistry } from '../scope/scope.registry';
 import ProviderRegistry from '../provider/provider.registry';
@@ -118,6 +119,24 @@ export class FrontMcpInstance implements FrontMcpInterface {
   public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
     // Parse config through Zod to apply defaults (providers, tools, etc.)
     const parsedConfig = frontMcpMetadataSchema.parse(options);
+    const frontMcp = new FrontMcpInstance(parsedConfig);
+    await frontMcp.ready;
+    return frontMcp;
+  }
+
+  /**
+   * Creates a FrontMCP instance optimized for CLI execution.
+   * Skips non-essential registries (UI widget compilation, event stores,
+   * elicitation stores) for faster startup (~100-150ms savings).
+   *
+   * @example
+   * const instance = await FrontMcpInstance.createForCli(config);
+   * const scopes = instance.getScopes();
+   */
+  public static async createForCli(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
+    const parsedConfig = parseFrontMcpConfigLite(options);
+    // Mark config for CLI mode so Scope can skip non-essential work
+    (parsedConfig as Record<string, unknown>)['__cliMode'] = true;
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;

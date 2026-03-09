@@ -1,27 +1,27 @@
 // options/orchestrated.schema.ts
-// Orchestrated mode - Local auth server that can proxy to remote or be fully local
+// Local and Remote auth modes (formerly orchestrated local/remote)
 
 import { z } from 'zod';
 import {
   cimdConfigSchema,
   consentConfigSchema,
   federatedAuthConfigSchema,
+  flatRemoteProviderFields,
   incrementalAuthConfigSchema,
   localSigningConfigSchema,
   publicAccessConfigSchema,
-  remoteProviderConfigSchema,
   tokenRefreshConfigSchema,
   tokenStorageConfigSchema,
 } from './shared.schemas';
 
 // ============================================
-// SHARED ORCHESTRATED FIELDS
+// SHARED LOCAL/REMOTE FIELDS
 // Common fields between local and remote modes
 // ============================================
 
-const orchestratedSharedFields = {
+const sharedAuthFields = {
   local: localSigningConfigSchema.optional(),
-  tokenStorage: tokenStorageConfigSchema.default({ type: 'memory' }),
+  tokenStorage: tokenStorageConfigSchema.default('memory'),
   allowDefaultPublic: z.boolean().default(false),
   anonymousScopes: z.array(z.string()).default(['anonymous']),
   publicAccess: publicAccessConfigSchema.optional(),
@@ -34,46 +34,59 @@ const orchestratedSharedFields = {
 };
 
 // ============================================
-// ORCHESTRATED LOCAL MODE
+// LOCAL AUTH MODE (formerly orchestrated local)
 // ============================================
 
-export const orchestratedLocalSchema = z.object({
-  mode: z.literal('orchestrated'),
-  type: z.literal('local'),
-  ...orchestratedSharedFields,
+export const localAuthSchema = z.object({
+  mode: z.literal('local'),
+  ...sharedAuthFields,
 });
 
 // ============================================
-// ORCHESTRATED REMOTE MODE
+// REMOTE AUTH MODE (formerly orchestrated remote)
 // ============================================
 
-export const orchestratedRemoteSchema = z.object({
-  mode: z.literal('orchestrated'),
-  type: z.literal('remote'),
-  remote: remoteProviderConfigSchema,
-  ...orchestratedSharedFields,
+export const remoteAuthSchema = z.object({
+  mode: z.literal('remote'),
+  ...flatRemoteProviderFields,
+  ...sharedAuthFields,
 });
-
-// ============================================
-// COMBINED ORCHESTRATED SCHEMA
-// ============================================
-
-export const orchestratedAuthOptionsSchema = z.discriminatedUnion('type', [
-  orchestratedLocalSchema,
-  orchestratedRemoteSchema,
-]);
 
 // ============================================
 // TYPE EXPORTS
 // ============================================
 
-export type OrchestratedLocalOptions = z.infer<typeof orchestratedLocalSchema>;
-export type OrchestratedLocalOptionsInput = z.input<typeof orchestratedLocalSchema>;
+export type LocalAuthOptions = z.infer<typeof localAuthSchema>;
+export type LocalAuthOptionsInput = z.input<typeof localAuthSchema>;
 
-export type OrchestratedRemoteOptions = z.infer<typeof orchestratedRemoteSchema>;
-export type OrchestratedRemoteOptionsInput = z.input<typeof orchestratedRemoteSchema>;
+export type RemoteAuthOptions = z.infer<typeof remoteAuthSchema>;
+export type RemoteAuthOptionsInput = z.input<typeof remoteAuthSchema>;
 
-export type OrchestratedAuthOptions = z.infer<typeof orchestratedAuthOptionsSchema>;
-export type OrchestratedAuthOptionsInput = z.input<typeof orchestratedAuthOptionsSchema>;
+// Unified type for local + remote
+export type LocalOrRemoteAuthOptions = LocalAuthOptions | RemoteAuthOptions;
+export type LocalOrRemoteAuthOptionsInput = LocalAuthOptionsInput | RemoteAuthOptionsInput;
 
-export type OrchestratedType = 'local' | 'remote';
+// ============================================
+// BACKWARDS COMPAT ALIASES (deprecated, remove in next major)
+// These map old names to new names for gradual migration
+// ============================================
+
+/** @deprecated Use localAuthSchema */
+export const orchestratedLocalSchema = localAuthSchema;
+/** @deprecated Use remoteAuthSchema */
+export const orchestratedRemoteSchema = remoteAuthSchema;
+
+/** @deprecated Use LocalAuthOptions */
+export type OrchestratedLocalOptions = LocalAuthOptions;
+/** @deprecated Use LocalAuthOptionsInput */
+export type OrchestratedLocalOptionsInput = LocalAuthOptionsInput;
+
+/** @deprecated Use RemoteAuthOptions */
+export type OrchestratedRemoteOptions = RemoteAuthOptions;
+/** @deprecated Use RemoteAuthOptionsInput */
+export type OrchestratedRemoteOptionsInput = RemoteAuthOptionsInput;
+
+/** @deprecated Use LocalOrRemoteAuthOptions */
+export type OrchestratedAuthOptions = LocalOrRemoteAuthOptions;
+/** @deprecated Use LocalOrRemoteAuthOptionsInput */
+export type OrchestratedAuthOptionsInput = LocalOrRemoteAuthOptionsInput;

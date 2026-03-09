@@ -29,10 +29,10 @@ export function resolveStageKey(type: HookMetadata['type'], stage: string) {
   return type === 'will'
     ? `will${cap(stage)}`
     : type === 'did'
-    ? `did${cap(stage)}`
-    : type === 'around'
-    ? `around${cap(stage)}`
-    : stage;
+      ? `did${cap(stage)}`
+      : type === 'around'
+        ? `around${cap(stage)}`
+        : stage;
 }
 
 export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
