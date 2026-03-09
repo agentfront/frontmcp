@@ -1,5 +1,6 @@
 import type { McpOpenAPITool, SecurityResolver } from 'mcp-from-openapi';
 import { validateBaseUrl } from '@frontmcp/utils';
+import { PublicMcpError } from '@frontmcp/sdk';
 
 /**
  * Request configuration for building HTTP requests
@@ -119,8 +120,10 @@ export function buildRequest(
 
         // eslint-disable-next-line no-control-regex
         if (/[\r\n\x00\f\v]/.test(headerValue)) {
-          throw new Error(
+          throw new PublicMcpError(
             `Invalid header value for '${mapper.key}': contains control characters (possible header injection attack)`,
+            'INVALID_HEADER_VALUE',
+            400,
           );
         }
         headers.set(mapper.key, headerValue);

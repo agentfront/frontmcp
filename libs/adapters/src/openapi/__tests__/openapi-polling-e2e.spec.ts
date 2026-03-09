@@ -97,9 +97,9 @@ function configureMockGenerator(tools: ReturnType<typeof createMockTool>[]) {
 
 /** Extract tool names from a FrontMcpAdapterResponse */
 function extractToolNames(response: FrontMcpAdapterResponse): string[] {
-  return (response.tools || []).map((toolFn: any) => {
+  return (response.tools || []).map((toolFn: Record<symbol, Record<string, unknown>>) => {
     const meta = toolFn[FrontMcpToolTokens.metadata];
-    return meta?.name ?? meta?.id ?? 'unknown';
+    return (meta?.name ?? meta?.id ?? 'unknown') as string;
   });
 }
 
@@ -130,20 +130,24 @@ function createUpdateTracker(adapter: OpenapiAdapter) {
       // If an update arrived since last wait, return it
       const pending = allUpdates.length;
       return new Promise<FrontMcpAdapterResponse>((resolve, reject) => {
-        // Check if a new update already came
-        const check = () => {
-          if (allUpdates.length > pending) {
-            return resolve(allUpdates[allUpdates.length - 1]);
-          }
-          pendingResolve = resolve;
-        };
-        check();
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           if (pendingResolve) {
             pendingResolve = null;
             reject(new Error(`waitForNextUpdate timed out after ${timeoutMs}ms`));
           }
         }, timeoutMs);
+
+        const check = () => {
+          if (allUpdates.length > pending) {
+            clearTimeout(timeoutId);
+            return resolve(allUpdates[allUpdates.length - 1]);
+          }
+          pendingResolve = (resp) => {
+            clearTimeout(timeoutId);
+            resolve(resp);
+          };
+        };
+        check();
       });
     },
   };
