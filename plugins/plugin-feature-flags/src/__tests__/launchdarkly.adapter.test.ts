@@ -45,7 +45,7 @@ describe('LaunchDarklyFeatureFlagAdapter', () => {
     });
 
     it('should throw if module not found', async () => {
-      jest.mock(
+      jest.doMock(
         '@launchdarkly/node-server-sdk',
         () => {
           throw new Error('Cannot find module');

@@ -5,6 +5,13 @@ import type { FeatureFlagAdapter } from '../adapters/feature-flag-adapter.interf
 import { getFeatureFlags, tryGetFeatureFlags } from '../feature-flag.context-extension';
 import * as barrel from '../index';
 
+interface ProviderEntry {
+  provide: symbol;
+  name?: string;
+  useValue?: unknown;
+  useFactory?: (...args: unknown[]) => unknown;
+}
+
 describe('FeatureFlagPlugin', () => {
   describe('constructor', () => {
     it('should store options', () => {
@@ -24,9 +31,9 @@ describe('FeatureFlagPlugin', () => {
       });
 
       expect(providers.length).toBe(3); // adapter + config + accessor
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken);
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
-      expect((adapterProvider as any).useValue).toBeInstanceOf(StaticFeatureFlagAdapter);
+      expect(adapterProvider!.useValue).toBeInstanceOf(StaticFeatureFlagAdapter);
     });
 
     it('should create config provider', () => {
@@ -35,9 +42,9 @@ describe('FeatureFlagPlugin', () => {
         flags: { 'flag-a': true },
       });
 
-      const configProvider = providers.find((p: any) => p.provide === FeatureFlagConfigToken);
+      const configProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagConfigToken);
       expect(configProvider).toBeDefined();
-      expect((configProvider as any).useValue).toEqual(
+      expect(configProvider!.useValue).toEqual(
         expect.objectContaining({ adapter: 'static', flags: { 'flag-a': true } }),
       );
     });
@@ -48,9 +55,9 @@ describe('FeatureFlagPlugin', () => {
         flags: {},
       });
 
-      const accessorProvider = providers.find((p: any) => p.provide === FeatureFlagAccessorToken);
+      const accessorProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAccessorToken);
       expect(accessorProvider).toBeDefined();
-      expect((accessorProvider as any).name).toBe('feature-flags:accessor');
+      expect(accessorProvider!.name).toBe('feature-flags:accessor');
     });
 
     it('should create splitio adapter provider with factory', () => {
@@ -59,10 +66,10 @@ describe('FeatureFlagPlugin', () => {
         config: { apiKey: 'test-key' },
       });
 
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken);
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
-      expect((adapterProvider as any).name).toBe('feature-flags:adapter:splitio');
-      expect(typeof (adapterProvider as any).useFactory).toBe('function');
+      expect(adapterProvider!.name).toBe('feature-flags:adapter:splitio');
+      expect(typeof adapterProvider!.useFactory).toBe('function');
     });
 
     it('should create launchdarkly adapter provider with factory', () => {
@@ -71,9 +78,9 @@ describe('FeatureFlagPlugin', () => {
         config: { sdkKey: 'sdk-test' },
       });
 
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken);
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
-      expect((adapterProvider as any).name).toBe('feature-flags:adapter:launchdarkly');
+      expect(adapterProvider!.name).toBe('feature-flags:adapter:launchdarkly');
     });
 
     it('should create unleash adapter provider with factory', () => {
@@ -82,9 +89,9 @@ describe('FeatureFlagPlugin', () => {
         config: { url: 'https://unleash.test', appName: 'test' },
       });
 
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken);
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
-      expect((adapterProvider as any).name).toBe('feature-flags:adapter:unleash');
+      expect(adapterProvider!.name).toBe('feature-flags:adapter:unleash');
     });
 
     it('should use custom adapter instance directly', () => {
@@ -101,9 +108,9 @@ describe('FeatureFlagPlugin', () => {
         adapterInstance: customAdapter,
       });
 
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken);
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
       expect(adapterProvider).toBeDefined();
-      expect((adapterProvider as any).useValue).toBe(customAdapter);
+      expect(adapterProvider!.useValue).toBe(customAdapter);
     });
   });
 
@@ -311,7 +318,7 @@ describe('FeatureFlagPlugin', () => {
 
   describe('dynamicProviders factory execution', () => {
     it('should execute splitio factory and call initialize', async () => {
-      jest.mock(
+      jest.doMock(
         '@splitsoftware/splitio',
         () => ({
           SplitFactory: jest.fn().mockReturnValue({
@@ -329,13 +336,13 @@ describe('FeatureFlagPlugin', () => {
         adapter: 'splitio',
         config: { apiKey: 'test' },
       });
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken) as any;
-      const adapter = await adapterProvider.useFactory();
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
+      const adapter = await adapterProvider!.useFactory!();
       expect(adapter).toBeDefined();
     });
 
     it('should execute launchdarkly factory and call initialize', async () => {
-      jest.mock(
+      jest.doMock(
         '@launchdarkly/node-server-sdk',
         () => ({
           init: jest.fn().mockReturnValue({
@@ -352,13 +359,13 @@ describe('FeatureFlagPlugin', () => {
         adapter: 'launchdarkly',
         config: { sdkKey: 'test' },
       });
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken) as any;
-      const adapter = await adapterProvider.useFactory();
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
+      const adapter = await adapterProvider!.useFactory!();
       expect(adapter).toBeDefined();
     });
 
     it('should execute unleash factory and call initialize', async () => {
-      jest.mock(
+      jest.doMock(
         'unleash-client',
         () => ({
           Unleash: jest.fn().mockImplementation(() => ({
@@ -375,8 +382,8 @@ describe('FeatureFlagPlugin', () => {
         adapter: 'unleash',
         config: { url: 'https://test.com', appName: 'test' },
       });
-      const adapterProvider = providers.find((p: any) => p.provide === FeatureFlagAdapterToken) as any;
-      const adapter = await adapterProvider.useFactory();
+      const adapterProvider = providers.find((p: ProviderEntry) => p.provide === FeatureFlagAdapterToken);
+      const adapter = await adapterProvider!.useFactory!();
       expect(adapter).toBeDefined();
     });
   });

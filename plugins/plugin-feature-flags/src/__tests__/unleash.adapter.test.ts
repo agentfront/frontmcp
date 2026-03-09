@@ -67,7 +67,7 @@ describe('UnleashFeatureFlagAdapter', () => {
     });
 
     it('should throw if module not found', async () => {
-      jest.mock(
+      jest.doMock(
         'unleash-client',
         () => {
           throw new Error('Cannot find module');

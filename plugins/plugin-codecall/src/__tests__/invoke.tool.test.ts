@@ -33,9 +33,15 @@ function getResultText(result: CallToolResult): string {
 
 // Mock the SDK - the mock class accepts any args to match ToolContext constructor
 jest.mock('@frontmcp/sdk', () => ({
-  Tool: (config: any) => (target: any) => target,
+  Tool:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
 
-  Provider: (config: any) => (target: any) => target,
+  Provider:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
   ToolContext: class MockToolContext {
     scope = {
@@ -47,7 +53,7 @@ jest.mock('@frontmcp/sdk', () => ({
     authInfo = undefined;
     logger = undefined;
 
-    constructor(_args?: any) {
+    constructor(_args?: unknown) {
       // Mock constructor accepts optional args
     }
   },
