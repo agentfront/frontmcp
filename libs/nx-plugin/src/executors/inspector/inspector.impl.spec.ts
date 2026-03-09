@@ -111,19 +111,21 @@ describe('inspector executor', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
-    const mockChild = createMockChild();
-    mockSpawn.mockReturnValue(mockChild as never);
+    try {
+      const mockChild = createMockChild();
+      mockSpawn.mockReturnValue(mockChild as never);
 
-    const gen = inspectorExecutor({}, mockContext);
-    await gen.next();
+      const gen = inspectorExecutor({}, mockContext);
+      await gen.next();
 
-    expect(mockSpawn).toHaveBeenCalledWith('npx.cmd', expect.any(Array), expect.anything());
+      expect(mockSpawn).toHaveBeenCalledWith('npx.cmd', expect.any(Array), expect.anything());
 
-    const done = gen.next();
-    mockChild.emit('close', 0);
-    await done;
-
-    Object.defineProperty(process, 'platform', { value: originalPlatform });
+      const done = gen.next();
+      mockChild.emit('close', 0);
+      await done;
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
   });
 
   it('should not kill child if already killed', async () => {

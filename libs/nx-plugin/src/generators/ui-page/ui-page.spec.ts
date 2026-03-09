@@ -119,6 +119,18 @@ describe('ui-page generator', () => {
     expect(tree.exists('ui/pages/src/AdminDashboard/AdminDashboard.tsx')).toBe(true);
   });
 
+  it('should run formatFiles when skipFormat is not set', async () => {
+    await uiPageGenerator(tree, { name: 'Formatted' });
+
+    expect(tree.exists('ui/pages/src/Formatted/Formatted.tsx')).toBe(true);
+  });
+
+  it('should throw on blank name', async () => {
+    await expect(uiPageGenerator(tree, { name: '   ', skipFormat: true })).rejects.toThrow(
+      'Generator name must not be blank',
+    );
+  });
+
   it('should export default', async () => {
     const mod = await import('./ui-page');
     expect(mod.default).toBe(uiPageGenerator);

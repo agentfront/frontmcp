@@ -7,6 +7,7 @@ import { DiContainer, type DiContainerOptions } from '../registry/container.js';
 import { ProviderScope } from '../metadata/provider.metadata.js';
 import { DESIGN_PARAMTYPES, META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 import type { ProviderTokens } from '../utils/provider.utils.js';
+import type { Token } from '../interfaces/index.js';
 
 // Test tokens for the container
 const TEST_TOKENS: ProviderTokens = {
@@ -1428,7 +1429,7 @@ describe('DiContainer', () => {
 
       const prebuilt = new CtxService();
       prebuilt.value = 'prebuilt';
-      const prePlannedMap = new Map<any, any>();
+      const prePlannedMap = new Map<Token, unknown>();
       prePlannedMap.set(CtxService, prebuilt);
 
       const views = await container.buildViews('session1', prePlannedMap);
