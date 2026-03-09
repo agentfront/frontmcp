@@ -23,7 +23,12 @@ import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../scope';
-import { NameDisambiguationError, EntryValidationError } from '../errors';
+import {
+  NameDisambiguationError,
+  EntryValidationError,
+  RegistryDefinitionNotFoundError,
+  RegistryGraphEntryNotFoundError,
+} from '../errors';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
@@ -89,14 +94,14 @@ export default class PromptRegistry
   protected buildGraph() {
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
-      if (!rec) throw new Error(`PromptRegistry: missing definition for token ${String(token)}`);
+      if (!rec) throw new RegistryDefinitionNotFoundError('PromptRegistry', String(token));
       const deps = promptDiscoveryDeps(rec);
 
       for (const d of deps) {
         // Validate against hierarchical providers; throws early if missing
         this.providers.get(d);
         const tokenDeps = this.graph.get(token);
-        if (!tokenDeps) throw new Error(`PromptRegistry: missing graph entry for token ${String(token)}`);
+        if (!tokenDeps) throw new RegistryGraphEntryNotFoundError('PromptRegistry', String(token));
         tokenDeps.add(d);
       }
     }
@@ -108,7 +113,7 @@ export default class PromptRegistry
     // Instantiate each local prompt once and store in this.instances
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
-      if (!rec) throw new Error(`PromptRegistry: missing definition for token ${String(token)}`);
+      if (!rec) throw new RegistryDefinitionNotFoundError('PromptRegistry', String(token));
 
       // Single, authoritative instance per local prompt
       const pi = new PromptInstance(rec, this.providers, this.owner);
@@ -535,7 +540,7 @@ export default class PromptRegistry
     // Recreate instances and local rows
     for (const token of this.tokens) {
       const rec = this.defs.get(token);
-      if (!rec) throw new Error(`PromptRegistry: missing definition for token ${String(token)}`);
+      if (!rec) throw new RegistryDefinitionNotFoundError('PromptRegistry', String(token));
       const pi = new PromptInstance(rec, this.providers, owner);
       this.instances.set(token as Token<PromptInstance>, pi);
 

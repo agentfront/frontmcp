@@ -217,8 +217,10 @@ export const UIAssertions = {
     const hasUiHtml = Boolean(meta['ui/html']);
     const hasMimeType = Boolean(meta['ui/mimeType']);
     const uiValue = meta['ui'];
+    const ui = uiValue && typeof uiValue === 'object' ? (uiValue as Record<string, unknown>) : undefined;
     const hasUiObject = Boolean(
-      uiValue && typeof uiValue === 'object' && Object.keys(uiValue as Record<string, unknown>).length > 0,
+      ui &&
+        (typeof ui['resourceUri'] === 'string' || typeof ui['mimeType'] === 'string' || typeof ui['html'] === 'string'),
     );
 
     if (!hasUiHtml && !hasMimeType && !hasUiObject) {

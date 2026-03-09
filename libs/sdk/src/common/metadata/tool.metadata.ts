@@ -174,7 +174,7 @@ type StructuredOutputType =
   | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
   | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
-  | z.ZodDiscriminatedUnion<z.ZodObject<any>[]>;
+  | z.ZodDiscriminatedUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>;
 
 export type ToolSingleOutputType =
   | PrimitiveOutputType
