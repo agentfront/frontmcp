@@ -258,8 +258,8 @@ Each renderer implements the `ContentRenderer` interface:
 interface ContentRenderer {
   type: string; // e.g. 'chart', 'csv', 'pdf'
   priority: number; // Higher wins when multiple match
-  canRender(data): boolean;
-  render(data, options): ReactElement;
+  canHandle(content: string): boolean;
+  render(content: string, options?: RenderOptions): ReactElement;
 }
 ```
 
