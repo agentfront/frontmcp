@@ -834,6 +834,12 @@ describe('DescribeTool', () => {
   });
 
   describe('Input Schema Validation', () => {
+    it('should reject empty toolNames array', () => {
+      const schema = z.object(describeToolInputSchema);
+      const result = schema.safeParse({ toolNames: [] });
+      expect(result.success).toBe(false);
+    });
+
     it('should reject duplicate tool names', () => {
       const schema = z.object(describeToolInputSchema);
       const result = schema.safeParse({ toolNames: ['users:list', 'billing:get', 'users:list'] });

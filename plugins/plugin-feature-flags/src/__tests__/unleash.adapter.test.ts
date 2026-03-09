@@ -32,7 +32,8 @@ describe('UnleashFeatureFlagAdapter', () => {
   });
 
   async function createAdapter(config: { url: string; appName: string; apiKey?: string }) {
-    const { UnleashFeatureFlagAdapter } = require('../adapters/unleash.adapter');
+    const { UnleashFeatureFlagAdapter } =
+      require('../adapters/unleash.adapter') as typeof import('../adapters/unleash.adapter');
     return new UnleashFeatureFlagAdapter(config);
   }
 
@@ -70,7 +71,9 @@ describe('UnleashFeatureFlagAdapter', () => {
       jest.doMock(
         'unleash-client',
         () => {
-          throw new Error('Cannot find module');
+          const err = new Error("Cannot find module 'unleash-client'");
+          (err as NodeJS.ErrnoException).code = 'MODULE_NOT_FOUND';
+          throw err;
         },
         { virtual: true },
       );

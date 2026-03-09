@@ -31,7 +31,8 @@ describe('LaunchDarklyFeatureFlagAdapter', () => {
   });
 
   async function createAdapter(sdkKey = 'sdk-test') {
-    const { LaunchDarklyFeatureFlagAdapter } = require('../adapters/launchdarkly.adapter');
+    const { LaunchDarklyFeatureFlagAdapter } =
+      require('../adapters/launchdarkly.adapter') as typeof import('../adapters/launchdarkly.adapter');
     return new LaunchDarklyFeatureFlagAdapter({ sdkKey });
   }
 

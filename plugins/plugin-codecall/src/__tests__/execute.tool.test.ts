@@ -45,11 +45,10 @@ jest.mock('@frontmcp/sdk', () => ({
     }
 
     get<T>(token: unknown): T {
-      const dep = this.dependencies.get(token);
-      if (!dep) {
+      if (!this.dependencies.has(token)) {
         throw new Error(`Dependency not found: ${(token as { name?: string })?.name || token}`);
       }
-      return dep as T;
+      return this.dependencies.get(token) as T;
     }
 
     tryGet<T>(token: unknown): T | undefined {
@@ -490,7 +489,8 @@ describe('ExecuteTool', () => {
       // Verify the environment has callTool
       expect(capturedEnv).toBeDefined();
 
-      expect(typeof (capturedEnv as any).callTool).toBe('function');
+      const typedEnv = capturedEnv as { callTool: (...args: unknown[]) => unknown };
+      expect(typeof typedEnv.callTool).toBe('function');
     });
 
     it('should create proper MCP request format for flow', async () => {
