@@ -1,43 +1,29 @@
 /**
  * @frontmcp/ui
  *
- * UI component library for FrontMCP applications.
- * Provides HTML components, React components, and rendering utilities.
+ * MUI-based React component library for FrontMCP applications.
+ * Provides themed components, content renderers, and MCP bridge hooks.
  *
- * For build tools, bundling, platform adapters, and theming, use @frontmcp/uipack.
- *
- * @example HTML components
+ * @example Theme
  * ```typescript
- * import { button, card, alert, badge } from '@frontmcp/ui/components';
- * import { baseLayout } from '@frontmcp/ui/layouts';
+ * import { FrontMcpThemeProvider, createFrontMcpTheme } from '@frontmcp/ui/theme';
  * ```
  *
- * @example Theme (from uipack)
+ * @example Components
  * ```typescript
- * import { DEFAULT_THEME, createTheme } from '@frontmcp/uipack/theme';
+ * import { Button, Card, Alert } from '@frontmcp/ui/components';
  * ```
  *
- * @example React components
+ * @example React hooks
  * ```typescript
- * import { Button, Card, Alert, Badge } from '@frontmcp/ui/react';
- * import { useMcpBridge, useCallTool } from '@frontmcp/ui/react/hooks';
+ * import { useMcpBridge, useCallTool } from '@frontmcp/ui/react';
  * ```
  *
- * @example Universal renderer
+ * @example Renderer
  * ```typescript
- * import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
+ * import { renderContent, detectContentType } from '@frontmcp/ui/renderer';
  * ```
  */
-
-// ============================================
-// HTML Components (Pure HTML string generation)
-// ============================================
-export * from './components';
-
-// ============================================
-// Layout System
-// ============================================
-export * from './layouts';
 
 // ============================================
 // MCP Bridge
@@ -62,55 +48,14 @@ export {
 } from './bridge';
 
 // ============================================
-// Web Components
-// ============================================
-export {
-  // Registration
-  registerAllComponents,
-  registerFmcpButton,
-  registerFmcpCard,
-  registerFmcpAlert,
-  registerFmcpBadge,
-  registerFmcpInput,
-  registerFmcpSelect,
-  // Element classes
-  FmcpButton,
-  FmcpCard,
-  FmcpAlert,
-  FmcpBadge,
-  FmcpInput,
-  FmcpSelect,
-  // Base class for custom elements
-  FmcpElement,
-} from './web-components';
-
-// ============================================
-// React Components and Hooks
+// React Hooks (re-exported for convenience)
 // ============================================
 export * from './react';
 
 // ============================================
-// React Renderer and Adapter
+// Theme, Components, and Renderer are available
+// via subpath imports:
+//   @frontmcp/ui/theme
+//   @frontmcp/ui/components
+//   @frontmcp/ui/renderer
 // ============================================
-export { ReactRenderer, reactRenderer, ReactRendererAdapter, createReactAdapter, loadReactAdapter } from './renderers';
-
-// ============================================
-// Universal Renderer (separate import path)
-// ============================================
-// Use '@frontmcp/ui/universal' for UniversalApp and related exports.
-// Not re-exported here to avoid conflicts with ./react exports.
-
-// ============================================
-// SSR Bundler (separate import path)
-// ============================================
-// Use '@frontmcp/ui/bundler' for InMemoryBundler and related exports.
-// Not re-exported here to avoid conflicts.
-
-// ============================================
-// Note: Theme, validation, utils, styles are in @frontmcp/uipack
-// ============================================
-// These foundational modules are in @frontmcp/uipack to avoid circular deps:
-// - Theme (@frontmcp/uipack/theme)
-// - Validation (@frontmcp/uipack/validation)
-// - Utils (@frontmcp/uipack/utils)
-// - Styles (@frontmcp/uipack/styles)

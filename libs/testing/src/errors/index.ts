@@ -19,7 +19,10 @@ export class TestClientError extends Error {
  * Error thrown when connection fails
  */
 export class ConnectionError extends TestClientError {
-  constructor(message: string, public override readonly cause?: Error) {
+  constructor(
+    message: string,
+    public override readonly cause?: Error,
+  ) {
     super(message);
     this.name = 'ConnectionError';
     Object.setPrototypeOf(this, new.target.prototype);
@@ -30,7 +33,10 @@ export class ConnectionError extends TestClientError {
  * Error thrown when request times out
  */
 export class TimeoutError extends TestClientError {
-  constructor(message: string, public readonly timeoutMs: number) {
+  constructor(
+    message: string,
+    public readonly timeoutMs: number,
+  ) {
     super(message);
     this.name = 'TimeoutError';
     Object.setPrototypeOf(this, new.target.prototype);
@@ -41,7 +47,11 @@ export class TimeoutError extends TestClientError {
  * Error thrown when MCP returns an error response
  */
 export class McpProtocolError extends TestClientError {
-  constructor(message: string, public readonly code: number, public readonly data?: unknown) {
+  constructor(
+    message: string,
+    public readonly code: number,
+    public readonly data?: unknown,
+  ) {
     super(message);
     this.name = 'McpProtocolError';
     Object.setPrototypeOf(this, new.target.prototype);
@@ -52,7 +62,10 @@ export class McpProtocolError extends TestClientError {
  * Error thrown when server fails to start
  */
 export class ServerStartError extends TestClientError {
-  constructor(message: string, public override readonly cause?: Error) {
+  constructor(
+    message: string,
+    public override readonly cause?: Error,
+  ) {
     super(message);
     this.name = 'ServerStartError';
     Object.setPrototypeOf(this, new.target.prototype);

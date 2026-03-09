@@ -29,8 +29,8 @@ Get all jobs (local + dynamic).
 getJobs(includeHidden?: boolean): JobEntry[]
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter       | Type      | Default | Description                    |
+| --------------- | --------- | ------- | ------------------------------ |
 | `includeHidden` | `boolean` | `false` | Include hidden jobs in results |
 
 **Example:**
@@ -176,13 +176,13 @@ hasAny(): boolean
 
 When the jobs system is enabled, the registry's capabilities are exposed through these MCP tools:
 
-| Tool | Description |
-|------|-------------|
-| `list-jobs` | List all registered jobs with optional filtering |
-| `execute-job` | Execute a job by name (inline or background) |
-| `get-job-status` | Get execution status by `runId` |
-| `register-job` | Register a dynamic job with JavaScript source |
-| `remove-job` | Remove a dynamic job |
+| Tool             | Description                                      |
+| ---------------- | ------------------------------------------------ |
+| `list-jobs`      | List all registered jobs with optional filtering |
+| `execute-job`    | Execute a job by name (inline or background)     |
+| `get-job-status` | Get execution status by `runId`                  |
+| `register-job`   | Register a dynamic job with JavaScript source    |
+| `remove-job`     | Remove a dynamic job                             |
 
 ## Change Events
 

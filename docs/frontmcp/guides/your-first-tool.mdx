@@ -43,13 +43,13 @@ export default class AddTool extends ToolContext {
 
 Let's break this down:
 
-| Property | Purpose |
-|----------|---------|
-| `name` | Unique identifier for the tool |
-| `description` | Helps LLMs understand when to use this tool |
-| `inputSchema` | Zod schema for input validation |
+| Property       | Purpose                                          |
+| -------------- | ------------------------------------------------ |
+| `name`         | Unique identifier for the tool                   |
+| `description`  | Helps LLMs understand when to use this tool      |
+| `inputSchema`  | Zod schema for input validation                  |
 | `outputSchema` | Can be a Zod schema or shorthand like `'number'` |
-| `execute()` | The logic that runs when the tool is called |
+| `execute()`    | The logic that runs when the tool is called      |
 
 ---
 
@@ -105,6 +105,7 @@ export default class Server {}
     ```
 
     Connect to `http://localhost:3000` and you'll see your `calculator:add` tool listed.
+
   </Step>
 
   <Step title="Call the tool">
@@ -114,6 +115,7 @@ export default class Server {}
     ```
 
     You should get back `8`.
+
   </Step>
 </Steps>
 
@@ -209,6 +211,7 @@ inputSchema: {
     // Bad - too vague
     description: 'Math operation'
     ```
+
   </Accordion>
 
   <Accordion title="Use .describe() on schema fields">
@@ -220,6 +223,7 @@ inputSchema: {
       category: z.string().describe('Expense category like "travel" or "meals"'),
     }
     ```
+
   </Accordion>
 
   <Accordion title="Keep tools focused">

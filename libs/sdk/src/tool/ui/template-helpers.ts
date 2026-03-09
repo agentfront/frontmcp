@@ -7,12 +7,11 @@
  * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
  */
 
-import type { TemplateHelpers } from '../../common/metadata/tool-ui.metadata';
 // Import escapeHtml from @frontmcp/uipack/utils - single source of truth (no React needed)
 import { escapeHtml } from '@frontmcp/uipack/utils';
 
-// Re-export createTemplateHelpers from @frontmcp/uipack (no React needed)
-export { createTemplateHelpers } from '@frontmcp/uipack/runtime';
+// Re-export createTemplateHelpers from @frontmcp/uipack shell module
+export { createTemplateHelpers } from '@frontmcp/uipack/shell';
 
 // ============================================
 // Individual Helper Functions (Backwards Compatibility)
@@ -78,20 +77,6 @@ export function jsonEmbed(data: unknown): string {
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026')
     .replace(/'/g, '\\u0027');
-}
-
-/**
- * Create a TemplateHelpers object with all helper functions.
- * @deprecated Use createTemplateHelpers from @frontmcp/uipack/runtime instead
- */
-export function createTemplateHelpersLocal(): TemplateHelpers {
-  return {
-    escapeHtml,
-    formatDate,
-    formatCurrency,
-    uniqueId,
-    jsonEmbed,
-  };
 }
 
 /**

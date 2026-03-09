@@ -21,7 +21,7 @@ let scopeCache = new WeakMap<object, Promise<Scope>>();
  *
  * @internal
  */
-async function getScope(config: FrontMcpConfigInput): Promise<Scope> {
+async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Promise<Scope> {
   // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle)
   let resolvedConfig = config;
   if (typeof config === 'function') {
@@ -30,7 +30,6 @@ async function getScope(config: FrontMcpConfigInput): Promise<Scope> {
       resolvedConfig = stored as FrontMcpConfigInput;
     }
   }
-
   // Create a unique cache key based on config
   // Since config is passed by reference, same config object = same scope
   const cacheKey = resolvedConfig as object;
@@ -43,7 +42,11 @@ async function getScope(config: FrontMcpConfigInput): Promise<Scope> {
         const { PublicMcpError } = await import('../errors/index.js');
 
         // Create instance without starting HTTP server
-        const instance = await FrontMcpInstance.createForGraph(resolvedConfig);
+        // CLI mode skips non-essential registries for faster startup
+        const instance =
+          mode === 'cli'
+            ? await FrontMcpInstance.createForCli(resolvedConfig)
+            : await FrontMcpInstance.createForGraph(resolvedConfig);
         const scopes = instance.getScopes();
 
         if (scopes.length === 0) {
@@ -100,9 +103,12 @@ async function getScope(config: FrontMcpConfigInput): Promise<Scope> {
  * const tools = await client.listTools();
  * ```
  */
-export async function connect(config: FrontMcpConfigInput, options?: ConnectOptions): Promise<DirectClient> {
+export async function connect(
+  config: FrontMcpConfigInput,
+  options?: ConnectOptions & { mode?: 'full' | 'cli' },
+): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
-  const scope = await getScope(config);
+  const scope = await getScope(config, options?.mode);
   return DirectClientImpl.create(scope, options);
 }
 

@@ -1,272 +1,92 @@
 /**
- * @file serving-mode.ts
- * @description Serving mode resolution for auto-detection based on client capabilities.
+ * Serving Mode Resolution
  *
- * The `'auto'` serving mode automatically selects the appropriate delivery mechanism
- * based on the MCP client's capabilities:
+ * Platform-aware serving mode resolution for MCP tool UI.
  *
- * - **OpenAI/ext-apps**: Use `'inline'` mode with `_meta['ui/html']`
- * - **Claude**: Use `'inline'` mode with structuredContent (raw HTML + raw output)
- * - **Gemini/unsupported**: Skip UI entirely (return JSON only)
- *
- * When a specific mode is forced (not 'auto'), but the client doesn't support it,
- * the UI is skipped to prevent broken experiences.
+ * @packageDocumentation
  */
 
-import type { WidgetServingMode } from '../types';
-import type { AIPlatformType } from './platform-meta';
+/**
+ * Platform types recognized by the serving mode resolver.
+ */
+export type AdapterPlatformType = 'openai' | 'ext-apps' | 'claude' | 'gemini' | 'generic-mcp' | 'unknown' | string;
 
-// ============================================
-// Types
-// ============================================
+/**
+ * Input for serving mode resolution.
+ */
+export interface ResolveServingModeOptions {
+  /** The configured serving mode from the tool's UI config */
+  configuredMode: string;
+  /** The detected platform type */
+  platformType: AdapterPlatformType;
+}
 
 /**
  * Result of serving mode resolution.
  */
-export interface ResolvedServingMode {
-  /**
-   * The effective serving mode to use.
-   * `null` means UI should be skipped entirely.
-   */
-  effectiveMode: Exclude<WidgetServingMode, 'auto'> | null;
-
-  /**
-   * Whether the client supports widget UI.
-   */
+export interface ServingModeResult {
+  /** The original configured mode */
+  mode: string;
+  /** Whether the platform supports UI rendering */
   supportsUI: boolean;
-
-  /**
-   * Whether structuredContent should be used (Claude).
-   * When true, the response includes raw tool output in structuredContent
-   * and raw HTML in a single content block.
-   */
+  /** The effective serving mode to use, or null if UI not supported */
+  effectiveMode: string | null;
+  /** Whether to include structuredContent in the tool response */
   useStructuredContent: boolean;
-
-  /**
-   * Reason for the decision (useful for logging/debugging).
-   */
-  reason: string;
+  /** Reason for the decision (for logging) */
+  reason?: string;
 }
 
 /**
- * Options for resolving serving mode.
- */
-export interface ResolveServingModeOptions {
-  /**
-   * The configured serving mode (from UITemplateConfig).
-   * Defaults to 'auto'.
-   */
-  configuredMode?: WidgetServingMode;
-
-  /**
-   * The detected platform type.
-   */
-  platformType: AIPlatformType;
-}
-
-// ============================================
-// Platform Capabilities Map
-// ============================================
-
-/**
- * Platform UI capabilities.
- */
-interface PlatformUICapabilities {
-  /** Whether the platform supports widget UI */
-  supportsWidgets: boolean;
-  /** Whether to use structuredContent format (Claude) */
-  useStructuredContent: boolean;
-  /** Supported serving modes for this platform */
-  supportedModes: Array<Exclude<WidgetServingMode, 'auto'>>;
-  /** Default serving mode for auto-detection */
-  defaultMode: Exclude<WidgetServingMode, 'auto'>;
-}
-
-/**
- * Platform capabilities mapping.
- * All platforms that support widgets use structuredContent for JSON payloads.
- */
-const PLATFORM_CAPABILITIES: Record<AIPlatformType, PlatformUICapabilities> = {
-  openai: {
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline', 'static', 'hybrid', 'direct-url', 'custom-url'],
-    defaultMode: 'inline',
-  },
-  'ext-apps': {
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline', 'static', 'hybrid', 'direct-url', 'custom-url'],
-    defaultMode: 'inline',
-  },
-  claude: {
-    supportsWidgets: true,
-    useStructuredContent: true,
-    // Claude supports inline only (no resource fetching for static)
-    supportedModes: ['inline'],
-    defaultMode: 'inline',
-  },
-  cursor: {
-    // Cursor (IDE) - similar to OpenAI, supports widgets
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline', 'static', 'hybrid', 'direct-url', 'custom-url'],
-    defaultMode: 'inline',
-  },
-  continue: {
-    // Continue (IDE extension) - basic widget support
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline'],
-    defaultMode: 'inline',
-  },
-  cody: {
-    // Sourcegraph Cody - basic widget support
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline'],
-    defaultMode: 'inline',
-  },
-  'generic-mcp': {
-    // Generic MCP clients - assume widget support
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline', 'static'],
-    defaultMode: 'inline',
-  },
-  gemini: {
-    supportsWidgets: false,
-    useStructuredContent: false,
-    supportedModes: [],
-    defaultMode: 'inline', // Not used since supportsWidgets is false
-  },
-  unknown: {
-    // Unknown clients: assume widget support, return ui/html + text/html+mcp
-    // This allows generic MCP clients to receive and render widget UI
-    supportsWidgets: true,
-    useStructuredContent: true,
-    supportedModes: ['inline'],
-    defaultMode: 'inline',
-  },
-};
-
-// ============================================
-// Resolver Function
-// ============================================
-
-/**
- * Resolve the effective serving mode based on configuration and client capabilities.
+ * Resolve the effective serving mode based on platform capabilities.
  *
- * This function implements the 'auto' serving mode logic:
- * 1. If `configuredMode` is 'auto', select the best mode for the platform
- * 2. If a specific mode is forced, check if the platform supports it
- * 3. If the platform doesn't support the mode, return `null` (skip UI)
- *
- * @example
- * ```typescript
- * const result = resolveServingMode({
- *   configuredMode: 'auto',
- *   platformType: 'openai',
- * });
- * // { effectiveMode: 'inline', useStructuredContent: true, supportsUI: true, ... }
- *
- * const claudeResult = resolveServingMode({
- *   configuredMode: 'auto',
- *   platformType: 'claude',
- * });
- * // { effectiveMode: 'inline', useStructuredContent: true, supportsUI: true, ... }
- *
- * const geminiResult = resolveServingMode({
- *   configuredMode: 'auto',
- *   platformType: 'gemini',
- * });
- * // { effectiveMode: null, useStructuredContent: false, supportsUI: false, ... }
- * ```
+ * - Gemini: No UI support
+ * - OpenAI, ext-apps, claude, generic-mcp, unknown: UI supported, inline mode
+ * - OpenAI/ext-apps/generic-mcp/unknown: include structuredContent
  */
-export function resolveServingMode(options: ResolveServingModeOptions): ResolvedServingMode {
-  const { configuredMode = 'auto', platformType } = options;
-  const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
+export function resolveServingMode(options: ResolveServingModeOptions): ServingModeResult {
+  const { configuredMode, platformType } = options;
 
-  // If platform doesn't support widgets at all
-  if (!capabilities.supportsWidgets) {
+  // Gemini does not support MCP UI
+  if (platformType === 'gemini') {
     return {
+      mode: configuredMode,
+      supportsUI: false,
       effectiveMode: null,
       useStructuredContent: false,
-      supportsUI: false,
-      reason: `Platform '${platformType}' does not support widget UI`,
+      reason: 'Gemini does not support MCP Apps UI',
     };
   }
 
-  // Auto mode: use platform's default mode
-  if (configuredMode === 'auto') {
-    return {
-      effectiveMode: capabilities.defaultMode,
-      useStructuredContent: capabilities.useStructuredContent,
-      supportsUI: true,
-      reason: `Auto-selected '${capabilities.defaultMode}' for platform '${platformType}'`,
-    };
+  // Determine effective mode
+  const effectiveMode: string | null = configuredMode === 'auto' ? 'inline' : configuredMode;
+
+  // Hybrid mode is only supported by widget-capable platforms
+  if (effectiveMode === 'hybrid') {
+    const hybridCapable = platformType === 'openai' || platformType === 'ext-apps' || platformType === 'cursor';
+    if (!hybridCapable) {
+      return {
+        mode: configuredMode,
+        supportsUI: false,
+        effectiveMode: null,
+        useStructuredContent: false,
+        reason: `Platform ${platformType} does not support hybrid serving mode`,
+      };
+    }
   }
 
-  // Specific mode: check if platform supports it
-  if (capabilities.supportedModes.includes(configuredMode)) {
-    return {
-      effectiveMode: configuredMode,
-      useStructuredContent: capabilities.useStructuredContent,
-      supportsUI: true,
-      reason: `Using configured mode '${configuredMode}' (supported by '${platformType}')`,
-    };
-  }
+  // Determine if structuredContent should be included
+  const useStructuredContent =
+    platformType === 'openai' ||
+    platformType === 'ext-apps' ||
+    platformType === 'generic-mcp' ||
+    platformType === 'unknown';
 
-  // Mode not supported by platform: skip UI
   return {
-    effectiveMode: null,
-    useStructuredContent: false,
-    supportsUI: false,
-    reason: `Mode '${configuredMode}' not supported by platform '${platformType}'. Supported: ${
-      capabilities.supportedModes.join(', ') || 'none'
-    }`,
+    mode: configuredMode,
+    supportsUI: true,
+    effectiveMode,
+    useStructuredContent,
+    reason: `Platform ${platformType} supports UI, mode: ${effectiveMode}`,
   };
-}
-
-/**
- * Check if a platform supports a specific serving mode.
- */
-export function isPlatformModeSupported(platformType: AIPlatformType, mode: WidgetServingMode): boolean {
-  const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
-
-  if (mode === 'auto') {
-    return capabilities.supportsWidgets;
-  }
-
-  return capabilities.supportedModes.includes(mode);
-}
-
-/**
- * Get the default serving mode for a platform.
- */
-export function getDefaultServingMode(platformType: AIPlatformType): Exclude<WidgetServingMode, 'auto'> | null {
-  const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
-  return capabilities.supportsWidgets ? capabilities.defaultMode : null;
-}
-
-/**
- * Check if a platform uses structuredContent format.
- * When true, responses include raw tool output in structuredContent
- * and raw HTML in a single content block.
- */
-export function platformUsesStructuredContent(platformType: AIPlatformType): boolean {
-  const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
-  return capabilities.useStructuredContent;
-}
-
-/**
- * Check if a platform supports widget UI via _meta.
- *
- * These platforms can read HTML from _meta['ui/html'] and render it
- * in a sandboxed iframe. They don't need the content blocks filled with
- * formatted data since the widget handles display.
- */
-export function platformSupportsWidgets(platformType: AIPlatformType): boolean {
-  const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
-  return capabilities.supportsWidgets;
 }

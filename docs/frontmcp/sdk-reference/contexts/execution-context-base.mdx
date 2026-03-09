@@ -27,11 +27,11 @@ type ExecutionContextBaseArgs = {
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `runId` | `string` | Unique identifier for this execution (UUID) |
-| `activeStage` | `string` | Current execution stage (default: 'init') |
-| `logger` | `FrontMcpLogger` | Logger instance with scope prefix |
+| Property      | Type             | Description                                 |
+| ------------- | ---------------- | ------------------------------------------- |
+| `runId`       | `string`         | Unique identifier for this execution (UUID) |
+| `activeStage` | `string`         | Current execution stage (default: 'init')   |
+| `logger`      | `FrontMcpLogger` | Logger instance with scope prefix           |
 
 ## Methods
 
@@ -190,6 +190,7 @@ fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>
 ```
 
 Automatically injects:
+
 - Authorization headers
 - Trace context headers
 - Custom headers from context

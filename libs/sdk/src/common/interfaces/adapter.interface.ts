@@ -13,6 +13,24 @@ export interface AdapterInterface {
    */
   setLogger?: (logger: FrontMcpLogger) => void;
   fetch: () => Promise<FrontMcpAdapterResponse> | FrontMcpAdapterResponse;
+
+  /**
+   * Optional: Register a callback for when the adapter's response changes (e.g., spec polling).
+   * Returns an unsubscribe function.
+   */
+  onUpdate?: (callback: (response: FrontMcpAdapterResponse) => void) => () => void;
+
+  /**
+   * Optional: Start polling for changes.
+   * Called by the SDK after initial fetch() and registry creation.
+   */
+  startPolling?: () => void;
+
+  /**
+   * Optional: Stop polling for changes.
+   * Called during dispose/cleanup.
+   */
+  stopPolling?: () => void;
 }
 
 export interface FrontMcpAdapterResponse {

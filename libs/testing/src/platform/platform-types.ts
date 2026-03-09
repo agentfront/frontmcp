@@ -16,15 +16,7 @@
 /**
  * Supported AI platform types for testing.
  *
- * - `openai`: OpenAI ChatGPT (uses openai/* meta keys)
- * - `ext-apps`: MCP Apps per SEP-1865 (uses ui/* meta keys)
- * - `claude`: Claude Desktop (uses ui/* keys only)
- * - `cursor`: Cursor IDE (uses ui/* keys only)
- * - `continue`: Continue Dev (uses ui/* keys only)
- * - `cody`: Sourcegraph Cody (uses ui/* keys only)
- * - `gemini`: Google Gemini (uses ui/* keys only)
- * - `generic-mcp`: Generic MCP client (uses ui/* keys only)
- * - `unknown`: Unknown platform (uses ui/* keys only)
+ * All platforms use `ui/*` meta keys per the MCP Apps specification.
  */
 export type TestPlatformType =
   | 'openai'
@@ -39,37 +31,31 @@ export type TestPlatformType =
 
 /**
  * Platform meta namespace used for tool responses.
- *
- * - `openai`: Uses `openai/*` keys only
- * - `ui`: Uses `ui/*` keys only (all non-OpenAI platforms)
+ * All platforms now use `ui/*` keys per the MCP Apps specification.
  */
-export type PlatformMetaNamespace = 'openai' | 'ui';
+export type PlatformMetaNamespace = 'ui';
 
 /**
  * Get the meta namespace for a platform type.
+ * All platforms use the `ui` namespace.
  */
 export function getPlatformMetaNamespace(platform: TestPlatformType): PlatformMetaNamespace {
-  switch (platform) {
-    case 'openai':
-      return 'openai';
-    default:
-      // All non-OpenAI platforms use ui/* namespace
-      return 'ui';
-  }
+  return 'ui';
 }
 
 /**
  * Get the expected MIME type for a platform.
  *
- * - OpenAI uses `text/html+skybridge`
- * - All other platforms use `text/html+mcp`
+ * - OpenAI uses `text/html;profile=mcp-app`
+ * - All other platforms use `text/html;profile=mcp-app`
  */
 export function getPlatformMimeType(platform: TestPlatformType): string {
-  return platform === 'openai' ? 'text/html+skybridge' : 'text/html+mcp';
+  return 'text/html;profile=mcp-app';
 }
 
 /**
  * Check if a platform uses OpenAI-specific meta keys.
+ * Note: OpenAI now uses the standard ui/* namespace like all other platforms.
  */
 export function isOpenAIPlatform(platform: TestPlatformType): boolean {
   return platform === 'openai';
@@ -83,36 +69,27 @@ export function isExtAppsPlatform(platform: TestPlatformType): boolean {
 }
 
 /**
- * Check if a platform uses ui/* meta keys (non-OpenAI).
+ * Check if a platform uses ui/* meta keys.
+ * All platforms now use ui/* keys.
  */
 export function isUiPlatform(platform: TestPlatformType): boolean {
-  return platform !== 'openai';
+  return true;
 }
 
 /**
  * Get all expected meta key prefixes for a platform's tools/list response.
+ * All platforms use ui/* namespace.
  */
 export function getToolsListMetaPrefixes(platform: TestPlatformType): string[] {
-  switch (platform) {
-    case 'openai':
-      return ['openai/'];
-    default:
-      // All non-OpenAI platforms use ui/* only
-      return ['ui/'];
-  }
+  return ['ui/'];
 }
 
 /**
  * Get all expected meta key prefixes for a platform's tool/call response.
+ * All platforms use ui/* namespace.
  */
 export function getToolCallMetaPrefixes(platform: TestPlatformType): string[] {
-  switch (platform) {
-    case 'openai':
-      return ['openai/'];
-    default:
-      // All non-OpenAI platforms use ui/* only
-      return ['ui/'];
-  }
+  return ['ui/'];
 }
 
 /**
@@ -120,12 +97,6 @@ export function getToolCallMetaPrefixes(platform: TestPlatformType): string[] {
  * These prefixes should NOT appear in responses for the given platform.
  */
 export function getForbiddenMetaPrefixes(platform: TestPlatformType): string[] {
-  switch (platform) {
-    case 'openai':
-      // OpenAI should NOT have ui/* or frontmcp/* keys
-      return ['ui/', 'frontmcp/'];
-    default:
-      // All non-OpenAI platforms should NOT have openai/* or frontmcp/* keys
-      return ['openai/', 'frontmcp/'];
-  }
+  // No platform should have openai/* or frontmcp/* keys
+  return ['openai/', 'frontmcp/'];
 }

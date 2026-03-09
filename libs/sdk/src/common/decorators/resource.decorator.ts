@@ -1,10 +1,5 @@
 import 'reflect-metadata';
-import {
-  FrontMcpResourceTokens,
-  FrontMcpResourceTemplateTokens,
-  extendedResourceMetadata,
-  extendedResourceTemplateMetadata,
-} from '../tokens';
+import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens, extendedResourceMetadata } from '../tokens';
 import {
   frontMcpResourceMetadataSchema,
   frontMcpResourceTemplateMetadataSchema,
@@ -44,15 +39,9 @@ function FrontMcpResourceTemplate(providedMetadata: ResourceTemplateMetadata): C
 
     Reflect.defineMetadata(FrontMcpResourceTemplateTokens.type, true, target);
 
-    const extended: Record<string, unknown> = {};
     for (const property in metadata) {
-      if (FrontMcpResourceTemplateTokens[property]) {
-        Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property], metadata[property], target);
-      } else {
-        extended[property] = metadata[property];
-      }
+      Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property] ?? property, metadata[property], target);
     }
-    Reflect.defineMetadata(extendedResourceTemplateMetadata, extended, target);
   };
 }
 

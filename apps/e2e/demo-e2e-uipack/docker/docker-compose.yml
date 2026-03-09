@@ -1,0 +1,27 @@
+services:
+  verdaccio:
+    image: verdaccio/verdaccio:5
+    ports:
+      - "14873:4873"
+    volumes:
+      - ./verdaccio/config.yaml:/verdaccio/conf/config.yaml
+      - verdaccio-storage:/verdaccio/storage
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4873/-/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  esm-sh:
+    build:
+      context: ./esm-sh
+      dockerfile: Dockerfile
+    ports:
+      - "8088:8080"
+    depends_on:
+      verdaccio:
+        condition: service_healthy
+
+volumes:
+  verdaccio-storage:

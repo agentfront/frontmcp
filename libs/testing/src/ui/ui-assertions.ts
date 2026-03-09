@@ -6,8 +6,7 @@
  * from @frontmcp/ui/adapters. Key fields include:
  * - `ui/html`: Inline rendered HTML (universal)
  * - `ui/mimeType`: MIME type for the HTML content
- * - `openai/outputTemplate`: Resource URI for widget template (OpenAI)
- * - `openai/widgetAccessible`: Whether widget can invoke tools (OpenAI)
+ * - `ui`: Nested UI object with resourceUri, csp, etc.
  *
  * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
  *
@@ -203,7 +202,7 @@ export const UIAssertions = {
 
   /**
    * Assert that widget metadata is present in the result.
-   * Checks for ui/html, openai/outputTemplate, or ui/mimeType.
+   * Checks for ui/html, ui/mimeType, or nested ui object with resourceUri.
    * @param result - The tool result wrapper
    * @throws Error if widget metadata is missing
    */
@@ -216,11 +215,16 @@ export const UIAssertions = {
 
     // Check for any widget-related metadata fields (aligned with toHaveWidgetMetadata matcher)
     const hasUiHtml = Boolean(meta['ui/html']);
-    const hasOutputTemplate = Boolean(meta['openai/outputTemplate']);
     const hasMimeType = Boolean(meta['ui/mimeType']);
+    const uiValue = meta['ui'];
+    const ui = uiValue && typeof uiValue === 'object' ? (uiValue as Record<string, unknown>) : undefined;
+    const hasUiObject = Boolean(
+      ui &&
+        (typeof ui['resourceUri'] === 'string' || typeof ui['mimeType'] === 'string' || typeof ui['html'] === 'string'),
+    );
 
-    if (!hasUiHtml && !hasOutputTemplate && !hasMimeType) {
-      throw new Error('Expected _meta to have widget metadata (ui/html, openai/outputTemplate, or ui/mimeType)');
+    if (!hasUiHtml && !hasMimeType && !hasUiObject) {
+      throw new Error('Expected _meta to have widget metadata (ui/html, ui/mimeType, or non-empty ui object)');
     }
   },
 
@@ -260,7 +264,7 @@ export const UIAssertions = {
 
   /**
    * Assert tool result has correct meta keys for OpenAI platform.
-   * Verifies openai/* keys are present and ui/*, frontmcp/* keys are absent.
+   * Verifies ui/* keys are present and openai/*, frontmcp/* keys are absent.
    * @param result - The tool result wrapper
    * @throws Error if meta keys don't match OpenAI expectations
    */
@@ -364,17 +368,8 @@ export const UIAssertions = {
       throw new Error(`Expected tool result to have _meta with MIME type for platform "${platform}"`);
     }
 
-    // Determine which key to check based on platform
-    let mimeTypeKey: string;
-    switch (platform) {
-      case 'openai':
-        mimeTypeKey = 'openai/mimeType';
-        break;
-      default:
-        // All non-OpenAI platforms use ui/* namespace
-        mimeTypeKey = 'ui/mimeType';
-    }
-
+    // All platforms use ui/* namespace
+    const mimeTypeKey = 'ui/mimeType';
     const actualMimeType = meta[mimeTypeKey];
 
     if (actualMimeType !== expectedMimeType) {
@@ -399,17 +394,8 @@ export const UIAssertions = {
       throw new Error(`Expected tool result to have _meta with platform HTML for "${platform}"`);
     }
 
-    // Determine which key to check based on platform
-    let htmlKey: string;
-    switch (platform) {
-      case 'openai':
-        htmlKey = 'openai/html';
-        break;
-      default:
-        // All non-OpenAI platforms use ui/* namespace
-        htmlKey = 'ui/html';
-    }
-
+    // All platforms use ui/* namespace
+    const htmlKey = 'ui/html';
     const html = meta[htmlKey];
 
     if (typeof html !== 'string' || html.length === 0) {

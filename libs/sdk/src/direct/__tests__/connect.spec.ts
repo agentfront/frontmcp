@@ -2,6 +2,7 @@
  * Connect Utilities Tests
  */
 
+import 'reflect-metadata';
 import type { FrontMcpConfigInput } from '../../common';
 import type { DirectClient } from '../client.types';
 
@@ -50,6 +51,7 @@ const mockFrontMcpInstance = {
 jest.mock('../../front-mcp/front-mcp', () => ({
   FrontMcpInstance: {
     createForGraph: jest.fn().mockResolvedValue(mockFrontMcpInstance),
+    createForCli: jest.fn().mockResolvedValue(mockFrontMcpInstance),
   },
 }));
 
@@ -181,6 +183,42 @@ describe('connect utilities', () => {
           }),
         }),
       );
+    });
+
+    it('should resolve decorated class to config object', async () => {
+      const { connect, clearScopeCache } = await import('../connect');
+      const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+      clearScopeCache();
+
+      // Simulate a @FrontMcp-decorated class (a function with __frontmcp:config metadata)
+      const decoratedClass = class MyApp {};
+      const storedConfig: FrontMcpConfigInput = {
+        info: { name: 'decorated-server', version: '2.0.0' },
+        apps: [],
+      };
+      Reflect.defineMetadata('__frontmcp:config', storedConfig, decoratedClass);
+
+      await connect(decoratedClass as unknown as FrontMcpConfigInput);
+
+      // Should have been called with the resolved config object, not the class function
+      expect(FrontMcpInstance.createForGraph).toHaveBeenCalledWith(storedConfig);
+    });
+
+    it('should use cli mode when specified with decorated class', async () => {
+      const { connect, clearScopeCache } = await import('../connect');
+      const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+      clearScopeCache();
+
+      const decoratedClass = class CliApp {};
+      const storedConfig: FrontMcpConfigInput = {
+        info: { name: 'cli-server', version: '1.0.0' },
+        apps: [],
+      };
+      Reflect.defineMetadata('__frontmcp:config', storedConfig, decoratedClass);
+
+      await connect(decoratedClass as unknown as FrontMcpConfigInput, { mode: 'cli' });
+
+      expect(FrontMcpInstance.createForCli).toHaveBeenCalledWith(storedConfig);
     });
 
     it('should generate sessionId when not provided', async () => {

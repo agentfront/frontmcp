@@ -18,6 +18,7 @@ import type { JobRegistryInterface } from '../job.registry';
         description: z.string().optional(),
         tags: z.array(z.string()).optional(),
         labels: z.record(z.string(), z.string()).optional(),
+        inputSchema: z.record(z.string(), z.unknown()).optional(),
       }),
     ),
     count: z.number(),
@@ -41,6 +42,7 @@ export default class ListJobsTool extends ToolContext {
       description: j.metadata.description,
       tags: j.getTags(),
       labels: j.getLabels(),
+      inputSchema: j.getInputJsonSchema() ?? undefined,
     }));
 
     return {

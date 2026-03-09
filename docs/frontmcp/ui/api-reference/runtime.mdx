@@ -514,7 +514,7 @@ const meta = buildOpenAIMeta({
   widgetDescription: 'Interactive weather widget',
   displayMode: 'fullscreen',
 });
-// { 'openai/widgetAccessible': true, 'openai/widgetCSP': {...}, ... }
+// { ui: { resourceUri: '...', csp: {...} }, ... }
 ```
 
 ### `getToolUIMimeType(platform?)`
@@ -524,7 +524,7 @@ Gets the MIME type for tool UI responses.
 ```typescript
 import { getToolUIMimeType } from '@frontmcp/uipack/runtime';
 
-getToolUIMimeType('openai');   // 'text/html+skybridge'
+getToolUIMimeType('openai');   // 'text/html;profile=mcp-app'
 getToolUIMimeType('ext-apps'); // 'text/html+mcp'
 getToolUIMimeType('generic');  // 'text/html'
 ```

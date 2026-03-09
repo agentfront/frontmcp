@@ -95,7 +95,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
   const configOrClass = mod.default || mod;
 
   // Use @frontmcp/sdk connect() to boot in-memory client
-  let connect: (config: unknown) => Promise<unknown>;
+  let connect: (config: unknown, options?: { mode?: string }) => Promise<unknown>;
   try {
     const sdk = require('@frontmcp/sdk');
     connect = sdk.connect || sdk.direct?.connect;
@@ -108,7 +108,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     );
   }
 
-  const client = await connect(configOrClass) as {
+  const client = await connect(configOrClass, { mode: 'cli' }) as {
     listTools(): Promise<unknown>;
     listResources(): Promise<{ resources: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> }>;
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;

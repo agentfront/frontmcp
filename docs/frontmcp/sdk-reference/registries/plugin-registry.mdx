@@ -123,6 +123,7 @@ class AuditPlugin { }
 ```
 
 Hooks are registered with scope-aware targeting:
+
 - **App-scoped**: Hook applies only to the app's tools
 - **Server-scoped**: Hook applies to all tools in the server
 
@@ -162,6 +163,7 @@ class MyTool extends ToolContext {
 ## Provider Merging
 
 Plugin providers are merged into both:
+
 - App registry (for app-scoped access)
 - Scope registry (for server-wide access)
 
@@ -183,11 +185,11 @@ class CachePlugin { }
 
 FrontMCP includes official plugins:
 
-| Plugin | Description |
-|--------|-------------|
-| `CachePlugin` | Response caching with Redis/memory support |
-| `RememberPlugin` | Session memory storage |
-| `CodeCallPlugin` | Dynamic code execution |
+| Plugin           | Description                                |
+| ---------------- | ------------------------------------------ |
+| `CachePlugin`    | Response caching with Redis/memory support |
+| `RememberPlugin` | Session memory storage                     |
+| `CodeCallPlugin` | Dynamic code execution                     |
 
 See the [Plugins documentation](/frontmcp/plugins/overview) for details.
 

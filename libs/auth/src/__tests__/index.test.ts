@@ -28,31 +28,6 @@ describe('@frontmcp/auth exports', () => {
       expect(AuthLib.decodeJwtPayloadSafe).toBeDefined();
       expect(typeof AuthLib.decodeJwtPayloadSafe).toBe('function');
     });
-
-    it('should export isDevKeyPersistenceEnabled function', () => {
-      expect(AuthLib.isDevKeyPersistenceEnabled).toBeDefined();
-      expect(typeof AuthLib.isDevKeyPersistenceEnabled).toBe('function');
-    });
-
-    it('should export resolveKeyPath function', () => {
-      expect(AuthLib.resolveKeyPath).toBeDefined();
-      expect(typeof AuthLib.resolveKeyPath).toBe('function');
-    });
-
-    it('should export loadDevKey function', () => {
-      expect(AuthLib.loadDevKey).toBeDefined();
-      expect(typeof AuthLib.loadDevKey).toBe('function');
-    });
-
-    it('should export saveDevKey function', () => {
-      expect(AuthLib.saveDevKey).toBeDefined();
-      expect(typeof AuthLib.saveDevKey).toBe('function');
-    });
-
-    it('should export deleteDevKey function', () => {
-      expect(AuthLib.deleteDevKey).toBeDefined();
-      expect(typeof AuthLib.deleteDevKey).toBe('function');
-    });
   });
 
   describe('UI Module exports', () => {

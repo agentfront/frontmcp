@@ -140,7 +140,7 @@ describe('supportsElicitation', () => {
         roots: { listChanged: true },
         sampling: { enabled: true },
         experimental: {
-          'io.modelcontextprotocol/ui': { mimeTypes: ['text/html+mcp'] },
+          'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
         },
         elicitation: {
           form: {},
@@ -157,7 +157,7 @@ describe('supportsElicitation', () => {
         roots: { listChanged: true },
         sampling: { enabled: true },
         experimental: {
-          'io.modelcontextprotocol/ui': { mimeTypes: ['text/html+mcp'] },
+          'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
         },
       };
 

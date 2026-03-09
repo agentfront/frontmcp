@@ -14,14 +14,14 @@ Jobs extend the FrontMCP execution model with persistent state tracking, retry l
 
 Jobs fill the gap between lightweight tool calls and full workflow orchestration:
 
-| Aspect | Tool | Job | Workflow |
-| --- | --- | --- | --- |
-| **Purpose** | Execute a single action | Execute a reliable unit of work | Orchestrate multiple jobs |
-| **Retries** | None | Automatic with exponential backoff | Per-step retry overrides |
-| **Background** | No | Yes (with `runId` polling) | Yes (with `runId` polling) |
-| **State tracking** | None | `pending` / `running` / `completed` / `failed` | Per-step state tracking |
-| **Timeout** | None | Configurable (default: 5 min) | Configurable (default: 10 min) |
-| **Permissions** | Auth providers | RBAC with roles, scopes, custom guards | Inherits from job permissions |
+| Aspect             | Tool                    | Job                                            | Workflow                       |
+| ------------------ | ----------------------- | ---------------------------------------------- | ------------------------------ |
+| **Purpose**        | Execute a single action | Execute a reliable unit of work                | Orchestrate multiple jobs      |
+| **Retries**        | None                    | Automatic with exponential backoff             | Per-step retry overrides       |
+| **Background**     | No                      | Yes (with `runId` polling)                     | Yes (with `runId` polling)     |
+| **State tracking** | None                    | `pending` / `running` / `completed` / `failed` | Per-step state tracking        |
+| **Timeout**        | None                    | Configurable (default: 5 min)                  | Configurable (default: 10 min) |
+| **Permissions**    | Auth providers          | RBAC with roles, scopes, custom guards         | Inherits from job permissions  |
 
 Jobs are ideal for:
 
@@ -167,19 +167,19 @@ Jobs require both input and output schemas using Zod:
 
 ## Configuration
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | — | **Required.** Unique job identifier |
-| `description` | `string` | — | Human-readable description |
-| `inputSchema` | `ZodShape` | — | **Required.** Zod schema for input validation |
-| `outputSchema` | `ZodShape` | — | **Required.** Zod schema for output validation |
-| `id` | `string` | `name` | Stable identifier for tracking |
-| `timeout` | `number` | `300000` | Maximum execution time in ms (5 min) |
-| `retry` | `JobRetryConfig` | — | Retry configuration (see below) |
-| `tags` | `string[]` | — | Categorization tags |
-| `labels` | `Record<string, string>` | — | Fine-grained key-value labels |
-| `hideFromDiscovery` | `boolean` | `false` | Hide from `list-jobs` |
-| `permissions` | `JobPermission[]` | — | RBAC permission rules |
+| Field               | Type                     | Default  | Description                                    |
+| ------------------- | ------------------------ | -------- | ---------------------------------------------- |
+| `name`              | `string`                 | —        | **Required.** Unique job identifier            |
+| `description`       | `string`                 | —        | Human-readable description                     |
+| `inputSchema`       | `ZodShape`               | —        | **Required.** Zod schema for input validation  |
+| `outputSchema`      | `ZodShape`               | —        | **Required.** Zod schema for output validation |
+| `id`                | `string`                 | `name`   | Stable identifier for tracking                 |
+| `timeout`           | `number`                 | `300000` | Maximum execution time in ms (5 min)           |
+| `retry`             | `JobRetryConfig`         | —        | Retry configuration (see below)                |
+| `tags`              | `string[]`               | —        | Categorization tags                            |
+| `labels`            | `Record<string, string>` | —        | Fine-grained key-value labels                  |
+| `hideFromDiscovery` | `boolean`                | `false`  | Hide from `list-jobs`                          |
+| `permissions`       | `JobPermission[]`        | —        | RBAC permission rules                          |
 
 ---
 
@@ -209,12 +209,12 @@ class FetchDataJob extends JobContext {
 }
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `maxAttempts` | `number` | `3` | Maximum retry attempts |
-| `backoffMs` | `number` | `1000` | Initial backoff delay in ms |
-| `backoffMultiplier` | `number` | `2` | Backoff multiplier per attempt |
-| `maxBackoffMs` | `number` | `60000` | Maximum backoff delay in ms |
+| Field               | Type     | Default | Description                    |
+| ------------------- | -------- | ------- | ------------------------------ |
+| `maxAttempts`       | `number` | `3`     | Maximum retry attempts         |
+| `backoffMs`         | `number` | `1000`  | Initial backoff delay in ms    |
+| `backoffMultiplier` | `number` | `2`     | Backoff multiplier per attempt |
+| `maxBackoffMs`      | `number` | `60000` | Maximum backoff delay in ms    |
 
 The backoff schedule for defaults: 1s, 2s, 4s (capped at `maxBackoffMs`).
 
@@ -236,12 +236,12 @@ Jobs support RBAC-style permission checks:
 })
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `action` | `'create' \| 'read' \| 'update' \| 'delete' \| 'execute' \| 'list'` | Permission action type |
-| `roles` | `string[]` | Required roles (at least one must match) |
-| `scopes` | `string[]` | Required OAuth scopes (at least one must match) |
-| `custom` | `(authInfo) => boolean \| Promise<boolean>` | Custom guard function |
+| Field    | Type                                                                | Description                                     |
+| -------- | ------------------------------------------------------------------- | ----------------------------------------------- |
+| `action` | `'create' \| 'read' \| 'update' \| 'delete' \| 'execute' \| 'list'` | Permission action type                          |
+| `roles`  | `string[]`                                                          | Required roles (at least one must match)        |
+| `scopes` | `string[]`                                                          | Required OAuth scopes (at least one must match) |
+| `custom` | `(authInfo) => boolean \| Promise<boolean>`                         | Custom guard function                           |
 
 When no permissions are defined, the job is accessible to all authenticated users.
 
@@ -318,12 +318,12 @@ class BatchImportJob extends JobContext {
 }
 ```
 
-| Method | Signature | Description |
-| --- | --- | --- |
-| `this.log(message)` | `log(message: string): void` | Append a timestamped log entry |
+| Method                             | Signature                                                               | Description                          |
+| ---------------------------------- | ----------------------------------------------------------------------- | ------------------------------------ |
+| `this.log(message)`                | `log(message: string): void`                                            | Append a timestamped log entry       |
 | `this.progress(pct, total?, msg?)` | `progress(pct: number, total?: number, msg?: string): Promise<boolean>` | Send progress notification to client |
-| `this.getLogs()` | `getLogs(): readonly string[]` | Retrieve all log entries |
-| `this.attempt` | `get attempt(): number` | Current retry attempt (1-based) |
+| `this.getLogs()`                   | `getLogs(): readonly string[]`                                          | Retrieve all log entries             |
+| `this.attempt`                     | `get attempt(): number`                                                 | Current retry attempt (1-based)      |
 
 ---
 
@@ -365,13 +365,13 @@ For production, configure Redis storage:
 
 When jobs are enabled, the following MCP tools are automatically registered:
 
-| Tool | Description |
-| --- | --- |
-| `list-jobs` | List registered jobs with optional tag/label filtering |
-| `execute-job` | Execute a job (inline or background) |
-| `get-job-status` | Get execution status by `runId` |
-| `register-job` | Register a dynamic job at runtime |
-| `remove-job` | Remove a dynamic job |
+| Tool             | Description                                            |
+| ---------------- | ------------------------------------------------------ |
+| `list-jobs`      | List registered jobs with optional tag/label filtering |
+| `execute-job`    | Execute a job (inline or background)                   |
+| `get-job-status` | Get execution status by `runId`                        |
+| `register-job`   | Register a dynamic job at runtime                      |
+| `remove-job`     | Remove a dynamic job                                   |
 
 ---
 

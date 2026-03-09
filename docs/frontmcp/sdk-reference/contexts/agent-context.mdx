@@ -21,27 +21,27 @@ Unlike other context classes, `AgentContext` is not abstract and provides a defa
 
 ## Type Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `InSchema` | Input schema type |
-| `OutSchema` | Output schema type |
-| `In` | Inferred input type |
-| `Out` | Inferred output type |
+| Parameter   | Description          |
+| ----------- | -------------------- |
+| `InSchema`  | Input schema type    |
+| `OutSchema` | Output schema type   |
+| `In`        | Inferred input type  |
+| `Out`       | Inferred output type |
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `metadata` | `AgentMetadata` | Agent metadata |
-| `input` | `In` | Agent input |
-| `output` | `Out \| undefined` | Agent output |
-| `llmAdapter` | `AgentLlmAdapter` | LLM provider adapter |
-| `systemInstructions` | `string` | System prompt |
-| `toolDefinitions` | `AgentToolDefinition[]` | Available tools |
-| `agentName` | `string` | Agent name |
-| `agentId` | `string` | Agent ID |
-| `platform` | `AIPlatformType` | Detected AI platform |
-| `clientInfo` | `ClientInfo \| undefined` | Client information |
+| Property             | Type                      | Description          |
+| -------------------- | ------------------------- | -------------------- |
+| `metadata`           | `AgentMetadata`           | Agent metadata       |
+| `input`              | `In`                      | Agent input          |
+| `output`             | `Out \| undefined`        | Agent output         |
+| `llmAdapter`         | `AgentLlmAdapter`         | LLM provider adapter |
+| `systemInstructions` | `string`                  | System prompt        |
+| `toolDefinitions`    | `AgentToolDefinition[]`   | Available tools      |
+| `agentName`          | `string`                  | Agent name           |
+| `agentId`            | `string`                  | Agent ID             |
+| `platform`           | `AIPlatformType`          | Detected AI platform |
+| `clientInfo`         | `ClientInfo \| undefined` | Client information   |
 
 ## Default Behavior
 
@@ -59,6 +59,7 @@ class MyAgent extends AgentContext {
 ```
 
 The default loop:
+
 1. Builds user message from input
 2. Sends to LLM with available tools
 3. If LLM requests tool call, executes tool and sends result back

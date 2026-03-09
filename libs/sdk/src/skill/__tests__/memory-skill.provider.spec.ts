@@ -214,6 +214,105 @@ describe('MemorySkillProvider', () => {
     });
   });
 
+  describe('search (single-document corpus)', () => {
+    it('should find matching skill in single-document corpus', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'math-helper',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations and operations',
+          tools: [{ name: 'add' }],
+        }),
+      );
+
+      const results = await provider.search('math');
+
+      expect(results.length).toBe(1);
+      expect(results[0].metadata.id).toBe('math-helper');
+      expect(results[0].score).toBeGreaterThan(0);
+    });
+
+    it('should return empty for non-matching query in single-document corpus', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'math-helper',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations',
+          tools: [{ name: 'add' }],
+        }),
+      );
+
+      const results = await provider.search('deploy kubernetes');
+
+      expect(results.length).toBe(0);
+    });
+
+    it('should respect tag filter in fallback search', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'math-helper',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations',
+          tools: [{ name: 'add' }],
+          tags: ['science'],
+        }) as SkillContent,
+      );
+
+      const withTag = await provider.search('math', { tags: ['science'] });
+      expect(withTag.length).toBe(1);
+
+      const wrongTag = await provider.search('math', { tags: ['devops'] });
+      expect(wrongTag.length).toBe(0);
+    });
+
+    it('should respect hidden filter in fallback search', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'hidden-math',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations',
+          tools: [{ name: 'add' }],
+          hideFromDiscovery: true,
+        }) as SkillContent,
+      );
+
+      const results = await provider.search('math');
+
+      expect(results.length).toBe(0);
+    });
+
+    it('should return empty for empty query', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'math-helper',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations',
+          tools: [{ name: 'add' }],
+        }),
+      );
+
+      const results = await provider.search('');
+
+      // Empty query should not trigger fallback
+      expect(results.length).toBe(0);
+    });
+
+    it('should return empty for stop-words-only query', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'math-helper',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations',
+          tools: [{ name: 'add' }],
+        }),
+      );
+
+      const results = await provider.search('the and or');
+
+      expect(results.length).toBe(0);
+    });
+  });
+
   describe('list', () => {
     beforeEach(async () => {
       await provider.addMany([

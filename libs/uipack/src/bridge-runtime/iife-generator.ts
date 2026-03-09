@@ -1066,7 +1066,7 @@ function minifyJS(code: string): string {
 
   return code
     .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
-    .replace(/\/\/.*$/gm, '') // Remove line comments
+    .replace(/(^|[^:])\/\/.*$/gm, '$1') // Remove line comments (but not :// in URLs)
     .replace(/\s+/g, ' ') // Collapse whitespace
     .replace(/\s*([{};,:()[\]])\s*/g, '$1') // Remove space around punctuation
     .replace(/;\}/g, '}') // Remove trailing semicolons before }

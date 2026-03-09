@@ -26,9 +26,11 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
       list.push(ConsoleLogTransportInstance);
     }
 
-    super('LoggerRegistry', globalProviders, list);
+    super('LoggerRegistry', globalProviders, list, false);
 
     this.config = config;
+    this.buildGraph();
+    this.ready = this.initialize();
   }
 
   protected buildGraph() {

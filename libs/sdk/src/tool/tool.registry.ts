@@ -15,7 +15,12 @@ import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../scope';
 import { AppEntry } from '../common';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
-import { NameDisambiguationError, EntryValidationError } from '../errors';
+import {
+  NameDisambiguationError,
+  EntryValidationError,
+  RegistryDefinitionNotFoundError,
+  RegistryGraphEntryNotFoundError,
+} from '../errors';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -79,13 +84,16 @@ export default class ToolRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
       const deps = toolDiscoveryDeps(rec);
 
       for (const d of deps) {
         // Validate against hierarchical providers; throws early if missing
         this.providers.get(d);
-        this.graph.get(token)!.add(d);
+        const tokenDeps = this.graph.get(token);
+        if (!tokenDeps) throw new RegistryGraphEntryNotFoundError('ToolRegistry', String(token));
+        tokenDeps.add(d);
       }
     }
   }
@@ -95,7 +103,8 @@ export default class ToolRegistry
   protected override async initialize(): Promise<void> {
     // Instantiate each local tool once and store in this.instances (from RegistryAbstract)
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
 
       // Single, authoritative instance per local tool
       const ti = new ToolInstance(rec, this.providers, this.owner);
@@ -512,6 +521,55 @@ export default class ToolRegistry
   /** True if this registry (or adopted children) has any tools. */
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
+  }
+
+  /**
+   * Replace all tools owned by the given owner.
+   * Clears local rows, rebuilds from new list, reindexes, and emits 'reset'.
+   * Used by adapter polling to hot-swap tools when specs change.
+   */
+  replaceAll(list: ToolType[], owner: EntryOwnerRef): void {
+    // Clear local rows, instances, and remote app tool tracking
+    this.localRows = [];
+    this.instances.clear();
+    this.remoteAppTools.clear();
+
+    // Clear internal maps from base class
+    this.tokens.clear();
+    this.defs.clear();
+    this.graph.clear();
+
+    // Rebuild from new list
+    const { tokens, defs, graph } = this.buildMap(list);
+    for (const [key, val] of defs) {
+      this.defs.set(key, val);
+      this.graph.set(key, graph.get(key) ?? new Set());
+    }
+    for (const t of tokens) {
+      this.tokens.add(t);
+    }
+
+    // Rebuild graph dependencies
+    this.buildGraph();
+
+    // Recreate instances and local rows
+    for (const token of this.tokens) {
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
+      const ti = new ToolInstance(rec, this.providers, owner);
+      this.instances.set(token as Token<ToolInstance>, ti);
+
+      const lineage: EntryLineage = owner ? [owner] : [];
+      const row = this.makeRow(token, ti, lineage, this);
+      this.localRows.push(row);
+    }
+
+    // Update owner reference
+    this.owner = owner;
+
+    // Rebuild indexes and notify
+    this.reindex();
+    this.bump('reset');
   }
 
   /**

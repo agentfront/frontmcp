@@ -211,7 +211,7 @@ export class PendingMetadataRegistry<T> {
           const desc = Object.getOwnPropertyDescriptor(proto, name);
           const method = desc?.value;
           if (typeof method === 'function') {
-            const pending = consume ? this.consume(method) : this.pending.get(method) ?? [];
+            const pending = consume ? this.consume(method) : (this.pending.get(method) ?? []);
             resolved.push(...pending);
           }
         } catch {
@@ -227,7 +227,7 @@ export class PendingMetadataRegistry<T> {
         const desc = Object.getOwnPropertyDescriptor(ctor, name);
         const method = desc?.value;
         if (typeof method === 'function') {
-          const pending = consume ? this.consume(method) : this.pending.get(method) ?? [];
+          const pending = consume ? this.consume(method) : (this.pending.get(method) ?? []);
           resolved.push(...pending);
         }
       } catch {

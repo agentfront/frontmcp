@@ -4,6 +4,11 @@
 
 import { DirectClientImpl } from '../direct-client';
 import type { Scope } from '../../scope/scope.instance';
+import {
+  SkillsSearchResultSchema,
+  SkillsLoadResultSchema,
+  SkillsListResultSchema,
+} from '../../transport/mcp-handlers/skills-mcp.types';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
@@ -529,6 +534,21 @@ describe('DirectClientImpl', () => {
       );
     });
 
+    it('searchSkills should pass SkillsSearchResultSchema as response schema', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        total: 0,
+        hasMore: false,
+        guidance: 'No results',
+      });
+
+      await client.searchSkills('query');
+
+      const schema = mockMcpClient.request.mock.calls[0][1];
+      expect(schema).toBe(SkillsSearchResultSchema);
+      expect(typeof schema.safeParse).toBe('function');
+    });
+
     it('loadSkills should call MCP client with correct request', async () => {
       mockMcpClient.request.mockResolvedValueOnce({
         skills: [],
@@ -550,6 +570,20 @@ describe('DirectClientImpl', () => {
       );
     });
 
+    it('loadSkills should pass SkillsLoadResultSchema as response schema', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        summary: { totalSkills: 0, totalTools: 0, allToolsAvailable: true },
+        nextSteps: 'No skills loaded',
+      });
+
+      await client.loadSkills(['skill-1']);
+
+      const schema = mockMcpClient.request.mock.calls[0][1];
+      expect(schema).toBe(SkillsLoadResultSchema);
+      expect(typeof schema.safeParse).toBe('function');
+    });
+
     it('listSkills should call MCP client with correct request', async () => {
       mockMcpClient.request.mockResolvedValueOnce({
         skills: [],
@@ -569,6 +603,20 @@ describe('DirectClientImpl', () => {
         },
         expect.anything(),
       );
+    });
+
+    it('listSkills should pass SkillsListResultSchema as response schema', async () => {
+      mockMcpClient.request.mockResolvedValueOnce({
+        skills: [],
+        total: 0,
+        hasMore: false,
+      });
+
+      await client.listSkills();
+
+      const schema = mockMcpClient.request.mock.calls[0][1];
+      expect(schema).toBe(SkillsListResultSchema);
+      expect(typeof schema.safeParse).toBe('function');
     });
 
     it('listSkills should handle undefined options', async () => {
@@ -853,6 +901,178 @@ describe('DirectClientImpl', () => {
         await client.setLogLevel(level);
         expect(mockMcpClient.setLoggingLevel).toHaveBeenCalledWith({ level });
       }
+    });
+  });
+
+  describe('job operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.callTool.mockClear();
+    });
+
+    it('listJobs should call list-jobs tool', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"jobs":[]}' }],
+      });
+
+      const result = await client.listJobs();
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'list-jobs',
+        arguments: {},
+      });
+      expect(result).toEqual({ jobs: [] });
+    });
+
+    it('listJobs should pass options to tool arguments', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"jobs":[],"total":0}' }],
+      });
+
+      await client.listJobs({ tags: ['batch'] });
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'list-jobs',
+        arguments: { tags: ['batch'] },
+      });
+    });
+
+    it('executeJob should call execute-job tool with name and input', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"run-1","status":"completed"}' }],
+      });
+
+      const result = await client.executeJob('process-data', { payload: 'test' });
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'execute-job',
+        arguments: { name: 'process-data', input: { payload: 'test' }, background: false },
+      });
+      expect(result).toEqual({ runId: 'run-1', status: 'completed' });
+    });
+
+    it('executeJob should support background option', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"run-2"}' }],
+      });
+
+      await client.executeJob('process-data', {}, { background: true });
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'execute-job',
+        arguments: { name: 'process-data', input: {}, background: true },
+      });
+    });
+
+    it('executeJob should default input to empty object', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"run-3"}' }],
+      });
+
+      await client.executeJob('process-data');
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'execute-job',
+        arguments: { name: 'process-data', input: {}, background: false },
+      });
+    });
+
+    it('getJobStatus should call get-job-status tool', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"run-1","status":"completed","result":{"data":1}}' }],
+      });
+
+      const result = await client.getJobStatus('run-1');
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'get-job-status',
+        arguments: { runId: 'run-1' },
+      });
+      expect(result).toEqual({ runId: 'run-1', status: 'completed', result: { data: 1 } });
+    });
+
+    it('should throw when tool returns no text content', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'image', data: 'abc' }],
+      });
+
+      await expect(client.listJobs()).rejects.toThrow('No text content from list-jobs');
+    });
+
+    it('should throw when tool returns empty content', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [],
+      });
+
+      await expect(client.executeJob('test')).rejects.toThrow('No text content from execute-job');
+    });
+  });
+
+  describe('workflow operations', () => {
+    let client: Awaited<ReturnType<typeof DirectClientImpl.create>>;
+
+    beforeEach(async () => {
+      const mockScope = createMockScope();
+      client = await DirectClientImpl.create(mockScope as Scope);
+      mockMcpClient.callTool.mockClear();
+    });
+
+    it('listWorkflows should call list-workflows tool', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"workflows":[]}' }],
+      });
+
+      const result = await client.listWorkflows();
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'list-workflows',
+        arguments: {},
+      });
+      expect(result).toEqual({ workflows: [] });
+    });
+
+    it('executeWorkflow should call execute-workflow tool', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"wf-1","status":"running"}' }],
+      });
+
+      const result = await client.executeWorkflow('my-workflow', { step: 'start' }, { background: true });
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'execute-workflow',
+        arguments: { name: 'my-workflow', input: { step: 'start' }, background: true },
+      });
+      expect(result).toEqual({ runId: 'wf-1', status: 'running' });
+    });
+
+    it('executeWorkflow should default input and background', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"wf-2"}' }],
+      });
+
+      await client.executeWorkflow('my-workflow');
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'execute-workflow',
+        arguments: { name: 'my-workflow', input: {}, background: false },
+      });
+    });
+
+    it('getWorkflowStatus should call get-workflow-status tool', async () => {
+      mockMcpClient.callTool.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"runId":"wf-1","status":"completed"}' }],
+      });
+
+      const result = await client.getWorkflowStatus('wf-1');
+
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'get-workflow-status',
+        arguments: { runId: 'wf-1' },
+      });
+      expect(result).toEqual({ runId: 'wf-1', status: 'completed' });
     });
   });
 });

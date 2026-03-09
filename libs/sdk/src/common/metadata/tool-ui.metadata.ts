@@ -27,7 +27,6 @@ export {
   type CSPDirectives,
   type RendererAssets,
   type WidgetManifest,
-  type RuntimePayload,
   type WidgetConfig,
   type WidgetTemplate,
   type WidgetRuntimeOptions,
