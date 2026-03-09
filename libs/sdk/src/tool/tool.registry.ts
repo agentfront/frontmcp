@@ -79,13 +79,16 @@ export default class ToolRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new Error(`ToolRegistry: missing definition for token ${String(token)}`);
       const deps = toolDiscoveryDeps(rec);
 
       for (const d of deps) {
         // Validate against hierarchical providers; throws early if missing
         this.providers.get(d);
-        this.graph.get(token)!.add(d);
+        const tokenDeps = this.graph.get(token);
+        if (!tokenDeps) throw new Error(`ToolRegistry: missing graph entry for token ${String(token)}`);
+        tokenDeps.add(d);
       }
     }
   }
@@ -95,7 +98,8 @@ export default class ToolRegistry
   protected override async initialize(): Promise<void> {
     // Instantiate each local tool once and store in this.instances (from RegistryAbstract)
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new Error(`ToolRegistry: missing definition for token ${String(token)}`);
 
       // Single, authoritative instance per local tool
       const ti = new ToolInstance(rec, this.providers, this.owner);
@@ -544,7 +548,8 @@ export default class ToolRegistry
 
     // Recreate instances and local rows
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new Error(`ToolRegistry: missing definition for token ${String(token)}`);
       const ti = new ToolInstance(rec, this.providers, owner);
       this.instances.set(token as Token<ToolInstance>, ti);
 

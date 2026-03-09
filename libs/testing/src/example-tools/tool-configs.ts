@@ -192,9 +192,14 @@ export function generateFullUIToolOutput(input: z.infer<typeof fullUIToolInputSc
 
 /**
  * Expected meta keys for OpenAI platform in tools/list response.
- * OpenAI now uses the standard ui/* namespace like all other platforms.
+ * Note: 'ui' is a nested object containing resourceUri, cdn, etc.
  */
-export const EXPECTED_OPENAI_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mimeType', 'ui/cdn', 'ui/type'] as const;
+export const EXPECTED_OPENAI_TOOLS_LIST_META_KEYS = [
+  'ui',
+  'frontmcp/type',
+  'frontmcp/cdn',
+  'frontmcp/displayMode',
+] as const;
 
 /**
  * Expected meta keys for OpenAI platform in tools/call response.
@@ -204,8 +209,14 @@ export const EXPECTED_OPENAI_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', 'u
 
 /**
  * Expected meta keys for ext-apps platform in tools/list response (SEP-1865).
+ * Note: 'ui' is a nested object containing resourceUri, cdn, etc.
  */
-export const EXPECTED_EXTAPPS_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mimeType', 'ui/cdn', 'ui/type'] as const;
+export const EXPECTED_EXTAPPS_TOOLS_LIST_META_KEYS = [
+  'ui',
+  'frontmcp/type',
+  'frontmcp/cdn',
+  'frontmcp/displayMode',
+] as const;
 
 /**
  * Expected meta keys for ext-apps platform in tools/call response (SEP-1865).
@@ -214,9 +225,14 @@ export const EXPECTED_EXTAPPS_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', '
 
 /**
  * Expected meta keys for generic MCP platforms in tools/list response (Claude, Cursor, etc.).
- * Uses ui/* namespace only.
+ * Note: 'ui' is a nested object containing resourceUri, cdn, etc.
  */
-export const EXPECTED_GENERIC_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mimeType', 'ui/cdn', 'ui/type'] as const;
+export const EXPECTED_GENERIC_TOOLS_LIST_META_KEYS = [
+  'ui',
+  'frontmcp/type',
+  'frontmcp/cdn',
+  'frontmcp/displayMode',
+] as const;
 
 /**
  * Expected meta keys for generic MCP platforms in tools/call response (Claude, Cursor, etc.).

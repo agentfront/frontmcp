@@ -739,13 +739,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           htmlContent = undefined;
           uiMeta = {};
         } else {
-          // Extract HTML from platform-specific meta key
-          const htmlKey = 'ui/html';
-          htmlContent = uiRenderResult?.meta?.[htmlKey] as string | undefined;
-          // Fallback to ui/html for compatibility
-          if (!htmlContent) {
-            htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
-          }
+          // Extract HTML from meta
+          htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
           uiMeta = uiRenderResult.meta || {};
         }
       }

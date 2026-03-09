@@ -397,7 +397,7 @@ describe('Plugin Utils', () => {
       it('should filter dependencies based on type', () => {
         class TestPlugin implements PluginInterface {
           constructor(
-            public dep1: any,
+            public dep1: unknown,
             public primitive: string,
           ) {}
         }
@@ -443,8 +443,8 @@ describe('Plugin Utils', () => {
         })
         class TestPlugin implements PluginInterface {
           constructor(
-            public dep1: any,
-            public nullable: any,
+            public dep1: unknown,
+            public nullable: unknown,
           ) {}
         }
 
@@ -466,7 +466,7 @@ describe('Plugin Utils', () => {
         })
         class TestPlugin implements PluginInterface {
           constructor(
-            public dep1: any,
+            public dep1: unknown,
             public stringDep: string,
           ) {}
         }
