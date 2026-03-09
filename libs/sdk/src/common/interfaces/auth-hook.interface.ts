@@ -23,7 +23,6 @@ export enum AuthHookStage {
    */
   willCreateSession = 'willCreateSession',
 
-
   /** Session created and registered.
    * Responsibilities:
    * - Announce readiness (mount handlers/streams), emit side-effects if needed.

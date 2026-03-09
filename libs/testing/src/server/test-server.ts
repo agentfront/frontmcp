@@ -486,7 +486,6 @@ export {
   getPortRange,
   releaseAllPorts,
   getReservedPorts,
-  findAvailablePort,
   E2E_PORT_RANGES,
   type E2EProject,
 } from './port-registry';

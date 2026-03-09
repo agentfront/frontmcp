@@ -28,8 +28,8 @@ function publicAuth(issuer?: string): AuthOptions {
 function transparentAuth(providerUrl: string, opts?: { id?: string; requiredScopes?: string[] }): AuthOptions {
   return {
     mode: 'transparent',
-    remote: {
-      provider: providerUrl,
+    provider: providerUrl,
+    providerConfig: {
       ...(opts?.id ? { id: opts.id } : {}),
     },
     requiredScopes: opts?.requiredScopes ?? [],
@@ -38,27 +38,25 @@ function transparentAuth(providerUrl: string, opts?: { id?: string; requiredScop
   } as AuthOptions;
 }
 
-function orchestratedLocal(issuer?: string): AuthOptions {
+function localAuth(issuer?: string): AuthOptions {
   return {
-    mode: 'orchestrated',
-    type: 'local',
-    tokenStorage: { type: 'memory' },
+    mode: 'local',
+    tokenStorage: 'memory',
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
     ...(issuer ? { local: { issuer } } : {}),
   } as AuthOptions;
 }
 
-function orchestratedRemote(providerUrl: string, opts?: { id?: string; scopes?: string[] }): AuthOptions {
+function remoteAuth(providerUrl: string, opts?: { id?: string; scopes?: string[] }): AuthOptions {
   return {
-    mode: 'orchestrated',
-    type: 'remote',
-    remote: {
-      provider: providerUrl,
+    mode: 'remote',
+    provider: providerUrl,
+    providerConfig: {
       ...(opts?.id ? { id: opts.id } : {}),
-      ...(opts?.scopes ? { scopes: opts.scopes } : {}),
     },
-    tokenStorage: { type: 'memory' },
+    ...(opts?.scopes ? { scopes: opts.scopes } : {}),
+    tokenStorage: 'memory',
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
   } as AuthOptions;
@@ -81,7 +79,7 @@ describe('auth-provider-detection', () => {
       expect(deriveProviderId(publicAuth('https://my-issuer.com'))).toBe('https://my-issuer.com');
     });
 
-    it('should return remote.id for transparent mode when id is set', () => {
+    it('should return providerConfig.id for transparent mode when id is set', () => {
       expect(deriveProviderId(transparentAuth('https://auth.example.com', { id: 'my-provider' }))).toBe('my-provider');
     });
 
@@ -95,20 +93,20 @@ describe('auth-provider-detection', () => {
       expect(result).toBe('not_a_url');
     });
 
-    it('should return remote.id for orchestrated remote when id is set', () => {
-      expect(deriveProviderId(orchestratedRemote('https://auth.example.com', { id: 'remote-1' }))).toBe('remote-1');
+    it('should return providerConfig.id for remote mode when id is set', () => {
+      expect(deriveProviderId(remoteAuth('https://auth.example.com', { id: 'remote-1' }))).toBe('remote-1');
     });
 
-    it('should return hostname for orchestrated remote without id', () => {
-      expect(deriveProviderId(orchestratedRemote('https://oauth.provider.io'))).toBe('oauth_provider_io');
+    it('should return hostname for remote mode without id', () => {
+      expect(deriveProviderId(remoteAuth('https://oauth.provider.io'))).toBe('oauth_provider_io');
     });
 
-    it('should return local issuer for orchestrated local', () => {
-      expect(deriveProviderId(orchestratedLocal('my-local-issuer'))).toBe('my-local-issuer');
+    it('should return local issuer for local mode', () => {
+      expect(deriveProviderId(localAuth('my-local-issuer'))).toBe('my-local-issuer');
     });
 
-    it('should return "local" for orchestrated local without issuer', () => {
-      expect(deriveProviderId(orchestratedLocal())).toBe('local');
+    it('should return "local" for local mode without issuer', () => {
+      expect(deriveProviderId(localAuth())).toBe('local');
     });
 
     it('should return "unknown" for unrecognized mode', () => {
@@ -235,7 +233,7 @@ describe('auth-provider-detection', () => {
       const result = detectAuthProviders(parent, apps);
       expect(result.warnings.length).toBeGreaterThan(0);
       expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('public mode')]));
-      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('orchestrated mode')]));
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('local or remote mode')]));
     });
 
     it('should not produce warning for single public provider', () => {
@@ -251,9 +249,9 @@ describe('auth-provider-detection', () => {
       expect(provider.providerUrl).toBe('https://auth.test.com');
     });
 
-    it('should set providerUrl for orchestrated remote mode', () => {
-      const result = detectAuthProviders(orchestratedRemote('https://auth.test.com'), []);
-      const providerId = deriveProviderId(orchestratedRemote('https://auth.test.com'));
+    it('should set providerUrl for remote mode', () => {
+      const result = detectAuthProviders(remoteAuth('https://auth.test.com'), []);
+      const providerId = deriveProviderId(remoteAuth('https://auth.test.com'));
       const provider = result.providers.get(providerId);
       assertDefined(provider);
       expect(provider.providerUrl).toBe('https://auth.test.com');
@@ -266,15 +264,15 @@ describe('auth-provider-detection', () => {
       expect(provider.providerUrl).toBeUndefined();
     });
 
-    it('should set providerUrl as undefined for orchestrated local mode', () => {
-      const result = detectAuthProviders(orchestratedLocal(), []);
+    it('should set providerUrl as undefined for local mode', () => {
+      const result = detectAuthProviders(localAuth(), []);
       const provider = result.providers.get('local');
       assertDefined(provider);
       expect(provider.providerUrl).toBeUndefined();
     });
 
-    it('should extract scopes for orchestrated remote', () => {
-      const auth = orchestratedRemote('https://auth.test.com', { scopes: ['openid', 'profile'] });
+    it('should extract scopes for remote mode', () => {
+      const auth = remoteAuth('https://auth.test.com', { scopes: ['openid', 'profile'] });
       const result = detectAuthProviders(auth, []);
       const providerId = deriveProviderId(auth);
       const provider = result.providers.get(providerId);

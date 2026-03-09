@@ -1,20 +1,43 @@
 /**
  * Platform Adapters
  *
- * Re-exports platform adapter functions from @frontmcp/uipack/adapters for SDK consumers.
- * This provides a single source of truth for platform-specific metadata building
- * while maintaining backwards compatibility.
+ * Stub module — platform adapter functions were removed from @frontmcp/uipack.
+ * These will be re-implemented against the new shell/resolver API.
  *
- * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
+ * TODO: Re-implement against new @frontmcp/uipack API after redesign
  */
 
-// Re-export platform adapter types and functions from @frontmcp/uipack
-export {
-  type AIPlatformType,
-  type UIMetadata,
-  type BuildUIMetaOptions,
-  type BuildToolDiscoveryMetaOptions,
-  buildUIMeta,
-  buildToolDiscoveryMeta,
-  buildOpenAICSP,
-} from '@frontmcp/uipack/adapters';
+// Stub types
+export type AIPlatformType = 'openai' | 'claude' | 'gemini' | 'cursor' | 'continue' | 'cody' | 'unknown';
+
+export interface UIMetadata {
+  [key: string]: unknown;
+}
+
+export interface BuildUIMetaOptions {
+  toolName: string;
+  html?: string;
+  platform?: AIPlatformType;
+  [key: string]: unknown;
+}
+
+export interface BuildToolDiscoveryMetaOptions {
+  toolName: string;
+  platform?: AIPlatformType;
+  [key: string]: unknown;
+}
+
+export function buildUIMeta(_options: BuildUIMetaOptions): UIMetadata {
+  return {};
+}
+
+export function buildToolDiscoveryMeta(_options: BuildToolDiscoveryMetaOptions): UIMetadata {
+  return {};
+}
+
+export function buildOpenAICSP(_csp?: {
+  connectDomains?: string[];
+  resourceDomains?: string[];
+}): { connect_domains?: string[]; resource_domains?: string[] } | undefined {
+  return undefined;
+}

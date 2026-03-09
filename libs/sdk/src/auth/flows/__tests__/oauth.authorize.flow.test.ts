@@ -726,7 +726,7 @@ describe('OAuth Authorize Flow', () => {
   describe('Flow Execution - Federated Login', () => {
     it('should not require federated login when apps have no auth', async () => {
       const scope = createMockScopeEntry({
-        auth: { mode: 'orchestrated', type: 'local' },
+        auth: { mode: 'local' },
         apps: [
           { id: 'app1', name: 'App 1' },
           { id: 'app2', name: 'App 2' },

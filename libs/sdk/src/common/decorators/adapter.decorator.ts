@@ -17,7 +17,4 @@ function FrontMcpAdapter(providedMetadata: AdapterMetadata): ClassDecorator {
   };
 }
 
-export {
-  FrontMcpAdapter,
-  FrontMcpAdapter as Adapter,
-};
+export { FrontMcpAdapter, FrontMcpAdapter as Adapter };

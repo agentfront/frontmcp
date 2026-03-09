@@ -243,13 +243,12 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
             icons: resource.metadata.icons,
           };
 
-          // Add OpenAI-specific _meta for skybridge widget resources
-          // This is CRITICAL for ChatGPT to discover and render widgets
-          if (resource.metadata.mimeType === 'text/html+skybridge') {
+          // Add _meta for MCP Apps widget resources (ui/* namespace per spec)
+          if (resource.metadata.mimeType === 'text/html;profile=mcp-app') {
             item._meta = {
-              'openai/outputTemplate': uri,
-              'openai/resultCanProduceWidget': true,
-              'openai/widgetAccessible': true,
+              ui: {
+                resourceUri: uri,
+              },
             };
           }
 

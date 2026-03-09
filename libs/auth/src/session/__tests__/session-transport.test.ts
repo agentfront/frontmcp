@@ -37,15 +37,6 @@ describe('TransportIdGenerator', () => {
       expect(mockRandomUUID).toHaveBeenCalledTimes(1);
     });
 
-    it('should work with deprecated jwt parameter (same behaviour)', () => {
-      mockRandomUUID.mockReturnValue('11111111-2222-3333-4444-555555555555');
-
-      const id = TransportIdGenerator.createId('jwt');
-
-      expect(id).toBe('11111111222233334444555555555555');
-      expect(id).toHaveLength(32);
-    });
-
     it('should produce unique IDs on successive calls', () => {
       mockRandomUUID
         .mockReturnValueOnce('00000000-0000-0000-0000-000000000001')

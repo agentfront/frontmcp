@@ -524,7 +524,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         if (app.metadata.auth) {
           providers.push({
             id: app.metadata.id || app.metadata.name,
-            providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.remote.provider : undefined,
+            providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
             mode: app.metadata.auth.mode,
             appIds: [app.metadata.id || app.metadata.name],
             scopes: [],

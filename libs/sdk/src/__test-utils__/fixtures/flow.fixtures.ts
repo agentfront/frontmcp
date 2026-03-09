@@ -18,10 +18,10 @@ import { InMemoryAuthorizationStore, type AuthorizationStore } from '@frontmcp/a
  * Auth configuration for mock scope
  */
 export interface MockAuthConfig {
-  mode: 'public' | 'orchestrated';
-  type?: 'local' | 'remote';
+  mode: 'public' | 'local' | 'remote';
   consent?: { enabled: boolean };
-  remote?: { provider: string };
+  provider?: string;
+  providerConfig?: { id?: string };
 }
 
 /**
@@ -33,7 +33,8 @@ export interface MockAppConfig {
   description?: string;
   auth?: {
     mode: string;
-    remote?: { provider: string };
+    provider?: string;
+    providerConfig?: { id?: string };
   };
 }
 
@@ -121,7 +122,7 @@ export function createMockAuth(options?: MockAuthConfig): FrontMcpAuth {
  * @example
  * ```typescript
  * const scope = createMockScopeEntry({
- *   auth: { mode: 'orchestrated', type: 'local' },
+ *   auth: { mode: 'local' },
  *   apps: [{ id: 'slack', name: 'Slack' }],
  *   tools: [{ id: 'slack:send', name: 'Send Message' }],
  * });
@@ -396,7 +397,7 @@ export const flowScenarios = {
    */
   orchestratedLocal: () =>
     createMockScopeEntry({
-      auth: { mode: 'orchestrated', type: 'local' },
+      auth: { mode: 'local' },
     }),
 
   /**
@@ -404,7 +405,7 @@ export const flowScenarios = {
    */
   withConsent: () =>
     createMockScopeEntry({
-      auth: { mode: 'orchestrated', type: 'local', consent: { enabled: true } },
+      auth: { mode: 'local', consent: { enabled: true } },
       tools: [
         { id: 'tool1', name: 'Tool 1' },
         { id: 'tool2', name: 'Tool 2' },
@@ -416,14 +417,14 @@ export const flowScenarios = {
    */
   multiApp: () =>
     createMockScopeEntry({
-      auth: { mode: 'orchestrated', type: 'local' },
+      auth: { mode: 'local' },
       apps: [
         {
           id: 'google',
           name: 'Google',
-          auth: { mode: 'transparent', remote: { provider: 'https://accounts.google.com' } },
+          auth: { mode: 'transparent', provider: 'https://accounts.google.com' },
         },
-        { id: 'github', name: 'GitHub', auth: { mode: 'transparent', remote: { provider: 'https://github.com' } } },
+        { id: 'github', name: 'GitHub', auth: { mode: 'transparent', provider: 'https://github.com' } },
       ],
     }),
 
@@ -432,7 +433,7 @@ export const flowScenarios = {
    */
   incrementalAuth: (appId = 'slack') =>
     createMockScopeEntry({
-      auth: { mode: 'orchestrated', type: 'local' },
+      auth: { mode: 'local' },
       apps: [{ id: appId, name: appId.charAt(0).toUpperCase() + appId.slice(1) }],
     }),
 };

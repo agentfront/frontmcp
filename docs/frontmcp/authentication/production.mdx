@@ -16,11 +16,9 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 
     ```typescript
     auth: {
-      mode: 'orchestrated',
-      type: 'local',
+      mode: 'local',
       tokenStorage: {
-        type: 'redis',
-        config: {
+        redis: {
           host: process.env.REDIS_HOST!,
           port: parseInt(process.env.REDIS_PORT || '6379'),
           password: process.env.REDIS_PASSWORD,
@@ -110,14 +108,10 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   info: { name: 'ProductionServer', version: '1.0.0' },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
-    sessionMode: 'stateful',
-
+    mode: 'local',
     // Persistent storage
     tokenStorage: {
-      type: 'redis',
-      config: {
+      redis: {
         host: process.env.REDIS_HOST!,
         port: parseInt(process.env.REDIS_PORT || '6379'),
         password: process.env.REDIS_PASSWORD,
@@ -224,8 +218,7 @@ auth: {
 
 ```typescript
 tokenStorage: {
-  type: 'redis',
-  config: {
+  redis: {
     host: 'redis.example.com',
     port: 6379,
     password: process.env.REDIS_PASSWORD,
@@ -298,8 +291,7 @@ export class Server {}
     **Solution:** Configure shared Redis storage:
     ```typescript
     tokenStorage: {
-      type: 'redis',
-      config: {
+      redis: {
         host: process.env.REDIS_HOST!,
         port: parseInt(process.env.REDIS_PORT || '6379'),
         password: process.env.REDIS_PASSWORD,
@@ -338,8 +330,7 @@ export class Server {}
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
+  mode: 'local',
 
   // Production settings
   allowDefaultPublic: false,   // No anonymous access
@@ -381,7 +372,7 @@ location /oauth/token {
     ```typescript
     // Simple deployment - in-memory works but not recommended
     auth: {
-      tokenStorage: { type: 'memory' }, // Data lost on restart
+      tokenStorage: 'memory', // Data lost on restart
     }
     ```
 
@@ -395,10 +386,8 @@ location /oauth/token {
     ```typescript
     // Required for horizontal scaling
     auth: {
-      sessionMode: 'stateful',
       tokenStorage: {
-        type: 'redis',
-        config: {
+        redis: {
           host: process.env.REDIS_HOST!,
           port: parseInt(process.env.REDIS_PORT || '6379'),
           password: process.env.REDIS_PASSWORD,
@@ -415,7 +404,6 @@ location /oauth/token {
     ```typescript
     // No shared state needed - tokens contain all info
     auth: {
-      sessionMode: 'stateless',
       local: {
         signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
       },

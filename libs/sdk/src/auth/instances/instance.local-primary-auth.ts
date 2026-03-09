@@ -4,8 +4,8 @@ import { randomBytes, randomUUID, sha256Hex } from '@frontmcp/utils';
 import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest, JWK } from '../../common';
 import {
   PublicAuthOptions,
-  OrchestratedLocalOptions,
-  OrchestratedRemoteOptions,
+  LocalAuthOptions,
+  RemoteAuthOptions,
   isPublicMode,
   isOrchestratedMode,
   isOrchestratedLocal,
@@ -33,7 +33,7 @@ import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote
  */
-export type LocalPrimaryAuthOptions = PublicAuthOptions | OrchestratedLocalOptions | OrchestratedRemoteOptions;
+export type LocalPrimaryAuthOptions = PublicAuthOptions | LocalAuthOptions | RemoteAuthOptions;
 
 const DEFAULT_NO_AUTH_SECRET = randomBytes(32);
 

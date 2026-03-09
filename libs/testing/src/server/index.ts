@@ -14,7 +14,6 @@ export {
   getPortRange,
   releaseAllPorts,
   getReservedPorts,
-  findAvailablePort,
   E2E_PORT_RANGES,
 } from './port-registry';
 export type { E2EProject } from './port-registry';

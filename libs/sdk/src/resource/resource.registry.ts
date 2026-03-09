@@ -566,6 +566,53 @@ export default class ResourceRegistry
   }
 
   /**
+   * Replace all resources owned by the given owner.
+   * Clears local rows, rebuilds from new list, reindexes, and emits 'reset'.
+   * Used by adapter polling to hot-swap resources when specs change.
+   */
+  replaceAll(list: ResourceType[], owner: EntryOwnerRef): void {
+    // Clear local rows and instances
+    this.localRows = [];
+    this.instances.clear();
+
+    // Clear internal maps from base class
+    this.tokens.clear();
+    this.defs.clear();
+    this.graph.clear();
+
+    // Rebuild from new list
+    const { tokens, defs, graph } = this.buildMap(list);
+    for (const [key, val] of defs) {
+      this.defs.set(key, val);
+      this.graph.set(key, graph.get(key) ?? new Set());
+    }
+    for (const t of tokens) {
+      this.tokens.add(t);
+    }
+
+    // Rebuild graph dependencies
+    this.buildGraph();
+
+    // Recreate instances and local rows
+    for (const token of this.tokens) {
+      const rec = this.defs.get(token)!;
+      const ri = new ResourceInstance(rec, this.providers, owner);
+      this.instances.set(token as Token<ResourceInstance>, ri);
+
+      const lineage: EntryLineage = owner ? [owner] : [];
+      const row = this.makeRow(token, ri, lineage, this);
+      this.localRows.push(row);
+    }
+
+    // Update owner reference
+    this.owner = owner;
+
+    // Rebuild indexes and notify
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
    * Get the MCP capabilities for resources.
    * These are reported to clients during initialization.
    */

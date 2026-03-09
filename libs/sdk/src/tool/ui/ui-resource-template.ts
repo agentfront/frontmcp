@@ -23,7 +23,7 @@ import { escapeHtml } from './template-helpers';
  *
  * URI format: ui://widget/{toolName}.html
  *
- * This is the format OpenAI expects in tools/list _meta.openai/outputTemplate.
+ * This is the format used in tools/list _meta.ui.resourceUri per the MCP Apps spec.
  * When OpenAI fetches this resource, we return the pre-compiled static HTML for the tool.
  *
  * The widget includes:
@@ -39,7 +39,7 @@ export const StaticWidgetResourceTemplate = resourceTemplate({
   name: 'static-widget',
   description: 'Static widget HTML for tool UI (OpenAI discovery)',
   uriTemplate: 'ui://widget/{toolName}.html',
-  mimeType: 'text/html+skybridge',
+  mimeType: 'text/html;profile=mcp-app',
 })((uri, params) => {
   // This handler should NOT be called because ReadResourceFlow
   // intercepts ui:// URIs before reaching the resource instance.
@@ -47,7 +47,7 @@ export const StaticWidgetResourceTemplate = resourceTemplate({
     contents: [
       {
         uri,
-        mimeType: 'text/html+skybridge',
+        mimeType: 'text/html;profile=mcp-app',
         text: `<!DOCTYPE html>
 <html>
 <head><title>Widget Placeholder</title></head>

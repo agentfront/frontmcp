@@ -34,18 +34,8 @@
 // ============================================
 // JWKS Module
 // ============================================
-export {
-  JwksService,
-  trimSlash,
-  normalizeIssuer,
-  decodeJwtPayloadSafe,
-  isDevKeyPersistenceEnabled,
-  resolveKeyPath,
-  loadDevKey,
-  saveDevKey,
-  deleteDevKey,
-} from './jwks';
-export type { JwksServiceOptions, ProviderVerifyRef, VerifyResult, DevKeyPersistenceOptions, DevKeyData } from './jwks';
+export { JwksService, trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks';
+export type { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks';
 
 // ============================================
 // UI Module
@@ -534,7 +524,7 @@ export {
   checkSsrfProtection,
   hasOnlyLocalhostRedirectUris,
   // Cache
-  CimdCache,
+  InMemoryCimdCache,
   extractCacheHeaders,
   parseCacheHeaders,
   type CimdCacheEntry,

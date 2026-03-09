@@ -99,6 +99,9 @@ export class Scope extends ScopeEntry {
   private _jobStateStore?: JobStateStore;
   private _jobDefinitionStore?: JobDefinitionStore;
 
+  /** CLI mode flag — skips non-essential initialization for faster startup */
+  private readonly cliMode: boolean;
+
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
     this.id = rec.metadata.id;
@@ -112,6 +115,9 @@ export class Scope extends ScopeEntry {
     } else {
       this.routeBase = '';
     }
+
+    // Check if CLI mode was requested (set by FrontMcpInstance.createForCli)
+    this.cliMode = !!(rec.metadata as unknown as Record<string, unknown>)['__cliMode'];
 
     // Pass distributed config to ProviderRegistry for serverless/multi-instance support
     const distributedMode = rec.metadata.transport?.distributedMode;
@@ -128,24 +134,27 @@ export class Scope extends ScopeEntry {
 
     const scopeRef: EntryOwnerRef = { kind: 'scope', id: this.id, ref: Scope };
     const scopeProviders = this.scopeProviders;
+    const perf = process.env['FRONTMCP_PERF'] === '1';
+    const t0 = perf ? performance.now() : 0;
+    const mark = perf
+      ? (label: string) => this.logger.info(`[PERF] ${label}: ${(performance.now() - t0).toFixed(1)}ms`)
+      : () => {};
 
+    // ═══ BATCH 1: Independent registries (parallel) ═══
+    // These only depend on scopeProviders — no cross-registry dependencies.
     this.scopeHooks = new HookRegistry(scopeProviders, []);
-    await this.scopeHooks.ready;
-    this.logger.verbose('HookRegistry initialized');
-
     this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow]);
-    await this.scopeFlows.ready;
-    this.logger.verbose('FlowRegistry initialized');
+    this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
+    this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
+    this.logger.info(`Initializing ${this.metadata.apps.length} app(s)...`);
 
-    // Pass transport persistence config to TransportService
+    // TransportService is synchronous — no await needed
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
-    this.logger.verbose('TransportService initialized');
 
-    // Initialize EventStore for SSE resumability support (optional)
-    // Disabled by default because Claude.ai's client doesn't handle priming events correctly
+    // EventStore (conditional, skipped in CLI mode)
     const eventStoreConfig = transportConfig?.eventStore;
-    if (eventStoreConfig?.enabled) {
+    if (eventStoreConfig?.enabled && !this.cliMode) {
       const { eventStore } = createEventStore(eventStoreConfig, this.logger);
       this._eventStore = eventStore;
       this.logger.info('EventStore initialized for SSE resumability', {
@@ -153,224 +162,118 @@ export class Scope extends ScopeEntry {
       });
     }
 
-    // Initialize elicitation store for distributed elicitation support
-    // Only initialize if elicitation is explicitly enabled (default: false)
-    const elicitationEnabled = this.metadata.elicitation?.enabled === true;
-    if (elicitationEnabled) {
-      // Use elicitation-specific redis config, or fall back to global redis
-      const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
-      const { store: elicitStore } = await createElicitationStore({
-        redis: elicitationRedis,
-        keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
-        logger: this.logger,
-        isEdgeRuntime: this.isEdgeRuntime(),
-      });
-      this._elicitationStore = elicitStore;
-    }
+    // Elicitation store (conditional, skipped in CLI mode)
+    const elicitationEnabled = this.metadata.elicitation?.enabled === true && !this.cliMode;
+    const elicitationPromise = elicitationEnabled
+      ? (async () => {
+          const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
+          const { store: elicitStore } = await createElicitationStore({
+            redis: elicitationRedis,
+            keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
+            logger: this.logger,
+            isEdgeRuntime: this.isEdgeRuntime(),
+          });
+          this._elicitationStore = elicitStore;
+        })()
+      : undefined;
 
-    this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
-    await this.scopeAuth.ready;
+    // Await batch 1: hooks, flows, auth, apps + optional elicitation — all in parallel
+    const batch1: Promise<void>[] = [
+      this.scopeHooks.ready,
+      this.scopeFlows.ready,
+      this.scopeAuth.ready,
+      this.scopeApps.ready,
+    ];
+    if (elicitationPromise) batch1.push(elicitationPromise);
+    await Promise.all(batch1);
+    this.logger.verbose('HookRegistry initialized');
+    this.logger.verbose('FlowRegistry initialized');
+    this.logger.verbose('TransportService initialized');
     this.logger.verbose('AuthRegistry initialized');
+    mark('batch1:parallel (hooks+flows+auth+apps)');
 
-    this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
-    const appCount = this.metadata.apps.length;
-    this.logger.info(`Initializing ${appCount} app(s)...`);
-    await this.scopeApps.ready;
-
-    // Initialize server-level plugins (from @FrontMcp decorator)
-    // Each scope gets its own instance of these plugins
+    // ═══ BATCH 2: App-dependent registries (parallel) ═══
+    // These call providers.getRegistries('AppRegistry') during initialize(),
+    // so AppRegistry must be fully ready before they start.
     const serverPlugins = this.metadata.plugins ?? [];
     if (serverPlugins.length > 0) {
       const serverPluginScopeInfo: PluginScopeInfo = {
         ownScope: this,
-        parentScope: undefined, // Server plugins are already at top level
+        parentScope: undefined,
         isStandaloneApp: false,
       };
-
       this.scopePlugins = new PluginRegistry(this.scopeProviders, serverPlugins, scopeRef, serverPluginScopeInfo);
-      await this.scopePlugins.ready;
-      const pluginNames = this.scopePlugins.getPluginNames();
-      this.logger.verbose(`PluginRegistry initialized (${pluginNames.length} plugin(s): [${pluginNames.join(', ')}])`);
     }
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
-    await this.scopeTools.ready;
+    this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
+    this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
+    this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
+    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
+
+    const batch2: Promise<void>[] = [
+      this.scopeTools.ready,
+      this.scopeResources.ready,
+      this.scopePrompts.ready,
+      this.scopeAgents.ready,
+      this.scopeSkills.ready,
+    ];
+    if (this.scopePlugins) batch2.push(this.scopePlugins.ready);
+    await Promise.all(batch2);
+
+    if (this.scopePlugins) {
+      const pluginNames = this.scopePlugins.getPluginNames();
+      this.logger.verbose(`PluginRegistry initialized (${pluginNames.length} plugin(s): [${pluginNames.join(', ')}])`);
+    }
     const toolNames = this.scopeTools.getTools(true).map((t) => t.metadata.name);
     this.logger.verbose(`ToolRegistry initialized with initial ${toolNames.length} tool(s): [${toolNames.join(', ')}]`);
+    this.logger.verbose(`ResourceRegistry initialized (${this.scopeResources.getResources().length} resource(s))`);
+    this.logger.verbose(`PromptRegistry initialized (${this.scopePrompts.getPrompts().length} prompt(s))`);
+    this.logger.verbose(`AgentRegistry initialized (${this.scopeAgents.getAgents().length} agent(s))`);
+    this.logger.verbose(`SkillRegistry initialized (${this.scopeSkills.getSkills().length} skill(s))`);
+    mark('batch2:parallel (tools+resources+prompts+agents+skills+plugins)');
 
-    // Register sendElicitationResult system tool (hidden by default)
-    // This tool is used for fallback elicitation with non-supporting clients
-    // Only register if elicitation is enabled
+    // ═══ BATCH 3: Cross-registry finalization (sequential) ═══
+
+    // Register sendElicitationResult system tool if elicitation is enabled
     if (elicitationEnabled) {
       this.registerSendElicitationResultTool(scopeRef);
     }
 
-    this.toolUIRegistry = new ToolUIRegistry();
-
-    this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
-    await this.scopeResources.ready;
-    this.logger.verbose(`ResourceRegistry initialized (${this.scopeResources.getResources().length} resource(s))`);
-
-    // Register UI resource templates if any tools have UI configs
-    // This enables resource capabilities to be advertised when tools have UI
-    const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
-    if (toolsWithUI.length > 0) {
-      // Register static widget template for OpenAI discovery (ui://widget/{toolName}.html)
-      this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
-      this.logger.verbose(`Registered UI resource template for ${toolsWithUI.length} tool(s) with UI configs`);
-
-      // Pre-compile static widgets for tools with servingMode: 'static'
-      // This is done at server startup so that the static widget HTML is immediately
-      // available when OpenAI fetches it via resources/read (at tools/list time).
-      // The static widget reads data from the FrontMCP Bridge at runtime.
-      const staticModeTools = toolsWithUI.filter(
-        (t) => t.metadata.ui && t.metadata.ui.servingMode === 'static' && t.metadata.ui.template,
-      );
-
-      if (staticModeTools.length > 0) {
-        // Compile all static widgets in parallel
-        let staticCompiledCount = 0;
-        await Promise.all(
-          staticModeTools.map(async (tool) => {
-            const uiConfig = tool.metadata.ui;
-            if (!uiConfig?.template) {
-              this.logger.warn(
-                `Skipping static widget pre-compile for tool "${tool.metadata.name}" due to missing ui.template`,
-              );
-              return;
-            }
-            try {
-              await this.toolUIRegistry.compileStaticWidgetAsync({
-                toolName: tool.metadata.name,
-                template: uiConfig.template,
-                uiConfig,
-              });
-              staticCompiledCount++;
-              this.logger.verbose(`Compiled static widget for tool: ${tool.metadata.name}`);
-            } catch (error) {
-              // Log error but don't fail server startup
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              this.logger.error(`Failed to compile static widget for tool "${tool.metadata.name}": ${errorMessage}`);
-            }
-          }),
-        );
-        this.logger.info(
-          `Pre-compiled ${staticCompiledCount}/${staticModeTools.length} static widget(s) for static mode tools`,
-        );
-      }
-
-      // Pre-compile lean widget shells for inline mode tools
-      // These are minimal HTML shells (no React/JS) that OpenAI caches at discovery
-      // The actual React widget comes in each tool response with embedded data
-      const inlineTools = toolsWithUI.filter(
-        (t) =>
-          t.metadata.ui &&
-          (t.metadata.ui.servingMode === 'inline' || !t.metadata.ui.servingMode) &&
-          t.metadata.ui.template,
-      );
-
-      if (inlineTools.length > 0) {
-        let inlineCompiledCount = 0;
-        await Promise.all(
-          inlineTools.map(async (tool) => {
-            const uiConfig = tool.metadata.ui;
-            if (!uiConfig) {
-              this.logger.warn(
-                `Skipping lean widget pre-compile for tool "${tool.metadata.name}" due to missing ui config`,
-              );
-              return;
-            }
-            try {
-              await this.toolUIRegistry.compileLeanWidgetAsync({
-                toolName: tool.metadata.name,
-                uiConfig,
-              });
-              inlineCompiledCount++;
-              this.logger.verbose(`Compiled lean widget shell for tool: ${tool.metadata.name}`);
-            } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              this.logger.error(
-                `Failed to compile lean widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
-              );
-            }
-          }),
-        );
-        this.logger.info(
-          `Pre-compiled ${inlineCompiledCount}/${inlineTools.length} lean widget shell(s) for inline mode tools`,
-        );
-      }
-
-      // Pre-compile hybrid widget shells for hybrid mode tools
-      // These contain React runtime + Bridge + dynamic renderer, but NO component code
-      // The component code is delivered per-request in _meta['ui/component']
-      const hybridTools = toolsWithUI.filter(
-        (t) => t.metadata.ui && t.metadata.ui.servingMode === 'hybrid' && t.metadata.ui.template,
-      );
-
-      if (hybridTools.length > 0) {
-        let hybridCompiledCount = 0;
-        await Promise.all(
-          hybridTools.map(async (tool) => {
-            const uiConfig = tool.metadata.ui;
-            if (!uiConfig) {
-              this.logger.warn(
-                `Skipping hybrid widget pre-compile for tool "${tool.metadata.name}" due to missing ui config`,
-              );
-              return;
-            }
-            try {
-              await this.toolUIRegistry.compileHybridWidgetAsync({
-                toolName: tool.metadata.name,
-                uiConfig,
-              });
-              hybridCompiledCount++;
-              this.logger.verbose(`Compiled hybrid widget shell for tool: ${tool.metadata.name}`);
-            } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              this.logger.error(
-                `Failed to compile hybrid widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
-              );
-            }
-          }),
-        );
-        this.logger.info(
-          `Pre-compiled ${hybridCompiledCount}/${hybridTools.length} hybrid widget shell(s) for hybrid mode tools`,
-        );
+    // Create UI import resolver with CDN overrides if configured
+    // In CLI mode, skip UI widget compilation entirely — not needed for tool calls
+    let uiResolver: import('@frontmcp/uipack/resolver').ImportResolver | undefined;
+    if (!this.cliMode) {
+      const cdnOverrides = this.metadata.ui?.cdnOverrides;
+      if (cdnOverrides && Object.keys(cdnOverrides).length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { createResolverWithOverrides } = require('@frontmcp/uipack/resolver');
+        uiResolver = createResolverWithOverrides(cdnOverrides);
+        this.logger.verbose('Created UI resolver with CDN overrides', { overrides: Object.keys(cdnOverrides) });
       }
     }
 
-    this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
-    await this.scopePrompts.ready;
-    this.logger.verbose(`PromptRegistry initialized (${this.scopePrompts.getPrompts().length} prompt(s))`);
+    this.toolUIRegistry = new ToolUIRegistry(uiResolver);
 
-    // Initialize agent registry (scope-level agents, typically none but allows for scope-wide agents)
-    this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
-    await this.scopeAgents.ready;
-    this.logger.verbose(`AgentRegistry initialized (${this.scopeAgents.getAgents().length} agent(s))`);
-
-    // Initialize skill registry (scope-level skills from @FrontMcp metadata)
-    this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
-    await this.scopeSkills.ready;
-    this.logger.verbose(`SkillRegistry initialized (${this.scopeSkills.getSkills().length} skill(s))`);
+    // Register UI resource templates if any tools have UI configs
+    // Skipped in CLI mode — UI widgets are not needed for CLI tool execution
+    if (!this.cliMode) {
+      await this.compileUIWidgets();
+    }
 
     // Initialize skill session manager if skills are available
-    // Skill sessions enable tool authorization enforcement at runtime
-    // The session manager is always initialized when skills exist, but
-    // session activation is opt-in via LoadSkillFlow's activateSession parameter
     if (this.scopeSkills.hasAny()) {
-      // Use in-memory store for now (Redis support can be added later)
       const store = createSkillSessionStore({ type: 'memory' });
 
       this._skillSession = new SkillSessionManager(
         {
-          defaultPolicyMode: 'permissive', // Default to permissive for backwards compatibility
+          defaultPolicyMode: 'permissive',
         },
         this.logger,
         store,
       );
 
       // Register skill tool authorization guard hook
-      // This hook intercepts tool calls and enforces skill-based allowlists
       const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
         logger: this.logger,
         trackToolCalls: true,
@@ -388,7 +291,6 @@ export class Scope extends ScopeEntry {
     }
 
     // Validate all skills after everything is initialized
-    // This ensures tools from plugins/adapters are also available for validation
     if (this.scopeSkills.hasAny()) {
       try {
         const report = await this.scopeSkills.validateAllTools();
@@ -438,10 +340,8 @@ export class Scope extends ScopeEntry {
         if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
       }
 
-      // TODO: Wire up actual notification delivery
       const notifyFn = async (data: Record<string, unknown>) => {
         if (this.notificationService) {
-          // Use notification service for SSE notifications
           this.logger.debug('Job notification', data);
         }
       };
@@ -500,7 +400,130 @@ export class Scope extends ScopeEntry {
 
     await this.auth.ready;
 
+    mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
+  }
+
+  /**
+   * Pre-compile UI widgets for tools with UI configs.
+   * Extracted from initialize() for readability.
+   */
+  private async compileUIWidgets(): Promise<void> {
+    const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
+    if (toolsWithUI.length === 0) return;
+
+    // Register static widget template for OpenAI discovery (ui://widget/{toolName}.html)
+    this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
+    this.logger.verbose(`Registered UI resource template for ${toolsWithUI.length} tool(s) with UI configs`);
+
+    // Pre-compile static widgets for tools with servingMode: 'static'
+    const staticModeTools = toolsWithUI.filter(
+      (t) => t.metadata.ui && t.metadata.ui.servingMode === 'static' && t.metadata.ui.template,
+    );
+
+    if (staticModeTools.length > 0) {
+      let staticCompiledCount = 0;
+      await Promise.all(
+        staticModeTools.map(async (tool) => {
+          const uiConfig = tool.metadata.ui;
+          if (!uiConfig?.template) {
+            this.logger.warn(
+              `Skipping static widget pre-compile for tool "${tool.metadata.name}" due to missing ui.template`,
+            );
+            return;
+          }
+          try {
+            await this.toolUIRegistry.compileStaticWidgetAsync({
+              toolName: tool.metadata.name,
+              template: uiConfig.template,
+              uiConfig,
+            });
+            staticCompiledCount++;
+            this.logger.verbose(`Compiled static widget for tool: ${tool.metadata.name}`);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to compile static widget for tool "${tool.metadata.name}": ${errorMessage}`);
+          }
+        }),
+      );
+      this.logger.info(
+        `Pre-compiled ${staticCompiledCount}/${staticModeTools.length} static widget(s) for static mode tools`,
+      );
+    }
+
+    // Pre-compile lean widget shells for inline mode tools
+    const inlineTools = toolsWithUI.filter(
+      (t) =>
+        t.metadata.ui &&
+        (t.metadata.ui.servingMode === 'inline' || !t.metadata.ui.servingMode) &&
+        t.metadata.ui.template,
+    );
+
+    if (inlineTools.length > 0) {
+      let inlineCompiledCount = 0;
+      await Promise.all(
+        inlineTools.map(async (tool) => {
+          const uiConfig = tool.metadata.ui;
+          if (!uiConfig) {
+            this.logger.warn(
+              `Skipping lean widget pre-compile for tool "${tool.metadata.name}" due to missing ui config`,
+            );
+            return;
+          }
+          try {
+            await this.toolUIRegistry.compileLeanWidgetAsync({
+              toolName: tool.metadata.name,
+              uiConfig,
+            });
+            inlineCompiledCount++;
+            this.logger.verbose(`Compiled lean widget shell for tool: ${tool.metadata.name}`);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to compile lean widget shell for tool "${tool.metadata.name}": ${errorMessage}`);
+          }
+        }),
+      );
+      this.logger.info(
+        `Pre-compiled ${inlineCompiledCount}/${inlineTools.length} lean widget shell(s) for inline mode tools`,
+      );
+    }
+
+    // Pre-compile hybrid widget shells for hybrid mode tools
+    const hybridTools = toolsWithUI.filter(
+      (t) => t.metadata.ui && t.metadata.ui.servingMode === 'hybrid' && t.metadata.ui.template,
+    );
+
+    if (hybridTools.length > 0) {
+      let hybridCompiledCount = 0;
+      await Promise.all(
+        hybridTools.map(async (tool) => {
+          const uiConfig = tool.metadata.ui;
+          if (!uiConfig) {
+            this.logger.warn(
+              `Skipping hybrid widget pre-compile for tool "${tool.metadata.name}" due to missing ui config`,
+            );
+            return;
+          }
+          try {
+            await this.toolUIRegistry.compileHybridWidgetAsync({
+              toolName: tool.metadata.name,
+              template: uiConfig.template,
+              uiConfig,
+            });
+            hybridCompiledCount++;
+            this.logger.verbose(`Compiled hybrid widget shell for tool: ${tool.metadata.name}`);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(
+              `Failed to compile hybrid widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
+            );
+          }
+        }),
+      );
+      this.logger.info(
+        `Pre-compiled ${hybridCompiledCount}/${hybridTools.length} hybrid widget shell(s) for hybrid mode tools`,
+      );
+    }
   }
 
   private formatScopeSummary(): string {

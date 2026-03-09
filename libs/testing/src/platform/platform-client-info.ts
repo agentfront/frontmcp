@@ -204,7 +204,7 @@ export function getPlatformCapabilities(platform: TestPlatformType): TestClientC
       ...baseCapabilities,
       experimental: {
         [MCP_APPS_EXTENSION_KEY]: {
-          mimeTypes: ['text/html+mcp'],
+          mimeTypes: ['text/html;profile=mcp-app'],
         },
       },
     };

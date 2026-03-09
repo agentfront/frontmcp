@@ -55,8 +55,7 @@ Authentication can be configured at two levels:
       info: { name: 'MyServer', version: '1.0.0' },
       apps: [BillingApp, AnalyticsApp],
       auth: {
-        mode: 'orchestrated',
-        type: 'local',
+        mode: 'local',
         consent: { enabled: true },
       },
     })
@@ -72,9 +71,7 @@ Authentication can be configured at two levels:
       name: 'Billing',
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://auth.example.com',
-        },
+        provider: 'https://auth.example.com',
       },
     })
     export class BillingApp {}
@@ -118,12 +115,9 @@ Sessions determine how tokens are stored and managed:
 
 ```typescript
 auth: {
-  mode: 'orchestrated',
-  type: 'local',
-  sessionMode: 'stateful', // or 'stateless'
+  mode: 'local',
   tokenStorage: {
-    type: 'redis',
-    config: { host: 'localhost', port: 6379 },
+    redis: { host: 'localhost', port: 6379 },
   },
 }
 ```

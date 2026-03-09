@@ -1,13 +1,10 @@
 import { FlowMetadata, FlowName, frontMcpFlowMetadataSchema } from '../metadata';
 import { FrontMcpFlowTokens } from '../tokens';
 
-
-
 /**
  * Decorator that marks a class as a FrontMcpFlow module and provides metadata
  */
 function FrontMcpFlow<Name extends FlowName>(providedMetadata: FlowMetadata<Name>): ClassDecorator {
-
   return (target: any) => {
     const metadata = frontMcpFlowMetadataSchema.parse(providedMetadata);
 
@@ -19,7 +16,4 @@ function FrontMcpFlow<Name extends FlowName>(providedMetadata: FlowMetadata<Name
   };
 }
 
-export {
-  FrontMcpFlow,
-  FrontMcpFlow as Flow,
-}
+export { FrontMcpFlow, FrontMcpFlow as Flow };

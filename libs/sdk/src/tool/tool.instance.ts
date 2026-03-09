@@ -58,18 +58,18 @@ export class ToolInstance<
     this.scope = this._providers.getActiveScope();
     this.hooks = this.scope.providers.getHooksRegistry();
 
-    const schema: any = record.metadata.inputSchema;
-    // Support both Zod objects and raw ZodRawShape
-    this.inputSchema = schema instanceof z.ZodObject ? schema.shape : (schema ?? {});
+    // inputSchema is always a ZodRawShape
+    this.inputSchema = (record.metadata.inputSchema ?? {}) as InSchema;
 
-    // Whatever JSON schema representation you're storing for inputs
-    this.rawInputSchema = record.metadata.rawInputSchema;
+    // @internal: rawInputSchema is set by OpenAPI adapter via passthrough, not user-facing
+    const meta = record.metadata as unknown as Record<string, unknown>;
+    this.rawInputSchema = meta['rawInputSchema'];
 
     // IMPORTANT: keep the *raw* outputSchema (string literal, zod, raw shape, or array)
     this.outputSchema = record.metadata.outputSchema as OutSchema;
 
-    // Raw JSON Schema for output (from OpenAPI tools or explicit rawOutputSchema in metadata)
-    this.rawOutputSchema = record.metadata.rawOutputSchema;
+    // @internal: rawOutputSchema is set by OpenAPI adapter via passthrough, not user-facing
+    this.rawOutputSchema = meta['rawOutputSchema'];
 
     this.ready = this.initialize();
   }

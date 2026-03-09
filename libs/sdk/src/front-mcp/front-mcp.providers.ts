@@ -1,6 +1,7 @@
 import { ProviderScope } from '@frontmcp/di';
 import { FrontMcpConfigType, FrontMcpServer, ProviderValueType, AsyncProvider } from '../common';
 import { FrontMcpServerInstance } from '../server/server.instance';
+import { NoopFrontMcpServer } from '../server/noop-server';
 import { FrontMcpConfig } from './front-mcp.tokens';
 import { FrontMcpContextStorage } from '../context';
 
@@ -25,6 +26,16 @@ const frontMcpServer = AsyncProvider({
   },
 });
 
+/** Lightweight server provider for CLI mode — skips Express/CORS import overhead. */
+const noopServer: ProviderValueType<FrontMcpServer> = {
+  name: 'frontmcp:server:noop',
+  provide: FrontMcpServer,
+  scope: ProviderScope.GLOBAL,
+  useValue: new NoopFrontMcpServer(),
+};
+
 export function createMcpGlobalProviders(metadata: FrontMcpConfigType) {
-  return [frontMcpConfig.with(metadata), frontMcpServer, FrontMcpContextStorage];
+  const isCli = !!(metadata as Record<string, unknown>)['__cliMode'];
+  const serverProvider = isCli ? noopServer : frontMcpServer;
+  return [frontMcpConfig.with(metadata), serverProvider, FrontMcpContextStorage];
 }

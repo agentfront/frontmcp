@@ -42,7 +42,6 @@ export {
   FrontMcpContextArgs,
   FrontMcpContextConfig,
   FrontMcpContextStorage,
-  ContextStorage,
   FRONTMCP_CONTEXT,
   FrontMcpContextProvider,
   // Request metadata

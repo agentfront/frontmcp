@@ -31,7 +31,7 @@ export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
   }
 
   get issuer(): string {
-    return this.options.remote.provider;
+    return this.options.provider;
   }
 
   protected async initialize() {

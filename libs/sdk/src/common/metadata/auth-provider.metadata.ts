@@ -19,9 +19,11 @@ export enum AuthProviderScope {
   SESSION = 'session',
 }
 
-export const frontMcpAuthProviderMetadataSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  scope: z.nativeEnum(AuthProviderScope).optional().default(AuthProviderScope.GLOBAL),
-} satisfies RawZodShape<AuthProviderMetadata>).passthrough();
+export const frontMcpAuthProviderMetadataSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    scope: z.nativeEnum(AuthProviderScope).optional().default(AuthProviderScope.GLOBAL),
+  } satisfies RawZodShape<AuthProviderMetadata>)
+  .passthrough();
