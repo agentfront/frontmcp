@@ -13,6 +13,9 @@ export { pluginGenerator } from './generators/plugin/plugin.js';
 export { adapterGenerator } from './generators/adapter/adapter.js';
 export { authProviderGenerator } from './generators/auth-provider/auth-provider.js';
 export { flowGenerator } from './generators/flow/flow.js';
+export { uiComponentGenerator } from './generators/ui-component/ui-component.js';
+export { uiPageGenerator } from './generators/ui-page/ui-page.js';
+export { uiShellGenerator } from './generators/ui-shell/ui-shell.js';
 
 // Utilities
 export {

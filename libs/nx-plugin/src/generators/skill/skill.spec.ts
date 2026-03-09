@@ -39,4 +39,9 @@ describe('skill generator', () => {
     const content = tree.read('apps/my-app/src/skills/data-analysis.skill.ts', 'utf-8');
     expect(content).toContain('class DataAnalysisSkill extends SkillContext');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./skill');
+    expect(mod.default).toBe(skillGenerator);
+  });
 });

@@ -63,4 +63,9 @@ describe('app generator', () => {
     expect(projectJson.tags).toContain('scope:apps');
     expect(projectJson.tags).toContain('type:demo');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./app');
+    expect(mod.default).toBe(appGenerator);
+  });
 });

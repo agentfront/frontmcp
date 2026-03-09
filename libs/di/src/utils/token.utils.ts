@@ -16,7 +16,7 @@ import { getMetadata, hasAsyncWith } from './metadata.utils.js';
  * @returns A string representation of the token
  */
 export const tokenName = (t: Token): string =>
-  typeof t === 'function' && !!(t as any).prototype ? (t as any).name : (t as any)?.name ?? '[ref]';
+  typeof t === 'function' && !!(t as any).prototype ? (t as any).name : ((t as any)?.name ?? '[ref]');
 
 /**
  * Check if a value is a class constructor.

@@ -1,10 +1,11 @@
 import { execSync } from 'child_process';
+import type { ExecutorContext } from '../executor-context.js';
 
 jest.mock('child_process', () => ({ execSync: jest.fn() }));
 
 import deployExecutor from './deploy.impl';
 
-const mockContext = {
+const mockContext: ExecutorContext = {
   root: '/workspace',
   projectName: 'server-prod',
   projectsConfigurations: {
@@ -15,7 +16,7 @@ const mockContext = {
   isVerbose: false,
   projectGraph: { nodes: {}, dependencies: {} },
   nxJsonConfiguration: {},
-} as any;
+};
 
 describe('deploy executor', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -68,6 +69,22 @@ describe('deploy executor', () => {
         cwd: '/workspace/servers/prod',
         stdio: 'inherit',
       }),
+    );
+  });
+
+  it('should fallback to empty strings when context properties are missing', async () => {
+    const sparseContext: ExecutorContext = {
+      root: '/workspace',
+      cwd: '/workspace',
+      isVerbose: false,
+      projectGraph: { nodes: {}, dependencies: {} },
+      nxJsonConfiguration: {},
+    };
+
+    await deployExecutor({ target: 'node' }, sparseContext);
+    expect(execSync).toHaveBeenCalledWith(
+      'docker compose up --build -d',
+      expect.objectContaining({ cwd: '/workspace/' }),
     );
   });
 });

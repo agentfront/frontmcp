@@ -91,6 +91,23 @@ describe('SqliteSessionStore', () => {
     expect(result).toBeNull();
   });
 
+  it('should use custom defaultTtlMs and expire after TTL', async () => {
+    const customStore = new SqliteSessionStore({
+      path: dbPath,
+      defaultTtlMs: 50,
+      keyPrefix: 'custom-ttl:',
+      ttlCleanupIntervalMs: 0,
+    });
+
+    await customStore.set('sess-1', { createdAt: Date.now() });
+    expect(await customStore.get('sess-1')).not.toBeNull();
+
+    await new Promise((r) => setTimeout(r, 60));
+    expect(await customStore.get('sess-1')).toBeNull();
+
+    customStore.close();
+  });
+
   it('should use custom key prefix', () => {
     const customStore = new SqliteSessionStore({
       path: dbPath,

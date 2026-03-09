@@ -96,11 +96,8 @@ export type ClassToken<T = any> = abstract new (...a: any) => T;
 /**
  * Resolve a single token to its instance type.
  */
-type ResolveToken<T> = T extends ClassToken<infer R>
-  ? R
-  : T extends symbol & { readonly __di_type?: infer R }
-  ? R
-  : never;
+type ResolveToken<T> =
+  T extends ClassToken<infer R> ? R : T extends symbol & { readonly __di_type?: infer R } ? R : never;
 
 /**
  * Resolve a tuple of tokens to their instance types.

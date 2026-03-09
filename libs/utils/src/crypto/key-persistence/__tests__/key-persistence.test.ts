@@ -443,6 +443,30 @@ describe('Schema Validation', () => {
       expect(result.error).toContain('future');
     });
 
+    it('should reject createdAt that is too old', () => {
+      // MAX_KEY_AGE_MS is 100 years. Mock Date.now() far enough in the future
+      // so that createdAt=1000 is older than 100 years ago.
+      const farFuture = 100 * 365 * 24 * 60 * 60 * 1000 + 1_000_000_000;
+      const spy = jest.spyOn(Date, 'now').mockReturnValue(farFuture);
+
+      try {
+        const ancient: SecretKeyData = {
+          type: 'secret',
+          kid: 'test',
+          secret: 'abc',
+          bytes: 3,
+          createdAt: 1000,
+          version: 1,
+        };
+
+        const result = validateKeyData(ancient);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('too old');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('should allow slight clock drift', () => {
       const slightFuture: SecretKeyData = {
         type: 'secret',

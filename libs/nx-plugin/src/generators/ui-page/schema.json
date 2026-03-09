@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpUiPage",
+  "title": "FrontMCP UI Page Generator",
+  "description": "Add a UI page entry to ui/pages",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Page name (PascalCase, e.g. AdminDashboard)",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the page (PascalCase)?",
+      "x-priority": "important"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the page",
+      "default": ""
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name"]
+}

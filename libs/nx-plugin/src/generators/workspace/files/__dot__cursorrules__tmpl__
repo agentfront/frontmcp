@@ -1,0 +1,3 @@
+Read CLAUDE.md for full project instructions, architecture patterns, and code conventions.
+Always use Nx generators (`npx nx g @frontmcp/nx:<generator>`) — never create files manually.
+Use the frontmcp-docs MCP server (configured in .mcp.json) to search FrontMCP documentation.

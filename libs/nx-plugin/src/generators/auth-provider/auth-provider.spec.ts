@@ -58,4 +58,9 @@ describe('auth-provider generator', () => {
     const content = tree.read('apps/my-app/src/auth/github.auth-provider.ts', 'utf-8');
     expect(content).toContain('class GithubAuthProvider');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./auth-provider');
+    expect(mod.default).toBe(authProviderGenerator);
+  });
 });

@@ -36,4 +36,9 @@ describe('resource generator', () => {
       'Project "non-existent" not found',
     );
   });
+
+  it('should export default', async () => {
+    const mod = await import('./resource');
+    expect(mod.default).toBe(resourceGenerator);
+  });
 });
