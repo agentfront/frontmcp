@@ -4,11 +4,11 @@ import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@fro
 import {
   PromptMetadata,
   FrontMcpPromptTokens,
+  extendedPromptMetadata,
   PromptType,
   PromptRecord,
   PromptKind,
   PromptEntry,
-  extendedPromptMetadata,
 } from '../common';
 import { GetPromptResult, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidEntityError } from '../errors';

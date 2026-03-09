@@ -201,17 +201,21 @@ describe('SqliteKvStore', () => {
 
   describe('cleanup timer', () => {
     it('should start cleanup timer when interval is positive', () => {
+      const spy = jest.spyOn(global, 'setInterval');
       const timerPath = tmpDbPath();
       const timerStore = new SqliteKvStore({
         path: timerPath,
         ttlCleanupIntervalMs: 60000,
       });
 
+      expect(spy).toHaveBeenCalledWith(expect.any(Function), 60000);
+
       timerStore.set('key', 'value');
       expect(timerStore.get('key')).toBe('value');
 
       timerStore.close();
       cleanup(timerPath);
+      spy.mockRestore();
     });
   });
 

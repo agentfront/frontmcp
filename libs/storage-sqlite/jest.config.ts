@@ -34,6 +34,7 @@ module.exports = {
   coverageThreshold: {
     global: {
       statements: 90,
+      // better-sqlite3 native module constructor error paths have limited testability in Jest
       branches: 78,
       functions: 90,
       lines: 90,

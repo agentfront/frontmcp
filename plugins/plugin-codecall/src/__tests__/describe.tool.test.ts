@@ -2,12 +2,19 @@
 
 import { z } from 'zod';
 import DescribeTool from '../tools/describe.tool';
+import { describeToolInputSchema } from '../tools/describe.schema';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
-  Tool: (config: any) => (target: any) => target,
+  Tool:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
 
-  Provider: (config: any) => (target: any) => target,
+  Provider:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
   ToolContext: class MockToolContext {
     scope = {
@@ -16,7 +23,7 @@ jest.mock('@frontmcp/sdk', () => ({
       },
     };
 
-    constructor(_args?: any) {
+    constructor(_args?: unknown) {
       // Mock constructor accepts optional args
     }
   },
@@ -823,6 +830,26 @@ describe('DescribeTool', () => {
 
       expect(result.tools[0].inputSchema).toBeDefined();
       expect(result.tools[0].inputSchema?.properties?.nested).toBeDefined();
+    });
+  });
+
+  describe('Input Schema Validation', () => {
+    it('should reject empty toolNames array', () => {
+      const schema = z.object(describeToolInputSchema);
+      const result = schema.safeParse({ toolNames: [] });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject duplicate tool names', () => {
+      const schema = z.object(describeToolInputSchema);
+      const result = schema.safeParse({ toolNames: ['users:list', 'billing:get', 'users:list'] });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept unique tool names', () => {
+      const schema = z.object(describeToolInputSchema);
+      const result = schema.safeParse({ toolNames: ['users:list', 'billing:get'] });
+      expect(result.success).toBe(true);
     });
   });
 });

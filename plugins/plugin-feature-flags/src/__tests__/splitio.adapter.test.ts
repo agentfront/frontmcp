@@ -48,7 +48,7 @@ describe('SplitioFeatureFlagAdapter', () => {
     });
 
     it('should throw if splitio module not found', async () => {
-      jest.mock(
+      jest.doMock(
         '@splitsoftware/splitio',
         () => {
           throw new Error('Cannot find module');

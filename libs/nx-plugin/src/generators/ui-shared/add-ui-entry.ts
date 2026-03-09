@@ -1,5 +1,9 @@
 import { type Tree, updateJson } from '@nx/devkit';
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export interface AddUiEntryOptions {
   /** The UI package root, e.g. 'ui/components' */
   packageRoot: string;
@@ -57,7 +61,7 @@ export function addUiEntry(tree: Tree, options: AddUiEntryOptions): void {
   if (tree.exists(barrelPath)) {
     const existing = tree.read(barrelPath, 'utf-8') ?? '';
     const exportLine = `export * from './${entryName}';\n`;
-    const duplicatePattern = new RegExp(`^export \\* from '\\./${entryName}';?$`, 'm');
+    const duplicatePattern = new RegExp(`^export \\* from '\\./${escapeRegExp(entryName)}';?$`, 'm');
     if (!duplicatePattern.test(existing)) {
       const normalized = existing.endsWith('\n') || existing === '' ? existing : existing + '\n';
       tree.write(barrelPath, normalized + exportLine);

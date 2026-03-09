@@ -191,7 +191,8 @@ async function tryReservePort(port: number, project: string): Promise<boolean> {
       resolve(false);
     });
 
-    server.listen(port, '::', () => {
+    // Omit host to match Express default behavior (:: on dual-stack, 0.0.0.0 otherwise)
+    server.listen(port, () => {
       // Port is available and now held
       reservedPorts.set(port, {
         port,
@@ -249,7 +250,8 @@ async function isPortAvailable(port: number): Promise<boolean> {
       resolve(false);
     });
 
-    server.listen(port, '::', () => {
+    // Omit host to match Express default behavior (:: on dual-stack, 0.0.0.0 otherwise)
+    server.listen(port, () => {
       server.close(() => {
         resolve(true);
       });

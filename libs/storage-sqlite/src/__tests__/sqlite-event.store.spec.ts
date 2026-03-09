@@ -33,6 +33,14 @@ describe('SqliteStorageOptions Schema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('should accept ttlCleanupIntervalMs of 0', () => {
+    const result = sqliteStorageOptionsSchema.safeParse({ path: '/tmp/test.db', ttlCleanupIntervalMs: 0 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ttlCleanupIntervalMs).toBe(0);
+    }
+  });
+
   it('should accept encryption config', () => {
     const result = sqliteStorageOptionsSchema.safeParse({
       path: '/tmp/test.db',
@@ -243,7 +251,7 @@ describe('SqliteEventStore', () => {
       await store.storeEvent('stream-1', msg);
 
       // Manually insert an event with a non-numeric ID suffix
-      const db = (store as any).db;
+      const db = store.getDatabase();
       db.prepare('INSERT INTO events (id, stream_id, message, created_at) VALUES (?, ?, ?, ?)').run(
         'stream-bad:not-a-number',
         'stream-bad',

@@ -44,8 +44,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   private logger: FrontMcpLogger;
   public options: OpenApiAdapterOptions;
   private poller: OpenApiSpecPoller | null = null;
-  private specHash: string | null = null;
-  private updateCallback: ((response: FrontMcpAdapterResponse) => void) | null = null;
+  private updateCallbacks = new Set<(response: FrontMcpAdapterResponse) => void>();
   private rebuildChain: Promise<void> = Promise.resolve();
 
   constructor(options: OpenApiAdapterOptions) {
@@ -836,9 +835,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
    * Returns an unsubscribe function.
    */
   onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
-    this.updateCallback = callback;
+    this.updateCallbacks.add(callback);
     return () => {
-      this.updateCallback = null;
+      this.updateCallbacks.delete(callback);
     };
   }
 
@@ -856,23 +855,19 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     this.poller = new OpenApiSpecPoller(this.options.url, polling, {
       onChanged: (_spec: string, _hash: string) => {
         // Serialize rebuilds to prevent races
-        this.rebuildChain = this.rebuildChain
-          .then(async () => {
-            const previousGenerator = this.generator;
-            try {
-              // Force re-init of generator
-              this.generator = undefined;
-              const response = await this.fetch();
-              this.updateCallback?.(response);
-              this.logger.info('OpenAPI spec updated, tools rebuilt');
-            } catch (error) {
-              this.generator = previousGenerator;
-              this.logger.error(`Failed to rebuild tools after spec change: ${(error as Error).message}`);
-            }
-          })
-          .catch((error) => {
-            this.logger.error(`Rebuild chain error: ${(error as Error).message}`);
-          });
+        this.rebuildChain = this.rebuildChain.then(async () => {
+          const previousGenerator = this.generator;
+          try {
+            // Force re-init of generator
+            this.generator = undefined;
+            const response = await this.fetch();
+            this.updateCallbacks.forEach((cb) => cb(response));
+            this.logger.info('OpenAPI spec updated, tools rebuilt');
+          } catch (error) {
+            this.generator = previousGenerator;
+            this.logger.error(`Failed to rebuild tools after spec change: ${(error as Error).message}`);
+          }
+        });
       },
       onError: (error: Error) => {
         this.logger.warn(`OpenAPI spec poll error: ${error.message}`);
