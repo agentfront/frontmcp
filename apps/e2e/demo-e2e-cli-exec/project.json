@@ -19,8 +19,7 @@
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cli-exec"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cli-exec/jest.e2e.config.ts",
-        "runInBand": true,
-        "passWithNoTests": true
+        "runInBand": true
       }
     },
     "test:e2e": {
@@ -28,8 +27,7 @@
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cli-exec-e2e"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cli-exec/jest.e2e.config.ts",
-        "runInBand": true,
-        "passWithNoTests": true
+        "runInBand": true
       }
     },
     "typecheck-e2e": {

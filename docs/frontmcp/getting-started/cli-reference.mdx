@@ -149,7 +149,7 @@ When you build with `--exec --cli`, the output is a self-contained executable wh
 frontmcp build --exec --cli
 ```
 
-This produces a standalone binary in `dist/` that can be distributed without Node.js.
+This produces a standalone JavaScript bundle in `dist/` that can be distributed and run with Node.js.
 
 ### Global Options
 
@@ -163,7 +163,12 @@ This produces a standalone binary in `dist/` that can be distributed without Nod
 
 The generated CLI organizes commands into five groups:
 
-**Tools** — Each MCP tool becomes a kebab-case subcommand. Flags are derived from the tool's input schema. Object-typed parameters accept JSON strings.
+**Tools** — Each MCP tool becomes a kebab-case subcommand. Flags are derived from the tool's input schema. Object-typed parameters accept JSON strings:
+
+```bash
+# Pass an object-typed parameter as JSON
+./myapp create-user --profile '{"name":"Alice","role":"admin"}'
+```
 
 **Resources & Prompts** — `resource list`, `resource read <uri>`, `template list`, `template <name>`, `prompt list`, `prompt <name>`.
 
