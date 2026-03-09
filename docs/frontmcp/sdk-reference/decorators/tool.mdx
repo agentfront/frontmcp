@@ -38,19 +38,19 @@ function Tool<I extends Shape, O extends OutputSchema>(
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique tool identifier |
+| Property      | Type       | Description                           |
+| ------------- | ---------- | ------------------------------------- |
+| `name`        | `string`   | Unique tool identifier                |
 | `inputSchema` | `ZodShape` | Zod object shape for input validation |
 
 ### Optional Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `description` | `string` | Tool description for AI |
-| `outputSchema` | `ZodType` | Output validation schema |
-| `id` | `string` | Stable identifier for tracking |
-| `tags` | `string[]` | Categorization tags |
+| Property       | Type       | Description                    |
+| -------------- | ---------- | ------------------------------ |
+| `description`  | `string`   | Tool description for AI        |
+| `outputSchema` | `ZodType`  | Output validation schema       |
+| `id`           | `string`   | Stable identifier for tracking |
+| `tags`         | `string[]` | Categorization tags            |
 
 ### Output Types
 

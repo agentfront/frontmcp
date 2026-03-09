@@ -11,8 +11,7 @@ const port = parseInt(process.env['PORT'] ?? '3121', 10);
   logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: {
       enabled: true,
       groupByApp: true,
@@ -21,9 +20,7 @@ const port = parseInt(process.env['PORT'] ?? '3121', 10);
       requireSelection: true,
       rememberConsent: true,
     },
-    tokenStorage: {
-      type: 'memory', // Use 'redis' in production
-    },
+    tokenStorage: 'memory', // Use { redis: ... } in production
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
   },

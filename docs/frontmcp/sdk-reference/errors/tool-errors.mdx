@@ -14,11 +14,11 @@ Tool and prompt errors are thrown when a tool or prompt cannot be found or when 
 
 Thrown when a requested tool is not registered in the server.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `TOOL_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value            |
+| ------------ | --------- | ---------------- |
+| `code`       | `string`  | `TOOL_NOT_FOUND` |
+| `statusCode` | `number`  | `404`            |
+| `isPublic`   | `boolean` | `true`           |
 
 ```typescript
 new ToolNotFoundError(toolName: string)
@@ -41,12 +41,12 @@ if (!tool) {
 
 Thrown when a tool's `execute()` method throws an unexpected error. This is an internal error — the original error details are hidden from clients.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `TOOL_EXECUTION_ERROR` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                  |
+| --------------- | -------------------- | ---------------------- |
+| `code`          | `string`             | `TOOL_EXECUTION_ERROR` |
+| `statusCode`    | `number`             | `500`                  |
+| `isPublic`      | `boolean`            | `false`                |
+| `originalError` | `Error \| undefined` | The underlying cause   |
 
 ```typescript
 new ToolExecutionError(toolName: string, originalError?: Error)
@@ -74,11 +74,11 @@ try {
 
 Thrown when a requested prompt is not registered in the server.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `PROMPT_NOT_FOUND` |
-| `statusCode` | `number` | `404` |
-| `isPublic` | `boolean` | `true` |
+| Property     | Type      | Value              |
+| ------------ | --------- | ------------------ |
+| `code`       | `string`  | `PROMPT_NOT_FOUND` |
+| `statusCode` | `number`  | `404`              |
+| `isPublic`   | `boolean` | `true`             |
 
 ```typescript
 new PromptNotFoundError(promptName: string)
@@ -99,13 +99,13 @@ throw new PromptNotFoundError('summarize');
 
 Thrown when a prompt's `execute()` method throws an unexpected error. This is an internal error.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `PROMPT_EXECUTION_FAILED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
-| `promptName` | `string` | The prompt that failed |
-| `originalError` | `Error \| undefined` | The underlying cause |
+| Property        | Type                 | Value                     |
+| --------------- | -------------------- | ------------------------- |
+| `code`          | `string`             | `PROMPT_EXECUTION_FAILED` |
+| `statusCode`    | `number`             | `500`                     |
+| `isPublic`      | `boolean`            | `false`                   |
+| `promptName`    | `string`             | The prompt that failed    |
+| `originalError` | `Error \| undefined` | The underlying cause      |
 
 ```typescript
 new PromptExecutionError(promptName: string, cause?: Error)

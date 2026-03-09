@@ -10,7 +10,7 @@ const port = Number.isNaN(parsedPort) ? 3150 : parsedPort;
  *
  * This server is configured with:
  * - CIMD enabled with allowInsecureForTesting for HTTP localhost URLs
- * - Local orchestrated auth (signs its own tokens)
+ * - Local auth mode (signs its own tokens)
  * - allowDefaultPublic: false (requires authentication)
  */
 @FrontMcp({
@@ -19,8 +19,7 @@ const port = Number.isNaN(parsedPort) ? 3150 : parsedPort;
   logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     cimd: {
       enabled: true,
       security: {
@@ -28,9 +27,7 @@ const port = Number.isNaN(parsedPort) ? 3150 : parsedPort;
         allowInsecureForTesting: true, // Allow HTTP for localhost
       },
     },
-    tokenStorage: {
-      type: 'memory',
-    },
+    tokenStorage: 'memory',
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
   },

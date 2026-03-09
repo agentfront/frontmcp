@@ -365,26 +365,27 @@ ui: {
 
 ## Platform Compatibility
 
-| Feature                | OpenAI | ext-apps | Claude  | Gemini |
-| ---------------------- | ------ | -------- | ------- | ------ |
-| `callTool`             | Yes    | Yes*     | Yes*    | No     |
-| `sendMessage`          | Yes    | Yes      | Yes     | No     |
-| `openLink`             | Yes    | Yes*     | Yes*    | Yes    |
-| `setWidgetState`       | Yes    | Yes      | Yes     | No     |
-| `onContextChange`      | Yes    | Yes      | Yes     | No     |
-| `updateModelContext`   | No     | Yes*     | Yes*    | No     |
-| `log`                  | No     | Yes*     | Yes*    | No     |
-| `registerTool`         | No     | Yes*     | Yes*    | No     |
-| `unregisterTool`       | No     | Yes*     | Yes*    | No     |
-| `resourceUri`          | Yes    | Yes      | Yes     | No     |
+| Feature              | OpenAI | ext-apps | Claude | Gemini |
+| -------------------- | ------ | -------- | ------ | ------ |
+| `callTool`           | Yes    | Yes\*    | Yes\*  | No     |
+| `sendMessage`        | Yes    | Yes      | Yes    | No     |
+| `openLink`           | Yes    | Yes\*    | Yes\*  | Yes    |
+| `setWidgetState`     | Yes    | Yes      | Yes    | No     |
+| `onContextChange`    | Yes    | Yes      | Yes    | No     |
+| `updateModelContext` | No     | Yes\*    | Yes\*  | No     |
+| `log`                | No     | Yes\*    | Yes\*  | No     |
+| `registerTool`       | No     | Yes\*    | Yes\*  | No     |
+| `unregisterTool`     | No     | Yes\*    | Yes\*  | No     |
+| `resourceUri`        | Yes    | Yes      | Yes    | No     |
 
-*Features depend on host capabilities negotiated during initialization.
+\*Features depend on host capabilities negotiated during initialization.
 
 <Note>
   **Claude MCP Apps:** Claude supports the ext-apps protocol with full
   bidirectional JSON-RPC communication via `window.__mcpAppsEnabled`.
 
-  See: [MCP Apps Announcement](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
+See: [MCP Apps Announcement](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
+
 </Note>
 
 <Note>

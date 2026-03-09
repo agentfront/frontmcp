@@ -30,7 +30,6 @@ async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Pro
       resolvedConfig = stored as FrontMcpConfigInput;
     }
   }
-
   // Create a unique cache key based on config
   // Since config is passed by reference, same config object = same scope
   const cacheKey = resolvedConfig as object;

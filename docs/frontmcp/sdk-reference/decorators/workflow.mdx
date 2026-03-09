@@ -35,48 +35,48 @@ function Workflow(opts: WorkflowMetadata): ClassDecorator
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique workflow identifier |
-| `steps` | `WorkflowStep[]` | Step definitions (minimum 1) |
+| Property | Type             | Description                  |
+| -------- | ---------------- | ---------------------------- |
+| `name`   | `string`         | Unique workflow identifier   |
+| `steps`  | `WorkflowStep[]` | Step definitions (minimum 1) |
 
 ### Optional Properties
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `description` | `string` | — | Workflow description |
-| `id` | `string` | `name` | Stable identifier for tracking |
-| `trigger` | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered |
-| `webhook` | `WorkflowWebhookConfig` | — | Webhook configuration |
-| `timeout` | `number` | `600000` | Max total execution time in ms (10 min) |
-| `maxConcurrency` | `number` | `5` | Max parallel step concurrency |
-| `tags` | `string[]` | — | Categorization tags |
-| `labels` | `Record<string, string>` | — | Key-value labels |
-| `hideFromDiscovery` | `boolean` | `false` | Hide from `list-workflows` |
-| `permissions` | `JobPermission[]` | — | RBAC permission rules |
-| `inputSchema` | `ZodShape` | — | Workflow-level input schema |
-| `outputSchema` | `ZodShape` | — | Workflow-level output schema |
+| Property            | Type                               | Default    | Description                             |
+| ------------------- | ---------------------------------- | ---------- | --------------------------------------- |
+| `description`       | `string`                           | —          | Workflow description                    |
+| `id`                | `string`                           | `name`     | Stable identifier for tracking          |
+| `trigger`           | `'manual' \| 'webhook' \| 'event'` | `'manual'` | How the workflow is triggered           |
+| `webhook`           | `WorkflowWebhookConfig`            | —          | Webhook configuration                   |
+| `timeout`           | `number`                           | `600000`   | Max total execution time in ms (10 min) |
+| `maxConcurrency`    | `number`                           | `5`        | Max parallel step concurrency           |
+| `tags`              | `string[]`                         | —          | Categorization tags                     |
+| `labels`            | `Record<string, string>`           | —          | Key-value labels                        |
+| `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list-workflows`              |
+| `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                   |
+| `inputSchema`       | `ZodShape`                         | —          | Workflow-level input schema             |
+| `outputSchema`      | `ZodShape`                         | —          | Workflow-level output schema            |
 
 ### WorkflowStep
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `id` | `string` | — | **Required.** Unique step identifier |
-| `jobName` | `string` | — | **Required.** Name of the registered job to execute |
-| `dependsOn` | `string[]` | `[]` | Step IDs that must complete first |
-| `input` | `object \| function` | Workflow input | Static input or dynamic callback |
-| `condition` | `(steps) => boolean` | — | Skip step if returns `false` |
-| `continueOnError` | `boolean` | `false` | Continue workflow if step fails |
-| `timeout` | `number` | Job default | Per-step timeout override in ms |
-| `retry` | [`JobRetryConfig`](/frontmcp/sdk-reference/decorators/job#retry-configuration) | Job default | Per-step retry override (`maxAttempts`, `backoffMs`, `backoffMultiplier`, `maxBackoffMs`) |
+| Property          | Type                                                                           | Default        | Description                                                                               |
+| ----------------- | ------------------------------------------------------------------------------ | -------------- | ----------------------------------------------------------------------------------------- |
+| `id`              | `string`                                                                       | —              | **Required.** Unique step identifier                                                      |
+| `jobName`         | `string`                                                                       | —              | **Required.** Name of the registered job to execute                                       |
+| `dependsOn`       | `string[]`                                                                     | `[]`           | Step IDs that must complete first                                                         |
+| `input`           | `object \| function`                                                           | Workflow input | Static input or dynamic callback                                                          |
+| `condition`       | `(steps) => boolean`                                                           | —              | Skip step if returns `false`                                                              |
+| `continueOnError` | `boolean`                                                                      | `false`        | Continue workflow if step fails                                                           |
+| `timeout`         | `number`                                                                       | Job default    | Per-step timeout override in ms                                                           |
+| `retry`           | [`JobRetryConfig`](/frontmcp/sdk-reference/decorators/job#retry-configuration) | Job default    | Per-step retry override (`maxAttempts`, `backoffMs`, `backoffMultiplier`, `maxBackoffMs`) |
 
 ### WorkflowWebhookConfig
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `path` | `string` | `/workflows/webhook/{name}` | Custom webhook path |
-| `secret` | `string` | — | Webhook secret for validation. Load from environment variables or a secrets manager — never hardcode in source. |
-| `methods` | `('GET' \| 'POST')[]` | `['POST']` | Allowed HTTP methods |
+| Property  | Type                  | Default                     | Description                                                                                                     |
+| --------- | --------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `path`    | `string`              | `/workflows/webhook/{name}` | Custom webhook path                                                                                             |
+| `secret`  | `string`              | —                           | Webhook secret for validation. Load from environment variables or a secrets manager — never hardcode in source. |
+| `methods` | `('GET' \| 'POST')[]` | `['POST']`                  | Allowed HTTP methods                                                                                            |
 
 ## Examples
 

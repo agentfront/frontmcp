@@ -47,22 +47,22 @@ function Agent<InSchema, OutSchema>(
 
 ### Required Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string` | Unique agent identifier |
-| `llm` | `AgentLlmAdapterConfig` | LLM provider configuration |
+| Property | Type                    | Description                |
+| -------- | ----------------------- | -------------------------- |
+| `name`   | `string`                | Unique agent identifier    |
+| `llm`    | `AgentLlmAdapterConfig` | LLM provider configuration |
 
 ### Optional Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `description` | `string` | Agent description |
-| `inputSchema` | `ZodShape` | Input validation schema |
-| `outputSchema` | `ZodType` | Output validation schema |
-| `tools` | `ToolType[]` | Tools available to the agent |
-| `systemInstructions` | `string` | System prompt for the agent |
-| `id` | `string` | Stable identifier |
-| `tags` | `string[]` | Categorization tags |
+| Property             | Type         | Description                  |
+| -------------------- | ------------ | ---------------------------- |
+| `description`        | `string`     | Agent description            |
+| `inputSchema`        | `ZodShape`   | Input validation schema      |
+| `outputSchema`       | `ZodType`    | Output validation schema     |
+| `tools`              | `ToolType[]` | Tools available to the agent |
+| `systemInstructions` | `string`     | System prompt for the agent  |
+| `id`                 | `string`     | Stable identifier            |
+| `tags`               | `string[]`   | Categorization tags          |
 
 ### LLM Configuration
 

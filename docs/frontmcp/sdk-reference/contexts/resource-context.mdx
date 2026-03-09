@@ -15,21 +15,21 @@ export abstract class ResourceContext<
 
 ## Type Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `Params` | URI template parameters type |
-| `Out` | Output type |
+| Parameter | Description                  |
+| --------- | ---------------------------- |
+| `Params`  | URI template parameters type |
+| `Out`     | Output type                  |
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `metadata` | `ResourceMetadata \| ResourceTemplateMetadata` | Resource metadata |
-| `uri` | `string` | The actual resource URI being read |
-| `params` | `Params` | Extracted URI template parameters |
-| `output` | `Out \| undefined` | Resource content (after execution) |
-| `resourceName` | `string` | Resource name |
-| `resourceId` | `string` | Resource ID |
+| Property       | Type                                           | Description                        |
+| -------------- | ---------------------------------------------- | ---------------------------------- |
+| `metadata`     | `ResourceMetadata \| ResourceTemplateMetadata` | Resource metadata                  |
+| `uri`          | `string`                                       | The actual resource URI being read |
+| `params`       | `Params`                                       | Extracted URI template parameters  |
+| `output`       | `Out \| undefined`                             | Resource content (after execution) |
+| `resourceName` | `string`                                       | Resource name                      |
+| `resourceId`   | `string`                                       | Resource ID                        |
 
 ## Abstract Method
 

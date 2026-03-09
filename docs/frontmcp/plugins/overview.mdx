@@ -73,21 +73,6 @@ These plugins are maintained by the FrontMCP team and published as individual pa
     **Best for:** Expensive computations, API rate limiting, multi-tenant data, frequently accessed resources
 
   </Card>
-
-  <Card title="Feature Flags Plugin" icon="flag" href="/frontmcp/plugins/feature-flags-plugin">
-    Gate tools, resources, prompts, and skills behind feature flags. Supports static flags, Split.io, LaunchDarkly,
-    Unleash, and custom adapters.
-
-    **Features:**
-    - Declarative per-capability feature flag annotations
-    - Automatic list filtering and execution gating
-    - Programmatic flag checks via `this.featureFlags`
-    - Multiple adapters: Static, Split.io, LaunchDarkly, Unleash, Custom
-    - Context-scoped evaluation with caching
-
-    **Best for:** Gradual rollouts, A/B testing, beta features, kill switches
-
-  </Card>
 </CardGroup>
 
 <Note>More official plugins are coming soon! Rate limiting, observability, and validation plugins are in development.</Note>
@@ -238,7 +223,6 @@ Choose the right plugin for your use case:
 | **Remember** | Session memory, approvals | Low      | Per-session  | Low         |
 | **CodeCall** | Large toolsets, workflows | Low      | Cross-app    | Medium      |
 | **Cache**    | Expensive operations      | Minimal  | Per-tool     | Low         |
-| **Feature Flags** | Gradual rollouts, A/B testing | Low | Per-capability | Low    |
 | **Custom**   | Any cross-cutting feature | Varies   | Configurable | Medium-High |
 
 ## Next Steps
@@ -252,9 +236,6 @@ Choose the right plugin for your use case:
   </Card>
   <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/cache-plugin">
     Learn how to use the Cache plugin
-  </Card>
-  <Card title="Feature Flags Plugin" icon="flag" href="/frontmcp/plugins/feature-flags-plugin">
-    Learn how to use feature flag-based capability gating
   </Card>
   <Card title="Join Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
     Get help and share your plugins

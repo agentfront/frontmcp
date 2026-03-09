@@ -71,7 +71,7 @@ perfTest.describe('Direct Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(150);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 

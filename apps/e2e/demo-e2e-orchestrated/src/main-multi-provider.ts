@@ -1,7 +1,7 @@
 /**
  * Multi-Provider Orchestrated Auth Server
  *
- * This server configuration demonstrates orchestrated mode with multiple
+ * This server configuration demonstrates local auth mode with multiple
  * upstream OAuth providers (GitHub, Slack). The providers are configured
  * via environment variables to allow E2E tests to inject mock server URLs.
  */
@@ -52,7 +52,7 @@ function buildUpstreamProviders() {
 // Note: Upstream providers are available via environment variables for E2E testing.
 // The actual provider configuration (GITHUB_ISSUER, SLACK_ISSUER) is used by the
 // MockOAuthServer in tests, not directly by this server config.
-// TODO: Add federatedLogin to orchestratedLocalSchema when full implementation is ready.
+// TODO: Add federatedLogin to localAuthSchema when full implementation is ready.
 const _upstreamProviders = buildUpstreamProviders();
 
 @FrontMcp({
@@ -61,8 +61,7 @@ const _upstreamProviders = buildUpstreamProviders();
   logging: { level: LogLevel.Warn },
   http: { port },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
+    mode: 'local',
     consent: {
       enabled: true,
       groupByApp: true,
@@ -71,9 +70,7 @@ const _upstreamProviders = buildUpstreamProviders();
       requireSelection: true,
       rememberConsent: true,
     },
-    tokenStorage: {
-      type: 'memory',
-    },
+    tokenStorage: 'memory',
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
   },
