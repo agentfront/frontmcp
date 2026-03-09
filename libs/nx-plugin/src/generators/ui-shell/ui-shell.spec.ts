@@ -73,7 +73,8 @@ describe('ui-shell generator', () => {
   it('should generate correct shell file content', async () => {
     await uiShellGenerator(tree, { name: 'admin-dashboard', skipFormat: true });
 
-    const content = tree.read('ui/shells/src/admin-dashboard/admin-dashboard.shell.ts', 'utf-8')!;
+    const content = tree.read('ui/shells/src/admin-dashboard/admin-dashboard.shell.ts', 'utf-8');
+    expect(content).not.toBeNull();
     expect(content).toContain("import { buildShell } from '@frontmcp/uipack'");
     expect(content).toContain('export interface AdminDashboardShellOptions');
     expect(content).toContain('export function buildAdminDashboardShell(options: AdminDashboardShellOptions)');
@@ -83,7 +84,8 @@ describe('ui-shell generator', () => {
   it('should generate index barrel with correct exports', async () => {
     await uiShellGenerator(tree, { name: 'admin-dashboard', skipFormat: true });
 
-    const index = tree.read('ui/shells/src/admin-dashboard/index.ts', 'utf-8')!;
+    const index = tree.read('ui/shells/src/admin-dashboard/index.ts', 'utf-8');
+    expect(index).not.toBeNull();
     expect(index).toContain("export { buildAdminDashboardShell } from './admin-dashboard.shell'");
     expect(index).toContain("export type { AdminDashboardShellOptions } from './admin-dashboard.shell'");
   });
@@ -96,8 +98,9 @@ describe('ui-shell generator', () => {
     const cjs = project.targets['build-cjs'].options.additionalEntryPoints;
     expect(cjs.filter((e: string) => e.includes('admin-dashboard'))).toHaveLength(1);
 
-    const barrel = tree.read('ui/shells/src/index.ts', 'utf-8')!;
-    const matches = barrel.match(/export \* from '\.\/admin-dashboard'/g);
+    const barrel = tree.read('ui/shells/src/index.ts', 'utf-8');
+    expect(barrel).not.toBeNull();
+    const matches = barrel!.match(/export \* from '\.\/admin-dashboard'/g);
     expect(matches).toHaveLength(1);
   });
 
