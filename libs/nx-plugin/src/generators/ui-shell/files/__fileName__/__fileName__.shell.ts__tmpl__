@@ -1,5 +1,9 @@
 import { buildShell } from '@frontmcp/uipack';
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 export interface <%= className %>ShellOptions {
   toolName: string;
   input?: unknown;
@@ -7,7 +11,7 @@ export interface <%= className %>ShellOptions {
 }
 
 export function build<%= className %>Shell(options: <%= className %>ShellOptions) {
-  const content = `<div id="app">TODO: implement ${options.toolName} shell</div>`;
+  const content = `<div id="app">TODO: implement ${escapeHtml(options.toolName)} shell</div>`;
   return buildShell(content, {
     toolName: options.toolName,
     input: options.input,

@@ -7,7 +7,12 @@ const PACKAGE_ROOT = 'ui/pages';
 const IMPORT_PATH = '@frontmcp/ui-pages';
 
 export async function uiPageGenerator(tree: Tree, schema: UiPageGeneratorSchema): Promise<GeneratorCallback | void> {
-  const { className } = names(schema.name);
+  const trimmedName = schema.name?.trim();
+  if (!trimmedName) {
+    throw new Error('Generator name must not be blank');
+  }
+
+  const { className } = names(trimmedName);
 
   // Generate page files from templates
   generateFiles(tree, join(__dirname, 'files'), `${PACKAGE_ROOT}/src`, {

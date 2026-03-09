@@ -10,7 +10,12 @@ export async function uiComponentGenerator(
   tree: Tree,
   schema: UiComponentGeneratorSchema,
 ): Promise<GeneratorCallback | void> {
-  const { className } = names(schema.name);
+  const trimmedName = schema.name?.trim();
+  if (!trimmedName) {
+    throw new Error('Generator name must not be blank');
+  }
+
+  const { className } = names(trimmedName);
 
   // Generate component files from templates
   generateFiles(tree, join(__dirname, 'files'), `${PACKAGE_ROOT}/src`, {

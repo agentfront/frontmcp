@@ -3,6 +3,14 @@
  */
 import { createStorage, createMemoryStorage, getDetectedStorageType } from '../factory';
 
+jest.mock('../adapters/redis', () => ({
+  RedisStorageAdapter: class {
+    constructor() {
+      throw new Error('Connection refused (mocked)');
+    }
+  },
+}));
+
 describe('Storage Factory', () => {
   // Store original env vars
   const originalEnv = { ...process.env };
@@ -188,7 +196,7 @@ describe('Storage Factory', () => {
     });
 
     describe('production warnings', () => {
-      let consoleWarnSpy: jest.SpyInstance;
+      let consoleWarnSpy: jest.SpiedFunction<typeof console.warn>;
 
       beforeEach(() => {
         consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -257,7 +265,7 @@ describe('Storage Factory', () => {
   });
 
   describe('fallback scenarios', () => {
-    let consoleWarnSpy: jest.SpyInstance;
+    let consoleWarnSpy: jest.SpiedFunction<typeof console.warn>;
 
     beforeEach(() => {
       consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -311,7 +319,7 @@ describe('Storage Factory', () => {
   });
 
   describe('adapter creation fallback', () => {
-    let consoleWarnSpy: jest.SpyInstance;
+    let consoleWarnSpy: jest.SpiedFunction<typeof console.warn>;
 
     beforeEach(() => {
       consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});

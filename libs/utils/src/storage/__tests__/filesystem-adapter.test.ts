@@ -4,7 +4,7 @@
 
 import { FileSystemStorageAdapter } from '../adapters/filesystem';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
-import { rm, mkdtemp, fileExists } from '../../fs';
+import { rm, mkdtemp, fileExists, writeFile } from '../../fs';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -111,7 +111,7 @@ describe('FileSystemStorageAdapter', () => {
 
       // Manually set the entry to be already expired
       const filePath = path.join(testDir, 'expiring.json');
-      const { writeFile } = await import('../../fs');
+
       await writeFile(filePath, JSON.stringify({ value: 'value', expiresAt: Date.now() - 1000 }));
 
       expect(await adapter.get('expiring')).toBeNull();
@@ -122,7 +122,7 @@ describe('FileSystemStorageAdapter', () => {
 
       // Manually expire
       const filePath = path.join(testDir, 'expiring.json');
-      const { writeFile } = await import('../../fs');
+
       await writeFile(filePath, JSON.stringify({ value: 'value', expiresAt: Date.now() - 1000 }));
 
       expect(await adapter.exists('expiring')).toBe(false);
@@ -148,7 +148,7 @@ describe('FileSystemStorageAdapter', () => {
       await adapter.set('expired', 'value', { ttlSeconds: 1 });
 
       const filePath = path.join(testDir, 'expired.json');
-      const { writeFile } = await import('../../fs');
+
       await writeFile(filePath, JSON.stringify({ value: 'value', expiresAt: Date.now() - 1000 }));
 
       expect(await adapter.ttl('expired')).toBeNull();
@@ -173,7 +173,7 @@ describe('FileSystemStorageAdapter', () => {
       await adapter.set('expired', 'value', { ttlSeconds: 1 });
 
       const filePath = path.join(testDir, 'expired.json');
-      const { writeFile } = await import('../../fs');
+
       await writeFile(filePath, JSON.stringify({ value: 'value', expiresAt: Date.now() - 1000 }));
 
       const result = await adapter.expire('expired', 300);
@@ -224,7 +224,7 @@ describe('FileSystemStorageAdapter', () => {
       await adapter.set('expired', 'value', { ttlSeconds: 1 });
 
       const filePath = path.join(testDir, 'expired.json');
-      const { writeFile } = await import('../../fs');
+
       await writeFile(filePath, JSON.stringify({ value: 'value', expiresAt: Date.now() - 1000 }));
 
       const keys = await adapter.keys();
@@ -242,6 +242,7 @@ describe('FileSystemStorageAdapter', () => {
 
       const keys = await badAdapter.keys();
       expect(keys).toEqual([]);
+      await badAdapter.disconnect();
     });
   });
 
@@ -314,7 +315,7 @@ describe('FileSystemStorageAdapter', () => {
     });
 
     it('should throw on subscribe', async () => {
-      await expect(adapter.subscribe('channel', () => {})).rejects.toThrow();
+      await expect(adapter.subscribe('channel', (_channel: string, _msg: string) => {})).rejects.toThrow();
     });
   });
 
