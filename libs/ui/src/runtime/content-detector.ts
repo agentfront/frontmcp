@@ -42,10 +42,10 @@ const JSX_PATTERNS = [
   /\{[a-zA-Z_$][\w$.]*\}/,
   // React hooks: useState, useEffect, etc.
   /\buse[A-Z]\w+\s*\(/,
-  // Arrow function components: const Foo = () =>
-  /(?:const|let|var|function)\s+[A-Z][a-zA-Z0-9]*\s*(?:=\s*(?:\([^)]*\)|[a-zA-Z_$][\w$]*)\s*=>|\()/,
+  // Arrow function components or function declarations: const Foo = / function Foo(
+  /(?:const|let|var|function)\s+[A-Z]\w*\s*[=(]/,
   // Import from react
-  /import\s[^\n]+from\s+['"]react['"]/,
+  /import\s[^\n]{1,200}from\s+['"]react['"]/,
   // JSX pragma or import
   /\/\*\*?\s*@jsx\b/,
   // export default function/const (component pattern)
@@ -67,7 +67,7 @@ const MDX_PATTERNS = [
   // Markdown bullet lists
   /^\s*[-*+]\s+\S/m,
   // Markdown links
-  /\[.+?\]\(.+?\)/,
+  /\[[^\]]+\]\([^)]+\)/,
   // Markdown code blocks
   /^```\w*/m,
   // Markdown emphasis
@@ -102,8 +102,8 @@ function looksLikeFlow(s: string): boolean {
 const MATH_PATTERNS = [
   /\$\$(?:[^$]|\$(?!\$))+\$\$/s,
   /\$[^$\n]+?\$/,
-  /\\\[(?:[^\\]|\\.)+\\\]/,
-  /\\\((?:[^\\]|\\.)+\\\)/,
+  /\\\[[^\\]*(?:\\.[^\\]*)*\\\]/,
+  /\\\([^\\]*(?:\\.[^\\]*)*\\\)/,
   /\\begin\{(?:equation|align|gather|matrix|pmatrix|bmatrix|cases)\}/,
 ];
 

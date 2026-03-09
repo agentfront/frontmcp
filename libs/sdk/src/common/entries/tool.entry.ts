@@ -118,20 +118,7 @@ export abstract class ToolEntry<
     // Convert Zod schema shape to JSON Schema
     if (this.inputSchema && Object.keys(this.inputSchema).length > 0) {
       try {
-        // Try Zod v4 import path first
-
-        const { z } = require('zod');
-        let toJSONSchema: (schema: unknown) => Record<string, unknown>;
-        try {
-          // Zod v4: toJSONSchema is in 'zod/v4/core'
-
-          const zodV4 = require('zod/v4/core');
-          toJSONSchema = zodV4.toJSONSchema;
-        } catch {
-          // Zod v3: toJSONSchema may be available as zod-to-json-schema or not at all
-          // In this case, return a basic schema
-          return { type: 'object', properties: {} };
-        }
+        const { z, toJSONSchema } = require('zod');
         return toJSONSchema(z.object(this.inputSchema));
       } catch (error) {
         // Log the error for debugging purposes

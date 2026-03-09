@@ -87,12 +87,17 @@ describe('Renderer barrel exports', () => {
 
   // registerAllRenderers
   it('should register all renderers without error', () => {
+    Renderer.clearRegistry();
     expect(() => Renderer.registerAllRenderers()).not.toThrow();
+    Renderer.clearRegistry();
   });
 
   it('should have renderers in registry after registerAllRenderers', () => {
+    Renderer.clearRegistry();
     Renderer.registerAllRenderers();
     const renderers = Renderer.getRegisteredRenderers();
-    expect(renderers.length).toBeGreaterThanOrEqual(13); // All built-in renderers
+    // Exactly 13 built-in renderers registered in registerAllRenderers() (see renderer/index.ts)
+    expect(renderers.length).toBe(13);
+    Renderer.clearRegistry();
   });
 });

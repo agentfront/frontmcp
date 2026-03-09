@@ -107,7 +107,7 @@ function ChartView({ config, className }: ChartViewProps): React.ReactElement {
   const { ResponsiveContainer, Tooltip, Legend, CartesianGrid, XAxis, YAxis } = recharts;
   const height = config.height ?? 400;
   const xKey = config.xKey ?? 'name';
-  const yKeys = config.yKeys ?? Object.keys(config.data[0] ?? {}).filter((k) => k !== xKey);
+  const yKeys = config.yKeys ?? Object.keys(config.data?.[0] ?? {}).filter((k) => k !== xKey);
 
   const chartContent = renderChartType(
     recharts,

@@ -10,6 +10,7 @@
 
 import { JSONWebKeySet, JWK } from '../common/jwt.types';
 import type { RedisConfig } from '../session/transport-session.types';
+import type { CimdConfigInput } from '../cimd';
 
 // ============================================
 // SHARED CONFIG INTERFACES
@@ -319,6 +320,7 @@ export interface LocalAuthOptionsInterface {
   refresh?: TokenRefreshConfig;
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
+  cimd?: CimdConfigInput;
 }
 
 export interface RemoteAuthOptionsInterface {
@@ -338,6 +340,7 @@ export interface RemoteAuthOptionsInterface {
   refresh?: TokenRefreshConfig;
   expectedAudience?: string | string[];
   incrementalAuth?: IncrementalAuthConfig;
+  cimd?: CimdConfigInput;
 }
 
 // ============================================
