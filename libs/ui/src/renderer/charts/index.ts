@@ -28,10 +28,12 @@ export interface ChartData {
 // Detection
 // ============================================
 
-const CHART_PATTERN = /^\s*\{[\s\S]*"type"\s*:\s*"(?:bar|line|area|pie|scatter|radar|composed)"[\s\S]*"data"\s*:/;
+const CHART_TYPE_RE = /"type"\s*:\s*"(?:bar|line|area|pie|scatter|radar|composed)"/;
 
 export function isChart(content: string): boolean {
-  return CHART_PATTERN.test(content.trim());
+  const trimmed = content.trim();
+  if (trimmed.charCodeAt(0) !== 0x7b) return false; // '{'
+  return CHART_TYPE_RE.test(trimmed) && trimmed.includes('"data"');
 }
 
 // ============================================
@@ -231,7 +233,7 @@ function renderChartType(
         tooltip,
         legend,
         ...yKeys.map((key, i) =>
-          React.createElement(rc.Scatter, { key, name: key, data, fill: colors[i % colors.length] }),
+          React.createElement(rc.Scatter, { key, name: key, dataKey: key, data, fill: colors[i % colors.length] }),
         ),
       );
 

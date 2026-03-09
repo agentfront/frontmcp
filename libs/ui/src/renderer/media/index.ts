@@ -11,13 +11,13 @@ import type { ContentRenderer, RenderOptions } from '../types';
 // ============================================
 
 const VIDEO_PATTERNS = [
-  /^https?:\/\/.+\.(?:mp4|webm|ogg|mov)(?:\?.*)?$/i,
+  /^https?:\/\/[^?#\s]+\.(?:mp4|webm|ogg|mov)(?:\?[^#\s]*)?$/i,
   /^https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|vimeo\.com)\//i,
   /^data:video\//,
 ];
 
 const AUDIO_PATTERNS = [
-  /^https?:\/\/.+\.(?:mp3|wav|ogg|aac|flac|m4a)(?:\?.*)?$/i,
+  /^https?:\/\/[^?#\s]+\.(?:mp3|wav|ogg|aac|flac|m4a)(?:\?[^#\s]*)?$/i,
   /^https?:\/\/(?:www\.)?soundcloud\.com\//i,
   /^data:audio\//,
 ];

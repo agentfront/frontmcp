@@ -43,11 +43,24 @@ function sortRegistry(): void {
 
 /**
  * Register a content renderer. Higher priority renderers are checked first.
+ * If a renderer with the same type is already registered, it is replaced.
  */
 export function registerRenderer(renderer: ContentRenderer): void {
+  if (rendererByType.has(renderer.type)) {
+    const idx = rendererRegistry.findIndex((r) => r.type === renderer.type);
+    if (idx !== -1) rendererRegistry.splice(idx, 1);
+  }
   rendererRegistry.push(renderer);
   rendererByType.set(renderer.type, renderer);
   sortRegistry();
+}
+
+/**
+ * Clear all registered renderers. Useful for testing.
+ */
+export function clearRegistry(): void {
+  rendererRegistry.length = 0;
+  rendererByType.clear();
 }
 
 /**

@@ -50,6 +50,7 @@ export function Select({
       fullWidth={fullWidth}
       size={size}
       variant="outlined"
+      {...(placeholder ? { SelectProps: { displayEmpty: true } } : {})}
     >
       {placeholder && (
         <MenuItem value="" disabled>

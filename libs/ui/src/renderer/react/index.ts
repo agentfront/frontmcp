@@ -15,7 +15,7 @@ import { transpileJsx } from '../../runtime/babel-runtime';
 export function isReactJsx(content: string): boolean {
   // Markdown headings indicate MDX content, not raw JSX source
   if (/^#{1,6}\s+\S/m.test(content)) return false;
-  return /(?:function|const|class)\s+\w+/.test(content) && /(?:return|=>)\s*[\s(]*</.test(content);
+  return /(?:function|const|class)\s+\w+/.test(content) && /(?:return|=>)[\s(]*</.test(content);
 }
 
 // ============================================
@@ -44,14 +44,14 @@ export function parseImports(source: string): ParsedImport[] {
   const results: ParsedImport[] = [];
 
   // Default imports: import X from '...'
-  const defaultRe = /^import\s+(\w+)\s+from\s+['"]([^'"]+)['"]\s*;?\s*$/gm;
+  const defaultRe = /^import\s+(\w+)\s+from\s+['"]([^'"]+)['"][\s;]*$/gm;
   let m: RegExpExecArray | null;
   while ((m = defaultRe.exec(source)) !== null) {
     results.push({ line: m[0], localName: m[1], specifier: m[2], named: false });
   }
 
   // Named imports: import { X } from '...'  or  import { X, Y } from '...'
-  const namedRe = /^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]\s*;?\s*$/gm;
+  const namedRe = /^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"][\s;]*$/gm;
   while ((m = namedRe.exec(source)) !== null) {
     const names = m[1]
       .split(',')
@@ -70,8 +70,8 @@ export function parseImports(source: string): ParsedImport[] {
  */
 export function stripImports(source: string): string {
   return source
-    .replace(/^import\s+\w+\s+from\s+['"][^'"]+['"]\s*;?\s*$/gm, '')
-    .replace(/^import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"]\s*;?\s*$/gm, '');
+    .replace(/^import\s+\w+\s+from\s+['"][^'"]+['"][\s;]*$/gm, '')
+    .replace(/^import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"][\s;]*$/gm, '');
 }
 
 /**
