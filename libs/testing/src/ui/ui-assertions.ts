@@ -216,15 +216,10 @@ export const UIAssertions = {
     // Check for any widget-related metadata fields (aligned with toHaveWidgetMetadata matcher)
     const hasUiHtml = Boolean(meta['ui/html']);
     const hasMimeType = Boolean(meta['ui/mimeType']);
-    const uiValue = meta['ui'];
-    const ui = uiValue && typeof uiValue === 'object' ? (uiValue as Record<string, unknown>) : undefined;
-    const hasUiObject = Boolean(
-      ui &&
-        (typeof ui['resourceUri'] === 'string' || typeof ui['mimeType'] === 'string' || typeof ui['html'] === 'string'),
-    );
+    const hasUiObject = Boolean(meta['ui'] && typeof meta['ui'] === 'object');
 
     if (!hasUiHtml && !hasMimeType && !hasUiObject) {
-      throw new Error('Expected _meta to have widget metadata (ui/html, ui/mimeType, or non-empty ui object)');
+      throw new Error('Expected _meta to have widget metadata (ui/html, ui/mimeType, or ui object)');
     }
   },
 

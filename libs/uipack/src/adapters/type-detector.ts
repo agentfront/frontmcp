@@ -22,7 +22,7 @@ export function detectUIType(template: unknown): UIType {
   }
 
   // FileSource object with .tsx/.jsx extension → 'react'
-  if (typeof template === 'object' && 'file' in template) {
+  if (typeof template === 'object' && template !== null && 'file' in template) {
     const file = (template as { file: string }).file;
     if (/\.(tsx|jsx)$/i.test(file)) return 'react';
   }
