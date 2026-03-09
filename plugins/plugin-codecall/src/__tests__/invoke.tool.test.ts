@@ -33,10 +33,15 @@ function getResultText(result: CallToolResult): string {
 
 // Mock the SDK - the mock class accepts any args to match ToolContext constructor
 jest.mock('@frontmcp/sdk', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Tool: (config: any) => (target: any) => target,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Provider: (config: any) => (target: any) => target,
+  Tool:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
+
+  Provider:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
   ToolContext: class MockToolContext {
     scope = {
@@ -47,8 +52,8 @@ jest.mock('@frontmcp/sdk', () => ({
     };
     authInfo = undefined;
     logger = undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
-    constructor(_args?: any) {
+
+    constructor(_args?: unknown) {
       // Mock constructor accepts optional args
     }
   },
@@ -57,7 +62,6 @@ jest.mock('@frontmcp/sdk', () => ({
 describe('InvokeTool', () => {
   describe('Constructor Validation', () => {
     it('should instantiate InvokeTool correctly', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       expect(tool).toBeDefined();
     });
@@ -65,7 +69,6 @@ describe('InvokeTool', () => {
 
   describe('Security: Self-Reference Blocking', () => {
     it('should block invocation of codecall:execute', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
 
       const result = await tool.execute({
@@ -78,7 +81,6 @@ describe('InvokeTool', () => {
     });
 
     it('should block invocation of codecall:search', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
 
       const result = await tool.execute({
@@ -91,7 +93,6 @@ describe('InvokeTool', () => {
     });
 
     it('should block invocation of codecall:describe', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
 
       const result = await tool.execute({
@@ -104,7 +105,6 @@ describe('InvokeTool', () => {
     });
 
     it('should block invocation of codecall:invoke (self)', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
 
       const result = await tool.execute({
@@ -117,7 +117,6 @@ describe('InvokeTool', () => {
     });
 
     it('should block any codecall: prefixed tool', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
 
       const result = await tool.execute({
@@ -130,7 +129,6 @@ describe('InvokeTool', () => {
     });
 
     it('should block CODECALL: prefix case-insensitively', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
 
       const result = await tool.execute({
@@ -145,7 +143,6 @@ describe('InvokeTool', () => {
 
   describe('Tool Not Found', () => {
     it('should return error when flow returns null (tool not found)', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: jest.fn(() => Promise.resolve(null)),
@@ -162,7 +159,6 @@ describe('InvokeTool', () => {
     });
 
     it('should suggest using codecall:search when tool not found', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: jest.fn(() => Promise.resolve(null)),
@@ -182,7 +178,6 @@ describe('InvokeTool', () => {
     it('should return CallToolResult directly from flow', async () => {
       const mockFlowResult = createMockMcpResult({ id: '123', name: 'Test User' });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: jest.fn(() => Promise.resolve(mockFlowResult)),
@@ -202,7 +197,6 @@ describe('InvokeTool', () => {
     it('should pass through flow error results unchanged', async () => {
       const mockErrorResult = createMockMcpResult('Database connection failed', true);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: jest.fn(() => Promise.resolve(mockErrorResult)),
@@ -222,7 +216,6 @@ describe('InvokeTool', () => {
       const mockFlowResult = createMockMcpResult({ success: true });
       const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: mockRunFlow,
@@ -259,7 +252,6 @@ describe('InvokeTool', () => {
         isError: false,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: jest.fn(() => Promise.resolve(multiContentResult)),
@@ -280,7 +272,6 @@ describe('InvokeTool', () => {
         isError: false,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tool = new (InvokeTool as any)();
       tool.scope = {
         runFlow: jest.fn(() => Promise.resolve(imageResult)),
@@ -299,7 +290,6 @@ describe('InvokeTool', () => {
 
 describe('Input Edge Cases', () => {
   it('should handle empty tool name (via flow)', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(null)),
@@ -316,7 +306,6 @@ describe('Input Edge Cases', () => {
   });
 
   it('should handle tool name with only whitespace', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(null)),
@@ -332,7 +321,6 @@ describe('Input Edge Cases', () => {
   });
 
   it('should handle very long tool name', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(null)),
@@ -349,7 +337,7 @@ describe('Input Edge Cases', () => {
 
   it('should handle tool name with special characters', async () => {
     const mockFlowResult = createMockMcpResult({ success: true });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: jest.fn(() => Promise.resolve(mockFlowResult)),
@@ -367,7 +355,6 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ data: 'test' });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: mockRunFlow,
@@ -394,7 +381,6 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: mockRunFlow,
@@ -433,7 +419,6 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: mockRunFlow,
@@ -466,7 +451,6 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: mockRunFlow,
@@ -493,7 +477,6 @@ describe('Input Edge Cases', () => {
     const mockFlowResult = createMockMcpResult({ success: true });
     const mockRunFlow = jest.fn(() => Promise.resolve(mockFlowResult));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: mockRunFlow,
@@ -517,7 +500,6 @@ describe('Input Edge Cases', () => {
   });
 
   it('should propagate flow exceptions as error result', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tool = new (InvokeTool as any)();
     tool.scope = {
       runFlow: jest.fn(() => Promise.reject(new Error('Flow execution failed'))),

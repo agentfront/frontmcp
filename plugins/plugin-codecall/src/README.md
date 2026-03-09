@@ -37,7 +37,6 @@ Goals:
 ## High-level architecture
 
 1. **Tool indexing**
-
    - On app/bootstrap, the plugin receives the resolved list of tools (inline + adapters) across all apps.
    - It builds an index containing:
      - `name`
@@ -49,14 +48,12 @@ Goals:
    - An optional `includeTools` predicate can drop tools from the index entirely.
 
 2. **Modes + metadata**
-
    - CodeCall has a `mode` that controls:
      - Which tools appear in `list_tools`.
      - Which tools are indexed and callable by CodeCall.
    - Tools are annotated with `codecall` metadata via the `@Tool` decorator.
 
 3. **Multi-app / filter-aware search**
-
    - `codecall.search` accepts a `filter` object that can include:
      - `appIds` – limit search to one or more apps (e.g. `['user', 'billing']`).
      - Other tags or flags.
@@ -66,7 +63,6 @@ Goals:
      - Or omit `appIds` to search across all apps.
 
 4. **`list_tools` interception**
-
    - CodeCall intercepts tool listing and replaces it with:
      - `codecall.search`
      - `codecall.describe`
@@ -75,7 +71,6 @@ Goals:
      - plus any tools whose metadata requires them to stay visible.
 
 5. **Search / describe**
-
    - `codecall.search`:
      - Scores tools against a natural-language query (optionally scoped by `filter`).
      - Returns the top `topK`.
@@ -83,7 +78,6 @@ Goals:
      - Returns JSON-schema-like shapes for selected tools so the LLM can generate valid JS code.
 
 6. **Plan execution**
-
    - `codecall.execute`:
      - Parses the script into an AST.
      - Validates the AST against security rules (no banned builtins/globals, optional loop ban).
@@ -99,7 +93,6 @@ Goals:
      - Returns a normalized result with a `status` discriminant.
 
 7. **Direct calls (no VM)**
-
    - If enabled, CodeCall exposes `codecall.invoke`:
      - Calls tools directly via the underlying tool pipeline (no VM, no JS plan).
      - Still uses the same plugin chain, PII behavior, and error model.
@@ -212,15 +205,12 @@ export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_drive
 **Behavior:**
 
 - `list_tools`:
-
   - Hide all tools by default.
   - Show tools with `codecall.visibleInListTools === true`.
 
 - CodeCall index:
-
   - Include all tools by default.
   - Exclude tools if:
-
     - `includeTools(tool) === false`, or
     - `codecall.enabledInCodeCall === false`.
 
@@ -234,12 +224,10 @@ export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_drive
 **Behavior:**
 
 - `list_tools`:
-
   - Hide all tools by default.
   - Show tools with `codecall.visibleInListTools === true`.
 
 - CodeCall index:
-
   - Include **only** tools with `codecall.enabledInCodeCall === true`.
 
 #### `metadata_driven`
@@ -253,11 +241,9 @@ export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_drive
 **Behavior:**
 
 - `list_tools`:
-
   - Show tools with `codecall.visibleInListTools === true`.
 
 - CodeCall index:
-
   - Include tools with `codecall.enabledInCodeCall === true`.
 
 - No other implicit defaults.
@@ -547,29 +533,23 @@ export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experime
 ### Security pipeline
 
 1. **AST validation**
-
    - Parse `script` to an AST.
    - Reject:
-
      - Disallowed identifiers (from `disabledBuiltins` / `disabledGlobals`).
      - Loop nodes (`ForStatement`, `WhileStatement`, `DoWhileStatement`, `ForOfStatement`, `ForInStatement`) if `allowLoops === false`.
 
    - Happens _before_ any VM execution.
 
 2. **VM configuration**
-
    - Start from preset defaults.
    - Apply `vm` overrides.
    - Construct `vm2` options with:
-
      - `sandbox` object (`callTool`, `getTool`, `codecallContext`, optional `console`, optional `mcpLog` / `mcpNotify`).
      - No `require` or other Node internals.
 
 3. **Execution**
-
    - Run script with `vm2` and `timeoutMs`.
    - Map outcomes to `CodeCallExecuteResult`:
-
      - `ok`
      - `syntax_error`
      - `illegal_access`
@@ -780,17 +760,13 @@ export type CodeCallExecuteResult =
 Every `callTool()` invocation should produce MCP notifications so the client/agent can observe:
 
 - **Before** the tool runs:
-
   - “tool call start” notification:
-
     - `toolName`
     - `input`
     - `callId` (correlates with end event)
 
 - **After** the tool finishes:
-
   - “tool call end” notification:
-
     - `toolName`
     - `input`
     - `callId`
@@ -828,17 +804,14 @@ These are **thin wrappers** over core logging/notification APIs and must not byp
 #### Error separation: script vs tool
 
 - **Script-level errors**:
-
   - `status: 'runtime_error'`, `error.source: 'script'`
   - Thrown by user code itself (invalid property access, thrown `Error`, etc.).
   - Not tied to a single tool call.
 
 - **Tool-level errors**:
-
   - `status: 'tool_error'`, `error.source: 'tool'`
   - Thrown while executing a specific `callTool(toolName, input)`.
   - Include:
-
     - `toolName`
     - `toolInput`
     - `message` (+ optional `code` / `details`).
@@ -869,7 +842,6 @@ Behavior:
 
 - Validate that `tool` is allowed by `directCalls` policy.
 - Forward the call to the **same tool call pipeline** as normal MCP calls:
-
   - PII plugin(s)
   - auth / rate limits
   - logging / audit
@@ -880,19 +852,14 @@ Behavior:
 Output:
 
 - On success:
-
   - Return tool result (or a wrapped `{ status: 'ok', result }`).
 
 - On error:
-
   - If tool is unknown/not allowed:
-
     - Return a clear error referring to `tool`.
 
   - If the tool throws:
-
     - Return a `tool_error`-like shape including:
-
       - `toolName`
       - `toolInput`
       - `message`
@@ -905,13 +872,11 @@ Output:
 CodeCall should integrate with the surrounding transport protocol:
 
 - With **session IDs + tool list change notifications**:
-
   - Clients cache search/describe results per session.
   - CodeCall emits notifications when tools relevant to a prior search/describe change.
   - Clients can re-describe only when notified.
 
 - Without notifications:
-
   - Orchestrators should re-run `codecall.describe` before relying on a tool in `codecall.execute`.
 
 Implementation-specific details (event names, payloads) live in the transport layer, but CodeCall needs hooks to trigger these events.
@@ -951,11 +916,9 @@ npx nx lint codecall
 Testing guidelines:
 
 - **Happy path**:
-
   - search → describe → execute with valid tools and simple scripts.
 
 - **Error cases**:
-
   - Script syntax errors.
   - Illegal access (banned globals/builtins).
   - Unknown tool names.
@@ -963,15 +926,12 @@ Testing guidelines:
   - Timeout behavior.
 
 - **Mode behavior**:
-
   - Which tools appear in `list_tools` and search results under each mode.
 
 - **Direct calls**:
-
   - `codecall.invoke` success + error paths.
 
 - **Security tests**:
-
   - Attempt access to `process`, `require`, `fetch`, etc.
   - Attempt loops when `allowLoops === false`.
   - Ensure PII plugins still see all inputs/outputs.
@@ -987,7 +947,6 @@ Safe extension points:
 - Helper utilities injected as globals (e.g. pagination helpers), guarded by AST + config.
 - Per-tenant / per-session VM policies (based on `codecallContext`).
 - Future **auth/permissions plugin** that:
-
   - Detects “authorization required” tool responses.
   - Drives OAuth/permission flows.
   - Retries execution when possible.

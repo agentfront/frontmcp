@@ -1,5 +1,10 @@
 import 'reflect-metadata';
-import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens } from '../tokens';
+import {
+  FrontMcpResourceTokens,
+  FrontMcpResourceTemplateTokens,
+  extendedResourceMetadata,
+  extendedResourceTemplateMetadata,
+} from '../tokens';
 import {
   frontMcpResourceMetadataSchema,
   frontMcpResourceTemplateMetadataSchema,
@@ -18,9 +23,15 @@ function FrontMcpResource(providedMetadata: ResourceMetadata): ClassDecorator {
 
     Reflect.defineMetadata(FrontMcpResourceTokens.type, true, target);
 
+    const extended: Record<string, unknown> = {};
     for (const property in metadata) {
-      Reflect.defineMetadata(FrontMcpResourceTokens[property] ?? property, metadata[property], target);
+      if (FrontMcpResourceTokens[property]) {
+        Reflect.defineMetadata(FrontMcpResourceTokens[property], metadata[property], target);
+      } else {
+        extended[property] = metadata[property];
+      }
     }
+    Reflect.defineMetadata(extendedResourceMetadata, extended, target);
   };
 }
 
@@ -33,9 +44,15 @@ function FrontMcpResourceTemplate(providedMetadata: ResourceTemplateMetadata): C
 
     Reflect.defineMetadata(FrontMcpResourceTemplateTokens.type, true, target);
 
+    const extended: Record<string, unknown> = {};
     for (const property in metadata) {
-      Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property] ?? property, metadata[property], target);
+      if (FrontMcpResourceTemplateTokens[property]) {
+        Reflect.defineMetadata(FrontMcpResourceTemplateTokens[property], metadata[property], target);
+      } else {
+        extended[property] = metadata[property];
+      }
     }
+    Reflect.defineMetadata(extendedResourceTemplateMetadata, extended, target);
   };
 }
 

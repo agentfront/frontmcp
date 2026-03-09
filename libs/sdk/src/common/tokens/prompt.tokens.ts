@@ -11,3 +11,6 @@ export const FrontMcpPromptTokens = {
   icons: tokenFactory.meta('icons'),
   metadata: tokenFactory.meta('metadata'), // used in prompt({}) construction
 } as const satisfies RawMetadataShape<PromptMetadata, ExtendFrontMcpPromptMetadata>;
+
+// Extended metadata symbol for class decorators
+export const extendedPromptMetadata = tokenFactory.meta('extendedPromptMetadata');

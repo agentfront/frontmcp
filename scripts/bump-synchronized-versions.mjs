@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import fs from "node:fs/promises";
-import path from "node:path";
-import { execSync } from "node:child_process";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 /**
  * Bump version for all synchronized libraries
@@ -12,8 +12,8 @@ import { execSync } from "node:child_process";
 const [, , newVersion] = process.argv;
 
 if (!newVersion) {
-  console.error("Usage: node scripts/bump-synchronized-versions.mjs <new-version>");
-  console.error("Example: node scripts/bump-synchronized-versions.mjs 0.4.0");
+  console.error('Usage: node scripts/bump-synchronized-versions.mjs <new-version>');
+  console.error('Example: node scripts/bump-synchronized-versions.mjs 0.4.0');
   process.exit(1);
 }
 
@@ -25,28 +25,27 @@ if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
 
 async function getSynchronizedLibs() {
   try {
-    const output = execSync(
-      'npx nx show projects -p tag:versioning:synchronized --type lib --json',
-      { encoding: 'utf8' }
-    );
+    const output = execSync('npx nx show projects -p tag:versioning:synchronized --type lib --json', {
+      encoding: 'utf8',
+    });
     return JSON.parse(output);
   } catch (error) {
-    console.error("Error fetching synchronized libraries:", error.message);
+    console.error('Error fetching synchronized libraries:', error.message);
     process.exit(1);
   }
 }
 
 async function updateLibVersion(libName, newVersion) {
-  const libPath = path.join(process.cwd(), "libs", libName, "package.json");
+  const libPath = path.join(process.cwd(), 'libs', libName, 'package.json');
 
   try {
-    const content = await fs.readFile(libPath, "utf8");
+    const content = await fs.readFile(libPath, 'utf8');
     const pkg = JSON.parse(content);
 
     const oldVersion = pkg.version;
     pkg.version = newVersion;
 
-    await fs.writeFile(libPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+    await fs.writeFile(libPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 
     console.log(`✓ Updated ${libName} from ${oldVersion} to ${newVersion}`);
     return { libName, oldVersion, newVersion };
@@ -57,16 +56,16 @@ async function updateLibVersion(libName, newVersion) {
 }
 
 async function updateRootVersion(newVersion) {
-  const rootPath = path.join(process.cwd(), "package.json");
+  const rootPath = path.join(process.cwd(), 'package.json');
 
   try {
-    const content = await fs.readFile(rootPath, "utf8");
+    const content = await fs.readFile(rootPath, 'utf8');
     const pkg = JSON.parse(content);
 
     const oldVersion = pkg.version;
     pkg.version = newVersion;
 
-    await fs.writeFile(rootPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+    await fs.writeFile(rootPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 
     console.log(`✓ Updated root package.json from ${oldVersion} to ${newVersion}`);
   } catch (error) {
@@ -75,23 +74,23 @@ async function updateRootVersion(newVersion) {
 }
 
 async function updateDependencies(libs, newVersion) {
-  console.log("\nUpdating internal dependencies...");
+  console.log('\nUpdating internal dependencies...');
 
   for (const libName of libs) {
-    const libPath = path.join(process.cwd(), "libs", libName, "package.json");
+    const libPath = path.join(process.cwd(), 'libs', libName, 'package.json');
 
     try {
-      const content = await fs.readFile(libPath, "utf8");
+      const content = await fs.readFile(libPath, 'utf8');
       const pkg = JSON.parse(content);
 
       let updated = false;
 
       // Update dependencies
-      for (const depType of ["dependencies", "devDependencies", "peerDependencies"]) {
+      for (const depType of ['dependencies', 'devDependencies', 'peerDependencies']) {
         if (pkg[depType]) {
           for (const dep of libs) {
-            const depPkgPath = path.join(process.cwd(), "libs", dep, "package.json");
-            const depPkg = JSON.parse(await fs.readFile(depPkgPath, "utf8"));
+            const depPkgPath = path.join(process.cwd(), 'libs', dep, 'package.json');
+            const depPkg = JSON.parse(await fs.readFile(depPkgPath, 'utf8'));
             const depName = depPkg.name;
 
             if (pkg[depType][depName]) {
@@ -103,7 +102,7 @@ async function updateDependencies(libs, newVersion) {
       }
 
       if (updated) {
-        await fs.writeFile(libPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+        await fs.writeFile(libPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
         console.log(`✓ Updated dependencies in ${libName}`);
       }
     } catch (error) {
@@ -118,11 +117,11 @@ async function main() {
   const libs = await getSynchronizedLibs();
 
   if (!libs || libs.length === 0) {
-    console.log("No synchronized libraries found.");
+    console.log('No synchronized libraries found.');
     return;
   }
 
-  console.log(`Found ${libs.length} synchronized libraries: ${libs.join(", ")}\n`);
+  console.log(`Found ${libs.length} synchronized libraries: ${libs.join(', ')}\n`);
 
   // Update all library versions
   const results = [];
@@ -141,6 +140,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  console.error('Fatal error:', error);
   process.exit(1);
 });
