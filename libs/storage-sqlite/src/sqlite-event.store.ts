@@ -217,6 +217,13 @@ export class SqliteEventStore implements EventStoreInterface {
   }
 
   /**
+   * Get the underlying database instance.
+   */
+  getDatabase(): Database.Database {
+    return this.db;
+  }
+
+  /**
    * Get the current number of stored events.
    */
   get size(): number {
