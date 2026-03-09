@@ -16,6 +16,7 @@ import type {
   SpecPollerRetryConfig,
   PollerHealthStatus,
 } from './openapi-spec-poller.types';
+import { OpenAPIFetchError } from './openapi.errors';
 
 const DEFAULT_RETRY: Required<SpecPollerRetryConfig> = {
   maxRetries: 3,
@@ -173,7 +174,7 @@ export class OpenApiSpecPoller {
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new OpenAPIFetchError(this.url, response.status, response.statusText);
       }
 
       // Store ETag and Last-Modified for next request
