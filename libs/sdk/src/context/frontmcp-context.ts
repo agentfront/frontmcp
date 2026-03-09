@@ -608,7 +608,7 @@ export class FrontMcpContext {
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
     // fire-and-forget signals whose internal abort listeners are never cleaned up).
-    const userSignal = init?.signal;
+    const userSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     let controller: AbortController | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 

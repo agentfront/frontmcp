@@ -17,9 +17,13 @@ export async function fetchFromGit(url: string, tmpDir: string): Promise<string>
   }
 
   // Validate URL scheme to prevent argument injection (e.g., --upload-pack)
-  const ALLOWED_PREFIXES = ['https://', 'http://', 'git://', 'ssh://', 'git@'];
-  if (!ALLOWED_PREFIXES.some((prefix) => gitUrl.startsWith(prefix))) {
-    throw new Error(`Invalid git URL: "${gitUrl}". URL must start with one of: ${ALLOWED_PREFIXES.join(', ')}`);
+  const ALLOWED_PREFIXES = ['https://', 'http://', 'git://', 'ssh://'];
+  // scp-style SSH: user@host:path (e.g., git@github.com:org/repo.git)
+  const SCP_PATTERN = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+:/;
+  if (!ALLOWED_PREFIXES.some((prefix) => gitUrl.startsWith(prefix)) && !SCP_PATTERN.test(gitUrl)) {
+    throw new Error(
+      `Invalid git URL. URL must start with one of: ${ALLOWED_PREFIXES.join(', ')}, or be an scp-style SSH remote (user@host:path)`,
+    );
   }
 
   const cloneDir = path.join(tmpDir, 'package');
