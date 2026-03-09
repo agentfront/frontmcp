@@ -204,8 +204,8 @@ describe('RedisCimdCache', () => {
 
       const result = await cache.get('client-1');
       expect(result).toBeDefined();
-      expect(result!.document).toEqual(entry.document);
-      expect(result!.etag).toBe('"abc123"');
+      expect(result?.document).toEqual(entry.document);
+      expect(result?.etag).toBe('"abc123"');
     });
 
     it('should return undefined for expired entry', async () => {
@@ -256,7 +256,7 @@ describe('RedisCimdCache', () => {
 
       const result = await cache.getStale('client-1');
       expect(result).toBeDefined();
-      expect(result!.document).toEqual(entry.document);
+      expect(result?.document).toEqual(entry.document);
     });
 
     it('should return undefined for invalid JSON', async () => {
