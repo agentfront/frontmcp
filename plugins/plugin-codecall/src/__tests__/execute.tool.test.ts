@@ -7,19 +7,25 @@ import type { EnclaveExecutionResult } from '../services/enclave.service';
 
 // Mock the SDK - ToolContext with dependency injection
 jest.mock('@frontmcp/sdk', () => ({
-  Tool: (config: any) => (target: any) => target,
+  Tool:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
 
-  Provider: (config: any) => (target: any) => target,
+  Provider:
+    (_config: unknown) =>
+    <T>(target: T) =>
+      target,
   ProviderScope: { GLOBAL: 'global', REQUEST: 'request' },
   // BaseConfig mock for CodeCallConfig to extend
   BaseConfig: class MockBaseConfig {
-    protected options: any;
+    protected options: Record<string, unknown>;
 
-    constructor(options: any = {}) {
+    constructor(options: Record<string, unknown> = {}) {
       this.options = options;
     }
 
-    get(key: string): any {
+    get(key: string): unknown {
       return this.options[key];
     }
   },
@@ -34,25 +40,25 @@ jest.mock('@frontmcp/sdk', () => ({
     authInfo = undefined;
     logger = undefined;
 
-    constructor(_args?: any) {
+    constructor(_args?: unknown) {
       // Mock constructor accepts optional args
     }
 
-    get<T>(token: any): T {
+    get<T>(token: unknown): T {
       const dep = this.dependencies.get(token);
       if (!dep) {
-        throw new Error(`Dependency not found: ${token?.name || token}`);
+        throw new Error(`Dependency not found: ${(token as { name?: string })?.name || token}`);
       }
       return dep as T;
     }
 
-    tryGet<T>(token: any): T | undefined {
+    tryGet<T>(token: unknown): T | undefined {
       return this.dependencies.get(token) as T | undefined;
     }
 
     // Test helper to set dependencies
 
-    _setDependency(token: any, instance: any): void {
+    _setDependency(token: unknown, instance: unknown): void {
       this.dependencies.set(token, instance);
     }
   },
