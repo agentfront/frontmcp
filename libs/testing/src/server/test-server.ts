@@ -288,6 +288,8 @@ export class TestServer {
     if (this.portRelease) {
       await this.portRelease();
       this.portRelease = null;
+      // Brief delay to allow OS to fully release the socket
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     // Use shell: true to handle complex commands with quoted arguments

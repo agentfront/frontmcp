@@ -605,14 +605,27 @@ export class FrontMcpContext {
       }
     }
 
-    // Use AbortSignal.timeout if no signal provided
-    const signal = init?.signal ?? AbortSignal.timeout(this.config.requestTimeout ?? 30000);
+    // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
+    // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
+    // fire-and-forget signals whose internal abort listeners are never cleaned up).
+    const userSignal = init?.signal;
+    let controller: AbortController | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    return fetch(input, {
-      ...init,
-      headers,
-      signal,
-    });
+    if (!userSignal) {
+      controller = new AbortController();
+      timeoutId = setTimeout(() => controller!.abort(), this.config.requestTimeout ?? 30000);
+    }
+
+    try {
+      return await fetch(input, {
+        ...init,
+        headers,
+        signal: userSignal ?? controller!.signal,
+      });
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
   }
 }
 

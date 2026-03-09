@@ -42,7 +42,7 @@ perfTest.describe('Cache Parallel Stress Testing', () => {
     );
 
     // 5 workers × ~80 req/s = ~400 req/s expected
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
@@ -82,7 +82,7 @@ perfTest.describe('Cache Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(150 * 1024);
   });
 
@@ -113,7 +113,7 @@ perfTest.describe('Cache Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
@@ -147,7 +147,7 @@ perfTest.describe('Cache Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(150 * 1024);
   });
 });

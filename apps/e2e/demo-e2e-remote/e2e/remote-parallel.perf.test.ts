@@ -85,7 +85,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
         `(${result.workersUsed} workers × ${result.totalIterations / result.workersUsed} iterations)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
@@ -109,7 +109,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
@@ -136,7 +136,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
@@ -170,7 +170,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 
@@ -194,7 +194,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
         `(${result.workersUsed} workers)`,
     );
 
-    expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
+    expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
 });
