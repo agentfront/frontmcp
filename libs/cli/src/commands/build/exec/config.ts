@@ -6,6 +6,29 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { SetupDefinition } from './setup';
 
+export interface OAuthConfig {
+  serverUrl?: string;
+  clientId?: string;
+  defaultScope?: string;
+  portRange?: [number, number];
+  defaultPort?: number;
+  timeout?: number;
+}
+
+export interface CliConfig {
+  enabled: boolean;
+  outputDefault?: 'text' | 'json';
+  authRequired?: boolean;
+  description?: string;
+  excludeTools?: string[];
+  nativeDeps?: {
+    brew?: string[];
+    apt?: string[];
+    npm?: string[];
+  };
+  oauth?: OAuthConfig;
+}
+
 export interface FrontmcpExecConfig {
   name: string;
   version?: string;
@@ -30,6 +53,10 @@ export interface FrontmcpExecConfig {
     minify?: boolean;
   };
   setup?: SetupDefinition;
+  cli?: CliConfig;
+  sea?: {
+    enabled?: boolean;
+  };
 }
 
 const CONFIG_FILENAMES = [
@@ -52,7 +79,7 @@ export async function loadExecConfig(cwd: string): Promise<FrontmcpExecConfig> {
         return JSON.parse(content) as FrontmcpExecConfig;
       }
       // JS/MJS/CJS config — require it
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const mod = require(configPath);
       return (mod.default || mod) as FrontmcpExecConfig;
     }
