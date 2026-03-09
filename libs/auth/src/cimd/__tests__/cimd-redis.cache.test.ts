@@ -30,12 +30,11 @@ jest.mock('@frontmcp/utils', () => ({
 
 import { RedisCimdCache } from '../cimd-redis.cache';
 import { RedisStorageAdapter, sha256Hex } from '@frontmcp/utils';
-import type { ClientMetadataDocument } from '../cimd.types';
+import type { ClientMetadataDocument, CimdCacheConfig } from '../cimd.types';
 
 // Helper to create RedisCimdCache with partial config (the constructor handles defaults via ??)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createCache(config: any): RedisCimdCache {
-  return new RedisCimdCache(config);
+function createCache(config: unknown): RedisCimdCache {
+  return new RedisCimdCache(config as CimdCacheConfig);
 }
 
 // ---- Test Helpers ----

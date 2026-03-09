@@ -701,8 +701,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         if (componentPayload) {
           uiMeta = {
             'ui/component': componentPayload,
-            'ui/type': componentPayload['type'],
             'ui/mimeType': MCP_APPS_MIME_TYPE,
+            ...(componentPayload['type'] != null && { 'ui/type': componentPayload['type'] }),
           };
         }
 
