@@ -128,6 +128,7 @@ describe('OpenAPI Adapter Security E2E', () => {
     // Start MCP server with staticAuth configuration
     server = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-openapi/src/security-test-main.ts',
+      project: 'demo-e2e-openapi',
       env: {
         OPENAPI_BASE_URL: apiInfo.baseUrl,
         OPENAPI_SPEC_URL: apiInfo.specUrl,

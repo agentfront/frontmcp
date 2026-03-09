@@ -119,6 +119,7 @@ describe('OpenAPI Adapter E2E', () => {
     // Start MCP server pointing to mock API
     server = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-openapi/src/main.ts',
+      project: 'demo-e2e-openapi',
       env: {
         OPENAPI_BASE_URL: apiInfo.baseUrl,
         OPENAPI_SPEC_URL: apiInfo.specUrl,

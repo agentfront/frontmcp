@@ -8,7 +8,7 @@
  * For isolated unit tests of createSecurityContextFromAuth (with mocked SecurityResolver),
  * see openapi-security-unit.spec.ts
  */
-import { SecurityResolver, createSecurityContext, type McpOpenAPITool } from 'mcp-from-openapi';
+import { type McpOpenAPITool } from 'mcp-from-openapi';
 import type { FrontMcpContext } from '@frontmcp/sdk';
 import { resolveToolSecurity } from '../openapi.security';
 import { buildRequest } from '../openapi.utils';
@@ -21,7 +21,7 @@ describe('OpenAPI Security Integration (Real SecurityResolver)', () => {
       requestId: 'test-request-id',
       sessionId: 'test-session-id',
       scopeId: 'test-scope',
-    } as FrontMcpContext);
+    }) as FrontMcpContext;
 
   // Tool with bearer auth security requirement
   const createBearerAuthTool = (): McpOpenAPITool => ({

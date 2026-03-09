@@ -16,12 +16,12 @@ nx g @frontmcp/nx:resource user-profile --project crm --template
 
 ## Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | — | **Required.** The name of the resource |
-| `project` | `string` | — | **Required.** The project to add the resource to |
-| `template` | `boolean` | `false` | Generate a `@ResourceTemplate` with URI template params |
-| `directory` | `string` | — | Subdirectory within `src/resources/` |
+| Option      | Type      | Default | Description                                             |
+| ----------- | --------- | ------- | ------------------------------------------------------- |
+| `name`      | `string`  | —       | **Required.** The name of the resource                  |
+| `project`   | `string`  | —       | **Required.** The project to add the resource to        |
+| `template`  | `boolean` | `false` | Generate a `@ResourceTemplate` with URI template params |
+| `directory` | `string`  | —       | Subdirectory within `src/resources/`                    |
 
 ## Generated Code
 
@@ -44,6 +44,7 @@ nx g @frontmcp/nx:resource user-profile --project crm --template
       }
     }
     ```
+
   </Tab>
   <Tab title="Resource Template">
     ```ts
@@ -63,5 +64,6 @@ nx g @frontmcp/nx:resource user-profile --project crm --template
       }
     }
     ```
+
   </Tab>
 </Tabs>

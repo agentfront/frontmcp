@@ -29,6 +29,7 @@ graph LR
     npx frontmcp create my-platform --nx
     cd my-platform
     ```
+
   </Step>
 
   <Step title="Generate an app for your existing code">
@@ -37,6 +38,7 @@ graph LR
     ```
 
     This creates `apps/my-app/` with the standard structure.
+
   </Step>
 
   <Step title="Copy your source files">
@@ -61,6 +63,7 @@ graph LR
     })
     export class MyAppApp {}
     ```
+
   </Step>
 
   <Step title="Extract shared code into libraries">
@@ -73,6 +76,7 @@ graph LR
     ```
 
     Move shared utilities into `libs/` and update imports using your workspace's path mappings in `tsconfig.base.json`.
+
   </Step>
 
   <Step title="Update imports">
@@ -97,6 +101,7 @@ graph LR
       }
     }
     ```
+
   </Step>
 
   <Step title="Generate a server">
@@ -105,6 +110,7 @@ graph LR
     ```bash
     nx g @frontmcp/nx:server production --apps my-app --deploymentTarget node
     ```
+
   </Step>
 
   <Step title="Verify everything works">
@@ -121,6 +127,7 @@ graph LR
     # Visualize dependencies
     nx graph
     ```
+
   </Step>
 </Steps>
 

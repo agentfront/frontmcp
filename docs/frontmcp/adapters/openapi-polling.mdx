@@ -1,0 +1,398 @@
+---
+title: OpenAPI Polling
+slug: adapters/openapi-polling
+sidebarTitle: Polling & Live Updates
+description: Automatically detect OpenAPI spec changes and rebuild tools at runtime without restarts.
+icon: arrows-rotate
+---
+
+The OpenAPI adapter supports **live polling** for spec changes. When your OpenAPI specification changes at its URL, the adapter automatically detects the change, rebuilds all tools, and notifies your application — no restart required.
+
+## Why Polling?
+
+<CardGroup cols={2}>
+  <Card title="Zero Downtime" icon="power-off">
+    API changes propagate to MCP tools without restarting your server.
+  </Card>
+  <Card title="Content-Hash Detection" icon="fingerprint">
+    Uses SHA-256 hashing to detect actual content changes, not just timestamps.
+  </Card>
+  <Card title="Resilient" icon="shield-check">
+    Built-in retry logic, health tracking, and graceful degradation on failures.
+  </Card>
+  <Card title="Race-Free" icon="lock">
+    Rebuild requests are serialized via a promise chain, preventing concurrent rebuilds.
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+const adapter = OpenapiAdapter.init({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  polling: {
+    enabled: true,
+    intervalMs: 30000, // Poll every 30 seconds
+  },
+});
+
+@App({
+  id: 'live-api',
+  name: 'Live API Server',
+  adapters: [adapter],
+})
+export default class LiveApiApp {}
+```
+
+<Info>
+  Polling requires the `url` option. If you use `spec` (in-memory object), polling is not supported and the adapter will throw an error at construction time.
+</Info>
+
+## Configuration
+
+### Polling Options
+
+<ParamField path="polling.enabled" type="boolean" required>
+  Enable or disable polling. Must be `true` to activate the poller.
+</ParamField>
+
+<ParamField path="polling.intervalMs" type="number" default="60000">
+  How often to poll for changes, in milliseconds. Shorter intervals detect changes faster but increase network traffic.
+</ParamField>
+
+<ParamField path="polling.fetchTimeoutMs" type="number" default="10000">
+  Timeout for each spec fetch request. If the spec server is slow, increase this value.
+</ParamField>
+
+<ParamField path="polling.changeDetection" type="'content-hash' | 'etag' | 'auto'" default="'auto'">
+  Strategy for detecting spec changes:
+  - `'content-hash'` — Always downloads the full spec and compares SHA-256 hashes
+  - `'etag'` — Uses `If-None-Match` / `If-Modified-Since` headers for efficient 304 responses
+  - `'auto'` — Uses ETag/Last-Modified headers when available, falls back to content-hash
+</ParamField>
+
+<ParamField path="polling.headers" type="Record<string, string>">
+  Additional headers to send with each poll request. Useful if your spec URL requires authentication.
+</ParamField>
+
+### Retry Options
+
+<ParamField path="polling.retry.maxRetries" type="number" default="3">
+  Maximum retry attempts per poll cycle before counting as a failure.
+</ParamField>
+
+<ParamField path="polling.retry.initialDelayMs" type="number" default="1000">
+  Delay before the first retry attempt.
+</ParamField>
+
+<ParamField path="polling.retry.maxDelayMs" type="number" default="10000">
+  Maximum delay between retries (caps exponential backoff).
+</ParamField>
+
+<ParamField path="polling.retry.backoffMultiplier" type="number" default="2">
+  Multiplier for exponential backoff between retries.
+</ParamField>
+
+### Health Monitoring
+
+<ParamField path="polling.unhealthyThreshold" type="number" default="3">
+  Number of consecutive poll failures before the poller is marked unhealthy. The adapter logs an error when this threshold is reached and logs recovery when polling succeeds again.
+</ParamField>
+
+## Lifecycle API
+
+### Starting and Stopping
+
+When used with `@App`, polling is typically managed by the adapter lifecycle. For standalone usage, you control the lifecycle directly:
+
+```ts
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  polling: { enabled: true, intervalMs: 30000 },
+});
+
+// Initial tool generation
+const response = await adapter.fetch();
+
+// Start watching for changes
+adapter.startPolling();
+
+// Later: stop watching
+adapter.stopPolling();
+```
+
+### Subscribing to Updates
+
+Use `onUpdate()` to receive new tool sets whenever the spec changes:
+
+```ts
+const unsubscribe = adapter.onUpdate((response) => {
+  console.log(`Tools rebuilt: ${response.tools?.length} tools`);
+
+  // response.tools contains the full new set of tools
+  // You can diff, log, or notify downstream systems
+});
+
+// Start polling after subscribing
+adapter.startPolling();
+
+// Later: stop receiving updates (polling continues)
+unsubscribe();
+```
+
+<Tip>
+  `onUpdate` fires for every detected spec change. The first poll after `startPolling()` always triggers an update because the poller has no previous hash to compare against.
+</Tip>
+
+## How It Works
+
+The polling pipeline has two independent concerns:
+
+1. **Change detection** — The `OpenApiSpecPoller` fetches raw spec text from the URL and computes a SHA-256 content hash. If the hash differs from the last known hash, it fires `onChanged`.
+
+2. **Tool rebuild** — When `onChanged` fires, the adapter resets its internal generator, calls `fetch()` to regenerate all tools from scratch, and notifies subscribers via the `updateCallback`.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Poll Cycle                               │
+│                                                             │
+│  setInterval(intervalMs)                                    │
+│       │                                                     │
+│       ▼                                                     │
+│  Fetch spec text from URL                                   │
+│       │                                                     │
+│       ▼                                                     │
+│  Compute SHA-256 hash                                       │
+│       │                                                     │
+│       ├── Hash unchanged → skip (onUnchanged)               │
+│       │                                                     │
+│       └── Hash changed → onChanged callback                 │
+│              │                                              │
+│              ▼                                              │
+│  ┌───────────────────────────────────┐                      │
+│  │  Rebuild Chain (serialized)       │                      │
+│  │  1. Reset generator               │                      │
+│  │  2. Call fetch() → new tools      │                      │
+│  │  3. Call updateCallback(response) │                      │
+│  └───────────────────────────────────┘                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Serialized Rebuilds
+
+Tool rebuilds are serialized through a promise chain (`rebuildChain`). If the spec changes multiple times before a rebuild completes, each rebuild runs sequentially — never concurrently. This prevents race conditions and ensures tools are always consistent.
+
+### Health States
+
+The poller tracks three health states:
+
+| State       | Meaning                                           |
+| ----------- | ------------------------------------------------- |
+| `unknown`   | Initial state before the first poll completes     |
+| `healthy`   | Last poll succeeded                               |
+| `unhealthy` | Consecutive failures reached `unhealthyThreshold` |
+
+When the poller transitions to `unhealthy`, the adapter logs an error. When it recovers (next successful poll), the adapter logs recovery. Tools remain available during unhealthy periods — only updates are paused.
+
+### Failure Resilience
+
+If a rebuild fails (e.g., the new spec is invalid or `fromURL()` throws), the adapter rolls back to the previous generator. Existing tools continue working and the poller keeps trying on the next interval. This ensures that a single bad spec deployment never leaves the adapter in a broken state.
+
+## Examples
+
+### Production Configuration
+
+```ts
+OpenapiAdapter.init({
+  name: 'production-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  polling: {
+    enabled: true,
+    intervalMs: 60000,          // Poll every minute
+    fetchTimeoutMs: 15000,      // 15s timeout for slow networks
+    changeDetection: 'auto',    // Use ETag when available
+    unhealthyThreshold: 5,      // Tolerate 5 failures before alerting
+    headers: {
+      authorization: `Bearer ${process.env.SPEC_TOKEN}`,
+    },
+    retry: {
+      maxRetries: 3,
+      initialDelayMs: 2000,
+      maxDelayMs: 30000,
+      backoffMultiplier: 2,
+    },
+  },
+});
+```
+
+### Logging Updates
+
+```ts
+const adapter = OpenapiAdapter.init({
+  name: 'watched-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  polling: { enabled: true, intervalMs: 30000 },
+});
+
+adapter.onUpdate((response) => {
+  const toolNames = response.tools?.map((t) => {
+    const meta = t[FrontMcpToolTokens.metadata];
+    return meta?.name;
+  });
+  console.log('Updated tools:', toolNames);
+});
+
+adapter.startPolling();
+```
+
+### Graceful Shutdown
+
+```ts
+process.on('SIGTERM', () => {
+  adapter.stopPolling();
+  // Allow in-flight rebuilds to complete
+  process.exit(0);
+});
+```
+
+### Multi-Adapter Polling
+
+```ts
+@App({
+  id: 'multi-api',
+  name: 'Multi-API Server',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'billing',
+      baseUrl: 'https://billing.example.com',
+      url: 'https://billing.example.com/openapi.json',
+      polling: { enabled: true, intervalMs: 60000 },
+    }),
+    OpenapiAdapter.init({
+      name: 'inventory',
+      baseUrl: 'https://inventory.example.com',
+      url: 'https://inventory.example.com/openapi.json',
+      polling: { enabled: true, intervalMs: 120000 }, // Less frequent
+    }),
+  ],
+})
+export default class MultiApiApp {}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Choose the right interval">
+    - **Development:** 5-10 seconds for fast feedback
+    - **Staging:** 30-60 seconds for reasonable freshness
+    - **Production:** 60-300 seconds to minimize load on spec servers
+
+    Shorter intervals mean faster detection but more network traffic. Most spec changes are infrequent, so 60 seconds is a good default.
+
+  </Accordion>
+
+  <Accordion title="Use ETag-aware spec servers">
+    If your spec server supports `ETag` or `Last-Modified` headers, set `changeDetection: 'auto'` (the default). This enables HTTP 304 responses, reducing bandwidth when the spec hasn't changed.
+  </Accordion>
+
+  <Accordion title="Authenticate poll requests">
+    If your spec endpoint requires authentication, pass credentials via `polling.headers` — not via `additionalHeaders` (which are for API requests, not spec fetches).
+
+    ```ts
+    polling: {
+      enabled: true,
+      headers: {
+        authorization: `Bearer ${process.env.SPEC_TOKEN}`,
+      },
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Handle unhealthy state">
+    Monitor the adapter logs for unhealthy state messages. When the poller becomes unhealthy, existing tools continue working — only new changes won't be detected until the poller recovers.
+
+    Consider connecting the poller health to your monitoring system by subscribing to updates and tracking intervals.
+
+  </Accordion>
+
+  <Accordion title="Test polling in CI">
+    Use short intervals (100ms) and real HTTP servers in integration tests to verify the full pipeline. See the [Testing OpenAPI Adapter](/frontmcp/guides/testing-openapi-adapter) guide for patterns.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Polling requires URL-based options">
+    **Cause:** You enabled polling with a static `spec` object instead of a `url`.
+
+    **Solution:** Switch to URL-based configuration:
+
+    ```ts
+    // Before (won't work with polling)
+    OpenapiAdapter.init({
+      spec: mySpecObject,
+      polling: { enabled: true },
+    });
+
+    // After
+    OpenapiAdapter.init({
+      url: 'https://api.example.com/openapi.json',
+      polling: { enabled: true },
+    });
+    ```
+
+  </Accordion>
+
+  <Accordion title="Updates not firing after spec change">
+    **Possible causes:**
+
+    1. **Content hasn't actually changed** — The poller compares SHA-256 hashes of the full response body. Whitespace or formatting changes count, but serving the exact same bytes won't trigger an update.
+    2. **Poll interval hasn't elapsed** — Wait for at least one full `intervalMs` cycle after the spec change.
+    3. **Poller is unhealthy** — Check logs for consecutive failure messages. The spec server may be down.
+    4. **No subscriber** — Call `adapter.onUpdate(cb)` before `startPolling()` to ensure you don't miss the initial update.
+
+  </Accordion>
+
+  <Accordion title="Too many rebuilds">
+    **Cause:** The spec server returns slightly different content on each request (e.g., timestamps, random IDs in the response).
+
+    **Solution:** Ensure your spec endpoint returns stable, deterministic content. If you can't control the server, increase `intervalMs` to reduce rebuild frequency.
+
+  </Accordion>
+
+  <Accordion title="Poller marked unhealthy">
+    **Cause:** The spec URL has returned errors for `unhealthyThreshold` consecutive polls.
+
+    **Solution:**
+    1. Verify the spec URL is accessible: `curl -I <your-spec-url>`
+    2. Check if authentication headers are needed in `polling.headers`
+    3. Increase `fetchTimeoutMs` if the server is slow
+    4. Increase `retry.maxRetries` for transient failures
+
+  </Accordion>
+</AccordionGroup>
+
+## What's Next?
+
+<CardGroup cols={3}>
+  <Card title="OpenAPI Adapter" icon="puzzle-piece" href="/frontmcp/adapters/openapi-adapter">
+    Full OpenAPI adapter configuration reference
+  </Card>
+  <Card title="Testing Guide" icon="flask-vial" href="/frontmcp/guides/testing-openapi-adapter">
+    Test your polling setup with real HTTP servers
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/frontmcp/deployment/production-build">
+    Deploy your polling-enabled adapter to production
+  </Card>
+</CardGroup>
