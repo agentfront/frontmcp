@@ -67,6 +67,9 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       Reflect.defineMetadata(FrontMcpTokens[property] ?? property, metadata[property], target);
     }
 
+    // Store full parsed config for build-time extraction (e.g., schema-extractor via connect())
+    Reflect.defineMetadata('__frontmcp:config', metadata, target);
+
     // Safe check for serverless mode - process.env may not exist in Cloudflare Workers
     const isServerless = typeof process !== 'undefined' && process.env?.['FRONTMCP_SERVERLESS'] === '1';
 

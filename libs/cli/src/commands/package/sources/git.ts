@@ -27,7 +27,7 @@ export async function fetchFromGit(url: string, tmpDir: string): Promise<string>
   }
 
   const cloneDir = path.join(tmpDir, 'package');
-  await runCmd('git', ['clone', '--depth', '1', gitUrl, cloneDir]);
+  await runCmd('git', ['clone', '--depth', '1', '--', gitUrl, cloneDir]);
 
   return cloneDir;
 }
