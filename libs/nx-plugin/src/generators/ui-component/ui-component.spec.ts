@@ -124,6 +124,18 @@ describe('ui-component generator', () => {
     expect(tree.exists('ui/components/src/LoginForm/LoginForm.tsx')).toBe(true);
   });
 
+  it('should run formatFiles when skipFormat is not set', async () => {
+    await uiComponentGenerator(tree, { name: 'Formatted' });
+
+    expect(tree.exists('ui/components/src/Formatted/Formatted.tsx')).toBe(true);
+  });
+
+  it('should throw on blank name', async () => {
+    await expect(uiComponentGenerator(tree, { name: '   ', skipFormat: true })).rejects.toThrow(
+      'Generator name must not be blank',
+    );
+  });
+
   it('should export default', async () => {
     const mod = await import('./ui-component');
     expect(mod.default).toBe(uiComponentGenerator);
