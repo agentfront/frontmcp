@@ -2,7 +2,7 @@
  * HTML Renderer Tests
  */
 
-import { HtmlRenderer } from '../html';
+import { HtmlRenderer, escapeHtml } from '../html';
 
 describe('HtmlRenderer', () => {
   const renderer = new HtmlRenderer();
@@ -43,6 +43,25 @@ describe('HtmlRenderer', () => {
     it('should use custom className', () => {
       const element = renderer.render('<div>Hello</div>', { className: 'custom' });
       expect(element.props.className).toBe('custom');
+    });
+  });
+
+  describe('sanitization', () => {
+    it('should escape script tags', () => {
+      const result = escapeHtml('<script>alert("xss")</script>');
+      expect(result).not.toContain('<script>');
+      expect(result).toContain('&lt;script&gt;');
+    });
+
+    it('should escape event handler attributes', () => {
+      const result = escapeHtml('<div onclick="alert(1)">click</div>');
+      expect(result).not.toContain('<div onclick');
+      expect(result).toContain('&lt;div onclick');
+    });
+
+    it('should escape all dangerous characters', () => {
+      const result = escapeHtml('a & b < c > d " e \' f');
+      expect(result).toBe('a &amp; b &lt; c &gt; d &quot; e &#39; f');
     });
   });
 

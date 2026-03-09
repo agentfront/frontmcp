@@ -288,7 +288,7 @@ nx lint ui
 ## Requirements
 
 - Node.js >= 22.0.0
-- React >= 19.0.0
+- React ^18.0.0 || ^19.0.0
 - MUI >= 7.0.0
 
 ## Related Packages

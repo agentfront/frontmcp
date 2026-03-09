@@ -18,6 +18,7 @@ describe('Renderer barrel exports', () => {
     expect(typeof Renderer.detectContentType).toBe('function');
     expect(typeof Renderer.renderContent).toBe('function');
     expect(typeof Renderer.registerRenderer).toBe('function');
+    expect(typeof Renderer.clearRegistry).toBe('function');
     expect(typeof Renderer.getRenderer).toBe('function');
     expect(typeof Renderer.getRegisteredRenderers).toBe('function');
     expect(typeof Renderer.registerAllRenderers).toBe('function');

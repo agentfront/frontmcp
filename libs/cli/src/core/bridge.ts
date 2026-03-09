@@ -22,6 +22,7 @@ export function toParsedArgs(
   // Build
   if (options['exec'] !== undefined) out.exec = options['exec'] as boolean;
   if (options['cli'] !== undefined) out.cli = options['cli'] as boolean;
+  if (options['sea'] !== undefined) out.sea = options['sea'] as boolean;
 
   // Create
   if (options['yes'] !== undefined) out.yes = options['yes'] as boolean;

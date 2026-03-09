@@ -5,6 +5,7 @@
  * These utilities are separate from the decorator to keep @FrontMcp lean.
  */
 
+import 'reflect-metadata';
 import type { FrontMcpConfigInput } from '../common';
 import type { DirectClient, ConnectOptions, LLMConnectOptions } from './client.types';
 import { PLATFORM_CLIENT_INFO } from './llm-platform';
@@ -21,9 +22,18 @@ let scopeCache = new WeakMap<object, Promise<Scope>>();
  * @internal
  */
 async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Promise<Scope> {
+  // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle)
+  let resolvedConfig = config;
+  if (typeof config === 'function') {
+    const stored = Reflect.getMetadata('__frontmcp:config', config);
+    if (stored) {
+      resolvedConfig = stored as FrontMcpConfigInput;
+    }
+  }
+
   // Create a unique cache key based on config
   // Since config is passed by reference, same config object = same scope
-  const cacheKey = config as object;
+  const cacheKey = resolvedConfig as object;
 
   let scopePromise = scopeCache.get(cacheKey);
   if (!scopePromise) {

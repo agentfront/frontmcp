@@ -6,12 +6,26 @@
 import * as path from 'path';
 import { FrontmcpExecConfig } from './config';
 
-// Default native addons that must be kept external
+// Default packages that must be kept external:
+// - native addons that cannot be bundled
+// - optional/lazy-required peer dependencies
 const DEFAULT_EXTERNALS = [
   'better-sqlite3',
   'fsevents',
   '@swc/core',
   'esbuild',
+  '@vercel/kv',
+  '@frontmcp/storage-sqlite',
+  '@enclave-vm/core',
+  // Externalize FrontMCP packages for single-copy semantics
+  // (required for schema extraction — bundled copies create separate Symbol tokens)
+  '@frontmcp/sdk',
+  '@frontmcp/di',
+  '@frontmcp/utils',
+  '@frontmcp/auth',
+  '@frontmcp/adapters',
+  '@frontmcp/plugins',
+  'reflect-metadata',
 ];
 
 export interface BundleResult {
