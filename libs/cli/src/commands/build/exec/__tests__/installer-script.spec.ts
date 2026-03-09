@@ -57,5 +57,33 @@ describe('installer-script', () => {
       const script = generateInstallerScript(config);
       expect(script).toContain('.frontmcp/apps');
     });
+
+    it('should default min Node major to 22 when version has no digits', () => {
+      const config: FrontmcpExecConfig = { name: 'app', nodeVersion: 'latest' };
+      const script = generateInstallerScript(config);
+      expect(script).toContain('-lt "22"');
+    });
+
+    it('should extract min major from nodeVersion string', () => {
+      const config: FrontmcpExecConfig = { name: 'app', nodeVersion: '>=20.0.0' };
+      const script = generateInstallerScript(config);
+      expect(script).toContain('-lt "20"');
+    });
+
+    it('should skip storage setup when storage type is not sqlite', () => {
+      const config: FrontmcpExecConfig = {
+        name: 'app',
+        storage: { type: 'memory' },
+      };
+      const script = generateInstallerScript(config);
+      expect(script).toContain('No storage setup required');
+      expect(script).not.toContain('FRONTMCP_SQLITE_PATH');
+    });
+
+    it('should handle config with no dependencies', () => {
+      const config: FrontmcpExecConfig = { name: 'app' };
+      const script = generateInstallerScript(config);
+      expect(script).toContain('No native addons required');
+    });
   });
 });

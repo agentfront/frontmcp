@@ -14,11 +14,11 @@ Decorator errors are thrown during class decoration when metadata validation fai
 
 Thrown when a decorator (e.g., `@App`, `@Plugin`, `@FrontMcp`) receives invalid metadata for a specific field.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `INVALID_DECORATOR_METADATA` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                        |
+| ------------ | --------- | ---------------------------- |
+| `code`       | `string`  | `INVALID_DECORATOR_METADATA` |
+| `statusCode` | `number`  | `500`                        |
+| `isPublic`   | `boolean` | `false`                      |
 
 ```typescript
 new InvalidDecoratorMetadataError(decoratorName: string, field: string, details: string)
@@ -39,11 +39,11 @@ throw new InvalidDecoratorMetadataError('App', 'name', 'must be a non-empty stri
 
 Thrown when a hook references a target method that is not defined on the class.
 
-| Property | Type | Value |
-|----------|------|-------|
-| `code` | `string` | `HOOK_TARGET_NOT_DEFINED` |
-| `statusCode` | `number` | `500` |
-| `isPublic` | `boolean` | `false` |
+| Property     | Type      | Value                     |
+| ------------ | --------- | ------------------------- |
+| `code`       | `string`  | `HOOK_TARGET_NOT_DEFINED` |
+| `statusCode` | `number`  | `500`                     |
+| `isPublic`   | `boolean` | `false`                   |
 
 ```typescript
 new HookTargetNotDefinedError(method: string)

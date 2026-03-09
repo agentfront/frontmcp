@@ -1,13 +1,12 @@
 /**
  * E2E Tests for Platform-Specific Meta Keys
  *
- * Tests that each platform receives the correct meta key namespace:
- * - OpenAI: Uses openai/* keys only (text/html+skybridge)
- * - ext-apps: Uses ui/* keys only per SEP-1865 (text/html+mcp)
- * - Others (Claude, Cursor, etc.): Uses frontmcp/* + ui/* keys (text/html+mcp)
+ * Tests that all platforms receive the correct ui/* meta key namespace
+ * per the MCP Apps specification. OpenAI now uses the same ui/* namespace
+ * as all other platforms (no more openai/* keys).
  *
- * These tests verify namespace isolation - each platform should NOT receive
- * keys from other namespaces (no cross-contamination).
+ * These tests verify namespace isolation — no platform should receive
+ * openai/* or frontmcp/* keys (no cross-contamination).
  */
 import { test, expect, UIAssertions } from '@frontmcp/testing';
 
@@ -19,7 +18,7 @@ test.describe('Platform Meta Keys E2E', () => {
   });
 
   test.describe('OpenAI Platform Meta Keys', () => {
-    test('should have openai/* meta keys in tool call response', async ({ server }) => {
+    test('should have ui/* meta keys in tool call response', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
@@ -32,17 +31,17 @@ test.describe('Platform Meta Keys E2E', () => {
 
       expect(result).toBeSuccessful();
 
-      // Verify openai/* keys are present
-      expect(result).toHaveMetaKey('openai/html');
-      expect(result).toHaveMetaKey('openai/mimeType');
+      // Verify ui/* keys are present (OpenAI now uses standard namespace)
+      expect(result).toHaveMetaKey('ui/html');
+      expect(result).toHaveMetaKey('ui/mimeType');
 
       // Verify correct MIME type
-      expect(result).toHaveMetaValue('openai/mimeType', 'text/html+skybridge');
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
 
       await client.disconnect();
     });
 
-    test('should NOT have ui/* or frontmcp/* keys for OpenAI', async ({ server }) => {
+    test('should NOT have openai/* or frontmcp/* keys for OpenAI', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
@@ -55,9 +54,9 @@ test.describe('Platform Meta Keys E2E', () => {
 
       expect(result).toBeSuccessful();
 
-      // Verify NO ui/* keys (namespace isolation)
-      expect(result).toNotHaveMetaKey('ui/html');
-      expect(result).toNotHaveMetaKey('ui/mimeType');
+      // Verify NO openai/* keys (unified to ui/* namespace)
+      expect(result).toNotHaveMetaKey('openai/html');
+      expect(result).toNotHaveMetaKey('openai/mimeType');
 
       // Verify NO frontmcp/* keys
       expect(result).toNotHaveMetaKey('frontmcp/html');
@@ -110,7 +109,7 @@ test.describe('Platform Meta Keys E2E', () => {
       expect(result).toHaveMetaKey('ui/mimeType');
 
       // Verify correct MIME type
-      expect(result).toHaveMetaValue('ui/mimeType', 'text/html+mcp');
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
 
       await client.disconnect();
     });
@@ -183,7 +182,7 @@ test.describe('Platform Meta Keys E2E', () => {
       expect(result).toNotHaveMetaKey('frontmcp/mimeType');
 
       // Verify correct MIME type
-      expect(result).toHaveMetaValue('ui/mimeType', 'text/html+mcp');
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
 
       await client.disconnect();
     });
@@ -281,8 +280,8 @@ test.describe('Platform Meta Keys E2E', () => {
   });
 
   test.describe('Cross-Platform Namespace Isolation', () => {
-    test('should maintain namespace isolation across concurrent platform calls', async ({ server }) => {
-      // Note: ext-apps requires capability-based detection, so we test OpenAI vs Claude
+    test('should maintain namespace isolation — all platforms use ui/* keys', async ({ server }) => {
+      // All platforms now use the same ui/* namespace
       const [openaiClient, claudeClient, cursorClient] = await Promise.all([
         server.createClient({
           transport: 'streamable-http',
@@ -304,17 +303,17 @@ test.describe('Platform Meta Keys E2E', () => {
         cursorClient.tools.call('html-card', { title: 'Cursor', content: 'Test' }),
       ]);
 
-      // OpenAI: only openai/* keys
-      expect(openaiResult).toHaveMetaKey('openai/html');
-      expect(openaiResult).toNotHaveMetaKey('ui/html');
+      // OpenAI: ui/* keys only (unified namespace)
+      expect(openaiResult).toHaveMetaKey('ui/html');
+      expect(openaiResult).toNotHaveMetaKey('openai/html');
       expect(openaiResult).toNotHaveMetaKey('frontmcp/html');
 
-      // Claude: ui/* keys only (no frontmcp/* duplication)
+      // Claude: ui/* keys only
       expect(claudeResult).toHaveMetaKey('ui/html');
       expect(claudeResult).toNotHaveMetaKey('frontmcp/html');
       expect(claudeResult).toNotHaveMetaKey('openai/html');
 
-      // Cursor: ui/* keys only (same as Claude, no frontmcp/* duplication)
+      // Cursor: ui/* keys only (same as Claude)
       expect(cursorResult).toHaveMetaKey('ui/html');
       expect(cursorResult).toNotHaveMetaKey('frontmcp/html');
       expect(cursorResult).toNotHaveMetaKey('openai/html');
@@ -346,7 +345,7 @@ test.describe('Platform Meta Keys E2E', () => {
   });
 
   test.describe('MIME Type Verification', () => {
-    test('OpenAI should use text/html+skybridge', async ({ server }) => {
+    test('OpenAI should use text/html;profile=mcp-app', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
@@ -355,12 +354,12 @@ test.describe('Platform Meta Keys E2E', () => {
       const result = await client.tools.call('html-card', { title: 'Test', content: 'Content' });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveMetaValue('openai/mimeType', 'text/html+skybridge');
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
 
       await client.disconnect();
     });
 
-    test('ext-apps should use text/html+mcp', async ({ server }) => {
+    test('ext-apps should use text/html;profile=mcp-app', async ({ server }) => {
       // Use withPlatform to auto-set clientInfo AND capabilities for ext-apps
       const client = await server
         .createClientBuilder()
@@ -371,12 +370,12 @@ test.describe('Platform Meta Keys E2E', () => {
       const result = await client.tools.call('html-card', { title: 'Test', content: 'Content' });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveMetaValue('ui/mimeType', 'text/html+mcp');
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
 
       await client.disconnect();
     });
 
-    test('Claude should use text/html+mcp', async ({ server }) => {
+    test('Claude should use text/html;profile=mcp-app', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'claude-desktop', version: '1.0.0' },
@@ -386,7 +385,7 @@ test.describe('Platform Meta Keys E2E', () => {
 
       expect(result).toBeSuccessful();
       // Claude uses ui/* namespace only (no frontmcp/* duplication)
-      expect(result).toHaveMetaValue('ui/mimeType', 'text/html+mcp');
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
       expect(result).toNotHaveMetaKey('frontmcp/mimeType');
 
       await client.disconnect();

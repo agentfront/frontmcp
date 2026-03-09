@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/out-tsc",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true
+  },
+  "exclude": [
+    "jest.config.ts",
+    "jest.e2e.config.ts",
+    "fixture/src/**/*.spec.ts",
+    "fixture/src/**/*.test.ts",
+    "e2e/**/*.ts"
+  ],
+  "include": ["fixture/src/**/*.ts"]
+}

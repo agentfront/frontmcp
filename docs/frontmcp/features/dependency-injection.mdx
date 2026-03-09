@@ -32,11 +32,11 @@ export class ConfigProvider {
 
 ## Provider Scopes
 
-| Scope | Lifetime | Use Case |
-| --- | --- | --- |
-| `singleton` | One instance per server | Configuration, database connections |
-| `request` | One instance per MCP request | Request-scoped caches, loggers |
-| `context` | One instance per execution context | Per-tool state |
+| Scope       | Lifetime                           | Use Case                            |
+| ----------- | ---------------------------------- | ----------------------------------- |
+| `singleton` | One instance per server            | Configuration, database connections |
+| `request`   | One instance per MCP request       | Request-scoped caches, loggers      |
+| `context`   | One instance per execution context | Per-tool state                      |
 
 ## Injecting Providers
 

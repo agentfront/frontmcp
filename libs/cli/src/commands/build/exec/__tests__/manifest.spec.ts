@@ -102,5 +102,75 @@ describe('manifest', () => {
       const manifest = generateManifest(config, 'test-app.bundle.js');
       expect(manifest.setup!.steps[0].env).toBe('AUTH_TYPE');
     });
+
+    it('should call zodSchemaToJsonSchema when step has schema (not jsonSchema)', () => {
+      const config: FrontmcpExecConfig = {
+        name: 'test-app',
+        setup: {
+          steps: [
+            {
+              id: 'test-step',
+              prompt: 'Enter value',
+              schema: 'fake-zod-schema',
+            },
+          ],
+        },
+      };
+
+      const manifest = generateManifest(config, 'test-app.bundle.js');
+      expect(manifest.setup!.steps[0].jsonSchema).toBeDefined();
+      // zodSchemaToJsonSchema falls back to { type: 'string' } when zod is not available
+      expect(manifest.setup!.steps[0].jsonSchema).toEqual({ type: 'string' });
+    });
+
+    it('should default to { type: "string" } when step has neither schema nor jsonSchema', () => {
+      const config: FrontmcpExecConfig = {
+        name: 'test-app',
+        setup: {
+          steps: [
+            {
+              id: 'bare-step',
+              prompt: 'Enter value',
+            },
+          ],
+        },
+      };
+
+      const manifest = generateManifest(config, 'test-app.bundle.js');
+      expect(manifest.setup!.steps[0].jsonSchema).toEqual({ type: 'string' });
+    });
+
+    it('should serialize all optional fields (sensitive, group, next, showWhen)', () => {
+      const config: FrontmcpExecConfig = {
+        name: 'test-app',
+        setup: {
+          steps: [
+            {
+              id: 'secret',
+              prompt: 'Enter secret',
+              description: 'A secret value',
+              jsonSchema: { type: 'string' },
+              sensitive: true,
+              group: 'Security',
+              next: { yes: 'next-step' },
+              showWhen: { prev: 'enabled' },
+            },
+            {
+              id: 'next-step',
+              prompt: 'Next',
+              jsonSchema: { type: 'string' },
+            },
+          ],
+        },
+      };
+
+      const manifest = generateManifest(config, 'test-app.bundle.js');
+      const step = manifest.setup!.steps[0];
+      expect(step.sensitive).toBe(true);
+      expect(step.group).toBe('Security');
+      expect(step.next).toEqual({ yes: 'next-step' });
+      expect(step.showWhen).toEqual({ prev: 'enabled' });
+      expect(step.description).toBe('A secret value');
+    });
   });
 });

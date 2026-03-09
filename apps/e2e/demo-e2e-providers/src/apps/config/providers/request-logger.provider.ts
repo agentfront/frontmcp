@@ -41,7 +41,10 @@ class RequestLoggerImpl implements RequestLogger {
   readonly instanceId = generateSecureId('req');
   private logs: string[] = [];
 
-  constructor(readonly requestId: string, readonly sessionId: string) {}
+  constructor(
+    readonly requestId: string,
+    readonly sessionId: string,
+  ) {}
 
   log(message: string): void {
     this.logs.push(`[${new Date().toISOString()}] ${message}`);

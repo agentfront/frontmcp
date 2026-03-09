@@ -17,24 +17,24 @@ export abstract class ToolContext<
 
 ## Type Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `InSchema` | Input schema type (Zod shape) |
-| `OutSchema` | Output schema type |
-| `In` | Inferred input type |
-| `Out` | Inferred output type |
+| Parameter   | Description                   |
+| ----------- | ----------------------------- |
+| `InSchema`  | Input schema type (Zod shape) |
+| `OutSchema` | Output schema type            |
+| `In`        | Inferred input type           |
+| `Out`       | Inferred output type          |
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `metadata` | `ToolMetadata` | Tool metadata (name, description, etc.) |
-| `input` | `In` | Parsed and validated input |
-| `output` | `Out \| undefined` | Tool output (after execution) |
-| `toolName` | `string` | Tool name |
-| `toolId` | `string` | Tool ID (or name if not specified) |
-| `platform` | `AIPlatformType` | Detected AI platform |
-| `clientInfo` | `ClientInfo \| undefined` | Client information |
+| Property     | Type                      | Description                             |
+| ------------ | ------------------------- | --------------------------------------- |
+| `metadata`   | `ToolMetadata`            | Tool metadata (name, description, etc.) |
+| `input`      | `In`                      | Parsed and validated input              |
+| `output`     | `Out \| undefined`        | Tool output (after execution)           |
+| `toolName`   | `string`                  | Tool name                               |
+| `toolId`     | `string`                  | Tool ID (or name if not specified)      |
+| `platform`   | `AIPlatformType`          | Detected AI platform                    |
+| `clientInfo` | `ClientInfo \| undefined` | Client information                      |
 
 ## Abstract Method
 
@@ -133,10 +133,10 @@ protected elicit<S extends ZodType>(
 
 **Options:**
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `mode` | `'form' \| 'url'` | Input mode |
-| `ttl` | `number` | Timeout in milliseconds |
+| Option | Type              | Description             |
+| ------ | ----------------- | ----------------------- |
+| `mode` | `'form' \| 'url'` | Input mode              |
+| `ttl`  | `number`          | Timeout in milliseconds |
 
 **Result:**
 
