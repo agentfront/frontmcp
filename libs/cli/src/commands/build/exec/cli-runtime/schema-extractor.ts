@@ -95,7 +95,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
   const configOrClass = mod.default || mod;
 
   // Use @frontmcp/sdk connect() to boot in-memory client
-  let connect: (config: unknown) => Promise<unknown>;
+  let connect: (config: unknown, options?: { mode?: string }) => Promise<unknown>;
   try {
     const sdk = require('@frontmcp/sdk');
     connect = sdk.connect || sdk.direct?.connect;

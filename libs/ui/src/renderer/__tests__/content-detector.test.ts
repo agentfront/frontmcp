@@ -66,6 +66,24 @@ describe('detectContentType (runtime)', () => {
     });
   });
 
+  describe('ReDoS resistance', () => {
+    it('should handle adversarial bracket math input without catastrophic backtracking', () => {
+      const adversarial = '\\[' + 'a'.repeat(50000);
+      const start = Date.now();
+      detectContentType(adversarial);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it('should handle adversarial paren math input without catastrophic backtracking', () => {
+      const adversarial = '\\(' + 'a'.repeat(50000);
+      const start = Date.now();
+      detectContentType(adversarial);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(1000);
+    });
+  });
+
   describe('image detection', () => {
     it('should detect image data URI', () => {
       expect(detectContentType('data:image/png;base64,iVBOR')).toBe('image');
