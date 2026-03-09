@@ -77,8 +77,21 @@ export const SYSTEM_TOOL_NAMES = new Set([
  * or a config object usable by connect().
  */
 export async function extractSchemas(bundlePath: string): Promise<ExtractedSchema> {
-  // Lazy-load the server bundle
-  const mod = require(bundlePath);
+  // Suppress @FrontMcp() decorator bootstrap — we only need metadata, not a running server
+  const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
+  process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+
+  let mod: Record<string, unknown>;
+  try {
+    mod = require(bundlePath);
+  } finally {
+    if (prev === undefined) {
+      delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
+    } else {
+      process.env['FRONTMCP_SCHEMA_EXTRACT'] = prev;
+    }
+  }
+
   const configOrClass = mod.default || mod;
 
   // Use @frontmcp/sdk connect() to boot in-memory client
