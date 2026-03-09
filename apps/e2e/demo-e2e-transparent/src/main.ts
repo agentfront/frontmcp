@@ -16,8 +16,8 @@ const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
   http: { port },
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: idpProviderUrl,
+    provider: idpProviderUrl,
+    providerConfig: {
       name: 'mock-idp',
       dcrEnabled: false,
     },

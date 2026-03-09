@@ -1,7 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({}).strict();
+const inputSchema = {};
 
 const outputSchema = z.object({
   sessionId: z.string(),
@@ -19,7 +19,7 @@ const sessionRequestCounts = new Map<string, number>();
   outputSchema,
 })
 export default class GetSessionInfoTool extends ToolContext {
-  async execute(_input: z.input<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+  async execute(_input: Record<string, never>): Promise<z.infer<typeof outputSchema>> {
     const authInfo = this.getAuthInfo();
     const sessionId = authInfo.sessionId ?? 'no-session';
     const hasSession = !!authInfo.sessionId;

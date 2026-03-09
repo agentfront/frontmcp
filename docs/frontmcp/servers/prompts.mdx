@@ -218,7 +218,7 @@ class ContextExamplePrompt {
     this.metadata;          // Prompt metadata (name, description, etc.)
 
     // Authentication
-    this.authInfo;          // Auth context from MCP session
+    this.getAuthInfo();     // Auth context from MCP session
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider

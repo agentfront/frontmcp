@@ -29,8 +29,8 @@ Get all prompts (local + adopted).
 getPrompts(includeHidden?: boolean): ReadonlyArray<PromptEntry>
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
+| Parameter       | Type      | Default | Description            |
+| --------------- | --------- | ------- | ---------------------- |
 | `includeHidden` | `boolean` | `false` | Include hidden prompts |
 
 **Example:**
@@ -235,12 +235,12 @@ interface PromptChangeEvent {
 
 ## Indexes
 
-| Index | Key | Description |
-|-------|-----|-------------|
-| `byQualifiedId` | `qualifiedId` | Unique identifier lookup |
-| `byName` | `name` | Base name lookup |
-| `byOwnerAndName` | `owner:name` | Scoped name lookup |
-| `byOwner` | `ownerPath` | All prompts by owner |
+| Index            | Key           | Description              |
+| ---------------- | ------------- | ------------------------ |
+| `byQualifiedId`  | `qualifiedId` | Unique identifier lookup |
+| `byName`         | `name`        | Base name lookup         |
+| `byOwnerAndName` | `owner:name`  | Scoped name lookup       |
+| `byOwner`        | `ownerPath`   | All prompts by owner     |
 
 ## Prompt Arguments
 

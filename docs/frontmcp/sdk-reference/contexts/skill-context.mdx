@@ -12,11 +12,11 @@ export abstract class SkillContext extends ExecutionContextBase<SkillContent>
 
 ## Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `metadata` | `SkillMetadata` | Skill metadata |
-| `skillName` | `string` | Skill name |
-| `skillId` | `string` | Skill ID |
+| Property    | Type            | Description    |
+| ----------- | --------------- | -------------- |
+| `metadata`  | `SkillMetadata` | Skill metadata |
+| `skillName` | `string`        | Skill name     |
+| `skillId`   | `string`        | Skill ID       |
 
 ## Abstract Methods
 
@@ -29,6 +29,7 @@ abstract loadInstructions(): Promise<string>
 ```
 
 Instructions can come from:
+
 - Inline string
 - File reference (`{ file: './path.md' }`)
 - URL reference (`{ url: 'https://...' }`)

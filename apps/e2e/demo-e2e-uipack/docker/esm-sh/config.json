@@ -1,0 +1,8 @@
+{
+  "port": 8080,
+  "npmRegistry": "http://verdaccio:4873",
+  "buildConcurrency": 4,
+  "minify": false,
+  "sourceMap": false,
+  "logLevel": "info"
+}
