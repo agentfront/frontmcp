@@ -108,7 +108,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     );
   }
 
-  const client = await connect(configOrClass) as {
+  const client = await connect(configOrClass, { mode: 'cli' }) as {
     listTools(): Promise<unknown>;
     listResources(): Promise<{ resources: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> }>;
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;

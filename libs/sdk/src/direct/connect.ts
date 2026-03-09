@@ -44,7 +44,9 @@ async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Pro
         // Create instance without starting HTTP server
         // CLI mode skips non-essential registries for faster startup
         const instance =
-          mode === 'cli' ? await FrontMcpInstance.createForCli(config) : await FrontMcpInstance.createForGraph(config);
+          mode === 'cli'
+            ? await FrontMcpInstance.createForCli(resolvedConfig)
+            : await FrontMcpInstance.createForGraph(resolvedConfig);
         const scopes = instance.getScopes();
 
         if (scopes.length === 0) {

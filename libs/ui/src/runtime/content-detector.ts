@@ -102,8 +102,8 @@ function looksLikeFlow(s: string): boolean {
 const MATH_PATTERNS = [
   /\$\$(?:[^$]|\$(?!\$))+\$\$/s,
   /\$[^$\n]+?\$/,
-  /\\\[[^\\]*(?:\\.[^\\]*)*\\\]/,
-  /\\\([^\\]*(?:\\.[^\\]*)*\\\)/,
+  /\\\[(?:[^\\]|\\.)*\\\]/s,
+  /\\\((?:[^\\]|\\.)*\\\)/s,
   /\\begin\{(?:equation|align|gather|matrix|pmatrix|bmatrix|cases)\}/,
 ];
 
