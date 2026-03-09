@@ -68,7 +68,4 @@ export {
   // Default Values
   DEFAULT_CSP_BY_TYPE,
   DEFAULT_RENDERER_ASSETS,
-  // Deprecated
-  /** @deprecated Use UIMetaFields instead */
-  type RuntimePayload,
 } from './ui-runtime';

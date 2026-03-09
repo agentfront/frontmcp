@@ -389,28 +389,6 @@ export interface RendererAssets {
    * Used for cache invalidation.
    */
   bundleHash?: string;
-
-  // ========== Legacy (deprecated) ==========
-
-  /**
-   * @deprecated Use `react.url` instead
-   */
-  reactRuntime?: string;
-
-  /**
-   * @deprecated Use `reactDom.url` instead
-   */
-  reactDomRuntime?: string;
-
-  /**
-   * @deprecated Use `markdown.url` instead
-   */
-  markdownEngine?: string;
-
-  /**
-   * @deprecated Use `handlebars.url` instead
-   */
-  handlebarsRuntime?: string;
 }
 
 // ============================================
@@ -434,7 +412,7 @@ export interface RendererAssets {
  *   "widgetAccessible": true,
  *   "schema": { "type": "object", "properties": {...} },
  *   "csp": { "scriptSrc": ["'self'"], ... },
- *   "rendererAssets": { "reactRuntime": "https://..." },
+ *   "rendererAssets": { "react": { "url": "https://..." } },
  *   "hash": "sha256-abc123..."
  * }
  * ```
@@ -540,8 +518,8 @@ export interface WidgetManifest {
  *     // Widget can call tools
  *     'ui/widgetAccessible': true,
  *
- *     // OpenAI-specific CSP
- *     'openai/widgetCSP': { connect_domains: ['api.weather.com'] },
+ *     // CSP configuration
+ *     'ui/csp': { connect_domains: ['api.weather.com'] },
  *   }
  * }
  * ```
@@ -601,82 +579,15 @@ export interface UIMetaFields {
 }
 
 /**
- * OpenAI-specific meta fields.
- * These are in addition to the standard UI fields.
+ * @deprecated OpenAI now uses the standard ui/* namespace. Use UIMetaFields instead.
+ * Kept for backwards compatibility with external consumers.
  */
-export interface OpenAIMetaFields {
-  /**
-   * OpenAI CSP configuration.
-   * Maps to `_meta['openai/widgetCSP']`.
-   */
-  'openai/widgetCSP'?: {
-    connect_domains?: string[];
-    resource_domains?: string[];
-  };
-
-  /**
-   * OpenAI widget accessible flag.
-   * Maps to `_meta['openai/widgetAccessible']`.
-   */
-  'openai/widgetAccessible'?: boolean;
-
-  /**
-   * OpenAI widget description.
-   * Maps to `_meta['openai/widgetDescription']`.
-   */
-  'openai/widgetDescription'?: string;
-
-  /**
-   * OpenAI display mode.
-   * Maps to `_meta['openai/displayMode']`.
-   */
-  'openai/displayMode'?: 'inline' | 'fullscreen' | 'pip';
-}
+export type OpenAIMetaFields = Record<string, never>;
 
 /**
  * Combined meta fields for tool responses.
- * Includes both standard UI fields and platform-specific fields.
  */
-export type ToolResponseMeta = Partial<UIMetaFields> & Partial<OpenAIMetaFields> & Record<string, unknown>;
-
-/**
- * @deprecated Use UIMetaFields instead. RuntimePayload is being replaced
- * with explicit _meta field types.
- */
-export interface RuntimePayload {
-  /**
-   * Resolved UI type for this invocation.
-   * @deprecated Use UIMetaFields['ui/type']
-   */
-  type: UIType;
-
-  /**
-   * Rendered/compiled content.
-   * @deprecated Use UIMetaFields['ui/content']
-   */
-  content: string;
-
-  /**
-   * Content hash for cache validation.
-   * @deprecated Use UIMetaFields['ui/hash']
-   */
-  hash: string;
-
-  /**
-   * Hydration data for React components.
-   */
-  hydrationData?: unknown;
-
-  /**
-   * Structured tool output (JSON-serializable).
-   */
-  toolOutput?: unknown;
-
-  /**
-   * Additional metadata for the runtime.
-   */
-  metadata?: Record<string, unknown>;
-}
+export type ToolResponseMeta = Partial<UIMetaFields> & Record<string, unknown>;
 
 // ============================================
 // Widget Configuration
@@ -865,7 +776,7 @@ export interface WidgetConfig<Input = Record<string, unknown>, Output = unknown>
 
   /**
    * Human-readable description shown to users.
-   * Maps to OpenAI's `openai/widgetDescription`.
+   * Exposed in `_meta.ui` for platform discovery.
    */
   widgetDescription?: string;
 
@@ -1246,25 +1157,25 @@ export const DEFAULT_CSP_BY_TYPE: Record<UIType, CSPDirectives> = {
  */
 export const DEFAULT_RENDERER_ASSETS: Record<UIType, Partial<RendererAssets>> = {
   html: {
-    handlebarsRuntime: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js',
+    handlebars: { url: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js' },
   },
   react: {
-    reactRuntime: 'https://unpkg.com/react@18/umd/react.production.min.js',
-    reactDomRuntime: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+    react: { url: 'https://unpkg.com/react@18/umd/react.production.min.js' },
+    reactDom: { url: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js' },
   },
   mdx: {
-    reactRuntime: 'https://unpkg.com/react@18/umd/react.production.min.js',
-    reactDomRuntime: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-    markdownEngine: 'https://unpkg.com/marked@latest/marked.min.js',
+    react: { url: 'https://unpkg.com/react@18/umd/react.production.min.js' },
+    reactDom: { url: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js' },
+    markdown: { url: 'https://unpkg.com/marked@latest/marked.min.js' },
   },
   markdown: {
-    markdownEngine: 'https://unpkg.com/marked@latest/marked.min.js',
+    markdown: { url: 'https://unpkg.com/marked@latest/marked.min.js' },
   },
   auto: {
-    reactRuntime: 'https://unpkg.com/react@18/umd/react.production.min.js',
-    reactDomRuntime: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-    markdownEngine: 'https://unpkg.com/marked@latest/marked.min.js',
-    handlebarsRuntime: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js',
+    react: { url: 'https://unpkg.com/react@18/umd/react.production.min.js' },
+    reactDom: { url: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js' },
+    markdown: { url: 'https://unpkg.com/marked@latest/marked.min.js' },
+    handlebars: { url: 'https://unpkg.com/handlebars@latest/dist/handlebars.runtime.min.js' },
   },
 };
 

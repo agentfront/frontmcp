@@ -8,7 +8,29 @@
  * @packageDocumentation
  */
 
-import type { CDNDependency, FileBundleOptions } from '../dependency/types';
+import type { CDNDependency } from '../resolver/types';
+import type { CustomShellSource } from '../shell/custom-shell-types';
+import type { FileSource } from '../component/types';
+
+/**
+ * Configuration options for bundling file-based components.
+ */
+export interface FileBundleOptions {
+  /** Minify the bundled output */
+  minify?: boolean;
+  /** Generate source maps for debugging */
+  sourceMaps?: boolean;
+  /** Target JavaScript version */
+  target?: 'es2018' | 'es2019' | 'es2020' | 'es2021' | 'es2022' | 'esnext';
+  /** Enable tree shaking */
+  treeShake?: boolean;
+  /** JSX factory function */
+  jsxFactory?: string;
+  /** JSX fragment factory */
+  jsxFragment?: string;
+  /** JSX import source for automatic runtime */
+  jsxImportSource?: string;
+}
 
 // ============================================
 // Content Security Policy
@@ -229,12 +251,6 @@ export type WidgetServingMode =
   | 'direct-url' // HTTP endpoint on MCP server
   | 'custom-url'; // Custom URL (CDN or external hosting)
 
-/**
- * @deprecated Use 'static' instead of 'mcp-resource'. Will be removed in v2.0.
- * Alias maintained for backwards compatibility.
- */
-export type WidgetServingModeLegacy = 'mcp-resource';
-
 // ============================================
 // Display Mode
 // ============================================
@@ -278,9 +294,10 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
    * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
    * - React component: `MyWidget` - receives props with input/output/helpers
+   * - FileSource object: `{ file: './my-widget.tsx' }` - transpiled client-side via esm.sh CDN
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  template: TemplateBuilderFn<In, Out> | string | ((props: any) => any);
+  template: TemplateBuilderFn<In, Out> | string | ((props: any) => any) | FileSource;
 
   /**
    * Content Security Policy for the sandboxed widget.
@@ -338,7 +355,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * Whether the widget can invoke tools via the MCP bridge.
    * When true, the widget gains access to `window.mcpBridge.callTool()`.
-   * Maps to OpenAI's `openai/widgetAccessible` annotation.
+   * Exposed in `_meta.ui` for platform discovery.
    *
    * Default: false
    */
@@ -356,13 +373,13 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Human-readable description shown to users about what the widget does.
-   * Maps to OpenAI's `openai/widgetDescription` annotation.
+   * Exposed in `_meta.ui` for platform discovery.
    */
   widgetDescription?: string;
 
   /**
-   * Status messages shown during tool invocation (OpenAI ChatGPT specific).
-   * Maps to OpenAI's `openai/toolInvocation/invoking` and `openai/toolInvocation/invoked`.
+   * Status messages shown during tool invocation.
+   * Exposed via `ui/toolInvocation/invoking` and `ui/toolInvocation/invoked` meta keys.
    *
    * @example
    * ```typescript
@@ -745,6 +762,29 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * ```
    */
   fileBundleOptions?: FileBundleOptions;
+
+  /**
+   * Custom HTML shell template with placeholders.
+   *
+   * Instead of the default HTML document, use a custom template
+   * containing `{{CONTENT}}` (required) and optional `{{CSP}}`,
+   * `{{DATA}}`, `{{BRIDGE}}`, `{{TITLE}}` placeholders.
+   *
+   * Source: inline string, URL, or npm package.
+   *
+   * @example
+   * ```typescript
+   * // Inline
+   * customShell: { inline: '<html><head>{{CSP}}{{DATA}}</head><body>{{CONTENT}}</body></html>' }
+   *
+   * // URL
+   * customShell: { url: 'https://cdn.example.com/my-shell.html' }
+   *
+   * // NPM
+   * customShell: { npm: '@acme/mcp-shell-template' }
+   * ```
+   */
+  customShell?: CustomShellSource;
 }
 
 /**

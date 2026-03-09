@@ -1,48 +1,64 @@
 /**
- * @frontmcp/ui Adapters
+ * @frontmcp/uipack/adapters
  *
- * Platform-specific adapters for building UI metadata.
- * These adapters are SDK-independent and can be used by external systems
- * like AgentLink without requiring @frontmcp/sdk.
+ * SDK integration layer for the UI pipeline.
+ * Provides rendering, serving mode resolution, and response formatting
+ * aligned with the MCP Apps protocol specification.
  *
  * @packageDocumentation
  */
 
-export {
-  // Platform Types
-  type AIPlatformType,
-  type ExtAppsMimeTypeVariant,
-  // Metadata Types
-  type UIMetadata,
-  type BuildUIMetaOptions,
-  type BuildToolDiscoveryMetaOptions,
-  // Builder Functions
-  buildUIMeta,
-  buildToolDiscoveryMeta,
-  buildOpenAICSP,
-  buildFrontMCPCSP,
-  // MIME Type Utilities
-  getExtAppsMimeType,
-  isExtAppsMimeType,
-} from './platform-meta';
+// ============================================
+// Constants
+// ============================================
+export { MCP_APPS_MIME_TYPE, MCP_APPS_EXTENSION_ID } from './constants';
 
+// ============================================
+// Serving Mode
+// ============================================
 export {
-  // Serving Mode Types
-  type ResolvedServingMode,
-  type ResolveServingModeOptions,
-  // Resolver Functions
   resolveServingMode,
-  isPlatformModeSupported,
-  getDefaultServingMode,
-  platformUsesStructuredContent,
-  platformSupportsWidgets,
+  type ResolveServingModeOptions,
+  type ServingModeResult,
+  type AdapterPlatformType,
 } from './serving-mode';
 
+// ============================================
+// Response Builder
+// ============================================
 export {
-  // Response Builder Types
-  type TextContentBlock,
-  type BuildToolResponseOptions,
-  type ToolResponseContent,
-  // Builder Functions
   buildToolResponseContent,
+  type ToolResponseContent,
+  type BuildToolResponseContentOptions,
 } from './response-builder';
+
+// ============================================
+// Render Failure
+// ============================================
+export { isUIRenderFailure, type UIRenderFailure } from './render-failure';
+
+// ============================================
+// Template Renderer
+// ============================================
+export { renderToolTemplate, type RenderToolTemplateOptions, type RenderToolTemplateResult } from './template-renderer';
+
+// ============================================
+// Content Detection & Rendering
+// ============================================
+export { detectContentType, type DetectedContentType } from './content-detector';
+export { buildChartHtml, buildMermaidHtml, buildPdfHtml, wrapDetectedContent } from './content-renderers';
+
+// ============================================
+// Base Template
+// ============================================
+export { createDefaultBaseTemplate, type DefaultBaseTemplateOptions } from './base-template';
+
+// ============================================
+// CDN Info
+// ============================================
+export { buildCDNInfoForUIType, type CDNInfo, type CDNDependencyInfo } from './cdn-info';
+
+// ============================================
+// Type Detection
+// ============================================
+export { detectUIType } from './type-detector';
