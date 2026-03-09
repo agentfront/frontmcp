@@ -126,7 +126,7 @@ describe('setup', () => {
       jest.resetModules();
       jest.doMock('zod/v4', () => ({
         toJSONSchema: () => ({ type: 'number', minimum: 0 }),
-      }), { virtual: true });
+      }));
 
       const { zodSchemaToJsonSchema } = require('../setup');
       expect(zodSchemaToJsonSchema('fake-schema')).toEqual({ type: 'number', minimum: 0 });
@@ -134,10 +134,10 @@ describe('setup', () => {
 
     it('should fallback to zod/v4/core when zod/v4 fails', () => {
       jest.resetModules();
-      jest.doMock('zod/v4', () => { throw new Error('not found'); }, { virtual: true });
+      jest.doMock('zod/v4', () => { throw new Error('not found'); });
       jest.doMock('zod/v4/core', () => ({
         toJSONSchema: () => ({ type: 'boolean' }),
-      }), { virtual: true });
+      }));
 
       const { zodSchemaToJsonSchema } = require('../setup');
       expect(zodSchemaToJsonSchema('fake-schema')).toEqual({ type: 'boolean' });
@@ -145,8 +145,8 @@ describe('setup', () => {
 
     it('should return { type: "string" } when both zod paths fail', () => {
       jest.resetModules();
-      jest.doMock('zod/v4', () => { throw new Error('not found'); }, { virtual: true });
-      jest.doMock('zod/v4/core', () => { throw new Error('not found'); }, { virtual: true });
+      jest.doMock('zod/v4', () => { throw new Error('not found'); });
+      jest.doMock('zod/v4/core', () => { throw new Error('not found'); });
 
       const { zodSchemaToJsonSchema } = require('../setup');
       expect(zodSchemaToJsonSchema('fake-schema')).toEqual({ type: 'string' });
