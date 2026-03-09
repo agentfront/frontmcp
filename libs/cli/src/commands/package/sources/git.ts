@@ -16,6 +16,20 @@ export async function fetchFromGit(url: string, tmpDir: string): Promise<string>
     gitUrl = gitUrl.slice(4);
   }
 
+  // Validate URL to prevent second-order command injection (CWE-88).
+  // Malicious URLs starting with '--' can inject flags like --upload-pack.
+  if (
+    !(
+      gitUrl.startsWith('https://') ||
+      gitUrl.startsWith('http://') ||
+      gitUrl.startsWith('git://') ||
+      gitUrl.startsWith('ssh://') ||
+      gitUrl.startsWith('git@')
+    )
+  ) {
+    throw new Error(`Invalid git URL: ${gitUrl}. Must start with https://, http://, git://, ssh://, or git@`);
+  }
+
   const cloneDir = path.join(tmpDir, 'package');
   await runCmd('git', ['clone', '--depth', '1', gitUrl, cloneDir]);
 
