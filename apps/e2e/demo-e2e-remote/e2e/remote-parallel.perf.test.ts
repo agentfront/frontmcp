@@ -85,6 +85,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
         `(${result.workersUsed} workers × ${result.totalIterations / result.workersUsed} iterations)`,
     );
 
+    // CI runners (GitHub Actions) achieve ~164-194 req/s; threshold set to 100 for stability
     expect(result.totalRequestsPerSecond).toBeGreaterThan(100);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
