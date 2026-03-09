@@ -148,9 +148,3 @@ export class FrontMcpContextStorage {
     return fn();
   }
 }
-
-/**
- * Alias for backward compatibility.
- * @deprecated Use FrontMcpContextStorage instead
- */
-export { FrontMcpContextStorage as ContextStorage };

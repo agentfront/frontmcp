@@ -10,7 +10,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   redis: tokenFactory.meta('redis'),
   pubsub: tokenFactory.meta('pubsub'),
   transport: tokenFactory.meta('transport'),
-  session: tokenFactory.meta('session'), // @deprecated - kept for backward compatibility
   serve: tokenFactory.meta('serve'),
   splitByApp: tokenFactory.meta('splitByApp'),
   auth: tokenFactory.meta('auth'),
@@ -36,6 +35,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   extApps: tokenFactory.meta('extApps'),
   // sqlite storage configuration
   sqlite: tokenFactory.meta('sqlite'),
+  // UI kit configuration
+  ui: tokenFactory.meta('ui'),
   // jobs and workflows configuration
   jobs: tokenFactory.meta('jobs'),
 };

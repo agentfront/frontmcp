@@ -113,8 +113,7 @@ export abstract class Session {
 
   async getTransportSessionId(): Promise<string> {
     if (this.#activeTransportId) return this.#activeTransportId;
-    // Always use JWT-style transport IDs for distributed session support
-    return TransportIdGenerator.createId('jwt');
+    return TransportIdGenerator.createId();
   }
 
   /**

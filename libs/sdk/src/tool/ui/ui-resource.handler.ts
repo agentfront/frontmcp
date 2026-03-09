@@ -25,16 +25,8 @@
 
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import type { AIPlatformType } from '../../notification/notification.service';
-import { createDefaultBaseTemplate } from '@frontmcp/uipack/base-template';
-import {
-  type ToolUIRegistry,
-  UI_RESOURCE_SCHEME,
-  isUIResourceUri,
-  isStaticWidgetUri,
-  parseWidgetUri,
-  getUIResourceMimeType,
-  type ParsedWidgetUri,
-} from '@frontmcp/uipack/registry';
+import { createDefaultBaseTemplate } from '@frontmcp/uipack/adapters';
+import { type ToolUIRegistry, isUIResourceUri, parseWidgetUri, getUIResourceMimeType } from './ui-shared';
 
 /**
  * Result of handling a UI resource request

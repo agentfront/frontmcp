@@ -8,8 +8,7 @@ export enum FlowKind {
 export type FlowClassToken = {
   kind: FlowKind.CLASS_TOKEN;
   provide: FlowType;
-  metadata: FlowMetadata<never>
+  metadata: FlowMetadata<never>;
 };
 
-export type FlowRecord =
-  | FlowClassToken
+export type FlowRecord = FlowClassToken;

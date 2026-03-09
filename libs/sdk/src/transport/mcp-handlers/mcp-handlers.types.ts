@@ -1,4 +1,4 @@
-import { z, ZodType, ZodLiteral } from 'zod';
+import { z, ZodType } from 'zod';
 import { Notification, Request, Result } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerOptions } from '@modelcontextprotocol/sdk/server/index.js';
@@ -11,16 +11,16 @@ type Primitive = string | number | boolean | bigint | null | undefined;
 type Flatten<T> = T extends Primitive
   ? T
   : T extends Array<infer U>
-  ? Array<Flatten<U>>
-  : T extends Set<infer U>
-  ? Set<Flatten<U>>
-  : T extends Map<infer K, infer V>
-  ? Map<Flatten<K>, Flatten<V>>
-  : T extends object
-  ? {
-      [K in keyof T]: Flatten<T[K]>;
-    }
-  : T;
+    ? Array<Flatten<U>>
+    : T extends Set<infer U>
+      ? Set<Flatten<U>>
+      : T extends Map<infer K, infer V>
+        ? Map<Flatten<K>, Flatten<V>>
+        : T extends object
+          ? {
+              [K in keyof T]: Flatten<T[K]>;
+            }
+          : T;
 type Infer<Schema extends ZodType> = Flatten<z.infer<Schema>>;
 
 export interface McpHandler<

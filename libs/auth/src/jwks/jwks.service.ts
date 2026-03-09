@@ -15,9 +15,7 @@ const WEAK_KEY_WARNING = `
 `;
 
 export class JwksService {
-  private readonly opts: Required<Omit<JwksServiceOptions, 'devKeyPersistence' | 'logger'>> & {
-    devKeyPersistence?: JwksServiceOptions['devKeyPersistence'];
-  };
+  private readonly opts: Required<Omit<JwksServiceOptions, 'logger'>>;
 
   private readonly logger: AuthLogger;
   private warnedProviders = new Set<string>();
@@ -47,7 +45,6 @@ export class JwksService {
       rotateDays: opts?.rotateDays ?? 30,
       providerJwksTtlMs: opts?.providerJwksTtlMs ?? 6 * 60 * 60 * 1000, // 6h
       networkTimeoutMs: opts?.networkTimeoutMs ?? 5000, // 5s
-      devKeyPersistence: opts?.devKeyPersistence,
     };
   }
 
@@ -61,7 +58,6 @@ export class JwksService {
    */
   private shouldEnablePersistence(): boolean {
     const isProd = process.env['NODE_ENV'] === 'production';
-    if (this.opts.devKeyPersistence?.forceEnable) return true;
     return !isProd;
   }
 

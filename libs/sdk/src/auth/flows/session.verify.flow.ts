@@ -368,10 +368,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       const issuer = auth.issuer;
       const providerRefs: ProviderVerifyRef[] = [
         {
-          id: primary.remote.id ?? 'default',
+          id: primary.providerConfig?.id ?? 'default',
           issuerUrl: issuer,
-          jwks: primary.remote.jwks,
-          jwksUri: primary.remote.jwksUri,
+          jwks: primary.providerConfig?.jwks,
+          jwksUri: primary.providerConfig?.jwksUri,
         },
       ];
       verify = jwks.verifyTransparentToken(token, providerRefs);
