@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpUiComponent",
+  "title": "FrontMCP UI Component Generator",
+  "description": "Add a UI component entry to ui/components",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Component name (PascalCase, e.g. LoginForm)",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the component (PascalCase)?",
+      "x-priority": "important"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the component",
+      "default": ""
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name"]
+}

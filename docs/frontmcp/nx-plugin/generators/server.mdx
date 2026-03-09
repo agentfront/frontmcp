@@ -15,14 +15,14 @@ nx g @frontmcp/nx:server production --apps crm,analytics
 
 ## Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | — | **Required.** The name of the server |
-| `apps` | `string` | — | **Required.** Comma-separated app names to compose |
-| `directory` | `string` | `servers/<name>` | The directory of the server |
-| `deploymentTarget` | `node` \| `vercel` \| `lambda` \| `cloudflare` | `node` | The deployment target platform |
-| `redis` | `docker` \| `existing` \| `none` | `none` | Redis setup option (node target only) |
-| `tags` | `string` | — | Comma-separated tags |
+| Option             | Type                                           | Default          | Description                                        |
+| ------------------ | ---------------------------------------------- | ---------------- | -------------------------------------------------- |
+| `name`             | `string`                                       | —                | **Required.** The name of the server               |
+| `apps`             | `string`                                       | —                | **Required.** Comma-separated app names to compose |
+| `directory`        | `string`                                       | `servers/<name>` | The directory of the server                        |
+| `deploymentTarget` | `node` \| `vercel` \| `lambda` \| `cloudflare` | `node`           | The deployment target platform                     |
+| `redis`            | `docker` \| `existing` \| `none`               | `none`           | Redis setup option (node target only)              |
+| `tags`             | `string`                                       | —                | Comma-separated tags                               |
 
 ## Generated Files
 
@@ -90,10 +90,10 @@ export default class Server {}
 
 ## Nx Targets
 
-| Target | Executor | Description |
-| --- | --- | --- |
-| `build` | `@frontmcp/nx:build` | Compile with deployment adapter |
-| `deploy` | `@frontmcp/nx:deploy` | Deploy to target platform |
+| Target   | Executor              | Description                     |
+| -------- | --------------------- | ------------------------------- |
+| `build`  | `@frontmcp/nx:build`  | Compile with deployment adapter |
+| `deploy` | `@frontmcp/nx:deploy` | Deploy to target platform       |
 
 ## Example
 

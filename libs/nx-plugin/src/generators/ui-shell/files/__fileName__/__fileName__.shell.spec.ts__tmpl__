@@ -1,0 +1,16 @@
+import { build<%= className %>Shell } from './<%= fileName %>.shell';
+
+describe('build<%= className %>Shell', () => {
+  it('should be defined', () => {
+    expect(build<%= className %>Shell).toBeDefined();
+  });
+
+  it('should be a function', () => {
+    expect(typeof build<%= className %>Shell).toBe('function');
+  });
+
+  it('should return an HTML string', () => {
+    const result = build<%= className %>Shell({ toolName: 'test' });
+    expect(typeof result).toBe('string');
+  });
+});

@@ -45,7 +45,7 @@ export const sqliteStorageOptionsSchema = z.object({
       secret: z.string().min(1),
     })
     .optional(),
-  ttlCleanupIntervalMs: z.number().int().positive().optional().default(60000),
+  ttlCleanupIntervalMs: z.number().int().nonnegative().optional().default(60000),
   walMode: z.boolean().optional().default(true),
 });
 

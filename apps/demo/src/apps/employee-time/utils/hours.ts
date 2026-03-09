@@ -1,10 +1,14 @@
 import EmployeeRedisProvider from '../providers/redis.provider';
-import {eachDayRange} from './time';
-import {hoursKey} from './keys';
+import { eachDayRange } from './time';
+import { hoursKey } from './keys';
 
 // Legacy helpers (non-site-aware) kept for backward compatibility with any remaining callers
-export function empDayHoursKey(id: string, day: string) { return `et:hours:${id}:${day}`; }
-export function employeesSetKey() { return 'et:employees'; }
+export function empDayHoursKey(id: string, day: string) {
+  return `et:hours:${id}:${day}`;
+}
+export function employeesSetKey() {
+  return 'et:employees';
+}
 
 export async function listEmployees(redis: EmployeeRedisProvider): Promise<string[]> {
   return redis.smembers(employeesSetKey());
@@ -16,7 +20,11 @@ export async function getEmployeeDayMs(redis: EmployeeRedisProvider, employeeId:
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function sumEmployeeDaysMs(redis: EmployeeRedisProvider, employeeId: string, days: string[]): Promise<number> {
+export async function sumEmployeeDaysMs(
+  redis: EmployeeRedisProvider,
+  employeeId: string,
+  days: string[],
+): Promise<number> {
   if (days.length === 0) return 0;
   const keys = days.map((d) => empDayHoursKey(employeeId, d));
   const vals = await redis.mget(keys);
@@ -28,7 +36,12 @@ export async function sumEmployeeDaysMs(redis: EmployeeRedisProvider, employeeId
   return total;
 }
 
-export async function sumEmployeesRangeMs(redis: EmployeeRedisProvider, employeeIds: string[], startMs: number, endMs: number): Promise<Record<string, number>> {
+export async function sumEmployeesRangeMs(
+  redis: EmployeeRedisProvider,
+  employeeIds: string[],
+  startMs: number,
+  endMs: number,
+): Promise<Record<string, number>> {
   const days = eachDayRange(startMs, endMs);
   const result: Record<string, number> = {};
   for (const id of employeeIds) {
@@ -38,13 +51,23 @@ export async function sumEmployeesRangeMs(redis: EmployeeRedisProvider, employee
 }
 
 // New site-aware helpers
-export async function getEmployeeDayMsForSite(redis: EmployeeRedisProvider, siteId: string, employeeId: string, day: string): Promise<number> {
+export async function getEmployeeDayMsForSite(
+  redis: EmployeeRedisProvider,
+  siteId: string,
+  employeeId: string,
+  day: string,
+): Promise<number> {
   const v = await redis.get(hoursKey(siteId, employeeId, day));
   const n = v ? Number(v) : 0;
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function sumEmployeeDaysMsForSite(redis: EmployeeRedisProvider, siteId: string, employeeId: string, days: string[]): Promise<number> {
+export async function sumEmployeeDaysMsForSite(
+  redis: EmployeeRedisProvider,
+  siteId: string,
+  employeeId: string,
+  days: string[],
+): Promise<number> {
   if (days.length === 0) return 0;
   const keys = days.map((d) => hoursKey(siteId, employeeId, d));
   const vals = await redis.mget(keys);
@@ -56,7 +79,13 @@ export async function sumEmployeeDaysMsForSite(redis: EmployeeRedisProvider, sit
   return total;
 }
 
-export async function sumEmployeesRangeMsForSite(redis: EmployeeRedisProvider, siteId: string, employeeIds: string[], startMs: number, endMs: number): Promise<Record<string, number>> {
+export async function sumEmployeesRangeMsForSite(
+  redis: EmployeeRedisProvider,
+  siteId: string,
+  employeeIds: string[],
+  startMs: number,
+  endMs: number,
+): Promise<Record<string, number>> {
   const days = eachDayRange(startMs, endMs);
   const result: Record<string, number> = {};
   for (const id of employeeIds) {

@@ -22,7 +22,7 @@ describe('MCP Apps Platform Detection', () => {
       const capabilities: ClientCapabilities = {
         experimental: {
           'io.modelcontextprotocol/ui': {
-            mimeTypes: ['text/html+mcp'],
+            mimeTypes: ['text/html;profile=mcp-app'],
           },
         },
       };
@@ -71,7 +71,7 @@ describe('MCP Apps Platform Detection', () => {
       const capabilities: ClientCapabilities = {
         experimental: {
           'io.modelcontextprotocol/ui': {
-            mimeTypes: ['text/html+mcp'],
+            mimeTypes: ['text/html;profile=mcp-app'],
           },
         },
       };
@@ -101,14 +101,14 @@ describe('MCP Apps Platform Detection', () => {
         sampling: { temperature: 0.7 },
         experimental: {
           'io.modelcontextprotocol/ui': {
-            mimeTypes: ['text/html+mcp'],
+            mimeTypes: ['text/html;profile=mcp-app'],
           },
           'some.other/extension': { enabled: true },
         },
       };
 
       expect(capabilities.experimental?.[MCP_APPS_EXTENSION_KEY]).toBeDefined();
-      expect(capabilities.experimental?.[MCP_APPS_EXTENSION_KEY]?.mimeTypes).toContain('text/html+mcp');
+      expect(capabilities.experimental?.[MCP_APPS_EXTENSION_KEY]?.mimeTypes).toContain('text/html;profile=mcp-app');
     });
   });
 });

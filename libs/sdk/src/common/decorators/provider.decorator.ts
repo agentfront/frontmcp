@@ -17,7 +17,4 @@ function FrontMcpProvider(providedMetadata: ProviderMetadata): ClassDecorator {
   };
 }
 
-export {
-  FrontMcpProvider,
-  FrontMcpProvider as Provider,
-};
+export { FrontMcpProvider, FrontMcpProvider as Provider };

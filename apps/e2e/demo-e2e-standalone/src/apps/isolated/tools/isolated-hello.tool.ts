@@ -1,16 +1,16 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = z.object({
+const inputSchema = {
   name: z.string().default('World'),
-});
+};
 
 const outputSchema = z.object({
   message: z.string(),
   scope: z.literal('isolated'),
 });
 
-type Input = z.output<typeof inputSchema>;
+type Input = z.output<z.ZodObject<typeof inputSchema>>;
 type Output = z.output<typeof outputSchema>;
 
 @Tool({

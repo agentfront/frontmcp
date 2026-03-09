@@ -41,7 +41,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
       "options": {
-        "command": "node libs/cli/dist/src/cli.js inspector"
+        "command": "node libs/cli/dist/src/core/cli.js inspector"
       }
     },
     "publish": {

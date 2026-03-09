@@ -10,9 +10,16 @@ const mockCalculatorAdapter: AgentLlmAdapter = {
     const expression = userMessage?.content ?? '0';
 
     try {
-      // Simple safe math evaluation (only numbers and basic operators)
-      const sanitized = expression.replace(/[^0-9+\-*/().]/g, '');
-      // eslint-disable-next-line no-eval
+      if (/[^0-9+\-*/().\s]/.test(expression)) {
+        return {
+          content: 'Unable to calculate the expression',
+          finishReason: 'stop',
+          usage: { promptTokens: 15, completionTokens: 5 },
+        };
+      }
+
+      const sanitized = expression.replace(/\s/g, '');
+
       const result = Function('"use strict"; return (' + sanitized + ')')();
 
       return {
@@ -67,8 +74,16 @@ export class CalculatorAgent extends AgentContext {
     this.logger.info(`Calculator agent evaluating: ${input.expression}`);
 
     try {
-      // Safe evaluation using only numbers and basic operators
-      const sanitized = input.expression.replace(/[^0-9+\-*/().]/g, '');
+      if (/[^0-9+\-*/().\s]/.test(input.expression)) {
+        return {
+          result: 0,
+          expression: input.expression,
+          success: false,
+          error: 'Invalid expression: contains disallowed characters',
+        };
+      }
+
+      const sanitized = input.expression.replace(/\s/g, '');
 
       if (!sanitized || sanitized.length === 0) {
         return {
@@ -79,10 +94,9 @@ export class CalculatorAgent extends AgentContext {
         };
       }
 
-      // eslint-disable-next-line no-eval
       const result = Function('"use strict"; return (' + sanitized + ')')();
 
-      if (typeof result !== 'number' || isNaN(result)) {
+      if (typeof result !== 'number' || !Number.isFinite(result)) {
         return {
           result: 0,
           expression: input.expression,

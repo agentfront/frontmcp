@@ -48,7 +48,9 @@ function getBaseBranch() {
   const arg = process.argv[2];
   if (arg) {
     if (!isValidBranchName(arg)) {
-      console.error(`Error: Invalid branch name "${arg}". Branch names must contain only alphanumeric characters, hyphens, underscores, slashes, and dots.`);
+      console.error(
+        `Error: Invalid branch name "${arg}". Branch names must contain only alphanumeric characters, hyphens, underscores, slashes, and dots.`,
+      );
       process.exit(1);
     }
     return arg;
@@ -79,11 +81,9 @@ function getChangedFiles(baseBranch) {
 
   // Get files that differ between base branch and current HEAD
   // Using execFileSync with array arguments for safety
-  const diffOutput = execFileSync(
-    'git',
-    ['diff', `${baseBranch}...HEAD`, '--name-only', '--diff-filter=ACM'],
-    { encoding: 'utf-8' }
-  );
+  const diffOutput = execFileSync('git', ['diff', `${baseBranch}...HEAD`, '--name-only', '--diff-filter=ACM'], {
+    encoding: 'utf-8',
+  });
 
   const files = diffOutput
     .split('\n')
@@ -144,11 +144,7 @@ export default [
     // Use execFileSync with array arguments to prevent shell injection
     // ESLint exits with code 1 if it finds (and fixes) issues, which is expected
     try {
-      execFileSync(
-        'npx',
-        ['eslint', '--config', tempConfigPath, '--fix', ...files],
-        { stdio: 'inherit' }
-      );
+      execFileSync('npx', ['eslint', '--config', tempConfigPath, '--fix', ...files], { stdio: 'inherit' });
       console.log('Done! Unused imports removed.');
     } catch (error) {
       // ESLint exit code 1 = linting errors remain after --fix (some issues couldn't be auto-fixed)

@@ -24,14 +24,14 @@ description: Use SQLite for local session, elicitation, and event storage withou
 
 ## When to Use SQLite
 
-| Use Case | SQLite | Redis |
-|----------|--------|-------|
-| Local-only / single-process | **Recommended** | Overkill |
-| Unix socket deployments | **Recommended** | Not needed |
-| Background daemons | **Recommended** | Not needed |
-| Multi-instance production | Not supported | **Required** |
+| Use Case                         | SQLite                        | Redis                        |
+| -------------------------------- | ----------------------------- | ---------------------------- |
+| Local-only / single-process      | **Recommended**               | Overkill                     |
+| Unix socket deployments          | **Recommended**               | Not needed                   |
+| Background daemons               | **Recommended**               | Not needed                   |
+| Multi-instance production        | Not supported                 | **Required**                 |
 | Pub/Sub (resource subscriptions) | EventEmitter (single process) | **Required** for distributed |
-| Edge / serverless | Not supported | **Required** |
+| Edge / serverless                | Not supported                 | **Required**                 |
 
 <Info>
 SQLite is ideal for local-only deployments — Unix socket servers, CLI tools, and background daemons. For multi-instance production or serverless, use [Redis](/frontmcp/deployment/redis-setup) or [Vercel KV](/frontmcp/deployment/vercel-kv) instead.
@@ -92,12 +92,12 @@ export default class Server {}
 
 ## Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `path` | `string` | *required* | Path to the `.sqlite` database file |
-| `encryption.secret` | `string` | — | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
-| `walMode` | `boolean` | `true` | Enable WAL mode for better read concurrency |
-| `ttlCleanupIntervalMs` | `number` | `60000` | Interval in ms for purging expired keys |
+| Option                 | Type      | Default    | Description                                           |
+| ---------------------- | --------- | ---------- | ----------------------------------------------------- |
+| `path`                 | `string`  | _required_ | Path to the `.sqlite` database file                   |
+| `encryption.secret`    | `string`  | —          | Secret key for AES-256-GCM encryption via HKDF-SHA256 |
+| `walMode`              | `boolean` | `true`     | Enable WAL mode for better read concurrency           |
+| `ttlCleanupIntervalMs` | `number`  | `60000`    | Interval in ms for purging expired keys               |
 
 ## Encryption
 
@@ -174,16 +174,16 @@ const elicitation = new SqliteElicitationStore({
 
 ## Comparison: SQLite vs Redis vs Vercel KV
 
-| Feature | SQLite | Redis | Vercel KV |
-|---------|--------|-------|-----------|
-| **Infrastructure** | Local file | Server or managed service | Vercel-managed |
-| **Setup** | `npm install` | Docker / cloud setup | Dashboard toggle |
-| **Multi-instance** | Single process only | Full support | Full support |
-| **Pub/Sub** | EventEmitter (local) | Native Redis pub/sub | Not supported |
-| **Encryption** | Built-in AES-256-GCM | TLS in transit | TLS in transit |
-| **Edge Compatible** | No | No | Yes |
-| **Latency** | ~0ms (local file I/O) | ~1-5ms (TCP) | ~5-15ms (REST) |
-| **Best For** | Local daemons, CLI tools | Production servers | Vercel deployments |
+| Feature             | SQLite                   | Redis                     | Vercel KV          |
+| ------------------- | ------------------------ | ------------------------- | ------------------ |
+| **Infrastructure**  | Local file               | Server or managed service | Vercel-managed     |
+| **Setup**           | `npm install`            | Docker / cloud setup      | Dashboard toggle   |
+| **Multi-instance**  | Single process only      | Full support              | Full support       |
+| **Pub/Sub**         | EventEmitter (local)     | Native Redis pub/sub      | Not supported      |
+| **Encryption**      | Built-in AES-256-GCM     | TLS in transit            | TLS in transit     |
+| **Edge Compatible** | No                       | No                        | Yes                |
+| **Latency**         | ~0ms (local file I/O)    | ~1-5ms (TCP)              | ~5-15ms (REST)     |
+| **Best For**        | Local daemons, CLI tools | Production servers        | Vercel deployments |
 
 ## Troubleshooting
 
@@ -196,6 +196,7 @@ const elicitation = new SqliteElicitationStore({
     npm install better-sqlite3
     ```
     If you're using yarn with PnP, you may need to add it as a dependency (not devDependency).
+
   </Accordion>
 
   <Accordion title="SQLITE_CANTOPEN: unable to open database file">
@@ -205,18 +206,21 @@ const elicitation = new SqliteElicitationStore({
     ```bash
     mkdir -p ~/.frontmcp/data
     ```
+
   </Accordion>
 
   <Accordion title="Database is locked">
     **Cause**: Multiple processes are trying to write to the same SQLite file simultaneously.
 
     **Solution**: SQLite is designed for single-process access. If you need multiple processes, use Redis instead. WAL mode (enabled by default) helps with read concurrency but doesn't solve multi-writer scenarios.
+
   </Accordion>
 
   <Accordion title="Encryption errors after changing the secret">
     **Cause**: Existing data was encrypted with a different secret.
 
     **Solution**: Either restore the original secret or delete the database file and let the server create a fresh one. There is no migration path between encryption keys.
+
   </Accordion>
 </AccordionGroup>
 

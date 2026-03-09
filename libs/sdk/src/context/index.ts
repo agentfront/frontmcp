@@ -36,7 +36,7 @@ export { BrowserContextStorage } from './context-storage.browser';
 // =====================
 // FrontMcpContextStorage - Platform-aware context storage wrapper
 // =====================
-export { FrontMcpContextStorage, ContextStorage } from './frontmcp-context-storage';
+export { FrontMcpContextStorage } from './frontmcp-context-storage';
 
 // =====================
 // DI Token and Provider

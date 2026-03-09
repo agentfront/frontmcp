@@ -692,7 +692,10 @@ export type AgentStreamEvent =
  * Error thrown when agent reaches maximum iterations.
  */
 export class AgentMaxIterationsError extends Error {
-  constructor(message: string, public readonly maxIterations: number) {
+  constructor(
+    message: string,
+    public readonly maxIterations: number,
+  ) {
     super(message);
     this.name = 'AgentMaxIterationsError';
   }

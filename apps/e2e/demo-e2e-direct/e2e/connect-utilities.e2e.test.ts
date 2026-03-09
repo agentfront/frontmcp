@@ -19,7 +19,6 @@ import { notesStore } from '../src/apps/notes/data/notes.store';
  * Raw results are wrapped in { content: [{ type: 'text', text: '...' }] }
  */
 function parseRawResult<T>(result: unknown): T {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const raw = result as any;
   if (raw?.content?.[0]?.type === 'text') {
     return JSON.parse(raw.content[0].text) as T;

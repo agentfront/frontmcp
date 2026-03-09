@@ -57,13 +57,13 @@ export function defineSetup(definition: SetupDefinition): SetupDefinition {
  */
 export function zodSchemaToJsonSchema(schema: unknown): Record<string, unknown> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { toJSONSchema } = require('zod/v4');
     return toJSONSchema(schema) as Record<string, unknown>;
   } catch {
     try {
       // Fallback: try zod/v4/core
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const zodV4 = require('zod/v4/core');
       return zodV4.toJSONSchema(schema) as Record<string, unknown>;
     } catch {

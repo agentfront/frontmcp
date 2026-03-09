@@ -28,7 +28,7 @@ The Cache Plugin provides transparent response caching for tools based on their 
 ## Installation
 
 ```bash
-npm install @frontmcp/plugins
+npm install @frontmcp/plugin-cache
 ```
 
 ## How It Works
@@ -59,7 +59,7 @@ npm install @frontmcp/plugins
 
 ```ts
 import { App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 
 @App({
   id: 'my-app',
@@ -542,7 +542,7 @@ Use short TTLs for frequently changing data:
 
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { CachePlugin } from '@frontmcp/plugin-cache';
 import { z } from 'zod';
 
 // Configure Redis cache

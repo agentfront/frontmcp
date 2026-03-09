@@ -40,17 +40,17 @@ if (result.success) {
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` | Yes | Tool name (e.g., `'users:list'`) |
-| `input` | `object` | Yes | Input arguments for the tool |
-| `options` | `object` | No | Execution options |
+| Parameter | Type     | Required | Description                      |
+| --------- | -------- | -------- | -------------------------------- |
+| `name`    | `string` | Yes      | Tool name (e.g., `'users:list'`) |
+| `input`   | `object` | Yes      | Input arguments for the tool     |
+| `options` | `object` | No       | Execution options                |
 
 **Options:**
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `throwOnError` | `boolean` | `true` | When `false`, returns `{ success, data, error }` instead of throwing |
+| Option         | Type      | Default | Description                                                          |
+| -------------- | --------- | ------- | -------------------------------------------------------------------- |
+| `throwOnError` | `boolean` | `true`  | When `false`, returns `{ success, data, error }` instead of throwing |
 
 **Return value (when `throwOnError: false`):**
 
@@ -106,7 +106,7 @@ console.error('Validation failed');
 
 ---
 
-### __safe_parallel(fns, options?)
+### \_\_safe_parallel(fns, options?)
 
 Execute multiple async operations in parallel with controlled concurrency.
 
@@ -123,16 +123,16 @@ return users;  // Array of results in same order as input
 
 **Options:**
 
-| Option | Type | Default | Max | Description |
-|--------|------|---------|-----|-------------|
-| `maxConcurrency` | `number` | 10 | 20 | Max concurrent operations |
+| Option           | Type     | Default | Max | Description               |
+| ---------------- | -------- | ------- | --- | ------------------------- |
+| `maxConcurrency` | `number` | 10      | 20  | Max concurrent operations |
 
 **Limits:**
 
-| Limit | Value | Error |
-|-------|-------|-------|
-| Max array size | 100 | `Cannot execute more than 100 operations in parallel` |
-| Max concurrency | 20 | Silently clamped |
+| Limit           | Value | Error                                                 |
+| --------------- | ----- | ----------------------------------------------------- |
+| Max array size  | 100   | `Cannot execute more than 100 operations in parallel` |
+| Max concurrency | 20    | Silently clamped                                      |
 
 **Error behavior:** If any operation fails, the entire `__safe_parallel` call fails with a combined error message.
 

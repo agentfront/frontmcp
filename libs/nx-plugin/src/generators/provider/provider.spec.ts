@@ -47,4 +47,9 @@ describe('provider generator', () => {
     const content = tree.read('apps/my-app/src/providers/my-database.provider.ts', 'utf-8');
     expect(content).toContain('class MyDatabaseProvider');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./provider');
+    expect(mod.default).toBe(providerGenerator);
+  });
 });

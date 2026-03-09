@@ -2,7 +2,6 @@ import { tokenFactory } from './base.tokens';
 import { RawMetadataShape } from '../types';
 import { LogTransportMetadata } from '../metadata';
 
-
 export const FrontMcpLogTransportTokens: RawMetadataShape<LogTransportMetadata> = {
   type: tokenFactory.type('logger'),
   id: tokenFactory.meta('id'),

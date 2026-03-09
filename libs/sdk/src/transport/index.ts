@@ -25,7 +25,7 @@ export {
 export { RecreateableSSEServerTransport, RecreateableSSEServerTransportOptions } from './adapters/sse-transport';
 
 // Base SSE transport (for type compatibility)
-export { SSEServerTransport, SSEServerTransportOptions } from './legacy/legacy.sse.tranporter';
+export { SSEServerTransport, SSEServerTransportOptions } from './adapters/base-sse-transport';
 
 // Transport types
 export { SupportedTransport } from './adapters/transport.local.adapter';

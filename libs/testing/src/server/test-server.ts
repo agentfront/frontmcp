@@ -186,6 +186,13 @@ export class TestServer {
     if (this.process) {
       this.log('Stopping server...');
 
+      // If process already exited, just clean up the reference
+      if (this.process.exitCode !== null || this.process.signalCode !== null) {
+        this.log(`Server already exited (code: ${this.process.exitCode}, signal: ${this.process.signalCode})`);
+        this.process = null;
+        return;
+      }
+
       // Try graceful shutdown first
       this.process.kill('SIGTERM');
 
@@ -288,6 +295,8 @@ export class TestServer {
     if (this.portRelease) {
       await this.portRelease();
       this.portRelease = null;
+      // Brief delay to allow OS to fully release the socket
+      await sleep(300);
     }
 
     // Use shell: true to handle complex commands with quoted arguments
@@ -486,7 +495,6 @@ export {
   getPortRange,
   releaseAllPorts,
   getReservedPorts,
-  findAvailablePort,
   E2E_PORT_RANGES,
   type E2EProject,
 } from './port-registry';

@@ -143,4 +143,45 @@ describe('dev executor', () => {
     mockChild.emit('close', 0);
     await done;
   });
+
+  it('should use npx.cmd on win32', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
+    try {
+      const mockChild = createMockChild();
+      mockSpawn.mockReturnValue(mockChild as never);
+
+      const gen = devExecutor({}, mockContext);
+      await gen.next();
+
+      expect(mockSpawn).toHaveBeenCalledWith('npx.cmd', expect.any(Array), expect.anything());
+
+      const done = gen.next();
+      mockChild.emit('close', 0);
+      await done;
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should not kill child if already killed', async () => {
+    const mockChild = createMockChild();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = devExecutor({}, mockContext);
+    await gen.next();
+
+    // Mark child as already killed before the generator finishes
+    mockChild.killed = true;
+
+    const secondPromise = gen.next();
+    mockChild.emit('close', 0);
+    await secondPromise;
+
+    // Consume the generator fully to trigger the finally block
+    await gen.next();
+
+    expect(mockChild.kill).not.toHaveBeenCalled();
+  });
 });

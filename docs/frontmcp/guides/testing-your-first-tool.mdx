@@ -16,6 +16,7 @@ This guide walks you through writing your first end-to-end tests for FrontMCP to
 ## What You'll Build
 
 A complete E2E test suite that:
+
 - Starts your MCP server automatically
 - Tests tool execution with various inputs
 - Validates error handling
@@ -37,6 +38,7 @@ pnpm add -D @frontmcp/testing
 ```bash yarn
 yarn add -D @frontmcp/testing
 ```
+
 </CodeGroup>
 
 ---
@@ -96,6 +98,7 @@ npm run test:e2e
 ```
 
 The testing library automatically:
+
 1. Starts your FrontMCP server
 2. Connects an MCP client
 3. Runs your test
@@ -379,6 +382,7 @@ test.describe('MCP Server E2E Tests', () => {
     // Bad - too vague
     test('add works', async ({ mcp }) => {});
     ```
+
   </Accordion>
 
   <Accordion title="Test both success and error cases">
@@ -398,6 +402,7 @@ test.describe('MCP Server E2E Tests', () => {
     expect(result.isError).toBe(false);
     expect(tools.some(t => t.name === 'my-tool')).toBe(true);
     ```
+
   </Accordion>
 
   <Accordion title="Use port: 0 in CI">

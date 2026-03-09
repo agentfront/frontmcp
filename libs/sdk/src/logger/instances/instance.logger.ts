@@ -20,7 +20,10 @@ export class LoggerInstance extends FrontMcpLogger {
   private readonly transports: LogTransportInterface[];
   private readonly consoleTransport?: ConsoleLogTransportInstance;
 
-  constructor(private readonly config: LoggingConfigType, private getTransports: GetTransports) {
+  constructor(
+    private readonly config: LoggingConfigType,
+    private getTransports: GetTransports,
+  ) {
     super();
     this.level = config.level;
     this.prefix = config.prefix ?? '';

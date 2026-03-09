@@ -195,6 +195,23 @@ export interface FrontMcpBaseMetadata {
   sqlite?: SqliteOptionsInput;
 
   /**
+   * UI rendering configuration.
+   * Controls CDN overrides for widget import resolution.
+   *
+   * @example Override @frontmcp/ui to load from local dev server
+   * ```typescript
+   * ui: {
+   *   cdnOverrides: {
+   *     '@frontmcp/ui': 'http://localhost:5173/@frontmcp/ui',
+   *   },
+   * }
+   * ```
+   */
+  ui?: {
+    cdnOverrides?: Record<string, string>;
+  };
+
+  /**
    * Jobs and workflows configuration.
    * Enables the jobs/workflows system for saved, discoverable, triggerable executions.
    *
@@ -241,6 +258,11 @@ export const frontMcpBaseSchema = z.object({
   skillsConfig: skillsConfigOptionsSchema.optional(),
   extApps: extAppsOptionsSchema.optional(),
   sqlite: sqliteOptionsSchema.optional(),
+  ui: z
+    .object({
+      cdnOverrides: z.record(z.string(), z.string()).optional(),
+    })
+    .optional(),
   jobs: z
     .object({
       enabled: z.boolean(),
@@ -266,12 +288,12 @@ const frontMcpMultiAppSchema = frontMcpBaseSchema.extend({
 
 export interface FrontMcpSplitByAppMetadata extends FrontMcpBaseMetadata {
   splitByApp: true;
-  auth?: never;
+  auth?: AuthOptionsInput;
 }
 
 const frontMcpSplitByAppSchema = frontMcpBaseSchema.extend({
   splitByApp: z.literal(true).describe('If false, apps are grouped under the same scope & basePath.'),
-  auth: z.never().optional(),
+  auth: authOptionsSchema.optional().describe("Configures the server's default authentication provider."),
 } satisfies RawZodShape<FrontMcpSplitByAppMetadata, FrontMcpBaseMetadata>);
 
 export type FrontMcpMetadata = FrontMcpMultiAppMetadata | FrontMcpSplitByAppMetadata;
@@ -365,6 +387,49 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
   .or(frontMcpSplitByAppSchema)
   .transform(applyAutoTransportPersistence);
 
+/**
+ * Lite config parser for CLI mode.
+ * Validates only fields needed for tool/resource execution, skipping
+ * transport persistence, HTTP, redis, elicitation, ext-apps, sqlite, UI, jobs.
+ * This reduces cold-start Zod parsing overhead by ~20-40ms.
+ */
+const frontMcpLiteSchema = z.object({
+  info: serverInfoOptionsSchema,
+  providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
+  resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
+  skills: z.array(annotatedFrontMcpSkillsSchema).optional().default([]),
+  plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
+  apps: z.array(annotatedFrontMcpAppSchema),
+  serve: z.boolean().optional().default(false),
+  splitByApp: z.boolean().optional().default(false),
+  auth: authOptionsSchema.optional(),
+  logging: loggingOptionsSchema.optional(),
+  skillsConfig: skillsConfigOptionsSchema.optional(),
+  // Pass through without deep validation — not used in CLI mode
+  http: z.any().optional(),
+  redis: z.any().optional(),
+  pubsub: z.any().optional(),
+  transport: z
+    .any()
+    .optional()
+    .transform((val) => val ?? transportOptionsSchema.parse({})),
+  pagination: z.any().optional(),
+  elicitation: z.any().optional(),
+  extApps: z.any().optional(),
+  sqlite: z.any().optional(),
+  ui: z.any().optional(),
+  jobs: z.any().optional(),
+});
+
+/**
+ * Parse config with minimal validation for CLI mode.
+ * Skips transport auto-persistence and deep validation of unused subsystems.
+ */
+export function parseFrontMcpConfigLite(input: FrontMcpConfigInput): FrontMcpConfigType {
+  return frontMcpLiteSchema.parse(input) as unknown as FrontMcpConfigType;
+}
+
 export type FrontMcpMultiAppConfig = z.infer<typeof frontMcpMultiAppSchema>;
 export type FrontMcpSplitByAppConfig = z.infer<typeof frontMcpSplitByAppSchema>;
 
@@ -374,7 +439,7 @@ export type FrontMcpConfigType = z.infer<typeof frontMcpMetadataSchema>;
 /** Input type for FrontMCP configuration (before zod defaults) */
 export type FrontMcpConfigInput = z.input<typeof frontMcpMetadataSchema>;
 
-export interface AppScopeMetadata extends Omit<FrontMcpSplitByAppMetadata, 'auth' | 'splitByApp'> {
+export interface AppScopeMetadata extends Omit<FrontMcpSplitByAppMetadata, 'splitByApp'> {
   id: string;
   apps: [AppType];
   auth?: AuthOptions;

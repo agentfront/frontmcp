@@ -7,6 +7,8 @@ import CalculatorMcpApp from './apps/calculator';
 import EmployeeTimeMcpApp from './apps/employee-time';
 import CrmMcpApp from './apps/crm';
 
+const defaultIdpProvider = process.env['IDP_PROVIDER_URL'] ?? 'https://sample-app.frontegg.com';
+
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
@@ -23,12 +25,12 @@ import CrmMcpApp from './apps/crm';
   },
   auth: {
     mode: 'transparent',
-    remote: {
-      provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
+    provider: defaultIdpProvider,
+    providerConfig: {
       name: 'frontegg',
       dcrEnabled: false,
     },
-    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://sample-app.frontegg.com',
+    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] ?? defaultIdpProvider,
     requiredScopes: [],
     allowAnonymous: true, // Allow anonymous access for demo
     anonymousScopes: ['anonymous'],

@@ -90,7 +90,7 @@ export const MCP_APPS_EXTENSION_KEY = 'io.modelcontextprotocol/ui' as const;
  * MCP Apps extension capability configuration.
  */
 export interface McpAppsExtension {
-  /** Supported MIME types (e.g., ['text/html+mcp']) */
+  /** Supported MIME types (e.g., ['text/html;profile=mcp-app']) */
   mimeTypes?: string[];
 }
 
@@ -170,7 +170,7 @@ export interface McpTestClientConfig {
    * ```typescript
    * capabilities: {
    *   experimental: {
-   *     'io.modelcontextprotocol/ui': { mimeTypes: ['text/html+mcp'] }
+   *     'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] }
    *   }
    * }
    * ```

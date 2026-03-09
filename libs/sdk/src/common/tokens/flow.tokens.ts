@@ -13,4 +13,3 @@ export const FrontMcpFlowTokens = {
   dependsOn: tokenFactory.meta('dependsOn'),
   middleware: tokenFactory.meta('middleware'),
 } as const satisfies RawMetadataShape<FlowMetadata<never>>;
-

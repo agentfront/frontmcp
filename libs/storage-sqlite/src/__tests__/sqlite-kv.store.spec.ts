@@ -170,6 +170,55 @@ describe('SqliteKvStore', () => {
     });
   });
 
+  describe('constructor error handling', () => {
+    it('should throw descriptive error for invalid db path', () => {
+      expect(() => {
+        new SqliteKvStore({ path: '/nonexistent/dir/bad/test.sqlite', ttlCleanupIntervalMs: 0 });
+      }).toThrow('SqliteKvStore: failed to open database');
+    });
+  });
+
+  describe('TTL edge cases', () => {
+    it('should return -2 for expired key via ttl()', async () => {
+      store.set('will-expire', 'value', 1);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // ttl() should detect expiry, delete the key, and return -2
+      expect(store.ttl('will-expire')).toBe(-2);
+      // Verify key is gone
+      expect(store.has('will-expire')).toBe(false);
+    });
+
+    it('should not list expired keys with has()', async () => {
+      store.set('expiring', 'value', 1);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(store.has('expiring')).toBe(false);
+    });
+  });
+
+  describe('cleanup timer', () => {
+    it('should start cleanup timer when interval is positive', () => {
+      const spy = jest.spyOn(global, 'setInterval');
+      const timerPath = tmpDbPath();
+      const timerStore = new SqliteKvStore({
+        path: timerPath,
+        ttlCleanupIntervalMs: 60000,
+      });
+
+      expect(spy).toHaveBeenCalledWith(expect.any(Function), 60000);
+
+      timerStore.set('key', 'value');
+      expect(timerStore.get('key')).toBe('value');
+
+      timerStore.close();
+      cleanup(timerPath);
+      spy.mockRestore();
+    });
+  });
+
   describe('WAL mode', () => {
     it('should enable WAL mode by default', () => {
       const db = store.getDatabase();

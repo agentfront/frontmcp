@@ -17,7 +17,4 @@ function FrontMcpAuthProvider(providedMetadata: AuthProviderMetadata): ClassDeco
   };
 }
 
-export {
-  FrontMcpAuthProvider,
-  FrontMcpAuthProvider as AuthProvider,
-};
+export { FrontMcpAuthProvider, FrontMcpAuthProvider as AuthProvider };

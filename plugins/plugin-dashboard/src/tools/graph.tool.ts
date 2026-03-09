@@ -1,6 +1,6 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { GraphDataProvider, GraphDataProviderToken } from '../providers';
+import { GraphDataProvider } from '../providers';
 import type { GraphData } from '../shared/types';
 
 /**

@@ -9,7 +9,10 @@ import { FrontMcpProvider, ProviderScope, FrontMcpContext } from '@frontmcp/sdk'
 export default class SessionRedisProvider {
   private readonly prefix: string;
 
-  constructor(private readonly redis: RedisProvider, ctx: FrontMcpContext) {
+  constructor(
+    private readonly redis: RedisProvider,
+    ctx: FrontMcpContext,
+  ) {
     const safeSid = ctx.sessionId.trim().replace(/\s+/g, '_').replace(/:+/g, '_');
     this.prefix = `:session:${safeSid}:`;
   }

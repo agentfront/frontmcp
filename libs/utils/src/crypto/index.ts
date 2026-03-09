@@ -23,11 +23,11 @@ export function getCrypto(): CryptoProvider {
   if (!_provider) {
     if (isNode()) {
       // Node.js: keep crypto module isolated from browser builds
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+
       _provider = require('./node').nodeCrypto as CryptoProvider;
     } else {
       // Browser: noble-based implementation
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+
       _provider = require('./browser').browserCrypto as CryptoProvider;
     }
   }
@@ -36,7 +36,7 @@ export function getCrypto(): CryptoProvider {
 
 export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, signature: Buffer): boolean {
   assertNode('rsaVerify');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   return require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean;
 }
 

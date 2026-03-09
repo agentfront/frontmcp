@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { FrontMcpPromptTokens } from '../tokens';
+import { FrontMcpPromptTokens, extendedPromptMetadata } from '../tokens';
 import { PromptMetadata, frontMcpPromptMetadataSchema } from '../metadata';
 import { GetPromptResult, GetPromptRequest } from '@modelcontextprotocol/sdk/types.js';
 
@@ -12,9 +12,15 @@ function FrontMcpPrompt(providedMetadata: PromptMetadata): ClassDecorator {
 
     Reflect.defineMetadata(FrontMcpPromptTokens.type, true, target);
 
+    const extended: Record<string, unknown> = {};
     for (const property in metadata) {
-      Reflect.defineMetadata(FrontMcpPromptTokens[property] ?? property, metadata[property], target);
+      if (FrontMcpPromptTokens[property]) {
+        Reflect.defineMetadata(FrontMcpPromptTokens[property], metadata[property], target);
+      } else {
+        extended[property] = metadata[property];
+      }
     }
+    Reflect.defineMetadata(extendedPromptMetadata, extended, target);
   };
 }
 

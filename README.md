@@ -14,7 +14,7 @@
 [![License](https://img.shields.io/github/license/agentfront/frontmcp.svg?v=1)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 [![Snyk](https://snyk.io/test/github/agentfront/frontmcp/badge.svg)](https://snyk.io/test/github/agentfront/frontmcp)
 
-[Docs][docs-home] &bull; [Quickstart][docs-quickstart] &bull; [API Reference][docs-sdk-ref] &bull; [Discord](https://discord.gg/frontmcp)
+[Docs][docs-home] &bull; [Quickstart][docs-quickstart] &bull; [API Reference][docs-sdk-ref] &bull; [Discord](https://discord.gg/53AHnJnmwR)
 
 </div>
 

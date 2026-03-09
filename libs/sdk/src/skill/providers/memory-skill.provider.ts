@@ -216,11 +216,17 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     };
 
     // Search using TF-IDF
-    const results = await this.vectorDB.search(query, {
+    let results = await this.vectorDB.search(query, {
       topK,
       threshold: minScore,
       filter,
     });
+
+    // Fallback: if TF-IDF returns nothing (common with single-doc corpus where IDF=0),
+    // do substring match against stored skills
+    if (results.length === 0 && query.trim().length > 0 && this.skills.size > 0) {
+      results = this.fallbackTextSearch(query, topK, filter);
+    }
 
     // Transform and enrich results
     const searchResults: SkillSearchResult[] = [];
@@ -499,6 +505,50 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     }
 
     return parts.join(' ');
+  }
+
+  /**
+   * Fallback text search when TF-IDF produces no results (e.g., single-document corpus).
+   * Performs case-insensitive substring matching on the searchable text.
+   */
+  private fallbackTextSearch(
+    query: string,
+    topK: number,
+    filter: (metadata: SkillDocumentMetadata) => boolean,
+  ): Array<{ id: string; text: string; score: number; metadata: SkillDocumentMetadata }> {
+    const queryTerms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0 && !STOP_WORDS.has(t));
+
+    if (queryTerms.length === 0) {
+      return [];
+    }
+
+    const matches: Array<{ id: string; text: string; score: number; metadata: SkillDocumentMetadata }> = [];
+
+    this.skills.forEach((skill) => {
+      const metadata: SkillDocumentMetadata = { id: skill.id, skillId: skill.id, skill };
+
+      if (!filter(metadata)) {
+        return;
+      }
+
+      const searchableText = this.buildSearchableText(skill);
+      const matchCount = queryTerms.filter((term) => searchableText.toLowerCase().includes(term)).length;
+
+      if (matchCount > 0) {
+        matches.push({
+          id: skill.id,
+          text: searchableText,
+          score: matchCount / queryTerms.length,
+          metadata,
+        });
+      }
+    });
+
+    matches.sort((a, b) => b.score - a.score);
+    return matches.slice(0, topK);
   }
 
   /**

@@ -113,4 +113,9 @@ describe('server generator', () => {
     expect(projectJson.tags).toContain('env:prod');
     expect(projectJson.tags).toContain('tier:1');
   });
+
+  it('should export default', async () => {
+    const mod = await import('./server');
+    expect(mod.default).toBe(serverGenerator);
+  });
 });

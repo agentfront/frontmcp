@@ -105,10 +105,10 @@ Register hooks dynamically.
 registerHooks(embedded: boolean, ...records: HookRecord[]): void
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `embedded` | `boolean` | Whether hooks are class-embedded |
-| `records` | `HookRecord[]` | Hook definitions to register |
+| Parameter  | Type           | Description                      |
+| ---------- | -------------- | -------------------------------- |
+| `embedded` | `boolean`      | Whether hooks are class-embedded |
+| `records`  | `HookRecord[]` | Hook definitions to register     |
 
 **Example:**
 
@@ -157,14 +157,14 @@ interface HookEntry {
 
 Most flows have these stages:
 
-| Stage | Description |
-|-------|-------------|
-| `beforeValidation` | Before input validation |
-| `afterValidation` | After input validation |
-| `beforeExecute` | Before execution |
-| `afterExecute` | After execution |
-| `onError` | On error (for error handling) |
-| `finally` | Always runs (cleanup) |
+| Stage              | Description                   |
+| ------------------ | ----------------------------- |
+| `beforeValidation` | Before input validation       |
+| `afterValidation`  | After input validation        |
+| `beforeExecute`    | Before execution              |
+| `afterExecute`     | After execution               |
+| `onError`          | On error (for error handling) |
+| `finally`          | Always runs (cleanup)         |
 
 ## Priority
 
@@ -198,6 +198,7 @@ class MyTool extends ToolContext {
 ```
 
 Embedded hooks:
+
 - Are scoped to their class
 - Use `getClsHooks()` for lookup
 - Have `embedded: true`
@@ -223,6 +224,7 @@ class AuditPlugin { }
 ```
 
 External hooks:
+
 - Can target any flow
 - Use `getFlowHooks()` for lookup
 - Have `embedded: false`
@@ -249,11 +251,11 @@ interface HookContext {
 
 Unlike other registries, HookRegistry uses specialized indexes:
 
-| Index | Key | Description |
-|-------|-----|-------------|
-| `recordsByCls` | `Token` | Historical records by class |
-| `entriesByCls` | `Token` | Hook instances by class |
-| `hooksByFlow` | `flow` | Hooks indexed by flow |
+| Index              | Key          | Description                   |
+| ------------------ | ------------ | ----------------------------- |
+| `recordsByCls`     | `Token`      | Historical records by class   |
+| `entriesByCls`     | `Token`      | Hook instances by class       |
+| `hooksByFlow`      | `flow`       | Hooks indexed by flow         |
 | `hooksByFlowStage` | `flow:stage` | Hooks indexed by flow + stage |
 
 ## Related
