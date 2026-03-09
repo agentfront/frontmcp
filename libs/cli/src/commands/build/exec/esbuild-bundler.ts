@@ -17,6 +17,15 @@ const DEFAULT_EXTERNALS = [
   '@vercel/kv',
   '@frontmcp/storage-sqlite',
   '@enclave-vm/core',
+  // Externalize FrontMCP packages for single-copy semantics
+  // (required for schema extraction — bundled copies create separate Symbol tokens)
+  '@frontmcp/sdk',
+  '@frontmcp/di',
+  '@frontmcp/utils',
+  '@frontmcp/auth',
+  '@frontmcp/adapters',
+  '@frontmcp/plugins',
+  'reflect-metadata',
 ];
 
 export interface BundleResult {

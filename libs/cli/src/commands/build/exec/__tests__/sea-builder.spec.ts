@@ -25,6 +25,7 @@ let originalPlatform: PropertyDescriptor | undefined;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(console, 'log').mockImplementation();
   mockRunCmd.mockResolvedValue(undefined);
   (mockFs.statSync as jest.Mock).mockReturnValue({ size: 1000000 });
   originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
