@@ -7,8 +7,9 @@
   "targets": {
     "build": {
       "executor": "nx:run-commands",
+      "dependsOn": [{ "projects": ["cli"], "target": "build" }],
       "options": {
-        "command": "node ../../../../node_modules/.bin/frontmcp build --exec --cli",
+        "command": "node ../../../../libs/cli/dist/src/core/cli.js build --exec --cli",
         "cwd": "apps/e2e/demo-e2e-cli-exec/fixture"
       },
       "outputs": ["{projectRoot}/fixture/dist"]

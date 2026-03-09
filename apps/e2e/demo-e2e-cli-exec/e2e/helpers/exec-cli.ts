@@ -35,7 +35,7 @@ export async function ensureBuild(): Promise<string> {
   }
 
   const rootDir = path.resolve(FIXTURE_DIR, '../../../..');
-  const frontmcpBin = path.join(rootDir, 'node_modules', '.bin', 'frontmcp');
+  const frontmcpBin = path.join(rootDir, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 
   console.log('[e2e] Building CLI exec bundle...');
   execFileSync('node', [frontmcpBin, 'build', '--exec', '--cli'], {
