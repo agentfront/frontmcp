@@ -84,6 +84,8 @@ test.describe('Import Resolver E2E', () => {
       expect(result).toBeSuccessful();
       const json = result.json<{ code: string; rewrites: Record<string, string> }>();
       expect(json.rewrites['react']).toBeUndefined();
+      // react import should be preserved in the output
+      expect(json.code).toContain("from 'react'");
       // zod should still be rewritten
       expect(json.code).toContain('esm.sh');
     });

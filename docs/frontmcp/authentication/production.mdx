@@ -295,6 +295,7 @@ export class Server {}
         host: process.env.REDIS_HOST!,
         port: parseInt(process.env.REDIS_PORT || '6379'),
         password: process.env.REDIS_PASSWORD,
+        tls: true,
       },
     }
     ```
@@ -336,7 +337,7 @@ auth: {
   allowDefaultPublic: false,   // No anonymous access
   dcrEnabled: false,           // Disable DCR in production
 
-  // Use orchestrated mode login page or remote IdP
+  // Use local mode login page or remote IdP
   // Never use the demo login page in production
 }
 ```
@@ -391,6 +392,7 @@ location /oauth/token {
           host: process.env.REDIS_HOST!,
           port: parseInt(process.env.REDIS_PORT || '6379'),
           password: process.env.REDIS_PASSWORD,
+          tls: true,
         },
       },
     }

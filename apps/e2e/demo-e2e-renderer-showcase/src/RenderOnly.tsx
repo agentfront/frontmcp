@@ -1,4 +1,3 @@
-import React from 'react';
 import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
 import { ContentView } from '@frontmcp/ui/renderer';
 import { getGroup } from './fixtures';

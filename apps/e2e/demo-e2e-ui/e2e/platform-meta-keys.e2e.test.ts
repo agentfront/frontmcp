@@ -62,6 +62,10 @@ test.describe('Platform Meta Keys E2E', () => {
       expect(result).toNotHaveMetaKey('frontmcp/html');
       expect(result).toNotHaveMetaKey('frontmcp/mimeType');
 
+      // Verify ui/* keys ARE present (positive assertion)
+      expect(result).toHaveMetaKey('ui/html');
+      expect(result).toHaveMetaKey('ui/mimeType');
+
       await client.disconnect();
     });
 
@@ -366,6 +370,20 @@ test.describe('Platform Meta Keys E2E', () => {
         .withTransport('streamable-http')
         .withPlatform('ext-apps')
         .buildAndConnect();
+
+      const result = await client.tools.call('html-card', { title: 'Test', content: 'Content' });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
+
+      await client.disconnect();
+    });
+
+    test('Cursor should use text/html;profile=mcp-app', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'cursor', version: '1.0.0' },
+      });
 
       const result = await client.tools.call('html-card', { title: 'Test', content: 'Content' });
 

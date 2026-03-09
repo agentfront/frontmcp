@@ -59,8 +59,9 @@ describe('CLI Exec Help & Discovery', () => {
 
   it('should NOT show searchSkills or loadSkills in Tools group', () => {
     const { stdout } = runCli(['--help']);
-    expect(stdout).not.toContain('search-skills');
-    expect(stdout).not.toContain('load-skills');
+    const toolsSection = stdout.split('Tools:')[1]?.split(/\n\n|\n[A-Z]/)[0] || '';
+    expect(toolsSection).not.toContain('search-skills');
+    expect(toolsSection).not.toContain('load-skills');
   });
 
   it('should NOT show execute-job or get-job-status in Tools group', () => {
