@@ -2,10 +2,7 @@
  * OpenAPI Adapter validation tests
  */
 
-import {
-  validateSecurityConfiguration,
-  extractSecuritySchemes,
-} from '../openapi.security';
+import { validateSecurityConfiguration, extractSecuritySchemes } from '../openapi.security';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 
 describe('OpenapiAdapter - Validation', () => {

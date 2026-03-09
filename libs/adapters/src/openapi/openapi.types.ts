@@ -1,6 +1,7 @@
 import { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
 import type { LoadOptions, GenerateOptions, McpOpenAPITool, SecurityContext, ToolMetadata } from 'mcp-from-openapi';
 import type { FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig, FrontMcpContext } from '@frontmcp/sdk';
+import type { SpecPollerOptions } from './openapi-spec-poller.types';
 
 // ============================================================================
 // Input Transform Types
@@ -598,12 +599,6 @@ export interface DataTransformOptions {
   };
 }
 
-/**
- * @deprecated Use `DataTransformOptions` instead.
- * Kept for backward compatibility.
- */
-export type OutputTransformOptions = DataTransformOptions;
-
 // ============================================================================
 // Extended Metadata Types (internal)
 // ============================================================================
@@ -945,12 +940,6 @@ interface BaseOptions {
   dataTransforms?: DataTransformOptions;
 
   /**
-   * @deprecated Use `dataTransforms` instead.
-   * Kept for backward compatibility.
-   */
-  outputTransforms?: OutputTransformOptions;
-
-  /**
    * Logger instance for adapter diagnostics.
    * Optional - if not provided, the SDK will inject it automatically via setLogger().
    */
@@ -978,6 +967,29 @@ interface BaseOptions {
    * @default 10485760 (10MB)
    */
   maxResponseSize?: number;
+
+  /**
+   * Polling configuration for auto-updating tools when the OpenAPI spec changes.
+   * Only applicable when using `url` option (not `spec`).
+   *
+   * When enabled, the adapter will poll the OpenAPI spec URL at the specified interval,
+   * detect changes via content-hash or ETag, and automatically rebuild tools.
+   *
+   * @example
+   * ```typescript
+   * new OpenapiAdapter({
+   *   name: 'my-api',
+   *   url: 'https://api.example.com/openapi.json',
+   *   baseUrl: 'https://api.example.com',
+   *   polling: {
+   *     enabled: true,
+   *     intervalMs: 60000,       // Poll every minute
+   *     unhealthyThreshold: 5,   // Mark unhealthy after 5 failures
+   *   },
+   * });
+   * ```
+   */
+  polling?: SpecPollerOptions & { enabled: boolean };
 }
 
 interface SpecOptions extends BaseOptions {

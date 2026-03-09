@@ -6,6 +6,7 @@ import OpenapiAdapter from '../openapi.adapter';
 import { basicOpenApiSpec } from './fixtures';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 import { FrontMcpToolTokens } from '@frontmcp/sdk';
+import type { JsonSchemaType, SchemaTransformFn } from '../openapi.types';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({
@@ -196,14 +197,14 @@ describe('OpenapiAdapter - Schema Transform Branch Coverage', () => {
       schemaTransforms: {
         input: {
           perTool: {
-            get_users: (schema) => {
+            get_users: ((schema: JsonSchemaType, _ctx) => {
               // Remove secret from input schema
               if (schema.type === 'object' && schema.properties) {
                 const { secret, ...rest } = schema.properties as Record<string, unknown>;
                 return { ...schema, properties: rest };
               }
               return schema;
-            },
+            }) satisfies SchemaTransformFn<JsonSchemaType>,
           },
         },
       },
@@ -249,14 +250,14 @@ describe('OpenapiAdapter - Schema Transform Branch Coverage', () => {
       schemaTransforms: {
         output: {
           perTool: {
-            get_users: (schema) => {
+            get_users: ((schema: JsonSchemaType | undefined, _ctx) => {
               // Remove internal from output schema
               if (schema?.type === 'object' && schema.properties) {
                 const { internal, ...rest } = schema.properties as Record<string, unknown>;
                 return { ...schema, properties: rest };
               }
               return schema;
-            },
+            }) satisfies SchemaTransformFn<JsonSchemaType | undefined>,
           },
         },
       },
@@ -632,7 +633,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           global: {
             transform: globalTransform,
@@ -680,7 +681,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           global: {
             transform: globalTransform,
@@ -725,7 +726,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           perTool: {
             get_users: {
@@ -768,7 +769,7 @@ describe('OpenapiAdapter - Post Tool Transform Branch Coverage', () => {
       baseUrl: 'https://api.example.com',
       spec: basicOpenApiSpec,
       logger: mockLogger,
-      outputTransforms: {
+      dataTransforms: {
         postToolTransforms: {
           generator: () => ({
             transform: generatedTransform,

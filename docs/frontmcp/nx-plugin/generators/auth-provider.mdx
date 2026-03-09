@@ -15,12 +15,12 @@ nx g @frontmcp/nx:auth-provider openai --project crm --type api-key
 
 ## Options
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `name` | `string` | — | **Required.** The name of the auth provider |
-| `project` | `string` | — | **Required.** The project to add the auth provider to |
-| `type` | `oauth` \| `api-key` \| `bearer` \| `basic` \| `custom` | `bearer` | The authentication type |
-| `directory` | `string` | — | Subdirectory within `src/auth/` |
+| Option      | Type                                                    | Default  | Description                                           |
+| ----------- | ------------------------------------------------------- | -------- | ----------------------------------------------------- |
+| `name`      | `string`                                                | —        | **Required.** The name of the auth provider           |
+| `project`   | `string`                                                | —        | **Required.** The project to add the auth provider to |
+| `type`      | `oauth` \| `api-key` \| `bearer` \| `basic` \| `custom` | `bearer` | The authentication type                               |
+| `directory` | `string`                                                | —        | Subdirectory within `src/auth/`                       |
 
 ## Generated Code by Type
 
@@ -74,6 +74,7 @@ nx g @frontmcp/nx:auth-provider openai --project crm --type api-key
       }
     }
     ```
+
   </Tab>
   <Tab title="Custom">
     ```ts
