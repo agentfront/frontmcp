@@ -245,7 +245,7 @@ type __StructuredOutputType =
   | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
   | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
-  | z.ZodDiscriminatedUnion<z.ZodObject<any>[]>;
+  | z.ZodDiscriminatedUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>;
 
 type __AgentSingleOutputType = __PrimitiveOutputType | __StructuredOutputType;
 type __OutputSchema = __AgentSingleOutputType | __AgentSingleOutputType[];
