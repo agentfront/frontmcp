@@ -45,7 +45,7 @@ const JSX_PATTERNS = [
   // Arrow function components: const Foo = () =>
   /(?:const|let|var|function)\s+[A-Z][a-zA-Z0-9]*\s*(?:=\s*(?:\([^)]*\)|[a-zA-Z_$][\w$]*)\s*=>|\()/,
   // Import from react
-  /import\s+.*from\s+['"]react['"]/,
+  /import\s[^\n]+from\s+['"]react['"]/,
   // JSX pragma or import
   /\/\*\*?\s*@jsx\b/,
   // export default function/const (component pattern)
@@ -61,7 +61,7 @@ const MDX_PATTERNS = [
   // Markdown headings
   /^#{1,6}\s+\S/m,
   // MDX import statements followed by markdown
-  /^import\s+.*\n+#/m,
+  /^import\s[^\n]*\n+#/m,
   // MDX export default (layout pattern)
   /^export\s+default\s+/m,
   // Markdown bullet lists
@@ -71,13 +71,13 @@ const MDX_PATTERNS = [
   // Markdown code blocks
   /^```\w*/m,
   // Markdown emphasis
-  /(?:\*\*|__).+?(?:\*\*|__)/,
+  /(?:\*\*|__)(?:(?!\*\*|__).)+(?:\*\*|__)/,
 ];
 
 /**
  * Patterns that indicate chart JSON content.
  */
-const CHART_PATTERN = /^\s*\{[\s\S]*"type"\s*:\s*"(?:bar|line|area|pie|scatter|radar|composed)"[\s\S]*"data"\s*:/;
+const CHART_TYPE_RE = /"type"\s*:\s*"(?:bar|line|area|pie|scatter|radar|composed)"/;
 
 /**
  * Patterns that indicate mermaid diagram content.
@@ -88,44 +88,54 @@ const MERMAID_PATTERN =
 /**
  * Patterns that indicate ReactFlow JSON content.
  */
-const FLOW_PATTERN = /^\s*\{[\s\S]*"nodes"\s*:\s*\[[\s\S]*"edges"\s*:\s*\[/;
+function looksLikeChart(s: string): boolean {
+  return s.charCodeAt(0) === 0x7b && CHART_TYPE_RE.test(s) && s.includes('"data"');
+}
+
+function looksLikeFlow(s: string): boolean {
+  return s.charCodeAt(0) === 0x7b && s.includes('"nodes"') && s.includes('"edges"');
+}
 
 /**
  * Patterns that indicate math/LaTeX content.
  */
 const MATH_PATTERNS = [
-  /\$\$.+?\$\$/s,
+  /\$\$(?:[^$]|\$(?!\$))+\$\$/s,
   /\$[^$\n]+?\$/,
-  /\\\[[\s\S]+?\\\]/,
-  /\\\([\s\S]+?\\\)/,
+  /\\\[(?:[^\\]|\\.)+\\\]/,
+  /\\\((?:[^\\]|\\.)+\\\)/,
   /\\begin\{(?:equation|align|gather|matrix|pmatrix|bmatrix|cases)\}/,
 ];
 
 /**
  * Patterns that indicate GeoJSON / map content.
  */
-const MAP_PATTERN =
-  /^\s*\{[\s\S]*"type"\s*:\s*"(?:FeatureCollection|Feature|Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)"/;
+const GEOJSON_TYPE_RE =
+  /"type"\s*:\s*"(?:FeatureCollection|Feature|Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)"/;
+
+function looksLikeMap(s: string): boolean {
+  return s.charCodeAt(0) === 0x7b && GEOJSON_TYPE_RE.test(s);
+}
 
 /**
  * Image URL / data URI patterns.
  */
 const IMAGE_PATTERNS = [
   /^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml)[;,]/,
-  /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|avif|ico)(?:\?.*)?$/i,
+  /^https?:\/\/[^?#\s]+\.(?:png|jpe?g|gif|webp|svg|avif|ico)(?:\?[^#\s]*)?$/i,
 ];
 
 /**
  * Media URL patterns (video/audio).
  */
 const VIDEO_PATTERNS = [
-  /^https?:\/\/.+\.(?:mp4|webm|ogg|mov)(?:\?.*)?$/i,
+  /^https?:\/\/[^?#\s]+\.(?:mp4|webm|ogg|mov)(?:\?[^#\s]*)?$/i,
   /^https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|vimeo\.com)\//i,
   /^data:video\//,
 ];
 
 const AUDIO_PATTERNS = [
-  /^https?:\/\/.+\.(?:mp3|wav|ogg|aac|flac|m4a)(?:\?.*)?$/i,
+  /^https?:\/\/[^?#\s]+\.(?:mp3|wav|ogg|aac|flac|m4a)(?:\?[^#\s]*)?$/i,
   /^https?:\/\/(?:www\.)?soundcloud\.com\//i,
   /^data:audio\//,
 ];
@@ -170,9 +180,9 @@ export function detectContentType(content: string): RuntimeContentType {
   const trimmed = content.trim();
 
   // Structured JSON types (check before text-based)
-  if (CHART_PATTERN.test(trimmed)) return 'chart';
-  if (FLOW_PATTERN.test(trimmed)) return 'flow';
-  if (MAP_PATTERN.test(trimmed)) return 'map';
+  if (looksLikeChart(trimmed)) return 'chart';
+  if (looksLikeFlow(trimmed)) return 'flow';
+  if (looksLikeMap(trimmed)) return 'map';
 
   // Diagram / math syntax
   if (MERMAID_PATTERN.test(trimmed)) return 'mermaid';

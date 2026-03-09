@@ -50,10 +50,10 @@ export interface FlowConfig {
 // Detection
 // ============================================
 
-const FLOW_PATTERN = /^\s*\{[\s\S]*"nodes"\s*:\s*\[[\s\S]*"edges"\s*:\s*\[/;
-
 export function isFlow(content: string): boolean {
-  return FLOW_PATTERN.test(content.trim());
+  const trimmed = content.trim();
+  if (trimmed.charCodeAt(0) !== 0x7b) return false; // '{'
+  return trimmed.includes('"nodes"') && trimmed.includes('"edges"');
 }
 
 // ============================================

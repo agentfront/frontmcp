@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import Alert from '@mui/material/Alert';
@@ -11,7 +11,7 @@ import type { ContentRenderer, RenderOptions } from '../types';
 // ============================================
 
 const IMAGE_DATA_URI = /^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml|avif)[;,]/;
-const IMAGE_URL = /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|avif|ico)(?:\?.*)?$/i;
+const IMAGE_URL = /^https?:\/\/[^?#\s]+\.(?:png|jpe?g|gif|webp|svg|avif|ico)(?:\?[^#\s]*)?$/i;
 const IMAGE_SERVICE_URL =
   /^https?:\/\/(?:picsum\.photos|images\.unsplash\.com|i\.imgur\.com|placekitten\.com|via\.placeholder\.com)\//i;
 
@@ -98,6 +98,12 @@ function ImageView({ src, alt, caption, className }: ImageViewProps): React.Reac
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+    setLightboxOpen(false);
+  }, [src]);
 
   const handleLoad = useCallback(() => setLoaded(true), []);
   const handleError = useCallback(() => {

@@ -18,10 +18,10 @@ const KATEX_CSS_ID = 'fmcp-katex-css';
 // Detection
 // ============================================
 
-const MATH_DISPLAY = /\$\$.+?\$\$/s;
+const MATH_DISPLAY = /\$\$(?:[^$]|\$(?!\$))+\$\$/s;
 const MATH_INLINE = /\$[^$\n]+?\$/;
-const MATH_BRACKET_DISPLAY = /\\\[[\s\S]+?\\\]/;
-const MATH_PAREN_INLINE = /\\\([\s\S]+?\\\)/;
+const MATH_BRACKET_DISPLAY = /\\\[(?:[^\\]|\\.)+\\\]/;
+const MATH_PAREN_INLINE = /\\\((?:[^\\]|\\.)+\\\)/;
 const MATH_BEGIN = /\\begin\{(?:equation|align|gather|matrix|pmatrix|bmatrix|cases)\}/;
 
 export function isMath(content: string): boolean {
@@ -95,7 +95,7 @@ function parseMathContent(source: string): MathSegment[] {
   const segments: MathSegment[] = [];
   // Combined regex for all math delimiters
   const mathRegex =
-    /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\\begin\{[\s\S]+?\\end\{[^}]+\})/g;
+    /(\$\$(?:[^$]|\$(?!\$))+\$\$|\$[^$\n]+?\$|\\\[(?:[^\\]|\\.)+\\\]|\\\((?:[^\\]|\\.)+\\\)|\\begin\{(?:[^\\]|\\.)+\\end\{[^}]+\})/g;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;

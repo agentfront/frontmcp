@@ -41,12 +41,12 @@ export interface MapConfig {
 // Detection
 // ============================================
 
-const GEOJSON_PATTERN =
-  /^\s*\{[\s\S]*"type"\s*:\s*"(?:FeatureCollection|Feature|Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)"/;
+const GEOJSON_TYPE_RE =
+  /"type"\s*:\s*"(?:FeatureCollection|Feature|Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)"/;
 
 export function isMap(content: string): boolean {
   const trimmed = content.trim();
-  if (GEOJSON_PATTERN.test(trimmed)) return true;
+  if (trimmed.charCodeAt(0) === 0x7b && GEOJSON_TYPE_RE.test(trimmed)) return true;
 
   // Also detect map config JSON with center/markers
   try {

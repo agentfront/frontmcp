@@ -3,6 +3,7 @@ export {
   detectContentType,
   renderContent,
   registerRenderer,
+  clearRegistry,
   getRenderer,
   getRegisteredRenderers,
   ContentView,
