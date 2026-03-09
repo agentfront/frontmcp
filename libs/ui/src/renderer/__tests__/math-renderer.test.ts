@@ -76,6 +76,24 @@ describe('MathRenderer', () => {
     });
   });
 
+  describe('ReDoS resistance', () => {
+    it('should handle adversarial bracket input without catastrophic backtracking', () => {
+      const adversarial = '\\[' + 'a'.repeat(50000);
+      const start = Date.now();
+      isMath(adversarial);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it('should handle adversarial paren input without catastrophic backtracking', () => {
+      const adversarial = '\\(' + 'a'.repeat(50000);
+      const start = Date.now();
+      isMath(adversarial);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(1000);
+    });
+  });
+
   describe('metadata', () => {
     it('should have type "math"', () => {
       expect(renderer.type).toBe('math');

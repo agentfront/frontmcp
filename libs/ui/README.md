@@ -258,8 +258,8 @@ Each renderer implements the `ContentRenderer` interface:
 interface ContentRenderer {
   type: string; // e.g. 'chart', 'csv', 'pdf'
   priority: number; // Higher wins when multiple match
-  canRender(data): boolean;
-  render(data, options): ReactElement;
+  canHandle(content: string): boolean;
+  render(content: string, options?: RenderOptions): ReactElement;
 }
 ```
 
@@ -288,7 +288,7 @@ nx lint ui
 ## Requirements
 
 - Node.js >= 22.0.0
-- React >= 19.0.0
+- React ^18.0.0 || ^19.0.0
 - MUI >= 7.0.0
 
 ## Related Packages

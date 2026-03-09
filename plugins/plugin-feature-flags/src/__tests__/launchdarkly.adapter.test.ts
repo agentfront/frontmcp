@@ -31,7 +31,8 @@ describe('LaunchDarklyFeatureFlagAdapter', () => {
   });
 
   async function createAdapter(sdkKey = 'sdk-test') {
-    const { LaunchDarklyFeatureFlagAdapter } = require('../adapters/launchdarkly.adapter');
+    const { LaunchDarklyFeatureFlagAdapter } =
+      require('../adapters/launchdarkly.adapter') as typeof import('../adapters/launchdarkly.adapter');
     return new LaunchDarklyFeatureFlagAdapter({ sdkKey });
   }
 
@@ -45,7 +46,7 @@ describe('LaunchDarklyFeatureFlagAdapter', () => {
     });
 
     it('should throw if module not found', async () => {
-      jest.mock(
+      jest.doMock(
         '@launchdarkly/node-server-sdk',
         () => {
           throw new Error('Cannot find module');

@@ -20,7 +20,8 @@ describe('CLI Exec Help & Discovery', () => {
   });
 
   it('should list tool subcommands in help', () => {
-    const { stdout } = runCli(['--help']);
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
     expect(stdout).toContain('add');
     expect(stdout).toContain('greet');
     expect(stdout).toContain('transform-data');
@@ -32,39 +33,46 @@ describe('CLI Exec Help & Discovery', () => {
   });
 
   it('should list resource, template, and prompt commands in help', () => {
-    const { stdout } = runCli(['--help']);
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
     expect(stdout).toContain('resource');
     expect(stdout).toContain('template');
     expect(stdout).toContain('prompt');
   });
 
   it('should show Skills group in help (fixture has skills)', () => {
-    const { stdout } = runCli(['--help']);
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
     expect(stdout).toContain('Skills:');
     expect(stdout).toContain('skills');
   });
 
   it('should show Jobs group in help (fixture has jobs)', () => {
-    const { stdout } = runCli(['--help']);
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
     expect(stdout).toContain('Jobs:');
     expect(stdout).toContain('job');
   });
 
   it('should NOT show Auth group in help (fixture has auth mode public)', () => {
-    const { stdout } = runCli(['--help']);
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
     expect(stdout).not.toContain('Auth:');
     expect(stdout).not.toMatch(/\blogin\b/);
     expect(stdout).not.toMatch(/\blogout\b/);
   });
 
   it('should NOT show searchSkills or loadSkills in Tools group', () => {
-    const { stdout } = runCli(['--help']);
-    expect(stdout).not.toContain('search-skills');
-    expect(stdout).not.toContain('load-skills');
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
+    const toolsSection = stdout.split('Tools:')[1]?.split(/\n\n|\n[A-Z]/)[0] || '';
+    expect(toolsSection).not.toContain('search-skills');
+    expect(toolsSection).not.toContain('load-skills');
   });
 
   it('should NOT show execute-job or get-job-status in Tools group', () => {
-    const { stdout } = runCli(['--help']);
+    const { stdout, exitCode } = runCli(['--help']);
+    expect(exitCode).toBe(0);
     // These system tools should be filtered out of the Tools group
     const toolsSection = stdout.split('Tools:')[1]?.split(/\n\n|\n[A-Z]/)[0] || '';
     expect(toolsSection).not.toContain('execute-job');

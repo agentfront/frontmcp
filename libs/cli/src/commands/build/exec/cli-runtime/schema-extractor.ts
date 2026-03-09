@@ -77,12 +77,25 @@ export const SYSTEM_TOOL_NAMES = new Set([
  * or a config object usable by connect().
  */
 export async function extractSchemas(bundlePath: string): Promise<ExtractedSchema> {
-  // Lazy-load the server bundle
-  const mod = require(bundlePath);
+  // Suppress @FrontMcp() decorator bootstrap — we only need metadata, not a running server
+  const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
+  process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+
+  let mod: Record<string, unknown>;
+  try {
+    mod = require(bundlePath);
+  } finally {
+    if (prev === undefined) {
+      delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
+    } else {
+      process.env['FRONTMCP_SCHEMA_EXTRACT'] = prev;
+    }
+  }
+
   const configOrClass = mod.default || mod;
 
   // Use @frontmcp/sdk connect() to boot in-memory client
-  let connect: (config: unknown) => Promise<unknown>;
+  let connect: (config: unknown, options?: { mode?: string }) => Promise<unknown>;
   try {
     const sdk = require('@frontmcp/sdk');
     connect = sdk.connect || sdk.direct?.connect;
@@ -95,7 +108,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     );
   }
 
-  const client = await connect(configOrClass) as {
+  const client = await connect(configOrClass, { mode: 'cli' }) as {
     listTools(): Promise<unknown>;
     listResources(): Promise<{ resources: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> }>;
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;

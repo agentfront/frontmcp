@@ -39,7 +39,7 @@ test.describe('Feature Flags E2E', () => {
       const tools = await mcp.tools.list();
 
       // experimental-agent flag is disabled → tool should NOT be visible
-      const toolNames = tools.map((t: any) => t.name);
+      const toolNames = tools.map((t) => t.name);
       expect(toolNames).not.toContain('experimental-agent');
     });
 
@@ -61,7 +61,7 @@ test.describe('Feature Flags E2E', () => {
       // but defaultValue controls the fallback behavior
       // Note: The static adapter returns false for unknown flags,
       // so this tool should be hidden (defaultValue only applies in accessor, not adapter)
-      const toolNames = tools.map((t: any) => t.name);
+      const toolNames = tools.map((t) => t.name);
       // The list hook uses adapter.evaluateFlags which returns false for unknown flags
       // Then falls back to ref.defaultValue which is true
       expect(toolNames).toContain('default-true');
@@ -170,7 +170,7 @@ test.describe('Feature Flags E2E', () => {
       const prompts = await mcp.prompts.list();
 
       // flag-for-prompt is disabled → prompt should NOT be visible
-      const promptNames = prompts.map((p: any) => p.name);
+      const promptNames = prompts.map((p) => p.name);
       expect(promptNames).not.toContain('flag-report');
     });
   });
@@ -183,7 +183,7 @@ test.describe('Feature Flags E2E', () => {
     test('should correctly filter all capability types in a single session', async ({ mcp }) => {
       // Tools
       const tools = await mcp.tools.list();
-      const toolNames = tools.map((t: any) => t.name);
+      const toolNames = tools.map((t) => t.name);
 
       // Enabled flags → visible
       expect(toolNames).toContain('beta-search');
@@ -200,7 +200,7 @@ test.describe('Feature Flags E2E', () => {
 
       // Prompts
       const prompts = await mcp.prompts.list();
-      const promptNames = prompts.map((p: any) => p.name);
+      const promptNames = prompts.map((p) => p.name);
       expect(promptNames).not.toContain('flag-report');
     });
   });

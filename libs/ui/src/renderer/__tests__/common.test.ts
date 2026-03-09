@@ -115,8 +115,10 @@ describe('injectStylesheet', () => {
     const origDoc = (globalThis as Record<string, unknown>).document;
     delete (globalThis as Record<string, unknown>).document;
 
-    expect(() => injectStylesheet('https://example.com/styles.css', 'test-css')).not.toThrow();
-
-    (globalThis as Record<string, unknown>).document = origDoc;
+    try {
+      expect(() => injectStylesheet('https://example.com/styles.css', 'test-css')).not.toThrow();
+    } finally {
+      (globalThis as Record<string, unknown>).document = origDoc;
+    }
   });
 });

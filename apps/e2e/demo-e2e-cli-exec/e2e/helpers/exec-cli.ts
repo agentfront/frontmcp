@@ -1,6 +1,5 @@
 import { execFileSync, spawn } from 'child_process';
 import * as path from 'path';
-import * as fs from 'fs';
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../fixture');
 const DIST_DIR = path.join(FIXTURE_DIR, 'dist');
@@ -29,13 +28,8 @@ export function getManifestPath(): string {
 export async function ensureBuild(): Promise<string> {
   if (buildDone) return DIST_DIR;
 
-  if (fs.existsSync(CLI_BUNDLE) && fs.existsSync(SERVER_BUNDLE) && fs.existsSync(MANIFEST)) {
-    buildDone = true;
-    return DIST_DIR;
-  }
-
   const rootDir = path.resolve(FIXTURE_DIR, '../../../..');
-  const frontmcpBin = path.join(rootDir, 'node_modules', '.bin', 'frontmcp');
+  const frontmcpBin = path.join(rootDir, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 
   console.log('[e2e] Building CLI exec bundle...');
   execFileSync('node', [frontmcpBin, 'build', '--exec', '--cli'], {
@@ -95,6 +89,11 @@ export function spawnCli(args: string[], timeoutMs = 3000, extraEnv?: Record<str
     const timer = setTimeout(() => {
       child.kill('SIGINT');
     }, timeoutMs);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr: stderr + err.message, exitCode: 1 });
+    });
 
     child.on('close', (code) => {
       clearTimeout(timer);

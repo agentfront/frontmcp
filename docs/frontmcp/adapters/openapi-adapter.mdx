@@ -819,7 +819,7 @@ OpenapiAdapter.init({
 });
 ```
 
-When a spec change is detected (via SHA-256 content hash), the adapter:
+When a spec change is detected (via content hash, ETag, or auto strategy), the adapter:
 
 1. Resets its internal generator
 2. Calls `fetch()` to regenerate all tools
@@ -828,6 +828,13 @@ When a spec change is detected (via SHA-256 content hash), the adapter:
 Subscribe to updates for logging, metrics, or downstream notifications:
 
 ```ts
+const adapter = OpenapiAdapter.init({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  polling: { enabled: true, intervalMs: 60000 },
+});
+
 adapter.onUpdate((response) => {
   console.log(`Tools rebuilt: ${response.tools?.length} tools`);
 });

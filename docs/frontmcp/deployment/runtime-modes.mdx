@@ -355,7 +355,7 @@ Serverless environments require distributed storage. In-memory storage does not 
 | **Network**     | In-process      | HTTP              | HTTP (stateless)     |
 | **Use Case**    | Embedded agents | Standalone server | Serverless platforms |
 | **Session**     | In-memory       | Configurable      | Distributed required |
-| **Entry Point** | `connect()`     | `@FrontMcp`       | `createHandler()`    |
+| **Entry Point** | `connect()`, `connectOpenAI()`, etc. | `@FrontMcp` with `http.port` | `createHandler()` or `FRONTMCP_SERVERLESS=1` |
 | **Scaling**     | Single process  | Horizontal        | Auto-scaling         |
 | **Auth**        | Token injection | OAuth/JWT         | OAuth/JWT            |
 | **Cold Start**  | None            | None              | Platform-dependent   |

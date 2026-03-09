@@ -98,6 +98,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     // Build --exec flag
     else if (a === '--exec') out.exec = true;
     else if (a === '--cli') out.cli = true;
+    else if (a === '--sea') out.sea = true;
     // Process Manager flags
     else if (a === '--port' || a === '-p') {
       const parsed = parseInt(argv[++i], 10);

@@ -69,6 +69,8 @@ test.describe('OpenAI Resource Flow E2E', () => {
       expect(hybridTool).toBeDefined();
       const uiMeta = hybridTool?._meta?.['ui'] as Record<string, unknown> | undefined;
       expect(uiMeta).toBeDefined();
+      expect(uiMeta?.resourceUri).toBeDefined();
+      expect(typeof uiMeta?.resourceUri).toBe('string');
 
       await client.disconnect();
     });

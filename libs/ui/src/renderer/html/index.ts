@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import { styled } from '@mui/material/styles';
 import { runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
@@ -50,10 +50,20 @@ function loadDOMPurify(): Promise<DOMPurifyModule> {
   return purifyPromise;
 }
 
+/** @internal Exported for testing */
+export function escapeHtml(html: string): string {
+  return html
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function sanitizeSync(html: string): string {
-  if (!purifyModule) return html;
+  if (!purifyModule) return escapeHtml(html);
   const sanitize = purifyModule.default?.sanitize ?? purifyModule.sanitize;
-  return sanitize ? sanitize(html) : html;
+  return sanitize ? sanitize(html) : escapeHtml(html);
 }
 
 // Eagerly attempt to load DOMPurify so it's available for synchronous render
@@ -69,7 +79,17 @@ interface HtmlViewProps {
 }
 
 function HtmlView({ html, className }: HtmlViewProps): React.ReactElement {
-  const sanitized = useMemo(() => sanitizeSync(html), [html]);
+  const [purifyReady, setPurifyReady] = useState(!!purifyModule);
+
+  useEffect(() => {
+    if (!purifyModule) {
+      loadDOMPurify().then((mod) => {
+        if (mod) setPurifyReady(true);
+      });
+    }
+  }, []);
+
+  const sanitized = useMemo(() => sanitizeSync(html), [html, purifyReady]);
 
   return React.createElement(HtmlRoot, {
     className,

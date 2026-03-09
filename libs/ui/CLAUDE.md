@@ -54,7 +54,7 @@ import { FrontMcpBridge, createBridge } from '@frontmcp/ui/bridge';
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "@mui/material": "^6.0.0",
+    "@mui/material": "^7.0.0",
     "@emotion/react": "^11.0.0",
     "@emotion/styled": "^11.0.0"
   }

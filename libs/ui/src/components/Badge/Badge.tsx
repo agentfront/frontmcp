@@ -30,21 +30,34 @@ function mapColor(variant: BadgeVariant): ChipProps['color'] {
   }
 }
 
+const DotIndicator = React.createElement('span', {
+  style: {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    backgroundColor: 'currentColor',
+    display: 'inline-block',
+  },
+});
+
 export function Badge({
   variant = 'default',
   label,
+  dot = false,
   removable = false,
   onRemove,
   size = 'small',
   icon,
 }: BadgeProps): React.ReactElement {
+  const avatarProp = dot && !icon ? { avatar: DotIndicator } : {};
   return (
     <Chip
       label={label}
       color={mapColor(variant)}
       size={size}
       icon={icon}
-      onDelete={removable ? (onRemove ?? (() => {})) : undefined}
+      {...avatarProp}
+      onDelete={removable && onRemove ? onRemove : undefined}
       variant="filled"
     />
   );

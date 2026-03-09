@@ -13,6 +13,7 @@ export class Scope extends ScopeEntry {
   readonly entryPath: string;
   readonly routeBase: string;
   readonly ready: Promise<void>;
+  readonly metadata: ScopeMetadata;
 }
 ```
 
@@ -26,6 +27,19 @@ export class Scope extends ScopeEntry {
 | `routeBase` | `string`         | Route prefix            |
 | `ready`     | `Promise<void>`  | Initialization promise  |
 | `metadata`  | `ScopeMetadata`  | Configuration metadata  |
+
+### ScopeMetadata
+
+`ScopeMetadata` is a union type:
+
+```typescript
+type ScopeMetadata = AppScopeMetadata | MultiAppScopeMetadata;
+```
+
+- **`AppScopeMetadata`** — Used for single-app scopes (created when `splitByApp` splits each app into its own scope). Contains a single `apps: [AppType]` entry plus the parent server config (info, auth, etc.).
+- **`MultiAppScopeMetadata`** — Used for multi-app scopes (the default). Contains `apps: AppType[]` with all registered apps.
+
+Both include an `id` field (unique scope identifier) and the full server configuration from `@FrontMcp()`. Defined in `libs/sdk/src/common/metadata/front-mcp.metadata.ts`.
 
 ## Registry Accessors
 

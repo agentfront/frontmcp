@@ -15,7 +15,12 @@ import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../scope';
 import { AppEntry } from '../common';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
-import { NameDisambiguationError, EntryValidationError } from '../errors';
+import {
+  NameDisambiguationError,
+  EntryValidationError,
+  RegistryDefinitionNotFoundError,
+  RegistryGraphEntryNotFoundError,
+} from '../errors';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -79,13 +84,16 @@ export default class ToolRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
       const deps = toolDiscoveryDeps(rec);
 
       for (const d of deps) {
         // Validate against hierarchical providers; throws early if missing
         this.providers.get(d);
-        this.graph.get(token)!.add(d);
+        const tokenDeps = this.graph.get(token);
+        if (!tokenDeps) throw new RegistryGraphEntryNotFoundError('ToolRegistry', String(token));
+        tokenDeps.add(d);
       }
     }
   }
@@ -95,7 +103,8 @@ export default class ToolRegistry
   protected override async initialize(): Promise<void> {
     // Instantiate each local tool once and store in this.instances (from RegistryAbstract)
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
 
       // Single, authoritative instance per local tool
       const ti = new ToolInstance(rec, this.providers, this.owner);
@@ -520,9 +529,10 @@ export default class ToolRegistry
    * Used by adapter polling to hot-swap tools when specs change.
    */
   replaceAll(list: ToolType[], owner: EntryOwnerRef): void {
-    // Clear local rows and instances
+    // Clear local rows, instances, and remote app tool tracking
     this.localRows = [];
     this.instances.clear();
+    this.remoteAppTools.clear();
 
     // Clear internal maps from base class
     this.tokens.clear();
@@ -544,7 +554,8 @@ export default class ToolRegistry
 
     // Recreate instances and local rows
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
       const ti = new ToolInstance(rec, this.providers, owner);
       this.instances.set(token as Token<ToolInstance>, ti);
 

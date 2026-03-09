@@ -5,6 +5,7 @@
 import {
   detectContentType,
   registerRenderer,
+  clearRegistry,
   renderContent,
   getRenderer,
   getRegisteredRenderers,
@@ -147,5 +148,24 @@ describe('Renderer Registry', () => {
     const result = renderContent('TEST: hello');
     expect(result).toBeTruthy();
     expect(result.props.children).toBe('TEST: hello');
+  });
+
+  it('should replace existing renderer with same type on re-register', () => {
+    const countBefore = getRegisteredRenderers().length;
+    const replacement: ContentRenderer = {
+      type: 'test-type',
+      priority: 200,
+      canHandle: (content: string) => content.startsWith('TEST:'),
+      render: (content: string) => React.createElement('span', null, content),
+    };
+    registerRenderer(replacement);
+    expect(getRenderer('test-type')).toBe(replacement);
+    expect(getRegisteredRenderers().length).toBe(countBefore);
+  });
+
+  it('should clear all renderers with clearRegistry', () => {
+    clearRegistry();
+    expect(getRegisteredRenderers().length).toBe(0);
+    expect(getRenderer('test-type')).toBeUndefined();
   });
 });

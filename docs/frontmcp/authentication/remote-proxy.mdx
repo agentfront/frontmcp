@@ -89,6 +89,7 @@ export class Server {}
 | `clientId`     | `string`        | Required             | Pre-registered client ID             |
 | `clientSecret` | `string`        | -                    | Client secret (confidential clients) |
 | `scopes`       | `string[]`      | `['openid']`         | Scopes to request from IdP           |
+| `providerConfig` | `ProviderConfig` | -                  | Endpoint overrides and IdP-specific settings |
 | `consent`      | `ConsentConfig` | `{ enabled: false }` | Consent UI configuration             |
 
 ---
@@ -118,18 +119,22 @@ auth: {
 For IdPs without a JWKS endpoint:
 
 ```typescript
-provider: 'https://legacy-idp.example.com',
-providerConfig: {
-  jwks: {
-    keys: [
-      {
-        kty: 'RSA',
-        kid: 'key-1',
-        alg: 'RS256',
-        n: '...',
-        e: 'AQAB',
-      },
-    ],
+auth: {
+  mode: 'remote',
+  provider: 'https://legacy-idp.example.com',
+  clientId: 'my-client',
+  providerConfig: {
+    jwks: {
+      keys: [
+        {
+          kty: 'RSA',
+          kid: 'key-1',
+          alg: 'RS256',
+          n: '...',
+          e: 'AQAB',
+        },
+      ],
+    },
   },
 }
 ```

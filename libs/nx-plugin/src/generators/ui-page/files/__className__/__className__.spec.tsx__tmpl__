@@ -12,6 +12,6 @@ describe('<%= className %>', () => {
 
   it('should render without crashing', () => {
     const { container } = render(<<%= className %> />);
-    expect(container).toBeTruthy();
+    expect(container.firstChild).not.toBeNull();
   });
 });

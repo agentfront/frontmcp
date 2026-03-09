@@ -40,6 +40,10 @@ describe('FlowRenderer', () => {
     it('should not detect JSON without edges', () => {
       expect(isFlow(JSON.stringify({ nodes: [{ id: '1' }] }))).toBe(false);
     });
+
+    it('should detect flow with empty nodes and edges arrays', () => {
+      expect(isFlow(JSON.stringify({ nodes: [], edges: [] }))).toBe(true);
+    });
   });
 
   describe('canHandle()', () => {
