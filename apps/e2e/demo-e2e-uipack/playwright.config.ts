@@ -4,7 +4,7 @@ export default defineConfig({
   globalSetup: './e2e/browser/global-setup.ts',
   globalTeardown: './e2e/browser/global-teardown.ts',
   testDir: './e2e/browser',
-  testMatch: '**/*.pw.test.ts',
+  testMatch: '**/*.pw.spec.ts',
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,

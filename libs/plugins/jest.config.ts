@@ -37,7 +37,6 @@ module.exports = {
   coverageDirectory: '../../coverage/unit/plugins',
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
     '!src/**/index.ts',
     '!src/**/*.d.ts',

@@ -8,7 +8,7 @@ const config: Config.InitialOptions = {
   displayName: 'demo-e2e-public',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
+  testMatch: ['<rootDir>/e2e/**/*.e2e.spec.ts'],
   testTimeout: 60000,
   maxWorkers: 1,
   setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],

@@ -8,12 +8,6 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true
   },
-  "exclude": [
-    "jest.config.ts",
-    "jest.e2e.config.ts",
-    "fixture/src/**/*.spec.ts",
-    "fixture/src/**/*.test.ts",
-    "e2e/**/*.ts"
-  ],
+  "exclude": ["jest.config.ts", "jest.e2e.config.ts", "fixture/src/**/*.spec.ts", "e2e/**/*.ts"],
   "include": ["fixture/src/**/*.ts"]
 }

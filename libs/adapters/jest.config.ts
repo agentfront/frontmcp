@@ -34,7 +34,6 @@ module.exports = {
   coverageDirectory: '../../coverage/unit/adapters',
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
     '!src/**/index.ts',
     '!src/**/*.d.ts',

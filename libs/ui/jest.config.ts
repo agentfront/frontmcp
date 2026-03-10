@@ -26,8 +26,8 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     // Web component tests need jsdom or browser environment
-    '/src/web-components/core/base-element.test.ts',
-    '/src/web-components/elements/elements.test.ts',
+    '/src/web-components/core/base-element.spec.ts',
+    '/src/web-components/elements/elements.spec.ts',
   ],
   // Map @frontmcp/uipack imports to the built dist for tests
   moduleNameMapper: {

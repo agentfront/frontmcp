@@ -8,7 +8,7 @@ const config: Config.InitialOptions = {
   displayName: 'demo-e2e-remote',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
+  testMatch: ['<rootDir>/e2e/**/*.e2e.spec.ts'],
   testTimeout: 120000, // 2 minutes for remote server tests
   maxWorkers: 1,
   setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],

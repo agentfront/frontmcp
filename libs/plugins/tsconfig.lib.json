@@ -15,11 +15,5 @@
     }
   },
   "include": ["src/**/*.ts"],
-  "exclude": [
-    "jest.config.ts",
-    "src/**/*.spec.ts",
-    "src/**/*.test.ts",
-    "src/**/__tests__/**",
-    "src/**/__test-utils__/**"
-  ]
+  "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/__tests__/**", "src/**/__test-utils__/**"]
 }
