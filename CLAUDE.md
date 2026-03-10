@@ -36,7 +36,7 @@ Located in `/apps/*`:
 - **No Warnings**: Build must complete without TypeScript warnings
 - **All Tests Passing**: 100% test pass rate required
 - **Strict TypeScript**: Use strict type checking, no `any` types without justification
-- **Test File Naming**: All test files MUST use `.spec.ts` extension (NOT `.test.ts`). E2E tests use `.e2e.spec.ts`, perf tests use `.perf.spec.ts`, Playwright tests use `.pw.spec.ts`
+- **Test File Naming**: All test files MUST use `.spec.ts` (or `.spec.tsx` for React components) extension (NOT `.test.ts`). E2E tests use `.e2e.spec.ts`, perf tests use `.perf.spec.ts`, Playwright tests use `.pw.spec.ts`
 
 ### Barrel Exports (index.ts)
 
