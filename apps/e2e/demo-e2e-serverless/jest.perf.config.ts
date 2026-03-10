@@ -4,7 +4,7 @@ const config: Config.InitialOptions = {
   displayName: 'demo-e2e-serverless-perf',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/e2e/**/*.perf.test.ts'],
+  testMatch: ['<rootDir>/e2e/**/*.perf.spec.ts'],
   testTimeout: 120000,
   maxWorkers: 1,
   setupFilesAfterEnv: [

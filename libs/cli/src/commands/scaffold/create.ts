@@ -270,7 +270,7 @@ const TEMPLATE_JEST_E2E_CONFIG = `
 export default {
   displayName: 'e2e',
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
+  testMatch: ['<rootDir>/e2e/**/*.e2e.spec.ts'],
   testTimeout: 60000,
   setupFilesAfterEnv: ['@frontmcp/testing/setup'],
   transform: {
@@ -1470,7 +1470,7 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'tools', 'add.tool.ts'), TEMPLATE_ADD_TOOL_TS);
 
   // E2E scaffolding
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.test.ts'), TEMPLATE_E2E_TEST_TS);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.spec.ts'), TEMPLATE_E2E_TEST_TS);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'jest.e2e.config.ts'), TEMPLATE_JEST_E2E_CONFIG);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'tsconfig.e2e.json'), TEMPLATE_TSCONFIG_E2E);
 

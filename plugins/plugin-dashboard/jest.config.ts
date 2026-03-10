@@ -37,7 +37,7 @@ module.exports = {
   coverageDirectory: '../../coverage/unit/plugin-dashboard',
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!src/**/*.test.ts',
+    '!src/**/*.spec.ts',
     '!src/**/*.d.ts',
     '!src/**/index.ts',
     '!src/shared/types.ts', // Pure type definitions

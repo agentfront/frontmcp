@@ -9,6 +9,6 @@
     "experimentalDecorators": true,
     "jsx": "react-jsx"
   },
-  "exclude": ["jest.config.ts", "jest.e2e.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts", "e2e/**/*.ts"],
+  "exclude": ["jest.config.ts", "jest.e2e.config.ts", "src/**/*.spec.ts", "e2e/**/*.ts"],
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

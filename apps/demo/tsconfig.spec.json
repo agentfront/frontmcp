@@ -6,7 +6,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["jest.config.ts", "src/**/*.test.ts", "src/**/*.spec.ts", "src/**/*.d.ts"],
+  "include": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.d.ts"],
   "references": [
     {
       "path": "./tsconfig.app.json"

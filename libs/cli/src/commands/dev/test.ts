@@ -21,7 +21,7 @@ function generateJestConfig(cwd: string, opts: ParsedArgs): object {
     rootDir: cwd,
 
     // Test file patterns for E2E tests
-    testMatch: ['<rootDir>/e2e/**/*.e2e.ts', '<rootDir>/e2e/**/*.e2e.test.ts', '<rootDir>/**/*.e2e.ts'],
+    testMatch: ['<rootDir>/e2e/**/*.e2e.ts', '<rootDir>/e2e/**/*.e2e.spec.ts', '<rootDir>/**/*.e2e.ts'],
 
     // Transform TypeScript files using @swc/jest for speed
     transform: {
@@ -75,7 +75,7 @@ function generateJestConfig(cwd: string, opts: ParsedArgs): object {
       ? {
           coverageDirectory: '<rootDir>/coverage',
           coverageReporters: ['text', 'lcov', 'json'],
-          collectCoverageFrom: ['<rootDir>/src/**/*.ts', '!<rootDir>/src/**/*.test.ts', '!<rootDir>/src/**/*.spec.ts'],
+          collectCoverageFrom: ['<rootDir>/src/**/*.ts', '!<rootDir>/src/**/*.spec.ts'],
         }
       : {}),
 
@@ -107,7 +107,7 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
     console.error('Expected structure:');
     console.error('  ./e2e/');
     console.error('    ├── your-test.e2e.ts');
-    console.error('    └── another-test.e2e.test.ts');
+    console.error('    └── another-test.e2e.spec.ts');
     console.error('');
     console.error('Create an e2e directory with test files, then run:');
     console.error('  frontmcp test');

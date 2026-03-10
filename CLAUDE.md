@@ -36,6 +36,7 @@ Located in `/apps/*`:
 - **No Warnings**: Build must complete without TypeScript warnings
 - **All Tests Passing**: 100% test pass rate required
 - **Strict TypeScript**: Use strict type checking, no `any` types without justification
+- **Test File Naming**: All test files MUST use `.spec.ts` extension (NOT `.test.ts`). E2E tests use `.e2e.spec.ts`, perf tests use `.perf.spec.ts`, Playwright tests use `.pw.spec.ts`
 
 ### Barrel Exports (index.ts)
 
@@ -603,6 +604,7 @@ Configure via `skillsConfig.auth` option:
 ❌ **Don't**: Hardcode capabilities in adapters - use registry.getCapabilities()
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
 ❌ **Don't**: Put auth-related code in libs/sdk/src/auth (use libs/auth instead)
+❌ **Don't**: Name test files with `.test.ts` extension (use `.spec.ts` instead)
 
 ✅ **Do**: Use clean, descriptive names for everything
 ✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations

@@ -140,7 +140,7 @@ describe('runCreate', () => {
     it('should create e2e directory with test file', async () => {
       await runCreate('my-app', { yes: true });
 
-      expect(consoleLogs.some((log) => log.includes('e2e/server.e2e.test.ts'))).toBe(true);
+      expect(consoleLogs.some((log) => log.includes('e2e/server.e2e.spec.ts'))).toBe(true);
     });
 
     it('should create tsconfig.e2e.json for E2E test typing', async () => {

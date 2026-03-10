@@ -2,7 +2,7 @@ module.exports = {
   displayName: '@frontmcp/cli',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  testMatch: ['**/__tests__/**/*.spec.ts', '**/__tests__/**/*.test.ts'],
+  testMatch: ['**/__tests__/**/*.spec.ts'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   transform: {
     '^.+\\.[tj]s$': [
