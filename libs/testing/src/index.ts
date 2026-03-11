@@ -314,6 +314,12 @@ export {
   createReportGenerator,
 } from './perf';
 
+// ═══════════════════════════════════════════════════════════════════
+// RAW MCP CLIENT (for low-level e2e testing)
+// ═══════════════════════════════════════════════════════════════════
+
+export { McpClient, McpStdioClientTransport } from './raw-client';
+
 export type {
   // Memory & CPU Types
   MemoryMetrics,

@@ -1,4 +1,5 @@
 import { DynamicPlugin, Plugin, ProviderType, ProviderScope } from '../../common';
+import { getCwd } from '@frontmcp/utils';
 import type { ConfigPluginOptions, ConfigPluginOptionsInput } from './config.types';
 import { ConfigPluginConfigToken } from './config.symbols';
 import { ConfigService } from './providers/config.service';
@@ -140,7 +141,7 @@ export default class ConfigPlugin<TConfig extends object = Record<string, string
         let env: Record<string, string> = {};
 
         if (pluginConfig.loadEnv) {
-          const basePath = pluginConfig.basePath ?? process.cwd();
+          const basePath = pluginConfig.basePath ?? getCwd();
           env = await loadEnvFiles(basePath, pluginConfig.envPath, pluginConfig.localEnvPath);
         }
 

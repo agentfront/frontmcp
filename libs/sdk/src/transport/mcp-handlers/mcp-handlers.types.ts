@@ -1,8 +1,8 @@
 import { z, ZodType } from 'zod';
-import { Notification, Request, Result } from '@modelcontextprotocol/sdk/types.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { ServerOptions } from '@modelcontextprotocol/sdk/server/index.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { Notification, Request, Result } from '@frontmcp/protocol';
+import { RequestHandlerExtra } from '@frontmcp/protocol';
+import type { McpServerOptions } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import { LocalTransporter } from '../transport.local';
 import { Authorization } from '../../common';
 import { Scope } from '../../scope';
@@ -42,7 +42,7 @@ export interface McpHandler<
 
 export type McpHandlerOptions = {
   scope: Scope;
-  serverOptions: ServerOptions;
+  serverOptions: McpServerOptions;
 };
 
 export type McpRequestHandler<

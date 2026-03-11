@@ -7,6 +7,7 @@ import {
   LogLevelName,
   LogRecord,
 } from '../../common';
+import { isDevelopment } from '@frontmcp/utils';
 import { ConsoleLogTransportInstance } from './instance.console-logger';
 
 export type GetTransports = () => {
@@ -83,7 +84,7 @@ export class LoggerInstance extends FrontMcpLogger {
 
   private _getter(level: LogLevel): LogFn {
     if (level < this.level || this.level === LogLevel.Off) return () => void 0;
-    if (process.env['NODE_ENV'] === 'development' && this.config.enableConsole && this.consoleTransport) {
+    if (isDevelopment() && this.config.enableConsole && this.consoleTransport) {
       return this.consoleTransport.bind(level, this.prefix);
     }
     const emit = this.emit.bind(this);

@@ -14,6 +14,8 @@ import {
   verifyData,
   isSignedData,
   verifyOrParseData,
+  getEnv,
+  isProduction,
   type SignedData,
   type HmacSigningConfig,
 } from '@frontmcp/utils';
@@ -43,10 +45,10 @@ export interface SessionSigningConfig {
  * Throws if no secret is available in production.
  */
 function getSigningSecret(config?: SessionSigningConfig): string {
-  const secret = config?.secret || process.env['MCP_SESSION_SECRET'];
+  const secret = config?.secret || getEnv('MCP_SESSION_SECRET');
 
   if (!secret) {
-    if (process.env['NODE_ENV'] === 'production') {
+    if (isProduction()) {
       throw new SessionSecretRequiredError('session signing');
     }
     // In development, warn but allow using a default

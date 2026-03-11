@@ -6,13 +6,12 @@
  * MCP clients that communicate via stdin/stdout.
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { McpClient, McpStdioClientTransport } from '@frontmcp/testing';
 import { join } from 'path';
 
 describe('Stdio Transport E2E', () => {
-  let client: Client | null = null;
-  let transport: StdioClientTransport | null = null;
+  let client: McpClient | null = null;
+  let transport: McpStdioClientTransport | null = null;
 
   // Path to the stdio entrypoint
   const entrypointPath = join(__dirname, '../src/stdio-entrypoint.ts');
@@ -48,7 +47,7 @@ describe('Stdio Transport E2E', () => {
   async function startServerAndConnect(): Promise<void> {
     // Use StdioClientTransport which spawns the process itself
     // We use tsx for better ESM support
-    transport = new StdioClientTransport({
+    transport = new McpStdioClientTransport({
       command: 'npx',
       args: ['tsx', entrypointPath],
       env: process.env as Record<string, string>,
@@ -56,7 +55,7 @@ describe('Stdio Transport E2E', () => {
     });
 
     // Create and connect MCP client
-    client = new Client({ name: 'stdio-test-client', version: '1.0.0' }, { capabilities: {} });
+    client = new McpClient({ name: 'stdio-test-client', version: '1.0.0' }, { capabilities: {} });
     await client.connect(transport);
   }
 

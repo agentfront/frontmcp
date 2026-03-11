@@ -1,7 +1,6 @@
 // file: libs/sdk/src/skill/session/skill-session.manager.ts
 
-import { AsyncLocalStorage } from 'async_hooks';
-import { EventEmitter } from 'events';
+import { AsyncLocalStorage, EventEmitter } from '@frontmcp/utils';
 import type { FrontMcpLogger } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
 import type { SkillLoadResult } from '../skill-storage.interface';

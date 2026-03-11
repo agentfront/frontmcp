@@ -25,7 +25,7 @@
 
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from '@frontmcp/utils';
 import { EncryptionContextNotSetError, VaultLoadError, VaultNotFoundError } from '../errors/auth-internal.errors';
 import { VaultEncryption, encryptedDataSchema } from './vault-encryption';
 import type { EncryptedData, VaultSensitiveData } from './vault-encryption';

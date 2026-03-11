@@ -1,6 +1,6 @@
 import { MemoryEventStore } from '../memory.event-store';
-import type { StreamId, EventId } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { StreamId, EventId } from '@frontmcp/protocol';
+import type { JSONRPCMessage } from '@frontmcp/protocol';
 
 describe('MemoryEventStore', () => {
   describe('storeEvent', () => {

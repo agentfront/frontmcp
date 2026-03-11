@@ -8,7 +8,7 @@
  * as local entities.
  */
 
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool, Resource, ResourceTemplate, Prompt } from '@frontmcp/protocol';
 import type { EntryOwnerRef } from '../../common';
 import type ProviderRegistry from '../../provider/provider.registry';
 import type { McpClientService } from '../mcp-client.service';

@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
   },
   transform: {

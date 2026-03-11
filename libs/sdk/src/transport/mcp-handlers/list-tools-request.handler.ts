@@ -1,4 +1,4 @@
-import { ListToolsRequestSchema, ListToolsRequest, ListToolsResult } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, ListToolsRequest, ListToolsResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listToolsRequestHandler({

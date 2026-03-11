@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isValidMcpUri } from '@frontmcp/utils';
 import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
-import {
+import type {
   AgentType,
   ProviderType,
   PromptType,

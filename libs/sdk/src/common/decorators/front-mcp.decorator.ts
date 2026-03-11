@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
+import { getEnvFlag } from '@frontmcp/utils';
 import { InternalMcpError } from '../../errors/mcp.error';
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 
@@ -70,9 +71,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
     // Store full parsed config for build-time extraction (e.g., schema-extractor via connect())
     Reflect.defineMetadata('__frontmcp:config', metadata, target);
 
-    // Safe check for serverless mode - process.env may not exist in Cloudflare Workers
-    const isServerless = typeof process !== 'undefined' && process.env?.['FRONTMCP_SERVERLESS'] === '1';
-    const isSchemaExtract = typeof process !== 'undefined' && process.env?.['FRONTMCP_SCHEMA_EXTRACT'] === '1';
+    const isServerless = getEnvFlag('FRONTMCP_SERVERLESS');
+    const isSchemaExtract = getEnvFlag('FRONTMCP_SCHEMA_EXTRACT');
 
     if (isSchemaExtract) {
       // Schema extraction mode — metadata already stored above, skip bootstrap

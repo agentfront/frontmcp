@@ -17,18 +17,18 @@
  */
 
 // Recreateable transports for session recreation support
-export {
-  RecreateableStreamableHTTPServerTransport,
-  StreamableHTTPServerTransportOptions,
-} from './adapters/streamable-http-transport';
+export { RecreateableStreamableHTTPServerTransport } from './adapters/streamable-http-transport';
+export type { StreamableHTTPServerTransportOptions } from './adapters/streamable-http-transport';
 
-export { RecreateableSSEServerTransport, RecreateableSSEServerTransportOptions } from './adapters/sse-transport';
+export { RecreateableSSEServerTransport } from './adapters/sse-transport';
+export type { RecreateableSSEServerTransportOptions } from './adapters/sse-transport';
 
 // Base SSE transport (for type compatibility)
-export { SSEServerTransport, SSEServerTransportOptions } from './adapters/base-sse-transport';
+export { SSEServerTransport } from '#sse-transport';
+export type { SSEServerTransportOptions } from '#sse-transport';
 
 // Transport types
-export { SupportedTransport } from './adapters/transport.local.adapter';
+export type { SupportedTransport } from './adapters/transport.local.adapter';
 // Type-only exports for TransportType and TransportKey (interfaces/type aliases)
 export type { TransportType, TransportKey } from './transport.types';
 
@@ -53,7 +53,7 @@ export type {
  * @example
  * ```typescript
  * import { createInMemoryServer } from '@frontmcp/sdk';
- * import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+ * import { Client } from '@frontmcp/protocol';
  *
  * const { clientTransport, setAuthInfo, close } = await createInMemoryServer(scope, {
  *   authInfo: { token: 'jwt-token' }

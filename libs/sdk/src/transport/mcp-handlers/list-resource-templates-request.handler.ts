@@ -4,7 +4,7 @@ import {
   ListResourceTemplatesRequestSchema,
   ListResourceTemplatesRequest,
   ListResourceTemplatesResult,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listResourceTemplatesRequestHandler({

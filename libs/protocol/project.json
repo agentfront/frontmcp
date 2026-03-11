@@ -1,0 +1,94 @@
+{
+  "name": "protocol",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/protocol/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/protocol/dist",
+        "main": "libs/protocol/src/index.ts",
+        "tsConfig": "libs/protocol/tsconfig.lib.json",
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/protocol/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "additionalEntryPoints": [
+          "libs/protocol/src/node-mcp-server.ts",
+          "libs/protocol/src/browser-mcp-server.ts",
+          "libs/protocol/src/node-mcp-streamable-http.ts",
+          "libs/protocol/src/browser-mcp-streamable-http.ts",
+          "libs/protocol/src/node-server-types.ts",
+          "libs/protocol/src/browser-server-types.ts"
+        ],
+        "assets": ["libs/protocol/README.md", "libs/protocol/CHANGELOG.md", "LICENSE", "libs/protocol/package.json"],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": ["#mcp-streamable-http", "#mcp-server", "#server-types"]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/protocol/dist/esm",
+        "main": "libs/protocol/src/index.ts",
+        "tsConfig": "libs/protocol/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "additionalEntryPoints": [
+          "libs/protocol/src/node-mcp-server.ts",
+          "libs/protocol/src/browser-mcp-server.ts",
+          "libs/protocol/src/node-mcp-streamable-http.ts",
+          "libs/protocol/src/browser-mcp-streamable-http.ts",
+          "libs/protocol/src/node-server-types.ts",
+          "libs/protocol/src/browser-server-types.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "external": ["#mcp-streamable-http", "#mcp-server", "#server-types"]
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs", "build-esm"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/protocol/dist/package.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/unit/protocol"],
+      "options": {
+        "jestConfig": "libs/protocol/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/protocol/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 // write-response.ts
 import { HttpCookie, httpOutputSchema, ServerResponse } from '../common';
-import { Buffer } from 'node:buffer';
+import { base64Decode } from '@frontmcp/utils';
 
 /* ----------------------- helpers ----------------------- */
 
@@ -46,7 +46,7 @@ function stringToBytes(str: string, encoding: 'utf8' | 'base64'): Uint8Array {
     return new TextEncoder().encode(str);
   }
   // base64
-  return Buffer.from(str, 'base64');
+  return base64Decode(str);
 }
 
 /* ----------------------- writer ------------------------ */
@@ -112,8 +112,8 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
       const bytes: Uint8Array = typeof out.body === 'string' ? stringToBytes(out.body, out.encoding) : out.body;
 
       res.setHeader('Content-Length', bytes.byteLength);
-      // Node's ServerResponse accepts Buffer | string; Buffer.from shares underlying data for Uint8Array.
-      res.status(out.status).end(Buffer.from(bytes));
+      // Node's ServerResponse accepts Uint8Array directly.
+      res.status(out.status).end(bytes);
       return;
     }
 

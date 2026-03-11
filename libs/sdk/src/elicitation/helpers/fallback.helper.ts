@@ -12,7 +12,7 @@ import type { Scope } from '../../scope';
 import type { FallbackExecutionResult } from '../elicitation.types';
 import { DEFAULT_FALLBACK_WAIT_TTL } from '../elicitation.types';
 import { ElicitationFallbackRequired, ElicitationSubscriptionError } from '../../errors';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 /**
  * Create a typed error result for tool responses.

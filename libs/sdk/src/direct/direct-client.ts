@@ -13,7 +13,7 @@ import type {
   ListPromptsResult,
   GetPromptResult,
   CompleteResult,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import type {
   DirectClient,
   ConnectOptions,
@@ -51,7 +51,7 @@ import {
 import type { Scope } from '../scope/scope.instance';
 import { PublicMcpError } from '../errors';
 import { randomUUID } from '@frontmcp/utils';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { Client } from '@frontmcp/protocol';
 import {
   SkillsSearchResultSchema,
   SkillsLoadResultSchema,
@@ -148,7 +148,7 @@ export class DirectClientImpl implements DirectClient {
 
       // Connect MCP client
       // Note: Using 'any' cast for clientTransport to handle ESM/CJS type incompatibility
-      // between dynamic imports from @modelcontextprotocol/sdk
+      // between dynamic imports from @frontmcp/protocol
       const mcpClient = new Client(clientInfo, clientCapabilities);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await mcpClient.connect(clientTransport as any);
@@ -195,9 +195,7 @@ export class DirectClientImpl implements DirectClient {
   ): Promise<void> {
     try {
       // Dynamic import to handle ESM/CJS compatibility
-      const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await import(
-        '@modelcontextprotocol/sdk/types.js'
-      );
+      const { ResourceUpdatedNotificationSchema, ElicitRequestSchema } = await import('@frontmcp/protocol');
 
       // Handler for resource updated notifications
       if (typeof mcpClient.setNotificationHandler === 'function') {

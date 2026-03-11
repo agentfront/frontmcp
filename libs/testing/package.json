@@ -117,7 +117,7 @@
   },
   "dependencies": {
     "@frontmcp/utils": "0.12.1",
-    "@modelcontextprotocol/sdk": "1.26.0",
+    "@frontmcp/protocol": "0.12.1",
     "jose": "^6.0.11",
     "tslib": "^2.3.0"
   },

@@ -1,4 +1,4 @@
-import { GetPromptRequestSchema, GetPromptRequest, GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptRequestSchema, GetPromptRequest, GetPromptResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function getPromptRequestHandler({

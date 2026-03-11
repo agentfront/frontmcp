@@ -2,7 +2,7 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
-import { CompleteRequestSchema, CompleteResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CompleteRequestSchema, CompleteResultSchema } from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../../tool/ui';
 

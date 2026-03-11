@@ -1,5 +1,4 @@
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
-import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ResourceTemplate, ResourceContext, ReadResourceResult } from '@frontmcp/sdk';
 
 type ItemParams = {
   itemId: string;

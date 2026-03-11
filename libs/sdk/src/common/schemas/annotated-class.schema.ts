@@ -1,5 +1,5 @@
 import { Type } from '@frontmcp/di';
-import { AgentType } from '../interfaces';
+import type { AgentType } from '../interfaces';
 import { z } from 'zod';
 import {
   FrontMcpAdapterTokens,

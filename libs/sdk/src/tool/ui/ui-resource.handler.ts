@@ -23,7 +23,7 @@
  * ```
  */
 
-import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ReadResourceResult } from '@frontmcp/protocol';
 import type { AIPlatformType } from '../../notification/notification.service';
 import { createDefaultBaseTemplate } from '@frontmcp/uipack/adapters';
 import { type ToolUIRegistry, isUIResourceUri, parseWidgetUri, getUIResourceMimeType } from './ui-shared';

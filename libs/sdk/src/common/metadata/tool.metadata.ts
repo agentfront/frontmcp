@@ -37,12 +37,7 @@ const toolAuthProviderMappingSchema = z.union([
     .strict(),
 ]);
 
-import {
-  ImageContentSchema,
-  AudioContentSchema,
-  ResourceLinkSchema,
-  EmbeddedResourceSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { ImageContentSchema, AudioContentSchema, ResourceLinkSchema, EmbeddedResourceSchema } from '@frontmcp/protocol';
 import { ToolUIConfig } from './tool-ui.metadata';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 

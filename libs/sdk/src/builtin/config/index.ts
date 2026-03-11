@@ -72,9 +72,6 @@ export { ConfigPluginConfigToken } from './config.symbols';
 
 // Config resolver with context-aware fallbacks
 export {
-  ConfigEntityType,
-  ConfigResolutionContext,
-  ConfigResolver,
   normalizeNameForEnv,
   normalizePathSegment,
   generateFallbacks,
@@ -83,6 +80,7 @@ export {
   createContextResolver,
   createDirectResolver,
 } from './config-resolver';
+export type { ConfigEntityType, ConfigResolutionContext, ConfigResolver } from './config-resolver';
 
 // Helper functions
 import { ConfigService } from './providers/config.service';

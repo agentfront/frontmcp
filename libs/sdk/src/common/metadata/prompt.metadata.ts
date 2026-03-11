@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
-import { Icon, IconSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Icon, IconSchema } from '@frontmcp/protocol';
 
 declare global {
   /**

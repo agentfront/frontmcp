@@ -1,6 +1,14 @@
 // auth/session/transport-session.manager.ts
 
-import { randomUUID, decryptValue, encryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
+import {
+  randomUUID,
+  decryptValue,
+  encryptValue,
+  hkdfSha256,
+  getEnv,
+  isProduction,
+  type EncryptedBlob,
+} from '@frontmcp/utils';
 import type {
   TransportSession,
   TransportProtocol,
@@ -135,9 +143,9 @@ export class TransportSessionManager {
     }
 
     // Derive encryption key from secret or generate one
-    const secret = config.encryptionSecret || process.env['MCP_SESSION_SECRET'];
+    const secret = config.encryptionSecret || getEnv('MCP_SESSION_SECRET');
     if (!secret) {
-      if (process.env['NODE_ENV'] === 'production') {
+      if (isProduction()) {
         throw new SessionSecretRequiredError('TransportSessionManager');
       }
       // Development fallback - NOT secure for production
@@ -339,7 +347,7 @@ export class TransportSessionManager {
         nodeId: payload.nid,
       };
     } catch (err) {
-      if (process.env['NODE_ENV'] !== 'production') {
+      if (!isProduction()) {
         console.debug('[TransportSessionManager] Failed to decrypt session JWT:', err);
       }
       return null;

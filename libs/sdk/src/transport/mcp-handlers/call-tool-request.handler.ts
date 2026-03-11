@@ -1,9 +1,4 @@
-import {
-  CallToolRequest,
-  CallToolRequestSchema,
-  CallToolResult,
-  CallToolResultSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequest, CallToolRequestSchema, CallToolResult, CallToolResultSchema } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { formatMcpErrorResponse, InternalMcpError } from '../../errors';
 import { FlowControl } from '../../common';

@@ -1,4 +1,4 @@
-import { InitializedNotificationSchema, InitializedNotification, Result } from '@modelcontextprotocol/sdk/types.js';
+import { InitializedNotificationSchema, InitializedNotification, Result } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function initializedNotificationHandler(

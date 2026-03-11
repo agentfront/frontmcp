@@ -13,7 +13,7 @@ import {
   resolveToolSecurity,
 } from '../openapi.security';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { AuthInfo } from '@frontmcp/protocol';
 import type { FrontMcpContext } from '@frontmcp/sdk';
 
 // Mock mcp-from-openapi

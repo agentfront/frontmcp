@@ -4,11 +4,12 @@ import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { ToolRecord } from '../records';
 import { ToolContext } from '../interfaces';
 import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
-import { Request, Notification, CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { Request, Notification, CallToolRequest, CallToolResult } from '@frontmcp/protocol';
+import { RequestHandlerExtra } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ProviderRegistryInterface } from '../interfaces/internal';
+import { isDebug, isDevelopment } from '@frontmcp/utils';
 import type ProviderRegistry from '../../provider/provider.registry';
 
 export type ToolCallArgs = CallToolRequest['params']['arguments'];
@@ -122,7 +123,7 @@ export abstract class ToolEntry<
         return toJSONSchema(z.object(this.inputSchema));
       } catch (error) {
         // Log the error for debugging purposes
-        if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+        if (isDebug() || isDevelopment()) {
           console.warn('[ToolEntry] Failed to convert Zod schema to JSON Schema:', error);
         }
         return { type: 'object', properties: {} };

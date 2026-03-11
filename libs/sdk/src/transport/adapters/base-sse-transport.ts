@@ -2,10 +2,9 @@ import { randomUUID } from '@frontmcp/utils';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import getRawBody from 'raw-body';
 import contentType from 'content-type';
-import { URL } from 'url';
-import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { JSONRPCMessage, JSONRPCMessageSchema, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { Transport } from '@frontmcp/protocol';
+import { JSONRPCMessage, JSONRPCMessageSchema, MessageExtraInfo } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import {
   TransportAlreadyStartedError,
   TransportNotConnectedError,

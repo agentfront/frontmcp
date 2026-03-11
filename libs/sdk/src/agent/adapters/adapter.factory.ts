@@ -6,6 +6,7 @@ import {
   AgentApiKeyConfig,
   WithConfig,
 } from '../../common';
+import { getEnv } from '@frontmcp/utils';
 import { LlmAdapterError } from './base.adapter';
 import { createProviderAdapterSync } from './providers';
 import { ConfigResolver, ConfigResolutionContext, generateFallbacks } from '../../builtin/config/config-resolver';
@@ -92,7 +93,7 @@ export function resolveApiKey(
 
   // Environment variable
   if ('env' in config) {
-    const value = process.env[config.env];
+    const value = getEnv(config.env);
     if (!value) {
       throw new LlmAdapterError(`Environment variable ${config.env} is not set`, 'config', 'missing_env_var');
     }

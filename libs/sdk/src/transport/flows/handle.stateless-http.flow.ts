@@ -11,7 +11,7 @@ import {
   Authorization,
 } from '../../common';
 import { z } from 'zod';
-import { RequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { RequestSchema } from '@frontmcp/protocol';
 import { Scope } from '../../scope';
 
 export const plan = {

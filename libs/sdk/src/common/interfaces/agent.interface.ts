@@ -1,5 +1,5 @@
 import { ProviderRegistryInterface } from './internal';
-import { ToolInputType, ToolOutputType, AgentMetadata, AgentType } from '../metadata';
+import type { ToolInputType, ToolOutputType, AgentMetadata, AgentType } from '../metadata';
 import { FlowControl } from './flow.interface';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
@@ -19,7 +19,7 @@ import { ZodType } from 'zod';
 import { AgentMethodNotAvailableError } from '../../errors';
 
 // Re-export AgentType for convenience (defined in agent.metadata.ts)
-export { AgentType };
+export type { AgentType };
 
 // ============================================================================
 // Agent Context Arguments

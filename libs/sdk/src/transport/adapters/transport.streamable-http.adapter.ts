@@ -1,7 +1,7 @@
 import { TransportType } from '../transport.types';
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { LocalTransportAdapter } from './transport.local.adapter';
-import { RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { RequestId } from '@frontmcp/protocol';
 import { ZodType } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';

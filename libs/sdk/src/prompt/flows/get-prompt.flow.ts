@@ -2,8 +2,8 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, PromptContext, PromptEntry } from '../../common';
 import { z } from 'zod';
-import { GetPromptRequestSchema, GetPromptResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { GetPromptRequestSchema, GetPromptResultSchema } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import {
   InvalidMethodError,
   PromptNotFoundError,
@@ -28,7 +28,7 @@ const stateSchema = z.object({
   }),
   // Prompt owner ID for hook filtering during execution
   promptOwnerId: z.string().optional(),
-  // z.any() used because AuthInfo is a complex external type from @modelcontextprotocol/sdk
+  // z.any() used because AuthInfo is a complex external type from @frontmcp/protocol
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   // z.any() used because PromptEntry is a complex abstract class type
   prompt: z.any() as z.ZodType<PromptEntry>,

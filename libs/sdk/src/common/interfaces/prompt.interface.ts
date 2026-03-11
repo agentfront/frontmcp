@@ -6,9 +6,9 @@ import { PromptMetadata } from '../metadata';
 import { ProviderRegistryInterface } from './internal';
 import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { AuthInfo } from '@frontmcp/protocol';
 import { ScopeEntry } from '../entries';
-import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptResult } from '@frontmcp/protocol';
 
 export interface PromptInterface {
   execute(args: Record<string, string>): Promise<GetPromptResult>;

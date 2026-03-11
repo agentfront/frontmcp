@@ -1,6 +1,5 @@
 import { SignJWT } from 'jose';
-import { URL } from 'url';
-import { randomBytes, randomUUID, sha256Hex } from '@frontmcp/utils';
+import { randomBytes, randomUUID, sha256Hex, getEnv, base64urlDecode } from '@frontmcp/utils';
 import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest, JWK } from '../../common';
 import {
   PublicAuthOptions,
@@ -155,8 +154,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.host = 'localhost';
     this.issuer = this.deriveIssuer(options);
 
-    if (process.env['JWT_SECRET']) {
-      this.secret = new TextEncoder().encode(process.env['JWT_SECRET']);
+    const jwtSecret = getEnv('JWT_SECRET');
+    if (jwtSecret) {
+      this.secret = new TextEncoder().encode(jwtSecret);
     } else {
       this.logger.warn('JWT_SECRET is not set, using default secret');
       this.secret = DEFAULT_NO_AUTH_SECRET;
@@ -669,7 +669,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       try {
         // Decode ID token (without verification - verification should happen separately)
         const [, payloadB64] = idToken.split('.');
-        const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as Record<string, unknown>;
+        const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64))) as Record<string, unknown>;
 
         return {
           sub: payload['sub'] as string,

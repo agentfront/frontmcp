@@ -8,8 +8,7 @@
  * This class extends the MCP SDK's transport to expose a public API for
  * session recreation, avoiding the need to access private properties.
  */
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { StreamableHTTPServerTransport, WebStandardStreamableHTTPServerTransport } from '@frontmcp/protocol';
 import { InvalidTransportSessionError } from '../../errors/transport.errors';
 
 export interface StreamableHTTPServerTransportOptions {

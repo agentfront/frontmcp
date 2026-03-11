@@ -11,7 +11,7 @@ import { ToolInstance } from './tool.instance';
 import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.types';
 import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
-import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { ServerCapabilities } from '@frontmcp/protocol';
 import { Scope } from '../scope';
 import { AppEntry } from '../common';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';

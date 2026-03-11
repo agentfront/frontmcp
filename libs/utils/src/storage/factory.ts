@@ -8,13 +8,7 @@ import type { StorageConfig, StorageType, RootStorage, StorageAdapter } from './
 import { StorageConfigError } from './errors';
 import { createRootStorage, createNamespacedStorage } from './namespace';
 import { MemoryStorageAdapter } from './adapters/memory';
-
-/**
- * Check if running in production environment.
- */
-function isProduction(): boolean {
-  return process.env['NODE_ENV'] === 'production';
-}
+import { getEnv, isProduction } from '#env';
 
 /**
  * Detect the best available storage type based on environment.
@@ -27,17 +21,17 @@ function isProduction(): boolean {
  */
 function detectStorageType(): StorageType {
   // Check for Upstash
-  if (process.env['UPSTASH_REDIS_REST_URL'] && process.env['UPSTASH_REDIS_REST_TOKEN']) {
+  if (getEnv('UPSTASH_REDIS_REST_URL') && getEnv('UPSTASH_REDIS_REST_TOKEN')) {
     return 'upstash';
   }
 
   // Check for Vercel KV
-  if (process.env['KV_REST_API_URL'] && process.env['KV_REST_API_TOKEN']) {
+  if (getEnv('KV_REST_API_URL') && getEnv('KV_REST_API_TOKEN')) {
     return 'vercel-kv';
   }
 
   // Check for Redis
-  if (process.env['REDIS_URL'] || process.env['REDIS_HOST']) {
+  if (getEnv('REDIS_URL') || getEnv('REDIS_HOST')) {
     return 'redis';
   }
 

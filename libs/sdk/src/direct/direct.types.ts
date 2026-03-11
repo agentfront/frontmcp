@@ -13,7 +13,7 @@ import type {
   ListPromptsResult,
   GetPromptResult,
   ListResourceTemplatesResult,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import type { DirectClient, ConnectOptions } from './client.types';
 
 /**

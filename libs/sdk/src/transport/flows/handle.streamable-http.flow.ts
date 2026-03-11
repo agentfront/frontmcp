@@ -14,7 +14,7 @@ import {
 } from '../../common';
 import { InternalMcpError } from '../../errors';
 import { z } from 'zod';
-import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
 import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';

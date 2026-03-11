@@ -21,7 +21,7 @@ import { PromptInstance } from './prompt.instance';
 import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from './prompt.types';
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
-import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { ServerCapabilities } from '@frontmcp/protocol';
 import { Scope } from '../scope';
 import {
   NameDisambiguationError,

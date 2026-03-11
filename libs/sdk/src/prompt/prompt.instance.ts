@@ -18,7 +18,7 @@ import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { buildParsedPromptResult } from './prompt.utils';
-import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptResult } from '@frontmcp/protocol';
 import { MissingPromptArgumentError, InvalidRegistryKindError } from '../errors';
 
 export class PromptInstance extends PromptEntry {

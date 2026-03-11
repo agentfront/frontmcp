@@ -9,7 +9,6 @@
 
 import { isNode } from '../runtime';
 import { MemoryStorageAdapter } from '../../storage/adapters/memory';
-import { FileSystemStorageAdapter } from '../../storage/adapters/filesystem';
 import type { StorageAdapter } from '../../storage/types';
 import { KeyPersistence } from './key-persistence';
 import type { CreateKeyPersistenceOptions } from './types';
@@ -53,11 +52,13 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
     // Explicit memory storage
     adapter = new MemoryStorageAdapter();
   } else if (type === 'filesystem') {
-    // Explicit filesystem storage
+    // Explicit filesystem storage — dynamic import to avoid pulling fs into browser bundles
+    const { FileSystemStorageAdapter } = await import('../../storage/adapters/filesystem.js');
     adapter = new FileSystemStorageAdapter({ baseDir });
   } else {
     // Auto-detect
     if (isNode()) {
+      const { FileSystemStorageAdapter } = await import('../../storage/adapters/filesystem.js');
       adapter = new FileSystemStorageAdapter({ baseDir });
     } else {
       adapter = new MemoryStorageAdapter();

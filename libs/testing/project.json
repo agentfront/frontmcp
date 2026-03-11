@@ -33,6 +33,7 @@
           "external": [
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
+            "@frontmcp/protocol",
             "@frontmcp/ui",
             "@frontmcp/ui/*",
             "@frontmcp/utils",
@@ -74,6 +75,7 @@
           "external": [
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
+            "@frontmcp/protocol",
             "@frontmcp/ui",
             "@frontmcp/ui/*",
             "@frontmcp/utils",

@@ -7,7 +7,7 @@ import {
   ListResourceTemplatesRequestSchema,
   ListResourceTemplatesResultSchema,
   ResourceTemplate,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({

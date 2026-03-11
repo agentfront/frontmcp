@@ -1,5 +1,5 @@
 import { Prompt, PromptContext } from '@frontmcp/sdk';
-import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'flag-report',

@@ -21,7 +21,7 @@ import {
   ImageContent,
   ResourceLink,
   TextContent,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 

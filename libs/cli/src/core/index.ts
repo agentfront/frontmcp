@@ -1,5 +1,6 @@
 export { c, COLORS } from './colors';
-export { Command, ParsedArgs, DeploymentAdapter, RedisSetupOption, PackageManagerOption, parseArgs } from './args';
+export { parseArgs } from './args';
+export type { Command, ParsedArgs, DeploymentAdapter, RedisSetupOption, PackageManagerOption } from './args';
 export { getSelfVersion } from './version';
 export { createProgram } from './program';
 export { toParsedArgs } from './bridge';

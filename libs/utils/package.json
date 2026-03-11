@@ -44,6 +44,28 @@
       "optional": true
     }
   },
+  "imports": {
+    "#crypto-provider": {
+      "browser": "./src/crypto/browser.ts",
+      "default": "./src/crypto/node.ts"
+    },
+    "#async-context": {
+      "browser": "./src/async-context/browser-async-context.ts",
+      "default": "./src/async-context/node-async-context.ts"
+    },
+    "#event-emitter": {
+      "browser": "./src/event-emitter/browser-event-emitter.ts",
+      "default": "./src/event-emitter/node-event-emitter.ts"
+    },
+    "#env": {
+      "browser": "./src/env/browser-env.ts",
+      "default": "./src/env/node-env.ts"
+    },
+    "#path": {
+      "browser": "./src/path/browser-path.ts",
+      "default": "./src/path/node-path.ts"
+    }
+  },
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/esm/index.mjs",

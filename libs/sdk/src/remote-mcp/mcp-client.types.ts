@@ -3,8 +3,8 @@
  * @description Types for MCP client connections to remote servers
  */
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { Client } from '@frontmcp/protocol';
+import type { Transport } from '@frontmcp/protocol';
 import type {
   Tool,
   Resource,
@@ -14,8 +14,8 @@ import type {
   CallToolResult,
   ReadResourceResult,
   GetPromptResult,
-} from '@modelcontextprotocol/sdk/types.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+} from '@frontmcp/protocol';
+import type { AuthInfo } from '@frontmcp/protocol';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONNECTION TYPES

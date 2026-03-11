@@ -43,6 +43,8 @@ jest.mock('@frontmcp/utils', () => {
     // Required by AuthInternalError base class for errorId generation
     randomBytes: (n: number) => crypto.randomBytes(n),
     bytesToHex: (bytes: Uint8Array) => Buffer.from(bytes).toString('hex'),
+    getEnv: (key: string) => process.env[key],
+    isProduction: () => process.env['NODE_ENV'] === 'production',
   };
 });
 

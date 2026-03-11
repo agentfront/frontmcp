@@ -1,6 +1,6 @@
-import { RootsListChangedNotificationSchema, Result } from '@modelcontextprotocol/sdk/types.js';
+import { RootsListChangedNotificationSchema, Result } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import type { RootsListChangedNotification } from '@modelcontextprotocol/sdk/types.js';
+import type { RootsListChangedNotification } from '@frontmcp/protocol';
 
 /**
  * Handler for `notifications/roots/list_changed` notification from the client.

@@ -7,7 +7,7 @@
  */
 
 import type { Type } from '@frontmcp/di';
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool, Resource, ResourceTemplate, Prompt } from '@frontmcp/protocol';
 import {
   ToolKind,
   ToolClassTokenRecord,

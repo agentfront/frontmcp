@@ -1,4 +1,4 @@
-import { SetLevelRequestSchema, SetLevelRequest, EmptyResult } from '@modelcontextprotocol/sdk/types.js';
+import { SetLevelRequestSchema, SetLevelRequest, EmptyResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 /**

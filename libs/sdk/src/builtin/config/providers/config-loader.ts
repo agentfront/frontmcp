@@ -1,7 +1,6 @@
 import * as yaml from 'js-yaml';
-import * as path from 'path';
 import { z } from 'zod';
-import { readFile, fileExists } from '@frontmcp/utils';
+import { readFile, fileExists, getCwd, pathResolve, pathJoin } from '@frontmcp/utils';
 import { loadEnvFiles, mapEnvToNestedConfig, extractSchemaPaths, populateProcessEnv } from './env-loader';
 import { ConfigValidationError } from './config.service';
 
@@ -38,7 +37,7 @@ export async function loadConfig<T extends object>(
   options: ConfigLoaderOptions = {},
 ): Promise<T> {
   const {
-    basePath = process.cwd(),
+    basePath = getCwd(),
     envPath = '.env',
     localEnvPath = '.env.local',
     configPath = 'config.yml',
@@ -98,7 +97,7 @@ async function loadYamlConfig(basePath: string, configPath: string): Promise<Rec
   const baseName = configPath.replace(/\.(ya?ml)$/, '');
 
   for (const ext of extensions) {
-    const fullPath = path.resolve(basePath, baseName + ext);
+    const fullPath = pathResolve(basePath, baseName + ext);
 
     if (await fileExists(fullPath)) {
       const content = await readFile(fullPath);

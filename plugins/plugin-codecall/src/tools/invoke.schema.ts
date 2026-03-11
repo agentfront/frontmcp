@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/invoke.schema.ts
 import { z } from 'zod';
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResultSchema } from '@frontmcp/protocol';
 
 export const invokeToolDescription = `Call ONE tool directly. Returns standard MCP CallToolResult.
 

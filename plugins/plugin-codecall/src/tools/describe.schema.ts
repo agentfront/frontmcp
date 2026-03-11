@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/describe.schema.ts
 import { z } from 'zod';
-import { ToolAnnotationsSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ToolAnnotationsSchema } from '@frontmcp/protocol';
 
 export const describeToolDescription = `Get input/output schemas for tools from search results.
 

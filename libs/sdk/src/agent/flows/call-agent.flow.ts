@@ -2,8 +2,8 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, AgentContext, AgentEntry } from '../../common';
 import { z } from 'zod';
-import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { CallToolRequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import {
   InvalidMethodError,
   InvalidInputError,

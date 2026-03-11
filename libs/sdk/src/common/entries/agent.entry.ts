@@ -4,9 +4,9 @@ import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { AgentRecord } from '../records';
 import { AgentContext } from '../interfaces';
 import { AgentMetadata, ToolInputType, ToolOutputType } from '../metadata';
-import { Request, Notification, CallToolRequest, CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { Request, Notification, CallToolRequest, CallToolResult, Tool } from '@frontmcp/protocol';
+import { RequestHandlerExtra } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import { AgentInputOf, AgentOutputOf } from '../decorators';
 import type { JSONSchema } from 'zod/v4/core';
 

@@ -1,4 +1,4 @@
-import { IncomingMessage, ServerResponse as HttpServerResponse } from 'http';
+import { IncomingMessage, HttpServerResponse } from '@frontmcp/protocol';
 import { Authorization } from '../types'; // TODO: move to internal
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';

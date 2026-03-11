@@ -1,5 +1,5 @@
 // tools/flows/call-tool.flow.ts
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, isDebug, isDevelopment } from '@frontmcp/utils';
 import {
   Flow,
   FlowBase,
@@ -11,8 +11,8 @@ import {
   isOrchestratedMode,
 } from '../../common';
 import { z } from 'zod';
-import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { CallToolRequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import {
   InvalidMethodError,
   ToolNotFoundError,
@@ -793,7 +793,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       });
 
       // In debug mode, also log to console for immediate visibility
-      if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+      if (isDebug() || isDevelopment()) {
         console.error('[FrontMCP] UI Rendering Error:', {
           tool: tool.metadata.name,
           error: errorMessage,

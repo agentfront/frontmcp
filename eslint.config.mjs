@@ -33,6 +33,9 @@ export default [
             '@frontmcp/utils',
             '@frontmcp/uipack',
             '@frontmcp/uipack/*',
+            '@frontmcp/protocol',
+            '@frontmcp/testing',
+            '^#.+',
           ],
           depConstraints: [
             {
@@ -68,6 +71,25 @@ export default [
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       'no-unused-private-class-members': 'off',
+    },
+  },
+  {
+    // Block direct imports of @frontmcp/protocol in consumer code
+    files: ['apps/**/*.ts', 'apps/**/*.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@frontmcp/protocol',
+              message:
+                '@frontmcp/protocol is internal. Import MCP types from @frontmcp/sdk. ' +
+                'For raw MCP Client in tests, use McpClient from @frontmcp/testing.',
+            },
+          ],
+        },
+      ],
     },
   },
   {

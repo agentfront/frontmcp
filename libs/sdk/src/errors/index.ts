@@ -50,16 +50,18 @@ export {
   authorizationRequiredDataSchema,
   authorizationRequiredParamsSchema,
   authorizationRequiredMetaSchema,
-  // Types (inferred from schemas)
-  AuthorizationRequiredData,
-  AuthorizationRequiredParams,
-  AuthorizationRequiredMeta,
   // Error class
   AuthorizationRequiredError,
 } from './authorization-required.error';
+export type {
+  AuthorizationRequiredData,
+  AuthorizationRequiredParams,
+  AuthorizationRequiredMeta,
+} from './authorization-required.error';
 
 // Export error handler utilities
-export { ErrorHandler, ErrorHandlerOptions, createErrorHandler, shouldStopExecution } from './error-handler';
+export { ErrorHandler, createErrorHandler, shouldStopExecution } from './error-handler';
+export type { ErrorHandlerOptions } from './error-handler';
 
 // Export agent errors
 export {

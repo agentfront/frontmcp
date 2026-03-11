@@ -1,10 +1,9 @@
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { TransportKey, TransportType } from '../transport.types';
-import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from './base-sse-transport';
+import { McpServer, StreamableHTTPServerTransport } from '@frontmcp/protocol';
+import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
+import { SSEServerTransport } from '#sse-transport';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 import { RecreateableSSEServerTransport } from './sse-transport';
 import { ZodType } from 'zod';

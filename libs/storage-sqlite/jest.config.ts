@@ -26,6 +26,7 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/utils$': '<rootDir>/../utils/src/index.ts',
     '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
   },

@@ -18,9 +18,20 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
+        "additionalEntryPoints": [
+          "libs/utils/src/crypto/node.ts",
+          "libs/utils/src/crypto/browser.ts",
+          "libs/utils/src/async-context/node-async-context.ts",
+          "libs/utils/src/async-context/browser-async-context.ts",
+          "libs/utils/src/event-emitter/node-event-emitter.ts",
+          "libs/utils/src/event-emitter/browser-event-emitter.ts",
+          "libs/utils/src/env/node-env.ts",
+          "libs/utils/src/env/browser-env.ts"
+        ],
         "assets": ["libs/utils/README.md", "libs/utils/CHANGELOG.md", "LICENSE", "libs/utils/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" }
+          "outExtension": { ".js": ".js" },
+          "external": ["#crypto-provider", "#async-context", "#event-emitter", "#env"]
         }
       }
     },
@@ -37,8 +48,19 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
+        "additionalEntryPoints": [
+          "libs/utils/src/crypto/node.ts",
+          "libs/utils/src/crypto/browser.ts",
+          "libs/utils/src/async-context/node-async-context.ts",
+          "libs/utils/src/async-context/browser-async-context.ts",
+          "libs/utils/src/event-emitter/node-event-emitter.ts",
+          "libs/utils/src/event-emitter/browser-event-emitter.ts",
+          "libs/utils/src/env/node-env.ts",
+          "libs/utils/src/env/browser-env.ts"
+        ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" }
+          "outExtension": { ".js": ".mjs" },
+          "external": ["#crypto-provider", "#async-context", "#event-emitter", "#env"]
         }
       }
     },

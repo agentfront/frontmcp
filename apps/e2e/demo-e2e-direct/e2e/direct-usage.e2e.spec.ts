@@ -13,7 +13,7 @@
  */
 
 import { FrontMcpInstance, createInMemoryServer, DirectMcpServer, InternalMcpError } from '@frontmcp/sdk';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { McpClient } from '@frontmcp/testing';
 import { serverConfig } from '../src/main';
 import { notesStore } from '../src/apps/notes/data/notes.store';
 
@@ -198,7 +198,7 @@ describe('Direct Usage E2E', () => {
       });
 
       // Create MCP client and connect
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       // Verify connection
@@ -215,7 +215,7 @@ describe('Direct Usage E2E', () => {
 
       const { clientTransport, close } = await createInMemoryServer(scope as any);
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       // List tools
@@ -238,7 +238,7 @@ describe('Direct Usage E2E', () => {
 
       const { clientTransport, close } = await createInMemoryServer(scope as any);
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       // Call tool
@@ -263,7 +263,7 @@ describe('Direct Usage E2E', () => {
         authInfo: { token: 'initial-token' },
       });
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       // Call with initial auth
@@ -293,7 +293,7 @@ describe('Direct Usage E2E', () => {
 
       const { clientTransport, close } = await createInMemoryServer(scope as any);
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       const result = await client.listResources();
@@ -310,7 +310,7 @@ describe('Direct Usage E2E', () => {
 
       const { clientTransport, close } = await createInMemoryServer(scope as any);
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       const result = await client.listPrompts();
@@ -328,7 +328,7 @@ describe('Direct Usage E2E', () => {
 
       const { clientTransport, close } = await createInMemoryServer(scope as any);
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       const result = await client.getPrompt({
@@ -385,7 +385,7 @@ describe('Direct Usage E2E', () => {
 
       const { clientTransport, close } = await createInMemoryServer(scope as any);
 
-      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const client = new McpClient({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
       await client.connect(clientTransport);
 
       // Concurrent operations

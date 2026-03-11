@@ -16,15 +16,16 @@
 // =====================
 export {
   FrontMcpContext,
-  Context, // Short alias
+  Context,
+  validateSessionId,
+  SESSION_ID_MAX_LENGTH,
+  SESSION_ID_VALID_PATTERN,
+} from './frontmcp-context';
+export type {
   FrontMcpContextArgs,
   FrontMcpContextConfig,
   RequestMetadata,
   TransportAccessor,
-  // Session validation
-  validateSessionId,
-  SESSION_ID_MAX_LENGTH,
-  SESSION_ID_VALID_PATTERN,
 } from './frontmcp-context';
 
 // =====================
@@ -40,7 +41,8 @@ export { FRONTMCP_CONTEXT, FrontMcpContextProvider } from './frontmcp-context.pr
 // =====================
 // Trace Context (W3C compliant)
 // =====================
-export { TraceContext, parseTraceContext, generateTraceContext, createChildSpanContext } from './trace-context';
+export { parseTraceContext, generateTraceContext, createChildSpanContext } from './trace-context';
+export type { TraceContext } from './trace-context';
 
 // =====================
 // Metadata Utilities

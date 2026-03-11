@@ -10,7 +10,7 @@ import {
   PromptEntry,
   extendedPromptMetadata,
 } from '../common';
-import { GetPromptResult, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptResult, PromptMessage } from '@frontmcp/protocol';
 import { InvalidEntityError } from '../errors';
 
 /**

@@ -1,8 +1,8 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { AuthInfo } from '@frontmcp/protocol';
 import { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
 import { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from '../transport/adapters/base-sse-transport';
+import { StreamableHTTPServerTransport } from '@frontmcp/protocol';
+import { SSEServerTransport } from '#sse-transport';
 import { Scope } from '../scope';
 
 export interface ScopedServerRequest extends ServerRequest {
@@ -16,7 +16,7 @@ export interface AuthenticatedServerRequest extends ScopedServerRequest {
   authSession: Authorization;
 }
 
-declare module '@modelcontextprotocol/sdk/server/auth/types.js' {
+declare module '@frontmcp/protocol' {
   export interface AuthInfo {
     token: string;
     user: UserClaim;

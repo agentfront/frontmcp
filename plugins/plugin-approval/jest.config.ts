@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   transformIgnorePatterns: ['node_modules/(?!(jose|@noble/hashes|@noble/ciphers)/)'],
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../../libs/utils/src/index.ts',
   },

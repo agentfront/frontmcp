@@ -7,23 +7,24 @@
  */
 
 // Naming utilities
-export { NameCase, splitWords, toCase, sepFor, shortHash, ensureMaxLen, idFromString } from './naming';
+export { splitWords, toCase, sepFor, shortHash, ensureMaxLen, idFromString } from './naming';
+export type { NameCase } from './naming';
 
 // URI utilities
 export {
   isValidMcpUri,
   extractUriScheme,
   isValidMcpUriTemplate,
-  ParsedUriTemplate,
   parseUriTemplate,
   matchUriTemplate,
   expandUriTemplate,
   extractTemplateParams,
   isUriTemplate,
 } from './uri';
+export type { ParsedUriTemplate } from './uri';
 
 // Path utilities
-export { trimSlashes, joinPath } from './path';
+export { trimSlashes, joinPath, pathResolve, pathJoin, basename, dirname, extname } from './path';
 
 // Content utilities
 export { sanitizeToJson, inferMimeType } from './content';
@@ -87,10 +88,7 @@ export {
   isNode,
   isBrowser,
   assertNode,
-  CryptoProvider,
-  EncBlob,
   // Encrypted blob helpers
-  EncryptedBlob,
   EncryptedBlobError,
   encryptValue,
   decryptValue,
@@ -160,6 +158,27 @@ export {
   createKeyPersistence,
   createKeyPersistenceWithStorage,
 } from './crypto';
+export type { CryptoProvider, EncBlob, EncryptedBlob } from './crypto';
+
+// Async context (cross-platform AsyncLocalStorage)
+export { AsyncLocalStorage } from './async-context';
+
+// Event emitter (cross-platform)
+export { EventEmitter } from './event-emitter';
+
+// Environment utilities (cross-platform)
+export {
+  getEnv,
+  getCwd,
+  isProduction,
+  isDevelopment,
+  getEnvFlag,
+  isDebug,
+  setEnv,
+  isEdgeRuntime,
+  isServerless,
+  supportsAnsi,
+} from './env';
 
 // Safe regex utilities (ReDoS prevention)
 export {
@@ -195,20 +214,6 @@ export {
   createStorage,
   createMemoryStorage,
   getDetectedStorageType,
-  // Types
-  StorageAdapter,
-  NamespacedStorage,
-  RootStorage,
-  SetOptions,
-  SetEntry,
-  MessageHandler,
-  Unsubscribe,
-  MemoryAdapterOptions,
-  RedisAdapterOptions,
-  VercelKvAdapterOptions,
-  UpstashAdapterOptions,
-  StorageType,
-  StorageConfig,
   // Namespace
   NamespacedStorageImpl,
   createRootStorage,
@@ -258,4 +263,19 @@ export {
   expiresAtToTTL,
   isExpired,
   normalizeTTL,
+} from './storage';
+export type {
+  StorageAdapter,
+  NamespacedStorage,
+  RootStorage,
+  SetOptions,
+  SetEntry,
+  MessageHandler,
+  Unsubscribe,
+  MemoryAdapterOptions,
+  RedisAdapterOptions,
+  VercelKvAdapterOptions,
+  UpstashAdapterOptions,
+  StorageType,
+  StorageConfig,
 } from './storage';

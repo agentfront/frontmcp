@@ -69,6 +69,9 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 /**
  * Browser-compatible crypto provider using @noble libraries.
  */
+/** Alias for conditional import resolution via `#crypto-provider`. */
+export { browserCrypto as cryptoProvider };
+
 export const browserCrypto: CryptoProvider = {
   randomUUID(): string {
     return generateUUID();

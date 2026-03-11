@@ -1,5 +1,6 @@
 // errors/error-handler.ts
 import { FlowControl } from '../common';
+import { isProduction } from '@frontmcp/utils';
 import { McpError, formatMcpErrorResponse, toMcpError } from './mcp.error';
 
 export interface ErrorHandlerOptions {
@@ -31,7 +32,7 @@ export class ErrorHandler {
   private errorTransformer?: ErrorHandlerOptions['errorTransformer'];
 
   constructor(options: ErrorHandlerOptions = {}) {
-    this.isDevelopment = options.isDevelopment ?? process.env['NODE_ENV'] !== 'production';
+    this.isDevelopment = options.isDevelopment ?? !isProduction();
     this['logger'] = options.logger;
     this.errorTransformer = options.errorTransformer;
   }

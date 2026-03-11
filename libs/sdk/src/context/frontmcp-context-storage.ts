@@ -18,13 +18,13 @@
  * ```
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from '@frontmcp/utils';
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
 import { FrontMcpContext, FrontMcpContextArgs } from './frontmcp-context';
 import { parseTraceContext } from './trace-context';
 import { extractMetadata } from './metadata.utils';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { AuthInfo } from '@frontmcp/protocol';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 
 /**

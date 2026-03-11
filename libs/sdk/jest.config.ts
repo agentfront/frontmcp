@@ -38,10 +38,12 @@ module.exports = {
   ],
   // Map @frontmcp/uipack imports to the built dist for tests
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/uipack$': '<rootDir>/../uipack/dist/index.js',
     '^@frontmcp/uipack/(.*)$': '<rootDir>/../uipack/dist/$1/index.js',
     '^@frontmcp/ui$': '<rootDir>/../ui/dist/index.js',
     '^@frontmcp/ui/(.*)$': '<rootDir>/../ui/dist/$1/index.js',
+    '^@frontmcp/auth$': '<rootDir>/../auth/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../utils/src/index.ts',
     '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
   },

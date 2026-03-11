@@ -9,7 +9,8 @@
  * @module skill/cache
  */
 
-export { SkillHttpCache, MemorySkillHttpCache, RedisSkillHttpCache } from './skill-http-cache.js';
+export { MemorySkillHttpCache, RedisSkillHttpCache } from './skill-http-cache.js';
+export type { SkillHttpCache } from './skill-http-cache.js';
 export { createSkillHttpCache } from './skill-http-cache.factory.js';
 export type {
   SkillHttpCacheOptions,
