@@ -64,7 +64,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/protocol/dist/package.json"
+        "command": "node scripts/strip-dist-from-pkg.js libs/protocol/dist/package.json && node scripts/fix-protocol-esm-reexports.js"
       }
     },
     "test": {
