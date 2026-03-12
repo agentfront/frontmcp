@@ -250,11 +250,15 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
             break;
 
           case 'content_block_stop':
-            if (currentToolIndex >= 0 && currentToolArgs) {
-              try {
-                toolCalls[currentToolIndex].arguments = JSON.parse(currentToolArgs);
-              } catch {
-                // Malformed tool-call JSON — keep empty args so the completion still returns
+            if (currentToolIndex >= 0) {
+              if (currentToolArgs) {
+                try {
+                  toolCalls[currentToolIndex].arguments = JSON.parse(currentToolArgs);
+                } catch {
+                  toolCalls[currentToolIndex].arguments = {};
+                }
+              } else {
+                toolCalls[currentToolIndex].arguments = {};
               }
               currentToolIndex = -1;
               currentToolArgs = '';
@@ -374,6 +378,9 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
         }
 
         case 'tool':
+          if (!msg.toolCallId) {
+            throw new LlmAdapterError('Tool message is missing required toolCallId', 'anthropic', 'invalid_request');
+          }
           // Tool results in Anthropic go as user messages with tool_result content
           result.push({
             role: 'user',

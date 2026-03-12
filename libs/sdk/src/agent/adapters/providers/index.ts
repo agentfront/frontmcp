@@ -97,16 +97,16 @@ function createAdapterForProvider(options: CreateProviderAdapterOptions): AgentL
  * A deferred adapter that initializes the real adapter on first use.
  */
 class DeferredProviderAdapter implements AgentLlmAdapter {
-  private _adapter: AgentLlmAdapter | null = null;
+  private adapter: AgentLlmAdapter | null = null;
 
   constructor(private readonly options: CreateProviderAdapterOptions) {}
 
   private getAdapter(): AgentLlmAdapter {
-    if (this._adapter) {
-      return this._adapter;
+    if (this.adapter) {
+      return this.adapter;
     }
-    this._adapter = createAdapterForProvider(this.options);
-    return this._adapter;
+    this.adapter = createAdapterForProvider(this.options);
+    return this.adapter;
   }
 
   async completion(

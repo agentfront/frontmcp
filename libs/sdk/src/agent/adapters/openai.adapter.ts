@@ -280,7 +280,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
     this.apiMode = config.api ?? 'chat';
   }
 
-  private getClient(): OpenAIClient {
+  private async getClient(): Promise<OpenAIClient> {
     if (this.providedClient) {
       return this.providedClient;
     }
@@ -290,9 +290,8 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
 
     let OpenAI: new (config: Record<string, unknown>) => OpenAIClient;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require('openai');
-      OpenAI = mod.default ?? mod;
+      const mod = await import('openai');
+      OpenAI = ((mod as Record<string, unknown>).default as typeof OpenAI) ?? mod;
     } catch {
       throw new LlmAdapterError(
         'The "openai" package is not installed.\n\n' +
@@ -359,7 +358,8 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
 
     return this.withRetry(async () => {
       try {
-        const response = (await this.getClient().chat.completions.create(params)) as OpenAIChatCompletion;
+        const client = await this.getClient();
+        const response = (await client.chat.completions.create(params)) as OpenAIChatCompletion;
         return this.parseChatResponse(response);
       } catch (error) {
         throw this.wrapError(error);
@@ -375,14 +375,24 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
     const params = this.buildChatParams(prompt, tools, options, true);
 
     let content = '';
-    const toolCallsMap = new Map<number, { id: string; name: string; args: string }>();
+    const toolCallsMap = new Map<number, { id: string; name: string; args: string; emitted: boolean }>();
     let finishReason: AgentCompletion['finishReason'] = 'stop';
     let usage: AgentCompletion['usage'];
 
     try {
-      const stream = (await this.getClient().chat.completions.create(params)) as OpenAIChatStream;
+      const client = await this.getClient();
+      const stream = (await client.chat.completions.create(params)) as OpenAIChatStream;
 
       for await (const chunk of stream) {
+        // Handle usage (often in last chunk with stream_options) — check before choice
+        if (chunk.usage) {
+          usage = {
+            promptTokens: chunk.usage.prompt_tokens,
+            completionTokens: chunk.usage.completion_tokens,
+            totalTokens: chunk.usage.total_tokens,
+          };
+        }
+
         const choice = chunk.choices?.[0];
         if (!choice) continue;
 
@@ -395,13 +405,14 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
         // Handle tool call deltas
         if (choice.delta.tool_calls) {
           for (const tc of choice.delta.tool_calls) {
-            const existing = toolCallsMap.get(tc.index) ?? { id: '', name: '', args: '' };
+            const existing = toolCallsMap.get(tc.index) ?? { id: '', name: '', args: '', emitted: false };
             if (tc.id) existing.id = tc.id;
             if (tc.function?.name) existing.name = tc.function.name;
             if (tc.function?.arguments) existing.args += tc.function.arguments;
             toolCallsMap.set(tc.index, existing);
 
-            if (existing.id) {
+            if (existing.id && !existing.emitted) {
+              existing.emitted = true;
               yield {
                 type: 'tool_call',
                 toolCall: { id: existing.id, name: existing.name, arguments: {} },
@@ -413,15 +424,6 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
         // Handle finish reason
         if (choice.finish_reason) {
           finishReason = this.mapChatFinishReason(choice.finish_reason);
-        }
-
-        // Handle usage (often in last chunk with stream_options)
-        if (chunk.usage) {
-          usage = {
-            promptTokens: chunk.usage.prompt_tokens,
-            completionTokens: chunk.usage.completion_tokens,
-            totalTokens: chunk.usage.total_tokens,
-          };
         }
       }
 
@@ -458,7 +460,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
 
     return this.withRetry(async () => {
       try {
-        const client = this.getClient();
+        const client = await this.getClient();
         if (!client.responses) {
           throw new LlmAdapterError(
             'The OpenAI client does not support the Responses API.\n' +
@@ -488,7 +490,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
     let usage: AgentCompletion['usage'];
 
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       if (!client.responses) {
         throw new LlmAdapterError(
           'The OpenAI client does not support the Responses API.\n' +
@@ -881,7 +883,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
   }
 
   private buildToolCallsFromMap(
-    toolCallsMap: Map<number, { id: string; name: string; args: string }>,
+    toolCallsMap: Map<number, { id: string; name: string; args: string; emitted?: boolean }>,
   ): AgentToolCall[] {
     const toolCalls: AgentToolCall[] = [];
     for (const [, tc] of toolCallsMap) {

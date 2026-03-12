@@ -923,6 +923,30 @@ describe('Crypto Module', () => {
     });
   });
 
+  describe('Cross-platform rsaVerify wrapper', () => {
+    const { rsaVerify } = require('../index');
+    const { generateRsaKeyPair, rsaSign } = require('../node');
+
+    it('should verify a valid RS256 signature via the cross-platform wrapper', async () => {
+      const keyPair = generateRsaKeyPair(2048, 'RS256');
+      const data = Buffer.from('cross-platform-test-data');
+      const signature = rsaSign('RSA-SHA256', data, keyPair.privateKey);
+
+      const isValid = await rsaVerify('RS256', data, keyPair.publicJwk, signature);
+      expect(isValid).toBe(true);
+    });
+
+    it('should reject an invalid signature via the cross-platform wrapper', async () => {
+      const keyPair = generateRsaKeyPair(2048, 'RS256');
+      const data = Buffer.from('cross-platform-test-data');
+      const wrongData = Buffer.from('tampered-data');
+      const signature = rsaSign('RSA-SHA256', data, keyPair.privateKey);
+
+      const isValid = await rsaVerify('RS256', wrongData, keyPair.publicJwk, signature);
+      expect(isValid).toBe(false);
+    });
+  });
+
   describe('RSA Key Utilities (Node.js)', () => {
     // Import Node.js specific utilities
     const {

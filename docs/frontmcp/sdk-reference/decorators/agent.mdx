@@ -50,7 +50,7 @@ function Agent<InSchema, OutSchema>(
 | Property | Type                    | Description                |
 | -------- | ----------------------- | -------------------------- |
 | `name`   | `string`                | Unique agent identifier    |
-| `llm`    | `AgentLlmAdapterConfig` | LLM provider configuration |
+| `llm`    | `AgentLlmBuiltinConfig \| AgentLlmAdapterConfig` | LLM provider configuration |
 
 ### Optional Properties
 
@@ -117,6 +117,11 @@ interface AgentLlmAdapterConfig {
   },
 })
 ```
+
+<Note>
+  The `process.env` examples below are Node.js-specific. In browser environments,
+  use your bundler's environment variable injection or pass the API key directly.
+</Note>
 
 ### OpenAI Responses API
 

@@ -979,6 +979,7 @@ describe('LLM Adapters', () => {
     it('should use OpenAIAdapter instance directly', () => {
       const mockClient = {
         chat: { completions: { create: jest.fn() } },
+        responses: { create: jest.fn() },
       };
 
       const openaiAdapter = new OpenAIAdapter({ model: 'gpt-4o', client: mockClient as never });

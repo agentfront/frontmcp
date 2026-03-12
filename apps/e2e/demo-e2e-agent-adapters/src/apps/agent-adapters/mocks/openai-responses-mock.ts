@@ -22,7 +22,7 @@ export function createOpenAIResponsesMock() {
       create: async (params: ResponseCreateParamsNonStreaming): Promise<Response> => {
         const input = params.input;
         const hasFunctionOutput =
-          Array.isArray(input) && input.some((i: Record<string, unknown>) => i.type === 'function_call_output');
+          Array.isArray(input) && input.some((i: unknown) => (i as { type?: string }).type === 'function_call_output');
 
         if (!hasFunctionOutput) {
           // First call: return function_call
@@ -55,7 +55,7 @@ export function createOpenAIResponsesMock() {
 
         // Second call: extract function output and return message
         const funcOutput = Array.isArray(input)
-          ? input.find((i: Record<string, unknown>) => i.type === 'function_call_output')
+          ? input.find((i: unknown) => (i as { type?: string }).type === 'function_call_output')
           : undefined;
         const outputContent = funcOutput && 'output' in funcOutput ? String(funcOutput.output) : '';
 

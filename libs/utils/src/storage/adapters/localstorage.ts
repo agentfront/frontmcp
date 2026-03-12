@@ -27,6 +27,12 @@ export interface LocalStorageAdapterOptions {
    * When provided, all values are encrypted at rest in localStorage.
    */
   encryptionKey?: Uint8Array;
+
+  /**
+   * Whether to allow plaintext storage when no encryption key is provided.
+   * @default true
+   */
+  allowPlaintext?: boolean;
 }
 
 /**
@@ -63,12 +69,14 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   protected readonly backendName = 'localstorage';
   private readonly prefix: string;
   private readonly encryptionKey: Uint8Array | undefined;
+  private readonly allowPlaintext: boolean;
   private readonly encoder = new TextEncoder();
   private readonly decoder = new TextDecoder();
 
   constructor(options?: LocalStorageAdapterOptions) {
     super();
     this.prefix = options?.prefix ?? 'frontmcp:';
+    this.allowPlaintext = options?.allowPlaintext ?? true;
     if (options?.encryptionKey) {
       if (options.encryptionKey.length !== 32) {
         throw new Error(`encryptionKey must be exactly 32 bytes, got ${options.encryptionKey.length}`);
@@ -164,6 +172,9 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
         data: base64urlEncode(ciphertext),
       };
     } else {
+      if (!this.allowPlaintext) {
+        throw new Error('Plaintext storage is disabled. Provide an encryptionKey or set allowPlaintext: true.');
+      }
       entry.v = value;
     }
 
@@ -221,15 +232,19 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
 
   async keys(pattern?: string): Promise<string[]> {
     const result: string[] = [];
+    // Snapshot keys first to avoid mutation during iteration (get() may remove expired entries)
+    const candidates: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const fullKey = localStorage.key(i);
       if (fullKey && fullKey.startsWith(this.prefix)) {
-        const key = this.stripPrefix(fullKey);
-        if (!pattern || pattern === '*' || this.matchPattern(key, pattern)) {
-          // Check if not expired
-          if ((await this.get(key)) !== null) {
-            result.push(key);
-          }
+        candidates.push(this.stripPrefix(fullKey));
+      }
+    }
+    for (const key of candidates) {
+      if (!pattern || pattern === '*' || this.matchPattern(key, pattern)) {
+        // Check if not expired
+        if ((await this.get(key)) !== null) {
+          result.push(key);
         }
       }
     }
@@ -249,11 +264,14 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   }
 
   async incrBy(key: string, amount: number): Promise<number> {
+    if (!Number.isInteger(amount)) {
+      throw new Error(`amount must be an integer, got ${amount}`);
+    }
     const current = await this.get(key);
-    const value = current !== null ? parseInt(current, 10) + amount : amount;
-    if (Number.isNaN(value)) {
+    if (current !== null && !/^-?\d+$/.test(current)) {
       throw new Error(`Value at "${key}" is not an integer`);
     }
+    const value = current !== null ? parseInt(current, 10) + amount : amount;
     await this.set(key, String(value));
     return value;
   }

@@ -2,7 +2,7 @@
  * LocalStorage Adapter Tests — encryption at rest
  */
 import { LocalStorageAdapter } from '../adapters/localstorage';
-import { randomBytes, encryptAesGcm, base64urlEncode } from '../../crypto';
+import { randomBytes } from '../../crypto';
 
 // ---------------------------------------------------------------------------
 // localStorage mock (Map-backed)
@@ -78,8 +78,8 @@ describe('LocalStorageAdapter — encryption', () => {
       await adapter.set('secret', 'plaintext-should-not-appear');
 
       const raw = store.get('frontmcp:secret');
-      expect(raw).toBeDefined();
-      const parsed = JSON.parse(raw!);
+      if (!raw) throw new Error('Expected raw value to be defined');
+      const parsed = JSON.parse(raw);
 
       // The value field should be empty (not the plaintext)
       expect(parsed.v).toBe('');
@@ -171,7 +171,8 @@ describe('LocalStorageAdapter — encryption', () => {
       expect(await adapter.get('plain')).toBe('hello');
 
       const raw = store.get('frontmcp:plain');
-      const parsed = JSON.parse(raw!);
+      if (!raw) throw new Error('Expected raw value to be defined');
+      const parsed = JSON.parse(raw);
       expect(parsed.v).toBe('hello');
       expect(parsed._enc).toBeUndefined();
     });

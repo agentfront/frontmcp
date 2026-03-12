@@ -17,7 +17,7 @@ export function createAnthropicMock() {
           (m) =>
             m.role === 'user' &&
             Array.isArray(m.content) &&
-            (m.content as Array<Record<string, unknown>>).some((b) => b.type === 'tool_result'),
+            (m.content as unknown as Array<Record<string, unknown>>).some((b) => b.type === 'tool_result'),
         );
 
         if (!hasToolResults) {
@@ -50,7 +50,7 @@ export function createAnthropicMock() {
         let toolContent = '';
         for (const m of params.messages) {
           if (m.role === 'user' && Array.isArray(m.content)) {
-            for (const block of m.content as Array<Record<string, unknown>>) {
+            for (const block of m.content as unknown as Array<Record<string, unknown>>) {
               if (block.type === 'tool_result' && typeof block.content === 'string') {
                 toolContent = block.content;
               }
