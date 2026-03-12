@@ -147,9 +147,11 @@ export default class ConfigPlugin<TConfig extends object = Record<string, string
 
         // Merge with existing process.env
         const merged = { ...env };
-        for (const [key, value] of Object.entries(process.env)) {
-          if (value !== undefined && merged[key] === undefined) {
-            merged[key] = value;
+        if (typeof process !== 'undefined' && process.env) {
+          for (const [key, value] of Object.entries(process.env)) {
+            if (value !== undefined && merged[key] === undefined) {
+              merged[key] = value;
+            }
           }
         }
 

@@ -1,9 +1,9 @@
-import { AuthInfo } from '@frontmcp/protocol';
-import { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
-import { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
-import { StreamableHTTPServerTransport } from '@frontmcp/protocol';
-import { SSEServerTransport } from '#sse-transport';
-import { Scope } from '../scope';
+import type { AuthInfo } from '@frontmcp/protocol';
+import type { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
+import type { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
+import type { StreamableHTTPServerTransport } from '@frontmcp/protocol';
+import type { SSEServerTransport } from '#sse-transport';
+import type { Scope } from '../scope';
 
 export interface ScopedServerRequest extends ServerRequest {
   authScope: Scope;

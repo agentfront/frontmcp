@@ -26,7 +26,7 @@ function FrontMcpPrompt(providedMetadata: PromptMetadata): ClassDecorator {
 
 export type FrontMcpPromptExecuteHandler = (
   args: GetPromptRequest['params']['arguments'],
-  ...tokens: any[]
+  ...tokens: unknown[]
 ) => GetPromptResult | Promise<GetPromptResult>;
 
 /**

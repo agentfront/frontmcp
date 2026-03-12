@@ -336,7 +336,7 @@ export const httpRespond = {
     },
   }),
 
-  rpcRequest: (requestId: RequestId, method: string, params: any): JSONRPCMessage => ({
+  rpcRequest: (requestId: RequestId, method: string, params: Record<string, unknown>): JSONRPCMessage => ({
     jsonrpc: JSON_RPC,
     id: requestId ?? randomUUID(),
     method,

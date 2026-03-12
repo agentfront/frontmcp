@@ -3,7 +3,7 @@
 import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, PromptEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { ListPromptsRequestSchema, ListPromptsResultSchema, Prompt } from '@frontmcp/protocol';
+import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({

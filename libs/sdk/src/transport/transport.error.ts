@@ -1,4 +1,4 @@
-import { JSONRPCError, JSONRPCMessage, RequestId } from '@frontmcp/protocol';
+import type { JSONRPCError, JSONRPCMessage, RequestId } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 const JSON_RPC = '2.0';

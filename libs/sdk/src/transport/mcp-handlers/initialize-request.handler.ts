@@ -1,4 +1,4 @@
-import { InitializeRequestSchema, InitializeRequest, InitializeResult } from '@frontmcp/protocol';
+import { InitializeRequestSchema, type InitializeRequest, type InitializeResult } from '@frontmcp/protocol';
 import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { UnsupportedClientVersionError } from '../../errors';

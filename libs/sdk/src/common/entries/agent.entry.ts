@@ -1,13 +1,19 @@
 // file: libs/sdk/src/common/entries/agent.entry.ts
 
 import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { AgentRecord } from '../records';
-import { AgentContext } from '../interfaces';
-import { AgentMetadata, ToolInputType, ToolOutputType } from '../metadata';
-import { Request, Notification, CallToolRequest, CallToolResult, Tool } from '@frontmcp/protocol';
-import { RequestHandlerExtra } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
-import { AgentInputOf, AgentOutputOf } from '../decorators';
+import type { AgentRecord } from '../records';
+import type { AgentContext } from '../interfaces';
+import type { AgentMetadata, ToolInputType, ToolOutputType } from '../metadata';
+import type {
+  Request,
+  Notification,
+  CallToolRequest,
+  CallToolResult,
+  Tool,
+  RequestHandlerExtra,
+  AuthInfo,
+} from '@frontmcp/protocol';
+import type { AgentInputOf, AgentOutputOf } from '../decorators';
 import type { JSONSchema } from 'zod/v4/core';
 
 /** JSON Schema type from Zod v4 */

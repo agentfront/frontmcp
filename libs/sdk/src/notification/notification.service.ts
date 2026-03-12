@@ -1,6 +1,6 @@
 // file: libs/sdk/src/notification/notification.service.ts
 
-import { McpServer } from '@frontmcp/protocol';
+import type { McpServer } from '@frontmcp/protocol';
 import {
   ListRootsResultSchema,
   type LoggingLevel,

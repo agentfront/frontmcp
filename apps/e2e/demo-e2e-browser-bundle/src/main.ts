@@ -126,26 +126,49 @@ const summary = Object.values(results);
 const passed = summary.filter((r) => r.pass).length;
 const failed = summary.filter((r) => !r.pass).length;
 
-app.innerHTML = `
-  <h1>FrontMCP Browser Bundle E2E</h1>
-  <p data-testid="summary">${passed} passed, ${failed} failed</p>
-  <table>
-    <thead><tr><th>Check</th><th>Status</th><th>Value</th></tr></thead>
-    <tbody>
-      ${Object.entries(results)
-        .map(
-          ([name, r]) => `
-        <tr data-testid="check-${name}" data-status="${r.pass ? 'pass' : 'fail'}">
-          <td>${name}</td>
-          <td>${r.pass ? '\u2705' : '\u274c'}</td>
-          <td>${r.value}</td>
-        </tr>
-      `,
-        )
-        .join('')}
-    </tbody>
-  </table>
-`;
+// Build DOM safely using textContent to avoid XSS from error strings containing HTML
+const heading = document.createElement('h1');
+heading.textContent = 'FrontMCP Browser Bundle E2E';
+app.appendChild(heading);
+
+const summaryP = document.createElement('p');
+summaryP.dataset.testid = 'summary';
+summaryP.textContent = `${passed} passed, ${failed} failed`;
+app.appendChild(summaryP);
+
+const table = document.createElement('table');
+const thead = document.createElement('thead');
+const headerRow = document.createElement('tr');
+for (const h of ['Check', 'Status', 'Value']) {
+  const th = document.createElement('th');
+  th.textContent = h;
+  headerRow.appendChild(th);
+}
+thead.appendChild(headerRow);
+table.appendChild(thead);
+
+const tbody = document.createElement('tbody');
+for (const [name, r] of Object.entries(results)) {
+  const tr = document.createElement('tr');
+  tr.dataset.testid = `check-${name}`;
+  tr.dataset.status = r.pass ? 'pass' : 'fail';
+
+  const tdName = document.createElement('td');
+  tdName.textContent = name;
+  tr.appendChild(tdName);
+
+  const tdStatus = document.createElement('td');
+  tdStatus.textContent = r.pass ? '\u2705' : '\u274c';
+  tr.appendChild(tdStatus);
+
+  const tdValue = document.createElement('td');
+  tdValue.textContent = r.value;
+  tr.appendChild(tdValue);
+
+  tbody.appendChild(tr);
+}
+table.appendChild(tbody);
+app.appendChild(table);
 
 // Expose for Playwright assertions
 (window as unknown as Record<string, unknown>).__BUNDLE_RESULTS__ = results;

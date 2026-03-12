@@ -2,7 +2,7 @@
 class StubMessage {
   content: string;
   constructor(content: string | Record<string, unknown>) {
-    this.content = typeof content === 'string' ? content : '';
+    this.content = typeof content === 'string' ? content : JSON.stringify(content);
   }
   _getType(): string {
     return 'base';
@@ -24,6 +24,13 @@ export class AIMessage extends StubMessage {
   }
 }
 export class ToolMessage extends StubMessage {
+  tool_call_id: string;
+  name?: string;
+  constructor(fields: { content: string | Record<string, unknown>; tool_call_id: string; name?: string }) {
+    super(fields.content);
+    this.tool_call_id = fields.tool_call_id;
+    this.name = fields.name;
+  }
   override _getType() {
     return 'tool';
   }

@@ -158,7 +158,7 @@ export class SSEServerTransport implements Transport {
     }
 
     const authInfo: AuthInfo | undefined = req.auth;
-    const requestInfo: RequestInfo = { headers: req.headers } as any;
+    const requestInfo = { headers: req.headers } as unknown as RequestInfo;
 
     let body: string | unknown;
     try {

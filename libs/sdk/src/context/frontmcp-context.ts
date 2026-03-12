@@ -12,7 +12,7 @@
  */
 
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
-import { AuthInfo } from '@frontmcp/protocol';
+import type { AuthInfo } from '@frontmcp/protocol';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
 import type { SessionIdPayload } from '../common/types';

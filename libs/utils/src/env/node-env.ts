@@ -55,6 +55,9 @@ export function isServerless(): boolean {
 
 export function supportsAnsi(): boolean {
   if (process.env['NO_COLOR']) return false;
-  if (process.env['FORCE_COLOR']) return true;
-  return !!(process.stdout && (process.stdout as any).isTTY);
+  const forceColor = process.env['FORCE_COLOR'];
+  if (forceColor !== undefined) {
+    return forceColor !== '0' && forceColor.toLowerCase() !== 'false';
+  }
+  return process.stdout?.isTTY === true;
 }

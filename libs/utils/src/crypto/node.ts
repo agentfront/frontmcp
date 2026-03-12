@@ -29,9 +29,6 @@ function toBuffer(data: string | Uint8Array): Buffer {
 /**
  * Node.js crypto provider implementation.
  */
-/** Alias for conditional import resolution via `#crypto-provider`. */
-export { nodeCrypto as cryptoProvider };
-
 export const nodeCrypto: CryptoProvider = {
   randomUUID(): string {
     return crypto.randomUUID();
@@ -104,6 +101,9 @@ export const nodeCrypto: CryptoProvider = {
     return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
   },
 };
+
+/** Alias for conditional import resolution via `#crypto-provider`. */
+export { nodeCrypto as cryptoProvider };
 
 // ═══════════════════════════════════════════════════════════════════
 // RSA KEY UTILITIES (Node.js only)

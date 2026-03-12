@@ -1,6 +1,6 @@
 import * as yaml from 'js-yaml';
 import { z } from 'zod';
-import { readFile, fileExists, getCwd, pathResolve, pathJoin } from '@frontmcp/utils';
+import { readFile, fileExists, getCwd, pathResolve } from '@frontmcp/utils';
 import { loadEnvFiles, mapEnvToNestedConfig, extractSchemaPaths, populateProcessEnv } from './env-loader';
 import { ConfigValidationError } from './config.service';
 

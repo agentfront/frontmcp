@@ -45,8 +45,11 @@ function stringToBytes(str: string, encoding: 'utf8' | 'base64'): Uint8Array {
   if (encoding === 'utf8') {
     return new TextEncoder().encode(str);
   }
-  // base64
-  return base64Decode(str);
+  try {
+    return base64Decode(str);
+  } catch (err) {
+    throw new Error(`Invalid base64 body: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /* ----------------------- writer ------------------------ */

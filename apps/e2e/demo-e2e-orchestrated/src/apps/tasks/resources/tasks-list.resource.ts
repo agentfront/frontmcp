@@ -1,4 +1,4 @@
-import { Resource, ResourceContext, ReadResourceResult } from '@frontmcp/sdk';
+import { Resource, ResourceContext, type ReadResourceResult } from '@frontmcp/sdk';
 
 @Resource({
   name: 'tasks-list',
