@@ -291,7 +291,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
     let OpenAI: new (config: Record<string, unknown>) => OpenAIClient;
     try {
       const mod = await import('openai');
-      OpenAI = ((mod as Record<string, unknown>).default as typeof OpenAI) ?? mod;
+      OpenAI = ((mod as Record<string, unknown>)['default'] as typeof OpenAI) ?? mod;
     } catch {
       throw new LlmAdapterError(
         'The "openai" package is not installed.\n\n' +
