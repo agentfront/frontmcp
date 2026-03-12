@@ -7,7 +7,7 @@ icon: plug
 DirectClient provides programmatic access to FrontMCP servers without HTTP or stdio transports. Connect directly from your TypeScript/JavaScript code with automatic LLM-aware response formatting.
 
 <Info>
-DirectClient is ideal for SDK integrations, unit testing, AI agent frameworks (LangChain, Vercel AI), and same-process embeddings where network overhead is undesirable.
+DirectClient is ideal for SDK integrations, unit testing, AI agent frameworks (Vercel AI, OpenAI SDK, or custom agent frameworks), and same-process embeddings where network overhead is undesirable.
 </Info>
 
 ## Transport Comparison
@@ -26,7 +26,7 @@ FrontMCP supports multiple ways to connect to MCP servers. Choose based on your 
 
 ### When to Use DirectClient
 
-- **Building AI agents**: Integrate MCP tools directly into LangChain, Vercel AI, or custom agent code
+- **Building AI agents**: Integrate MCP tools directly into Vercel AI, OpenAI SDK, or custom agent code
 - **Testing**: Write unit/integration tests without spinning up servers
 - **Same-process integrations**: Embed MCP capabilities in your application
 - **Performance-critical**: Avoid network/IPC overhead for high-throughput scenarios
@@ -76,7 +76,6 @@ For automatic tool/result formatting based on LLM platform:
 import {
   connectOpenAI,
   connectClaude,
-  connectLangChain,
   connectVercelAI
 } from '@frontmcp/sdk/direct';
 
@@ -88,9 +87,6 @@ const openaiClient = await connectOpenAI(scope, {
 
 // Claude format (tool_use blocks)
 const claudeClient = await connectClaude(scope);
-
-// LangChain format
-const langchainClient = await connectLangChain(scope);
 
 // Vercel AI format
 const vercelClient = await connectVercelAI(scope);
@@ -359,7 +355,7 @@ const capabilities = client.getCapabilities();
 
 // Get detected platform
 const platform = client.getDetectedPlatform();
-// 'openai' | 'claude' | 'langchain' | 'vercel-ai' | 'raw'
+// 'openai' | 'claude' | 'vercel-ai' | 'raw'
 ```
 
 ---
@@ -372,7 +368,6 @@ DirectClient automatically formats tools and results based on the detected platf
 | --------- | ----------------------------------------- | --------------------- |
 | OpenAI    | `{ type: 'function', function: {...} }`   | Parsed JSON or string |
 | Claude    | `{ name, description, input_schema }`     | Content array         |
-| LangChain | `{ name, description, schema }`           | Parsed JSON           |
 | Vercel AI | `{ [name]: { description, parameters } }` | Parsed JSON           |
 | Raw       | MCP native format                         | MCP CallToolResult    |
 

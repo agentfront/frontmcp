@@ -159,7 +159,8 @@ export default class WeatherApp {}
 
 ```typescript
 llm: {
-  // Provider: 'openai' | 'anthropic' | 'azure' | etc.
+  // Provider: 'openai' | 'anthropic'
+  // For Azure, Groq, Mistral, etc., use OpenAIAdapter with baseUrl instead
   provider: 'openai',
 
   // Model name

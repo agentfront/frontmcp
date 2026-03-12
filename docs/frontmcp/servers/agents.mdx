@@ -53,8 +53,8 @@ import { z } from 'zod';
     topic: z.string().describe('Topic to research'),
   },
   llm: {
-    adapter: 'openai',
-    model: 'gpt-4-turbo',
+    provider: 'openai',
+    model: 'gpt-4o',
     apiKey: { env: 'OPENAI_API_KEY' },
   },
   tools: [WebSearchTool, SummarizeTool],
@@ -75,8 +75,8 @@ Override `execute()` only when you need custom pre/post processing:
     query: z.string(),
   },
   llm: {
-    adapter: 'openai',
-    model: 'gpt-4-turbo',
+    provider: 'openai',
+    model: 'gpt-4o',
     apiKey: { env: 'OPENAI_API_KEY' },
   },
 })
@@ -109,8 +109,8 @@ const EchoAgent = agent({
     message: z.string(),
   },
   llm: {
-    adapter: 'openai',
-    model: 'gpt-3.5-turbo',
+    provider: 'openai',
+    model: 'gpt-4o-mini',
     apiKey: { env: 'OPENAI_API_KEY' },
   },
 })(({ message }) => ({ echoed: `Echo: ${message}` }));
@@ -143,58 +143,123 @@ Each agent is automatically exposed as a tool:
 
 ## LLM Configuration
 
-Agents require an LLM configuration. FrontMCP uses **LangChain** as the standard adapter layer, providing consistent APIs across all LLM providers with built-in retry logic, streaming support, and token tracking.
+Agents require an LLM configuration. FrontMCP provides **native adapters** for OpenAI and Anthropic SDKs with built-in retry logic, streaming support, and token tracking.
 
-### Using LangChain Adapters
+### Built-in Providers (Shorthand)
 
-First, install the LangChain package for your provider:
+The simplest way to configure an LLM — the SDK auto-creates the appropriate adapter:
 
 ```bash
 # For OpenAI
-npm install @langchain/openai
+npm install openai
 
 # For Anthropic
-npm install @langchain/anthropic
-
-# For Google
-npm install @langchain/google-genai
-
-# For Mistral
-npm install @langchain/mistralai
+npm install @anthropic-ai/sdk
 ```
 
-### OpenAI
+```ts
+@Agent({
+  name: 'research-agent',
+  llm: {
+    provider: 'openai',
+    model: 'gpt-4o',
+    apiKey: { env: 'OPENAI_API_KEY' },
+  },
+  // ...
+})
+class ResearchAgent extends AgentContext {}
+
+@Agent({
+  name: 'claude-agent',
+  llm: {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-20250514',
+    apiKey: { env: 'ANTHROPIC_API_KEY' },
+  },
+  // ...
+})
+class ClaudeAgent extends AgentContext {}
+```
+
+### OpenAI Adapter (Direct)
+
+For full control, use `OpenAIAdapter` directly. Supports the **Chat Completions API** (default) and the **Responses API**:
 
 ```ts
-import { ChatOpenAI } from '@langchain/openai';
-import { LangChainAdapter } from '@frontmcp/sdk';
+import { OpenAIAdapter } from '@frontmcp/sdk';
 
-const adapter = new LangChainAdapter({
-  model: new ChatOpenAI({
-    model: 'gpt-4-turbo',
-    openAIApiKey: process.env.OPENAI_API_KEY,
-  }),
+// Chat Completions API (default)
+const chatAdapter = new OpenAIAdapter({
+  model: 'gpt-4o',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Responses API
+const responsesAdapter = new OpenAIAdapter({
+  model: 'gpt-4o',
+  apiKey: process.env.OPENAI_API_KEY,
+  api: 'responses',
+});
+
+// Pre-configured client
+import OpenAI from 'openai';
+const clientAdapter = new OpenAIAdapter({
+  model: 'gpt-4o',
+  client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
 });
 
 @Agent({
   name: 'research-agent',
-  llm: { adapter },
+  llm: { adapter: chatAdapter },
   // ...
 })
-class ResearchAgent extends AgentContext { }
+class ResearchAgent extends AgentContext {}
 ```
 
-### Anthropic
+#### OpenAI-Compatible Providers
+
+Use `baseUrl` to connect to any OpenAI-compatible API (OpenRouter, Azure, Groq, Mistral, etc.):
 
 ```ts
-import { ChatAnthropic } from '@langchain/anthropic';
-import { LangChainAdapter } from '@frontmcp/sdk';
+import { OpenAIAdapter } from '@frontmcp/sdk';
 
-const adapter = new LangChainAdapter({
-  model: new ChatAnthropic({
-    model: 'claude-3-opus-20240229',
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  }),
+// OpenRouter — access 100+ models
+const openRouterAdapter = new OpenAIAdapter({
+  model: 'anthropic/claude-3-opus',
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseUrl: 'https://openrouter.ai/api/v1',
+});
+
+// Groq
+const groqAdapter = new OpenAIAdapter({
+  model: 'llama-3.1-70b-versatile',
+  apiKey: process.env.GROQ_API_KEY,
+  baseUrl: 'https://api.groq.com/openai/v1',
+});
+
+// Azure OpenAI
+const azureAdapter = new OpenAIAdapter({
+  model: 'gpt-4o',
+  apiKey: process.env.AZURE_OPENAI_API_KEY,
+  baseUrl: 'https://my-resource.openai.azure.com/openai/deployments/gpt-4o',
+});
+```
+
+### Anthropic Adapter (Direct)
+
+```ts
+import { AnthropicAdapter } from '@frontmcp/sdk';
+
+const adapter = new AnthropicAdapter({
+  model: 'claude-sonnet-4-20250514',
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+// Or with pre-configured client
+import Anthropic from '@anthropic-ai/sdk';
+const clientAdapter = new AnthropicAdapter({
+  model: 'claude-sonnet-4-20250514',
+  client: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
 });
 
 @Agent({
@@ -202,45 +267,18 @@ const adapter = new LangChainAdapter({
   llm: { adapter },
   // ...
 })
-class ClaudeAgent extends AgentContext { }
-```
-
-### OpenRouter
-
-Access 100+ models through OpenRouter using the OpenAI-compatible API:
-
-```ts
-import { ChatOpenAI } from '@langchain/openai';
-import { LangChainAdapter } from '@frontmcp/sdk';
-
-const adapter = new LangChainAdapter({
-  model: new ChatOpenAI({
-    model: 'anthropic/claude-3-opus',  // Any OpenRouter model
-    openAIApiKey: process.env.OPENROUTER_API_KEY,
-    configuration: {
-      baseURL: 'https://openrouter.ai/api/v1',
-    },
-  }),
-});
-
-@Agent({
-  name: 'openrouter-agent',
-  llm: { adapter },
-  // ...
-})
-class OpenRouterAgent extends AgentContext { }
+class ClaudeAgent extends AgentContext {}
 ```
 
 ### Custom Adapter
 
-Implement `AgentLlmAdapter` for providers not covered by LangChain:
+Implement `AgentLlmAdapter` for any other provider:
 
 ```ts
 import { AgentLlmAdapter, AgentCompletion, AgentPrompt, AgentToolDefinition } from '@frontmcp/sdk';
 
 const myAdapter: AgentLlmAdapter = {
   async completion(prompt: AgentPrompt, tools?: AgentToolDefinition[]): Promise<AgentCompletion> {
-    // Call your LLM provider
     const response = await myLlmClient.chat({
       messages: prompt.messages,
       system: prompt.system,
@@ -259,7 +297,7 @@ const myAdapter: AgentLlmAdapter = {
   name: 'custom-agent',
   llm: { adapter: myAdapter },
 })
-class CustomAgent extends AgentContext { }
+class CustomAgent extends AgentContext {}
 ```
 
 ---

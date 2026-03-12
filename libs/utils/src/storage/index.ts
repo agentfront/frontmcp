@@ -70,8 +70,10 @@ export {
   VercelKvStorageAdapter,
   UpstashStorageAdapter,
   FileSystemStorageAdapter,
+  LocalStorageAdapter,
+  IndexedDBStorageAdapter,
 } from './adapters';
-export type { FileSystemAdapterOptions } from './adapters';
+export type { FileSystemAdapterOptions, LocalStorageAdapterOptions, IndexedDBAdapterOptions } from './adapters';
 
 // Utilities (for advanced use)
 export { globToRegex, matchesPattern, validatePattern, escapeGlob } from './utils/pattern';

@@ -82,12 +82,14 @@ export interface KeyPersistenceOptions {
 export interface CreateKeyPersistenceOptions {
   /**
    * Storage type.
-   * - 'auto': Auto-detect based on environment (filesystem in Node.js, memory in browser)
+   * - 'auto': Auto-detect based on environment (filesystem in Node.js, indexeddb in browser)
    * - 'memory': Always use memory (keys lost on restart)
    * - 'filesystem': Always use filesystem (Node.js only)
+   * - 'indexeddb': Use IndexedDB (browser only, persistent)
+   * - 'localstorage': Use localStorage (browser only, persistent, ~5MB limit)
    * @default 'auto'
    */
-  type?: 'auto' | 'memory' | 'filesystem';
+  type?: 'auto' | 'memory' | 'filesystem' | 'indexeddb' | 'localstorage';
 
   /**
    * Base directory for filesystem storage.

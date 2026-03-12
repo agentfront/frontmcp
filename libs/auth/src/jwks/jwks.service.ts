@@ -235,7 +235,12 @@ export class JwksService {
         return { ok: false, error: 'missing_alg' };
       }
 
-      const isValid = rsaVerify(jwtAlg, Buffer.from(signatureInput), matchingKey as unknown as JsonWebKey, signature);
+      const isValid = await rsaVerify(
+        jwtAlg,
+        Buffer.from(signatureInput),
+        matchingKey as unknown as JsonWebKey,
+        signature,
+      );
 
       if (!isValid) {
         return { ok: false, error: 'signature_invalid' };

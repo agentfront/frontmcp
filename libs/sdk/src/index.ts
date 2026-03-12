@@ -167,6 +167,10 @@ export type {
   AgentToolDefinition,
 } from './agent';
 
+// LLM Adapters (direct SDK wrappers)
+export { OpenAIAdapter, AnthropicAdapter } from './agent/adapters';
+export type { OpenAIAdapterConfig, OpenAIApiMode, AnthropicAdapterConfig } from './agent/adapters';
+
 export const ToolHook = FlowHooksOf('tools:call-tool');
 export const ListToolsHook = FlowHooksOf('tools:list-tools');
 export const HttpHook = FlowHooksOf('http:request');

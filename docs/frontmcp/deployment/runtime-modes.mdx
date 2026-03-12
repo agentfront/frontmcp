@@ -21,7 +21,7 @@ FrontMCP supports three integration modes depending on how you want to deploy an
 
 Use SDK mode when your agent code directly calls FrontMCP tools without HTTP. This is ideal for:
 
-- LangChain, Vercel AI, or OpenAI SDK integrations
+- Vercel AI or OpenAI SDK integrations
 - In-process agent frameworks
 - Testing and local development
 
@@ -32,7 +32,6 @@ Use SDK mode when your agent code directly calls FrontMCP tools without HTTP. Th
 | `connect()`          | Auto-detect | Based on clientInfo                                      |
 | `connectOpenAI()`    | OpenAI      | `[{ type: 'function', function: { name, parameters } }]` |
 | `connectClaude()`    | Anthropic   | `[{ name, input_schema }]`                               |
-| `connectLangChain()` | LangChain   | `[{ name, schema }]`                                     |
 | `connectVercelAI()`  | Vercel AI   | `{ [name]: { parameters } }`                             |
 
 ### Benefits
@@ -368,7 +367,7 @@ Serverless environments require distributed storage. In-memory storage does not 
   <Accordion title="When to use SDK Mode">
     Choose SDK mode when:
     - Your agent code calls FrontMCP tools directly
-    - You're using LangChain, Vercel AI SDK, or OpenAI SDK
+    - You're using Vercel AI SDK or OpenAI SDK
     - You want zero network overhead
     - You need automatic tool format conversion
     - You're building an in-process agent

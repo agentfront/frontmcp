@@ -26,3 +26,28 @@ export function jwtAlgToNodeAlg(jwtAlg: string): string {
 export function isRsaPssAlg(jwtAlg: string): boolean {
   return jwtAlg.startsWith('PS');
 }
+
+// ============================================================================
+// WebCrypto algorithm mapping (browser-compatible)
+// ============================================================================
+
+const JWT_ALG_TO_WEB_CRYPTO: Record<string, string> = {
+  RS256: 'SHA-256',
+  RS384: 'SHA-384',
+  RS512: 'SHA-512',
+  PS256: 'SHA-256',
+  PS384: 'SHA-384',
+  PS512: 'SHA-512',
+};
+
+/**
+ * Map a JWT algorithm to a WebCrypto hash algorithm name.
+ * Used for `crypto.subtle.importKey()` and `crypto.subtle.verify()`.
+ */
+export function jwtAlgToWebCryptoAlg(jwtAlg: string): string {
+  const webAlg = JWT_ALG_TO_WEB_CRYPTO[jwtAlg];
+  if (!webAlg) {
+    throw new Error(`Unsupported JWT algorithm for WebCrypto: ${jwtAlg}`);
+  }
+  return webAlg;
+}

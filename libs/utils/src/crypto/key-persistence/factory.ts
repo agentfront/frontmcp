@@ -7,7 +7,7 @@
  * @module @frontmcp/utils/key-persistence
  */
 
-import { isNode } from '../runtime';
+import { isNode, isBrowser } from '../runtime';
 import { MemoryStorageAdapter } from '../../storage/adapters/memory';
 import type { StorageAdapter } from '../../storage/types';
 import { KeyPersistence } from './key-persistence';
@@ -22,7 +22,8 @@ const DEFAULT_BASE_DIR = '.frontmcp/keys';
  * Create a KeyPersistence instance with auto-detected storage.
  *
  * In Node.js: Uses filesystem storage at `.frontmcp/keys/` by default
- * In browser: Uses memory storage (keys lost on refresh)
+ * In browser: Uses IndexedDB (persistent) with localStorage fallback
+ * Fallback: Memory storage (keys lost on restart)
  *
  * @param options - Configuration options
  * @returns KeyPersistence instance (storage already connected)
@@ -34,6 +35,12 @@ const DEFAULT_BASE_DIR = '.frontmcp/keys';
  *
  * // Force memory storage
  * const memKeys = await createKeyPersistence({ type: 'memory' });
+ *
+ * // Force IndexedDB (browser)
+ * const idbKeys = await createKeyPersistence({ type: 'indexeddb' });
+ *
+ * // Force localStorage (browser)
+ * const lsKeys = await createKeyPersistence({ type: 'localstorage' });
  *
  * // Custom directory for filesystem
  * const fsKeys = await createKeyPersistence({
@@ -49,17 +56,27 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
   let adapter: StorageAdapter;
 
   if (type === 'memory') {
-    // Explicit memory storage
     adapter = new MemoryStorageAdapter();
   } else if (type === 'filesystem') {
-    // Explicit filesystem storage — dynamic import to avoid pulling fs into browser bundles
     const { FileSystemStorageAdapter } = await import('../../storage/adapters/filesystem.js');
     adapter = new FileSystemStorageAdapter({ baseDir });
+  } else if (type === 'indexeddb') {
+    const { IndexedDBStorageAdapter } = await import('../../storage/adapters/indexeddb.js');
+    adapter = new IndexedDBStorageAdapter();
+  } else if (type === 'localstorage') {
+    const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
+    adapter = new LocalStorageAdapter({ prefix: 'frontmcp:keys:' });
   } else {
     // Auto-detect
     if (isNode()) {
       const { FileSystemStorageAdapter } = await import('../../storage/adapters/filesystem.js');
       adapter = new FileSystemStorageAdapter({ baseDir });
+    } else if (isBrowser() && typeof indexedDB !== 'undefined') {
+      const { IndexedDBStorageAdapter } = await import('../../storage/adapters/indexeddb.js');
+      adapter = new IndexedDBStorageAdapter();
+    } else if (isBrowser() && typeof localStorage !== 'undefined') {
+      const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
+      adapter = new LocalStorageAdapter({ prefix: 'frontmcp:keys:' });
     } else {
       adapter = new MemoryStorageAdapter();
     }

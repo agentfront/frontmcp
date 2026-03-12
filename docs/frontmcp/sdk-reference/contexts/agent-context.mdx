@@ -50,7 +50,7 @@ By default, agents run an automatic execution loop:
 ```typescript
 @Agent({
   name: 'my-agent',
-  llm: { adapter: 'openai', model: 'gpt-4' },
+  llm: { provider: 'openai', model: 'gpt-4o' },
   tools: [MyTool],
 })
 class MyAgent extends AgentContext {
@@ -273,7 +273,7 @@ Synthesize findings into a comprehensive report.`,
     sources: z.array(z.string()),
   }),
   llm: {
-    adapter: 'openai',
+    provider: 'openai',
     model: 'gpt-4-turbo',
     apiKey: { env: 'OPENAI_API_KEY' },
     temperature: 0.7,
@@ -315,7 +315,7 @@ Provide a comprehensive summary with sources.`;
 @Agent({
   name: 'orchestrator',
   description: 'Coordinates multiple specialized agents',
-  llm: { adapter: 'openai', model: 'gpt-4' },
+  llm: { provider: 'openai', model: 'gpt-4o' },
   systemInstructions: `You orchestrate tasks across specialized agents:
 - research-agent: For information gathering
 - writer-agent: For content creation
@@ -398,7 +398,7 @@ class StoreResultTool extends ToolContext {
     confidence: z.enum(['high', 'medium', 'low']),
   }),
   llm: {
-    adapter: 'openai',
+    provider: 'openai',
     model: 'gpt-4-turbo',
     apiKey: { env: 'OPENAI_API_KEY' },
     temperature: 0.2, // Lower for math accuracy

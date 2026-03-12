@@ -1,41 +1,49 @@
 /**
  * LLM adapters for FrontMCP agents.
  *
- * FrontMCP uses LangChain as the standard adapter layer for LLM integration.
- * This provides:
- * - Consistent API across all providers (OpenAI, Anthropic, Google, Mistral, etc.)
- * - Built-in retry logic and error handling
- * - Streaming support
- * - Tool/function calling support
- * - Token counting and usage tracking
- *
- * @example Using with OpenAI
- * ```typescript
- * import { ChatOpenAI } from '@langchain/openai';
- * import { LangChainAdapter } from '@frontmcp/sdk';
- *
- * @Agent({
- *   name: 'my-agent',
- *   llm: {
- *     adapter: new LangChainAdapter({
- *       model: new ChatOpenAI({
- *         model: 'gpt-4-turbo',
- *         openAIApiKey: process.env.OPENAI_API_KEY,
- *       }),
- *     }),
- *   },
- * })
- * ```
+ * FrontMCP provides direct adapters for OpenAI and Anthropic SDKs.
+ * For other providers, implement the `AgentLlmAdapter` interface
+ * or use the OpenAI adapter with a custom `baseUrl` (most providers
+ * are OpenAI-compatible).
  *
  * @example Using built-in shorthand
  * ```typescript
  * @Agent({
  *   name: 'my-agent',
  *   llm: {
- *     adapter: 'langchain',
  *     provider: 'openai',
- *     model: 'gpt-4-turbo',
+ *     model: 'gpt-4o',
  *     apiKey: { env: 'OPENAI_API_KEY' },
+ *   },
+ * })
+ * ```
+ *
+ * @example Using OpenAI adapter directly
+ * ```typescript
+ * import { OpenAIAdapter } from '@frontmcp/sdk';
+ *
+ * @Agent({
+ *   name: 'my-agent',
+ *   llm: {
+ *     adapter: new OpenAIAdapter({
+ *       model: 'gpt-4o',
+ *       apiKey: process.env.OPENAI_API_KEY,
+ *     }),
+ *   },
+ * })
+ * ```
+ *
+ * @example Using Anthropic adapter directly
+ * ```typescript
+ * import { AnthropicAdapter } from '@frontmcp/sdk';
+ *
+ * @Agent({
+ *   name: 'my-agent',
+ *   llm: {
+ *     adapter: new AnthropicAdapter({
+ *       model: 'claude-sonnet-4-20250514',
+ *       apiKey: process.env.ANTHROPIC_API_KEY,
+ *     }),
  *   },
  * })
  * ```
@@ -45,9 +53,13 @@
 export { BaseLlmAdapter, LlmAdapterError, LlmRateLimitError, LlmContextLengthError } from './base.adapter';
 export type { BaseLlmAdapterConfig } from './base.adapter';
 
-// LangChain adapter (primary adapter)
-export { LangChainAdapter } from './langchain.adapter';
-export type { LangChainAdapterConfig } from './langchain.adapter';
+// OpenAI adapter
+export { OpenAIAdapter } from './openai.adapter';
+export type { OpenAIAdapterConfig, OpenAIApiMode } from './openai.adapter';
+
+// Anthropic adapter
+export { AnthropicAdapter } from './anthropic.adapter';
+export type { AnthropicAdapterConfig } from './anthropic.adapter';
 
 // Adapter factory
 export {

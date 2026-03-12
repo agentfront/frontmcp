@@ -24,8 +24,8 @@ class SearchWebTool extends ToolContext {
   name: 'research-agent',
   description: 'Researches topics using web search',
   llm: {
-    adapter: 'openai',
-    model: 'gpt-4-turbo',
+    provider: 'openai',
+    model: 'gpt-4o',
     apiKey: { env: 'OPENAI_API_KEY' },
   },
   tools: [SearchWebTool],
@@ -66,14 +66,26 @@ function Agent<InSchema, OutSchema>(
 
 ### LLM Configuration
 
+The `llm` property accepts one of two configuration shapes:
+
+**Built-in provider shorthand** (`AgentLlmBuiltinConfig`):
+
 ```typescript
-interface AgentLlmAdapterConfig {
-  adapter: 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq' | string;
+interface AgentLlmBuiltinConfig {
+  provider: 'openai' | 'anthropic';
   model: string;
-  apiKey?: string | { env: string } | { config: string };
+  apiKey: string | { env: string } | WithConfig<string>;
+  baseUrl?: string;        // For OpenAI-compatible APIs
   temperature?: number;
   maxTokens?: number;
-  // Provider-specific options...
+}
+```
+
+**Direct adapter instance** (`AgentLlmAdapterConfig`):
+
+```typescript
+interface AgentLlmAdapterConfig {
+  adapter: AgentLlmAdapter | OpenAIAdapter | AnthropicAdapter;
 }
 ```
 
@@ -85,8 +97,8 @@ interface AgentLlmAdapterConfig {
 @Agent({
   name: 'assistant',
   llm: {
-    adapter: 'openai',
-    model: 'gpt-4-turbo',
+    provider: 'openai',
+    model: 'gpt-4o',
     apiKey: { env: 'OPENAI_API_KEY' },
     temperature: 0.7,
   },
@@ -99,22 +111,43 @@ interface AgentLlmAdapterConfig {
 @Agent({
   name: 'assistant',
   llm: {
-    adapter: 'anthropic',
-    model: 'claude-3-opus-20240229',
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-20250514',
     apiKey: { env: 'ANTHROPIC_API_KEY' },
   },
 })
 ```
 
-### Google (Gemini)
+### OpenAI Responses API
 
 ```typescript
+import { OpenAIAdapter } from '@frontmcp/sdk';
+
 @Agent({
   name: 'assistant',
   llm: {
-    adapter: 'google',
-    model: 'gemini-pro',
-    apiKey: { env: 'GOOGLE_API_KEY' },
+    adapter: new OpenAIAdapter({
+      model: 'gpt-4o',
+      apiKey: process.env.OPENAI_API_KEY,
+      api: 'responses',
+    }),
+  },
+})
+```
+
+### Direct Adapter Instance
+
+```typescript
+import { OpenAIAdapter } from '@frontmcp/sdk';
+
+@Agent({
+  name: 'assistant',
+  llm: {
+    adapter: new OpenAIAdapter({
+      model: 'gpt-4o',
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: 'https://api.groq.com/openai/v1',  // OpenAI-compatible APIs
+    }),
   },
 })
 ```
@@ -131,7 +164,7 @@ By default, agents run an automatic loop:
 ```typescript
 @Agent({
   name: 'task-agent',
-  llm: { adapter: 'openai', model: 'gpt-4' },
+  llm: { provider: 'openai', model: 'gpt-4o' },
   tools: [Tool1, Tool2],
   systemInstructions: 'You are a helpful assistant.',
 })
@@ -149,7 +182,7 @@ Override `execute()` for custom behavior:
   name: 'custom-agent',
   inputSchema: { task: z.string() },
   outputSchema: z.object({ result: z.string() }),
-  llm: { adapter: 'openai', model: 'gpt-4' },
+  llm: { provider: 'openai', model: 'gpt-4o' },
 })
 class CustomAgent extends AgentContext {
   async execute(input: { task: string }) {
@@ -181,7 +214,7 @@ import { z } from 'zod';
 const researchAgent = agent({
   name: 'research',
   inputSchema: { topic: z.string() },
-  llm: { adapter: 'openai', model: 'gpt-4' },
+  llm: { provider: 'openai', model: 'gpt-4o' },
 })((input, ctx) => {
   // Custom execution logic
   return { findings: '...' };
@@ -251,7 +284,7 @@ Agents can invoke other agents:
 ```typescript
 @Agent({
   name: 'orchestrator',
-  llm: { adapter: 'openai', model: 'gpt-4' },
+  llm: { provider: 'openai', model: 'gpt-4o' },
   tools: [ResearchAgent, WriterAgent], // Agents as tools
 })
 class OrchestratorAgent extends AgentContext {
@@ -310,8 +343,8 @@ Always explain your reasoning before taking actions.`,
     summary: z.string(),
   }),
   llm: {
-    adapter: 'openai',
-    model: 'gpt-4-turbo',
+    provider: 'openai',
+    model: 'gpt-4o',
     apiKey: { env: 'OPENAI_API_KEY' },
     temperature: 0.3,
   },

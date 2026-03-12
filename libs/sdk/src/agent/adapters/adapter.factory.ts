@@ -197,11 +197,7 @@ export function resolveStringValue(
 export function isBuiltinConfig(config: AgentLlmConfig): config is AgentLlmBuiltinConfig {
   if (typeof config !== 'object' || config === null) return false;
   const obj = config as unknown as Record<string, unknown>;
-  return (
-    'provider' in obj &&
-    typeof obj['provider'] === 'string' &&
-    ['openai', 'anthropic', 'google', 'mistral', 'groq'].includes(obj['provider'])
-  );
+  return 'provider' in obj && typeof obj['provider'] === 'string' && ['openai', 'anthropic'].includes(obj['provider']);
 }
 
 /**
@@ -273,13 +269,10 @@ export interface CreateAdapterOptions {
 /**
  * Create an LLM adapter from configuration.
  *
- * FrontMCP uses LangChain as the standard adapter layer for all LLM providers.
- * This provides a consistent API, built-in retry logic, and streaming support.
- *
  * Supported configuration types:
  * - Provider shorthand (`{ provider: 'openai', model: 'gpt-4o', ... }`) - recommended
- * - Direct LangChainAdapter instance (`{ adapter: new LangChainAdapter(...) }`)
- * - Factory function (`{ adapter: (providers) => new LangChainAdapter(...) }`)
+ * - Direct adapter instance (`{ adapter: new OpenAIAdapter(...) }`)
+ * - Factory function (`{ adapter: (providers) => new OpenAIAdapter(...) }`)
  * - DI token (`LLM_ADAPTER` symbol)
  *
  * @example Provider shorthand (recommended)
@@ -291,13 +284,14 @@ export interface CreateAdapterOptions {
  * });
  * ```
  *
- * @example Direct LangChain adapter
+ * @example Direct adapter instance
  * ```typescript
- * import { ChatOpenAI } from '@langchain/openai';
+ * import { OpenAIAdapter } from '@frontmcp/sdk';
  *
  * const adapter = createAdapter({
- *   adapter: new LangChainAdapter({
- *     model: new ChatOpenAI({ model: 'gpt-4o' }),
+ *   adapter: new OpenAIAdapter({
+ *     model: 'gpt-4o',
+ *     apiKey: process.env.OPENAI_API_KEY,
  *   }),
  * });
  * ```
@@ -348,7 +342,7 @@ export function createAdapter(config: AgentLlmConfig, options: CreateAdapterOpti
 /**
  * Create a built-in adapter from provider configuration.
  *
- * Automatically creates the appropriate LangChain adapter based on the provider.
+ * Automatically creates the appropriate adapter based on the provider.
  *
  * @example
  * ```typescript
@@ -378,7 +372,7 @@ function createBuiltinAdapter(
   const { temperature, maxTokens } = config;
 
   return createProviderAdapterSync({
-    provider: provider as 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq',
+    provider: provider as 'openai' | 'anthropic',
     model,
     apiKey,
     baseUrl,
