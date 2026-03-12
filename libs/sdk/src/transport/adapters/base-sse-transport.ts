@@ -165,7 +165,6 @@ export class SSEServerTransport implements Transport {
     const authInfo: AuthInfo | undefined = req.auth;
     const requestInfo: McpRequestInfo = {
       headers: req.headers as Record<string, string | string[] | undefined>,
-      url: req.url ? new URL(req.url, `http://${req.headers.host ?? 'localhost'}`) : undefined,
     };
 
     let body: string | unknown;
