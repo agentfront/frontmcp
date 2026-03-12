@@ -4,6 +4,7 @@
 // Uses explicit interfaces from interfaces.ts for IDE autocomplete.
 
 import { z } from 'zod';
+import { isServerless } from '@frontmcp/utils';
 import { RawZodShape } from '../../common.types';
 import { redisOptionsSchema } from '../redis';
 
@@ -334,19 +335,7 @@ export function isDistributedMode(distributedMode?: DistributedEnabled): boolean
 
   // Auto-detect serverless environment
   if (distributedMode === 'auto') {
-    // Check common serverless environment indicators
-    const env = typeof process !== 'undefined' ? process.env : {};
-    return !!(
-      env['VERCEL'] ||
-      env['NETLIFY'] ||
-      env['CF_PAGES'] || // Cloudflare Pages
-      env['AWS_LAMBDA_FUNCTION_NAME'] ||
-      env['AZURE_FUNCTIONS_ENVIRONMENT'] ||
-      env['K_SERVICE'] || // Google Cloud Run
-      env['RAILWAY_ENVIRONMENT'] ||
-      env['RENDER'] ||
-      env['FLY_APP_NAME']
-    );
+    return isServerless();
   }
 
   return false;

@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/security/tool-access-control.service.ts
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { AuthInfo } from '@frontmcp/protocol';
 
 /**
  * Tool access control modes:

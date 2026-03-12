@@ -4,9 +4,9 @@ import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { PromptRecord } from '../records';
 import { PromptContext, PromptInterface } from '../interfaces';
 import { PromptMetadata } from '../metadata';
-import { GetPromptResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { GetPromptResult, Request, Notification } from '@frontmcp/protocol';
+import { RequestHandlerExtra } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import { ProviderRegistryInterface } from '../interfaces/internal';
 import type ProviderRegistry from '../../provider/provider.registry';
 

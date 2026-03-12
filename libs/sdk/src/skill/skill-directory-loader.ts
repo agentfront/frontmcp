@@ -9,8 +9,7 @@
  * @module skill/skill-directory-loader
  */
 
-import { basename } from 'node:path';
-import { readFile, fileExists, stat, joinPath } from '@frontmcp/utils';
+import { readFile, fileExists, stat, joinPath, basename } from '@frontmcp/utils';
 import { SkillKind } from '../common/records/skill.record';
 import type { SkillFileRecord } from '../common/records/skill.record';
 import type { SkillMetadata, SkillResources } from '../common/metadata/skill.metadata';

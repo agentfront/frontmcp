@@ -2,7 +2,7 @@
 
 import InvokeTool from '../tools/invoke.tool';
 import { isBlockedSelfReference } from '../security/self-reference-guard';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 // Helper to create a mock MCP CallToolResult
 function createMockMcpResult(data: unknown, isError = false): CallToolResult {

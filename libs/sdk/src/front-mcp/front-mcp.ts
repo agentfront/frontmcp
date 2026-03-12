@@ -302,8 +302,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   public static async runStdio(options: FrontMcpConfigInput): Promise<void> {
     // Dynamically import to avoid bundling issues
-    const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
-    const { Server: McpServer } = await import('@modelcontextprotocol/sdk/server/index.js');
+    const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
 
     // Parse config through Zod to apply defaults, then disable HTTP server
     const parsedConfig = frontMcpMetadataSchema.parse({

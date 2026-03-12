@@ -7,7 +7,8 @@ export {
   federatedProviderItemSchema,
   federatedLoginStateSchema,
   federatedSelectionSchema,
-  // Types
+} from './consent.types';
+export type {
   ConsentToolItem,
   ConsentSelection,
   ConsentState,

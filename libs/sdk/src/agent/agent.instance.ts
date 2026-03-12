@@ -33,7 +33,7 @@ import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { createAdapter, CreateAdapterOptions, ConfigResolver } from './adapters';
 import { ConfigService } from '../builtin/config';
-import type { CallToolRequest, Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolRequest, Tool } from '@frontmcp/protocol';
 import {
   InvalidHookFlowError,
   AgentNotConfiguredError,
@@ -45,7 +45,7 @@ import { agentToolName, isAgentVisibleToSwarm, canAgentSeeSwarm, getVisibleAgent
 import { buildParsedToolResult, buildAgentToolDefinitions } from '../tool/tool.utils';
 import { ToolExecutor } from './agent-execution-loop';
 import { AgentScope } from './agent.scope';
-import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, TextContent } from '@frontmcp/protocol';
 
 // ============================================================================
 // Constants
@@ -436,7 +436,7 @@ export class AgentInstance<
     return async (input, toolCtx) => {
       // Get auth info from tool context
       // Cast is safe because by the time we reach execute, auth has been validated in the flow
-      const authInfo = toolCtx.authInfo as import('@modelcontextprotocol/sdk/server/auth/types.js').AuthInfo;
+      const authInfo = toolCtx.authInfo as import('@frontmcp/protocol').AuthInfo;
 
       // Create agent context with minimal AgentCallExtra
       // Note: buildAgentCtorArgs only accesses ctx.authInfo, so we construct a minimal object

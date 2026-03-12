@@ -1,0 +1,67 @@
+{
+  "name": "@frontmcp/protocol",
+  "version": "0.12.1",
+  "description": "Centralized MCP protocol types, server, and client re-exports for FrontMCP",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "protocol",
+    "modelcontextprotocol",
+    "agentfront",
+    "frontmcp",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/protocol"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/protocol/README.md",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.27.1"
+  },
+  "imports": {
+    "#mcp-streamable-http": {
+      "browser": "./src/browser-mcp-streamable-http.ts",
+      "default": "./src/node-mcp-streamable-http.ts"
+    },
+    "#mcp-server": {
+      "browser": "./src/browser-mcp-server.ts",
+      "default": "./src/node-mcp-server.ts"
+    },
+    "#server-types": {
+      "browser": "./src/browser-server-types.ts",
+      "default": "./src/node-server-types.ts"
+    }
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -9,6 +9,7 @@ import type { Scope } from '../../scope/scope.instance';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   randomUUID: jest.fn(() => 'mock-uuid-1234'),
   randomBytes: jest.fn(() => new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])),
   bytesToHex: jest.fn(() => 'mock-hex'),

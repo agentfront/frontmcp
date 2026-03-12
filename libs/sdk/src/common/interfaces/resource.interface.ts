@@ -3,7 +3,6 @@
 import { Type } from '@frontmcp/di';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
 /**

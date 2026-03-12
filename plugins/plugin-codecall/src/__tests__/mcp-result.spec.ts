@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/mcp-result.spec.ts
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 import { extractResultFromCallToolResult } from '../utils';
 
 describe('extractResultFromCallToolResult', () => {

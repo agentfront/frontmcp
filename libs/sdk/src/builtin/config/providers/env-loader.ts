@@ -1,5 +1,4 @@
-import { readFile, fileExists } from '@frontmcp/utils';
-import * as path from 'path';
+import { readFile, fileExists, getCwd, getEnv, setEnv, pathResolve } from '@frontmcp/utils';
 import { z } from 'zod';
 
 /**
@@ -69,21 +68,21 @@ export function parseEnvContent(content: string): Record<string, string> {
  * @returns Record of merged environment variables
  */
 export async function loadEnvFiles(
-  basePath = process.cwd(),
+  basePath = getCwd(),
   envPath = '.env',
   localEnvPath = '.env.local',
 ): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
 
   // Load base .env file
-  const envFile = path.resolve(basePath, envPath);
+  const envFile = pathResolve(basePath, envPath);
   if (await fileExists(envFile)) {
     const content = await readFile(envFile);
     Object.assign(result, parseEnvContent(content));
   }
 
   // Load .env.local (overrides base)
-  const localFile = path.resolve(basePath, localEnvPath);
+  const localFile = pathResolve(basePath, localEnvPath);
   if (await fileExists(localFile)) {
     const content = await readFile(localFile);
     Object.assign(result, parseEnvContent(content));
@@ -109,8 +108,8 @@ export function parseEnvContentSync(content: string): Record<string, string> {
  */
 export function populateProcessEnv(env: Record<string, string>, override = false): void {
   for (const [key, value] of Object.entries(env)) {
-    if (override || process.env[key] === undefined) {
-      process.env[key] = value;
+    if (override || getEnv(key) === undefined) {
+      setEnv(key, value);
     }
   }
 }

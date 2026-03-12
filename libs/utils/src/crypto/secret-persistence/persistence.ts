@@ -10,11 +10,18 @@
  * @module @frontmcp/utils/secret-persistence
  */
 
-import * as path from 'path';
 import { readFile, writeFile, mkdir, rename, unlink } from '../../fs';
 import { randomBytes, base64urlEncode } from '../';
 import type { SecretData, SecretPersistenceOptions } from './types';
 import { validateSecretData } from './schema';
+import { getEnv, getCwd } from '#env';
+
+// Lazy-load path module to avoid pulling it into browser bundles.
+// All functions that use path are Node-only (filesystem operations).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+function getPath(): typeof import('path') {
+  return require('path');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -42,7 +49,7 @@ const DEFAULT_SECRET_DIR = '.frontmcp';
  * @returns true if persistence is enabled
  */
 export function isSecretPersistenceEnabled(options?: SecretPersistenceOptions): boolean {
-  const isProduction = process.env['NODE_ENV'] === 'production';
+  const isProduction = getEnv('NODE_ENV') === 'production';
 
   // In production, only enable if explicitly forced
   if (isProduction) {
@@ -60,19 +67,20 @@ export function isSecretPersistenceEnabled(options?: SecretPersistenceOptions): 
  * @returns Absolute path to secret file
  */
 export function resolveSecretPath(options?: SecretPersistenceOptions): string {
+  const p = getPath();
   if (options?.secretPath) {
     // If absolute path, use as-is
-    if (path.isAbsolute(options.secretPath)) {
+    if (p.isAbsolute(options.secretPath)) {
       return options.secretPath;
     }
     // Relative paths are resolved from current working directory
-    return path.resolve(process.cwd(), options.secretPath);
+    return p.resolve(getCwd(), options.secretPath);
   }
 
   // Default path using name
   const name = options?.name ?? 'default';
   const defaultPath = `${DEFAULT_SECRET_DIR}/${name}-secret.json`;
-  return path.resolve(process.cwd(), defaultPath);
+  return p.resolve(getCwd(), defaultPath);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -154,7 +162,7 @@ export async function saveSecret(secretData: SecretData, options?: SecretPersist
   }
 
   const secretPath = resolveSecretPath(options);
-  const dir = path.dirname(secretPath);
+  const dir = getPath().dirname(secretPath);
   const tempPath = `${secretPath}.tmp.${Date.now()}.${base64urlEncode(randomBytes(8))}`;
   const logger = getLogger(options);
   const prefix = getLogPrefix(options);

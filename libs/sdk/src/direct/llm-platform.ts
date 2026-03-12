@@ -4,7 +4,7 @@
  * Detects LLM platform from clientInfo and formats tools/results accordingly.
  */
 
-import type { Tool as McpTool, CallToolResult, TextContent, ImageContent } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool as McpTool, CallToolResult, TextContent, ImageContent } from '@frontmcp/protocol';
 import type { LLMPlatform, ClientInfo } from './client.types';
 
 /**

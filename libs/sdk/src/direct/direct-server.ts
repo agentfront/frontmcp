@@ -14,8 +14,8 @@ import type {
   ListPromptsResult,
   GetPromptResult,
   ListResourceTemplatesResult,
-} from '@modelcontextprotocol/sdk/types.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+} from '@frontmcp/protocol';
+import type { AuthInfo } from '@frontmcp/protocol';
 import type { DirectMcpServer, DirectCallOptions, DirectAuthContext, DirectRequestMetadata } from './direct.types';
 import type { ConnectOptions } from './client.types';
 import type { DirectClient } from './client.types';

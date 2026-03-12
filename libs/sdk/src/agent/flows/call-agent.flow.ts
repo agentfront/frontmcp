@@ -2,8 +2,9 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, AgentContext, AgentEntry } from '../../common';
 import { z } from 'zod';
-import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { CallToolRequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
+import type { AuthInfo } from '@frontmcp/protocol';
+import type { SdkAuthInfo } from '../../server/server.types';
 import {
   InvalidMethodError,
   InvalidInputError,
@@ -284,8 +285,9 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
       const frontmcpContext = context.tryGetContext();
-      if (frontmcpContext && authInfo?.transport?.sendElicitRequest) {
-        const transport = authInfo.transport;
+      const sdkAuthInfo = authInfo as SdkAuthInfo | undefined;
+      if (frontmcpContext && sdkAuthInfo?.transport?.sendElicitRequest) {
+        const transport = sdkAuthInfo.transport;
         // Pass the JSON-RPC request ID for proper elicitation routing
         // The MCP SDK uses this to route messages through the correct SSE stream
         const jsonRpcRequestId = this.state.jsonRpcRequestId;

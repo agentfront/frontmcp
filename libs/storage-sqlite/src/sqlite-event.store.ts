@@ -1,7 +1,7 @@
 /**
  * SQLite Event Store
  *
- * Implements the EventStore interface from @modelcontextprotocol/sdk for SSE resumability.
+ * Implements the EventStore interface from @frontmcp/protocol for SSE resumability.
  * Stores events in SQLite with TTL-based expiration and max event limits.
  */
 
@@ -9,8 +9,8 @@ import type Database from 'better-sqlite3';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /**
- * Event store interface matching @modelcontextprotocol/sdk EventStore.
- * Redeclared here to avoid hard dependency on @modelcontextprotocol/sdk.
+ * Event store interface matching @frontmcp/protocol EventStore.
+ * Redeclared here to avoid hard dependency on @frontmcp/protocol.
  */
 export interface EventStoreInterface {
   storeEvent(streamId: string, message: unknown): Promise<string>;

@@ -1,10 +1,8 @@
-import { AuthenticatedServerRequest } from '../../server/server.types';
+import { AuthenticatedServerRequest, SdkAuthInfo } from '../../server/server.types';
 import { TransportKey, TransportType } from '../transport.types';
-import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from './base-sse-transport';
+import { McpServer, StreamableHTTPServerTransport } from '@frontmcp/protocol';
+import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@frontmcp/protocol';
+import { SSEServerTransport } from '#sse-transport';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 import { RecreateableSSEServerTransport } from './sse-transport';
 import { ZodType } from 'zod';
@@ -204,7 +202,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const sessionId = session?.id ?? `fallback:${Date.now()}`;
     const sessionPayload = session?.payload ?? { protocol: 'streamable-http' as const };
 
-    req.auth = {
+    const authInfo: SdkAuthInfo = {
       token,
       user,
       sessionId,
@@ -212,7 +210,8 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       scopes: [],
       clientId: user.sub ?? '',
       transport,
-    } satisfies AuthInfo;
+    };
+    req.auth = authInfo;
     return req.auth;
   }
 

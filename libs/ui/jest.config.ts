@@ -31,6 +31,7 @@ module.exports = {
   ],
   // Map @frontmcp/uipack imports to the built dist for tests
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/uipack$': '<rootDir>/../uipack/dist/index.js',
     '^@frontmcp/uipack/(.*)$': '<rootDir>/../uipack/dist/$1/index.js',
   },

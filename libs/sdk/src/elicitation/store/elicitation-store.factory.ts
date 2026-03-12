@@ -11,7 +11,7 @@
  */
 
 import type { StorageConfig, RootStorage } from '@frontmcp/utils';
-import { createStorage, createMemoryStorage } from '@frontmcp/utils';
+import { createStorage, createMemoryStorage, getEnv } from '@frontmcp/utils';
 import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 import type { ElicitationStore } from './elicitation.store';
 import { StorageElicitationStore } from './storage-elicitation.store';
@@ -146,10 +146,10 @@ export interface ElicitationStoreResult {
  */
 function detectStorageType(storage: RootStorage): 'memory' | 'redis' | 'upstash' | 'auto' {
   // Check environment variables to infer type
-  if (process.env['UPSTASH_REDIS_REST_URL']) {
+  if (getEnv('UPSTASH_REDIS_REST_URL')) {
     return 'upstash';
   }
-  if (process.env['REDIS_URL'] || process.env['REDIS_HOST']) {
+  if (getEnv('REDIS_URL') || getEnv('REDIS_HOST')) {
     return 'redis';
   }
   return 'memory';
@@ -260,7 +260,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   }
 
   // Check for Vercel KV - not supported for elicitation (no pub/sub)
-  if (finalStorageConfig?.type === 'vercel-kv' || process.env['KV_REST_API_URL']) {
+  if (finalStorageConfig?.type === 'vercel-kv' || getEnv('KV_REST_API_URL')) {
     throw new ElicitationNotSupportedError(
       'Vercel KV is not supported for elicitation stores. ' +
         'Elicitation requires pub/sub for cross-node result routing, which Vercel KV does not support. ' +

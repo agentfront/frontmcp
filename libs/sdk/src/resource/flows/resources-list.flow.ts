@@ -3,7 +3,7 @@
 import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { ListResourcesRequestSchema, ListResourcesResultSchema, Resource } from '@modelcontextprotocol/sdk/types.js';
+import { ListResourcesRequestSchema, ListResourcesResultSchema, Resource } from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({

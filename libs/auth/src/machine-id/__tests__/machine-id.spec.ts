@@ -16,6 +16,10 @@ jest.mock('@frontmcp/utils', () => ({
   readFileSync: mockReadFileSync,
   mkdir: mockMkdir,
   writeFile: mockWriteFile,
+  getEnv: (key: string) => process.env[key],
+  getCwd: () => process.cwd(),
+  isProduction: () => process.env['NODE_ENV'] === 'production',
+  isBrowser: () => false,
 }));
 
 describe('machine-id', () => {

@@ -102,6 +102,9 @@ export const nodeCrypto: CryptoProvider = {
   },
 };
 
+/** Alias for conditional import resolution via `#crypto-provider`. */
+export { nodeCrypto as cryptoProvider };
+
 // ═══════════════════════════════════════════════════════════════════
 // RSA KEY UTILITIES (Node.js only)
 // ═══════════════════════════════════════════════════════════════════

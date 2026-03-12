@@ -122,3 +122,6 @@ export const browserCrypto: CryptoProvider = {
     return constantTimeEqual(a, b);
   },
 };
+
+/** Alias for conditional import resolution via `#crypto-provider`. */
+export { browserCrypto as cryptoProvider };

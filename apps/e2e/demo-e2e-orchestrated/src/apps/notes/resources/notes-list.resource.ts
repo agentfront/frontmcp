@@ -1,5 +1,4 @@
-import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { Resource, ResourceContext, type ReadResourceResult } from '@frontmcp/sdk';
 
 @Resource({
   name: 'notes-list',

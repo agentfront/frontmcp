@@ -20,8 +20,8 @@ import { LangChainAdapter, LangChainChatModel } from '../langchain.adapter';
 import type { LlmProvider, ProviderCommonOptions } from './types';
 
 // Static imports for built-in providers (OpenAI and Anthropic)
-import { ChatOpenAI } from '@langchain/openai';
-import { ChatAnthropic } from '@langchain/anthropic';
+import { ChatOpenAI } from '#langchain-openai';
+import { ChatAnthropic } from '#langchain-anthropic';
 
 /**
  * Options for creating a provider-based adapter.
@@ -61,7 +61,7 @@ async function importOptionalProvider(provider: LlmProvider): Promise<Record<str
   }
 
   try {
-    return await import(providerInfo.package);
+    return await import(/* @vite-ignore */ providerInfo.package);
   } catch {
     throw new LlmAdapterError(
       `LangChain provider package not installed.\n\n` +

@@ -3,4 +3,5 @@
  * @description Exports for remote capability caching
  */
 
-export { CapabilityCache, CapabilityCacheConfig } from './capability-cache';
+export { CapabilityCache } from './capability-cache';
+export type { CapabilityCacheConfig } from './capability-cache';

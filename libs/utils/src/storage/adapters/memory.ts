@@ -5,7 +5,7 @@
  * Supports TTL, pattern matching, pub/sub via EventEmitter.
  */
 
-import { EventEmitter } from 'events';
+import { EventEmitter } from '#event-emitter';
 import { BaseStorageAdapter } from './base';
 import type { MemoryAdapterOptions, SetOptions, MessageHandler, Unsubscribe } from '../types';
 import { StorageOperationError } from '../errors';

@@ -1,4 +1,4 @@
-import { CompleteRequestSchema, CompleteRequest, CompleteResult } from '@modelcontextprotocol/sdk/types.js';
+import { CompleteRequestSchema, CompleteRequest, CompleteResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function completeRequestHandler({

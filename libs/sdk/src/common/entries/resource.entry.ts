@@ -4,9 +4,9 @@ import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { AnyResourceRecord } from '../records';
 import { ResourceContext, ResourceInterface } from '../interfaces';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
-import { ReadResourceResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ReadResourceResult, Request, Notification } from '@frontmcp/protocol';
+import { RequestHandlerExtra } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import { ProviderRegistryInterface } from '../interfaces/internal';
 
 export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {

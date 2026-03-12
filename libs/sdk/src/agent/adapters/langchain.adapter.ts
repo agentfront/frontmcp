@@ -7,8 +7,9 @@ import {
   AgentToolDefinition,
   AgentCompletionOptions,
 } from '../../common';
+import { getEnvFlag } from '@frontmcp/utils';
 import { LlmAdapterError } from './base.adapter';
-import { SystemMessage, HumanMessage, AIMessage, ToolMessage, BaseMessage } from '@langchain/core/messages';
+import { SystemMessage, HumanMessage, AIMessage, ToolMessage, BaseMessage } from '#langchain-messages';
 
 // ============================================================================
 // LangChain Types (minimal interface for duck-typing)
@@ -228,7 +229,7 @@ export class LangChainAdapter implements AgentLlmAdapter {
 
     try {
       // Debug: log invoke options if DEBUG_LANGCHAIN is set
-      if (process.env['DEBUG_LANGCHAIN']) {
+      if (getEnvFlag('DEBUG_LANGCHAIN')) {
         console.log('[LangChain] Messages:', JSON.stringify(messages, null, 2));
         console.log('[LangChain] Tools:', JSON.stringify(langChainTools, null, 2));
       }
@@ -278,7 +279,7 @@ export class LangChainAdapter implements AgentLlmAdapter {
       return this.parseResponse(response);
     } catch (error) {
       // Debug: log the raw error before wrapping
-      if (process.env['DEBUG_LANGCHAIN']) {
+      if (getEnvFlag('DEBUG_LANGCHAIN')) {
         console.error('[LangChain] Raw error:', error);
       }
       throw this.wrapError(error);

@@ -15,4 +15,5 @@ export {
 } from './lineage.utils';
 
 // MCP-specific content utilities
-export { toStructuredContent, TextContent, BlobContent, ResourceContent, buildResourceContent } from './content.utils';
+export { toStructuredContent, buildResourceContent } from './content.utils';
+export type { TextContent, BlobContent, ResourceContent } from './content.utils';

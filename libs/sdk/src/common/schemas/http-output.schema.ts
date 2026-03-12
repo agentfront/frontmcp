@@ -1,12 +1,6 @@
 // output-schemas.ts
 import { z } from 'zod';
-import {
-  JSONRPCError,
-  JSONRPCMessage,
-  RequestId,
-  JSONRPCResponseSchema,
-  JSONRPCErrorSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { JSONRPCError, JSONRPCMessage, RequestId, JSONRPCResponseSchema, JSONRPCErrorSchema } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 /**
@@ -342,11 +336,11 @@ export const httpRespond = {
     },
   }),
 
-  rpcRequest: (requestId: RequestId, method: string, params: any): JSONRPCMessage => ({
+  rpcRequest: (requestId: RequestId, method: string, params?: Record<string, unknown>): JSONRPCMessage => ({
     jsonrpc: JSON_RPC,
     id: requestId ?? randomUUID(),
     method,
-    params,
+    ...(params !== undefined && { params }),
   }),
   redirect(location: string): z.infer<typeof HttpRedirectSchema> {
     return {

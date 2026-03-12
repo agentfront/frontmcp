@@ -1,4 +1,4 @@
-import { SubscribeRequestSchema, SubscribeRequest, EmptyResult } from '@modelcontextprotocol/sdk/types.js';
+import { SubscribeRequestSchema, SubscribeRequest, EmptyResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 /**

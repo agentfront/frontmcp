@@ -1,6 +1,13 @@
 // auth/jwks/jwks.service.ts
 import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK } from 'jose';
-import { bytesToHex, randomBytes, rsaVerify, createKeyPersistence, KeyPersistence } from '@frontmcp/utils';
+import {
+  bytesToHex,
+  randomBytes,
+  rsaVerify,
+  createKeyPersistence,
+  KeyPersistence,
+  isProduction,
+} from '@frontmcp/utils';
 import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
 import type { AuthLogger } from '../common/auth-logger.interface';
@@ -53,20 +60,11 @@ export class JwksService {
   // ===========================================================================
 
   /**
-   * Check if key persistence should be enabled.
-   * Enabled in development by default, disabled in production unless forceEnable.
-   */
-  private shouldEnablePersistence(): boolean {
-    const isProd = process.env['NODE_ENV'] === 'production';
-    return !isProd;
-  }
-
-  /**
    * Get or create the KeyPersistence instance.
-   * Returns null if persistence is disabled.
+   * Returns null if persistence is disabled (production).
    */
   private async getKeyPersistence(): Promise<KeyPersistence | null> {
-    if (!this.shouldEnablePersistence()) return null;
+    if (isProduction()) return null;
     if (!this.keyPersistence) {
       this.keyPersistence = await createKeyPersistence({
         baseDir: '.frontmcp/keys',

@@ -2,8 +2,8 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceContext, ResourceEntry } from '../../common';
 import { z } from 'zod';
-import { ReadResourceRequestSchema, ReadResourceResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ReadResourceRequestSchema, ReadResourceResultSchema } from '@frontmcp/protocol';
+import { AuthInfo } from '@frontmcp/protocol';
 import {
   InvalidMethodError,
   ResourceNotFoundError,
@@ -27,7 +27,7 @@ const stateSchema = z.object({
   input: z.object({
     uri: z.string().min(1),
   }),
-  // z.any() used because AuthInfo is a complex external type from @modelcontextprotocol/sdk
+  // z.any() used because AuthInfo is a complex external type from @frontmcp/protocol
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   params: z.record(z.string(), z.string()).default({}), // URI template parameters
   // z.any() used because ResourceEntry is a complex abstract class type

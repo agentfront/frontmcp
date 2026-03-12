@@ -3,7 +3,7 @@
 // Core session encryption/decryption utilities extracted from SDK's session-id.utils.ts.
 // These are pure crypto operations that don't depend on SDK framework primitives.
 
-import { sha256, encryptValue, decryptValue } from '@frontmcp/utils';
+import { sha256, encryptValue, decryptValue, getEnv, isProduction } from '@frontmcp/utils';
 import { getMachineId } from '../../machine-id/machine-id';
 import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
 
@@ -22,12 +22,11 @@ let cachedKey: Uint8Array | null = null;
 export function getKey(): Uint8Array {
   if (cachedKey) return cachedKey;
 
-  const secret = process.env['MCP_SESSION_SECRET'];
-  const nodeEnv = process.env['NODE_ENV'];
+  const secret = getEnv('MCP_SESSION_SECRET');
 
   if (!secret) {
     // Fail fast in production - machine ID is not secure for production use
-    if (nodeEnv === 'production') {
+    if (isProduction()) {
       throw new SessionSecretRequiredError('session ID encryption');
     }
     // Development/test fallback - log warning

@@ -7,7 +7,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import { normalizeAgent, agentDiscoveryDeps } from './agent.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AgentInstance } from './agent.instance';
-import type { Tool, ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool, ServerCapabilities } from '@frontmcp/protocol';
 import { DependencyNotFoundError } from '../errors/mcp.error';
 
 // ============================================================================

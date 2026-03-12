@@ -7,7 +7,7 @@
  * @module transport/event-stores/event-store.factory
  */
 
-import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { EventStore } from '@frontmcp/protocol';
 import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 import { PublicMcpError } from '../../errors';
 

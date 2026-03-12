@@ -1,7 +1,7 @@
 /**
  * Tests for elicitation fallback helpers.
  */
-import type { ClientCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import type { ClientCapabilities } from '@frontmcp/protocol';
 import type { Scope } from '../../../scope';
 import { canDeliverNotifications } from '../fallback.helper';
 

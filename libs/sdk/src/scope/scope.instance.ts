@@ -29,6 +29,7 @@ import PromptRegistry from '../prompt/prompt.registry';
 import AgentRegistry from '../agent/agent.registry';
 import SkillRegistry from '../skill/skill.registry';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
+import { getEnvFlag, isEdgeRuntime } from '@frontmcp/utils';
 import { FlowExitedWithoutOutputError } from '../errors';
 import { registerSkillCapabilities } from '../skill/skill-scope.helper';
 import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
@@ -46,7 +47,7 @@ import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { normalizeTool } from '../tool/tool.utils';
 import { ToolInstance } from '../tool/tool.instance';
-import type { EventStore } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { EventStore } from '@frontmcp/protocol';
 import { createEventStore } from '../transport/event-stores';
 import JobRegistry from '../job/job.registry';
 import WorkflowRegistry from '../workflow/workflow.registry';
@@ -134,7 +135,7 @@ export class Scope extends ScopeEntry {
 
     const scopeRef: EntryOwnerRef = { kind: 'scope', id: this.id, ref: Scope };
     const scopeProviders = this.scopeProviders;
-    const perf = process.env['FRONTMCP_PERF'] === '1';
+    const perf = getEnvFlag('FRONTMCP_PERF');
     const t0 = perf ? performance.now() : 0;
     const mark = perf
       ? (label: string) => this.logger.info(`[PERF] ${label}: ${(performance.now() - t0).toFixed(1)}ms`)
@@ -171,7 +172,7 @@ export class Scope extends ScopeEntry {
             redis: elicitationRedis,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
-            isEdgeRuntime: this.isEdgeRuntime(),
+            isEdgeRuntime: isEdgeRuntime(),
           });
           this._elicitationStore = elicitStore;
         })()
@@ -708,31 +709,6 @@ export class Scope extends ScopeEntry {
         `Failed to register sendElicitationResult tool: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-  }
-
-  /**
-   * Detect if running on Edge runtime (Vercel Edge, Cloudflare Workers).
-   * Edge functions are stateless and require external storage for elicitation.
-   */
-  private isEdgeRuntime(): boolean {
-    // Check for Vercel Edge Runtime
-    if (typeof globalThis !== 'undefined' && 'EdgeRuntime' in globalThis) {
-      return true;
-    }
-    // Check for Cloudflare Workers
-    if (typeof globalThis !== 'undefined' && 'caches' in globalThis && !('window' in globalThis)) {
-      return true;
-    }
-    // Check for common environment variables (guarded for Edge runtimes where process may not exist)
-    if (
-      typeof process !== 'undefined' &&
-      typeof process.env !== 'undefined' &&
-      process.env['VERCEL_ENV'] !== undefined &&
-      process.env['EDGE_RUNTIME'] !== undefined
-    ) {
-      return true;
-    }
-    return false;
   }
 
   /**

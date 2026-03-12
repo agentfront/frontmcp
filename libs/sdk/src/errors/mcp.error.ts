@@ -1,5 +1,5 @@
 // errors/mcp.error.ts
-import { randomBytes, bytesToHex } from '@frontmcp/utils';
+import { randomBytes, bytesToHex, isProduction } from '@frontmcp/utils';
 
 /**
  * MCP-specific error codes per JSON-RPC specification.
@@ -531,7 +531,7 @@ export function toMcpError(error: any): McpError {
 /**
  * Format error for MCP response
  */
-export function formatMcpErrorResponse(error: any, isDevelopment: boolean = process.env['NODE_ENV'] !== 'production') {
+export function formatMcpErrorResponse(error: any, isDevelopment = !isProduction()) {
   const mcpError = toMcpError(error);
   return mcpError.toMcpError(isDevelopment);
 }

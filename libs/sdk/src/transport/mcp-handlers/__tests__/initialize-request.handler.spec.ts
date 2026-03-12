@@ -4,7 +4,7 @@
  * Tests for the MCP initialize request handler, specifically focusing on
  * session payload updates for clientName, clientVersion, supportsElicitation, and platformType.
  */
-import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { InitializeRequest } from '@frontmcp/protocol';
 import { McpHandlerOptions } from '../mcp-handlers.types';
 import { SessionIdPayload } from '../../../common';
 import { UnsupportedClientVersionError } from '../../../errors';

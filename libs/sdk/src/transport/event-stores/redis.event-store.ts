@@ -1,5 +1,5 @@
-import type { EventId, EventStore, StreamId } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { EventId, EventStore, StreamId } from '@frontmcp/protocol';
+import type { JSONRPCMessage } from '@frontmcp/protocol';
 import type { RedisOptionsInput } from '../../common';
 import { VercelKvNotSupportedError } from '../../errors/sdk.errors';
 

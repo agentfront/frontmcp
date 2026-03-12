@@ -30,7 +30,7 @@ import {
   StageHookOf,
 } from '../../common';
 import { z } from 'zod';
-import { randomUUID, randomBytes, base64urlEncode } from '@frontmcp/utils';
+import { randomUUID, randomBytes, base64urlEncode, isProduction } from '@frontmcp/utils';
 
 /** Simple in-memory registry (dev only) */
 type RegisteredClient = {
@@ -125,7 +125,7 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     // Dev-only guard: hide the endpoint in production
-    const isDev = process.env['NODE_ENV'] !== 'production';
+    const isDev = !isProduction();
 
     const { request } = this.rawInput;
     const parsed = registrationRequestSchema.parse(request.body || {});

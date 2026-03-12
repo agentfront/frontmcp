@@ -1,4 +1,4 @@
-import { ListPromptsRequestSchema, ListPromptsRequest, ListPromptsResult } from '@modelcontextprotocol/sdk/types.js';
+import { ListPromptsRequestSchema, ListPromptsRequest, ListPromptsResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listPromptsRequestHandler({

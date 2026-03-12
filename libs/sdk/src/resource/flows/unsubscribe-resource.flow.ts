@@ -2,7 +2,7 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
-import { UnsubscribeRequestSchema, EmptyResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { UnsubscribeRequestSchema, EmptyResultSchema } from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({

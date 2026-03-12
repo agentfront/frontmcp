@@ -3,10 +3,10 @@
  * @description Service for managing connections to remote MCP servers
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { Client } from '@frontmcp/protocol';
+import { StreamableHTTPClientTransport } from '@frontmcp/protocol';
+import { SSEClientTransport } from '@frontmcp/protocol';
+import type { Transport } from '@frontmcp/protocol';
 import type {
   Tool,
   Resource,
@@ -15,10 +15,10 @@ import type {
   CallToolResult,
   ReadResourceResult,
   GetPromptResult,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 
 import type { FrontMcpLogger } from '../common';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { AuthInfo } from '@frontmcp/protocol';
 import type {
   McpClientConnection,
   McpConnectionStatus,

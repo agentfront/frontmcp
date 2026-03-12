@@ -79,9 +79,26 @@
       "@frontmcp/ui/render": ["libs/ui/src/render/index.ts"],
       "@frontmcp/ui/universal": ["libs/ui/src/universal/index.ts"],
       "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
+      "@frontmcp/protocol": ["libs/protocol/src/index.ts"],
       "@frontmcp/auth": ["libs/auth/src/index.ts"],
       "@frontmcp/storage-sqlite": ["libs/storage-sqlite/src/index.ts"],
-      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"]
+      "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"],
+
+      "#mcp-streamable-http": ["libs/protocol/src/node-mcp-streamable-http.ts"],
+      "#mcp-server": ["libs/protocol/src/node-mcp-server.ts"],
+      "#server-types": ["libs/protocol/src/node-server-types.ts"],
+
+      "#crypto-provider": ["libs/utils/src/crypto/node.ts"],
+      "#async-context": ["libs/utils/src/async-context/node-async-context.ts"],
+      "#event-emitter": ["libs/utils/src/event-emitter/node-event-emitter.ts"],
+      "#env": ["libs/utils/src/env/node-env.ts"],
+      "#path": ["libs/utils/src/path/node-path.ts"],
+
+      "#langchain-messages": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-messages.ts"],
+      "#langchain-openai": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-openai.ts"],
+      "#langchain-anthropic": ["libs/sdk/src/agent/adapters/polyfills/node-langchain-anthropic.ts"],
+      "#sse-transport": ["libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts"],
+      "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -1,11 +1,15 @@
-import { z, ZodType } from 'zod';
-import { Notification, Request, Result } from '@modelcontextprotocol/sdk/types.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { ServerOptions } from '@modelcontextprotocol/sdk/server/index.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { LocalTransporter } from '../transport.local';
-import { Authorization } from '../../common';
-import { Scope } from '../../scope';
+import { z, type ZodType } from 'zod';
+import type {
+  Notification,
+  Request,
+  Result,
+  RequestHandlerExtra,
+  McpServerOptions,
+  AuthInfo,
+} from '@frontmcp/protocol';
+import type { LocalTransporter } from '../transport.local';
+import type { Authorization } from '../../common';
+import type { Scope } from '../../scope';
 
 type Primitive = string | number | boolean | bigint | null | undefined;
 type Flatten<T> = T extends Primitive
@@ -42,7 +46,7 @@ export interface McpHandler<
 
 export type McpHandlerOptions = {
   scope: Scope;
-  serverOptions: ServerOptions;
+  serverOptions: McpServerOptions;
 };
 
 export type McpRequestHandler<

@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/invoke.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 import {
   InvokeToolInput,
   invokeToolInputSchema,

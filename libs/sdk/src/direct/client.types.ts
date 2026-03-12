@@ -15,7 +15,7 @@ import type {
   GetPromptResult,
   CompleteResult,
   LoggingLevel,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import type { FormattedTools, FormattedToolResult } from './llm-platform';
 
 // Re-export platform-specific types for convenience

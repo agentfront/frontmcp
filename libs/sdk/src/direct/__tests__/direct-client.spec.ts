@@ -12,6 +12,7 @@ import {
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   randomUUID: jest.fn(() => 'mock-uuid-1234'),
   randomBytes: jest.fn(() => new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])),
   bytesToHex: jest.fn((bytes: Uint8Array) =>
@@ -73,13 +74,14 @@ const mockMcpClient = {
 
 // MockClient defined inside the mock factory to avoid hoisting issues
 // (jest.mock is hoisted, but accessing outer variables before they're defined causes errors)
-jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+jest.mock('@frontmcp/protocol', () => ({
+  ...jest.requireActual('@frontmcp/protocol'),
   Client: jest.fn().mockImplementation(() => mockMcpClient),
 }));
 
 // Import the mocked Client to use in tests for assertions
 
-const { Client: MockClient } = require('@modelcontextprotocol/sdk/client/index.js');
+const { Client: MockClient } = require('@frontmcp/protocol');
 
 describe('DirectClientImpl', () => {
   // Minimal mock scope

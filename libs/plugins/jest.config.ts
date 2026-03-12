@@ -32,6 +32,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'html', 'node'],
   transformIgnorePatterns: ['node_modules/(?!(isolated-vm|jose|@enclave-vm)/)'],
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
   },
   coverageDirectory: '../../coverage/unit/plugins',

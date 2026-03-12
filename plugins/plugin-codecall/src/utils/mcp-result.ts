@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/utils/mcp-result.ts
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 /**
  * Extract the actual result from a CallToolResult.

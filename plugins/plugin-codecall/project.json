@@ -32,6 +32,7 @@
             "@enclave-vm/core",
             "vectoriadb",
             "@frontmcp/sdk",
+            "@frontmcp/protocol",
             "@frontmcp/plugin-cache",
             "zod",
             "reflect-metadata"
@@ -58,6 +59,7 @@
             "@enclave-vm/core",
             "vectoriadb",
             "@frontmcp/sdk",
+            "@frontmcp/protocol",
             "@frontmcp/plugin-cache",
             "zod",
             "reflect-metadata"

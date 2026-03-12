@@ -1,6 +1,5 @@
 import { FrontMcpAuth, ProviderScope, ScopeEntry, ServerRequest } from '../../common';
 import { TransparentAuthOptions } from '../../common/types/options/auth';
-import { URL } from 'url';
 import ProviderRegistry from '../../provider/provider.registry';
 import { JwksService } from '@frontmcp/auth';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';

@@ -1,7 +1,7 @@
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { RecreateableSSEServerTransport } from './sse-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
-import { RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { RequestId } from '@frontmcp/protocol';
 import { ZodType } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
@@ -78,7 +78,13 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     }
     if (req.method === 'GET') {
       this.logger.verbose(`[${this.sessionId}] handle get request`);
-      return this.transport.handleMessage(req.body, { requestInfo: req, authInfo });
+      return this.transport.handleMessage(req.body, {
+        requestInfo: {
+          headers: req.headers as Record<string, string | string[] | undefined>,
+          url: req.url ? new URL(req.url, 'http://localhost') : undefined,
+        },
+        authInfo,
+      });
     } else {
       this.logger.verbose(`[${this.sessionId}] handle post request`);
       return this.transport.handlePostMessage(req, res, req.body);

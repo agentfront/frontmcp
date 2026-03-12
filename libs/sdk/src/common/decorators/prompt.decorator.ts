@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { FrontMcpPromptTokens, extendedPromptMetadata } from '../tokens';
 import { PromptMetadata, frontMcpPromptMetadataSchema } from '../metadata';
-import { GetPromptResult, GetPromptRequest } from '@modelcontextprotocol/sdk/types.js';
+import { GetPromptResult, GetPromptRequest } from '@frontmcp/protocol';
 
 /**
  * Decorator that marks a class as a McpPrompt module and provides metadata
@@ -26,7 +26,7 @@ function FrontMcpPrompt(providedMetadata: PromptMetadata): ClassDecorator {
 
 export type FrontMcpPromptExecuteHandler = (
   args: GetPromptRequest['params']['arguments'],
-  ...tokens: any[]
+  ...tokens: unknown[]
 ) => GetPromptResult | Promise<GetPromptResult>;
 
 /**

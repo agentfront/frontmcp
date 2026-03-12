@@ -38,7 +38,8 @@
 export * from './agent.events';
 export * from './agent.utils';
 export { AgentInstance } from './agent.instance';
-export { default as AgentRegistry, IndexedAgent } from './agent.registry';
+export { default as AgentRegistry } from './agent.registry';
+export type { IndexedAgent } from './agent.registry';
 export * from './agent-execution-loop';
 
 // Flow exports
@@ -51,11 +52,14 @@ export * from './hooks';
 export * from './adapters';
 
 // Re-export common types for convenience
-export { AgentContext, AgentCtorArgs } from '../common/interfaces/agent.interface';
+export { AgentContext } from '../common/interfaces/agent.interface';
+export type { AgentCtorArgs } from '../common/interfaces/agent.interface';
 
-export { AgentEntry, AgentCallArgs, AgentCallExtra, ParsedAgentResult } from '../common/entries/agent.entry';
+export { AgentEntry } from '../common/entries/agent.entry';
+export type { AgentCallArgs, AgentCallExtra, ParsedAgentResult } from '../common/entries/agent.entry';
 
-export {
+export { withConfig, frontMcpAgentMetadataSchema } from '../common/metadata/agent.metadata';
+export type {
   AgentMetadata,
   AgentLlmConfig,
   AgentLlmBuiltinConfig,
@@ -66,16 +70,14 @@ export {
   AgentApiKeyConfig,
   AgentLlmProviderType,
   WithConfig,
-  withConfig,
   AgentType,
-  frontMcpAgentMetadataSchema,
 } from '../common/metadata/agent.metadata';
 
 export { annotatedFrontMcpAgentsSchema } from '../common/schemas';
 
-export {
+export { AgentKind } from '../common/records/agent.record';
+export type {
   AgentRecord,
-  AgentKind,
   AgentClassTokenRecord,
   AgentFunctionTokenRecord,
   AgentValueRecord,
@@ -84,12 +86,5 @@ export {
 
 export { FrontMcpAgentTokens, extendedAgentMetadata } from '../common/tokens/agent.tokens';
 
-export {
-  Agent,
-  FrontMcpAgent,
-  agent,
-  frontMcpAgent,
-  AgentInputOf,
-  AgentOutputOf,
-  FrontMcpAgentExecuteHandler,
-} from '../common/decorators/agent.decorator';
+export { Agent, FrontMcpAgent, agent, frontMcpAgent } from '../common/decorators/agent.decorator';
+export type { AgentInputOf, AgentOutputOf, FrontMcpAgentExecuteHandler } from '../common/decorators/agent.decorator';

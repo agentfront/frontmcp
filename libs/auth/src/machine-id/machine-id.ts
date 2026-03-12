@@ -14,8 +14,7 @@
  * or use unique values per instance to enforce session affinity.
  */
 
-import * as path from 'path';
-import { randomUUID, mkdir, writeFile, readFileSync } from '@frontmcp/utils';
+import { randomUUID, mkdir, writeFile, readFileSync, getEnv, getCwd, isProduction, isBrowser } from '@frontmcp/utils';
 
 const DEFAULT_MACHINE_ID_PATH = '.frontmcp/machine-id';
 
@@ -23,15 +22,20 @@ const DEFAULT_MACHINE_ID_PATH = '.frontmcp/machine-id';
  * Check if dev persistence is enabled (non-production mode)
  */
 function isDevPersistenceEnabled(): boolean {
-  return process.env['NODE_ENV'] !== 'production';
+  if (isBrowser()) return false;
+  return !isProduction();
 }
 
 /**
  * Resolve the machine ID file path
  */
 function resolveMachineIdPath(): string {
-  const machineIdPath = process.env['MACHINE_ID_PATH'] ?? DEFAULT_MACHINE_ID_PATH;
-  return path.isAbsolute(machineIdPath) ? machineIdPath : path.resolve(process.cwd(), machineIdPath);
+  if (isBrowser()) return DEFAULT_MACHINE_ID_PATH;
+  // Lazy-load path to avoid browser bundling issues
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('path') as typeof import('path');
+  const machineIdPath = getEnv('MACHINE_ID_PATH') ?? DEFAULT_MACHINE_ID_PATH;
+  return path.isAbsolute(machineIdPath) ? machineIdPath : path.resolve(getCwd(), machineIdPath);
 }
 
 /**
@@ -73,6 +77,8 @@ function saveMachineIdAsync(machineId: string): void {
   }
 
   const machineIdPath = resolveMachineIdPath();
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('path') as typeof import('path');
   const dir = path.dirname(machineIdPath);
 
   // Fire-and-forget - we don't want to block startup
@@ -100,7 +106,7 @@ function saveMachineIdAsync(machineId: string): void {
  */
 const machineId = (() => {
   // 1. Check env var (highest priority - supports Redis, K8s, etc.)
-  const envMachineId = process.env['MACHINE_ID'];
+  const envMachineId = getEnv('MACHINE_ID');
   if (envMachineId) {
     return envMachineId;
   }

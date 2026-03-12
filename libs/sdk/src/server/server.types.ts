@@ -1,13 +1,13 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
-import { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from '../transport/adapters/base-sse-transport';
-import { Scope } from '../scope';
+import type { AuthInfo } from '@frontmcp/protocol';
+import type { Authorization, ServerRequest, SessionIdPayload, UserClaim } from '../common';
+import type { LocalTransportAdapter } from '../transport/adapters/transport.local.adapter';
+import type { StreamableHTTPServerTransport } from '@frontmcp/protocol';
+import type { SSEServerTransport } from '../transport/adapters/base-sse-transport';
+import type { Scope } from '../scope';
 
 export interface ScopedServerRequest extends ServerRequest {
   authScope: Scope;
-  auth: AuthInfo;
+  auth?: AuthInfo;
   authSession?: Authorization;
 }
 
@@ -16,12 +16,15 @@ export interface AuthenticatedServerRequest extends ScopedServerRequest {
   authSession: Authorization;
 }
 
-declare module '@modelcontextprotocol/sdk/server/auth/types.js' {
+export interface SdkAuthInfo extends AuthInfo {
+  transport: LocalTransportAdapter<StreamableHTTPServerTransport | SSEServerTransport>;
+}
+
+declare module '@frontmcp/protocol' {
   export interface AuthInfo {
     token: string;
     user: UserClaim;
     sessionId: string;
     sessionIdPayload: SessionIdPayload;
-    transport: LocalTransportAdapter<StreamableHTTPServerTransport | SSEServerTransport>;
   }
 }

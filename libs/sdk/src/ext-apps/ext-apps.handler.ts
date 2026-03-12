@@ -8,6 +8,7 @@
  * @packageDocumentation
  */
 
+import { isDevelopment } from '@frontmcp/utils';
 import type { FrontMcpLogger } from '../common';
 import type {
   ExtAppsCallServerToolParams,
@@ -146,8 +147,7 @@ export class ExtAppsMessageHandler {
           code: errorCode,
           message: errorMessage,
           // Only include stack traces in development to avoid leaking internals in production
-          data:
-            process.env['NODE_ENV'] === 'development' && error instanceof Error ? { stack: error.stack } : undefined,
+          data: isDevelopment() && error instanceof Error ? { stack: error.stack } : undefined,
         },
       };
     }

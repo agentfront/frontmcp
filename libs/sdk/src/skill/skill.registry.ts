@@ -23,7 +23,7 @@ import { MemorySkillProvider } from './providers/memory-skill.provider';
 import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
 import type { SyncResult } from './sync/sync-state.interface';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { ServerCapabilities } from '@frontmcp/protocol';
 import { SkillValidationError, SkillValidationResult, SkillValidationReport } from './errors/skill-validation.error';
 
 /**

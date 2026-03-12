@@ -7,7 +7,7 @@ import {
   ResourceTemplateMetadata,
 } from '../metadata';
 
-import { ReadResourceRequest, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ReadResourceRequest, ReadResourceResult } from '@frontmcp/protocol';
 
 /**
  * Decorator that marks a class as a McpResource module and provides metadata

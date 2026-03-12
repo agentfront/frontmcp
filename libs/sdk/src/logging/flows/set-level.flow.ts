@@ -2,7 +2,7 @@
 
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
-import { SetLevelRequestSchema, EmptyResultSchema, LoggingLevelSchema } from '@modelcontextprotocol/sdk/types.js';
+import { SetLevelRequestSchema, EmptyResultSchema, LoggingLevelSchema } from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError, GenericServerError } from '../../errors';
 
 const inputSchema = z.object({

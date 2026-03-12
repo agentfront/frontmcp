@@ -6,7 +6,7 @@
 
 import 'reflect-metadata';
 import { z } from 'zod';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 import { Tool, ToolContext } from '../../common';
 import type { DirectMcpServer } from '../direct.types';
 import type { DirectClient } from '../client.types';

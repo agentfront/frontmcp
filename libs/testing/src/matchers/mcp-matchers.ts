@@ -18,7 +18,7 @@
  */
 
 import type { MatcherFunction } from 'expect';
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool, Resource, ResourceTemplate, Prompt } from '@frontmcp/protocol';
 import type { ToolResultWrapper, ResourceContentWrapper, PromptResultWrapper } from '../client/mcp-test-client.types';
 import { uiMatchers } from '../ui/ui-matchers';
 

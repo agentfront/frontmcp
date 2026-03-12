@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   transformIgnorePatterns: ['node_modules/(?!(jose|@noble/hashes|@noble/ciphers)/)'],
   moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../../libs/utils/src/index.ts',
   },
@@ -40,8 +41,8 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
   coverageThreshold: {
     global: {
-      branches: 88,
-      functions: 94,
+      branches: 95,
+      functions: 95,
       lines: 95,
       statements: 95,
     },

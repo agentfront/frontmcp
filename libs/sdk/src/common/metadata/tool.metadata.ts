@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
+import { ImageContentSchema, AudioContentSchema, ResourceLinkSchema, EmbeddedResourceSchema } from '@frontmcp/protocol';
+import { ToolUIConfig } from './tool-ui.metadata';
+import { ToolInputOf, ToolOutputOf } from '../decorators';
 
 // ============================================
 // Auth Provider Mapping for Tools
@@ -36,15 +39,6 @@ const toolAuthProviderMappingSchema = z.union([
     })
     .strict(),
 ]);
-
-import {
-  ImageContentSchema,
-  AudioContentSchema,
-  ResourceLinkSchema,
-  EmbeddedResourceSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import { ToolUIConfig } from './tool-ui.metadata';
-import { ToolInputOf, ToolOutputOf } from '../decorators';
 
 declare global {
   /**

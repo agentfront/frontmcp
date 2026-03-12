@@ -1,4 +1,5 @@
 import { LogTransportInterface, LogRecord, LogTransport, LogLevel, LogFn } from '../../common';
+import { supportsAnsi } from '@frontmcp/utils';
 
 type LogLevelMeta = {
   label: string;
@@ -35,7 +36,7 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
     const DIM = '\x1b[2m';
     const GRAY = '\x1b[90m';
 
-    const useAnsi = this.supportsAnsi();
+    const useAnsi = supportsAnsi();
     const timePart = useAnsi ? `${DIM}[${ts}]${RESET}` : `[${ts}]`;
     const scopePart = loggerPrefix ? (useAnsi ? `${BOLD}[${loggerPrefix}]${RESET}` : `[${loggerPrefix}]`) : undefined;
     const levelPart = useAnsi ? `${BOLD}${meta.ansi}${meta.label}${RESET}` : meta.label;
@@ -59,14 +60,6 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
       default:
         return console.log.bind(console);
     }
-  }
-
-  private supportsAnsi(): boolean {
-    if (typeof process === 'undefined') return false;
-    const env = process.env || {};
-    if (env['NO_COLOR']) return false;
-    if (env['FORCE_COLOR']) return true;
-    return !!(process.stdout && (process.stdout as any).isTTY);
   }
 
   private friendlyTime(d: Date): string {

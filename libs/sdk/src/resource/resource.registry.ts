@@ -31,7 +31,7 @@ import ResourcesListFlow from './flows/resources-list.flow';
 import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
 import SubscribeResourceFlow from './flows/subscribe-resource.flow';
 import UnsubscribeResourceFlow from './flows/unsubscribe-resource.flow';
-import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import type { ServerCapabilities } from '@frontmcp/protocol';
 import { NameDisambiguationError, EntryValidationError } from '../errors';
 
 export default class ResourceRegistry

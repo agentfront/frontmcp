@@ -1,5 +1,5 @@
-import { InitializeRequestSchema, InitializeRequest, InitializeResult } from '@modelcontextprotocol/sdk/types.js';
-import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js';
+import { InitializeRequestSchema, type InitializeRequest, type InitializeResult } from '@frontmcp/protocol';
+import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { UnsupportedClientVersionError } from '../../errors';
 import type { ClientCapabilities } from '../../notification';
@@ -133,7 +133,7 @@ export default function initializeRequestHandler({
       const configuredInfo = scope.metadata?.info ?? { name: 'FrontMcpServer', version: '0.0.1' };
 
       const result: InitializeResult = {
-        capabilities: serverOptions.capabilities!,
+        capabilities: serverOptions.capabilities ?? {},
         instructions: serverOptions.instructions,
         serverInfo: {
           name: configuredInfo.name,

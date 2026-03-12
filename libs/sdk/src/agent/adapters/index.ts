@@ -42,23 +42,16 @@
  */
 
 // Base adapter utilities
-export {
-  BaseLlmAdapter,
-  BaseLlmAdapterConfig,
-  LlmAdapterError,
-  LlmRateLimitError,
-  LlmContextLengthError,
-} from './base.adapter';
+export { BaseLlmAdapter, LlmAdapterError, LlmRateLimitError, LlmContextLengthError } from './base.adapter';
+export type { BaseLlmAdapterConfig } from './base.adapter';
 
 // LangChain adapter (primary adapter)
-export { LangChainAdapter, LangChainAdapterConfig } from './langchain.adapter';
+export { LangChainAdapter } from './langchain.adapter';
+export type { LangChainAdapterConfig } from './langchain.adapter';
 
 // Adapter factory
 export {
   createAdapter,
-  CreateAdapterOptions,
-  ConfigResolver,
-  ProviderResolver,
   resolveApiKey,
   resolveStringValue,
   isBuiltinConfig,
@@ -66,9 +59,11 @@ export {
   isTokenConfig,
   isAdapterInstance,
 } from './adapter.factory';
+export type { CreateAdapterOptions, ConfigResolver, ProviderResolver } from './adapter.factory';
 
 // Re-export core LLM types for convenience
-export {
+export { LLM_ADAPTER } from '../../common/interfaces/llm-adapter.interface';
+export type {
   AgentLlmAdapter,
   AgentPrompt,
   AgentMessage,
@@ -77,5 +72,4 @@ export {
   AgentToolCall,
   AgentToolDefinition,
   AgentCompletionOptions,
-  LLM_ADAPTER,
 } from '../../common/interfaces/llm-adapter.interface';

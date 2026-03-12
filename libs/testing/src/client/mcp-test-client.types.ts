@@ -17,7 +17,7 @@ import type {
   ResourceTemplate,
   Prompt,
   Implementation,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import type { TestPlatformType } from '../platform/platform-types';
 
 // ═══════════════════════════════════════════════════════════════════

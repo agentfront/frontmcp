@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@frontmcp/protocol';
 import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
 import type { Scope } from '../scope';

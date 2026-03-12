@@ -196,7 +196,6 @@ export type { SkillHttpAuthContext, SkillHttpAuthResult, SkillHttpAuthValidatorO
 
 // HTTP Caching
 export {
-  SkillHttpCache,
   MemorySkillHttpCache,
   RedisSkillHttpCache,
   createSkillHttpCache,
@@ -205,4 +204,4 @@ export {
   invalidateSkillInCache,
   disposeAllCaches,
 } from './cache';
-export type { SkillHttpCacheOptions, SkillHttpCacheResult } from './cache';
+export type { SkillHttpCache, SkillHttpCacheOptions, SkillHttpCacheResult } from './cache';

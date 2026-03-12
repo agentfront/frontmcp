@@ -5,6 +5,7 @@ import 'reflect-metadata';
 // that can be triggered when validating request-like objects with Zod v4.
 // Express docs: https://expressjs.com/en/4x/api.html#req.hostname
 (function suppressZodExpressWarning() {
+  if (typeof process === 'undefined' || typeof process.emitWarning !== 'function') return;
   const originalEmitWarning = process.emitWarning.bind(process);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (process as any).emitWarning = (warning: string | Error, ...args: any[]) => {
@@ -31,31 +32,49 @@ export * from './errors';
 export * from './elicitation';
 export * from './remote-mcp';
 
-// Re-export MCP types commonly needed
-export type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+// Re-export MCP types commonly needed by consumers
+export type {
+  // Result types (used as return type annotations in execute() methods)
+  GetPromptResult,
+  ReadResourceResult,
+  CallToolResult,
+  ListToolsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
+  ListPromptsResult,
+  // Server/Client metadata (used by DirectClient interface)
+  ServerCapabilities,
+  Implementation,
+  ClientCapabilities,
+  // Content types (used in tool/prompt results)
+  TextContent,
+  ImageContent,
+  PromptMessage,
+} from '@frontmcp/protocol';
 
 // Unified context for production-ready request handling
 export {
   // Primary exports (new unified context)
   FrontMcpContext,
   Context,
-  FrontMcpContextArgs,
-  FrontMcpContextConfig,
   FrontMcpContextStorage,
   FRONTMCP_CONTEXT,
   FrontMcpContextProvider,
-  // Request metadata
-  RequestMetadata,
-  TransportAccessor,
   // Trace context
-  TraceContext,
   parseTraceContext,
   generateTraceContext,
   createChildSpanContext,
 } from './context';
+export type {
+  FrontMcpContextArgs,
+  FrontMcpContextConfig,
+  RequestMetadata,
+  TransportAccessor,
+  TraceContext,
+} from './context';
 
 // Tool change events for subscription
-export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
+export type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
@@ -130,7 +149,9 @@ export {
   frontMcpAgent,
   // Context class
   AgentContext,
-  // Types
+  withConfig,
+} from './agent';
+export type {
   AgentMetadata,
   AgentLlmConfig,
   AgentLlmBuiltinConfig,
@@ -138,8 +159,6 @@ export {
   AgentExecutionConfig,
   AgentType,
   WithConfig,
-  withConfig,
-  // Adapter interface (for custom adapters)
   AgentLlmAdapter,
   AgentPrompt,
   AgentMessage,

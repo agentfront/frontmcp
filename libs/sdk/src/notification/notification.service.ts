@@ -1,13 +1,13 @@
 // file: libs/sdk/src/notification/notification.service.ts
 
-import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
+import type { McpServer } from '@frontmcp/protocol';
 import {
   ListRootsResultSchema,
   type LoggingLevel,
   type ProgressNotificationParams,
   type ProgressToken,
   type Root,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@frontmcp/protocol';
 import {
   FrontMcpLogger,
   type AIPlatformType,
@@ -29,7 +29,7 @@ export type { AIPlatformType } from '../common/types/auth/session.types';
 
 /**
  * Alias for MCP SDK's LoggingLevel for backwards compatibility.
- * @deprecated Use LoggingLevel from @modelcontextprotocol/sdk/types.js directly
+ * @deprecated Use LoggingLevel from @frontmcp/protocol directly
  */
 export type McpLoggingLevel = LoggingLevel;
 

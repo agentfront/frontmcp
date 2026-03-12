@@ -7,6 +7,7 @@ import { SkillKind } from '../../common/records/skill.record';
 
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   readFile: jest.fn(),
   fileExists: jest.fn(),
   stat: jest.fn(),

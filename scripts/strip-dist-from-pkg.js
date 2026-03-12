@@ -16,7 +16,14 @@ try {
   process.exit(1);
 }
 
-const stripDist = (v) => (typeof v === 'string' ? v.replace(/^\.\/dist\//, './') : v);
+const stripDist = (v) => {
+  if (typeof v !== 'string') return v;
+  // Strip "./dist/" prefix (build output paths)
+  v = v.replace(/^\.\/dist\//, './');
+  // Strip "./src/" prefix and change .ts → .js (source paths used in imports field)
+  v = v.replace(/^\.\/src\/(.+)\.ts$/, './$1.js');
+  return v;
+};
 
 const walk = (v) => {
   if (Array.isArray(v)) {
@@ -47,6 +54,13 @@ if (pkg.exports) {
   else delete pkg.exports;
 }
 
+// Fix imports map deeply (strip "./dist/" + remove "development")
+if (pkg.imports) {
+  const cleaned = walk(pkg.imports);
+  if (cleaned !== undefined) pkg.imports = cleaned;
+  else delete pkg.imports;
+}
+
 // Fix bin map deeply (strip "./dist/")
 if (pkg.bin) {
   const cleaned = walk(pkg.bin);
@@ -67,58 +81,72 @@ try {
 // Generate ESM package.json with type:module and adjusted paths
 const esmDir = path.join(path.dirname(pkgPath), 'esm');
 if (fs.existsSync(esmDir)) {
-  const esmPkg = JSON.parse(JSON.stringify(pkg)); // Deep clone
-
-  // Add type: module for ESM
-  esmPkg.type = 'module';
-
-  // Adjust paths: ESM files stay relative (./), CJS/types go up one level (../)
-  const adjustForEsm = (v) => {
-    if (typeof v !== 'string') return v;
-    // ESM files (.mjs) stay relative - they're in this folder
-    if (v.endsWith('.mjs')) {
-      return v.replace('./esm/', './');
+  // If the package uses subpath imports (#-prefixed), skip the ESM package.json
+  // entirely. Node.js resolves #imports from the nearest package.json, and ESM
+  // targets can't use "../" (must start with "./"). Without an ESM package.json,
+  // Node.js falls through to the root dist/package.json which has correct "./"
+  // paths. The .mjs extension already signals ESM to Node.js and bundlers.
+  if (pkg.imports) {
+    // Remove any existing ESM package.json to avoid stale files
+    const esmPkgPath = path.join(esmDir, 'package.json');
+    if (fs.existsSync(esmPkgPath)) {
+      fs.unlinkSync(esmPkgPath);
     }
-    // CJS/types files go up one level to parent dist folder
-    if (v.startsWith('./')) {
-      return '..' + v.slice(1);
-    }
-    return v;
-  };
+    console.log(`✅ Skipped ESM package.json for ${pkg.name} (uses subpath imports).`);
+  } else {
+    const esmPkg = JSON.parse(JSON.stringify(pkg)); // Deep clone
 
-  // Fix top-level fields
-  if (esmPkg.main) esmPkg.main = adjustForEsm(esmPkg.main);
-  if (esmPkg.types) esmPkg.types = adjustForEsm(esmPkg.types);
-  if (esmPkg.module) esmPkg.module = adjustForEsm(esmPkg.module);
+    // Add type: module for ESM
+    esmPkg.type = 'module';
 
-  // Fix exports map recursively
-  const walkEsm = (v) => {
-    if (Array.isArray(v)) return v.map(walkEsm);
-    if (v && typeof v === 'object') {
-      const out = {};
-      for (const [k, val] of Object.entries(v)) {
-        out[k] = walkEsm(val);
+    // Adjust paths: ESM files stay relative (./), CJS/types go up one level (../)
+    const adjustForEsm = (v) => {
+      if (typeof v !== 'string') return v;
+      // ESM files (.mjs) stay relative - they're in this folder
+      if (v.endsWith('.mjs')) {
+        return v.replace('./esm/', './');
       }
-      return out;
+      // CJS/types files go up one level to parent dist folder
+      if (v.startsWith('./')) {
+        return '..' + v.slice(1);
+      }
+      return v;
+    };
+
+    // Fix top-level fields
+    if (esmPkg.main) esmPkg.main = adjustForEsm(esmPkg.main);
+    if (esmPkg.types) esmPkg.types = adjustForEsm(esmPkg.types);
+    if (esmPkg.module) esmPkg.module = adjustForEsm(esmPkg.module);
+
+    // Fix exports map recursively
+    const walkEsm = (v) => {
+      if (Array.isArray(v)) return v.map(walkEsm);
+      if (v && typeof v === 'object') {
+        const out = {};
+        for (const [k, val] of Object.entries(v)) {
+          out[k] = walkEsm(val);
+        }
+        return out;
+      }
+      return adjustForEsm(v);
+    };
+
+    if (esmPkg.exports) {
+      esmPkg.exports = walkEsm(esmPkg.exports);
     }
-    return adjustForEsm(v);
-  };
 
-  if (esmPkg.exports) {
-    esmPkg.exports = walkEsm(esmPkg.exports);
-  }
+    // Fix bin paths if present
+    if (esmPkg.bin) {
+      esmPkg.bin = walkEsm(esmPkg.bin);
+    }
 
-  // Fix bin paths if present
-  if (esmPkg.bin) {
-    esmPkg.bin = walkEsm(esmPkg.bin);
-  }
-
-  const esmPkgPath = path.join(esmDir, 'package.json');
-  try {
-    fs.writeFileSync(esmPkgPath, JSON.stringify(esmPkg, null, 2) + '\n');
-    console.log(`✅ Generated ${esmPkgPath} with type:module and adjusted paths.`);
-  } catch (err) {
-    console.error(`❌ Error writing ESM package.json:`, err.message);
-    process.exit(1);
+    const esmPkgPath = path.join(esmDir, 'package.json');
+    try {
+      fs.writeFileSync(esmPkgPath, JSON.stringify(esmPkg, null, 2) + '\n');
+      console.log(`✅ Generated ${esmPkgPath} with type:module and adjusted paths.`);
+    } catch (err) {
+      console.error(`❌ Error writing ESM package.json:`, err.message);
+      process.exit(1);
+    }
   }
 }

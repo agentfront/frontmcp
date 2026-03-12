@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
-import { Icon, IconSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Icon, IconSchema } from '@frontmcp/protocol';
 import { isValidMcpUri, isValidMcpUriTemplate } from '@frontmcp/utils';
 
 declare global {

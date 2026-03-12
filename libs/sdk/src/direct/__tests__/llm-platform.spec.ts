@@ -2,7 +2,7 @@
  * LLM Platform Detection and Formatting Tests
  */
 
-import type { Tool as McpTool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool as McpTool, CallToolResult } from '@frontmcp/protocol';
 import {
   detectPlatform,
   formatToolsForPlatform,

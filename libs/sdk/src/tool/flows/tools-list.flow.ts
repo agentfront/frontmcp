@@ -3,13 +3,13 @@ import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, Too
 import 'reflect-metadata';
 import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
-import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, ListToolsResultSchema } from '@frontmcp/protocol';
 import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import type { Scope } from '../../scope/scope.instance';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { AuthInfo } from '@frontmcp/protocol';
 import type { ToolPaginationOptions } from '../../common/types/options/pagination';
 import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination';
 
@@ -22,7 +22,7 @@ const outputSchema = ListToolsResultSchema;
 
 const stateSchema = z.object({
   cursor: z.string().optional(),
-  // z.any() used because AuthInfo is an external type from @modelcontextprotocol/sdk that varies by SDK version
+  // z.any() used because AuthInfo is an external type from @frontmcp/protocol that varies by SDK version
   // Non-optional for 'authorized' flows - transport layer ensures authInfo is always present
   authInfo: z.any() as z.ZodType<AuthInfo>,
   platformType: z.string().optional() as z.ZodType<AIPlatformType | undefined>,

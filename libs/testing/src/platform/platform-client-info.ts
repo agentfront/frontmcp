@@ -25,7 +25,8 @@ export const MCP_APPS_EXTENSION_KEY = 'io.modelcontextprotocol/ui' as const;
 
 /**
  * Client info for MCP initialization.
- * Matches the Implementation type from @modelcontextprotocol/sdk.
+ * Contains the required fields (name, version) of the Implementation type
+ * from @frontmcp/protocol, used for testing and platform detection.
  */
 export interface TestClientInfo {
   /** Client name (used for User-Agent header) */

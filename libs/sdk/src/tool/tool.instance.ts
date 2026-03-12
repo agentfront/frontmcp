@@ -22,7 +22,7 @@ import { z } from 'zod';
 import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolRequest } from '@frontmcp/protocol';
 import { buildParsedToolResult } from './tool.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
 import { InvalidRegistryKindError } from '../errors';

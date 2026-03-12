@@ -11,7 +11,8 @@
 import { RecreateableStreamableHTTPServerTransport } from '../streamable-http-transport';
 
 // Mock the MCP SDK StreamableHTTPServerTransport
-jest.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
+jest.mock('@frontmcp/protocol', () => ({
+  ...jest.requireActual('@frontmcp/protocol'),
   StreamableHTTPServerTransport: class MockStreamableHTTPServerTransport {
     _webStandardTransport: {
       _initialized: boolean;

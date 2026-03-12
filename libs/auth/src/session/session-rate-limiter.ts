@@ -71,7 +71,7 @@ export class SessionRateLimiter {
     if (cleanupIntervalMs > 0) {
       this.cleanupTimer = setInterval(() => this.cleanup(), cleanupIntervalMs);
       // Don't block process exit
-      this.cleanupTimer.unref();
+      if (typeof this.cleanupTimer.unref === 'function') this.cleanupTimer.unref();
     }
   }
 

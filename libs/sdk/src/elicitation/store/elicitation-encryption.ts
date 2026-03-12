@@ -19,6 +19,7 @@ import {
   randomBytes,
   base64urlEncode,
   base64urlDecode,
+  getEnv,
   type EncBlob,
 } from '@frontmcp/utils';
 import { ElicitationSecretRequiredError } from '../../errors/auth-internal.errors';
@@ -74,12 +75,7 @@ const textDecoder = new TextDecoder();
  * @returns The secret string, or null if not configured
  */
 export function getElicitationSecret(): string | null {
-  return (
-    process.env['MCP_ELICITATION_SECRET'] ||
-    process.env['MCP_SESSION_SECRET'] ||
-    process.env['MCP_SERVER_SECRET'] ||
-    null
-  );
+  return getEnv('MCP_ELICITATION_SECRET') || getEnv('MCP_SESSION_SECRET') || getEnv('MCP_SERVER_SECRET') || null;
 }
 
 /**

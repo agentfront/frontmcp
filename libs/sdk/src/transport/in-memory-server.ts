@@ -5,8 +5,8 @@
  * Useful for testing, embedding in applications, and LangChain integration.
  */
 
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { Transport } from '@frontmcp/protocol';
+import type { AuthInfo } from '@frontmcp/protocol';
 import type { Scope } from '../scope/scope.instance';
 import { randomUUID } from '@frontmcp/utils';
 
@@ -43,7 +43,7 @@ export interface InMemoryServerResult {
  *
  * @example
  * ```typescript
- * import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+ * import { Client } from '@frontmcp/protocol';
  * import { FrontMcpInstance, createInMemoryServer } from '@frontmcp/sdk';
  *
  * // Create a FrontMCP instance
@@ -91,8 +91,7 @@ export async function createInMemoryServer(
   options?: CreateInMemoryServerOptions,
 ): Promise<InMemoryServerResult> {
   // Dynamically import to avoid bundling issues
-  const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
-  const { Server: McpServer } = await import('@modelcontextprotocol/sdk/server/index.js');
+  const { InMemoryTransport, McpServer } = await import('@frontmcp/protocol');
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
   const sessionId = options?.sessionId ?? `in-memory:${randomUUID()}`;

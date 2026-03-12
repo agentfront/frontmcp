@@ -1,6 +1,6 @@
 // file: libs/sdk/src/transport/mcp-handlers/read-resource-request.handler.ts
 
-import { ReadResourceRequestSchema, ReadResourceRequest, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ReadResourceRequestSchema, ReadResourceRequest, ReadResourceResult } from '@frontmcp/protocol';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function readResourceRequestHandler({

@@ -4,14 +4,7 @@
  */
 
 import type { McpResponse, ToolResultWrapper, ResourceContentWrapper, McpErrorInfo } from '../client';
-import type {
-  Tool,
-  Resource,
-  ResourceTemplate,
-  Prompt,
-  CallToolResult,
-  ReadResourceResult,
-} from '@modelcontextprotocol/sdk/types.js';
+import type { Tool, Resource, ResourceTemplate, Prompt, CallToolResult, ReadResourceResult } from '@frontmcp/protocol';
 
 // ═══════════════════════════════════════════════════════════════════
 // ASSERTION FUNCTIONS
