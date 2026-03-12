@@ -759,9 +759,16 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
           }
           break;
         case 'tool':
+          if (!msg.toolCallId) {
+            throw new LlmAdapterError(
+              'Tool message is missing toolCallId, which is required to correlate tool output with its function call in the Responses API',
+              'openai',
+              'invalid_request',
+            );
+          }
           result.push({
             type: 'function_call_output',
-            call_id: msg.toolCallId ?? '',
+            call_id: msg.toolCallId,
             output: msg.content ?? '',
           });
           break;
@@ -790,7 +797,8 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
       if (item.type === 'message' && item.content) {
         const textParts = item.content.filter((c) => c.type === 'output_text');
         if (textParts.length > 0) {
-          content = textParts.map((p) => p.text).join('');
+          const text = textParts.map((p) => p.text).join('');
+          content = content ? content + text : text;
         }
       } else if (item.type === 'function_call' && item.call_id && item.name) {
         let args: Record<string, unknown> = {};

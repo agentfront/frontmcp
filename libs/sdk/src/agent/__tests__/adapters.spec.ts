@@ -543,6 +543,60 @@ describe('LLM Adapters', () => {
         expect(result.finishReason).toBe('content_filter');
       });
 
+      it('should accumulate content from multiple message items', async () => {
+        const mockClient = createMockOpenAIClient();
+        mockClient.responses.create.mockResolvedValueOnce({
+          id: 'resp-multi',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'First part. ' }],
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Second part.' }],
+            },
+          ],
+          status: 'completed',
+          usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+        });
+
+        const adapter = new OpenAIAdapter({ model: 'gpt-4o', client: mockClient as never, api: 'responses' });
+        const result = await adapter.completion({
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+
+        expect(result.content).toBe('First part. Second part.');
+      });
+
+      it('should throw when tool message is missing toolCallId in Responses API', async () => {
+        const mockClient = createMockOpenAIClient();
+        mockClient.responses.create.mockResolvedValueOnce({
+          id: 'resp-err',
+          output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'OK' }] }],
+          status: 'completed',
+          usage: { input_tokens: 5, output_tokens: 1, total_tokens: 6 },
+        });
+
+        const adapter = new OpenAIAdapter({ model: 'gpt-4o', client: mockClient as never, api: 'responses' });
+
+        await expect(
+          adapter.completion({
+            messages: [
+              { role: 'user', content: 'Calculate 2+2' },
+              {
+                role: 'assistant',
+                content: null,
+                toolCalls: [{ id: 'call-1', name: 'calculator', arguments: { expr: '2+2' } }],
+              },
+              { role: 'tool', content: '4' } as never,
+            ],
+          }),
+        ).rejects.toThrow(LlmAdapterError);
+      });
+
       it('should use max_output_tokens instead of max_tokens', async () => {
         const mockClient = createMockOpenAIClient();
         mockClient.responses.create.mockResolvedValueOnce({
