@@ -2,9 +2,14 @@ import { randomUUID } from '@frontmcp/utils';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import getRawBody from 'raw-body';
 import contentType from 'content-type';
-import { Transport } from '@frontmcp/protocol';
-import { JSONRPCMessage, JSONRPCMessageSchema, MessageExtraInfo } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
+import {
+  Transport,
+  JSONRPCMessageSchema,
+  type JSONRPCMessage,
+  type MessageExtraInfo,
+  type AuthInfo,
+  type RequestInfo as McpRequestInfo,
+} from '@frontmcp/protocol';
 import {
   TransportAlreadyStartedError,
   TransportNotConnectedError,
@@ -158,7 +163,10 @@ export class SSEServerTransport implements Transport {
     }
 
     const authInfo: AuthInfo | undefined = req.auth;
-    const requestInfo = { headers: req.headers } as unknown as RequestInfo;
+    const requestInfo: McpRequestInfo = {
+      headers: req.headers as Record<string, string | string[] | undefined>,
+      url: req.url ? new URL(req.url, `http://${req.headers.host ?? 'localhost'}`) : undefined,
+    };
 
     let body: string | unknown;
     try {
@@ -180,7 +188,7 @@ export class SSEServerTransport implements Transport {
     }
 
     try {
-      await this.handleMessage(typeof body === 'string' ? JSON.parse(body) : body, { requestInfo, authInfo } as any);
+      await this.handleMessage(typeof body === 'string' ? JSON.parse(body) : body, { requestInfo, authInfo });
     } catch {
       res.writeHead(400).end(`Invalid message: ${body}`);
       return;

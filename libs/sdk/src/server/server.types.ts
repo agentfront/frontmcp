@@ -7,7 +7,7 @@ import type { Scope } from '../scope';
 
 export interface ScopedServerRequest extends ServerRequest {
   authScope: Scope;
-  auth: AuthInfo;
+  auth?: AuthInfo;
   authSession?: Authorization;
 }
 
@@ -16,12 +16,15 @@ export interface AuthenticatedServerRequest extends ScopedServerRequest {
   authSession: Authorization;
 }
 
+export interface SdkAuthInfo extends AuthInfo {
+  transport: LocalTransportAdapter<StreamableHTTPServerTransport | SSEServerTransport>;
+}
+
 declare module '@frontmcp/protocol' {
   export interface AuthInfo {
     token: string;
     user: UserClaim;
     sessionId: string;
     sessionIdPayload: SessionIdPayload;
-    transport: LocalTransportAdapter<StreamableHTTPServerTransport | SSEServerTransport>;
   }
 }

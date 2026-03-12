@@ -336,11 +336,11 @@ export const httpRespond = {
     },
   }),
 
-  rpcRequest: (requestId: RequestId, method: string, params: Record<string, unknown>): JSONRPCMessage => ({
+  rpcRequest: (requestId: RequestId, method: string, params?: Record<string, unknown>): JSONRPCMessage => ({
     jsonrpc: JSON_RPC,
     id: requestId ?? randomUUID(),
     method,
-    params,
+    ...(params !== undefined && { params }),
   }),
   redirect(location: string): z.infer<typeof HttpRedirectSchema> {
     return {

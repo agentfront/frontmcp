@@ -15,9 +15,9 @@ export const rpcError = (message: string, requestId?: RequestId | null): JSONRPC
   id: requestId ?? randomUUID(), // change it to request id + random
 });
 
-export const rpcRequest = (requestId: RequestId, method: string, params: any): JSONRPCMessage => ({
+export const rpcRequest = (requestId: RequestId, method: string, params?: Record<string, unknown>): JSONRPCMessage => ({
   jsonrpc: JSON_RPC,
   id: requestId ?? randomUUID(),
   method,
-  params,
+  ...(params !== undefined && { params }),
 });

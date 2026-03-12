@@ -88,6 +88,14 @@ export default [
                 'For raw MCP Client in tests, use McpClient from @frontmcp/testing.',
             },
           ],
+          patterns: [
+            {
+              group: ['@frontmcp/protocol/*'],
+              message:
+                '@frontmcp/protocol is internal. Import MCP types from @frontmcp/sdk. ' +
+                'For raw MCP Client in tests, use McpClient from @frontmcp/testing.',
+            },
+          ],
         },
       ],
     },

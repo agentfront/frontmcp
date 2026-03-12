@@ -133,7 +133,7 @@ export default function initializeRequestHandler({
       const configuredInfo = scope.metadata?.info ?? { name: 'FrontMcpServer', version: '0.0.1' };
 
       const result: InitializeResult = {
-        capabilities: serverOptions.capabilities!,
+        capabilities: serverOptions.capabilities ?? {},
         instructions: serverOptions.instructions,
         serverInfo: {
           name: configuredInfo.name,
