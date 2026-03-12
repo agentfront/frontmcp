@@ -41,18 +41,13 @@ jobs:
               - "**/*.spec.tsx"
               - "**/*.e2e.spec.ts"
               - "**/*.perf.spec.ts"
-              - "apps/e2e/**"
-              - "apps/demo/**"
+              - "apps/e2e/**/dist/**"
+              - "apps/e2e/**/node_modules/**"
+              - "apps/demo/**/dist/**"
+              - "apps/demo/**/node_modules/**"
               - "**/dist/**"
               - "**/node_modules/**"
               - "**/coverage/**"
-
-      - name: Run manual build steps
-        if: matrix.build-mode == 'manual'
-        shell: bash
-        run: |
-          echo 'Manual build mode not configured'
-          exit 1
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

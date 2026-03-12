@@ -11,6 +11,7 @@
 import { BaseStorageAdapter } from './base';
 import type { SetOptions, MessageHandler, Unsubscribe } from '../types';
 import { encryptAesGcm, decryptAesGcm, randomBytes, base64urlEncode, base64urlDecode } from '../../crypto';
+import { matchesPattern } from '../utils/pattern';
 
 /**
  * Options for the LocalStorage adapter.
@@ -172,6 +173,8 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
         data: base64urlEncode(ciphertext),
       };
     } else {
+      // Plaintext: only written when this.allowPlaintext is explicitly true and no encryptionKey is set.
+      // When this.encryptionKey is provided, values are encrypted into entry._enc (AES-256-GCM) above.
       if (!this.allowPlaintext) {
         throw new Error('Plaintext storage is disabled. Provide an encryptionKey or set allowPlaintext: true.');
       }
@@ -289,14 +292,6 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   }
 
   private matchPattern(key: string, pattern: string): boolean {
-    const regex = new RegExp(
-      '^' +
-        pattern
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          .replace(/\\\*/g, '.*')
-          .replace(/\\\?/g, '.') +
-        '$',
-    );
-    return regex.test(key);
+    return matchesPattern(key, pattern);
   }
 }

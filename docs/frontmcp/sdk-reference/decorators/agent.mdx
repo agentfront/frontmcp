@@ -121,6 +121,14 @@ interface AgentLlmAdapterConfig {
 <Note>
   The `process.env` examples below are Node.js-specific. In browser environments,
   use your bundler's environment variable injection or pass the API key directly.
+
+  ```typescript
+  // Browser (Vite / similar bundlers):
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  ```
+
+  **Warning:** Never embed long-lived API keys in client-side bundles shipped to end users.
+  Use short-lived tokens or a backend proxy instead.
 </Note>
 
 ### OpenAI Responses API

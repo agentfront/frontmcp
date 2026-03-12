@@ -485,7 +485,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
     const params = this.buildResponsesParams(prompt, tools, options, true);
 
     let content = '';
-    const toolCallsMap = new Map<number, { id: string; name: string; args: string }>();
+    const toolCallsMap = new Map<number, { id: string; name: string; args: string; emitted: boolean }>();
     let finishReason: AgentCompletion['finishReason'] = 'stop';
     let usage: AgentCompletion['usage'];
 
@@ -512,7 +512,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
 
           case 'response.function_call_arguments.delta': {
             const idx = event.output_index ?? 0;
-            const existing = toolCallsMap.get(idx) ?? { id: '', name: '', args: '' };
+            const existing = toolCallsMap.get(idx) ?? { id: '', name: '', args: '', emitted: false };
             if (event.delta) existing.args += event.delta;
             toolCallsMap.set(idx, existing);
             break;
@@ -521,12 +521,13 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
           case 'response.output_item.added':
             if (event.item?.type === 'function_call') {
               const idx = event.output_index ?? 0;
-              const entry = toolCallsMap.get(idx) ?? { id: '', name: '', args: '' };
+              const entry = toolCallsMap.get(idx) ?? { id: '', name: '', args: '', emitted: false };
               if (event.item.call_id) entry.id = event.item.call_id;
               if (event.item.name) entry.name = event.item.name;
               toolCallsMap.set(idx, entry);
 
-              if (entry.id) {
+              if (entry.id && !entry.emitted) {
+                entry.emitted = true;
                 yield {
                   type: 'tool_call',
                   toolCall: { id: entry.id, name: entry.name, arguments: {} },
@@ -537,7 +538,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
 
           case 'response.function_call_arguments.done': {
             const idx = event.output_index ?? 0;
-            const entry = toolCallsMap.get(idx) ?? { id: '', name: '', args: '' };
+            const entry = toolCallsMap.get(idx) ?? { id: '', name: '', args: '', emitted: false };
             if (event.call_id) entry.id = event.call_id;
             if (event.name) entry.name = event.name;
             if (event.arguments) entry.args = event.arguments;

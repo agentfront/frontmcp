@@ -10,6 +10,7 @@
 
 import { BaseStorageAdapter } from './base';
 import type { SetOptions } from '../types';
+import { matchesPattern } from '../utils/pattern';
 
 /**
  * Options for the IndexedDB adapter.
@@ -301,14 +302,6 @@ export class IndexedDBStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   private matchPattern(key: string, pattern: string): boolean {
-    const regex = new RegExp(
-      '^' +
-        pattern
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          .replace(/\\\*/g, '.*')
-          .replace(/\\\?/g, '.') +
-        '$',
-    );
-    return regex.test(key);
+    return matchesPattern(key, pattern);
   }
 }

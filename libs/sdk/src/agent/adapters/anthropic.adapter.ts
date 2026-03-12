@@ -138,7 +138,7 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
     }
   }
 
-  private getClient(): AnthropicClient {
+  private async getClient(): Promise<AnthropicClient> {
     if (this.providedClient) {
       return this.providedClient;
     }
@@ -148,9 +148,8 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
 
     let Anthropic: new (config: Record<string, unknown>) => AnthropicClient;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require('@anthropic-ai/sdk');
-      Anthropic = mod.default ?? mod;
+      const mod = await import('@anthropic-ai/sdk');
+      Anthropic = ((mod as Record<string, unknown>)['default'] as typeof Anthropic) ?? mod;
     } catch {
       throw new LlmAdapterError(
         'The "@anthropic-ai/sdk" package is not installed.\n\n' +
@@ -186,7 +185,8 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
 
     return this.withRetry(async () => {
       try {
-        const response = (await this.getClient().messages.create(params)) as AnthropicMessage;
+        const client = await this.getClient();
+        const response = (await client.messages.create(params)) as AnthropicMessage;
         return this.parseResponse(response);
       } catch (error) {
         throw this.wrapError(error);
@@ -210,7 +210,8 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
     let usage: AgentCompletion['usage'];
 
     try {
-      const stream = (await this.getClient().messages.create(params)) as AnthropicStream;
+      const client = await this.getClient();
+      const stream = (await client.messages.create(params)) as AnthropicStream;
 
       for await (const event of stream) {
         switch (event.type) {

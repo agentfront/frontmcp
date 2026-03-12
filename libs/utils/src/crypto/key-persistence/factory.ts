@@ -29,7 +29,7 @@ const INSTALL_SALT_KEY = 'frontmcp:_install_salt';
  */
 function getOrCreateInstallationSalt(): Uint8Array {
   if (typeof localStorage === 'undefined') {
-    return new Uint8Array(32);
+    throw new Error('localStorage unavailable: cannot derive installation salt');
   }
   const existing = localStorage.getItem(INSTALL_SALT_KEY);
   if (existing) {
