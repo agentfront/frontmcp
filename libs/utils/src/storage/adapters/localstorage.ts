@@ -4,12 +4,13 @@
  * Browser-compatible storage using the Web Storage API (localStorage).
  * Persistent across page reloads but limited to ~5MB per origin.
  *
- * Suitable for key persistence in browser environments where
- * simplicity is preferred over capacity.
+ * Supports optional AES-256-GCM at-rest encryption when an encryption key
+ * is provided, preventing clear-text storage of sensitive values.
  */
 
 import { BaseStorageAdapter } from './base';
 import type { SetOptions, MessageHandler, Unsubscribe } from '../types';
+import { encryptAesGcm, decryptAesGcm, randomBytes, base64urlEncode, base64urlDecode } from '../../crypto';
 
 /**
  * Options for the LocalStorage adapter.
@@ -20,6 +21,12 @@ export interface LocalStorageAdapterOptions {
    * @default 'frontmcp:'
    */
   prefix?: string;
+
+  /**
+   * Optional 32-byte AES-256-GCM encryption key.
+   * When provided, all values are encrypted at rest in localStorage.
+   */
+  encryptionKey?: Uint8Array;
 }
 
 /**
@@ -28,6 +35,13 @@ export interface LocalStorageAdapterOptions {
 interface StoredEntry {
   v: string;
   e?: number; // expiresAt timestamp
+  /** Present when the value was encrypted at rest. */
+  _enc?: {
+    alg: 'A256GCM';
+    iv: string; // base64url
+    tag: string; // base64url
+    data: string; // base64url ciphertext
+  };
 }
 
 /**
@@ -41,17 +55,26 @@ interface StoredEntry {
  *
  * Limitations:
  * - No pub/sub support
- * - No atomic increment/decrement
+ * - incr/decr/incrBy are non-atomic (read-then-write); do not assume atomicity under concurrent access
  * - String-only values (matches StorageAdapter contract)
  * - Pattern matching uses simple iteration
  */
 export class LocalStorageAdapter extends BaseStorageAdapter {
   protected readonly backendName = 'localstorage';
   private readonly prefix: string;
+  private readonly encryptionKey: Uint8Array | undefined;
+  private readonly encoder = new TextEncoder();
+  private readonly decoder = new TextDecoder();
 
   constructor(options?: LocalStorageAdapterOptions) {
     super();
     this.prefix = options?.prefix ?? 'frontmcp:';
+    if (options?.encryptionKey) {
+      if (options.encryptionKey.length !== 32) {
+        throw new Error(`encryptionKey must be exactly 32 bytes, got ${options.encryptionKey.length}`);
+      }
+      this.encryptionKey = options.encryptionKey;
+    }
   }
 
   private assertAvailable(): void {
@@ -70,10 +93,11 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
 
   async connect(): Promise<void> {
     this.assertAvailable();
+    this.connected = true;
   }
 
   async disconnect(): Promise<void> {
-    // No cleanup needed
+    this.connected = false;
   }
 
   async ping(): Promise<boolean> {
@@ -95,6 +119,16 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
         localStorage.removeItem(this.key(key));
         return null;
       }
+
+      if (entry._enc) {
+        if (!this.encryptionKey) return null;
+        const iv = base64urlDecode(entry._enc.iv);
+        const tag = base64urlDecode(entry._enc.tag);
+        const ciphertext = base64urlDecode(entry._enc.data);
+        const plainBytes = decryptAesGcm(this.encryptionKey, ciphertext, iv, tag);
+        return this.decoder.decode(plainBytes);
+      }
+
       return entry.v;
     } catch {
       return null;
@@ -114,15 +148,30 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
-    const entry: StoredEntry = { v: value };
+    const entry: StoredEntry = { v: '' };
     if (options?.ttlSeconds) {
       entry.e = Date.now() + options.ttlSeconds * 1000;
     }
+
+    if (this.encryptionKey) {
+      const iv = randomBytes(12);
+      const plainBytes = this.encoder.encode(value);
+      const { ciphertext, tag } = encryptAesGcm(this.encryptionKey, plainBytes, iv);
+      entry._enc = {
+        alg: 'A256GCM',
+        iv: base64urlEncode(iv),
+        tag: base64urlEncode(tag),
+        data: base64urlEncode(ciphertext),
+      };
+    } else {
+      entry.v = value;
+    }
+
     localStorage.setItem(this.key(key), JSON.stringify(entry));
   }
 
   async delete(key: string): Promise<boolean> {
-    const existed = localStorage.getItem(this.key(key)) !== null;
+    const existed = (await this.get(key)) !== null;
     localStorage.removeItem(this.key(key));
     return existed;
   }

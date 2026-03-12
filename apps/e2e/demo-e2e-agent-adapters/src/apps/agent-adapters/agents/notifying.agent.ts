@@ -16,6 +16,7 @@ const chatMock = createOpenAIChatMock();
   llm: {
     adapter: new OpenAIAdapter({
       model: 'gpt-4o',
+      api: 'chat',
       client: chatMock as never,
     }),
   },

@@ -87,6 +87,7 @@ interface OpenAIChatParams {
   max_tokens?: number;
   stop?: string[];
   stream?: boolean;
+  stream_options?: { include_usage?: boolean };
 }
 
 type OpenAIChatMessage =
@@ -308,6 +309,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
       apiKey: this.config.apiKey,
       timeout: this.config.timeout,
       maxRetries: this.config.maxRetries,
+      dangerouslyAllowBrowser: true,
     };
     if (this.config.baseUrl) {
       clientConfig['baseURL'] = this.config.baseUrl;
@@ -598,6 +600,10 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
       params.tools = this.formatChatTools(tools) as OpenAIChatTool[];
     }
 
+    if (stream) {
+      params.stream_options = { include_usage: true };
+    }
+
     if (options.toolChoice) {
       if (options.toolChoice === 'auto' || options.toolChoice === 'none' || options.toolChoice === 'required') {
         params.tool_choice = options.toolChoice;
@@ -654,11 +660,15 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
     }
 
     if (choice.message.tool_calls?.length) {
-      completion.toolCalls = choice.message.tool_calls.map((tc) => ({
-        id: tc.id,
-        name: tc.function.name,
-        arguments: JSON.parse(tc.function.arguments),
-      }));
+      completion.toolCalls = choice.message.tool_calls.map((tc) => {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(tc.function.arguments);
+        } catch {
+          // Keep empty args on malformed JSON
+        }
+        return { id: tc.id, name: tc.function.name, arguments: args };
+      });
       completion.finishReason = 'tool_calls';
     }
 

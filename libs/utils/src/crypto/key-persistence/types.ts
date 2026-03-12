@@ -109,6 +109,13 @@ export interface CreateKeyPersistenceOptions {
    * @default true
    */
   enableCache?: boolean;
+
+  /**
+   * Optional 32-byte AES-256-GCM key for encrypting values at rest in localStorage.
+   * Only used when type is 'localstorage' or 'auto' with localStorage fallback.
+   * If not provided, HKDF-SHA256 derives a key from a fixed IKM using the page origin.
+   */
+  encryptionKey?: Uint8Array;
 }
 
 /**

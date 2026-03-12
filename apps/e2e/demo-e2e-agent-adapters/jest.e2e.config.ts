@@ -7,6 +7,7 @@ const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
 const config: Config.InitialOptions = {
   displayName: 'demo-e2e-agent-adapters',
   preset: '../../../jest.preset.js',
+  ...e2eCoveragePreset,
   testEnvironment: 'node',
   testMatch: ['<rootDir>/e2e/**/*.e2e.spec.ts'],
   testTimeout: 60000,
@@ -36,7 +37,6 @@ const config: Config.InitialOptions = {
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
   },
   coverageDirectory: '../../../coverage/e2e/demo-e2e-agent-adapters',
-  ...e2eCoveragePreset,
 };
 
 export default config;

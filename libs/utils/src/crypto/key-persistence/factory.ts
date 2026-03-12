@@ -8,6 +8,7 @@
  */
 
 import { isNode, isBrowser } from '../runtime';
+import { cryptoProvider } from '#crypto-provider';
 import { MemoryStorageAdapter } from '../../storage/adapters/memory';
 import type { StorageAdapter } from '../../storage/types';
 import { KeyPersistence } from './key-persistence';
@@ -17,6 +18,20 @@ import type { CreateKeyPersistenceOptions } from './types';
  * Default base directory for filesystem storage.
  */
 const DEFAULT_BASE_DIR = '.frontmcp/keys';
+
+const LS_HKDF_IKM = new TextEncoder().encode('frontmcp:localstorage:v1');
+const LS_HKDF_SALT = new Uint8Array(0);
+
+/**
+ * Derive or pass-through a 32-byte AES-256-GCM key for localStorage encryption.
+ * Uses HKDF-SHA256 with a fixed IKM and `location.origin` as info context.
+ */
+function deriveLocalStorageKey(userKey?: Uint8Array): Uint8Array {
+  if (userKey) return userKey;
+  const origin = typeof location !== 'undefined' ? location.origin : 'unknown';
+  const info = new TextEncoder().encode(origin);
+  return cryptoProvider.hkdfSha256(LS_HKDF_IKM, LS_HKDF_SALT, info, 32);
+}
 
 /**
  * Create a KeyPersistence instance with auto-detected storage.
@@ -62,10 +77,13 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
     adapter = new FileSystemStorageAdapter({ baseDir });
   } else if (type === 'indexeddb') {
     const { IndexedDBStorageAdapter } = await import('../../storage/adapters/indexeddb.js');
-    adapter = new IndexedDBStorageAdapter();
+    adapter = new IndexedDBStorageAdapter({ prefix: 'frontmcp:keys:' });
   } else if (type === 'localstorage') {
     const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
-    adapter = new LocalStorageAdapter({ prefix: 'frontmcp:keys:' });
+    adapter = new LocalStorageAdapter({
+      prefix: 'frontmcp:keys:',
+      encryptionKey: deriveLocalStorageKey(options?.encryptionKey),
+    });
   } else {
     // Auto-detect
     if (isNode()) {
@@ -73,10 +91,13 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
       adapter = new FileSystemStorageAdapter({ baseDir });
     } else if (isBrowser() && typeof indexedDB !== 'undefined') {
       const { IndexedDBStorageAdapter } = await import('../../storage/adapters/indexeddb.js');
-      adapter = new IndexedDBStorageAdapter();
+      adapter = new IndexedDBStorageAdapter({ prefix: 'frontmcp:keys:' });
     } else if (isBrowser() && typeof localStorage !== 'undefined') {
       const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
-      adapter = new LocalStorageAdapter({ prefix: 'frontmcp:keys:' });
+      adapter = new LocalStorageAdapter({
+        prefix: 'frontmcp:keys:',
+        encryptionKey: deriveLocalStorageKey(options?.encryptionKey),
+      });
     } else {
       adapter = new MemoryStorageAdapter();
     }

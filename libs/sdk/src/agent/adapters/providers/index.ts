@@ -26,7 +26,7 @@ import type { LlmProvider, ProviderCommonOptions } from './types';
 export interface CreateProviderAdapterOptions extends ProviderCommonOptions {
   /** The LLM provider to use. */
   provider: LlmProvider;
-  /** The model identifier (e.g., 'gpt-4o', 'claude-sonnet-4-20250514'). */
+  /** The model identifier (e.g., 'gpt-4o', 'claude-sonnet-4-6'). */
   model: string;
   /** API key for the provider. */
   apiKey: string;
@@ -39,6 +39,9 @@ export interface CreateProviderAdapterOptions extends ProviderCommonOptions {
 
 /**
  * Create an adapter for the specified provider.
+ *
+ * Async signature preserved for API compatibility — actual initialization
+ * is deferred via DeferredProviderAdapter (lazy init on first completion call).
  */
 export async function createProviderAdapter(options: CreateProviderAdapterOptions): Promise<AgentLlmAdapter> {
   return createProviderAdapterSync(options);

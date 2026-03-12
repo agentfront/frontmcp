@@ -9,7 +9,7 @@
  */
 
 import { BaseStorageAdapter } from './base';
-import type { SetOptions, MessageHandler, Unsubscribe } from '../types';
+import type { SetOptions } from '../types';
 
 /**
  * Options for the IndexedDB adapter.
@@ -166,7 +166,8 @@ export class IndexedDBStorageAdapter extends BaseStorageAdapter {
     if (!entry) return null;
 
     if (entry.e && entry.e < Date.now()) {
-      // Expired — delete asynchronously
+      // Expired — fire-and-forget cleanup; failures are safe to ignore since
+      // the entry is logically gone and will be cleaned up on next write.
       const writeStore = this.getStore('readwrite');
       writeStore.delete(this.key(key));
       return null;
@@ -279,6 +280,10 @@ export class IndexedDBStorageAdapter extends BaseStorageAdapter {
     return this.incrBy(key, -1);
   }
 
+  /**
+   * Increment by amount. NOT atomic — uses read-then-write which can race
+   * under concurrent access (e.g., multiple browser tabs).
+   */
   async incrBy(key: string, amount: number): Promise<number> {
     this.ensureConnected();
 

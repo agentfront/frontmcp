@@ -3,7 +3,7 @@
  */
 
 import 'reflect-metadata';
-import { OpenAIAdapter, AnthropicAdapter, createAdapter, LlmAdapterError, BaseLlmAdapter } from '../adapters';
+import { OpenAIAdapter, AnthropicAdapter, createAdapter, LlmAdapterError } from '../adapters';
 import {
   AgentLlmBuiltinConfig,
   AgentLlmAdapterConfig,

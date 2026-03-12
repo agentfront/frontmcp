@@ -978,7 +978,7 @@ describe('Crypto Module', () => {
 
     describe('rsaSign() and rsaVerify()', () => {
       describe('RS256 (RSASSA-PKCS1-v1_5)', () => {
-        it('should sign and verify data with RS256', () => {
+        it('should sign and verify data with RS256', async () => {
           const keyPair = generateRsaKeyPair(2048, 'RS256');
           const data = Buffer.from('Hello, World!');
 
@@ -988,59 +988,59 @@ describe('Crypto Module', () => {
           expect(signature.length).toBeGreaterThan(0);
 
           // Verify using rsaVerify
-          const isValid = rsaVerify('RS256', data, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('RS256', data, keyPair.publicJwk, signature);
           expect(isValid).toBe(true);
         });
 
-        it('should fail verification with wrong data', () => {
+        it('should fail verification with wrong data', async () => {
           const keyPair = generateRsaKeyPair(2048, 'RS256');
           const data = Buffer.from('Original data');
           const wrongData = Buffer.from('Tampered data');
 
           const signature = rsaSign('RSA-SHA256', data, keyPair.privateKey);
 
-          const isValid = rsaVerify('RS256', wrongData, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('RS256', wrongData, keyPair.publicJwk, signature);
           expect(isValid).toBe(false);
         });
 
-        it('should fail verification with wrong key', () => {
+        it('should fail verification with wrong key', async () => {
           const keyPair1 = generateRsaKeyPair(2048, 'RS256');
           const keyPair2 = generateRsaKeyPair(2048, 'RS256');
           const data = Buffer.from('Hello, World!');
 
           const signature = rsaSign('RSA-SHA256', data, keyPair1.privateKey);
 
-          const isValid = rsaVerify('RS256', data, keyPair2.publicJwk, signature);
+          const isValid = await rsaVerify('RS256', data, keyPair2.publicJwk, signature);
           expect(isValid).toBe(false);
         });
       });
 
       describe('RS384', () => {
-        it('should sign and verify data with RS384', () => {
+        it('should sign and verify data with RS384', async () => {
           const keyPair = generateRsaKeyPair(2048, 'RS384');
           const data = Buffer.from('Test data for RS384');
 
           const signature = rsaSign('RSA-SHA384', data, keyPair.privateKey);
 
-          const isValid = rsaVerify('RS384', data, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('RS384', data, keyPair.publicJwk, signature);
           expect(isValid).toBe(true);
         });
       });
 
       describe('RS512', () => {
-        it('should sign and verify data with RS512', () => {
+        it('should sign and verify data with RS512', async () => {
           const keyPair = generateRsaKeyPair(2048, 'RS512');
           const data = Buffer.from('Test data for RS512');
 
           const signature = rsaSign('RSA-SHA512', data, keyPair.privateKey);
 
-          const isValid = rsaVerify('RS512', data, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('RS512', data, keyPair.publicJwk, signature);
           expect(isValid).toBe(true);
         });
       });
 
       describe('PS256 (RSASSA-PSS)', () => {
-        it('should sign and verify data with PS256', () => {
+        it('should sign and verify data with PS256', async () => {
           const keyPair = generateRsaKeyPair(2048, 'PS256');
           const data = Buffer.from('Test data for PS256');
 
@@ -1049,13 +1049,13 @@ describe('Crypto Module', () => {
             saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
           });
 
-          const isValid = rsaVerify('PS256', data, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('PS256', data, keyPair.publicJwk, signature);
           expect(isValid).toBe(true);
         });
       });
 
       describe('PS384', () => {
-        it('should sign and verify data with PS384', () => {
+        it('should sign and verify data with PS384', async () => {
           const keyPair = generateRsaKeyPair(2048, 'PS384');
           const data = Buffer.from('Test data for PS384');
 
@@ -1064,13 +1064,13 @@ describe('Crypto Module', () => {
             saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
           });
 
-          const isValid = rsaVerify('PS384', data, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('PS384', data, keyPair.publicJwk, signature);
           expect(isValid).toBe(true);
         });
       });
 
       describe('PS512', () => {
-        it('should sign and verify data with PS512', () => {
+        it('should sign and verify data with PS512', async () => {
           const keyPair = generateRsaKeyPair(2048, 'PS512');
           const data = Buffer.from('Test data for PS512');
 
@@ -1079,7 +1079,7 @@ describe('Crypto Module', () => {
             saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
           });
 
-          const isValid = rsaVerify('PS512', data, keyPair.publicJwk, signature);
+          const isValid = await rsaVerify('PS512', data, keyPair.publicJwk, signature);
           expect(isValid).toBe(true);
         });
       });
@@ -1134,7 +1134,7 @@ describe('Crypto Module', () => {
         expect(header.alg).toBe('RS256');
       });
 
-      it('should create verifiable JWT', () => {
+      it('should create verifiable JWT', async () => {
         const keyPair = generateRsaKeyPair(2048, 'RS256');
         const payload = { sub: 'test', data: 'value' };
 
@@ -1144,7 +1144,7 @@ describe('Crypto Module', () => {
         const signatureInput = Buffer.from(`${headerB64}.${payloadB64}`);
         const signature = Buffer.from(signatureB64, 'base64url');
 
-        const isValid = rsaVerify('RS256', signatureInput, keyPair.publicJwk, signature);
+        const isValid = await rsaVerify('RS256', signatureInput, keyPair.publicJwk, signature);
         expect(isValid).toBe(true);
       });
 

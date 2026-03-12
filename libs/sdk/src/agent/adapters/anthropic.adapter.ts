@@ -6,14 +6,14 @@
  *
  * @example Using with API key
  * ```typescript
- * const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', apiKey: 'sk-ant-...' });
+ * const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-6', apiKey: 'sk-ant-...' });
  * ```
  *
  * @example Using with pre-configured client
  * ```typescript
  * import Anthropic from '@anthropic-ai/sdk';
  * const adapter = new AnthropicAdapter({
- *   model: 'claude-sonnet-4-20250514',
+ *   model: 'claude-sonnet-4-6',
  *   client: new Anthropic({ apiKey: 'sk-ant-...' }),
  * });
  * ```
@@ -254,7 +254,7 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
               try {
                 toolCalls[currentToolIndex].arguments = JSON.parse(currentToolArgs);
               } catch {
-                // Keep empty args
+                // Malformed tool-call JSON — keep empty args so the completion still returns
               }
               currentToolIndex = -1;
               currentToolArgs = '';
@@ -337,9 +337,12 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
     for (const msg of messages) {
       switch (msg.role) {
         case 'system':
-          // System messages in conversation are rare; add as user message with context
-          result.push({ role: 'user', content: msg.content ?? '' });
-          break;
+          throw new LlmAdapterError(
+            'Anthropic does not support system messages mid-conversation. ' +
+              'Use the top-level systemInstructions instead.',
+            'anthropic',
+            'invalid_message',
+          );
 
         case 'user':
           result.push({ role: 'user', content: msg.content ?? '' });

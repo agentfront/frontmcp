@@ -41,7 +41,7 @@
  *   name: 'my-agent',
  *   llm: {
  *     adapter: new AnthropicAdapter({
- *       model: 'claude-sonnet-4-20250514',
+ *       model: 'claude-sonnet-4-6',
  *       apiKey: process.env.ANTHROPIC_API_KEY,
  *     }),
  *   },
