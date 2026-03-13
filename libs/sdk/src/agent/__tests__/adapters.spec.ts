@@ -226,6 +226,25 @@ describe('LLM Adapters', () => {
       }
     });
 
+    it('should throw when tool message is missing toolCallId in Chat API', async () => {
+      const mockClient = createMockOpenAIClient();
+      const adapter = new OpenAIAdapter({ model: 'gpt-4o', client: mockClient as never });
+
+      await expect(
+        adapter.completion({
+          messages: [
+            { role: 'user', content: 'Calculate 2+2' },
+            {
+              role: 'assistant',
+              content: null,
+              toolCalls: [{ id: 'call-1', name: 'calculator', arguments: { expr: '2+2' } }],
+            },
+            { role: 'tool', content: '4' } as never,
+          ],
+        }),
+      ).rejects.toThrow(LlmAdapterError);
+    });
+
     it('should handle errors', async () => {
       const mockClient = createMockOpenAIClient();
       mockClient.chat.completions.create.mockRejectedValueOnce(
@@ -341,6 +360,10 @@ describe('LLM Adapters', () => {
         })) {
           chunks.push(chunk);
         }
+
+        const toolCallChunks = chunks.filter((c) => (c as { type: string }).type === 'tool_call');
+        expect(toolCallChunks).toHaveLength(1);
+        expect((toolCallChunks[0] as { toolCall: { name: string } }).toolCall.name).toBe('get_weather');
 
         const doneChunk = chunks.find((c) => (c as { type: string }).type === 'done') as {
           type: string;
@@ -717,6 +740,10 @@ describe('LLM Adapters', () => {
           })) {
             chunks.push(chunk);
           }
+
+          const toolCallChunks = chunks.filter((c) => (c as { type: string }).type === 'tool_call');
+          expect(toolCallChunks).toHaveLength(1);
+          expect((toolCallChunks[0] as { toolCall: { name: string } }).toolCall.name).toBe('get_weather');
 
           const doneChunk = chunks.find((c) => (c as { type: string }).type === 'done') as {
             type: string;

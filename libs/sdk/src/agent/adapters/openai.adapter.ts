@@ -411,7 +411,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
             if (tc.function?.arguments) existing.args += tc.function.arguments;
             toolCallsMap.set(tc.index, existing);
 
-            if (existing.id && !existing.emitted) {
+            if (existing.id && existing.name && !existing.emitted) {
               existing.emitted = true;
               yield {
                 type: 'tool_call',
@@ -526,7 +526,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
               if (event.item.name) entry.name = event.item.name;
               toolCallsMap.set(idx, entry);
 
-              if (entry.id && !entry.emitted) {
+              if (entry.id && entry.name && !entry.emitted) {
                 entry.emitted = true;
                 yield {
                   type: 'tool_call',
@@ -867,6 +867,9 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
         return assistantMsg;
       }
       case 'tool':
+        if (!message.toolCallId) {
+          throw new LlmAdapterError('Tool message is missing required toolCallId', 'openai', 'invalid_request');
+        }
         return {
           role: 'tool',
           content: message.content ?? '',

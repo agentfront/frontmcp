@@ -120,7 +120,8 @@ interface AgentLlmAdapterConfig {
 
 <Note>
   The `process.env` examples below are Node.js-specific. In browser environments,
-  use your bundler's environment variable injection or pass the API key directly.
+  use your bundler's secure environment variable injection or a short-lived token
+  obtained via a backend proxy.
 
   ```typescript
   // Browser (Vite / similar bundlers):
@@ -128,7 +129,8 @@ interface AgentLlmAdapterConfig {
   ```
 
   **Warning:** Never embed long-lived API keys in client-side bundles shipped to end users.
-  Use short-lived tokens or a backend proxy instead.
+  When using Browser LLM adapters (`OpenAIAdapter` / `AnthropicAdapter`), prefer a backend
+  proxy or short-lived tokens to avoid exposing persistent credentials.
 </Note>
 
 ### OpenAI Responses API
