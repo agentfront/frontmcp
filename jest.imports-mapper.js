@@ -23,9 +23,6 @@ module.exports = {
   '^#server-types$': path.resolve(root, 'libs/protocol/src/node-server-types.ts'),
 
   // @frontmcp/sdk conditionals
-  '^#langchain-messages$': path.resolve(root, 'libs/sdk/src/agent/adapters/polyfills/node-langchain-messages.ts'),
-  '^#langchain-openai$': path.resolve(root, 'libs/sdk/src/agent/adapters/polyfills/node-langchain-openai.ts'),
-  '^#langchain-anthropic$': path.resolve(root, 'libs/sdk/src/agent/adapters/polyfills/node-langchain-anthropic.ts'),
   '^#sse-transport$': path.resolve(root, 'libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts'),
   '^#express-host$': path.resolve(root, 'libs/sdk/src/server/adapters/polyfills/node-express-host.ts'),
 };

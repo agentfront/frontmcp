@@ -82,12 +82,14 @@ export interface KeyPersistenceOptions {
 export interface CreateKeyPersistenceOptions {
   /**
    * Storage type.
-   * - 'auto': Auto-detect based on environment (filesystem in Node.js, memory in browser)
+   * - 'auto': Auto-detect based on environment (filesystem in Node.js, indexeddb in browser)
    * - 'memory': Always use memory (keys lost on restart)
    * - 'filesystem': Always use filesystem (Node.js only)
+   * - 'indexeddb': Use IndexedDB (browser only, persistent)
+   * - 'localstorage': Use localStorage (browser only, persistent, ~5MB limit)
    * @default 'auto'
    */
-  type?: 'auto' | 'memory' | 'filesystem';
+  type?: 'auto' | 'memory' | 'filesystem' | 'indexeddb' | 'localstorage';
 
   /**
    * Base directory for filesystem storage.
@@ -107,6 +109,13 @@ export interface CreateKeyPersistenceOptions {
    * @default true
    */
   enableCache?: boolean;
+
+  /**
+   * Optional 32-byte AES-256-GCM key for encrypting values at rest in localStorage.
+   * Only used when type is 'localstorage' or 'auto' with localStorage fallback.
+   * If not provided, HKDF-SHA256 derives a key from a fixed IKM using the page origin.
+   */
+  encryptionKey?: Uint8Array;
 }
 
 /**

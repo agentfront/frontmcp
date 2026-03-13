@@ -41,7 +41,7 @@ declare global {
 /**
  * Supported LLM providers for the built-in adapter shorthand.
  */
-export type AgentLlmProviderType = 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq';
+export type AgentLlmProviderType = 'openai' | 'anthropic';
 
 /**
  * Fallback configuration for withConfig.
@@ -148,7 +148,7 @@ export type AgentApiKeyConfig = string | { env: string } | WithConfig<string>;
 /**
  * Built-in provider shorthand configuration.
  * Use this for quick setup with standard LLM providers.
- * The SDK will auto-create the appropriate LangChain adapter.
+ * The SDK will auto-create the appropriate adapter.
  */
 export interface AgentLlmBuiltinConfig {
   /**
@@ -499,7 +499,7 @@ const withConfigSchema = z.object({
 const apiKeyConfigSchema = z.union([z.string(), z.object({ env: z.string() }), withConfigSchema]);
 
 const builtinAdapterConfigSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'google', 'mistral', 'groq']),
+  provider: z.enum(['openai', 'anthropic']),
   model: z.union([z.string(), withConfigSchema]),
   apiKey: apiKeyConfigSchema,
   baseUrl: z.union([z.string(), withConfigSchema]).optional(),

@@ -5,10 +5,10 @@
  * Uses native crypto in Node.js and @noble/hashes + @noble/ciphers in browsers.
  */
 
-import { assertNode } from './runtime';
+import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
 import { cryptoProvider } from '#crypto-provider';
-export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
+export { isRsaPssAlg, jwtAlgToNodeAlg, jwtAlgToWebCryptoAlg } from './jwt-alg';
 
 /**
  * Get the crypto provider for the current runtime environment.
@@ -18,10 +18,32 @@ export function getCrypto(): CryptoProvider {
   return cryptoProvider;
 }
 
-export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, signature: Buffer): boolean {
-  assertNode('rsaVerify');
+/**
+ * Verify an RSA signature.
+ *
+ * Cross-platform: uses Node.js `crypto` module in Node environments,
+ * and WebCrypto `crypto.subtle.verify()` in browsers.
+ *
+ * @param jwtAlg - JWT algorithm identifier (e.g. 'RS256', 'PS256')
+ * @param data - The signed data bytes
+ * @param publicJwk - Public key in JWK format
+ * @param signature - The signature bytes
+ * @returns Promise resolving to true if the signature is valid
+ */
+export function rsaVerify(
+  jwtAlg: string,
+  data: Buffer | Uint8Array,
+  publicJwk: JsonWebKey,
+  signature: Buffer | Uint8Array,
+): Promise<boolean> {
+  if (isNode()) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return Promise.resolve(require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean);
+  }
+  // Browser: use WebCrypto async API
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean;
+  const { rsaVerifyBrowser } = require('./browser');
+  return rsaVerifyBrowser(jwtAlg, data, publicJwk, signature) as Promise<boolean>;
 }
 
 // Convenience function exports - delegate to provider

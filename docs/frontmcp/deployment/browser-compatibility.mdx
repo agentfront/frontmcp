@@ -1,0 +1,116 @@
+---
+title: Browser Compatibility
+slug: deployment/browser-compatibility
+icon: globe
+description: What works in the browser and what requires Node.js
+---
+
+FrontMCP supports browser environments for client-side use cases like JWT verification, key persistence, cryptographic operations, and agent LLM adapters.
+
+## What Works in Browser
+
+| Feature               | Details                                                                  |
+| --------------------- | ------------------------------------------------------------------------ |
+| **Crypto operations** | SHA-256, AES-GCM, HKDF, PKCE via WebCrypto API                           |
+| **JWT verification**  | `rsaVerify` via WebCrypto, `decodeJwtPayloadSafe`                        |
+| **Key persistence**   | IndexedDB and localStorage backends                                      |
+| **Storage adapters**  | `MemoryStorageAdapter`, `IndexedDBStorageAdapter`, `LocalStorageAdapter` |
+| **Agent adapters**    | `OpenAIAdapter`, `AnthropicAdapter` (HTTP-based, no Node dependencies)   |
+| **MCP client**        | Direct client connections                                                |
+
+## What's Node-only
+
+| Feature                   | Reason                                                                 |
+| ------------------------- | ---------------------------------------------------------------------- |
+| **JWT signing**           | `createSignedJwt`, `rsaSign`, `generateRsaKeyPair` require Node crypto |
+| **File system**           | `FileSystemStorageAdapter`, `fs` utilities                             |
+| **Server infrastructure** | Express adapter, SSE/Streamable HTTP transport                         |
+| **Redis/TCP storage**     | `ioredis` requires TCP sockets                                         |
+| **CLI and Nx Plugin**     | Node-only tooling                                                      |
+
+---
+
+## Key Persistence in Browser
+
+Key persistence auto-detects the best available backend:
+
+**IndexedDB** (preferred) → **localStorage** (fallback) → **memory** (last resort)
+
+```typescript
+import { createKeyPersistence } from '@frontmcp/utils';
+
+// Auto-detect best backend
+const store = createKeyPersistence();
+
+// Explicit backend
+const indexedDbStore = createKeyPersistence({ type: 'indexeddb' });
+const localStorageStore = createKeyPersistence({ type: 'localstorage' });
+```
+
+---
+
+## Storage Adapters in Browser
+
+```typescript
+import { IndexedDBStorageAdapter, LocalStorageAdapter, MemoryStorageAdapter } from '@frontmcp/utils';
+
+// IndexedDB — best for structured data, large values
+const idb = new IndexedDBStorageAdapter({ dbName: 'my-app', storeName: 'state' });
+
+// localStorage — simpler, synchronous-friendly
+const ls = new LocalStorageAdapter({ prefix: 'my-app:' });
+
+// Memory — ephemeral, works everywhere
+const mem = new MemoryStorageAdapter();
+```
+
+---
+
+## Agent LLM Adapters in Browser
+
+Both built-in adapters work in browser environments since they use HTTP-based APIs:
+
+```typescript
+import { OpenAIAdapter, AnthropicAdapter } from '@frontmcp/sdk';
+
+// OpenAI — requires `npm install openai`
+const openai = new OpenAIAdapter({
+  model: 'gpt-4o',
+  apiKey: 'sk-...',
+});
+
+// Anthropic — requires `npm install @anthropic-ai/sdk`
+const anthropic = new AnthropicAdapter({
+  model: 'claude-sonnet-4-20250514',
+  apiKey: 'sk-ant-...',
+});
+```
+
+<Warning>
+When using LLM adapters in the browser, API keys are exposed to the client. Use a backend proxy or token-scoped keys for production deployments.
+</Warning>
+
+---
+
+## Crypto Operations
+
+All `@frontmcp/utils` crypto functions use the WebCrypto API in browser and `node:crypto` in Node.js:
+
+```typescript
+import {
+  sha256Hex,
+  generateCodeVerifier,
+  generateCodeChallenge,
+  encryptAesGcm,
+  decryptAesGcm,
+  randomBytes,
+  randomUUID,
+  base64urlEncode,
+  base64urlDecode,
+} from '@frontmcp/utils';
+
+// All of these work identically in both environments
+const hash = await sha256Hex('data');
+const verifier = generateCodeVerifier();
+const challenge = await generateCodeChallenge(verifier);
+```

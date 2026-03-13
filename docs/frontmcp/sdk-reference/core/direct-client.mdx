@@ -1,6 +1,6 @@
 ---
 title: "DirectClient"
-description: "DirectClient provides programmatic access to FrontMCP servers with automatic tool formatting for different LLM platforms (OpenAI, Claude, LangChain, etc.)."
+description: "DirectClient provides programmatic access to FrontMCP servers with automatic tool formatting for different LLM platforms (OpenAI, Claude, Vercel AI, etc.)."
 icon: "plug"
 ---
 
@@ -85,18 +85,6 @@ import { connectClaude } from '@frontmcp/sdk';
 const client = await connectClaude(config);
 const tools = await client.listTools();
 // tools are in Claude tool format
-```
-
-### connectLangChain(config, options?)
-
-Create a client with LangChain tool formatting.
-
-```typescript
-import { connectLangChain } from '@frontmcp/sdk';
-
-const client = await connectLangChain(config);
-const tools = await client.listTools();
-// tools are in LangChain schema format
 ```
 
 ### connectVercelAI(config, options?)

@@ -1,8 +1,8 @@
 /**
  * LLM Provider Factories
  *
- * Auto-creates LangChain adapters based on provider configuration.
- * OpenAI and Anthropic are included by default, other providers use dynamic imports.
+ * Creates adapters based on provider configuration using the official SDKs.
+ * OpenAI and Anthropic are supported via optional peer dependencies.
  */
 
 export * from './types';
@@ -16,12 +16,9 @@ import {
   AgentCompletionChunk,
 } from '../../../common';
 import { LlmAdapterError } from '../base.adapter';
-import { LangChainAdapter, LangChainChatModel } from '../langchain.adapter';
+import { OpenAIAdapter } from '../openai.adapter';
+import { AnthropicAdapter } from '../anthropic.adapter';
 import type { LlmProvider, ProviderCommonOptions } from './types';
-
-// Static imports for built-in providers (OpenAI and Anthropic)
-import { ChatOpenAI } from '#langchain-openai';
-import { ChatAnthropic } from '#langchain-anthropic';
 
 /**
  * Options for creating a provider-based adapter.
@@ -29,176 +26,87 @@ import { ChatAnthropic } from '#langchain-anthropic';
 export interface CreateProviderAdapterOptions extends ProviderCommonOptions {
   /** The LLM provider to use. */
   provider: LlmProvider;
-  /** The model identifier (e.g., 'gpt-4-turbo', 'claude-3-opus'). */
+  /** The model identifier (e.g., 'gpt-4o', 'claude-sonnet-4-6'). */
   model: string;
   /** API key for the provider. */
   apiKey: string;
   /**
    * Custom base URL for the API endpoint.
-   * Supported by all providers for custom/self-hosted endpoints.
+   * Useful for OpenAI-compatible providers (Groq, Mistral, etc.).
    */
   baseUrl?: string;
 }
 
 /**
- * Provider package mapping for optional providers (dynamic import).
+ * Create an adapter for the specified provider.
+ *
+ * Async signature preserved for API compatibility — actual initialization
+ * is deferred via DeferredProviderAdapter (lazy init on first completion call).
  */
-const OPTIONAL_PROVIDER_PACKAGES: Partial<
-  Record<LlmProvider, { package: string; className: string; apiKeyProp: string }>
-> = {
-  google: { package: '@langchain/google-genai', className: 'ChatGoogleGenerativeAI', apiKeyProp: 'apiKey' },
-  mistral: { package: '@langchain/mistralai', className: 'ChatMistralAI', apiKeyProp: 'apiKey' },
-  groq: { package: '@langchain/groq', className: 'ChatGroq', apiKeyProp: 'apiKey' },
-};
-
-/**
- * Dynamically import an optional LangChain provider package.
- */
-async function importOptionalProvider(provider: LlmProvider): Promise<Record<string, unknown>> {
-  const providerInfo = OPTIONAL_PROVIDER_PACKAGES[provider];
-  if (!providerInfo) {
-    throw new LlmAdapterError(`Provider ${provider} is not available for dynamic import`, 'config', 'unknown_provider');
-  }
-
-  try {
-    return await import(/* @vite-ignore */ providerInfo.package);
-  } catch {
-    throw new LlmAdapterError(
-      `LangChain provider package not installed.\n\n` +
-        `To use the '${provider}' provider, install the required package:\n\n` +
-        `  npm install ${providerInfo.package}\n` +
-        `  # or\n` +
-        `  yarn add ${providerInfo.package}\n\n` +
-        `Then you can use:\n` +
-        `  llm: {\n` +
-        `    provider: '${provider}',\n` +
-        `    model: 'your-model',\n` +
-        `    apiKey: { env: 'YOUR_API_KEY' },\n` +
-        `  }`,
-      'config',
-      'missing_provider_package',
-    );
-  }
+export async function createProviderAdapter(options: CreateProviderAdapterOptions): Promise<AgentLlmAdapter> {
+  return createProviderAdapterSync(options);
 }
 
 /**
- * Create a LangChain adapter for the specified provider.
- * OpenAI and Anthropic are built-in, other providers require package installation.
+ * Create an adapter synchronously.
+ * Used internally by the adapter factory for synchronous contexts.
  */
-export async function createProviderAdapter(options: CreateProviderAdapterOptions): Promise<AgentLlmAdapter> {
+export function createProviderAdapterSync(options: CreateProviderAdapterOptions): AgentLlmAdapter {
+  // For providers that need deferred init (e.g. dynamic import), use DeferredProviderAdapter
+  return new DeferredProviderAdapter(options);
+}
+
+/**
+ * Create the actual adapter instance for a provider.
+ */
+function createAdapterForProvider(options: CreateProviderAdapterOptions): AgentLlmAdapter {
   const { provider, model, apiKey, baseUrl, temperature, maxTokens } = options;
 
-  let chatModel: LangChainChatModel;
-
   switch (provider) {
-    case 'openai': {
-      const config: Record<string, unknown> = {
+    case 'openai':
+      return new OpenAIAdapter({
         model,
-        openAIApiKey: apiKey,
-      };
-      if (temperature !== undefined) config['temperature'] = temperature;
-      if (maxTokens !== undefined) config['maxTokens'] = maxTokens;
-      if (baseUrl) config['configuration'] = { baseURL: baseUrl };
-      chatModel = new ChatOpenAI(config) as unknown as LangChainChatModel;
-      break;
-    }
+        apiKey,
+        baseUrl,
+        temperature,
+        maxTokens,
+      });
 
-    case 'anthropic': {
-      const config: Record<string, unknown> = {
+    case 'anthropic':
+      return new AnthropicAdapter({
         model,
-        anthropicApiKey: apiKey,
-      };
-      if (temperature !== undefined) config['temperature'] = temperature;
-      if (maxTokens !== undefined) config['maxTokens'] = maxTokens;
-      chatModel = new ChatAnthropic(config) as unknown as LangChainChatModel;
-      break;
-    }
-
-    case 'google':
-    case 'mistral':
-    case 'groq': {
-      // Dynamic import for optional providers
-      const providerInfo = OPTIONAL_PROVIDER_PACKAGES[provider];
-      if (!providerInfo) {
-        throw new LlmAdapterError(`Provider ${provider} configuration not found`, 'config', 'missing_config');
-      }
-      const providerModule = await importOptionalProvider(provider);
-      const ChatModelClass = providerModule[providerInfo.className] as new (config: Record<string, unknown>) => unknown;
-
-      if (!ChatModelClass) {
-        throw new LlmAdapterError(
-          `Could not find ${providerInfo.className} in ${providerInfo.package}`,
-          'config',
-          'missing_class',
-        );
-      }
-
-      const config: Record<string, unknown> = {
-        model,
-        [providerInfo.apiKeyProp]: apiKey,
-      };
-      if (temperature !== undefined) config['temperature'] = temperature;
-      if (maxTokens !== undefined) {
-        config[provider === 'google' ? 'maxOutputTokens' : 'maxTokens'] = maxTokens;
-      }
-      // Pass baseUrl with provider-specific property names
-      if (baseUrl) {
-        if (provider === 'google') {
-          config['baseUrl'] = baseUrl;
-        } else if (provider === 'mistral') {
-          config['endpoint'] = baseUrl;
-        } else if (provider === 'groq') {
-          config['configuration'] = { baseURL: baseUrl };
-        }
-      }
-
-      chatModel = new ChatModelClass(config) as LangChainChatModel;
-      break;
-    }
+        apiKey,
+        baseUrl,
+        temperature,
+        maxTokens,
+      });
 
     default:
       throw new LlmAdapterError(
-        `Unknown provider: ${provider}. Supported providers: openai, anthropic, google, mistral, groq`,
+        `Unknown provider: ${provider}. Supported providers: openai, anthropic.\n\n` +
+          'For other providers (Google, Mistral, Groq, etc.), use one of:\n' +
+          '  - OpenAI adapter with baseUrl (most providers are OpenAI-compatible)\n' +
+          '  - Custom AgentLlmAdapter implementation\n',
         'config',
         'unknown_provider',
       );
   }
-
-  return new LangChainAdapter({ model: chatModel });
-}
-
-/**
- * Synchronous version that throws if provider needs async loading.
- * Used internally by the adapter factory for synchronous contexts.
- */
-export function createProviderAdapterSync(options: CreateProviderAdapterOptions): AgentLlmAdapter {
-  // For now, we'll create a deferred adapter that initializes on first use
-  // This allows synchronous creation while still supporting dynamic imports
-  return new DeferredProviderAdapter(options);
 }
 
 /**
  * A deferred adapter that initializes the real adapter on first use.
  */
 class DeferredProviderAdapter implements AgentLlmAdapter {
-  private _adapter: AgentLlmAdapter | null = null;
-  private _initPromise: Promise<AgentLlmAdapter> | null = null;
+  private adapter: AgentLlmAdapter | null = null;
 
   constructor(private readonly options: CreateProviderAdapterOptions) {}
 
-  private async getAdapter(): Promise<AgentLlmAdapter> {
-    if (this._adapter) {
-      return this._adapter;
+  private getAdapter(): AgentLlmAdapter {
+    if (this.adapter) {
+      return this.adapter;
     }
-
-    if (!this._initPromise) {
-      this._initPromise = createProviderAdapter(this.options).then((adapter) => {
-        this._adapter = adapter;
-        return adapter;
-      });
-    }
-
-    return this._initPromise;
+    this.adapter = createAdapterForProvider(this.options);
+    return this.adapter;
   }
 
   async completion(
@@ -206,8 +114,7 @@ class DeferredProviderAdapter implements AgentLlmAdapter {
     tools?: AgentToolDefinition[],
     options?: AgentCompletionOptions,
   ): Promise<AgentCompletion> {
-    const adapter = await this.getAdapter();
-    return adapter.completion(prompt, tools, options);
+    return this.getAdapter().completion(prompt, tools, options);
   }
 
   async *streamCompletion(
@@ -215,14 +122,13 @@ class DeferredProviderAdapter implements AgentLlmAdapter {
     tools?: AgentToolDefinition[],
     options?: AgentCompletionOptions,
   ): AsyncGenerator<AgentCompletionChunk> {
-    const adapter = await this.getAdapter();
+    const adapter = this.getAdapter();
     if (adapter.streamCompletion) {
       yield* adapter.streamCompletion(prompt, tools, options);
     } else {
-      // Fallback to non-streaming - yield chunks in sequence
+      // Fallback to non-streaming
       const result = await adapter.completion(prompt, tools, options);
 
-      // Yield tool calls
       if (result.toolCalls) {
         for (const toolCall of result.toolCalls) {
           yield {
@@ -232,19 +138,11 @@ class DeferredProviderAdapter implements AgentLlmAdapter {
         }
       }
 
-      // Yield content if any
       if (result.content) {
-        yield {
-          type: 'content' as const,
-          content: result.content,
-        };
+        yield { type: 'content' as const, content: result.content };
       }
 
-      // Yield done with full completion
-      yield {
-        type: 'done' as const,
-        completion: result,
-      };
+      yield { type: 'done' as const, completion: result };
     }
   }
 }

@@ -89,7 +89,7 @@ import { z } from 'zod';
   systemInstructions: `You are an expense processing assistant. Analyze expense reports,
     categorize them, and prepare summaries. Always verify large expenses with the user.`,
   llm: {
-    adapter: 'openai',
+    provider: 'openai',
     model: 'gpt-4o',
     apiKey: { env: 'OPENAI_API_KEY' },
   },

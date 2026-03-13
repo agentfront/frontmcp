@@ -83,14 +83,14 @@ export class Server {}
 
 ### Configuration Options
 
-| Option         | Type            | Default              | Description                          |
-| -------------- | --------------- | -------------------- | ------------------------------------ |
-| `provider`     | `string`        | Required             | Upstream IdP base URL                |
-| `clientId`     | `string`        | Required             | Pre-registered client ID             |
-| `clientSecret` | `string`        | -                    | Client secret (confidential clients) |
-| `scopes`       | `string[]`      | `['openid']`         | Scopes to request from IdP           |
-| `providerConfig` | `ProviderConfig` | -                  | Endpoint overrides and IdP-specific settings |
-| `consent`      | `ConsentConfig` | `{ enabled: false }` | Consent UI configuration             |
+| Option           | Type             | Default              | Description                                  |
+| ---------------- | ---------------- | -------------------- | -------------------------------------------- |
+| `provider`       | `string`         | Required             | Upstream IdP base URL                        |
+| `clientId`       | `string`         | Required             | Pre-registered client ID                     |
+| `clientSecret`   | `string`         | -                    | Client secret (confidential clients)         |
+| `scopes`         | `string[]`       | `['openid']`         | Scopes to request from IdP                   |
+| `providerConfig` | `ProviderConfig` | -                    | Endpoint overrides and IdP-specific settings |
+| `consent`        | `ConsentConfig`  | `{ enabled: false }` | Consent UI configuration                     |
 
 ---
 
