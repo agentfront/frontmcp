@@ -9,24 +9,24 @@ FrontMCP supports browser environments for client-side use cases like JWT verifi
 
 ## What Works in Browser
 
-| Feature | Details |
-| ------- | ------- |
-| **Crypto operations** | SHA-256, AES-GCM, HKDF, PKCE via WebCrypto API |
-| **JWT verification** | `rsaVerify` via WebCrypto, `decodeJwtPayloadSafe` |
-| **Key persistence** | IndexedDB and localStorage backends |
-| **Storage adapters** | `MemoryStorageAdapter`, `IndexedDBStorageAdapter`, `LocalStorageAdapter` |
-| **Agent adapters** | `OpenAIAdapter`, `AnthropicAdapter` (HTTP-based, no Node dependencies) |
-| **MCP client** | Direct client connections |
+| Feature               | Details                                                                  |
+| --------------------- | ------------------------------------------------------------------------ |
+| **Crypto operations** | SHA-256, AES-GCM, HKDF, PKCE via WebCrypto API                           |
+| **JWT verification**  | `rsaVerify` via WebCrypto, `decodeJwtPayloadSafe`                        |
+| **Key persistence**   | IndexedDB and localStorage backends                                      |
+| **Storage adapters**  | `MemoryStorageAdapter`, `IndexedDBStorageAdapter`, `LocalStorageAdapter` |
+| **Agent adapters**    | `OpenAIAdapter`, `AnthropicAdapter` (HTTP-based, no Node dependencies)   |
+| **MCP client**        | Direct client connections                                                |
 
 ## What's Node-only
 
-| Feature | Reason |
-| ------- | ------ |
-| **JWT signing** | `createSignedJwt`, `rsaSign`, `generateRsaKeyPair` require Node crypto |
-| **File system** | `FileSystemStorageAdapter`, `fs` utilities |
-| **Server infrastructure** | Express adapter, SSE/Streamable HTTP transport |
-| **Redis/TCP storage** | `ioredis` requires TCP sockets |
-| **CLI and Nx Plugin** | Node-only tooling |
+| Feature                   | Reason                                                                 |
+| ------------------------- | ---------------------------------------------------------------------- |
+| **JWT signing**           | `createSignedJwt`, `rsaSign`, `generateRsaKeyPair` require Node crypto |
+| **File system**           | `FileSystemStorageAdapter`, `fs` utilities                             |
+| **Server infrastructure** | Express adapter, SSE/Streamable HTTP transport                         |
+| **Redis/TCP storage**     | `ioredis` requires TCP sockets                                         |
+| **CLI and Nx Plugin**     | Node-only tooling                                                      |
 
 ---
 

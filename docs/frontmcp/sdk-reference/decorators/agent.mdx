@@ -47,9 +47,9 @@ function Agent<InSchema, OutSchema>(
 
 ### Required Properties
 
-| Property | Type                    | Description                |
-| -------- | ----------------------- | -------------------------- |
-| `name`   | `string`                | Unique agent identifier    |
+| Property | Type                                             | Description                |
+| -------- | ------------------------------------------------ | -------------------------- |
+| `name`   | `string`                                         | Unique agent identifier    |
 | `llm`    | `AgentLlmBuiltinConfig \| AgentLlmAdapterConfig` | LLM provider configuration |
 
 ### Optional Properties
@@ -119,21 +119,31 @@ interface AgentLlmAdapterConfig {
 ```
 
 <Note>
-  The `process.env` examples below are Node.js-specific. In browser environments,
-  avoid shipping provider API keys in browser bundles. Prefer a short-lived token
-  obtained via a backend proxy.
+  The `process.env` examples above are Node.js-specific. Decorator and config arguments
+  are evaluated synchronously, so async token retrieval must happen **before** agent
+  creation. In browser environments, use the function-based `agent()` API:
 
-  ```typescript
-  // Browser (recommended): fetch short-lived token from your backend
-  apiKey: await fetch('/api/llm-token').then((r) => r.text()),
+```typescript
+import { agent } from '@frontmcp/sdk';
 
-  // Local development only (not a secret in client bundles):
-  // apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  ```
+// Fetch a short-lived token from your backend, then create the agent
+const token = await fetch('/api/llm-token').then((r) => r.text());
 
-  **Warning:** Never embed long-lived API keys in client-side bundles shipped to end users.
-  When using Browser LLM adapters (`OpenAIAdapter` / `AnthropicAdapter`), prefer a backend
-  proxy or short-lived tokens to avoid exposing persistent credentials.
+const researcher = agent({
+  name: 'research',
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: token },
+})((input, ctx) => {
+  return { findings: '...' };
+});
+
+// Local development only (never ship in production bundles):
+// apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+```
+
+**Warning:** Never embed long-lived API keys in client-side bundles shipped to end users.
+When using Browser LLM adapters (`OpenAIAdapter` / `AnthropicAdapter`), prefer a backend
+proxy or short-lived tokens to avoid exposing persistent credentials.
+
 </Note>
 
 ### OpenAI Responses API
@@ -334,7 +344,7 @@ class SearchDatabaseTool extends ToolContext {
 
 @Tool({
   name: 'create_report',
-  inputSchema: { title: z.string(), data: z.any() },
+  inputSchema: { title: z.string(), data: z.unknown() },
 })
 class CreateReportTool extends ToolContext {
   async execute(input) {

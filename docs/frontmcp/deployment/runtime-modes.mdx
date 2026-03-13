@@ -27,12 +27,12 @@ Use SDK mode when your agent code directly calls FrontMCP tools without HTTP. Th
 
 ### Entry Points
 
-| Function             | Platform    | Tool Format                                              |
-| -------------------- | ----------- | -------------------------------------------------------- |
-| `connect()`          | Auto-detect | Based on clientInfo                                      |
-| `connectOpenAI()`    | OpenAI      | `[{ type: 'function', function: { name, parameters } }]` |
-| `connectClaude()`    | Anthropic   | `[{ name, input_schema }]`                               |
-| `connectVercelAI()`  | Vercel AI   | `{ [name]: { parameters } }`                             |
+| Function            | Platform    | Tool Format                                              |
+| ------------------- | ----------- | -------------------------------------------------------- |
+| `connect()`         | Auto-detect | Based on clientInfo                                      |
+| `connectOpenAI()`   | OpenAI      | `[{ type: 'function', function: { name, parameters } }]` |
+| `connectClaude()`   | Anthropic   | `[{ name, input_schema }]`                               |
+| `connectVercelAI()` | Vercel AI   | `{ [name]: { parameters } }`                             |
 
 ### Benefits
 
@@ -349,15 +349,15 @@ Serverless environments require distributed storage. In-memory storage does not 
 
 ## Comparison Table
 
-| Feature         | SDK Mode        | Server Mode       | Handler Mode         |
-| --------------- | --------------- | ----------------- | -------------------- |
-| **Network**     | In-process      | HTTP              | HTTP (stateless)     |
-| **Use Case**    | Embedded agents | Standalone server | Serverless platforms |
-| **Session**     | In-memory       | Configurable      | Distributed required |
+| Feature         | SDK Mode                             | Server Mode                  | Handler Mode                                 |
+| --------------- | ------------------------------------ | ---------------------------- | -------------------------------------------- |
+| **Network**     | In-process                           | HTTP                         | HTTP (stateless)                             |
+| **Use Case**    | Embedded agents                      | Standalone server            | Serverless platforms                         |
+| **Session**     | In-memory                            | Configurable                 | Distributed required                         |
 | **Entry Point** | `connect()`, `connectOpenAI()`, etc. | `@FrontMcp` with `http.port` | `createHandler()` or `FRONTMCP_SERVERLESS=1` |
-| **Scaling**     | Single process  | Horizontal        | Auto-scaling         |
-| **Auth**        | Token injection | OAuth/JWT         | OAuth/JWT            |
-| **Cold Start**  | None            | None              | Platform-dependent   |
+| **Scaling**     | Single process                       | Horizontal                   | Auto-scaling                                 |
+| **Auth**        | Token injection                      | OAuth/JWT                    | OAuth/JWT                                    |
+| **Cold Start**  | None                                 | None                         | Platform-dependent                           |
 
 ---
 
