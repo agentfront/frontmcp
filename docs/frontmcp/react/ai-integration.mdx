@@ -89,6 +89,8 @@ import OpenAI from 'openai';
 
 function OpenAIChat() {
   const { tools, processToolCalls } = useTools('openai');
+  // ⚠️ dangerouslyAllowBrowser exposes your API key in client-side code.
+  // In production, proxy requests through your backend instead.
   const openai = new OpenAI({ apiKey: '...', dangerouslyAllowBrowser: true });
 
   async function chat(message: string) {

@@ -15,7 +15,7 @@ export class CurrentRouteResource {
       return {
         contents: [
           {
-            uri: 'route://current',
+            uri: CurrentRouteResource.uri,
             mimeType: 'application/json',
             text: JSON.stringify({
               error: 'Router bridge not connected. Ensure useRouterBridge() is called inside a React Router tree.',
@@ -28,7 +28,7 @@ export class CurrentRouteResource {
     return {
       contents: [
         {
-          uri: 'route://current',
+          uri: CurrentRouteResource.uri,
           mimeType: 'application/json',
           text: JSON.stringify({
             pathname: location.pathname,

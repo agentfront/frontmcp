@@ -456,7 +456,7 @@ describe('FrontMcpProvider', () => {
       listResources: jest.fn().mockResolvedValue({}),
       listResourceTemplates: jest.fn().mockResolvedValue({}),
       listPrompts: jest.fn().mockResolvedValue({}),
-    } as unknown as Partial<DirectClient>);
+    } as Partial<DirectClient>);
     const server = createMockServer(mockClient);
     let captured: Record<string, unknown> = {};
 

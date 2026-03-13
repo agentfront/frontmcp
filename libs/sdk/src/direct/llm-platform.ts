@@ -117,7 +117,6 @@ export type FormattedTools = OpenAITool[] | ClaudeTool[] | LangChainTool[] | Ver
  */
 export type FormattedToolResult =
   | string
-  | unknown
   | Array<{ type: string; text: string }>
   | CallToolResult
   | {
@@ -347,15 +346,15 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
     case 'openai':
     case 'langchain':
       // OpenAI and LangChain expect simple string/JSON content
-      return extractTextContent(result);
+      return extractTextContent(result) as FormattedToolResult;
 
     case 'claude':
       // Claude can handle the content array directly
-      return result.content;
+      return result.content as FormattedToolResult;
 
     case 'vercel-ai':
       // Vercel AI SDK expects structured data
-      return extractStructuredResult(result);
+      return extractStructuredResult(result) as FormattedToolResult;
 
     default:
       // Raw - return full MCP result

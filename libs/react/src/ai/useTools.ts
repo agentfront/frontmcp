@@ -18,7 +18,7 @@ export interface UseToolsResult<P extends SupportedPlatform> {
   error: Error | null;
 }
 
-interface ToolsOptions {
+export interface ToolsOptions {
   server?: string;
 }
 

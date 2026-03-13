@@ -23,7 +23,6 @@ export type VercelToolCallInfo = _VercelToolCallInfo;
  */
 export type FormattedToolResult =
   | string
-  | unknown
   | Array<{ type: string; text: string }>
   | { content?: Array<{ type: string; text?: string; data?: string; mimeType?: string }> }
   | { text?: string[]; images?: Array<{ data: string; mimeType: string }> };

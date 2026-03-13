@@ -119,8 +119,9 @@ describe('useStoreResource', () => {
     expect(result.current.data).toEqual({ v: 1 });
 
     // Simulate server notification
+    expect(updateCallback).toBeDefined();
     await act(async () => {
-      updateCallback!('state://data');
+      updateCallback?.('state://data');
       await new Promise((r) => setTimeout(r, 0));
     });
 
@@ -148,8 +149,9 @@ describe('useStoreResource', () => {
     const callCountAfterMount = mockClient.readResource.mock.calls.length;
 
     // Notify for a DIFFERENT URI
+    expect(updateCallback).toBeDefined();
     await act(async () => {
-      updateCallback!('state://other');
+      updateCallback?.('state://other');
       await new Promise((r) => setTimeout(r, 0));
     });
 
@@ -185,7 +187,7 @@ describe('useStoreResource', () => {
     });
 
     expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error!.message).toBe('string error');
+    expect(result.current.error?.message).toBe('string error');
   });
 
   it('parses JSON content from resource', async () => {

@@ -133,7 +133,7 @@ describe('useReadResource', () => {
 
       const [, state] = result.current as [unknown, { error: Error | null }];
       expect(state.error).toBeInstanceOf(Error);
-      expect(state.error!.message).toBe('string error');
+      expect(state.error?.message).toBe('string error');
     });
 
     it('handles not-connected state', async () => {
@@ -152,7 +152,8 @@ describe('useReadResource', () => {
       expect(mockClient.readResource).not.toHaveBeenCalled();
 
       const [, state] = result.current as [unknown, { error: Error | null }];
-      expect(state.error!.message).toBe('FrontMCP not connected');
+      expect(state.error).toBeDefined();
+      expect(state.error?.message).toBe('FrontMCP not connected');
     });
   });
 
@@ -301,7 +302,8 @@ describe('useReadResource', () => {
       });
 
       const [, state] = result.current as [unknown, { error: Error | null }];
-      expect(state.error!.message).toBe('FrontMCP not connected');
+      expect(state.error).toBeDefined();
+      expect(state.error?.message).toBe('FrontMCP not connected');
     });
   });
 

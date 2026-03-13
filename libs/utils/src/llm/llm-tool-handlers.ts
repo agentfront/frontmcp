@@ -105,5 +105,9 @@ async function processClaude(
 }
 
 async function processVercel(info: VercelToolCallInfo, callTool: CallToolFn): Promise<unknown> {
-  return callTool(info.toolName, info.args as Record<string, unknown>);
+  const args =
+    info.args != null && typeof info.args === 'object' && !Array.isArray(info.args)
+      ? (info.args as Record<string, unknown>)
+      : undefined;
+  return callTool(info.toolName, args);
 }

@@ -68,9 +68,9 @@ describe('ResourceViewer', () => {
     const { getByTestId } = render(<ResourceViewer data={data} />);
 
     const viewer = getByTestId('resource-viewer');
-    const pre = viewer.querySelector('pre')!;
-    expect(pre).toBeTruthy();
-    expect(pre.textContent).toBe(JSON.stringify(jsonObj, null, 2));
+    const pre = viewer.querySelector('pre');
+    expect(pre).not.toBeNull();
+    expect(pre?.textContent).toBe(JSON.stringify(jsonObj, null, 2));
   });
 
   it('handles invalid JSON content gracefully', () => {
@@ -87,8 +87,9 @@ describe('ResourceViewer', () => {
     const { getByTestId } = render(<ResourceViewer data={data} />);
 
     const viewer = getByTestId('resource-viewer');
-    const pre = viewer.querySelector('pre')!;
-    expect(pre.textContent).toBe('{invalid json}');
+    const pre = viewer.querySelector('pre');
+    expect(pre).not.toBeNull();
+    expect(pre?.textContent).toBe('{invalid json}');
   });
 
   it('handles multiple contents', () => {
@@ -156,8 +157,9 @@ describe('ResourceViewer', () => {
     const { getByTestId } = render(<ResourceViewer data={data} />);
 
     const viewer = getByTestId('resource-viewer');
-    const pre = viewer.querySelector('pre')!;
+    const pre = viewer.querySelector('pre');
+    expect(pre).not.toBeNull();
     // formatJson('') will fail to parse and return ''
-    expect(pre.textContent).toBe('');
+    expect(pre?.textContent).toBe('');
   });
 });

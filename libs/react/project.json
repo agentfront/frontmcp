@@ -100,7 +100,7 @@
       "outputs": ["{workspaceRoot}/coverage/libs/react"],
       "options": {
         "jestConfig": "libs/react/jest.config.ts",
-        "passWithNoTests": true
+        "passWithNoTests": false
       }
     }
   }

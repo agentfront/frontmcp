@@ -20,7 +20,7 @@ function createWrapper(overrides?: {
 }) {
   const name = overrides?.name ?? 'default';
   serverRegistry.register(name, mockServer);
-  if (overrides?.resources || overrides?.resourceTemplates) {
+  if (overrides?.resources !== undefined || overrides?.resourceTemplates !== undefined) {
     serverRegistry.update(name, {
       resources: overrides.resources ?? [],
       resourceTemplates: overrides.resourceTemplates ?? [],
@@ -68,7 +68,7 @@ describe('useListResources', () => {
 
   it('returns empty arrays when no resources exist', () => {
     const { result } = renderHook(() => useListResources(), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper({ resources: [], resourceTemplates: [] }),
     });
 
     expect(result.current.resources).toEqual([]);

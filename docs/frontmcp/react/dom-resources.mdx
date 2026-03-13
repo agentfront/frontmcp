@@ -88,3 +88,7 @@ const server = await create({
 ```
 
 An AI agent can then call `readResource('dom://byId/login-form')` to inspect a form, or `readResource('dom://selector/.error-message')` to check for error states on the page.
+
+<Note>
+When using `readDomBySelector` with complex selectors (e.g., `div > .my-class`), the selector is embedded in the URI path. Use `encodeURIComponent` when constructing the URI to avoid parsing issues: `dom://selector/${encodeURIComponent('div > .my-class')}`.
+</Note>

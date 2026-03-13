@@ -131,7 +131,7 @@ export function FrontMcpProvider({
       mountedRef.current = false;
       clientRef.current = null;
     };
-  }, []);
+  }, [autoConnect, connectClient]);
 
   const contextValue = useMemo(
     () => ({
