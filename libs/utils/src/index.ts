@@ -279,3 +279,17 @@ export type {
   StorageType,
   StorageConfig,
 } from './storage';
+
+// LLM platform tool call processing (cross-platform: Node.js and browser)
+export { processPlatformToolCalls } from './llm';
+export type {
+  CallToolFn,
+  OpenAIToolCallItem,
+  OpenAIToolResponse,
+  ClaudeToolUseBlock,
+  ClaudeToolResultBlock,
+  VercelToolCallInfo,
+  PlatformToolCallsInput,
+  PlatformToolCallsOutput,
+  SupportedPlatform,
+} from './llm';

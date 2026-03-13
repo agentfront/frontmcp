@@ -1,0 +1,226 @@
+---
+title: Hooks Reference
+slug: react/hooks
+icon: hook
+description: Complete API reference for all @frontmcp/react hooks
+---
+
+All hooks support multi-server targeting via an `options.server` parameter. When omitted, they use the provider's default server.
+
+## useCallTool
+
+Call an MCP tool with typed input/output.
+
+```tsx
+const [callTool, state, reset] = useCallTool<InputType, OutputType>(toolName, options?);
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `toolName` | `string` | Name of the MCP tool |
+| `options.server` | `string` | Target a named server |
+| `options.onSuccess` | `(data) => void` | Success callback |
+| `options.onError` | `(error) => void` | Error callback |
+| `options.resetOnToolChange` | `boolean` | Reset state when `toolName` changes (default: `true`) |
+
+### Return Value
+
+| Index | Type | Description |
+|-------|------|-------------|
+| `[0]` | `(args: TInput) => Promise<TOutput \| null>` | Call function |
+| `[1]` | `ToolState<TOutput>` | `{ data, loading, error, called }` |
+| `[2]` | `() => void` | Reset state |
+
+### Example
+
+```tsx
+function SearchTool() {
+  const [search, { data, loading, error, called }, reset] = useCallTool('search');
+
+  return (
+    <div>
+      <button onClick={() => search({ query: 'react' })}>Search</button>
+      <button onClick={reset}>Reset</button>
+      {loading && <p>Searching...</p>}
+      {data && <pre>{JSON.stringify(data, null, 2)}</pre>}
+    </div>
+  );
+}
+```
+
+---
+
+## useReadResource
+
+Dual-mode resource reading — lazy or auto-fetch.
+
+### Lazy Mode
+
+```tsx
+const [readFn, state] = useReadResource(options?);
+```
+
+Returns a `[read, state]` tuple. Call `read(uri)` on demand.
+
+```tsx
+function LazyReader() {
+  const [read, { data, loading }] = useReadResource();
+
+  return <button onClick={() => read('app://config')}>Load Config</button>;
+}
+```
+
+### Auto-Fetch Mode
+
+```tsx
+const { data, loading, error, refetch } = useReadResource(uri, options?);
+```
+
+Fetches automatically when connected. Call `refetch()` to re-read.
+
+```tsx
+function AutoReader() {
+  const { data, loading, refetch } = useReadResource('app://status');
+
+  return (
+    <div>
+      {loading ? 'Loading...' : JSON.stringify(data)}
+      <button onClick={refetch}>Refresh</button>
+    </div>
+  );
+}
+```
+
+---
+
+## useGetPrompt
+
+Fetch an MCP prompt by name.
+
+```tsx
+const [getPrompt, state] = useGetPrompt(promptName, options?);
+```
+
+### Example
+
+```tsx
+function PromptFetcher() {
+  const [getPrompt, { data, loading }] = useGetPrompt('summarize');
+
+  return (
+    <button onClick={() => getPrompt({ topic: 'AI safety' })}>
+      {loading ? 'Loading...' : 'Get Prompt'}
+    </button>
+  );
+}
+```
+
+---
+
+## useListTools
+
+Reactive tool list from the registry.
+
+```tsx
+const tools: ToolInfo[] = useListTools(options?);
+```
+
+```tsx
+function ToolList() {
+  const tools = useListTools();
+  return (
+    <ul>
+      {tools.map((t) => <li key={t.name}>{t.name} — {t.description}</li>)}
+    </ul>
+  );
+}
+```
+
+---
+
+## useListResources
+
+Reactive resource and resource template lists.
+
+```tsx
+const { resources, resourceTemplates } = useListResources(options?);
+```
+
+---
+
+## useListPrompts
+
+Reactive prompt list.
+
+```tsx
+const prompts: PromptInfo[] = useListPrompts(options?);
+```
+
+---
+
+## useStoreResource
+
+Subscribe to a `state://` URI with live updates via MCP resource subscriptions.
+
+```tsx
+const { data, loading, error, refetch } = useStoreResource(uri, options?);
+```
+
+When the server sends `notifications/resources/updated`, the hook automatically re-fetches the resource. Content is JSON-parsed when possible.
+
+### Example
+
+```tsx
+function LiveCounter() {
+  const { data, loading } = useStoreResource('state://counter');
+
+  if (loading) return <p>Loading...</p>;
+  return <p>Count: {String(data)}</p>;
+}
+```
+
+---
+
+## useServer
+
+Low-level hook to access a raw `ServerEntry` from the registry.
+
+```tsx
+const entry: ServerEntry | undefined = useServer(name?);
+```
+
+Uses `useSyncExternalStore` for tear-free reads.
+
+---
+
+## useResolvedServer
+
+Internal hook that resolves a server entry with context fallback.
+
+```tsx
+const { entry, name, registry, connect } = useResolvedServer(serverName?);
+```
+
+This is the shared foundation for all other hooks. You typically don't need to use it directly.
+
+---
+
+## Multi-Server Pattern
+
+All hooks accept `{ server: 'name' }` to target a specific server:
+
+```tsx
+// Call a tool on the analytics server
+const [track, state] = useCallTool('track_event', { server: 'analytics' });
+
+// Read a resource from the config server
+const { data } = useReadResource('app://settings', { server: 'config' });
+
+// List tools from a specific server
+const tools = useListTools({ server: 'analytics' });
+
+// Subscribe to state on a specific server
+const { data } = useStoreResource('state://counter', { server: 'state-server' });
+```

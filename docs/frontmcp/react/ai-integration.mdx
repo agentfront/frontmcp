@@ -1,0 +1,148 @@
+---
+title: AI SDK Integration
+slug: react/ai-integration
+icon: robot
+description: Bridge MCP tools to OpenAI, Claude, Vercel AI, and LangChain
+---
+
+The `@frontmcp/react/ai` entry point bridges FrontMCP tools to popular AI SDK formats. Tools are automatically formatted for the target platform and results are converted back.
+
+## useAITools
+
+The core hook that formats MCP tools for a specific platform.
+
+```tsx
+import { useAITools } from '@frontmcp/react/ai';
+
+function AIChat() {
+  const { tools, callTool, loading, error } = useAITools('openai');
+
+  // `tools` is formatted for the OpenAI SDK
+  // `callTool(name, args)` calls the MCP tool and formats the result
+}
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `platform` | `LLMPlatform` | `'openai' \| 'claude' \| 'vercel-ai' \| 'langchain'` |
+| `options.server` | `string` | Target a named server |
+
+### Return Value
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tools` | `PlatformToolsMap[P] \| null` | Tools formatted for the target platform |
+| `callTool` | `(name, args) => Promise<FormattedToolResult>` | Execute a tool and format the result |
+| `loading` | `boolean` | True while formatting tools |
+| `error` | `Error \| null` | Formatting or execution error |
+
+---
+
+## useTools
+
+Higher-level hook that adds batch tool call processing via `processPlatformToolCalls`.
+
+```tsx
+import { useTools } from '@frontmcp/react/ai';
+
+function ChatAgent() {
+  const { tools, processToolCalls, loading } = useTools('openai');
+
+  // Process a batch of tool calls from the AI response
+  const results = await processToolCalls(toolCalls);
+}
+```
+
+### Return Value
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tools` | `PlatformToolsMap[P] \| null` | Formatted tools |
+| `processToolCalls` | `(calls) => Promise<PlatformToolCallsOutput[P]>` | Batch process tool calls |
+| `loading` | `boolean` | Loading state |
+| `error` | `Error \| null` | Error state |
+
+---
+
+## createToolCallHandler
+
+Non-React utility for vanilla JavaScript usage. Creates a handler that executes tools and formats results.
+
+```ts
+import { createToolCallHandler } from '@frontmcp/react/ai';
+
+const handler = createToolCallHandler(server, 'openai');
+const result = await handler.callTool('search', { query: 'react hooks' });
+```
+
+---
+
+## Platform Examples
+
+### OpenAI
+
+```tsx
+import { useTools } from '@frontmcp/react/ai';
+import OpenAI from 'openai';
+
+function OpenAIChat() {
+  const { tools, processToolCalls } = useTools('openai');
+  const openai = new OpenAI({ apiKey: '...', dangerouslyAllowBrowser: true });
+
+  async function chat(message: string) {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: message }],
+      tools: tools ?? undefined,
+    });
+
+    const toolCalls = response.choices[0].message.tool_calls;
+    if (toolCalls) {
+      const results = await processToolCalls(toolCalls);
+      // Continue the conversation with tool results...
+    }
+  }
+}
+```
+
+### Vercel AI SDK
+
+```tsx
+import { useTools } from '@frontmcp/react/ai';
+import { useChat } from 'ai/react';
+
+function VercelAIChat() {
+  const { tools, processToolCalls } = useTools('vercel-ai');
+
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+    // Pass tools to the chat configuration
+  });
+}
+```
+
+### Claude (Anthropic)
+
+```tsx
+import { useTools } from '@frontmcp/react/ai';
+
+function ClaudeChat() {
+  const { tools, processToolCalls } = useTools('claude');
+
+  // `tools` is formatted as Claude tool_use blocks
+  // Each tool has: { name, description, input_schema }
+}
+```
+
+---
+
+## Multi-Server AI Tools
+
+Target tools from a specific server:
+
+```tsx
+const { tools: analyticsTools } = useAITools('openai', { server: 'analytics' });
+const { tools: mainTools } = useAITools('openai'); // defaults to primary server
+```

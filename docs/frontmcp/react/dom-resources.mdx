@@ -1,0 +1,90 @@
+---
+title: DOM Resources
+slug: react/dom-resources
+icon: code
+description: Read DOM elements as MCP resources for AI agent page inspection
+---
+
+`@frontmcp/react` provides two utility functions for reading DOM elements as MCP-compatible resources. These are useful when AI agents need to inspect page content.
+
+## readDomById
+
+Reads a DOM element by its `id` attribute and returns its HTML, text content, and tag name.
+
+```ts
+import { readDomById } from '@frontmcp/react';
+
+const result = readDomById('main-content');
+// {
+//   contents: [{
+//     uri: 'dom://byId/main-content',
+//     mimeType: 'application/json',
+//     text: '{"outerHTML":"<div id=\"main-content\">...</div>","textContent":"...","tagName":"div"}'
+//   }]
+// }
+```
+
+### Return Values
+
+| Scenario | mimeType | text |
+|----------|----------|------|
+| Element found | `application/json` | JSON with `outerHTML`, `textContent`, `tagName` |
+| Element not found | `text/plain` | `'Element with id "..." not found'` |
+| No DOM (SSR) | `text/plain` | `'DOM not available (not in a browser environment)'` |
+
+---
+
+## readDomBySelector
+
+Reads all elements matching a CSS selector.
+
+```ts
+import { readDomBySelector } from '@frontmcp/react';
+
+const result = readDomBySelector('.card');
+// {
+//   contents: [{
+//     uri: 'dom://selector/.card',
+//     mimeType: 'application/json',
+//     text: '[{"outerHTML":"...","textContent":"...","tagName":"div"}, ...]'
+//   }]
+// }
+```
+
+### Return Values
+
+| Scenario | mimeType | text |
+|----------|----------|------|
+| Elements found | `application/json` | JSON array of `{ outerHTML, textContent, tagName }` |
+| No matches | `text/plain` | `'No elements found matching "..."'` |
+| Invalid selector | `text/plain` | `'Invalid selector: "..."'` |
+| No DOM (SSR) | `text/plain` | `'DOM not available (not in a browser environment)'` |
+
+---
+
+## Use Case: AI Agent Page Inspection
+
+Register DOM readers as MCP resource handlers so AI agents can inspect page content:
+
+```ts
+import { create } from '@frontmcp/sdk';
+import { readDomById, readDomBySelector } from '@frontmcp/react';
+
+const server = await create({
+  info: { name: 'browser-app', version: '1.0.0' },
+  resources: [
+    {
+      uri: 'dom://byId/{id}',
+      name: 'DOM Element by ID',
+      read: ({ id }) => readDomById(id),
+    },
+    {
+      uri: 'dom://selector/{selector}',
+      name: 'DOM Elements by Selector',
+      read: ({ selector }) => readDomBySelector(decodeURIComponent(selector)),
+    },
+  ],
+});
+```
+
+An AI agent can then call `readResource('dom://byId/login-form')` to inspect a form, or `readResource('dom://selector/.error-message')` to check for error states on the page.

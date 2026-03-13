@@ -1,0 +1,86 @@
+{
+  "name": "@frontmcp/react",
+  "version": "0.12.1",
+  "description": "React hooks, components, and AI SDK integration for FrontMCP",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "react",
+    "hooks",
+    "ai",
+    "tools",
+    "openai",
+    "claude",
+    "vercel-ai",
+    "agentfront",
+    "frontmcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./ai": {
+      "development": "./src/ai/index.ts",
+      "require": {
+        "types": "./dist/ai/index.d.ts",
+        "default": "./dist/ai/index.js"
+      },
+      "import": {
+        "types": "./dist/ai/index.d.ts",
+        "default": "./dist/esm/ai/index.mjs"
+      }
+    },
+    "./router": {
+      "development": "./src/router/index.ts",
+      "require": {
+        "types": "./dist/router/index.d.ts",
+        "default": "./dist/router/index.js"
+      },
+      "import": {
+        "types": "./dist/router/index.d.ts",
+        "default": "./dist/esm/router/index.mjs"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@frontmcp/sdk": "0.12.1",
+    "@frontmcp/utils": "0.12.1",
+    "react-router-dom": "^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-router-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
