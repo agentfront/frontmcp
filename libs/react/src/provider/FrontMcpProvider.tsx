@@ -105,7 +105,7 @@ export function FrontMcpProvider({
         onConnected?.(client);
       }
 
-      // Auto-connect additional servers
+      // Auto-connect additional servers (non-critical; failures don't block the primary provider)
       if (servers) {
         for (const sName of Object.keys(servers)) {
           serverRegistry.connect(sName).catch(() => {});

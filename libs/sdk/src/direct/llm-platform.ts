@@ -245,7 +245,7 @@ export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform):
  * Used for platforms that expect simple string/JSON results.
  * Returns string for plain text, or parsed JSON (unknown) for structured data.
  */
-function extractTextContent(result: CallToolResult): unknown {
+function extractTextContent(result: CallToolResult): string {
   if (!result.content || result.content.length === 0) {
     return '';
   }
@@ -276,9 +276,9 @@ function extractTextContent(result: CallToolResult): unknown {
  * Extract structured result from MCP CallToolResult.
  * Used for Vercel AI SDK which expects structured data.
  */
-function extractStructuredResult(result: CallToolResult): unknown {
+function extractStructuredResult(result: CallToolResult): FormattedToolResult {
   if (!result.content || result.content.length === 0) {
-    return null;
+    return '';
   }
 
   // If single text content, try to parse as JSON
@@ -346,7 +346,7 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
     case 'openai':
     case 'langchain':
       // OpenAI and LangChain expect simple string/JSON content
-      return extractTextContent(result) as FormattedToolResult;
+      return extractTextContent(result);
 
     case 'claude':
       // Claude can handle the content array directly
@@ -354,7 +354,7 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
 
     case 'vercel-ai':
       // Vercel AI SDK expects structured data
-      return extractStructuredResult(result) as FormattedToolResult;
+      return extractStructuredResult(result);
 
     default:
       // Raw - return full MCP result

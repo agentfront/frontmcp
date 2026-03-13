@@ -255,7 +255,9 @@ describe('FrontMcpProvider', () => {
     });
 
     expect(serverRegistry.has('default')).toBe(true);
-    expect(serverRegistry.get('default')!.server).toBe(server);
+    const entry = serverRegistry.get('default');
+    expect(entry).toBeDefined();
+    expect(entry?.server).toBe(server);
   });
 
   it('registers additional servers from the servers prop', async () => {
@@ -280,15 +282,15 @@ describe('FrontMcpProvider', () => {
     expect(serverRegistry.has('default')).toBe(true);
     expect(serverRegistry.has('analytics')).toBe(true);
     expect(serverRegistry.has('logging')).toBe(true);
-    expect(serverRegistry.get('analytics')!.server).toBe(analyticsServer);
-    expect(serverRegistry.get('logging')!.server).toBe(loggingServer);
+    expect(serverRegistry.get('analytics')?.server).toBe(analyticsServer);
+    expect(serverRegistry.get('logging')?.server).toBe(loggingServer);
   });
 
   it('unregisters servers on unmount', async () => {
     const server = createMockServer();
     const extraServer = createMockServer();
 
-    let unmount!: () => void;
+    let unmount: () => void = () => {};
 
     await act(async () => {
       const result = render(
@@ -408,8 +410,8 @@ describe('FrontMcpProvider', () => {
 
     const entry = serverRegistry.get('default');
     expect(entry).toBeDefined();
-    expect(entry!.status).toBe('connected');
-    expect(entry!.client).toBe(mockClient);
+    expect(entry?.status).toBe('connected');
+    expect(entry?.client).toBe(mockClient);
   });
 
   // ─── does not re-connect if already connected ───────────────────────────

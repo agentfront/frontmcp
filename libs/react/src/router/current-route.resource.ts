@@ -2,6 +2,7 @@
  * CurrentRouteResource — MCP resource that reads the current URL/path/params.
  */
 
+import type { ReadResourceResult } from '@frontmcp/sdk';
 import { getLocation } from './router-bridge';
 
 export class CurrentRouteResource {
@@ -9,7 +10,7 @@ export class CurrentRouteResource {
   static readonly resourceName = 'Current Route';
   static readonly description = 'Read the current URL path, search params, and hash';
 
-  static read(): { contents: Array<{ uri: string; mimeType: string; text: string }> } {
+  static read(): ReadResourceResult {
     const location = getLocation();
     if (!location) {
       return {
