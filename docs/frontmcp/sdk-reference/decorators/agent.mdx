@@ -120,12 +120,15 @@ interface AgentLlmAdapterConfig {
 
 <Note>
   The `process.env` examples below are Node.js-specific. In browser environments,
-  use your bundler's secure environment variable injection or a short-lived token
+  avoid shipping provider API keys in browser bundles. Prefer a short-lived token
   obtained via a backend proxy.
 
   ```typescript
-  // Browser (Vite / similar bundlers):
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  // Browser (recommended): fetch short-lived token from your backend
+  apiKey: await fetch('/api/llm-token').then((r) => r.text()),
+
+  // Local development only (not a secret in client bundles):
+  // apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   ```
 
   **Warning:** Never embed long-lived API keys in client-side bundles shipped to end users.
