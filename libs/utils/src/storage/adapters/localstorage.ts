@@ -102,6 +102,22 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
 
   async connect(): Promise<void> {
     this.assertAvailable();
+    const probeKey = this.key('__probe__');
+    try {
+      localStorage.setItem(probeKey, '1');
+      const read = localStorage.getItem(probeKey);
+      if (read !== '1') {
+        throw new Error('localStorage probe: read-back mismatch');
+      }
+    } catch (err) {
+      throw new Error(`localStorage is not writable: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      try {
+        localStorage.removeItem(probeKey);
+      } catch {
+        /* best-effort */
+      }
+    }
     this.connected = true;
   }
 
@@ -110,11 +126,19 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   }
 
   async ping(): Promise<boolean> {
+    const probeKey = this.key('__probe__');
     try {
       this.assertAvailable();
-      return true;
+      localStorage.setItem(probeKey, '1');
+      return localStorage.getItem(probeKey) === '1';
     } catch {
       return false;
+    } finally {
+      try {
+        localStorage.removeItem(probeKey);
+      } catch {
+        /* best-effort */
+      }
     }
   }
 

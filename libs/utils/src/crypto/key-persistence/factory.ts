@@ -21,7 +21,8 @@ import { randomBytes, base64urlEncode, base64urlDecode } from '../index';
 const DEFAULT_BASE_DIR = '.frontmcp/keys';
 
 const LS_HKDF_IKM = new TextEncoder().encode('frontmcp:localstorage:v1');
-const INSTALL_SALT_KEY = 'frontmcp:_install_salt';
+const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
+const LEGACY_SALT_KEY = 'frontmcp:_install_salt';
 
 /**
  * Get or create a per-installation random salt stored in localStorage.
@@ -39,6 +40,20 @@ function getOrCreateInstallationSalt(): Uint8Array {
       // Corrupted salt — regenerate
     }
   }
+
+  // Migrate from legacy key if present
+  const legacy = localStorage.getItem(LEGACY_SALT_KEY);
+  if (legacy) {
+    try {
+      const salt = base64urlDecode(legacy);
+      localStorage.setItem(INSTALL_SALT_KEY, base64urlEncode(salt));
+      localStorage.removeItem(LEGACY_SALT_KEY);
+      return salt;
+    } catch {
+      localStorage.removeItem(LEGACY_SALT_KEY);
+    }
+  }
+
   const salt = randomBytes(32);
   localStorage.setItem(INSTALL_SALT_KEY, base64urlEncode(salt));
   return salt;

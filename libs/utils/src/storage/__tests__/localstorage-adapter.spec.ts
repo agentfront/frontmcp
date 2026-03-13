@@ -36,6 +36,82 @@ function makeKey(len = 32): Uint8Array {
 // ---------------------------------------------------------------------------
 // tests
 // ---------------------------------------------------------------------------
+describe('LocalStorageAdapter — connect/ping probe', () => {
+  beforeEach(() => store.clear());
+
+  it('should connect successfully when localStorage is writable', async () => {
+    const adapter = new LocalStorageAdapter();
+    await expect(adapter.connect()).resolves.toBeUndefined();
+  });
+
+  it('should throw on connect when setItem throws', async () => {
+    const origSetItem = localStorageMock.setItem;
+    localStorageMock.setItem = () => {
+      throw new Error('QuotaExceeded');
+    };
+    try {
+      const adapter = new LocalStorageAdapter();
+      await expect(adapter.connect()).rejects.toThrow('localStorage is not writable');
+      await expect(adapter.connect()).rejects.toThrow('QuotaExceeded');
+    } finally {
+      localStorageMock.setItem = origSetItem;
+    }
+  });
+
+  it('should throw on connect when read-back mismatches', async () => {
+    const origGetItem = localStorageMock.getItem;
+    localStorageMock.getItem = () => 'wrong-value';
+    try {
+      const adapter = new LocalStorageAdapter();
+      await expect(adapter.connect()).rejects.toThrow('read-back mismatch');
+    } finally {
+      localStorageMock.getItem = origGetItem;
+    }
+  });
+
+  it('should clean up probe key after connect', async () => {
+    const adapter = new LocalStorageAdapter({ prefix: 'test:' });
+    await adapter.connect();
+    expect(store.has('test:__probe__')).toBe(false);
+  });
+
+  it('should clean up probe key even on connect failure', async () => {
+    const origGetItem = localStorageMock.getItem;
+    localStorageMock.getItem = () => 'wrong';
+    try {
+      const adapter = new LocalStorageAdapter({ prefix: 'test:' });
+      await adapter.connect().catch(() => {});
+      expect(store.has('test:__probe__')).toBe(false);
+    } finally {
+      localStorageMock.getItem = origGetItem;
+    }
+  });
+
+  it('should return true from ping when localStorage is writable', async () => {
+    const adapter = new LocalStorageAdapter();
+    expect(await adapter.ping()).toBe(true);
+  });
+
+  it('should return false from ping when setItem throws', async () => {
+    const origSetItem = localStorageMock.setItem;
+    localStorageMock.setItem = () => {
+      throw new Error('QuotaExceeded');
+    };
+    try {
+      const adapter = new LocalStorageAdapter();
+      expect(await adapter.ping()).toBe(false);
+    } finally {
+      localStorageMock.setItem = origSetItem;
+    }
+  });
+
+  it('should clean up probe key after ping', async () => {
+    const adapter = new LocalStorageAdapter({ prefix: 'test:' });
+    await adapter.ping();
+    expect(store.has('test:__probe__')).toBe(false);
+  });
+});
+
 describe('LocalStorageAdapter — encryption', () => {
   beforeEach(() => store.clear());
 

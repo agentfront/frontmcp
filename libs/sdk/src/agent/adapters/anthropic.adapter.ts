@@ -321,14 +321,35 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
     }
 
     if (options.toolChoice) {
-      if (options.toolChoice === 'auto') {
-        params.tool_choice = { type: 'auto' };
-      } else if (options.toolChoice === 'required') {
-        params.tool_choice = { type: 'any' };
-      } else if (options.toolChoice === 'none') {
+      if (options.toolChoice === 'none') {
         // Anthropic doesn't have a 'none' tool_choice; omit tools instead
         delete params.tools;
+      } else if (options.toolChoice === 'auto') {
+        if (!params.tools?.length) {
+          throw new LlmAdapterError(
+            'toolChoice "auto" requires at least one tool to be provided',
+            'anthropic',
+            'invalid_request',
+          );
+        }
+        params.tool_choice = { type: 'auto' };
+      } else if (options.toolChoice === 'required') {
+        if (!params.tools?.length) {
+          throw new LlmAdapterError(
+            'toolChoice "required" requires at least one tool to be provided',
+            'anthropic',
+            'invalid_request',
+          );
+        }
+        params.tool_choice = { type: 'any' };
       } else if (typeof options.toolChoice === 'object' && 'name' in options.toolChoice) {
+        if (!params.tools?.length) {
+          throw new LlmAdapterError(
+            `toolChoice references tool "${options.toolChoice.name}" but no tools were provided`,
+            'anthropic',
+            'invalid_request',
+          );
+        }
         params.tool_choice = { type: 'tool', name: options.toolChoice.name };
       }
     }

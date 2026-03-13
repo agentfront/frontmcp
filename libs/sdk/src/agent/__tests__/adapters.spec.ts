@@ -889,6 +889,120 @@ describe('LLM Adapters', () => {
       );
     });
 
+    describe('toolChoice validation', () => {
+      it('should throw when toolChoice is "auto" but no tools provided', async () => {
+        const mockClient = createMockAnthropicClient();
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+
+        await expect(
+          adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, undefined, { toolChoice: 'auto' }),
+        ).rejects.toThrow(LlmAdapterError);
+        await expect(
+          adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, [], { toolChoice: 'auto' }),
+        ).rejects.toThrow('toolChoice "auto" requires at least one tool');
+      });
+
+      it('should throw when toolChoice is "required" but no tools provided', async () => {
+        const mockClient = createMockAnthropicClient();
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+
+        await expect(
+          adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, undefined, { toolChoice: 'required' }),
+        ).rejects.toThrow('toolChoice "required" requires at least one tool');
+      });
+
+      it('should throw when toolChoice references a named tool but no tools provided', async () => {
+        const mockClient = createMockAnthropicClient();
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+
+        await expect(
+          adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, undefined, {
+            toolChoice: { name: 'my_tool' },
+          }),
+        ).rejects.toThrow('toolChoice references tool "my_tool" but no tools were provided');
+      });
+
+      it('should allow toolChoice "none" without tools', async () => {
+        const mockClient = createMockAnthropicClient();
+        mockClient.messages.create.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'No tools!' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        });
+
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+        const result = await adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, undefined, {
+          toolChoice: 'none',
+        });
+
+        expect(result.content).toBe('No tools!');
+        const callArgs = mockClient.messages.create.mock.calls[0][0];
+        expect(callArgs.tools).toBeUndefined();
+      });
+
+      it('should allow toolChoice "auto" when tools are provided', async () => {
+        const mockClient = createMockAnthropicClient();
+        mockClient.messages.create.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'OK' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        });
+
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+        const tools: AgentToolDefinition[] = [
+          { name: 'test', description: 'test', parameters: { type: 'object', properties: {} } },
+        ];
+
+        const result = await adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, tools, {
+          toolChoice: 'auto',
+        });
+
+        expect(result.content).toBe('OK');
+        const callArgs = mockClient.messages.create.mock.calls[0][0];
+        expect(callArgs.tool_choice).toEqual({ type: 'auto' });
+      });
+
+      it('should allow toolChoice "required" when tools are provided', async () => {
+        const mockClient = createMockAnthropicClient();
+        mockClient.messages.create.mockResolvedValueOnce({
+          content: [{ type: 'tool_use', id: 'c1', name: 'test', input: {} }],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        });
+
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+        const tools: AgentToolDefinition[] = [
+          { name: 'test', description: 'test', parameters: { type: 'object', properties: {} } },
+        ];
+
+        await adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, tools, { toolChoice: 'required' });
+
+        const callArgs = mockClient.messages.create.mock.calls[0][0];
+        expect(callArgs.tool_choice).toEqual({ type: 'any' });
+      });
+
+      it('should allow named toolChoice when tools are provided', async () => {
+        const mockClient = createMockAnthropicClient();
+        mockClient.messages.create.mockResolvedValueOnce({
+          content: [{ type: 'tool_use', id: 'c1', name: 'my_tool', input: {} }],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        });
+
+        const adapter = new AnthropicAdapter({ model: 'claude-sonnet-4-20250514', client: mockClient as never });
+        const tools: AgentToolDefinition[] = [
+          { name: 'my_tool', description: 'test', parameters: { type: 'object', properties: {} } },
+        ];
+
+        await adapter.completion({ messages: [{ role: 'user', content: 'Hi' }] }, tools, {
+          toolChoice: { name: 'my_tool' },
+        });
+
+        const callArgs = mockClient.messages.create.mock.calls[0][0];
+        expect(callArgs.tool_choice).toEqual({ type: 'tool', name: 'my_tool' });
+      });
+    });
+
     describe('streaming', () => {
       it('should stream content chunks', async () => {
         const mockClient = createMockAnthropicClient();

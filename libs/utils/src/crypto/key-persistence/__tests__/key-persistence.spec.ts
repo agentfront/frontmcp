@@ -562,6 +562,62 @@ describe('Schema Validation', () => {
   });
 });
 
+describe('INSTALL_SALT_KEY namespace', () => {
+  const lsStore = new Map<string, string>();
+  const lsMock: Storage = {
+    getItem: (key: string) => lsStore.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      lsStore.set(key, value);
+    },
+    removeItem: (key: string) => {
+      lsStore.delete(key);
+    },
+    clear: () => lsStore.clear(),
+    get length() {
+      return lsStore.size;
+    },
+    key: (index: number) => [...lsStore.keys()][index] ?? null,
+  };
+
+  beforeAll(() => {
+    Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true, configurable: true });
+  });
+
+  beforeEach(() => lsStore.clear());
+
+  it('should use new namespaced key, not frontmcp: prefix', async () => {
+    const keys = await createKeyPersistence({ type: 'localstorage' });
+
+    // The salt should be stored under the new key, not the legacy one
+    expect(lsStore.has('frontmcp:_install_salt')).toBe(false);
+    expect(lsStore.has('__frontmcp_internal__:install_salt')).toBe(true);
+
+    await keys.getAdapter().disconnect();
+  });
+
+  it('should migrate salt from legacy key to new key', async () => {
+    const { base64urlEncode, randomBytes: rb } = await import('../../../crypto');
+    const legacySalt = rb(32);
+    lsStore.set('frontmcp:_install_salt', base64urlEncode(legacySalt));
+
+    const keys = await createKeyPersistence({ type: 'localstorage' });
+
+    // Legacy key should be removed
+    expect(lsStore.has('frontmcp:_install_salt')).toBe(false);
+    // New key should exist
+    expect(lsStore.has('__frontmcp_internal__:install_salt')).toBe(true);
+
+    await keys.getAdapter().disconnect();
+  });
+
+  it('should not collide with LocalStorageAdapter default prefix', () => {
+    // The new key prefix '__frontmcp_internal__:' does not start with 'frontmcp:'
+    const newKey = '__frontmcp_internal__:install_salt';
+    const adapterPrefix = 'frontmcp:';
+    expect(newKey.startsWith(adapterPrefix)).toBe(false);
+  });
+});
+
 describe('Factory Functions', () => {
   describe('createKeyPersistence', () => {
     it('should create KeyPersistence with memory storage', async () => {
