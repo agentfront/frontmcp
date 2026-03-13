@@ -7,7 +7,7 @@
 
 import { useCallback } from 'react';
 import { processPlatformToolCalls } from '@frontmcp/utils';
-import type { SupportedPlatform, PlatformToolCallsInput, PlatformToolCallsOutput } from '@frontmcp/utils';
+import type { SupportedPlatform, PlatformToolCallsInput, PlatformToolCallsOutput, CallToolFn } from '@frontmcp/utils';
 import { useAITools } from './useAITools';
 import type { PlatformToolsMap } from './types';
 
@@ -22,12 +22,23 @@ interface ToolsOptions {
   server?: string;
 }
 
+/**
+ * Generic wrapper type for `processPlatformToolCalls` that accepts a
+ * generic platform parameter.  TypeScript overloads cannot be called with
+ * an un-narrowed generic, so we express the same contract as an indexed
+ * mapped signature instead.
+ */
+type ProcessToolCallsFn = <P extends SupportedPlatform>(
+  platform: P,
+  calls: PlatformToolCallsInput[P],
+  callTool: CallToolFn,
+) => Promise<PlatformToolCallsOutput[P]>;
+
 export function useTools<P extends SupportedPlatform>(platform: P, options?: ToolsOptions): UseToolsResult<P> {
   const { tools, callTool, loading, error } = useAITools(platform, options);
 
   const processToolCalls = useCallback(
-    (calls: PlatformToolCallsInput[P]) =>
-      processPlatformToolCalls(platform, calls as never, callTool) as Promise<PlatformToolCallsOutput[P]>,
+    (calls: PlatformToolCallsInput[P]) => (processPlatformToolCalls as ProcessToolCallsFn)(platform, calls, callTool),
     [platform, callTool],
   );
 

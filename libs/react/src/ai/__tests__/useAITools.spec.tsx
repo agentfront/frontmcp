@@ -182,7 +182,7 @@ describe('useAITools', () => {
   it('handles non-Error thrown during formatting', async () => {
     const tools: ToolInfo[] = [{ name: 'tool1', inputSchema: { type: 'object' } }];
     mockFormatToolsForPlatform.mockImplementation(() => {
-      throw 'string error'; // eslint-disable-line no-throw-literal
+      throw 'string error';
     });
 
     const { result } = renderHook(() => useAITools('openai'), {

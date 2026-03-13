@@ -14,6 +14,7 @@ E2E_DIR="$SCRIPT_DIR"
 VERDACCIO_PORT=14873
 VERDACCIO_URL="http://localhost:$VERDACCIO_PORT"
 TEST_DIR=$(mktemp -d)
+NPM_CACHE_DIR=$(mktemp -d)
 VERDACCIO_PID=""
 
 # Detect Docker availability
@@ -34,6 +35,7 @@ cleanup() {
     done
   fi
   rm -rf "$TEST_DIR"
+  rm -rf "$NPM_CACHE_DIR"
   rm -rf "$E2E_DIR/storage"
   rm -f "$ROOT_DIR/.npmrc.e2e"
   echo "✅ Cleanup complete"
@@ -89,6 +91,9 @@ fi
 
 # Set npm registry and auth for local Verdaccio
 export npm_config_registry="$VERDACCIO_URL"
+
+# Use a temporary npm cache to avoid permission issues with the global cache
+export npm_config_cache="$NPM_CACHE_DIR"
 
 # Create a local .npmrc with auth token for publishing
 echo "//localhost:$VERDACCIO_PORT/:_authToken=fake-token-for-e2e" > "$ROOT_DIR/.npmrc.e2e"

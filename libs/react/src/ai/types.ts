@@ -21,7 +21,6 @@ export type VercelToolCallInfo = _VercelToolCallInfo;
  * Formatted tool result — union matching SDK's FormattedToolResult.
  * Defined locally to avoid dependency on unexported SDK internal type.
  */
-// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 export type FormattedToolResult =
   | string
   | unknown
@@ -57,7 +56,7 @@ export type PlatformToolsMap = {
 
 export interface UseAIToolsResult<P extends LLMPlatform> {
   tools: PlatformToolsMap[P] | null;
-  callTool: (name: string, args: Record<string, unknown>) => Promise<FormattedToolResult>;
+  callTool: (name: string, args?: Record<string, unknown>) => Promise<FormattedToolResult>;
   loading: boolean;
   error: Error | null;
 }

@@ -137,7 +137,7 @@ describe('useStoreResource', () => {
 
     mockClient.readResource.mockResolvedValue({ contents: [{ text: '{"v":1}' }] });
 
-    const { result } = renderHook(() => useStoreResource('state://mine'), {
+    renderHook(() => useStoreResource('state://mine'), {
       wrapper: createWrapper(),
     });
 

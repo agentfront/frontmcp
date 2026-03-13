@@ -59,7 +59,7 @@ export function useAITools<P extends LLMPlatform>(platform: P, options?: AITools
   }, [toolInfos, platform, status]);
 
   const callTool = useCallback(
-    async (name: string, args: Record<string, unknown>): Promise<FormattedToolResult> => {
+    async (name: string, args?: Record<string, unknown>): Promise<FormattedToolResult> => {
       if (!server) {
         throw new Error('FrontMCP server not available');
       }
