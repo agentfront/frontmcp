@@ -47,6 +47,25 @@ export function collectToolMetadata(cls: ToolType): ToolMetadata {
 }
 
 export function normalizeTool(item: any): ToolRecord {
+  // ESM package specifier string (e.g., '@acme/mcp-tools@^1.0.0')
+  if (typeof item === 'string') {
+    const { parsePackageSpecifier, isPackageSpecifier } = require('../esm-loader/package-specifier');
+    if (isPackageSpecifier(item)) {
+      const specifier = parsePackageSpecifier(item);
+      return {
+        kind: ToolKind.ESM,
+        provide: item,
+        specifier,
+        metadata: {
+          name: specifier.fullName,
+          description: `ESM tools from ${specifier.fullName}`,
+          inputSchema: {},
+        },
+      };
+    }
+    throw new InvalidEntityError('tool', item, 'a class, a tool object, or a valid package specifier');
+  }
+
   if (
     item &&
     typeof item === 'function' &&
@@ -80,6 +99,9 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
       return depsOfFunc(rec.provide, 'discovery');
     case ToolKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    case ToolKind.ESM:
+      // ESM packages have no local DI dependencies
+      return [];
   }
 }
 

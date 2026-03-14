@@ -252,6 +252,23 @@ export type RemoteAuthConfig =
     };
 
 /**
+ * Unified loader configuration for npm/ESM package resolution and bundle fetching.
+ * When `url` is set but `registryUrl` is not, both registry and bundles use `url`.
+ * When `registryUrl` is also set, registry uses `registryUrl`, bundles use `url`.
+ */
+export interface PackageLoader {
+  /** Base URL for the loader server (registry API + bundle fetching).
+   *  Defaults: registry → https://registry.npmjs.org, bundles → https://esm.sh */
+  url?: string;
+  /** Separate registry URL for version resolution (if different from bundle URL) */
+  registryUrl?: string;
+  /** Bearer token for authentication */
+  token?: string;
+  /** Env var name containing the bearer token */
+  tokenEnvVar?: string;
+}
+
+/**
  * Declarative metadata describing what a remote encapsulated mcp app.
  */
 export interface RemoteAppMetadata {
@@ -329,6 +346,29 @@ export interface RemoteAppMetadata {
   cacheTTL?: number;
 
   /**
+   * ESM/NPM-specific configuration (only used when urlType is 'npm' or 'esm').
+   * Configures loader endpoints, auto-update, caching, and import map overrides.
+   */
+  packageConfig?: {
+    /**
+     * Unified loader configuration for registry API + bundle fetching.
+     * Overrides the gateway-level `loader` when set.
+     */
+    loader?: PackageLoader;
+    /** Auto-update configuration for semver-based polling */
+    autoUpdate?: {
+      /** Enable background version polling */
+      enabled: boolean;
+      /** Polling interval in milliseconds (default: 300000 = 5 min) */
+      intervalMs?: number;
+    };
+    /** Local cache TTL in milliseconds (default: 86400000 = 24 hours) */
+    cacheTTL?: number;
+    /** Import map overrides for ESM resolution */
+    importMap?: Record<string, string>;
+  };
+
+  /**
    * If true, the app will NOT be included and will act as a separated scope.
    * If false, the app will be included in MultiApp frontmcp server.
    * If 'includeInParent', the app will be included in the gateway's
@@ -336,6 +376,25 @@ export interface RemoteAppMetadata {
    */
   standalone: 'includeInParent' | boolean;
 }
+
+export const packageLoaderSchema = z.object({
+  url: z.string().url().optional(),
+  registryUrl: z.string().url().optional(),
+  token: z.string().min(1).optional(),
+  tokenEnvVar: z.string().min(1).optional(),
+});
+
+const esmAutoUpdateOptionsSchema = z.object({
+  enabled: z.boolean(),
+  intervalMs: z.number().positive().optional(),
+});
+
+const packageConfigSchema = z.object({
+  loader: packageLoaderSchema.optional(),
+  autoUpdate: esmAutoUpdateOptionsSchema.optional(),
+  cacheTTL: z.number().positive().optional(),
+  importMap: z.record(z.string(), z.string()).optional(),
+});
 
 const remoteTransportOptionsSchema = z.object({
   timeout: z.number().optional(),
@@ -366,24 +425,33 @@ const remoteAuthConfigSchema = z.discriminatedUnion('mode', [
   }),
 ]);
 
-export const frontMcpRemoteAppMetadataSchema = z.looseObject({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  urlType: z.enum(['worker', 'url', 'npm', 'esm']),
-  url: z.string().refine(isValidMcpUri, {
-    message: 'URL must have a valid scheme (e.g., https://, file://, custom://)',
-  }),
-  namespace: z.string().optional(),
-  transportOptions: remoteTransportOptionsSchema.optional(),
-  remoteAuth: remoteAuthConfigSchema.optional(),
-  auth: authOptionsSchema.optional(),
-  refreshInterval: z.number().optional(),
-  cacheTTL: z.number().optional(),
-  standalone: z
-    .union([z.literal('includeInParent'), z.boolean()])
-    .optional()
-    .default(false),
-} satisfies RawZodShape<RemoteAppMetadata>);
+export const frontMcpRemoteAppMetadataSchema = z
+  .looseObject({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    urlType: z.enum(['worker', 'url', 'npm', 'esm']),
+    url: z.string().min(1),
+    namespace: z.string().optional(),
+    transportOptions: remoteTransportOptionsSchema.optional(),
+    remoteAuth: remoteAuthConfigSchema.optional(),
+    auth: authOptionsSchema.optional(),
+    refreshInterval: z.number().optional(),
+    cacheTTL: z.number().optional(),
+    packageConfig: packageConfigSchema.optional(),
+    standalone: z
+      .union([z.literal('includeInParent'), z.boolean()])
+      .optional()
+      .default(false),
+  } satisfies RawZodShape<RemoteAppMetadata>)
+  .refine(
+    (data) => {
+      // For npm/esm urlTypes, url is a package specifier (no scheme required)
+      if (data.urlType === 'npm' || data.urlType === 'esm') return true;
+      // For url/worker types, require a valid URI scheme
+      return isValidMcpUri(data.url);
+    },
+    { message: 'URL must have a valid scheme for url/worker types (e.g., https://, file://)' },
+  );
 
 export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;

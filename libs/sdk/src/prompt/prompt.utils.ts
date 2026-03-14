@@ -73,6 +73,8 @@ export function promptDiscoveryDeps(rec: PromptRecord): Token[] {
       return depsOfFunc(rec.provide, 'discovery');
     case PromptKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    case PromptKind.ESM:
+      return [];
   }
 }
 

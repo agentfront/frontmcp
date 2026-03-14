@@ -141,5 +141,7 @@ export function resourceDiscoveryDeps(rec: ResourceRecord | ResourceTemplateReco
     case ResourceKind.CLASS_TOKEN:
     case ResourceTemplateKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    case ResourceKind.ESM:
+      return [];
   }
 }

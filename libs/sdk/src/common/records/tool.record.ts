@@ -1,10 +1,12 @@
 import { Type } from '@frontmcp/di';
 import { ToolContext } from '../interfaces';
 import { ToolMetadata } from '../metadata';
+import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 
 export enum ToolKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
   FUNCTION = 'FUNCTION',
+  ESM = 'ESM',
 }
 
 export type ToolClassTokenRecord = {
@@ -21,4 +23,11 @@ export type ToolFunctionTokenRecord = {
   metadata: ToolMetadata;
 };
 
-export type ToolRecord = ToolClassTokenRecord | ToolFunctionTokenRecord;
+export type ToolEsmRecord = {
+  kind: ToolKind.ESM;
+  provide: string;
+  specifier: ParsedPackageSpecifier;
+  metadata: ToolMetadata;
+};
+
+export type ToolRecord = ToolClassTokenRecord | ToolFunctionTokenRecord | ToolEsmRecord;

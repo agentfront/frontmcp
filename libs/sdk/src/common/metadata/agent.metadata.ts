@@ -22,7 +22,7 @@ import { ToolInputType, ToolOutputType } from './tool.metadata';
  * Agent type definition (class or factory function).
  * Used in app/plugin metadata for defining agents.
  */
-export type AgentType<T = unknown> = Type<T> | FuncType<T>;
+export type AgentType<T = unknown> = Type<T> | FuncType<T> | string;
 
 declare global {
   /**

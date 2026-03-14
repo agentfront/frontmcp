@@ -1,11 +1,13 @@
 import { Type } from '@frontmcp/di';
 import { JobContext } from '../interfaces';
 import { JobMetadata } from '../metadata';
+import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 
 export enum JobKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
   FUNCTION = 'FUNCTION',
   DYNAMIC = 'DYNAMIC',
+  ESM = 'ESM',
 }
 
 export type JobClassTokenRecord = {
@@ -31,4 +33,11 @@ export type JobDynamicRecord = {
   registeredAt: number;
 };
 
-export type JobRecord = JobClassTokenRecord | JobFunctionTokenRecord | JobDynamicRecord;
+export type JobEsmRecord = {
+  kind: JobKind.ESM;
+  provide: string;
+  specifier: ParsedPackageSpecifier;
+  metadata: JobMetadata;
+};
+
+export type JobRecord = JobClassTokenRecord | JobFunctionTokenRecord | JobDynamicRecord | JobEsmRecord;

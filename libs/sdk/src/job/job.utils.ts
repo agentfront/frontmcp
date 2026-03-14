@@ -58,6 +58,7 @@ export function jobDiscoveryDeps(rec: JobRecord): Token[] {
     case JobKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
     case JobKind.DYNAMIC:
-      return []; // Dynamic jobs have no compile-time deps
+    case JobKind.ESM:
+      return []; // Dynamic/ESM jobs have no compile-time deps
   }
 }

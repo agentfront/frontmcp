@@ -1,6 +1,7 @@
 import { Type } from '@frontmcp/di';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ResourceEntry } from '../entries';
+import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 
 // ============================================================================
 // Static Resource Records
@@ -9,6 +10,7 @@ import { ResourceEntry } from '../entries';
 export enum ResourceKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
   FUNCTION = 'FUNCTION',
+  ESM = 'ESM',
 }
 
 export type ResourceClassTokenRecord = {
@@ -25,7 +27,14 @@ export type ResourceFunctionRecord = {
   metadata: ResourceMetadata;
 };
 
-export type ResourceRecord = ResourceClassTokenRecord | ResourceFunctionRecord;
+export type ResourceEsmRecord = {
+  kind: ResourceKind.ESM;
+  provide: string;
+  specifier: ParsedPackageSpecifier;
+  metadata: ResourceMetadata;
+};
+
+export type ResourceRecord = ResourceClassTokenRecord | ResourceFunctionRecord | ResourceEsmRecord;
 
 // ============================================================================
 // Resource Template Records

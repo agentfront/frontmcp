@@ -4,8 +4,9 @@ import { AppType, AppEntry, AppKind, AppRecord, EntryOwnerRef, FrontMcpLogger } 
 import { appDiscoveryDeps, normalizeApp } from './app.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { AppLocalInstance, AppRemoteInstance } from './instances';
+import { AppLocalInstance, AppRemoteInstance, AppEsmInstance } from './instances';
 import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
+import type { RemoteAppMetadata } from '../common';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
   private readonly owner: EntryOwnerRef;
@@ -59,7 +60,12 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       if (rec.kind === AppKind.LOCAL_CLASS) {
         app = new AppLocalInstance(rec, this.providers);
       } else if (rec.kind === AppKind.REMOTE_VALUE) {
-        app = new AppRemoteInstance(rec, this.providers);
+        const remoteMeta = rec.metadata as RemoteAppMetadata;
+        if (remoteMeta.urlType === 'npm' || remoteMeta.urlType === 'esm') {
+          app = new AppEsmInstance(rec, this.providers);
+        } else {
+          app = new AppRemoteInstance(rec, this.providers);
+        }
       } else {
         throw new InvalidRegistryKindError('app', (rec as { kind?: string }).kind);
       }

@@ -1,6 +1,7 @@
 import { Token, Type } from '@frontmcp/di';
 import { ProviderType } from '../interfaces';
 import { AgentMetadata } from '../metadata';
+import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 
 /**
  * Discriminator enum for agent record types.
@@ -14,6 +15,8 @@ export enum AgentKind {
   VALUE = 'VALUE',
   /** Agent created via factory function */
   FACTORY = 'FACTORY',
+  /** Agent loaded from an npm package via esm.sh */
+  ESM = 'ESM',
 }
 
 /**
@@ -91,6 +94,22 @@ export interface AgentFactoryRecord {
 }
 
 /**
+ * Record for ESM-loaded agents from npm packages.
+ */
+export interface AgentEsmRecord {
+  kind: AgentKind.ESM;
+  provide: string;
+  specifier: ParsedPackageSpecifier;
+  metadata: AgentMetadata;
+  providers?: ProviderType[];
+}
+
+/**
  * Union type of all possible agent record types.
  */
-export type AgentRecord = AgentClassTokenRecord | AgentFunctionTokenRecord | AgentValueRecord | AgentFactoryRecord;
+export type AgentRecord =
+  | AgentClassTokenRecord
+  | AgentFunctionTokenRecord
+  | AgentValueRecord
+  | AgentFactoryRecord
+  | AgentEsmRecord;

@@ -31,6 +31,7 @@ export * from './common';
 export * from './errors';
 export * from './elicitation';
 export * from './remote-mcp';
+export * from './esm-loader';
 
 // Re-export MCP types commonly needed by consumers
 export type {

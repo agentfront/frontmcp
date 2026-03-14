@@ -1,10 +1,12 @@
 import { Type } from '@frontmcp/di';
 import { WorkflowMetadata } from '../metadata';
+import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 
 export enum WorkflowKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
   VALUE = 'VALUE',
   DYNAMIC = 'DYNAMIC',
+  ESM = 'ESM',
 }
 
 export type WorkflowClassTokenRecord = {
@@ -27,4 +29,11 @@ export type WorkflowDynamicRecord = {
   registeredAt: number;
 };
 
-export type WorkflowRecord = WorkflowClassTokenRecord | WorkflowValueRecord | WorkflowDynamicRecord;
+export type WorkflowEsmRecord = {
+  kind: WorkflowKind.ESM;
+  provide: string;
+  specifier: ParsedPackageSpecifier;
+  metadata: WorkflowMetadata;
+};
+
+export type WorkflowRecord = WorkflowClassTokenRecord | WorkflowValueRecord | WorkflowDynamicRecord | WorkflowEsmRecord;

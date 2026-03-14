@@ -120,7 +120,8 @@ export function skillDiscoveryDeps(rec: SkillRecord): Token[] {
       return depsOfClass(rec.provide, 'discovery');
     case SkillKind.VALUE:
     case SkillKind.FILE:
-      // Value and file records don't have class dependencies
+    case SkillKind.ESM:
+      // Value, file, and ESM records don't have class dependencies
       return [];
   }
 }

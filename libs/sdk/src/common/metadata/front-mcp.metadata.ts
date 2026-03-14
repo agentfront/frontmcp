@@ -27,6 +27,8 @@ import {
   SqliteOptionsInput,
   sqliteOptionsSchema,
 } from '../types';
+import type { PackageLoader } from './app.metadata';
+import { packageLoaderSchema } from './app.metadata';
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
@@ -195,6 +197,12 @@ export interface FrontMcpBaseMetadata {
   sqlite?: SqliteOptionsInput;
 
   /**
+   * Default package loader config for all npm/esm apps.
+   * Individual apps can override this via `packageConfig.loader`.
+   */
+  loader?: PackageLoader;
+
+  /**
    * UI rendering configuration.
    * Controls CDN overrides for widget import resolution.
    *
@@ -274,6 +282,7 @@ export const frontMcpBaseSchema = z.object({
         .optional(),
     })
     .optional(),
+  loader: packageLoaderSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
@@ -406,6 +415,7 @@ const frontMcpLiteSchema = z.object({
   auth: authOptionsSchema.optional(),
   logging: loggingOptionsSchema.optional(),
   skillsConfig: skillsConfigOptionsSchema.optional(),
+  loader: packageLoaderSchema.optional(),
   // Pass through without deep validation — not used in CLI mode
   http: z.any().optional(),
   redis: z.any().optional(),
