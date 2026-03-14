@@ -282,15 +282,16 @@ export class EsmCacheManager {
     const now = Date.now();
     let removed = 0;
 
-    // Clean memory
+    // Clean memory (housekeeping — doesn't count toward removed total for disk-backed entries)
     for (const [key, entry] of this.memoryStore) {
       if (now - entry.cachedAt > threshold) {
         this.memoryStore.delete(key);
-        removed++;
+        // Only count as removed if there's no disk cache (browser-only mode)
+        if (!this.cacheDir) removed++;
       }
     }
 
-    // Clean disk (Node.js only)
+    // Clean disk (Node.js only) — this is the authoritative count
     if (!this.cacheDir) return removed;
 
     try {

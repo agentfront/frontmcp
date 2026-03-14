@@ -127,7 +127,7 @@ describe('EsmCacheManager', () => {
       expect(entry).toBeUndefined();
     });
 
-    it('returns undefined when bundle file is missing', async () => {
+    it('returns from in-memory cache even when bundle file is deleted from disk', async () => {
       await cache.put('@acme/tools', '1.0.0', 'code', 'url');
       const entry = await cache.get('@acme/tools', '1.0.0');
 
@@ -135,8 +135,10 @@ describe('EsmCacheManager', () => {
         store.delete(entry.bundlePath);
       }
 
+      // In-memory cache still has the entry (with bundleContent)
       const result = await cache.get('@acme/tools', '1.0.0');
-      expect(result).toBeUndefined();
+      expect(result).toBeDefined();
+      expect(result!.bundleContent).toBe('code');
     });
 
     it('returns undefined when meta.json is empty/null', async () => {

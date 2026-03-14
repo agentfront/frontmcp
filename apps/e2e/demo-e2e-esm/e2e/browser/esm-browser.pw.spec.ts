@@ -1,23 +1,21 @@
 /**
- * Browser E2E Tests for ESM Package Loading
+ * Browser E2E Tests for Full FrontMCP with Dynamic ESM Tool Loading
  *
- * Uses Playwright to verify that ESM packages can be loaded and executed
- * in a real browser environment — no Node.js-specific APIs (node:fs, node:url).
+ * Uses Playwright to verify that a complete FrontMCP DirectClient runs in the browser,
+ * loading ESM tool packages on the fly from a local ESM package server.
  *
- * The test serves a local HTML page that:
- * 1. Fetches the CJS bundle from the ESM package server
- * 2. Evaluates it in a sandboxed scope (simulating dynamic import)
- * 3. Calls tools from the loaded manifest
- * 4. Reports results to the DOM
+ * The browser app (browser-app/main.ts) boots a real FrontMCP instance via connect()
+ * with loadFrom() ESM apps, then reports results to window.__ESM_RESULTS__.
  *
- * Playwright reads the DOM to verify tool execution worked.
+ * Prerequisites:
+ * - ESM package server must be running on the configured port
+ * - Vite preview server must be serving the browser app
  */
 import { test, expect } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { serveHtml, buildEsmTestPage, stopServer } from './helpers';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 const ESM_SERVER_PORT = 50413;
-let esmServerProcess: ReturnType<typeof spawn> | null = null;
+let esmServerProcess: ChildProcess | null = null;
 
 // Start local ESM package server before all tests
 test.beforeAll(async () => {
@@ -34,8 +32,7 @@ test.beforeAll(async () => {
     }, 30000);
 
     esmServerProcess.stdout?.on('data', (data: Buffer) => {
-      const text = data.toString();
-      if (text.includes('ESM Package Server started') && !started) {
+      if (data.toString().includes('ESM Package Server started') && !started) {
         started = true;
         clearTimeout(timeout);
         resolve();
@@ -53,153 +50,94 @@ test.beforeAll(async () => {
   });
 });
 
-// Stop ESM package server + HTML server after all tests
+// Stop ESM package server after all tests
 test.afterAll(async () => {
   if (esmServerProcess) {
     esmServerProcess.kill('SIGTERM');
     esmServerProcess = null;
   }
-  await stopServer();
 });
 
-test.describe('ESM Browser Loading', () => {
-  test('loads and executes ESM tools in browser', async ({ page }) => {
-    const esmServerUrl = `http://127.0.0.1:${ESM_SERVER_PORT}`;
-    const html = buildEsmTestPage(esmServerUrl, '@test/esm-tools@1.0.0');
-    const url = await serveHtml(html);
+test.describe('Full FrontMCP in Browser with ESM Loading', () => {
+  test('loads and reports ESM tools successfully', async ({ page }) => {
+    await page.goto(`/?esmServer=http://127.0.0.1:${ESM_SERVER_PORT}`);
 
-    await page.goto(url);
+    // Wait for FrontMCP to finish loading (window.__ESM_RESULTS__ becomes defined)
+    await page.waitForFunction(() => (window as unknown as { __ESM_RESULTS__?: unknown }).__ESM_RESULTS__, {
+      timeout: 60000,
+    });
 
-    // Wait for the result to appear
-    await page.waitForFunction(
-      () => {
-        const el = document.getElementById('result');
-        return el && el.textContent && el.textContent.length > 0;
-      },
-      { timeout: 15000 },
-    );
+    const results = await page.evaluate(() => (window as unknown as { __ESM_RESULTS__: unknown }).__ESM_RESULTS__);
+    const r = results as { success: boolean; error?: string; toolNames: string[] };
 
-    const resultText = await page.textContent('#result');
-    const result = JSON.parse(resultText!);
-
-    expect(result.success).toBe(true);
-    expect(result.name).toBe('@test/esm-tools');
-    expect(result.version).toBe('1.0.0');
-    expect(result.toolNames).toContain('echo');
-    expect(result.toolNames).toContain('add');
+    expect(r.success).toBe(true);
+    expect(r.toolNames).toContain('esm:echo');
+    expect(r.toolNames).toContain('esm:add');
+    expect(r.toolNames).toContain('multi:greet');
   });
 
-  test('echo tool returns correct result in browser', async ({ page }) => {
-    const esmServerUrl = `http://127.0.0.1:${ESM_SERVER_PORT}`;
-    const html = buildEsmTestPage(esmServerUrl, '@test/esm-tools@1.0.0');
-    const url = await serveHtml(html);
+  test('ESM echo tool executes correctly in browser', async ({ page }) => {
+    await page.goto(`/?esmServer=http://127.0.0.1:${ESM_SERVER_PORT}`);
+    await page.waitForFunction(() => (window as unknown as { __ESM_RESULTS__?: unknown }).__ESM_RESULTS__, {
+      timeout: 60000,
+    });
 
-    await page.goto(url);
+    const results = await page.evaluate(() => (window as unknown as { __ESM_RESULTS__: unknown }).__ESM_RESULTS__);
+    const r = results as { success: boolean; echoResult: { content: Array<{ text: string }> } };
 
-    await page.waitForFunction(
-      () => {
-        const el = document.getElementById('result');
-        return el && el.textContent && el.textContent.length > 0;
-      },
-      { timeout: 15000 },
-    );
-
-    const resultText = await page.textContent('#result');
-    const result = JSON.parse(resultText!);
-
-    expect(result.success).toBe(true);
-    // echo tool should echo back the input
-    expect(result.results.echo).toBeDefined();
-    expect(result.results.echo.content).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'text',
-          text: expect.stringContaining('browser-test'),
-        }),
-      ]),
-    );
+    expect(r.success).toBe(true);
+    expect(r.echoResult.content[0].text).toContain('browser-hello');
   });
 
-  test('add tool computes correctly in browser', async ({ page }) => {
-    const esmServerUrl = `http://127.0.0.1:${ESM_SERVER_PORT}`;
-    const html = buildEsmTestPage(esmServerUrl, '@test/esm-tools@1.0.0');
-    const url = await serveHtml(html);
+  test('ESM add tool computes correctly in browser', async ({ page }) => {
+    await page.goto(`/?esmServer=http://127.0.0.1:${ESM_SERVER_PORT}`);
+    await page.waitForFunction(() => (window as unknown as { __ESM_RESULTS__?: unknown }).__ESM_RESULTS__, {
+      timeout: 60000,
+    });
 
-    await page.goto(url);
+    const results = await page.evaluate(() => (window as unknown as { __ESM_RESULTS__: unknown }).__ESM_RESULTS__);
+    const r = results as { success: boolean; addResult: { content: Array<{ text: string }> } };
 
-    await page.waitForFunction(
-      () => {
-        const el = document.getElementById('result');
-        return el && el.textContent && el.textContent.length > 0;
-      },
-      { timeout: 15000 },
-    );
-
-    const resultText = await page.textContent('#result');
-    const result = JSON.parse(resultText!);
-
-    expect(result.success).toBe(true);
-    expect(result.results.add).toBeDefined();
-    expect(result.results.add.content[0].text).toBe('15'); // 7 + 8
+    expect(r.success).toBe(true);
+    expect(r.addResult.content[0].text).toBe('12'); // 5 + 7
   });
 
-  test('multi-package resources and prompts load in browser', async ({ page }) => {
-    const esmServerUrl = `http://127.0.0.1:${ESM_SERVER_PORT}`;
+  test('ESM multi-package greet tool works in browser', async ({ page }) => {
+    await page.goto(`/?esmServer=http://127.0.0.1:${ESM_SERVER_PORT}`);
+    await page.waitForFunction(() => (window as unknown as { __ESM_RESULTS__?: unknown }).__ESM_RESULTS__, {
+      timeout: 60000,
+    });
 
-    // Build a page that loads the multi-package
-    const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body>
-  <div id="result"></div>
-  <script type="module">
-    try {
-      const res = await fetch('${esmServerUrl}/@test/esm-multi@1.0.0');
-      const bundleText = await res.text();
+    const results = await page.evaluate(() => (window as unknown as { __ESM_RESULTS__: unknown }).__ESM_RESULTS__);
+    const r = results as { success: boolean; greetResult: { content: Array<{ text: string }> } };
 
-      const module = { exports: {} };
-      const wrappedFn = new Function('module', 'exports', bundleText);
-      wrappedFn(module, module.exports);
+    expect(r.success).toBe(true);
+    expect(r.greetResult.content[0].text).toContain('Browser');
+  });
 
-      const manifest = module.exports.default || module.exports;
+  test('ESM resources are discoverable in browser', async ({ page }) => {
+    await page.goto(`/?esmServer=http://127.0.0.1:${ESM_SERVER_PORT}`);
+    await page.waitForFunction(() => (window as unknown as { __ESM_RESULTS__?: unknown }).__ESM_RESULTS__, {
+      timeout: 60000,
+    });
 
-      const toolNames = (manifest.tools || []).map(t => t.name);
-      const resourceNames = (manifest.resources || []).map(r => r.name);
-      const promptNames = (manifest.prompts || []).map(p => p.name);
+    const results = await page.evaluate(() => (window as unknown as { __ESM_RESULTS__: unknown }).__ESM_RESULTS__);
+    const r = results as { success: boolean; resourceUris: string[] };
 
-      document.getElementById('result').textContent = JSON.stringify({
-        success: true,
-        toolNames,
-        resourceNames,
-        promptNames,
-      });
-    } catch (err) {
-      document.getElementById('result').textContent = JSON.stringify({
-        success: false,
-        error: err.message,
-      });
-    }
-  </script>
-</body>
-</html>`;
+    expect(r.success).toBe(true);
+    expect(r.resourceUris).toContain('esm://status');
+  });
 
-    const url = await serveHtml(html);
-    await page.goto(url);
+  test('ESM prompts are discoverable in browser', async ({ page }) => {
+    await page.goto(`/?esmServer=http://127.0.0.1:${ESM_SERVER_PORT}`);
+    await page.waitForFunction(() => (window as unknown as { __ESM_RESULTS__?: unknown }).__ESM_RESULTS__, {
+      timeout: 60000,
+    });
 
-    await page.waitForFunction(
-      () => {
-        const el = document.getElementById('result');
-        return el && el.textContent && el.textContent.length > 0;
-      },
-      { timeout: 15000 },
-    );
+    const results = await page.evaluate(() => (window as unknown as { __ESM_RESULTS__: unknown }).__ESM_RESULTS__);
+    const r = results as { success: boolean; promptNames: string[] };
 
-    const resultText = await page.textContent('#result');
-    const result = JSON.parse(resultText!);
-
-    expect(result.success).toBe(true);
-    expect(result.toolNames).toContain('greet');
-    expect(result.resourceNames).toContain('status');
-    expect(result.promptNames).toContain('greeting-prompt');
+    expect(r.success).toBe(true);
+    expect(r.promptNames).toContain('multi:greeting-prompt');
   });
 });
