@@ -117,6 +117,7 @@ export type FormattedTools = OpenAITool[] | ClaudeTool[] | LangChainTool[] | Ver
  */
 export type FormattedToolResult =
   | string
+  | unknown
   | Array<{ type: string; text: string }>
   | CallToolResult
   | {
@@ -376,9 +377,15 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
   // Handle content-based response (standard CallToolResult)
   switch (platform) {
     case 'openai':
-    case 'langchain':
-      // OpenAI and LangChain expect simple string/JSON content
-      return extractTextContent(result);
+    case 'langchain': {
+      // OpenAI and LangChain expect simple string or parsed JSON content
+      const text = extractTextContent(result);
+      try {
+        return JSON.parse(text) as FormattedToolResult;
+      } catch {
+        return text;
+      }
+    }
 
     case 'claude':
       // Claude can handle the content array directly

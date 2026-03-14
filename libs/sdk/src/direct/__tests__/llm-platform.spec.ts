@@ -328,10 +328,10 @@ describe('llm-platform', () => {
         expect(formatted).toBe('Hello, world!');
       });
 
-      it('should return JSON content as string', () => {
+      it('should parse JSON content', () => {
         const result = createJsonResult({ temperature: 72, unit: 'fahrenheit' });
         const formatted = formatResultForPlatform(result, 'openai');
-        expect(formatted).toBe(JSON.stringify({ temperature: 72, unit: 'fahrenheit' }));
+        expect(formatted).toEqual({ temperature: 72, unit: 'fahrenheit' });
       });
 
       it('should combine multiple text contents', () => {
