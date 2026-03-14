@@ -117,7 +117,7 @@ export type FormattedTools = OpenAITool[] | ClaudeTool[] | LangChainTool[] | Ver
  */
 export type FormattedToolResult =
   | string
-  | unknown
+  | Record<string, unknown>
   | Array<{ type: string; text: string }>
   | CallToolResult
   | {
