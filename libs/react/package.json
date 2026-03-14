@@ -80,6 +80,10 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "@frontmcp/sdk": "0.12.1",
+    "@frontmcp/utils": "0.12.1"
+  },
   "devDependencies": {
     "typescript": "^5.9.3"
   }
