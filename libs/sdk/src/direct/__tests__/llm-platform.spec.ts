@@ -415,10 +415,10 @@ describe('llm-platform', () => {
         });
       });
 
-      it('should return null for empty content', () => {
+      it('should return empty string for empty content', () => {
         const result: CallToolResult = { content: [] };
         const formatted = formatResultForPlatform(result, 'vercel-ai');
-        expect(formatted).toBeNull();
+        expect(formatted).toBe('');
       });
 
       it('should handle text-only multiple contents', () => {

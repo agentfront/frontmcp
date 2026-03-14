@@ -1,0 +1,198 @@
+---
+title: Components
+slug: react/components
+icon: puzzle-piece
+description: Pre-built headless form and display components for @frontmcp/react
+---
+
+`@frontmcp/react` includes headless UI components that auto-generate forms from MCP tool/prompt schemas and display results. They render unstyled by default and support custom renderers.
+
+## ToolForm
+
+Generates a form from a tool's `inputSchema`.
+
+```tsx
+import { ToolForm, useListTools, useCallTool } from '@frontmcp/react';
+
+function ToolUI() {
+  const tools = useListTools();
+  const [callTool, { data }] = useCallTool(tools[0]?.name ?? '');
+
+  if (!tools.length) return null;
+
+  return (
+    <ToolForm
+      tool={tools[0]}
+      onSubmit={(args) => callTool(args)}
+      submitLabel="Execute"
+    />
+  );
+}
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `tool` | `ToolInfo` | — | **Required.** Tool definition with `inputSchema` |
+| `onSubmit` | `(args: Record<string, unknown>) => void` | — | **Required.** Called with parsed form values |
+| `renderField` | `(props: FieldRenderProps) => ReactNode` | — | Custom field renderer |
+| `submitLabel` | `string` | `'Call Tool'` | Submit button text |
+
+### Custom Field Rendering
+
+```tsx
+<ToolForm
+  tool={tool}
+  onSubmit={handleSubmit}
+  renderField={({ name, type, required, value, onChange, description }) => (
+    <div key={name}>
+      <label>{name}{required ? ' *' : ''}</label>
+      <input value={value} onChange={(e) => onChange(e.target.value)} />
+      {description && <small>{description}</small>}
+    </div>
+  )}
+/>
+```
+
+### FieldRenderProps
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Field name from schema |
+| `type` | `string` | `'string' \| 'number' \| 'integer' \| 'boolean' \| 'enum'` |
+| `required` | `boolean` | Whether the field is required |
+| `description` | `string?` | Schema description |
+| `enumValues` | `string[]?` | Enum options (renders `<select>`) |
+| `value` | `string` | Current value |
+| `onChange` | `(value: string) => void` | Change handler |
+
+---
+
+## PromptForm
+
+Generates a form from a prompt's `arguments` array.
+
+```tsx
+import { PromptForm, useListPrompts, useGetPrompt } from '@frontmcp/react';
+
+function PromptUI() {
+  const prompts = useListPrompts();
+  const [getPrompt, { data }] = useGetPrompt(prompts[0]?.name ?? '');
+
+  if (!prompts.length) return null;
+
+  return <PromptForm prompt={prompts[0]} onSubmit={(args) => getPrompt(args)} />;
+}
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `prompt` | `PromptInfo` | — | **Required.** Prompt definition with `arguments` |
+| `onSubmit` | `(args: Record<string, string>) => void` | — | **Required.** Called with form values |
+| `renderField` | `(props: FieldRenderProps) => ReactNode` | — | Custom field renderer |
+| `submitLabel` | `string` | `'Get Prompt'` | Submit button text |
+
+---
+
+## ResourceViewer
+
+Displays the contents of a `ReadResourceResult`.
+
+```tsx
+import { ResourceViewer, useReadResource } from '@frontmcp/react';
+
+function ConfigViewer() {
+  const { data, loading, error } = useReadResource('app://config');
+
+  return <ResourceViewer data={data} loading={loading} error={error} />;
+}
+```
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `data` | `{ contents?: ResourceContent[] } \| null` | Resource result |
+| `loading` | `boolean` | Show loading indicator |
+| `error` | `Error \| null` | Show error message |
+
+JSON content (`application/json` mimeType) is automatically pretty-printed in a `<pre>` block.
+
+---
+
+## OutputDisplay
+
+Renders any tool/prompt output as formatted JSON or plain text.
+
+```tsx
+import { OutputDisplay, useCallTool } from '@frontmcp/react';
+
+function ToolOutput() {
+  const [callTool, { data, loading, error }] = useCallTool('greet');
+
+  return (
+    <div>
+      <button onClick={() => callTool({ name: 'World' })}>Call</button>
+      <OutputDisplay data={data} loading={loading} error={error} />
+    </div>
+  );
+}
+```
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `data` | `unknown` | Output value — objects are JSON-stringified |
+| `loading` | `boolean` | Show loading indicator |
+| `error` | `Error \| null` | Show error message |
+
+---
+
+## DynamicRenderer
+
+Recursively renders a `ComponentNode` tree using the `ComponentRegistry`.
+
+```tsx
+import { DynamicRenderer } from '@frontmcp/react';
+
+const tree = {
+  type: 'Card',
+  props: { title: 'Hello' },
+  children: [
+    { type: 'Text', children: 'World' },
+  ],
+};
+
+<DynamicRenderer tree={tree} registry={registry} fallback={DefaultComponent} />
+```
+
+### Resolution Order
+
+1. Exact URI match in registry
+2. `component://{type}` in registry
+3. `element://{type}` in registry
+4. Fallback component (or `<div>`)
+
+---
+
+## ComponentRegistry
+
+Maps URI protocols to React components. Used by `DynamicRenderer` and populated via the provider's `components` prop.
+
+```tsx
+import { ComponentRegistry } from '@frontmcp/react';
+
+const registry = new ComponentRegistry();
+registry.register('component://Card', CardComponent);
+registry.register('element://Badge', BadgeComponent);
+
+// Resolve by short name
+const Card = registry.resolve('Card'); // finds component://Card
+
+// List all entries
+const entries = registry.list(); // [{ uri, name, description }]
+```

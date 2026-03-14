@@ -117,9 +117,10 @@ export type FormattedTools = OpenAITool[] | ClaudeTool[] | LangChainTool[] | Ver
  */
 export type FormattedToolResult =
   | string
-  | unknown
+  | Record<string, unknown>
   | Array<{ type: string; text: string }>
   | CallToolResult
+  | CallToolResult['content']
   | {
       text?: string[];
       images?: Array<{ data: string; mimeType: string }>;
@@ -242,11 +243,39 @@ export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform):
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Runtime type guard for parsed JSON objects that conform to FormattedToolResult.
+ * Validates that any present text/images/content fields match expected shapes;
+ * arbitrary objects (e.g. `{ temperature: 72 }`) pass through as valid
+ * structured data for platforms like Vercel AI SDK.
+ */
+function isFormattedObjectResult(value: Record<string, unknown>): boolean {
+  // CallToolResult shape: must have a content array
+  if ('content' in value && Array.isArray(value['content'])) {
+    return true;
+  }
+  // Structured content: validate text/images fields if present
+  if ('text' in value) {
+    if (!Array.isArray(value['text']) || !value['text'].every((t) => typeof t === 'string')) {
+      return false;
+    }
+  }
+  if ('images' in value) {
+    if (
+      !Array.isArray(value['images']) ||
+      !value['images'].every((i) => typeof i === 'object' && i !== null && 'data' in i && 'mimeType' in i)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Extract text content from MCP CallToolResult.
  * Used for platforms that expect simple string/JSON results.
- * Returns string for plain text, or parsed JSON (unknown) for structured data.
+ * Returns the combined text content as a plain string.
  */
-function extractTextContent(result: CallToolResult): unknown {
+function extractTextContent(result: CallToolResult): string {
   if (!result.content || result.content.length === 0) {
     return '';
   }
@@ -263,30 +292,34 @@ function extractTextContent(result: CallToolResult): unknown {
     return '';
   }
 
-  const combined = textParts.join('\n');
-
-  // Try to parse as JSON for structured results
-  try {
-    return JSON.parse(combined);
-  } catch {
-    return combined;
-  }
+  return textParts.join('\n');
 }
 
 /**
  * Extract structured result from MCP CallToolResult.
  * Used for Vercel AI SDK which expects structured data.
  */
-function extractStructuredResult(result: CallToolResult): unknown {
+function extractStructuredResult(result: CallToolResult): FormattedToolResult {
   if (!result.content || result.content.length === 0) {
-    return null;
+    return '';
   }
 
   // If single text content, try to parse as JSON
   if (result.content.length === 1 && result.content[0].type === 'text') {
     const text = (result.content[0] as TextContent).text;
     try {
-      return JSON.parse(text);
+      const parsed: unknown = JSON.parse(text);
+      if (typeof parsed === 'string') return parsed;
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        const obj = parsed as Record<string, unknown>;
+        if (isFormattedObjectResult(obj)) {
+          // Safe: runtime guard validated the shape matches FormattedToolResult
+          return obj as FormattedToolResult;
+        }
+        return JSON.stringify(parsed);
+      }
+      // Primitive or array — wrap as string
+      return JSON.stringify(parsed);
     } catch {
       return text;
     }
@@ -345,9 +378,23 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
   // Handle content-based response (standard CallToolResult)
   switch (platform) {
     case 'openai':
-    case 'langchain':
-      // OpenAI and LangChain expect simple string/JSON content
-      return extractTextContent(result);
+    case 'langchain': {
+      // OpenAI and LangChain expect simple string or parsed JSON content
+      const text = extractTextContent(result);
+      try {
+        const parsed: unknown = JSON.parse(text);
+        if (typeof parsed === 'string') return parsed;
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          const obj = parsed as Record<string, unknown>;
+          if (isFormattedObjectResult(obj)) {
+            return obj;
+          }
+        }
+        return text;
+      } catch {
+        return text;
+      }
+    }
 
     case 'claude':
       // Claude can handle the content array directly

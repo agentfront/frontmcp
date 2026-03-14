@@ -1,0 +1,190 @@
+---
+title: Router Integration
+slug: react/router
+icon: route
+description: Bridge React Router with MCP via useRouterBridge, navigation tools, and route resources
+---
+
+The `@frontmcp/react/router` entry point bridges React Router v7 with MCP. AI agents can navigate your app, go back in history, and read the current route — all through standard MCP tools and resources.
+
+<Info>
+`react-router-dom` is an optional peer dependency. Only install it if you use the router integration.
+</Info>
+
+## Setup
+
+### 1. Install React Router
+
+```bash
+npm install react-router-dom
+```
+
+### 2. Wire the Bridge
+
+Call `useRouterBridge()` inside your React Router tree:
+
+```tsx title="src/App.tsx"
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { FrontMcpProvider } from '@frontmcp/react';
+import { useRouterBridge } from '@frontmcp/react/router';
+
+function RouterBridge() {
+  useRouterBridge();
+  return null;
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <FrontMcpProvider server={server}>
+        <RouterBridge />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+        </Routes>
+      </FrontMcpProvider>
+    </BrowserRouter>
+  );
+}
+```
+
+### 3. Register Router Entries
+
+Add the router tools and resources to your MCP server:
+
+```ts title="src/server.ts"
+import { create } from '@frontmcp/sdk';
+import { createRouterEntries } from '@frontmcp/react/router';
+
+const { tools, resources } = createRouterEntries();
+
+const server = await create({
+  info: { name: 'my-app', version: '1.0.0' },
+  tools: [...tools, ...myOtherTools],
+  resources: [...resources, ...myOtherResources],
+});
+```
+
+---
+
+## useRouterBridge
+
+Wires React Router's `navigate` and `location` into a module-scoped bridge singleton.
+
+```tsx
+import { useRouterBridge } from '@frontmcp/react/router';
+
+function RouterBridge() {
+  useRouterBridge();
+  return null;
+}
+```
+
+Must be called inside a React Router tree (`<BrowserRouter>`, `<MemoryRouter>`, etc.). It:
+
+- Captures `useNavigate()` and syncs it to the bridge on mount
+- Updates the bridge location on every route change
+- Clears the bridge on unmount
+
+---
+
+## NavigateTool
+
+MCP tool that navigates to a URL path.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `navigate` |
+| **Description** | Navigate to a URL path in the application |
+
+### Input Schema
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` | Yes | URL path to navigate to |
+| `replace` | `boolean` | No | Replace history entry instead of pushing |
+
+### Example
+
+```json
+{ "path": "/dashboard", "replace": false }
+```
+
+Returns: `"Navigated to /dashboard"`
+
+---
+
+## GoBackTool
+
+MCP tool that navigates back in browser history.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `go_back` |
+| **Description** | Go back to the previous page in browser history |
+
+Takes no input parameters.
+
+---
+
+## CurrentRouteResource
+
+MCP resource that reads the current URL/path/params.
+
+| Field | Value |
+|-------|-------|
+| **URI** | `route://current` |
+| **Name** | Current Route |
+
+### Response
+
+```json
+{
+  "pathname": "/dashboard",
+  "search": "?tab=overview",
+  "hash": "#section-1",
+  "href": "/dashboard?tab=overview#section-1"
+}
+```
+
+---
+
+## createRouterEntries
+
+Factory that returns tool and resource entries for easy spreading into `create()` config:
+
+```ts
+import { createRouterEntries } from '@frontmcp/react/router';
+
+const { tools, resources } = createRouterEntries();
+// tools = [NavigateTool, GoBackTool]
+// resources = [CurrentRouteResource]
+```
+
+---
+
+## Bridge Functions
+
+Low-level bridge functions for advanced use cases:
+
+```ts
+import {
+  setNavigate,
+  setLocation,
+  getNavigate,
+  getLocation,
+  clearBridge,
+} from '@frontmcp/react/router';
+```
+
+| Function | Description |
+|----------|-------------|
+| `setNavigate(fn)` | Set the navigate function |
+| `setLocation(loc)` | Set the current location |
+| `getNavigate()` | Get the navigate function (or null) |
+| `getLocation()` | Get the current location (or null) |
+| `clearBridge()` | Reset both navigate and location to null |
+
+<Warning>
+If the bridge is not connected (e.g., `useRouterBridge()` not called), `NavigateTool` and `GoBackTool` return an error message instead of navigating. `CurrentRouteResource` returns an error JSON object.
+</Warning>

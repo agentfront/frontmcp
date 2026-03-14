@@ -61,7 +61,15 @@ export { connect, connectOpenAI, connectClaude, connectLangChain, connectVercelA
 
 export { DirectClientImpl } from './direct-client';
 export { detectPlatform, formatToolsForPlatform, formatResultForPlatform, PLATFORM_CLIENT_INFO } from './llm-platform';
-export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools } from './llm-platform';
+export type {
+  OpenAITool,
+  ClaudeTool,
+  LangChainTool,
+  VercelAITool,
+  VercelAITools,
+  FormattedToolResult,
+  FormattedTools,
+} from './llm-platform';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Legacy Direct Server (bypasses transport, invokes flows directly)

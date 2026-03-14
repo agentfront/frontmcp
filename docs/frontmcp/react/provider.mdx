@@ -1,0 +1,124 @@
+---
+title: Provider & Context
+slug: react/provider
+icon: layer-group
+description: FrontMcpProvider props, FrontMcpContext, and ServerRegistry
+---
+
+## FrontMcpProvider
+
+The provider manages the MCP client lifecycle and populates the shared `ServerRegistry`.
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/react';
+
+<FrontMcpProvider
+  server={server}
+  name="main"
+  servers={{ analytics: analyticsServer }}
+  components={{ 'component://Chart': ChartComponent }}
+  autoConnect={true}
+  onConnected={(client) => console.log('Connected', client)}
+  onError={(err) => console.error('Failed', err)}
+>
+  {children}
+</FrontMcpProvider>
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `server` | `DirectMcpServer` | — | **Required.** Primary MCP server instance |
+| `name` | `string` | `'default'` | Logical name for the primary server in the registry |
+| `servers` | `Record<string, DirectMcpServer>` | — | Additional named servers |
+| `components` | `Record<string, ComponentType>` | — | Components for `DynamicRenderer` and `ComponentRegistry` |
+| `autoConnect` | `boolean` | `true` | Connect on mount |
+| `children` | `ReactNode` | — | **Required.** Child elements |
+| `onConnected` | `(client: DirectClient) => void` | — | Called after successful connection |
+| `onError` | `(error: Error) => void` | — | Called if connection fails |
+
+### Lifecycle
+
+1. On mount, registers the primary server (and any `servers`) in `ServerRegistry`
+2. If `autoConnect` is true, calls `server.connect()` and discovers tools/resources/prompts
+3. Updates registry entry with `status: 'connected'` and populates tool/resource/prompt lists
+4. Also auto-connects additional servers from `servers` prop
+5. On unmount, unregisters all servers from the registry
+
+## FrontMcpContext
+
+The React context carries a slim value — no state, just pointers:
+
+```ts
+interface FrontMcpContextValue {
+  name: string;                    // Server name for this provider
+  registry: ComponentRegistry;     // Component registry for DynamicRenderer
+  connect: () => Promise<void>;    // Manual connect trigger
+}
+```
+
+All state (status, tools, etc.) lives in `ServerRegistry` and is accessed via hooks.
+
+## ServerRegistry
+
+A singleton that stores all server entries and notifies subscribers on change.
+
+```ts
+import { serverRegistry } from '@frontmcp/react';
+
+// Check if a server exists
+serverRegistry.has('analytics'); // boolean
+
+// Get a server entry
+const entry = serverRegistry.get('analytics');
+// entry.status, entry.client, entry.tools, etc.
+
+// Subscribe to changes
+const unsub = serverRegistry.subscribe(() => {
+  console.log('Registry changed');
+});
+```
+
+### ServerEntry
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `server` | `DirectMcpServer` | The server instance |
+| `client` | `DirectClient \| null` | Connected client (null until connected) |
+| `status` | `FrontMcpStatus` | `'idle' \| 'connecting' \| 'connected' \| 'error'` |
+| `error` | `Error \| null` | Connection error |
+| `tools` | `ToolInfo[]` | Discovered tools |
+| `resources` | `ResourceInfo[]` | Discovered resources |
+| `resourceTemplates` | `ResourceTemplateInfo[]` | Discovered resource templates |
+| `prompts` | `PromptInfo[]` | Discovered prompts |
+
+## useFrontMcp
+
+The primary hook for reading the resolved server state:
+
+```tsx
+import { useFrontMcp } from '@frontmcp/react';
+
+function MyComponent() {
+  const {
+    name,            // 'default'
+    server,          // DirectMcpServer | null
+    client,          // DirectClient | null
+    status,          // 'idle' | 'connecting' | 'connected' | 'error'
+    error,           // Error | null
+    tools,           // ToolInfo[]
+    resources,       // ResourceInfo[]
+    resourceTemplates, // ResourceTemplateInfo[]
+    prompts,         // PromptInfo[]
+    registry,        // ComponentRegistry
+    connect,         // () => Promise<void>
+  } = useFrontMcp();
+}
+```
+
+Pass a server name to target a specific server:
+
+```tsx
+const analytics = useFrontMcp('analytics');
+```

@@ -1,0 +1,106 @@
+---
+title: Overview
+slug: react/overview
+icon: atom
+description: React hooks, components, and AI SDK integration for FrontMCP
+---
+
+`@frontmcp/react` provides a React binding layer for FrontMCP. It lets you connect to MCP servers, call tools, read resources, fetch prompts, and render UI — all with idiomatic React hooks and components.
+
+## Entry Points
+
+The package exposes three entry points:
+
+| Import | Purpose |
+|--------|---------|
+| `@frontmcp/react` | Provider, hooks, components, and `ServerRegistry` |
+| `@frontmcp/react/ai` | AI SDK integration (`useAITools`, `useTools`, `createToolCallHandler`) |
+| `@frontmcp/react/router` | React Router bridge (`useRouterBridge`, navigation tools, route resource) |
+
+## Architecture
+
+```
+FrontMcpProvider
+  └─ ServerRegistry (singleton, multi-server)
+       ├─ useCallTool / useReadResource / useGetPrompt
+       ├─ useListTools / useListResources / useListPrompts
+       ├─ useStoreResource (live subscriptions)
+       ├─ ToolForm / PromptForm / ResourceViewer / OutputDisplay
+       └─ useAITools / useTools (AI SDK bridge)
+```
+
+The provider manages the MCP client lifecycle. All state (status, tools, resources, prompts) is stored in the shared `ServerRegistry` singleton and read via `useSyncExternalStore` for tear-free rendering.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @frontmcp/react react react-dom
+```
+
+```bash pnpm
+pnpm add @frontmcp/react react react-dom
+```
+
+```bash yarn
+yarn add @frontmcp/react react react-dom
+```
+
+</CodeGroup>
+
+### Peer Dependencies
+
+`@frontmcp/sdk` and `@frontmcp/utils` are bundled as dependencies and installed automatically.
+
+| Package | Version | Required |
+|---------|---------|----------|
+| `react` | `^18.0.0 \|\| ^19.0.0` | Yes |
+| `react-dom` | `^18.0.0 \|\| ^19.0.0` | Yes |
+| `react-router-dom` | `^7.0.0` | Optional (only for `/router`) |
+
+## Quick Example
+
+```tsx
+import { create } from '@frontmcp/sdk';
+import { FrontMcpProvider, useCallTool } from '@frontmcp/react';
+
+const server = await create({
+  info: { name: 'my-app', version: '1.0.0' },
+  tools: [GreetTool],
+});
+
+function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <GreetButton />
+    </FrontMcpProvider>
+  );
+}
+
+function GreetButton() {
+  const [callTool, { data, loading }] = useCallTool('greet');
+  return (
+    <button onClick={() => callTool({ name: 'World' })} disabled={loading}>
+      {data ? String(data) : 'Greet'}
+    </button>
+  );
+}
+```
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="play" href="/frontmcp/react/getting-started">
+    Install, wrap your app, and make your first tool call
+  </Card>
+  <Card title="Hooks Reference" icon="hook" href="/frontmcp/react/hooks">
+    Complete API reference for all hooks
+  </Card>
+  <Card title="Components" icon="puzzle-piece" href="/frontmcp/react/components">
+    Pre-built headless form and display components
+  </Card>
+  <Card title="AI Integration" icon="robot" href="/frontmcp/react/ai-integration">
+    Bridge MCP tools to OpenAI, Claude, and Vercel AI SDK
+  </Card>
+</CardGroup>

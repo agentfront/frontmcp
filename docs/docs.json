@@ -214,6 +214,19 @@
             ]
           },
           {
+            "group": "React SDK",
+            "pages": [
+              "frontmcp/react/overview",
+              "frontmcp/react/getting-started",
+              "frontmcp/react/provider",
+              "frontmcp/react/hooks",
+              "frontmcp/react/components",
+              "frontmcp/react/dom-resources",
+              "frontmcp/react/ai-integration",
+              "frontmcp/react/router"
+            ]
+          },
+          {
             "group": "Guides",
             "pages": [
               {

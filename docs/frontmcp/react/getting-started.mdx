@@ -1,0 +1,136 @@
+---
+title: Getting Started
+slug: react/getting-started
+icon: play
+description: Install @frontmcp/react, wrap your app, and make your first tool call
+---
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @frontmcp/react react react-dom
+```
+
+```bash yarn
+yarn add @frontmcp/react react react-dom
+```
+
+</CodeGroup>
+
+## Wrap Your App
+
+Every `@frontmcp/react` app starts with a `FrontMcpProvider`. It takes a pre-created `DirectMcpServer` and manages the MCP client lifecycle.
+
+```tsx title="src/App.tsx"
+import { create } from '@frontmcp/sdk';
+import { FrontMcpProvider } from '@frontmcp/react';
+import { GreetTool } from './tools/greet.tool';
+import { Dashboard } from './Dashboard';
+
+// Create an in-process MCP server
+const server = await create({
+  info: { name: 'my-app', version: '1.0.0' },
+  tools: [GreetTool],
+});
+
+export function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <Dashboard />
+    </FrontMcpProvider>
+  );
+}
+```
+
+By default the provider auto-connects on mount. Pass `autoConnect={false}` to connect manually later.
+
+## Your First Hook
+
+Use `useCallTool` to invoke an MCP tool:
+
+```tsx title="src/Dashboard.tsx"
+import { useCallTool } from '@frontmcp/react';
+
+export function Dashboard() {
+  const [callTool, { data, loading, error }] = useCallTool('greet');
+
+  return (
+    <div>
+      <button onClick={() => callTool({ name: 'Alice' })} disabled={loading}>
+        {loading ? 'Calling...' : 'Greet'}
+      </button>
+      {data && <pre>{JSON.stringify(data, null, 2)}</pre>}
+      {error && <p style={{ color: 'red' }}>{error.message}</p>}
+    </div>
+  );
+}
+```
+
+## Multi-Server Setup
+
+Connect to multiple MCP servers by passing a `servers` prop:
+
+```tsx title="src/App.tsx"
+import { create } from '@frontmcp/sdk';
+import { FrontMcpProvider } from '@frontmcp/react';
+
+const mainServer = await create({ info: { name: 'main', version: '1.0.0' }, tools: mainTools });
+const analyticsServer = await create({ info: { name: 'analytics', version: '1.0.0' }, tools: analyticsTools });
+
+export function App() {
+  return (
+    <FrontMcpProvider
+      server={mainServer}
+      servers={{ analytics: analyticsServer }}
+    >
+      <Dashboard />
+    </FrontMcpProvider>
+  );
+}
+```
+
+Target a specific server from any hook:
+
+```tsx
+const [callTool, state] = useCallTool('track_event', { server: 'analytics' });
+```
+
+## Connection Lifecycle
+
+The provider status progresses through:
+
+| Status | Description |
+|--------|-------------|
+| `idle` | Not connected yet (`autoConnect={false}`) |
+| `connecting` | `server.connect()` in progress |
+| `connected` | Client ready, tools/resources/prompts populated |
+| `error` | Connection failed — see `error` field |
+
+Monitor status with `useFrontMcp()`:
+
+```tsx
+import { useFrontMcp } from '@frontmcp/react';
+
+function StatusBar() {
+  const { status, error, tools } = useFrontMcp();
+  return (
+    <div>
+      Status: {status} | Tools: {tools.length}
+      {error && <span> — {error.message}</span>}
+    </div>
+  );
+}
+```
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Provider & Context" icon="layer-group" href="/frontmcp/react/provider">
+    Deep dive into FrontMcpProvider props and ServerRegistry
+  </Card>
+  <Card title="Hooks Reference" icon="hook" href="/frontmcp/react/hooks">
+    Full API for all hooks
+  </Card>
+</CardGroup>
