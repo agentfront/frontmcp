@@ -29,7 +29,7 @@ jobs:
       node-version: ${{ steps.node-version.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get Node version
         id: node-version
@@ -44,7 +44,7 @@ jobs:
       NX_DAEMON: "false"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -79,7 +79,7 @@ jobs:
       NX_DAEMON: "false"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -135,7 +135,7 @@ jobs:
       matrix: ${{ steps.discover.outputs.projects }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -168,7 +168,7 @@ jobs:
       RUN_COVERAGE: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -224,7 +224,7 @@ jobs:
       RUN_COVERAGE: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -290,7 +290,7 @@ jobs:
       NX_DAEMON: "false"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
         uses: actions/setup-node@v6
