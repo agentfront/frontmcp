@@ -241,6 +241,34 @@ export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform):
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Runtime type guard for parsed JSON objects that conform to FormattedToolResult.
+ * Validates that any present text/images/content fields match expected shapes;
+ * arbitrary objects (e.g. `{ temperature: 72 }`) pass through as valid
+ * structured data for platforms like Vercel AI SDK.
+ */
+function isFormattedObjectResult(value: Record<string, unknown>): boolean {
+  // CallToolResult shape: must have a content array
+  if ('content' in value && Array.isArray(value['content'])) {
+    return true;
+  }
+  // Structured content: validate text/images fields if present
+  if ('text' in value) {
+    if (!Array.isArray(value['text']) || !value['text'].every((t) => typeof t === 'string')) {
+      return false;
+    }
+  }
+  if ('images' in value) {
+    if (
+      !Array.isArray(value['images']) ||
+      !value['images'].every((i) => typeof i === 'object' && i !== null && 'data' in i && 'mimeType' in i)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Extract text content from MCP CallToolResult.
  * Used for platforms that expect simple string/JSON results.
  * Returns the combined text content as a plain string.
@@ -281,7 +309,12 @@ function extractStructuredResult(result: CallToolResult): FormattedToolResult {
       const parsed: unknown = JSON.parse(text);
       if (typeof parsed === 'string') return parsed;
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        return parsed as FormattedToolResult;
+        const obj = parsed as Record<string, unknown>;
+        if (isFormattedObjectResult(obj)) {
+          // Safe: runtime guard validated the shape matches FormattedToolResult
+          return obj as FormattedToolResult;
+        }
+        return JSON.stringify(parsed);
       }
       // Primitive or array — wrap as string
       return JSON.stringify(parsed);
