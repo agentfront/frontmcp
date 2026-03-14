@@ -207,6 +207,126 @@ This is the shared foundation for all other hooks. You typically don't need to u
 
 ---
 
+## useDynamicTool
+
+Register an MCP tool on mount, unregister on unmount. See [Dynamic Tools](/frontmcp/react/dynamic-tools) for full details.
+
+Supports both **zod schemas** (recommended) and raw **JSON Schema** (backward compat).
+
+### With Zod Schema (Recommended)
+
+```tsx
+import { useDynamicTool } from '@frontmcp/react';
+import { z } from 'zod';
+
+useDynamicTool({
+  name: 'add_to_cart',
+  description: 'Add item to cart',
+  schema: z.object({
+    itemId: z.string(),
+    quantity: z.number().optional(),
+  }),
+  execute: async (args) => {
+    // args is typed as { itemId: string; quantity?: number }
+    addToCart(args.itemId, args.quantity ?? 1);
+    return { content: [{ type: 'text', text: 'Added' }] };
+  },
+  enabled: isLoggedIn,
+});
+```
+
+When using a zod `schema`, input is automatically validated via `safeParse` before reaching your `execute` callback. Invalid input returns an error `CallToolResult` with validation details.
+
+### With JSON Schema (Backward Compat)
+
+```tsx
+useDynamicTool({
+  name: 'add_to_cart',
+  description: 'Add item to cart',
+  inputSchema: { type: 'object', properties: { itemId: { type: 'string' } } },
+  execute: async (args) => {
+    addToCart(args.itemId as string);
+    return { content: [{ type: 'text', text: 'Added' }] };
+  },
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | — | **Required.** Tool name |
+| `description` | `string` | — | **Required.** Description for agents |
+| `schema` | `z.ZodObject` | — | Zod schema (mutually exclusive with `inputSchema`) |
+| `inputSchema` | `Record<string, unknown>` | — | JSON Schema (mutually exclusive with `schema`) |
+| `execute` | `(args) => Promise<CallToolResult>` | — | **Required.** Handler |
+| `enabled` | `boolean` | `true` | Conditionally enable/disable |
+| `server` | `string` | — | Target a named server |
+
+---
+
+## useDynamicResource
+
+Register an MCP resource on mount, unregister on unmount. See [Dynamic Tools](/frontmcp/react/dynamic-tools) for full details.
+
+```tsx
+import { useDynamicResource } from '@frontmcp/react';
+
+useDynamicResource({
+  uri: 'app://user-prefs',
+  name: 'user-prefs',
+  description: 'Current user preferences',
+  mimeType: 'application/json',
+  read: async () => ({
+    contents: [{ uri: 'app://user-prefs', text: JSON.stringify(prefs) }],
+  }),
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `uri` | `string` | — | **Required.** Resource URI |
+| `name` | `string` | — | **Required.** Human-readable name |
+| `description` | `string` | — | Description for agents |
+| `mimeType` | `string` | — | Content MIME type |
+| `read` | `() => Promise<ReadResourceResult>` | — | **Required.** Handler |
+| `enabled` | `boolean` | `true` | Conditionally enable/disable |
+| `server` | `string` | — | Target a named server |
+
+---
+
+## useComponentTree
+
+Expose the DOM subtree under a ref as a JSON MCP resource. See [Dynamic Tools](/frontmcp/react/dynamic-tools) for full details.
+
+```tsx
+import { useRef } from 'react';
+import { useComponentTree } from '@frontmcp/react';
+
+const rootRef = useRef<HTMLDivElement>(null);
+
+useComponentTree({
+  rootRef,
+  uri: 'react://component-tree',
+  maxDepth: 10,
+  includeProps: true,
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `rootRef` | `RefObject<HTMLElement \| null>` | — | **Required.** Root element ref |
+| `uri` | `string` | `'react://component-tree'` | Resource URI |
+| `maxDepth` | `number` | `10` | Max traversal depth |
+| `includeProps` | `boolean` | `false` | Include `data-*` attributes |
+| `server` | `string` | — | Target a named server |
+
+---
+
 ## Multi-Server Pattern
 
 All hooks accept `{ server: 'name' }` to target a specific server:

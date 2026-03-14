@@ -90,6 +90,8 @@
       "#mcp-streamable-http": ["libs/protocol/src/node-mcp-streamable-http.ts"],
       "#mcp-server": ["libs/protocol/src/node-mcp-server.ts"],
       "#server-types": ["libs/protocol/src/node-server-types.ts"],
+      "#stdio-client": ["libs/protocol/src/node-stdio-client.ts"],
+      "#stdio-server": ["libs/protocol/src/node-stdio-server.ts"],
 
       "#crypto-provider": ["libs/utils/src/crypto/node.ts"],
       "#async-context": ["libs/utils/src/async-context/node-async-context.ts"],

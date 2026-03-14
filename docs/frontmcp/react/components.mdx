@@ -196,3 +196,62 @@ const Card = registry.resolve('Card'); // finds component://Card
 // List all entries
 const entries = registry.list(); // [{ uri, name, description }]
 ```
+
+---
+
+## AgentContent
+
+A component that registers itself as an MCP tool. When an agent calls the tool, it renders the args via the `render` prop. See [Agent Components](/frontmcp/react/agent-components) for full details and patterns.
+
+```tsx
+import { AgentContent } from '@frontmcp/react';
+
+<AgentContent
+  name="show_weather"
+  description="Display weather data"
+  render={(data) => <WeatherCard city={data.city} temp={data.temp} />}
+  fallback={<p>Waiting for data...</p>}
+/>
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `name` | `string` | — | **Required.** MCP tool name |
+| `description` | `string` | — | **Required.** Tool description |
+| `inputSchema` | `Record<string, unknown>` | `{ type: 'object' }` | JSON Schema for input |
+| `render` | `(data: Record<string, unknown>) => ReactNode` | — | **Required.** Render function |
+| `fallback` | `ReactNode` | `null` | Shown before first invocation |
+| `server` | `string` | — | Target a named server |
+
+---
+
+## AgentSearch
+
+A headless search component powered by an MCP tool. Registers a tool for delivering results and a resource for the current query. See [Agent Components](/frontmcp/react/agent-components) for full details.
+
+```tsx
+import { AgentSearch } from '@frontmcp/react';
+
+<AgentSearch
+  toolName="product_search"
+  description="Search products"
+  placeholder="Search..."
+  onResults={setResults}
+  renderInput={({ value, onChange, placeholder }) => (
+    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+  )}
+/>
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `toolName` | `string` | — | **Required.** MCP tool name |
+| `description` | `string` | — | **Required.** Tool description |
+| `placeholder` | `string` | — | Input placeholder |
+| `onResults` | `(results: unknown) => void` | — | **Required.** Results callback |
+| `renderInput` | `(props: SearchInputRenderProps) => ReactNode` | — | Custom input renderer |
+| `server` | `string` | — | Target a named server |
