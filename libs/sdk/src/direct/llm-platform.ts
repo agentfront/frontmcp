@@ -243,7 +243,7 @@ export function formatToolsForPlatform(tools: McpTool[], platform: LLMPlatform):
 /**
  * Extract text content from MCP CallToolResult.
  * Used for platforms that expect simple string/JSON results.
- * Returns string for plain text, or parsed JSON (unknown) for structured data.
+ * Returns the combined text content as a plain string.
  */
 function extractTextContent(result: CallToolResult): string {
   if (!result.content || result.content.length === 0) {
@@ -262,14 +262,7 @@ function extractTextContent(result: CallToolResult): string {
     return '';
   }
 
-  const combined = textParts.join('\n');
-
-  // Try to parse as JSON for structured results
-  try {
-    return JSON.parse(combined);
-  } catch {
-    return combined;
-  }
+  return textParts.join('\n');
 }
 
 /**
@@ -285,7 +278,13 @@ function extractStructuredResult(result: CallToolResult): FormattedToolResult {
   if (result.content.length === 1 && result.content[0].type === 'text') {
     const text = (result.content[0] as TextContent).text;
     try {
-      return JSON.parse(text);
+      const parsed: unknown = JSON.parse(text);
+      if (typeof parsed === 'string') return parsed;
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as FormattedToolResult;
+      }
+      // Primitive or array — wrap as string
+      return JSON.stringify(parsed);
     } catch {
       return text;
     }
