@@ -120,6 +120,7 @@ export type FormattedToolResult =
   | Record<string, unknown>
   | Array<{ type: string; text: string }>
   | CallToolResult
+  | CallToolResult['content']
   | {
       text?: string[];
       images?: Array<{ data: string; mimeType: string }>;
@@ -381,7 +382,15 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
       // OpenAI and LangChain expect simple string or parsed JSON content
       const text = extractTextContent(result);
       try {
-        return JSON.parse(text) as FormattedToolResult;
+        const parsed: unknown = JSON.parse(text);
+        if (typeof parsed === 'string') return parsed;
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          const obj = parsed as Record<string, unknown>;
+          if (isFormattedObjectResult(obj)) {
+            return obj;
+          }
+        }
+        return text;
       } catch {
         return text;
       }
@@ -389,7 +398,7 @@ export function formatResultForPlatform(result: CallToolResult, platform: LLMPla
 
     case 'claude':
       // Claude can handle the content array directly
-      return result.content as FormattedToolResult;
+      return result.content;
 
     case 'vercel-ai':
       // Vercel AI SDK expects structured data

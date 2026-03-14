@@ -5,7 +5,7 @@
  * SDK-dependent types (tool shapes, hook return types) remain here.
  */
 
-import type { OpenAITool, ClaudeTool, LangChainTool, VercelAITools, LLMPlatform } from '@frontmcp/sdk';
+import type { OpenAITool, ClaudeTool, LangChainTool, VercelAITools, LLMPlatform, CallToolResult } from '@frontmcp/sdk';
 import type {
   OpenAIToolCallItem as _OpenAIToolCallItem,
   ClaudeToolUseBlock as _ClaudeToolUseBlock,
@@ -18,13 +18,15 @@ export type ClaudeToolUseBlock = _ClaudeToolUseBlock;
 export type VercelToolCallInfo = _VercelToolCallInfo;
 
 /**
- * Formatted tool result — union matching SDK's FormattedToolResult.
- * Defined locally to avoid dependency on unexported SDK internal type.
+ * Formatted tool result — local union matching SDK's FormattedToolResult.
+ * Synced with: libs/sdk/src/direct/llm-platform.ts FormattedToolResult
+ * @see libs/react/src/ai/__tests__/types-compat.spec.ts for drift guard
  */
 export type FormattedToolResult =
   | string
   | Record<string, unknown>
   | Array<{ type: string; text: string }>
+  | CallToolResult['content']
   | { content?: Array<{ type: string; text?: string; data?: string; mimeType?: string }> }
   | { text?: string[]; images?: Array<{ data: string; mimeType: string }> };
 

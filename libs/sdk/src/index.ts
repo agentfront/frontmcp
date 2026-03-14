@@ -250,7 +250,15 @@ export type {
 
 // LLM platform utilities (for advanced use)
 export { detectPlatform, formatToolsForPlatform, formatResultForPlatform, PLATFORM_CLIENT_INFO } from './direct';
-export type { OpenAITool, ClaudeTool, LangChainTool, VercelAITool, VercelAITools } from './direct';
+export type {
+  OpenAITool,
+  ClaudeTool,
+  LangChainTool,
+  VercelAITool,
+  VercelAITools,
+  FormattedToolResult,
+  FormattedTools,
+} from './direct';
 
 // DirectClient Job/Workflow types (for client-side operations)
 export type {
