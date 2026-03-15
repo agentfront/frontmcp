@@ -30,9 +30,16 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
       const operation = pathItem[method] as Record<string, unknown> | undefined;
       if (!operation || typeof operation !== 'object') continue;
 
-      const operationId = (operation['operationId'] as string) ?? `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const rawOperationId = operation['operationId'];
+      const operationId =
+        typeof rawOperationId === 'string' ? rawOperationId : `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+      const rawSummary = operation['summary'];
+      const rawDescription = operation['description'];
       const description =
-        (operation['summary'] as string) ?? (operation['description'] as string) ?? `${method.toUpperCase()} ${path}`;
+        (typeof rawSummary === 'string' ? rawSummary : undefined) ??
+        (typeof rawDescription === 'string' ? rawDescription : undefined) ??
+        `${method.toUpperCase()} ${path}`;
 
       // Build input schema from parameters + requestBody
       const properties: Record<string, unknown> = {};

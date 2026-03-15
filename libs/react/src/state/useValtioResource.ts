@@ -35,7 +35,7 @@ export function useValtioResource(options: ValtioResourceOptions): void {
   // Wrap valtio subscribe to match the standard interface
   const subscribe = useMemo(() => (cb: () => void) => valtioSubscribe(proxy, cb), [proxy, valtioSubscribe]);
 
-  // Wrap mutations to pass the proxy as first arg
+  // Wrap mutations for consistent action interface
   const actions = useMemo(() => {
     if (!mutations) return undefined;
     const wrapped: Record<string, (...args: unknown[]) => unknown> = {};

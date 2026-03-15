@@ -9,22 +9,19 @@
  * - Cleanup on unmount
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect } from 'react';
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
 import type { DynamicRegistry } from '../registry/DynamicRegistry';
 import type { StoreAdapter } from '../types';
 
 export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: DynamicRegistry): void {
-  const storesRef = useRef(stores);
-  storesRef.current = stores;
-
   useEffect(() => {
     if (stores.length === 0) return;
 
     const cleanups: (() => void)[] = [];
 
     for (const adapter of stores) {
-      const { name, getState, subscribe, selectors, actions } = adapter;
+      const { name, subscribe, selectors, actions } = adapter;
 
       // Keep a ref-like closure for getState
       const getStateWrapper = () => adapter.getState();
@@ -50,13 +47,10 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
         }),
       );
 
-      // Subscribe to store changes
-      const unsubscribe = subscribe(() => {
-        dynamicRegistry.updateResourceRead(`state://${name}`, readState);
-      });
-      cleanups.push(unsubscribe);
+      // Register selector sub-resources BEFORE subscribing so we can
+      // update them when the store changes
+      const selectorEntries: { uri: string; readSelector: () => Promise<ReadResourceResult> }[] = [];
 
-      // Register selector sub-resources
       if (selectors) {
         for (const [key, selector] of Object.entries(selectors)) {
           const uri = `state://${name}/${key}`;
@@ -71,6 +65,8 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
             ],
           });
 
+          selectorEntries.push({ uri, readSelector });
+
           cleanups.push(
             dynamicRegistry.registerResource({
               uri,
@@ -82,6 +78,15 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
           );
         }
       }
+
+      // Subscribe to store changes — update main resource AND selectors
+      const unsubscribe = subscribe(() => {
+        dynamicRegistry.updateResourceRead(`state://${name}`, readState);
+        for (const { uri, readSelector } of selectorEntries) {
+          dynamicRegistry.updateResourceRead(uri, readSelector);
+        }
+      });
+      cleanups.push(unsubscribe);
 
       // Register action tools
       if (actions) {

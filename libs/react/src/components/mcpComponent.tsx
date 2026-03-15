@@ -13,12 +13,26 @@
  * - Table mode (columns option with null component)
  */
 
-import React, { useState, useCallback, Suspense, useMemo } from 'react';
+import React, { useState, useCallback, Suspense } from 'react';
 import type { ReactNode, ReactElement, ComponentType } from 'react';
 import type { CallToolResult } from '@frontmcp/sdk';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { McpColumnDef } from '../types';
 import { useDynamicTool } from '../hooks/useDynamicTool';
+
+// ─── Lazy branding ──────────────────────────────────────────────────────────
+
+const MCP_LAZY_MARKER = Symbol.for('frontmcp:lazy');
+
+/**
+ * Brand a factory function as a lazy import so mcpComponent can
+ * distinguish `() => import(...)` from zero-arg function components.
+ */
+export function mcpLazy<Props>(
+  factory: () => Promise<{ default: ComponentType<Props> }>,
+): () => Promise<{ default: ComponentType<Props> }> {
+  return Object.assign(factory, { [MCP_LAZY_MARKER]: true });
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -77,14 +91,9 @@ function DefaultTable({ rows, columns }: { rows: Record<string, unknown>[]; colu
 // ─── Lazy detection helper ──────────────────────────────────────────────────
 
 function isLazyImport<Props>(fn: ComponentArg<Props>): fn is () => Promise<{ default: ComponentType<Props> }> {
-  // Lazy imports are 0-arity functions that are NOT React components
-  // (React components receive props as first arg, so length >= 0, but
-  // actual components typically have length 1; lazy factories have length 0)
-  if (typeof fn !== 'function' || fn === null) return false;
-  // If it has a prototype with render method, it's a class component
-  if (fn.prototype && fn.prototype.isReactComponent) return false;
-  // Check if it's a zero-arg function — heuristic for () => import(...)
-  return fn.length === 0;
+  if (typeof fn !== 'function') return false;
+  // Only treat functions branded with mcpLazy as lazy imports
+  return MCP_LAZY_MARKER in fn;
 }
 
 // ─── Factory ────────────────────────────────────────────────────────────────
@@ -110,12 +119,9 @@ export function mcpComponent<S extends z.ZodObject<z.ZodRawShape>>(
   }
 
   // The actual tool schema: if columns mode, wrap in { rows: z.array(schema) }
-  // We need to import z dynamically to build the rows schema
   let toolSchema: z.ZodObject<z.ZodRawShape>;
   if (isTableMode) {
-    // Use the z module from the schema to build rows wrapper
-    const zod = require('zod') as typeof import('zod');
-    toolSchema = zod.z.object({ rows: zod.z.array(schema) }) as unknown as z.ZodObject<z.ZodRawShape>;
+    toolSchema = z.object({ rows: z.array(schema) }) as unknown as z.ZodObject<z.ZodRawShape>;
   } else {
     toolSchema = schema;
   }

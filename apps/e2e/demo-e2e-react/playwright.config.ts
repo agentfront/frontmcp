@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
-  retries: 1,
+  retries: process.env['CI'] ? 1 : 0,
   use: {
     headless: true,
     baseURL: 'http://localhost:4402',

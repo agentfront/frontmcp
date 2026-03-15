@@ -16,6 +16,7 @@ test.describe('Tool Listing', () => {
 
   test('reports tools count >= 2', async ({ page }) => {
     const count = page.locator('[data-testid="tools-count"]');
+    await expect(count).toBeVisible();
     const text = await count.textContent();
     expect(Number(text)).toBeGreaterThanOrEqual(2);
   });

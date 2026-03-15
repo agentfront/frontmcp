@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { z } from 'zod';
 import { useDynamicTool } from '../useDynamicTool';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';

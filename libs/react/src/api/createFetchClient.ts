@@ -19,6 +19,11 @@ export function createFetchClient(fetchFn?: typeof globalThis.fetch): HttpClient
 
       if (config.body !== undefined) {
         fetchOptions.body = JSON.stringify(config.body);
+        // Ensure Content-Type is set when sending a JSON body
+        const headers = fetchOptions.headers as Record<string, string> | undefined;
+        if (headers && !headers['Content-Type'] && !headers['content-type']) {
+          headers['Content-Type'] = 'application/json';
+        }
       }
 
       const response = await fn(config.url, fetchOptions);

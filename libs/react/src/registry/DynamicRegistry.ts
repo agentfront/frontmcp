@@ -17,38 +17,66 @@ type Listener = () => void;
 export class DynamicRegistry {
   private tools = new Map<string, DynamicToolDef>();
   private resources = new Map<string, DynamicResourceDef>();
+  private toolRefCounts = new Map<string, number>();
+  private resourceRefCounts = new Map<string, number>();
   private listeners = new Set<Listener>();
   private version = 0;
 
   /**
    * Register a dynamic tool. Returns an unregister function
    * suitable for useEffect cleanup.
+   *
+   * Multiple registrations of the same name are ref-counted:
+   * subsequent registrations update the definition but the tool
+   * is only removed when every registrant has unregistered.
    */
   registerTool(def: DynamicToolDef): () => void {
+    const existing = this.toolRefCounts.get(def.name) ?? 0;
+    this.toolRefCounts.set(def.name, existing + 1);
     this.tools.set(def.name, def);
-    this.notify();
+    if (existing === 0) {
+      this.notify();
+    }
     return () => this.unregisterTool(def.name);
   }
 
   unregisterTool(name: string): void {
-    if (this.tools.delete(name)) {
+    const count = this.toolRefCounts.get(name);
+    if (count == null) return;
+    if (count <= 1) {
+      this.toolRefCounts.delete(name);
+      this.tools.delete(name);
       this.notify();
+    } else {
+      this.toolRefCounts.set(name, count - 1);
     }
   }
 
   /**
    * Register a dynamic resource. Returns an unregister function
    * suitable for useEffect cleanup.
+   *
+   * Multiple registrations of the same URI are ref-counted.
    */
   registerResource(def: DynamicResourceDef): () => void {
+    const existing = this.resourceRefCounts.get(def.uri) ?? 0;
+    this.resourceRefCounts.set(def.uri, existing + 1);
     this.resources.set(def.uri, def);
-    this.notify();
+    if (existing === 0) {
+      this.notify();
+    }
     return () => this.unregisterResource(def.uri);
   }
 
   unregisterResource(uri: string): void {
-    if (this.resources.delete(uri)) {
+    const count = this.resourceRefCounts.get(uri);
+    if (count == null) return;
+    if (count <= 1) {
+      this.resourceRefCounts.delete(uri);
+      this.resources.delete(uri);
       this.notify();
+    } else {
+      this.resourceRefCounts.set(uri, count - 1);
     }
   }
 
@@ -106,11 +134,15 @@ export class DynamicRegistry {
   clear(): void {
     this.tools.clear();
     this.resources.clear();
+    this.toolRefCounts.clear();
+    this.resourceRefCounts.clear();
     this.notify();
   }
 
   private notify(): void {
     this.version++;
-    this.listeners.forEach((l) => l());
+    this.listeners.forEach((l) => {
+      l();
+    });
   }
 }

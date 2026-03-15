@@ -66,7 +66,7 @@ describe('DynamicRegistry', () => {
       expect(registry.getVersion()).toBe(1);
     });
 
-    it('overwrites an existing tool with the same name', () => {
+    it('overwrites an existing tool definition with the same name', () => {
       const tool1 = createToolDef({ name: 'dup', description: 'first' });
       const tool2 = createToolDef({ name: 'dup', description: 'second' });
 
@@ -75,6 +75,18 @@ describe('DynamicRegistry', () => {
 
       expect(registry.findTool('dup')?.description).toBe('second');
       expect(registry.getTools()).toHaveLength(1);
+    });
+
+    it('only notifies on first registration of a name (ref counting)', () => {
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      registry.registerTool(createToolDef({ name: 'rc' }));
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Second registration of the same name should NOT notify
+      registry.registerTool(createToolDef({ name: 'rc', description: 'updated' }));
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -104,6 +116,40 @@ describe('DynamicRegistry', () => {
       const v = registry.getVersion();
       registry.unregisterTool('nonexistent');
       expect(registry.getVersion()).toBe(v);
+    });
+
+    it('ref counting: register twice, unregister once → tool still exists', () => {
+      registry.registerTool(createToolDef({ name: 'rc-tool', description: 'v1' }));
+      registry.registerTool(createToolDef({ name: 'rc-tool', description: 'v2' }));
+
+      registry.unregisterTool('rc-tool');
+
+      expect(registry.hasTool('rc-tool')).toBe(true);
+      expect(registry.findTool('rc-tool')?.description).toBe('v2');
+    });
+
+    it('ref counting: register twice, unregister twice → tool removed', () => {
+      registry.registerTool(createToolDef({ name: 'rc-tool' }));
+      registry.registerTool(createToolDef({ name: 'rc-tool' }));
+
+      registry.unregisterTool('rc-tool');
+      registry.unregisterTool('rc-tool');
+
+      expect(registry.hasTool('rc-tool')).toBe(false);
+    });
+
+    it('ref counting: does not notify on intermediate unregister', () => {
+      registry.registerTool(createToolDef({ name: 'rc-tool' }));
+      registry.registerTool(createToolDef({ name: 'rc-tool' }));
+
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      registry.unregisterTool('rc-tool'); // decrement to 1, no notify
+      expect(listener).not.toHaveBeenCalled();
+
+      registry.unregisterTool('rc-tool'); // decrement to 0, notify
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -141,7 +187,7 @@ describe('DynamicRegistry', () => {
       expect(registry.getVersion()).toBe(1);
     });
 
-    it('overwrites an existing resource with the same URI', () => {
+    it('overwrites an existing resource definition with the same URI', () => {
       const res1 = createResourceDef({ uri: 'dup://x', name: 'first' });
       const res2 = createResourceDef({ uri: 'dup://x', name: 'second' });
 
@@ -150,6 +196,17 @@ describe('DynamicRegistry', () => {
 
       expect(registry.findResource('dup://x')?.name).toBe('second');
       expect(registry.getResources()).toHaveLength(1);
+    });
+
+    it('only notifies on first registration of a URI (ref counting)', () => {
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      registry.registerResource(createResourceDef({ uri: 'rc://r' }));
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      registry.registerResource(createResourceDef({ uri: 'rc://r', name: 'updated' }));
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -179,6 +236,40 @@ describe('DynamicRegistry', () => {
       const v = registry.getVersion();
       registry.unregisterResource('nonexistent://uri');
       expect(registry.getVersion()).toBe(v);
+    });
+
+    it('ref counting: register twice, unregister once → resource still exists', () => {
+      registry.registerResource(createResourceDef({ uri: 'rc://r', name: 'v1' }));
+      registry.registerResource(createResourceDef({ uri: 'rc://r', name: 'v2' }));
+
+      registry.unregisterResource('rc://r');
+
+      expect(registry.hasResource('rc://r')).toBe(true);
+      expect(registry.findResource('rc://r')?.name).toBe('v2');
+    });
+
+    it('ref counting: register twice, unregister twice → resource removed', () => {
+      registry.registerResource(createResourceDef({ uri: 'rc://r' }));
+      registry.registerResource(createResourceDef({ uri: 'rc://r' }));
+
+      registry.unregisterResource('rc://r');
+      registry.unregisterResource('rc://r');
+
+      expect(registry.hasResource('rc://r')).toBe(false);
+    });
+
+    it('ref counting: does not notify on intermediate unregister', () => {
+      registry.registerResource(createResourceDef({ uri: 'rc://r' }));
+      registry.registerResource(createResourceDef({ uri: 'rc://r' }));
+
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      registry.unregisterResource('rc://r');
+      expect(listener).not.toHaveBeenCalled();
+
+      registry.unregisterResource('rc://r');
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -398,10 +489,10 @@ describe('DynamicRegistry', () => {
       const listener = jest.fn();
       registry.subscribe(listener);
 
-      registry.registerTool(createToolDef({ name: 't1' }));
-      registry.registerResource(createResourceDef({ uri: 'r://1' }));
-      registry.unregisterTool('t1');
-      registry.unregisterResource('r://1');
+      registry.registerTool(createToolDef({ name: 't1' })); // first reg → notify
+      registry.registerResource(createResourceDef({ uri: 'r://1' })); // first reg → notify
+      registry.unregisterTool('t1'); // last ref → notify
+      registry.unregisterResource('r://1'); // last ref → notify
 
       expect(listener).toHaveBeenCalledTimes(4);
     });

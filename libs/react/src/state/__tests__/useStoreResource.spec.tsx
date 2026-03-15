@@ -5,7 +5,6 @@ import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
-import type { StoreResourceOptions } from '../state.types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -201,6 +200,36 @@ describe('useStoreResource (state module)', () => {
       });
 
       expect(updateSpy).toHaveBeenCalledWith('state://observed', expect.any(Function));
+    });
+
+    it('calls updateResourceRead for selector URIs when store changes', () => {
+      const store = createMockStore({ count: 0, label: 'test' });
+      const updateSpy = jest.spyOn(dynamicRegistry, 'updateResourceRead');
+
+      renderHook(
+        () =>
+          useStoreResource({
+            name: 'sel',
+            getState: store.getState,
+            subscribe: store.subscribe,
+            selectors: {
+              count: (state: unknown) => (state as { count: number }).count,
+              label: (state: unknown) => (state as { label: string }).label,
+            },
+          }),
+        { wrapper: createWrapper(dynamicRegistry) },
+      );
+
+      updateSpy.mockClear();
+
+      act(() => {
+        store.setState({ count: 5 });
+      });
+
+      // Main resource + 2 selectors
+      expect(updateSpy).toHaveBeenCalledWith('state://sel', expect.any(Function));
+      expect(updateSpy).toHaveBeenCalledWith('state://sel/count', expect.any(Function));
+      expect(updateSpy).toHaveBeenCalledWith('state://sel/label', expect.any(Function));
     });
   });
 

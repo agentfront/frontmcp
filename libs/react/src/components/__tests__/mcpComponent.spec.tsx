@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, act } from '@testing-library/react';
 import { z } from 'zod';
-import { mcpComponent } from '../mcpComponent';
+import { mcpComponent, mcpLazy } from '../mcpComponent';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import { ComponentRegistry } from '../ComponentRegistry';
@@ -440,6 +440,54 @@ describe('mcpComponent', () => {
     const { container } = render(React.createElement(WeatherCard), { wrapper: Wrapper });
 
     expect(container.innerHTML).toBe('');
+  });
+
+  it('mcpLazy brands a factory so isLazyImport detects it', async () => {
+    function LazyCard(props: { msg: string }) {
+      return React.createElement('span', { 'data-testid': 'lazy-card' }, props.msg);
+    }
+
+    const factory = mcpLazy(() => Promise.resolve({ default: LazyCard }));
+
+    const LazyComponent = mcpComponent(factory, {
+      name: 'lazy-test',
+      schema: z.object({ msg: z.string() }),
+      fallback: React.createElement('span', { 'data-testid': 'lazy-fallback' }, 'Loading...'),
+    });
+
+    const Wrapper = createWrapper(dynamicRegistry);
+    const { getByTestId } = render(React.createElement(LazyComponent), { wrapper: Wrapper });
+
+    expect(getByTestId('lazy-fallback')).toBeTruthy();
+
+    const tool = dynamicRegistry.findTool('lazy-test')!;
+    expect(tool).toBeDefined();
+
+    await act(async () => {
+      await tool.execute({ msg: 'Hello Lazy' });
+    });
+
+    // After Suspense resolves, the lazy card should appear
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(getByTestId('lazy-card').textContent).toBe('Hello Lazy');
+  });
+
+  it('zero-arg function component is NOT treated as lazy without mcpLazy', () => {
+    const ZeroArgComponent = () => React.createElement('span', { 'data-testid': 'zero-arg' }, 'I am not lazy');
+
+    const Comp = mcpComponent(ZeroArgComponent, {
+      name: 'zero-arg-test',
+      schema: z.object({ label: z.string() }),
+    });
+
+    const Wrapper = createWrapper(dynamicRegistry);
+    const { getByTestId } = render(React.createElement(Comp, { label: 'test' }), { wrapper: Wrapper });
+
+    // Should render directly (not via Suspense), so the text should appear
+    expect(getByTestId('zero-arg').textContent).toBe('I am not lazy');
   });
 
   it('returns success CallToolResult from execute', async () => {

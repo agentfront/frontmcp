@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useDynamicTool, useCallTool } from '@frontmcp/react';
 import type { CallToolResult } from '@frontmcp/react';
 

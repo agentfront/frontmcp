@@ -12,7 +12,7 @@ import { FrontMcpContext } from '../provider/FrontMcpContext';
 import type { StoreResourceOptions } from './state.types';
 
 export function useStoreResource(options: StoreResourceOptions): void {
-  const { name, getState, subscribe, selectors, actions, server } = options;
+  const { name, getState, subscribe, selectors, actions } = options;
   const { dynamicRegistry } = useContext(FrontMcpContext);
 
   // Keep latest getState in ref
@@ -55,11 +55,13 @@ export function useStoreResource(options: StoreResourceOptions): void {
     };
   }, [dynamicRegistry, name, subscribe, readState]);
 
-  // Register selector sub-resources
+  // Register selector sub-resources and subscribe to store changes
   useEffect(() => {
     if (!selectors) return;
 
     const cleanups: (() => void)[] = [];
+    const selectorUris: { uri: string; readSelector: () => Promise<ReadResourceResult> }[] = [];
+
     for (const [key, selector] of Object.entries(selectors)) {
       const uri = `state://${name}/${key}`;
       const selectorRef = { current: selector };
@@ -74,6 +76,8 @@ export function useStoreResource(options: StoreResourceOptions): void {
         ],
       });
 
+      selectorUris.push({ uri, readSelector });
+
       cleanups.push(
         dynamicRegistry.registerResource({
           uri,
@@ -85,8 +89,16 @@ export function useStoreResource(options: StoreResourceOptions): void {
       );
     }
 
+    // Subscribe to store changes so selectors get updated reads
+    const unsubscribe = subscribe(() => {
+      for (const { uri, readSelector } of selectorUris) {
+        dynamicRegistry.updateResourceRead(uri, readSelector);
+      }
+    });
+    cleanups.push(unsubscribe);
+
     return () => cleanups.forEach((fn) => fn());
-  }, [dynamicRegistry, name, selectors]);
+  }, [dynamicRegistry, name, selectors, subscribe]);
 
   // Register action tools
   useEffect(() => {

@@ -12,11 +12,11 @@ test.describe('MCP Component', () => {
   });
 
   test('renders greeting card after trigger', async ({ page }) => {
-    // Wait a moment for the dynamic tool to be registered
-    await page.waitForTimeout(500);
-
     const trigger = page.locator('[data-testid="greeting-trigger"]');
     const card = page.locator('[data-testid="greeting-card"]');
+
+    // Wait for trigger to be visible (tool registered) instead of arbitrary timeout
+    await trigger.waitFor({ state: 'visible' });
 
     await trigger.click();
     await expect(card).toBeVisible({ timeout: 10_000 });

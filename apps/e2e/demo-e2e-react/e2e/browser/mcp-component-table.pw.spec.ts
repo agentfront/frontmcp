@@ -12,10 +12,10 @@ test.describe('MCP Component Table', () => {
   });
 
   test('renders table with data after trigger', async ({ page }) => {
-    // Wait a moment for the dynamic tool to be registered
-    await page.waitForTimeout(500);
-
     const trigger = page.locator('[data-testid="table-trigger"]');
+
+    // Wait for trigger to be visible (tool registered) instead of arbitrary timeout
+    await trigger.waitFor({ state: 'visible' });
     await trigger.click();
 
     const container = page.locator('[data-testid="table-container"]');

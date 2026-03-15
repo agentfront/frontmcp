@@ -1,4 +1,3 @@
-import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { useStoreRegistration } from '../useStoreRegistration';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
@@ -240,6 +239,36 @@ describe('useStoreRegistration', () => {
     });
 
     expect(updateSpy).toHaveBeenCalledWith('state://observed', expect.any(Function));
+  });
+
+  it('calls updateResourceRead for selector URIs when store changes', () => {
+    const store = createMockStore({ count: 0, label: 'test' });
+    const updateSpy = jest.spyOn(dynamicRegistry, 'updateResourceRead');
+
+    const stores: StoreAdapter[] = [
+      {
+        name: 'sel',
+        getState: store.getState,
+        subscribe: store.subscribe,
+        selectors: {
+          count: (state: unknown) => (state as { count: number }).count,
+          label: (state: unknown) => (state as { label: string }).label,
+        },
+      },
+    ];
+
+    renderHook(() => useStoreRegistration(stores, dynamicRegistry));
+
+    updateSpy.mockClear();
+
+    act(() => {
+      store.setState({ count: 5 });
+    });
+
+    // Main resource + 2 selectors
+    expect(updateSpy).toHaveBeenCalledWith('state://sel', expect.any(Function));
+    expect(updateSpy).toHaveBeenCalledWith('state://sel/count', expect.any(Function));
+    expect(updateSpy).toHaveBeenCalledWith('state://sel/label', expect.any(Function));
   });
 
   it('unregisters everything on unmount', () => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFrontMcp, useCallTool, useListTools } from '@frontmcp/react';
-import type { CallToolResult } from '@frontmcp/react';
+import type { CallToolResult, ReadResourceResult } from '@frontmcp/react';
 
 export function StoreAdapterSection(): React.ReactElement {
   const { client, status } = useFrontMcp();
@@ -14,9 +14,9 @@ export function StoreAdapterSection(): React.ReactElement {
   const handleReadState = async () => {
     if (!client || status !== 'connected') return;
     try {
-      const result = await client.readResource('state://counter');
-      const contents = (result as { contents?: Array<{ text?: string }> }).contents;
-      if (contents?.[0]?.text) {
+      const result = (await client.readResource('state://counter')) as ReadResourceResult;
+      const contents = result.contents;
+      if (contents?.[0] && 'text' in contents[0] && contents[0].text) {
         setStoreValue(contents[0].text);
       }
     } catch {
@@ -25,6 +25,7 @@ export function StoreAdapterSection(): React.ReactElement {
   };
 
   const handleIncrement = async () => {
+    if (!hasIncrementTool) return;
     await callIncrement({ args: [] });
     // Re-read state after increment
     await handleReadState();
@@ -40,7 +41,7 @@ export function StoreAdapterSection(): React.ReactElement {
         <button data-testid="store-read" onClick={handleReadState}>
           Read State
         </button>
-        <button data-testid="store-increment" onClick={handleIncrement}>
+        <button data-testid="store-increment" onClick={handleIncrement} disabled={!hasIncrementTool}>
           Increment
         </button>
       </div>

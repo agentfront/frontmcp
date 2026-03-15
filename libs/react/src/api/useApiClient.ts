@@ -8,18 +8,18 @@
 import { useContext, useEffect, useRef } from 'react';
 import type { CallToolResult } from '@frontmcp/sdk';
 import { FrontMcpContext } from '../provider/FrontMcpContext';
-import type { ApiClientOptions, HttpClient, HttpRequestConfig, HttpResponse } from './api.types';
+import type { ApiClientOptions, HttpClient, HttpRequestConfig } from './api.types';
 import { createFetchClient } from './createFetchClient';
 
 function interpolatePath(path: string, params: Record<string, unknown>): string {
   return path.replace(/\{(\w+)\}/g, (_, key) => {
     const value = params[key];
-    return value != null ? String(value) : `{${key}}`;
+    return value != null ? encodeURIComponent(String(value)) : `{${key}}`;
   });
 }
 
 export function useApiClient(options: ApiClientOptions): void {
-  const { baseUrl, operations, headers, prefix = 'api', client, fetch: customFetch, server } = options;
+  const { baseUrl, operations, headers, prefix = 'api', client, fetch: customFetch } = options;
   const { dynamicRegistry } = useContext(FrontMcpContext);
 
   const headersRef = useRef(headers);

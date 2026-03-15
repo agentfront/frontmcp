@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { useApiClient } from '../useApiClient';
 import type { ApiClientOptions, HttpClient } from '../api.types';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';

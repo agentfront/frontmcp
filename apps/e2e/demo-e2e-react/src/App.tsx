@@ -41,7 +41,9 @@ function createCounterStore(): StoreAdapter {
     actions: {
       increment: () => {
         state = { count: state.count + 1 };
-        listeners.forEach((cb) => cb());
+        listeners.forEach((cb) => {
+          cb();
+        });
         return state;
       },
     },

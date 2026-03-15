@@ -137,6 +137,7 @@ export {
   AgentContent,
   AgentSearch,
   mcpComponent,
+  mcpLazy,
 } from './components';
 export type {
   ComponentRegistryEntry,
