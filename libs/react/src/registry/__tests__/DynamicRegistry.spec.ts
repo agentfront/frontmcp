@@ -88,6 +88,17 @@ describe('DynamicRegistry', () => {
       registry.registerTool(createToolDef({ name: 'rc', description: 'updated' }));
       expect(listener).toHaveBeenCalledTimes(1);
     });
+
+    it('cleanup is idempotent — calling twice does not double-decrement ref count', () => {
+      const cleanup1 = registry.registerTool(createToolDef({ name: 'idem', description: 'v1' }));
+      registry.registerTool(createToolDef({ name: 'idem', description: 'v2' }));
+
+      // ref count is 2; calling cleanup1 twice should only decrement once
+      cleanup1();
+      cleanup1();
+
+      expect(registry.hasTool('idem')).toBe(true);
+    });
   });
 
   // ─── unregisterTool ─────────────────────────────────────────────────────
@@ -207,6 +218,17 @@ describe('DynamicRegistry', () => {
 
       registry.registerResource(createResourceDef({ uri: 'rc://r', name: 'updated' }));
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('cleanup is idempotent — calling twice does not double-decrement ref count', () => {
+      const cleanup1 = registry.registerResource(createResourceDef({ uri: 'idem://r', name: 'v1' }));
+      registry.registerResource(createResourceDef({ uri: 'idem://r', name: 'v2' }));
+
+      // ref count is 2; calling cleanup1 twice should only decrement once
+      cleanup1();
+      cleanup1();
+
+      expect(registry.hasResource('idem://r')).toBe(true);
     });
   });
 
@@ -602,13 +624,15 @@ describe('DynamicRegistry', () => {
       expect(registry.getVersion()).toBe(v + 1);
     });
 
-    it('is safe to call on an empty registry', () => {
+    it('is a no-op on an empty registry (no notify, no version bump)', () => {
       const listener = jest.fn();
       registry.subscribe(listener);
+      const v = registry.getVersion();
 
       registry.clear();
-      // Still notifies even when empty (no conditional guard)
-      expect(listener).toHaveBeenCalledTimes(1);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(registry.getVersion()).toBe(v);
     });
   });
 });

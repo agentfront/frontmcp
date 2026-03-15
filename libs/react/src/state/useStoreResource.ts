@@ -14,6 +14,7 @@ import type { StoreResourceOptions } from './state.types';
 const VALID_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 export function useStoreResource(options: StoreResourceOptions): void {
+  // TODO: forward options.server to DynamicRegistry when server-scoped registries are implemented
   const { name, getState, subscribe, selectors, actions } = options;
   const { dynamicRegistry } = useContext(FrontMcpContext);
 
@@ -69,6 +70,9 @@ export function useStoreResource(options: StoreResourceOptions): void {
     const selectorUris: { uri: string; readSelector: () => Promise<ReadResourceResult> }[] = [];
 
     for (const [key, selector] of Object.entries(selectors)) {
+      if (!key || !VALID_NAME_RE.test(key)) {
+        throw new Error(`useStoreResource: invalid selector key "${key}". Keys must match ${VALID_NAME_RE}.`);
+      }
       const uri = `state://${name}/${key}`;
       const selectorRef = { current: selector };
 

@@ -37,7 +37,12 @@ export class DynamicRegistry {
     if (existing === 0) {
       this.notify();
     }
-    return () => this.unregisterTool(def.name);
+    let called = false;
+    return () => {
+      if (called) return;
+      called = true;
+      this.unregisterTool(def.name);
+    };
   }
 
   unregisterTool(name: string): void {
@@ -65,7 +70,12 @@ export class DynamicRegistry {
     if (existing === 0) {
       this.notify();
     }
-    return () => this.unregisterResource(def.uri);
+    let called = false;
+    return () => {
+      if (called) return;
+      called = true;
+      this.unregisterResource(def.uri);
+    };
   }
 
   unregisterResource(uri: string): void {
@@ -133,6 +143,7 @@ export class DynamicRegistry {
   }
 
   clear(): void {
+    if (this.tools.size === 0 && this.resources.size === 0) return;
     this.tools.clear();
     this.resources.clear();
     this.toolRefCounts.clear();

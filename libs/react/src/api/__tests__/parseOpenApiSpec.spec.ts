@@ -586,6 +586,49 @@ describe('parseOpenApiSpec', () => {
       const spec = { paths: {} };
       expect(parseOpenApiSpec(spec)).toEqual([]);
     });
+
+    it('skips parameters named __proto__ to prevent prototype pollution', () => {
+      const spec = {
+        paths: {
+          '/x': {
+            get: {
+              operationId: 'op',
+              parameters: [
+                { name: '__proto__', in: 'query', schema: { type: 'string' } },
+                { name: 'constructor', in: 'query', schema: { type: 'string' } },
+                { name: 'prototype', in: 'query', schema: { type: 'string' } },
+                { name: 'safe', in: 'query', schema: { type: 'string' } },
+              ],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      const props = ops[0].inputSchema.properties as Record<string, unknown>;
+      expect(Object.keys(props)).toEqual(['safe']);
+    });
+
+    it('same-name parameters from different locations — last write wins', () => {
+      const spec = {
+        paths: {
+          '/items/{id}': {
+            get: {
+              operationId: 'getItem',
+              parameters: [
+                { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Path ID' },
+                { name: 'id', in: 'query', required: false, schema: { type: 'integer' }, description: 'Query ID' },
+              ],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      const props = ops[0].inputSchema.properties as Record<string, Record<string, unknown>>;
+      // Both params map to key "id" in properties; the query one is processed second
+      expect(props.id).toEqual({ type: 'integer', description: 'Query ID' });
+    });
   });
 
   // ─── Path-level parameter merging ──────────────────────────────────────

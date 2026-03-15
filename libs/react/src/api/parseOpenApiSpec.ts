@@ -51,7 +51,7 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
         `${method.toUpperCase()} ${path}`;
 
       // Build input schema from parameters + requestBody
-      const properties: Record<string, unknown> = {};
+      const properties: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
       const required: string[] = [];
 
       // Merge path-level and operation-level parameters (operation overrides path)
@@ -73,6 +73,7 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
       }
 
       for (const param of paramMap.values()) {
+        if (param.name === '__proto__' || param.name === 'constructor' || param.name === 'prototype') continue;
         properties[param.name] = {
           ...(param.schema ?? { type: 'string' }),
           description: param.description,
