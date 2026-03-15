@@ -116,12 +116,25 @@ export class EsmModuleLoader {
   private async loadFromCache(entry: EsmCacheEntry): Promise<EsmLoadResult> {
     let rawModule: unknown;
 
-    if (entry.bundleContent) {
-      // In-memory content available (browser mode or populated cache)
+    if (entry.bundlePath) {
+      // In Node.js, always prefer the cached file so ESM stays native and CJS uses
+      // the same disk bridge that Jest and regular import() both understand.
+      try {
+        rawModule = await this.importFromPath(entry.bundlePath);
+      } catch (error) {
+        if (!entry.bundleContent) {
+          throw error;
+        }
+
+        // If the disk artifact disappears after a warm cache hit, fall back to the
+        // in-memory copy instead of failing the whole load.
+        rawModule = await this.importBundle(entry.bundleContent);
+      }
+    } else if (entry.bundleContent) {
+      // Browser mode or in-memory-only fallback
       rawModule = await this.importBundle(entry.bundleContent);
     } else {
-      // Node.js: import from disk path
-      rawModule = await this.importFromPath(entry.bundlePath);
+      throw new Error(`Cached bundle for "${entry.packageName}@${entry.resolvedVersion}" has no importable content`);
     }
 
     const manifest = normalizeEsmExport(rawModule);

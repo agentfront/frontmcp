@@ -3,7 +3,7 @@
  * @description Cache manager for downloaded ESM bundles.
  *
  * Supports two modes:
- * - **Node.js**: File-based cache with .mjs bundles and metadata JSON
+ * - **Node.js**: File-based cache with `.mjs`/`.cjs` bundles and metadata JSON
  * - **Browser**: In-memory cache (no file system access)
  *
  * The mode is auto-detected. In-memory cache is always used as a fast first-level cache,
@@ -22,21 +22,48 @@ function isBrowserEnv(): boolean {
 }
 
 /**
- * Wrap CJS bundle content for ESM compatibility.
- * CJS bundles use `module.exports = ...` which isn't valid in .mjs files.
- * This wraps them with a module/exports shim and re-exports via `export default`.
+ * Detect whether a bundle already contains ESM syntax and should stay as .mjs.
  */
-function wrapCjsForEsm(content: string): string {
-  // If already ESM (has export/import statements), return as-is
-  if (/\bexport\s+(default\b|{)/.test(content) || /\bimport\s+/.test(content)) {
-    return content;
-  }
+function isEsmSource(content: string): boolean {
+  return (
+    /\bexport\s+(default\b|{|\*|async\b|const\b|class\b|function\b|let\b|var\b)/.test(content) ||
+    /\bimport\s+/.test(content)
+  );
+}
+
+/**
+ * Wrap CJS bundle content so Node and Jest can both load it through import().
+ * The bridge keeps all CJS state local, then flattens `module.exports.default`
+ * into the final CommonJS export. Native import() will then expose a single
+ * `default` manifest namespace instead of a nested default object.
+ */
+function wrapCjsForImport(content: string): string {
   return [
-    'const module = { exports: {} };',
-    'const exports = module.exports;',
+    'const __frontmcpModule = { exports: {} };',
+    'const __frontmcpExports = __frontmcpModule.exports;',
+    '((module, exports) => {',
     content,
-    'export default module.exports;',
+    '})(__frontmcpModule, __frontmcpExports);',
+    'module.exports =',
+    "  __frontmcpModule.exports && typeof __frontmcpModule.exports === 'object' && 'default' in __frontmcpModule.exports",
+    '    ? __frontmcpModule.exports.default',
+    '    : __frontmcpModule.exports;',
   ].join('\n');
+}
+
+/**
+ * Build the on-disk bundle artifact for a source bundle.
+ * ESM stays as `.mjs`; CJS is bridged into a `.cjs` module for import().
+ */
+function toCachedBundle(content: string): { fileName: string; content: string } {
+  if (isEsmSource(content)) {
+    return { fileName: 'bundle.mjs', content };
+  }
+
+  return {
+    fileName: 'bundle.cjs',
+    content: wrapCjsForImport(content),
+  };
 }
 
 /**
@@ -51,7 +78,7 @@ export interface EsmCacheEntry {
   resolvedVersion: string;
   /** Timestamp when cached */
   cachedAt: number;
-  /** Path to the cached .mjs bundle file (Node.js only — empty in browser) */
+  /** Path to the cached bundle file (.mjs for ESM, .cjs for bridged CJS; empty in browser) */
   bundlePath: string;
   /** HTTP ETag for conditional requests */
   etag?: string;
@@ -125,7 +152,7 @@ const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  * **Node.js mode**: File-based disk cache with in-memory first-level cache.
  * ```
  * {cacheDir}/{hash}/
- *   bundle.mjs      - The ESM module code
+ *   bundle.mjs|cjs  - Native ESM or bridged CJS bundle code
  *   meta.json        - Cache metadata (version, timestamp, etag)
  * ```
  *
@@ -217,8 +244,9 @@ export class EsmCacheManager {
         const entryDir = this.getEntryDir(packageName, version);
         await ensureDir(entryDir);
 
-        bundlePath = path.join(entryDir, 'bundle.mjs');
-        await writeFile(bundlePath, wrapCjsForEsm(bundleContent));
+        const cachedBundle = toCachedBundle(bundleContent);
+        bundlePath = path.join(entryDir, cachedBundle.fileName);
+        await writeFile(bundlePath, cachedBundle.content);
 
         const diskEntry: EsmCacheEntry = {
           packageUrl,
@@ -353,9 +381,9 @@ export class EsmCacheManager {
    */
   async readBundle(entry: EsmCacheEntry): Promise<string> {
     // In-memory content available (browser or populated cache)
-    // Apply wrapCjsForEsm so output is consistent with the wrapped .mjs on disk
+    // Apply the same disk artifact selection so memory/disk contents stay identical.
     if (entry.bundleContent) {
-      return wrapCjsForEsm(entry.bundleContent);
+      return toCachedBundle(entry.bundleContent).content;
     }
 
     // Read from disk (Node.js only) — already wrapped by put()

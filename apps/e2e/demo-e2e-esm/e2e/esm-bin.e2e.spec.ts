@@ -11,7 +11,7 @@
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { mkdtemp, rm, fileExists } from '@frontmcp/utils';
-import { test, expect, TestServer } from '@frontmcp/testing';
+import { TestServer } from '@frontmcp/testing';
 
 const DEBUG = process.env['DEBUG_E2E'] === '1';
 const log = DEBUG ? console.log.bind(console) : () => {};
@@ -59,7 +59,7 @@ afterAll(async () => {
   }
 }, 30000);
 
-test.describe('ESM CLI/Bin Mode E2E', () => {
+describe('ESM CLI/Bin Mode E2E', () => {
   let client: Awaited<ReturnType<(typeof import('@frontmcp/sdk'))['connect']>>;
 
   beforeAll(async () => {
@@ -84,13 +84,19 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
     log('[E2E] CLI-mode client connected');
   }, 60000);
 
+  afterAll(async () => {
+    if (client) {
+      await client.close();
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════════
   // TOOL DISCOVERY IN CLI MODE
   // ═══════════════════════════════════════════════════════════════
 
-  test('lists ESM-loaded tools in CLI mode', async () => {
+  it('lists ESM-loaded tools in CLI mode', async () => {
     const tools = await client.listTools();
-    const toolNames = tools.tools.map((t) => t.name);
+    const toolNames = tools.map((t) => t.name);
     log('[TEST] CLI tools:', toolNames);
 
     expect(toolNames).toContain('esm:echo');
@@ -101,14 +107,14 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
   // TOOL EXECUTION IN CLI MODE
   // ═══════════════════════════════════════════════════════════════
 
-  test('calls ESM tool echo in CLI mode', async () => {
-    const result = await client.callTool({ name: 'esm:echo', arguments: { message: 'cli-test' } });
+  it('calls ESM tool echo in CLI mode', async () => {
+    const result = await client.callTool('esm:echo', { message: 'cli-test' });
     const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
     expect(text).toContain('cli-test');
   });
 
-  test('calls ESM tool add in CLI mode', async () => {
-    const result = await client.callTool({ name: 'esm:add', arguments: { a: 10, b: 20 } });
+  it('calls ESM tool add in CLI mode', async () => {
+    const result = await client.callTool('esm:add', { a: 10, b: 20 });
     const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
     expect(text).toBe('30');
   });
@@ -117,7 +123,7 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
   // CACHE DIRECTORY VERIFICATION
   // ═══════════════════════════════════════════════════════════════
 
-  test('cache directory follows environment-aware logic', async () => {
+  it('cache directory follows environment-aware logic', async () => {
     // When running in a project with node_modules, the default cache
     // goes to {cwd}/node_modules/.cache/frontmcp-esm/
     const projectCacheDir = path.join(process.cwd(), 'node_modules', '.cache', 'frontmcp-esm');
@@ -139,7 +145,7 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
     }
   });
 
-  test('explicit cacheDir option overrides default', async () => {
+  it('explicit cacheDir option overrides default', async () => {
     const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
     const esmServerUrl = `http://127.0.0.1:${esmServer!.info.port}`;
 
@@ -160,8 +166,12 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
     );
 
     // Tools should still work regardless of cache location
-    const tools = await customClient.listTools();
-    const toolNames = tools.tools.map((t) => t.name);
-    expect(toolNames).toContain('custom:echo');
+    try {
+      const tools = await customClient.listTools();
+      const toolNames = tools.map((t) => t.name);
+      expect(toolNames).toContain('custom:echo');
+    } finally {
+      await customClient.close();
+    }
   });
 });

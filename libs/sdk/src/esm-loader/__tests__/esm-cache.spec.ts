@@ -1,5 +1,9 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 import { EsmCacheManager } from '../esm-cache';
 
 /**
@@ -65,6 +69,28 @@ jest.mock('@frontmcp/utils', () => ({
   isValidMcpUri: jest.fn((uri: string) => /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(uri)),
 }));
 
+const execFileAsync = promisify(execFile);
+
+async function importWrappedModule(source: string, extension = '.mjs'): Promise<unknown> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'esm-cache-import-'));
+  const modulePath = path.join(tempDir, `bundle${extension}`);
+  const moduleUrl = `${pathToFileURL(modulePath).href}?t=${Date.now()}`;
+
+  try {
+    await fs.writeFile(modulePath, source, 'utf8');
+
+    const { stdout } = await execFileAsync(process.execPath, [
+      '--input-type=module',
+      '-e',
+      `const mod = await import(${JSON.stringify(moduleUrl)}); console.log(JSON.stringify(mod));`,
+    ]);
+
+    return JSON.parse(stdout) as unknown;
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 describe('EsmCacheManager', () => {
   const cacheDir = path.join(os.tmpdir(), 'test-esm-cache');
   let cache: EsmCacheManager;
@@ -75,7 +101,7 @@ describe('EsmCacheManager', () => {
   });
 
   describe('put()', () => {
-    it('writes bundle.mjs and meta.json', async () => {
+    it('writes bundle.mjs for ESM bundles and meta.json', async () => {
       const entry = await cache.put('@acme/tools', '1.0.0', 'export default {}', 'https://esm.sh/@acme/tools@1.0.0');
 
       expect(entry.packageName).toBe('@acme/tools');
@@ -86,6 +112,19 @@ describe('EsmCacheManager', () => {
 
       // Verify bundle was written
       expect(store.get(entry.bundlePath)).toBe('export default {}');
+    });
+
+    it('writes bundle.cjs bridge for CJS bundles', async () => {
+      const entry = await cache.put(
+        '@acme/tools',
+        '1.0.0',
+        `module.exports = { default: { name: '@acme/tools', version: '1.0.0', tools: [] } };`,
+        'https://esm.sh/@acme/tools@1.0.0',
+      );
+
+      expect(entry.bundlePath).toContain('bundle.cjs');
+      expect(store.get(entry.bundlePath)).toContain('module.exports =');
+      expect(store.get(entry.bundlePath)).not.toContain('export default');
     });
 
     it('stores etag when provided', async () => {
@@ -233,6 +272,58 @@ describe('EsmCacheManager', () => {
       const entry = await cache.put('@acme/tools', '1.0.0', 'export default 42;', 'https://esm.sh/x');
       const content = await cache.readBundle(entry);
       expect(content).toBe('export default 42;');
+    });
+
+    it('returns the same bridged source for in-memory CJS content as the disk cache', async () => {
+      const entry = await cache.put(
+        '@acme/tools',
+        '1.0.0',
+        `
+module.exports = {
+  default: {
+    name: '@acme/tools',
+    version: '1.0.0',
+    tools: [],
+  },
+};
+`,
+        'https://esm.sh/@acme/tools@1.0.0',
+      );
+
+      const content = await cache.readBundle(entry);
+
+      expect(content).toBe(store.get(entry.bundlePath));
+      expect(entry.bundlePath).toContain('bundle.cjs');
+      expect(content).toContain('((module, exports) => {');
+      expect(content).not.toContain('const module = { exports: {} };');
+      expect(content).not.toContain('export default');
+    });
+
+    it('imports bridged CJS bundles without redeclaring module and flattens the manifest default', async () => {
+      const entry = await cache.put(
+        '@acme/tools',
+        '1.0.0',
+        `
+module.exports = {
+  default: {
+    name: '@acme/tools',
+    version: '1.0.0',
+    tools: [],
+  },
+};
+`,
+        'https://esm.sh/@acme/tools@1.0.0',
+      );
+
+      const content = await cache.readBundle(entry);
+      const extension = path.extname(entry.bundlePath) || '.mjs';
+      const imported = (await importWrappedModule(content, extension)) as {
+        default: { name: string; version: string; tools: unknown[] };
+      };
+
+      expect(imported.default.name).toBe('@acme/tools');
+      expect(imported.default.version).toBe('1.0.0');
+      expect(imported.default.tools).toEqual([]);
     });
   });
 

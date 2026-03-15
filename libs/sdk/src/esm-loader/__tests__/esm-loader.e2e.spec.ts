@@ -5,8 +5,8 @@
  * Tests the full flow: VersionResolver → fetch registry → EsmModuleLoader → fetch bundle → cache → import → execute.
  * No real network calls - everything hits a local HTTP server on 127.0.0.1.
  *
- * Note: Bundles use CJS format for Jest compatibility. In production, esm.sh serves ESM.
- * The dynamic-import-from-file step is Node.js built-in; we test everything else end-to-end.
+ * Note: Bundles use CJS fixtures for Jest compatibility. Most tests load them via
+ * require(), and a targeted regression test covers the cache → native import() bridge.
  */
 
 import * as os from 'node:os';
@@ -14,6 +14,8 @@ import * as path from 'node:path';
 import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 import { LocalEsmServer } from './helpers/local-esm-server';
 import { SIMPLE_TOOLS_V1, SIMPLE_TOOLS_V2, MULTI_PRIMITIVE, NAMED_EXPORTS } from './helpers/esm-fixtures';
+import { EsmCacheManager } from '../esm-cache';
+import { EsmModuleLoader } from '../esm-module-loader';
 import { VersionResolver } from '../version-resolver';
 import { VersionPoller } from '../version-poller';
 import { parsePackageSpecifier } from '../package-specifier';
@@ -218,6 +220,48 @@ describe('ESM Loader E2E', () => {
   });
 
   describe('Bundle import and manifest normalization', () => {
+    it('loads a CJS fixture through the disk cache and native import path', async () => {
+      const loader = new EsmModuleLoader({
+        cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
+        registryAuth: { registryUrl },
+        esmShBaseUrl,
+      });
+
+      const specifier = parsePackageSpecifier('@test/simple-tools@1.0.0');
+      const result = await loader.load(specifier);
+
+      expect(result.source).toBe('network');
+      expect(result.manifest.name).toBe('@test/simple-tools');
+      expect(result.manifest.version).toBe('1.0.0');
+      expect(result.manifest.tools).toHaveLength(1);
+      expect((result.manifest.tools![0] as { name: string }).name).toBe('echo');
+    });
+
+    it('reloads a cached CJS fixture from disk through native import', async () => {
+      const specifier = parsePackageSpecifier('@test/simple-tools@1.0.0');
+
+      const firstLoader = new EsmModuleLoader({
+        cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
+        registryAuth: { registryUrl },
+        esmShBaseUrl,
+      });
+      await firstLoader.load(specifier);
+
+      const cachedLoader = new EsmModuleLoader({
+        cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
+        registryAuth: { registryUrl },
+        esmShBaseUrl,
+      });
+
+      const cachedResult = await cachedLoader.load(specifier);
+
+      expect(cachedResult.source).toBe('cache');
+      expect(cachedResult.manifest.name).toBe('@test/simple-tools');
+      expect(cachedResult.manifest.version).toBe('1.0.0');
+      expect(cachedResult.manifest.tools).toHaveLength(1);
+      expect((cachedResult.manifest.tools![0] as { name: string }).name).toBe('echo');
+    });
+
     it('writes bundle to disk and imports correctly', async () => {
       const response = await fetch(`${esmBaseUrl}/@test/simple-tools@1.0.0?bundle`);
       const bundleContent = await response.text();

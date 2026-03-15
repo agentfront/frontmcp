@@ -1,7 +1,8 @@
 /**
  * @file main.ts
  * @description Local ESM package server for E2E testing.
- * Serves fake npm registry metadata and CJS bundles that mimic esm.sh behavior.
+ * Serves fake npm registry metadata and CJS fixture bundles for the loader's
+ * cache-to-native-import bridge.
  *
  * Packages served:
  * - @test/esm-tools v1.0.0 — 2 tools: echo, add
@@ -17,7 +18,7 @@ import * as http from 'node:http';
 const port = parseInt(process.env['PORT'] ?? process.env['ESM_SERVER_PORT'] ?? '50400', 10);
 
 // ═══════════════════════════════════════════════════════════════════
-// FIXTURE BUNDLES (CJS format — normalizeEsmExport handles the default wrapper)
+// FIXTURE BUNDLES (CJS format — the cache bridge unwraps the nested default on import)
 // ═══════════════════════════════════════════════════════════════════
 
 const ESM_TOOLS_BUNDLE = `

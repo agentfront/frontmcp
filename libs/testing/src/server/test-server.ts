@@ -323,6 +323,7 @@ export class TestServer {
       ...this.options.env,
       PORT: String(this.options.port),
     };
+    const runtimeEnv = withWorkspaceProtocolFallback(env, this.options.cwd);
 
     // Release port reservation just before spawning so the server can bind it
     if (this.portRelease) {
@@ -336,7 +337,7 @@ export class TestServer {
     // This avoids fragile command parsing with split(' ')
     this.process = spawn(this.options.command, [], {
       cwd: this.options.cwd,
-      env,
+      env: runtimeEnv,
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -518,6 +519,147 @@ export class TestServer {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Ensure spawned test servers can resolve the protocol workspace package.
+ *
+ * Some local installs miss the workspace symlink at `node_modules/@frontmcp/protocol`
+ * even though the built package exists under `libs/protocol/dist`. `tsx` does not
+ * reliably honor NODE_PATH in this path, so prefer creating the missing workspace
+ * link and only fall back to NODE_PATH aliasing when that is not possible.
+ */
+function withWorkspaceProtocolFallback(env: NodeJS.ProcessEnv, cwd: string): NodeJS.ProcessEnv {
+  if (findInstalledProtocolPackageDir(cwd)) {
+    return env;
+  }
+
+  try {
+    const workspacePackageDir = findWorkspaceProtocolDir(cwd);
+    if (!workspacePackageDir) {
+      return env;
+    }
+
+    ensureWorkspaceProtocolLink(cwd, workspacePackageDir);
+    if (findInstalledProtocolPackageDir(cwd)) {
+      return env;
+    }
+
+    return withProtocolNodePathAlias(env, cwd, workspacePackageDir);
+  } catch {
+    return env;
+  }
+}
+
+function ensureWorkspaceProtocolLink(cwd: string, workspacePackageDir: string): void {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  const scopeDir = findWorkspaceScopeDir(cwd);
+  if (!scopeDir) {
+    return;
+  }
+
+  const aliasPackageDir = path.join(scopeDir, 'protocol');
+  if (fs.existsSync(aliasPackageDir)) {
+    return;
+  }
+
+  fs.mkdirSync(scopeDir, { recursive: true });
+  try {
+    fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== 'EEXIST') {
+      throw error;
+    }
+  }
+}
+
+function withProtocolNodePathAlias(
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  workspacePackageDir: string,
+): NodeJS.ProcessEnv {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+
+  const aliasRoot = path.join(os.tmpdir(), 'frontmcp-test-node-path', Buffer.from(cwd).toString('hex'));
+  const scopeDir = path.join(aliasRoot, '@frontmcp');
+  const aliasPackageDir = path.join(scopeDir, 'protocol');
+
+  fs.mkdirSync(scopeDir, { recursive: true });
+  if (!fs.existsSync(aliasPackageDir)) {
+    fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
+  }
+
+  const existingNodePath = env['NODE_PATH'];
+  const nodePathEntries = [aliasRoot, ...(existingNodePath ? existingNodePath.split(path.delimiter) : [])].filter(
+    Boolean,
+  );
+
+  return {
+    ...env,
+    NODE_PATH: [...new Set(nodePathEntries)].join(path.delimiter),
+  };
+}
+
+function findWorkspaceProtocolDir(startDir: string): string | undefined {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  let currentDir = startDir;
+  while (true) {
+    const candidate = path.join(currentDir, 'libs', 'protocol');
+    if (fs.existsSync(path.join(candidate, 'dist', 'index.js'))) {
+      return candidate;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return undefined;
+    }
+    currentDir = parentDir;
+  }
+}
+
+function findInstalledProtocolPackageDir(startDir: string): string | undefined {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  let currentDir = startDir;
+  while (true) {
+    const candidate = path.join(currentDir, 'node_modules', '@frontmcp', 'protocol');
+    if (fs.existsSync(path.join(candidate, 'package.json'))) {
+      return candidate;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return undefined;
+    }
+    currentDir = parentDir;
+  }
+}
+
+function findWorkspaceScopeDir(startDir: string): string | undefined {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  let currentDir = startDir;
+  while (true) {
+    const candidate = path.join(currentDir, 'node_modules', '@frontmcp');
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return undefined;
+    }
+    currentDir = parentDir;
+  }
 }
 
 // Re-export port registry utilities

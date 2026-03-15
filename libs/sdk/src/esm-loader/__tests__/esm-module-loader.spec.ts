@@ -104,6 +104,62 @@ describe('EsmModuleLoader', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it('prefers the cached file path over in-memory bundle content in Node mode', async () => {
+      const cachedEntry: EsmCacheEntry = {
+        packageUrl: 'https://esm.sh/@acme/tools@1.2.0?bundle',
+        packageName: '@acme/tools',
+        resolvedVersion: '1.2.0',
+        cachedAt: Date.now(),
+        bundlePath: '/tmp/cache/bundle.cjs',
+        bundleContent: 'module.exports = { default: { name: "stale" } };',
+      };
+
+      mockCache.get.mockResolvedValue(cachedEntry);
+
+      const mockModule = { name: '@acme/tools', version: '1.2.0', tools: [] };
+      const importFromPathSpy = jest
+        .spyOn(loader as unknown as { importFromPath: (p: string) => Promise<unknown> }, 'importFromPath' as never)
+        .mockResolvedValue(mockModule as never);
+      const importBundleSpy = jest
+        .spyOn(loader as unknown as { importBundle: (source: string) => Promise<unknown> }, 'importBundle' as never)
+        .mockResolvedValue({ name: 'wrong-path' } as never);
+
+      const result = await loader.load(specifier);
+
+      expect(result.source).toBe('cache');
+      expect(result.manifest.name).toBe('@acme/tools');
+      expect(importFromPathSpy).toHaveBeenCalledWith('/tmp/cache/bundle.cjs');
+      expect(importBundleSpy).not.toHaveBeenCalled();
+    });
+
+    it('falls back to in-memory bundle content when the cached file import fails', async () => {
+      const cachedEntry: EsmCacheEntry = {
+        packageUrl: 'https://esm.sh/@acme/tools@1.2.0?bundle',
+        packageName: '@acme/tools',
+        resolvedVersion: '1.2.0',
+        cachedAt: Date.now(),
+        bundlePath: '/tmp/cache/bundle.cjs',
+        bundleContent: 'module.exports = { default: { name: "fallback" } };',
+      };
+
+      mockCache.get.mockResolvedValue(cachedEntry);
+
+      const fallbackModule = { name: '@acme/tools', version: '1.2.0', tools: [] };
+      const importFromPathSpy = jest
+        .spyOn(loader as unknown as { importFromPath: (p: string) => Promise<unknown> }, 'importFromPath' as never)
+        .mockRejectedValue(new Error('ENOENT') as never);
+      const importBundleSpy = jest
+        .spyOn(loader as unknown as { importBundle: (source: string) => Promise<unknown> }, 'importBundle' as never)
+        .mockResolvedValue(fallbackModule as never);
+
+      const result = await loader.load(specifier);
+
+      expect(result.source).toBe('cache');
+      expect(result.manifest.name).toBe('@acme/tools');
+      expect(importFromPathSpy).toHaveBeenCalledWith('/tmp/cache/bundle.cjs');
+      expect(importBundleSpy).toHaveBeenCalledWith(cachedEntry.bundleContent);
+    });
+
     it('fetches from network on cache miss', async () => {
       mockCache.get.mockResolvedValue(undefined);
 

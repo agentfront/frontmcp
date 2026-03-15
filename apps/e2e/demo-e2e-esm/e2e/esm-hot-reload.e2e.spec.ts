@@ -3,7 +3,7 @@
  *
  * Tests the auto-update pipeline:
  * 1. Start with @test/esm-tools v1.0.0 (2 tools: echo, add)
- * 2. Publish v2.0.0 with 3 tools (echo, add, multiply) via /_admin/publish
+ * 2. Publish v1.1.0 with 3 tools (echo, add, multiply) via /_admin/publish
  * 3. Wait for the VersionPoller to detect the new version
  * 4. Verify the new tool appears in tools/list
  * 5. Call the new tool to confirm it works
@@ -21,11 +21,11 @@ let esmServer: TestServer | null = null;
 // Port configuration
 const ESM_SERVER_PORT = 50411;
 
-const V2_BUNDLE = `
+const UPDATED_BUNDLE = `
 module.exports = {
   default: {
     name: '@test/esm-tools',
-    version: '2.0.0',
+    version: '1.1.0',
     tools: [
       {
         name: 'echo',
@@ -125,19 +125,19 @@ test.describe('ESM Hot-Reload E2E', () => {
     expect(initialTools).toContainTool('esm:add');
     expect(initialNames).not.toContain('esm:multiply');
 
-    // Step 2: Publish v2.0.0 with 3 tools (adds multiply)
+    // Step 2: Publish v1.1.0 with 3 tools (adds multiply)
     const publishUrl = `http://127.0.0.1:${esmServer!.info.port}/_admin/publish`;
     const publishRes = await fetch(publishUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         package: '@test/esm-tools',
-        version: '2.0.0',
-        bundle: V2_BUNDLE,
+        version: '1.1.0',
+        bundle: UPDATED_BUNDLE,
       }),
     });
     expect(publishRes.ok).toBe(true);
-    log('[TEST] Published v2.0.0');
+    log('[TEST] Published v1.1.0');
 
     // Step 3: Poll tools/list until esm:multiply appears (max ~30s)
     let multiplyFound = false;
