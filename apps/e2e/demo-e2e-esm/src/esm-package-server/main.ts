@@ -191,7 +191,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 const MAX_ADMIN_BODY_BYTES = 1_048_576; // 1 MB
 
 function handleAdminPublish(req: http.IncomingMessage, res: http.ServerResponse): void {
-  let body = '';
+  const chunks: Buffer[] = [];
   let bodyBytes = 0;
   let aborted = false;
   req.on('data', (chunk: Buffer) => {
@@ -204,10 +204,11 @@ function handleAdminPublish(req: http.IncomingMessage, res: http.ServerResponse)
       req.destroy();
       return;
     }
-    body += chunk.toString();
+    chunks.push(chunk);
   });
   req.on('end', () => {
     if (aborted) return;
+    const body = Buffer.concat(chunks).toString('utf8');
     try {
       const data = JSON.parse(body) as {
         package: string;
@@ -310,10 +311,8 @@ server.listen(port, '127.0.0.1', () => {
 });
 
 process.on('SIGINT', () => {
-  server.close();
-  process.exit(0);
+  server.close(() => process.exit(0));
 });
 process.on('SIGTERM', () => {
-  server.close();
-  process.exit(0);
+  server.close(() => process.exit(0));
 });

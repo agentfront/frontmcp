@@ -153,29 +153,54 @@ export class TestServer {
       );
     }
 
-    // Use the Nx project name for port range allocation
-    const { port, release } = await reservePort(project, options.port);
+    const maxAttempts = 3;
 
-    const serverOptions: TestServerOptions = {
-      ...options,
-      port,
-      project,
-      command: `npx nx serve ${project} --port ${port}`,
-      cwd: options.cwd ?? process.cwd(),
-    };
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { port, release } = await reservePort(project, options.port);
 
-    const server = new TestServer(serverOptions, port, release);
-    try {
-      await server.startProcess();
-    } catch (error) {
+      const serverOptions: TestServerOptions = {
+        ...options,
+        port,
+        project,
+        command: `npx nx serve ${project} --port ${port}`,
+        cwd: options.cwd ?? process.cwd(),
+      };
+
+      const server = new TestServer(serverOptions, port, release);
       try {
-        await server.stop();
-      } catch {
-        // Best-effort cleanup — don't mask the original startup error
+        await server.startProcess();
+        return server;
+      } catch (error) {
+        try {
+          await server.stop();
+        } catch (cleanupError) {
+          if (options.debug || DEBUG_SERVER) {
+            const msg = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+            console.warn(`[TestServer] Cleanup failed after startup error: ${msg}`);
+          }
+        }
+
+        const isEADDRINUSE =
+          error instanceof Error &&
+          (error.message.includes('EADDRINUSE') || server.getLogs().some((l) => l.includes('EADDRINUSE')));
+
+        if (isEADDRINUSE && attempt < maxAttempts) {
+          const delayMs = attempt * 500;
+          if (options.debug || DEBUG_SERVER) {
+            console.warn(
+              `[TestServer] EADDRINUSE on port ${port}, retrying in ${delayMs}ms (attempt ${attempt}/${maxAttempts})`,
+            );
+          }
+          await sleep(delayMs);
+          continue;
+        }
+
+        throw error;
       }
-      throw error;
     }
-    return server;
+
+    // Unreachable, but TypeScript requires a return
+    throw new Error(`[TestServer] Failed to start after ${maxAttempts} attempts`);
   }
 
   /**
@@ -556,10 +581,11 @@ function ensureWorkspaceProtocolLink(cwd: string, workspacePackageDir: string): 
   const fs = require('node:fs');
   const path = require('node:path');
 
-  const scopeDir = findWorkspaceScopeDir(cwd);
-  if (!scopeDir) {
+  const nodeModulesDir = findWorkspaceNodeModulesDir(cwd);
+  if (!nodeModulesDir) {
     return;
   }
+  const scopeDir = path.join(nodeModulesDir, '@frontmcp');
 
   const aliasPackageDir = path.join(scopeDir, 'protocol');
   if (fs.existsSync(aliasPackageDir)) {
@@ -650,11 +676,11 @@ function findInstalledProtocolPackageDir(startDir: string): string | undefined {
   });
 }
 
-function findWorkspaceScopeDir(startDir: string): string | undefined {
+function findWorkspaceNodeModulesDir(startDir: string): string | undefined {
   const fs = require('node:fs');
   const path = require('node:path');
   return findUp(startDir, (dir) => {
-    const candidate = path.join(dir, 'node_modules', '@frontmcp');
+    const candidate = path.join(dir, 'node_modules');
     return fs.existsSync(candidate) ? candidate : undefined;
   });
 }
