@@ -1,1 +1,1 @@
-export { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+export { StdioServerTransport } from '#stdio-server';

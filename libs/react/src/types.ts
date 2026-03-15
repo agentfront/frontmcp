@@ -2,8 +2,10 @@
  * Core types for @frontmcp/react
  */
 
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
+import type React from 'react';
+import type { DirectMcpServer, DirectClient, CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
 import type { ComponentRegistry } from './components/ComponentRegistry';
+import type { DynamicRegistry } from './registry/DynamicRegistry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool / Resource / Prompt info types (from MCP protocol)
@@ -48,7 +50,28 @@ export type FrontMcpStatus = 'idle' | 'connecting' | 'connected' | 'error';
 export interface FrontMcpContextValue {
   name: string;
   registry: ComponentRegistry;
+  dynamicRegistry: DynamicRegistry;
+  getDynamicRegistry: (server?: string) => DynamicRegistry;
   connect: () => Promise<void>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dynamic tool / resource definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DynamicToolDef {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => Promise<CallToolResult>;
+}
+
+export interface DynamicResourceDef {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+  read: () => Promise<ReadResourceResult>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -132,4 +155,31 @@ export interface FieldRenderProps {
   enumValues?: string[];
   value: string;
   onChange: (value: string) => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Store adapter (provider-level state integration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StoreAdapter {
+  /** Logical name for this store (e.g., 'redux', 'valtio'). */
+  name: string;
+  /** Returns the current state snapshot. */
+  getState: () => unknown;
+  /** Subscribes to state changes. Returns an unsubscribe function. */
+  subscribe: (cb: () => void) => () => void;
+  /** Named selectors — each becomes a sub-resource state://{name}/{key}. */
+  selectors?: Record<string, (state: unknown) => unknown>;
+  /** Named actions — each becomes a dynamic tool {name}_{key}. */
+  actions?: Record<string, (...args: unknown[]) => unknown>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// mcpComponent column definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface McpColumnDef<T = unknown> {
+  key: string;
+  header: string;
+  render?: (value: T) => React.ReactNode;
 }

@@ -1,0 +1,217 @@
+---
+title: API Client
+slug: react/api-client
+icon: plug
+description: Register OpenAPI operations as MCP tools with pluggable HTTP clients
+---
+
+`@frontmcp/react/api` turns OpenAPI operations into MCP tools that agents can call. It supports any HTTP client — fetch, axios, ky, or a custom wrapper with token refresh and interceptors.
+
+```tsx
+import { useApiClient, parseOpenApiSpec, createFetchClient } from '@frontmcp/react/api';
+import type { HttpClient, HttpRequestConfig, HttpResponse } from '@frontmcp/react';
+```
+
+## useApiClient
+
+Registers each API operation as an MCP tool. Tools are registered on mount and cleaned up on unmount.
+
+```tsx
+import { useApiClient } from '@frontmcp/react/api';
+
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations: [
+    {
+      operationId: 'getUser',
+      description: 'Get a user by ID',
+      method: 'GET',
+      path: '/users/{id}',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+  ],
+  headers: () => ({ Authorization: `Bearer ${getToken()}` }),
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `baseUrl` | `string` | — | **Required.** Base URL for all requests |
+| `operations` | `ApiOperation[]` | — | **Required.** Operations to register as tools |
+| `headers` | `Record<string, string> \| () => Record<string, string>` | — | Static headers or header factory |
+| `prefix` | `string` | `'api'` | Tool name prefix |
+| `client` | `HttpClient` | — | Custom HTTP client (takes precedence over `fetch`) |
+| `fetch` | `typeof globalThis.fetch` | — | **Deprecated.** Use `client` instead |
+| `server` | `string` | — | Target a named server |
+
+### Tool Naming
+
+Each operation becomes a tool named `{prefix}_{operationId}`. For example, with prefix `'api'` and operationId `'getUser'`, the tool name is `api_getUser`.
+
+---
+
+## HttpClient Interface
+
+The `HttpClient` interface lets you inject any HTTP library. Implement a single `request` method:
+
+```typescript
+interface HttpClient {
+  request(config: HttpRequestConfig): Promise<HttpResponse>;
+}
+
+interface HttpRequestConfig {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body?: unknown;
+}
+
+interface HttpResponse {
+  status: number;
+  statusText?: string;
+  data: unknown;
+}
+```
+
+### Axios Example
+
+```tsx
+import axios from 'axios';
+import type { HttpClient } from '@frontmcp/react';
+
+const axiosClient: HttpClient = {
+  request: async ({ method, url, headers, body }) => {
+    const response = await axios({ method, url, headers, data: body });
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data,
+    };
+  },
+};
+
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations,
+  client: axiosClient,
+});
+```
+
+### Custom Client with Token Refresh
+
+```tsx
+import type { HttpClient } from '@frontmcp/react';
+
+function createAuthClient(getToken: () => string, refreshToken: () => Promise<string>): HttpClient {
+  return {
+    request: async (config) => {
+      config.headers['Authorization'] = `Bearer ${getToken()}`;
+
+      let response = await fetch(config.url, {
+        method: config.method,
+        headers: config.headers,
+        body: config.body ? JSON.stringify(config.body) : undefined,
+      });
+
+      // Auto-refresh on 401
+      if (response.status === 401) {
+        const newToken = await refreshToken();
+        config.headers['Authorization'] = `Bearer ${newToken}`;
+
+        response = await fetch(config.url, {
+          method: config.method,
+          headers: config.headers,
+          body: config.body ? JSON.stringify(config.body) : undefined,
+        });
+      }
+
+      const data = await response.json().catch(() => response.text());
+      return { status: response.status, statusText: response.statusText, data };
+    },
+  };
+}
+```
+
+### Backward Compatibility
+
+The `fetch` option still works but is deprecated. When provided without `client`, it's internally wrapped into an `HttpClient`. If both are provided, `client` takes precedence.
+
+```tsx
+// Deprecated — still works
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations,
+  fetch: customFetch,
+});
+
+// Recommended — use client
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations,
+  client: createFetchClient(customFetch),
+});
+```
+
+---
+
+## createFetchClient
+
+A convenience factory that wraps a plain `fetch` function into the `HttpClient` interface:
+
+```tsx
+import { createFetchClient } from '@frontmcp/react/api';
+
+const client = createFetchClient(); // uses globalThis.fetch
+const client = createFetchClient(myCustomFetch); // uses custom fetch
+```
+
+Useful when you want the generic `HttpClient` interface but still use fetch under the hood.
+
+---
+
+## parseOpenApiSpec
+
+Extracts `ApiOperation[]` from an OpenAPI 3.x JSON spec. Handles parameters, request bodies, and generates operation IDs when missing.
+
+```tsx
+import { parseOpenApiSpec } from '@frontmcp/react/api';
+
+const spec = await fetch('/openapi.json').then((r) => r.json());
+const operations = parseOpenApiSpec(spec);
+
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations,
+  client: myClient,
+});
+```
+
+### What Gets Extracted
+
+- **operationId**: From spec or auto-generated from `{method}_{path}`
+- **description**: From `summary`, `description`, or `{METHOD} {path}`
+- **method**: HTTP method (uppercase)
+- **path**: URL path with `{param}` placeholders
+- **inputSchema**: JSON Schema built from parameters + requestBody
+
+### Headers Factory
+
+The `headers` option can be a factory function that's called fresh on every request. This is useful for dynamic auth tokens:
+
+```tsx
+useApiClient({
+  baseUrl: 'https://api.example.com',
+  operations,
+  client: myClient,
+  headers: () => ({
+    Authorization: `Bearer ${auth.getAccessToken()}`,
+    'X-Request-ID': crypto.randomUUID(),
+  }),
+});
+```

@@ -39,6 +39,14 @@
     "#server-types": {
       "browser": "./src/browser-server-types.ts",
       "default": "./src/node-server-types.ts"
+    },
+    "#stdio-client": {
+      "browser": "./src/browser-stdio-client.ts",
+      "default": "./src/node-stdio-client.ts"
+    },
+    "#stdio-server": {
+      "browser": "./src/browser-stdio-server.ts",
+      "default": "./src/node-stdio-server.ts"
     }
   },
   "type": "commonjs",

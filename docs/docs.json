@@ -221,6 +221,10 @@
               "frontmcp/react/provider",
               "frontmcp/react/hooks",
               "frontmcp/react/components",
+              "frontmcp/react/dynamic-tools",
+              "frontmcp/react/agent-components",
+              "frontmcp/react/state-management",
+              "frontmcp/react/api-client",
               "frontmcp/react/dom-resources",
               "frontmcp/react/ai-integration",
               "frontmcp/react/router"

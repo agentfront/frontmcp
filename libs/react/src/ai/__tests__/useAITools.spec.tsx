@@ -4,6 +4,7 @@ import type { FrontMcpContextValue, ToolInfo } from '../../types';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import { useAITools } from '../useAITools';
 import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
 
@@ -36,9 +37,12 @@ function makeWrapper(overrides?: {
     ...(overrides?.client !== undefined ? { client: overrides.client } : {}),
   });
 
+  const dynamicRegistry = new DynamicRegistry();
   const ctx: FrontMcpContextValue = {
     name,
     registry: new ComponentRegistry(),
+    dynamicRegistry,
+    getDynamicRegistry: () => dynamicRegistry,
     connect: jest.fn(),
   };
 
@@ -146,9 +150,12 @@ describe('useAITools', () => {
     serverRegistry.register('default', null as never as DirectMcpServer);
     serverRegistry.update('default', { tools, status: 'connected' });
 
+    const dynamicRegistry = new DynamicRegistry();
     const ctx: FrontMcpContextValue = {
       name: 'default',
       registry: new ComponentRegistry(),
+      dynamicRegistry,
+      getDynamicRegistry: () => dynamicRegistry,
       connect: jest.fn(),
     };
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -214,9 +221,12 @@ describe('useAITools', () => {
     // Provider context points to 'default' which is idle
     serverRegistry.register('default', {} as DirectMcpServer);
 
+    const dynamicRegistry = new DynamicRegistry();
     const ctx: FrontMcpContextValue = {
       name: 'default',
       registry: new ComponentRegistry(),
+      dynamicRegistry,
+      getDynamicRegistry: () => dynamicRegistry,
       connect: jest.fn(),
     };
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -305,9 +315,12 @@ describe('useAITools', () => {
     // Only register 'default', not 'nonexistent'
     serverRegistry.register('default', {} as DirectMcpServer);
 
+    const dynamicRegistry = new DynamicRegistry();
     const ctx: FrontMcpContextValue = {
       name: 'default',
       registry: new ComponentRegistry(),
+      dynamicRegistry,
+      getDynamicRegistry: () => dynamicRegistry,
       connect: jest.fn(),
     };
     const wrapper = ({ children }: { children: React.ReactNode }) => (

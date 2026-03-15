@@ -12,3 +12,13 @@ export type { UseListResourcesResult } from './useListResources';
 export { useListPrompts } from './useListPrompts';
 export { useStoreResource } from './useStoreResource';
 export type { UseStoreResourceReturn } from './useStoreResource';
+export { useDynamicTool } from './useDynamicTool';
+export type {
+  UseDynamicToolOptions,
+  UseDynamicToolSchemaOptions,
+  UseDynamicToolJsonSchemaOptions,
+} from './useDynamicTool';
+export { useDynamicResource } from './useDynamicResource';
+export type { UseDynamicResourceOptions } from './useDynamicResource';
+export { useComponentTree } from './useComponentTree';
+export type { UseComponentTreeOptions } from './useComponentTree';

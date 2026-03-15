@@ -36,6 +36,7 @@ const noopServer: ProviderValueType<FrontMcpServer> = {
 
 export function createMcpGlobalProviders(metadata: FrontMcpConfigType) {
   const isCli = !!(metadata as Record<string, unknown>)['__cliMode'];
-  const serverProvider = isCli ? noopServer : frontMcpServer;
+  const isNoServe = metadata.serve === false;
+  const serverProvider = isCli || isNoServe ? noopServer : frontMcpServer;
   return [frontMcpConfig.with(metadata), serverProvider, FrontMcpContextStorage];
 }
