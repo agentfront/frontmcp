@@ -224,7 +224,7 @@ describe('ESM Loader E2E', () => {
       const loader = new EsmModuleLoader({
         cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
         registryAuth: { registryUrl },
-        esmShBaseUrl,
+        esmShBaseUrl: esmBaseUrl,
       });
 
       const specifier = parsePackageSpecifier('@test/simple-tools@1.0.0');
@@ -243,14 +243,14 @@ describe('ESM Loader E2E', () => {
       const firstLoader = new EsmModuleLoader({
         cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
         registryAuth: { registryUrl },
-        esmShBaseUrl,
+        esmShBaseUrl: esmBaseUrl,
       });
       await firstLoader.load(specifier);
 
       const cachedLoader = new EsmModuleLoader({
         cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
         registryAuth: { registryUrl },
-        esmShBaseUrl,
+        esmShBaseUrl: esmBaseUrl,
       });
 
       const cachedResult = await cachedLoader.load(specifier);
