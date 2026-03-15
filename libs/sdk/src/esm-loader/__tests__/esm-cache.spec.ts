@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { EsmCacheManager } from '../esm-cache';
 
 /**
- * In-memory file store backing both @frontmcp/utils and node:fs/promises mocks.
+ * In-memory file store backing @frontmcp/utils mocks.
  */
 const store = new Map<string, string>();
 
@@ -54,6 +54,7 @@ jest.mock('@frontmcp/utils', () => ({
       if (key.startsWith(p)) store.delete(key);
     }
   }),
+  readdir: jest.fn(async (dirPath: string) => getDirectoryEntries(dirPath)),
   sha256Hex: jest.fn((input: string) => {
     let hash = 0;
     for (let i = 0; i < input.length; i++) {
@@ -61,11 +62,7 @@ jest.mock('@frontmcp/utils', () => ({
     }
     return Math.abs(hash).toString(16).padStart(16, '0');
   }),
-}));
-
-// Mock node:fs/promises for the dynamic import('node:fs/promises') in invalidate/cleanup
-jest.mock('node:fs/promises', () => ({
-  readdir: jest.fn(async (dirPath: string) => getDirectoryEntries(dirPath)),
+  isValidMcpUri: jest.fn((uri: string) => /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(uri)),
 }));
 
 describe('EsmCacheManager', () => {
@@ -92,19 +89,25 @@ describe('EsmCacheManager', () => {
     });
 
     it('stores etag when provided', async () => {
-      const entry = await cache.put('@acme/tools', '1.0.0', 'code', 'url', '"abc123"');
+      const entry = await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x', '"abc123"');
       expect(entry.etag).toBe('"abc123"');
     });
 
     it('omits etag when not provided', async () => {
-      const entry = await cache.put('@acme/tools', '1.0.0', 'code', 'url');
+      const entry = await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
       expect(entry.etag).toBeUndefined();
+    });
+
+    it('rejects packageUrl without valid URI scheme', async () => {
+      await expect(cache.put('@acme/tools', '1.0.0', 'code', 'no-scheme')).rejects.toThrow(
+        'URI must have a valid scheme',
+      );
     });
   });
 
   describe('get()', () => {
     it('returns entry when cached and fresh', async () => {
-      await cache.put('@acme/tools', '1.0.0', 'code', 'url');
+      await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
       const entry = await cache.get('@acme/tools', '1.0.0');
 
       expect(entry).toBeDefined();
@@ -119,7 +122,7 @@ describe('EsmCacheManager', () => {
 
     it('returns undefined when expired', async () => {
       const shortTtlCache = new EsmCacheManager({ cacheDir, maxAgeMs: 1 });
-      await shortTtlCache.put('@acme/tools', '1.0.0', 'code', 'url');
+      await shortTtlCache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
 
       await new Promise((r) => setTimeout(r, 5));
 
@@ -128,7 +131,7 @@ describe('EsmCacheManager', () => {
     });
 
     it('returns from in-memory cache even when bundle file is deleted from disk', async () => {
-      await cache.put('@acme/tools', '1.0.0', 'code', 'url');
+      await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
       const entry = await cache.get('@acme/tools', '1.0.0');
 
       if (entry) {
@@ -154,9 +157,9 @@ describe('EsmCacheManager', () => {
 
   describe('invalidate()', () => {
     it('removes all versions of a package', async () => {
-      await cache.put('@acme/tools', '1.0.0', 'v1', 'url1');
-      await cache.put('@acme/tools', '2.0.0', 'v2', 'url2');
-      await cache.put('@other/pkg', '1.0.0', 'other', 'url3');
+      await cache.put('@acme/tools', '1.0.0', 'v1', 'https://esm.sh/a');
+      await cache.put('@acme/tools', '2.0.0', 'v2', 'https://esm.sh/b');
+      await cache.put('@other/pkg', '1.0.0', 'other', 'https://esm.sh/c');
 
       await cache.invalidate('@acme/tools');
 
@@ -171,11 +174,11 @@ describe('EsmCacheManager', () => {
     });
 
     it('handles readdir error gracefully', async () => {
-      const { readdir } = jest.requireMock('node:fs/promises') as { readdir: jest.Mock };
+      const { readdir } = jest.requireMock('@frontmcp/utils') as { readdir: jest.Mock };
       readdir.mockRejectedValueOnce(new Error('permission denied'));
 
       // Put something so cacheDir "exists"
-      await cache.put('@acme/tools', '1.0.0', 'v1', 'url1');
+      await cache.put('@acme/tools', '1.0.0', 'v1', 'https://esm.sh/a');
       await expect(cache.invalidate('@acme/tools')).resolves.toBeUndefined();
     });
   });
@@ -183,8 +186,8 @@ describe('EsmCacheManager', () => {
   describe('cleanup()', () => {
     it('removes expired entries and returns count', async () => {
       const shortTtlCache = new EsmCacheManager({ cacheDir, maxAgeMs: 1 });
-      await shortTtlCache.put('@acme/tools', '1.0.0', 'v1', 'url1');
-      await shortTtlCache.put('@acme/tools', '2.0.0', 'v2', 'url2');
+      await shortTtlCache.put('@acme/tools', '1.0.0', 'v1', 'https://esm.sh/a');
+      await shortTtlCache.put('@acme/tools', '2.0.0', 'v2', 'https://esm.sh/b');
 
       await new Promise((r) => setTimeout(r, 5));
 
@@ -193,13 +196,13 @@ describe('EsmCacheManager', () => {
     });
 
     it('does not remove fresh entries', async () => {
-      await cache.put('@acme/tools', '1.0.0', 'v1', 'url1');
+      await cache.put('@acme/tools', '1.0.0', 'v1', 'https://esm.sh/a');
       const removed = await cache.cleanup();
       expect(removed).toBe(0);
     });
 
     it('accepts custom maxAgeMs override', async () => {
-      await cache.put('@acme/tools', '1.0.0', 'v1', 'url1');
+      await cache.put('@acme/tools', '1.0.0', 'v1', 'https://esm.sh/a');
 
       await new Promise((r) => setTimeout(r, 5));
 
@@ -214,10 +217,10 @@ describe('EsmCacheManager', () => {
     });
 
     it('handles readdir error gracefully', async () => {
-      const { readdir } = jest.requireMock('node:fs/promises') as { readdir: jest.Mock };
+      const { readdir } = jest.requireMock('@frontmcp/utils') as { readdir: jest.Mock };
       readdir.mockRejectedValueOnce(new Error('permission denied'));
 
-      await cache.put('@acme/tools', '1.0.0', 'v1', 'url1');
+      await cache.put('@acme/tools', '1.0.0', 'v1', 'https://esm.sh/a');
       const removed = await cache.cleanup();
       expect(removed).toBe(0);
     });
@@ -225,7 +228,7 @@ describe('EsmCacheManager', () => {
 
   describe('readBundle()', () => {
     it('reads content from disk', async () => {
-      const entry = await cache.put('@acme/tools', '1.0.0', 'export default 42;', 'url');
+      const entry = await cache.put('@acme/tools', '1.0.0', 'export default 42;', 'https://esm.sh/x');
       const content = await cache.readBundle(entry);
       expect(content).toBe('export default 42;');
     });

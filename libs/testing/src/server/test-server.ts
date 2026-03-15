@@ -167,7 +167,11 @@ export class TestServer {
     try {
       await server.startProcess();
     } catch (error) {
-      await server.stop(); // Clean up spawned process to prevent leaks
+      try {
+        await server.stop();
+      } catch {
+        // Best-effort cleanup — don't mask the original startup error
+      }
       throw error;
     }
     return server;

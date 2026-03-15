@@ -10,7 +10,7 @@
  * with disk persistence as a second level in Node.js environments.
  */
 
-import { sha256Hex } from '@frontmcp/utils';
+import { sha256Hex, isValidMcpUri } from '@frontmcp/utils';
 
 /**
  * Detect if we're running in a browser environment.
@@ -201,6 +201,10 @@ export class EsmCacheManager {
     packageUrl: string,
     etag?: string,
   ): Promise<EsmCacheEntry> {
+    if (!isValidMcpUri(packageUrl)) {
+      throw new Error('URI must have a valid scheme (e.g., file://, https://, custom://)');
+    }
+
     const memKey = `${packageName}@${version}`;
     let bundlePath = '';
 
@@ -264,7 +268,7 @@ export class EsmCacheManager {
     try {
       const path = require('node:path');
       const { fileExists, readJSON, rm } = require('@frontmcp/utils');
-      const { readdir } = await import('node:fs/promises');
+      const { readdir } = require('@frontmcp/utils');
 
       if (!(await fileExists(this.cacheDir))) {
         return;
@@ -314,7 +318,7 @@ export class EsmCacheManager {
     try {
       const path = require('node:path');
       const { fileExists, readJSON, rm } = require('@frontmcp/utils');
-      const { readdir } = await import('node:fs/promises');
+      const { readdir } = require('@frontmcp/utils');
 
       if (!(await fileExists(this.cacheDir))) {
         return removed;
@@ -349,11 +353,12 @@ export class EsmCacheManager {
    */
   async readBundle(entry: EsmCacheEntry): Promise<string> {
     // In-memory content available (browser or populated cache)
+    // Apply wrapCjsForEsm so output is consistent with the wrapped .mjs on disk
     if (entry.bundleContent) {
-      return entry.bundleContent;
+      return wrapCjsForEsm(entry.bundleContent);
     }
 
-    // Read from disk (Node.js only)
+    // Read from disk (Node.js only) — already wrapped by put()
     const { readFile } = require('@frontmcp/utils');
     return readFile(entry.bundlePath);
   }
