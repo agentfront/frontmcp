@@ -4,6 +4,7 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
+import { sha256Hex } from '@frontmcp/utils';
 import { ServerStartError } from '../errors';
 import { reservePort } from './port-registry';
 
@@ -576,6 +577,10 @@ function ensureWorkspaceProtocolLink(cwd: string, workspacePackageDir: string): 
   }
 }
 
+// NOTE: The helpers below use synchronous node:fs/node:path/node:os because they
+// run in a synchronous code path. @frontmcp/utils only provides async FS wrappers,
+// so native APIs are required here for existsSync, mkdirSync, and symlinkSync.
+
 function withProtocolNodePathAlias(
   env: NodeJS.ProcessEnv,
   cwd: string,
@@ -585,7 +590,9 @@ function withProtocolNodePathAlias(
   const os = require('node:os');
   const path = require('node:path');
 
-  const aliasRoot = path.join(os.tmpdir(), 'frontmcp-test-node-path', Buffer.from(cwd).toString('hex'));
+  // Use a short deterministic hash to avoid Windows 260-char path limits
+  // (Buffer.from(cwd).toString('hex') would produce very long directory names).
+  const aliasRoot = path.join(os.tmpdir(), 'frontmcp-test-node-path', sha256Hex(cwd).slice(0, 12));
   const scopeDir = path.join(aliasRoot, '@frontmcp');
   const aliasPackageDir = path.join(scopeDir, 'protocol');
 
@@ -605,61 +612,46 @@ function withProtocolNodePathAlias(
   };
 }
 
+/**
+ * Walk up from startDir until testFn returns a truthy value, or reach the root.
+ */
+function findUp<T>(startDir: string, testFn: (dir: string) => T | undefined): T | undefined {
+  const path = require('node:path');
+  let currentDir = startDir;
+  while (true) {
+    const result = testFn(currentDir);
+    if (result !== undefined) return result;
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) return undefined;
+    currentDir = parentDir;
+  }
+}
+
 function findWorkspaceProtocolDir(startDir: string): string | undefined {
   const fs = require('node:fs');
   const path = require('node:path');
-
-  let currentDir = startDir;
-  while (true) {
-    const candidate = path.join(currentDir, 'libs', 'protocol');
-    if (fs.existsSync(path.join(candidate, 'dist', 'index.js'))) {
-      return candidate;
-    }
-
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) {
-      return undefined;
-    }
-    currentDir = parentDir;
-  }
+  return findUp(startDir, (dir) => {
+    const candidate = path.join(dir, 'libs', 'protocol');
+    return fs.existsSync(path.join(candidate, 'dist', 'index.js')) ? candidate : undefined;
+  });
 }
 
 function findInstalledProtocolPackageDir(startDir: string): string | undefined {
   const fs = require('node:fs');
   const path = require('node:path');
-
-  let currentDir = startDir;
-  while (true) {
-    const candidate = path.join(currentDir, 'node_modules', '@frontmcp', 'protocol');
-    if (fs.existsSync(path.join(candidate, 'package.json'))) {
-      return candidate;
-    }
-
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) {
-      return undefined;
-    }
-    currentDir = parentDir;
-  }
+  return findUp(startDir, (dir) => {
+    const candidate = path.join(dir, 'node_modules', '@frontmcp', 'protocol');
+    return fs.existsSync(path.join(candidate, 'package.json')) ? candidate : undefined;
+  });
 }
 
 function findWorkspaceScopeDir(startDir: string): string | undefined {
   const fs = require('node:fs');
   const path = require('node:path');
-
-  let currentDir = startDir;
-  while (true) {
-    const candidate = path.join(currentDir, 'node_modules', '@frontmcp');
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) {
-      return undefined;
-    }
-    currentDir = parentDir;
-  }
+  return findUp(startDir, (dir) => {
+    const candidate = path.join(dir, 'node_modules', '@frontmcp');
+    return fs.existsSync(candidate) ? candidate : undefined;
+  });
 }
 
 // Re-export port registry utilities

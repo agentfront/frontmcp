@@ -128,6 +128,9 @@ export class EsmModuleLoader {
 
         // If the disk artifact disappears after a warm cache hit, fall back to the
         // in-memory copy instead of failing the whole load.
+        this.logger?.debug(
+          `importFromPath failed for ${entry.bundlePath}, falling back to in-memory bundle: ${(error as Error).message}`,
+        );
         rawModule = await this.importBundle(entry.bundleContent);
       }
     } else if (entry.bundleContent) {
@@ -221,13 +224,55 @@ export class EsmModuleLoader {
   }
 
   /**
-   * Import a bundle from its source text (browser-compatible).
-   * Uses Function constructor to evaluate CJS bundles in a sandboxed scope.
+   * Import a bundle from its source text.
+   * Detects ESM vs CJS and uses the appropriate evaluation strategy.
    */
   private async importBundle(bundleContent: string): Promise<unknown> {
+    if (this.looksLikeEsm(bundleContent)) {
+      return this.importEsmBundle(bundleContent);
+    }
+    // CJS path: Function constructor with module/exports scope
     const module = { exports: {} as Record<string, unknown> };
     const fn = new Function('module', 'exports', bundleContent);
     fn(module, module.exports);
     return module.exports;
+  }
+
+  /**
+   * Heuristic: content uses ESM export/import syntax at line boundaries.
+   */
+  private looksLikeEsm(content: string): boolean {
+    return /^\s*(export\s|import\s)/m.test(content);
+  }
+
+  /**
+   * Import ESM content via Blob URL (browser) or temp file (Node.js).
+   */
+  private async importEsmBundle(bundleContent: string): Promise<unknown> {
+    // Browser: Blob + URL.createObjectURL + dynamic import
+    if (typeof Blob !== 'undefined' && typeof URL?.createObjectURL === 'function') {
+      const blob = new Blob([bundleContent], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      try {
+        return await import(/* webpackIgnore: true */ url);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    // Node.js: write to temp .mjs file and use native import()
+    const { mkdtemp, writeFile, rm } = await import('@frontmcp/utils');
+    const nodePath = await import('node:path');
+    const nodeOs = await import('node:os');
+    const { pathToFileURL } = await import('node:url');
+
+    const tempDir = await mkdtemp(nodePath.join(nodeOs.tmpdir(), 'frontmcp-esm-'));
+    const tempPath = nodePath.join(tempDir, 'bundle.mjs');
+    try {
+      await writeFile(tempPath, bundleContent);
+      return await import(pathToFileURL(tempPath).href + `?t=${Date.now()}`);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }

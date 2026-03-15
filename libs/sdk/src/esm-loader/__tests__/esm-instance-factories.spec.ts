@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createEsmToolInstance } from '../factories/esm-instance-factories';
 import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
+import type { ToolCallExtra } from '../../common/entries/tool.entry';
 
 describe('esm-instance-factories', () => {
   describe('createEsmToolInstance()', () => {
@@ -31,11 +32,11 @@ describe('esm-instance-factories', () => {
       const parsed = instance.parseInput({
         name: 'esm:echo',
         arguments: { message: 'hello' },
-      } as never);
+      });
 
       expect(parsed).toEqual({ message: 'hello' });
 
-      const ctx = instance.create(parsed, { authInfo: {} as never } as never);
+      const ctx = instance.create(parsed, { authInfo: {} } as ToolCallExtra);
       await ctx.execute(ctx.input);
 
       expect(execute).toHaveBeenCalledWith({ message: 'hello' });
@@ -62,7 +63,7 @@ describe('esm-instance-factories', () => {
       const parsed = instance.parseInput({
         name: 'esm:strict-echo',
         arguments: { message: 'hello', extra: 'ignored' },
-      } as never);
+      });
 
       expect(parsed).toEqual({ message: 'hello' });
     });

@@ -1,5 +1,9 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
+// NOTE: The native Node imports below (fs, child_process, url, util) are required
+// by the importWrappedModule helper which spawns a subprocess to validate real ESM
+// module evaluation. This is an intentional exception to the @frontmcp/utils rule
+// because subprocess-based ESM validation cannot use the mocked utils FS layer.
 import * as fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -54,8 +58,9 @@ jest.mock('@frontmcp/utils', () => ({
   }),
   ensureDir: jest.fn(async () => undefined),
   rm: jest.fn(async (p: string) => {
+    const prefix = p.endsWith(path.sep) ? p : `${p}${path.sep}`;
     for (const key of [...store.keys()]) {
-      if (key.startsWith(p)) store.delete(key);
+      if (key === p || key.startsWith(prefix)) store.delete(key);
     }
   }),
   readdir: jest.fn(async (dirPath: string) => getDirectoryEntries(dirPath)),

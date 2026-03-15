@@ -167,12 +167,26 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
  * POST /_admin/publish — publish a new version at runtime.
  * Body: { "package": "@test/esm-tools", "version": "2.0.0", "bundle": "module.exports = ..." }
  */
+const MAX_ADMIN_BODY_BYTES = 1_048_576; // 1 MB
+
 function handleAdminPublish(req: http.IncomingMessage, res: http.ServerResponse): void {
   let body = '';
+  let bodyBytes = 0;
+  let aborted = false;
   req.on('data', (chunk: Buffer) => {
+    if (aborted) return;
+    bodyBytes += chunk.length;
+    if (bodyBytes > MAX_ADMIN_BODY_BYTES) {
+      aborted = true;
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Payload too large' }));
+      req.destroy();
+      return;
+    }
     body += chunk.toString();
   });
   req.on('end', () => {
+    if (aborted) return;
     try {
       const data = JSON.parse(body) as {
         package: string;

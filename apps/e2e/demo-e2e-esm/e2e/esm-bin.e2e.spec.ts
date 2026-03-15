@@ -65,7 +65,8 @@ describe('ESM CLI/Bin Mode E2E', () => {
   beforeAll(async () => {
     const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
 
-    const esmServerUrl = `http://127.0.0.1:${esmServer!.info.port}`;
+    if (!esmServer) throw new Error('ESM package server was not started');
+    const esmServerUrl = `http://127.0.0.1:${esmServer.info.port}`;
 
     client = await connect(
       {
@@ -132,24 +133,24 @@ describe('ESM CLI/Bin Mode E2E', () => {
     // cache should be project-local
     const hasNodeModules = await fileExists(path.join(process.cwd(), 'node_modules'));
     if (hasNodeModules) {
-      // Project-local cache should have been created by the ESM loader
-      // (may or may not exist depending on whether files were actually cached)
-      log('[TEST] Expected project-local cache dir:', projectCacheDir);
-      // The important thing is that the default logic picks project-local
-      // when node_modules exists
-      expect(hasNodeModules).toBe(true);
+      // Prior tests loaded ESM tools which should have populated the cache
+      const cacheExists = await fileExists(projectCacheDir);
+      log('[TEST] Project-local cache dir:', projectCacheDir, 'exists:', cacheExists);
+      expect(cacheExists).toBe(true);
     } else {
       // If no node_modules (unlikely in this test), homedir should be used
       const homedirCache = path.join(os.homedir(), '.frontmcp', 'esm-cache');
-      log('[TEST] Expected homedir cache dir:', homedirCache);
+      const homedirCacheExists = await fileExists(homedirCache);
+      log('[TEST] Homedir cache dir:', homedirCache, 'exists:', homedirCacheExists);
+      expect(homedirCacheExists).toBe(true);
     }
   });
 
-  it('explicit cacheDir option overrides default', async () => {
+  it('second client with different namespace loads independently', async () => {
     const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
-    const esmServerUrl = `http://127.0.0.1:${esmServer!.info.port}`;
+    if (!esmServer) throw new Error('ESM package server was not started');
+    const esmServerUrl = `http://127.0.0.1:${esmServer.info.port}`;
 
-    // Use explicit cacheDir pointing to temp directory
     const customClient = await connect(
       {
         info: { name: 'ESM CLI Custom Cache', version: '0.1.0' },
