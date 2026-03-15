@@ -38,7 +38,11 @@ function isRemoteAppConfig(item: unknown): item is RemoteAppMetadata {
     return true;
   }
   // For url/worker types, require a valid URI scheme
-  return isValidMcpUri(obj['url']);
+  if (obj['urlType'] === 'url' || obj['urlType'] === 'worker') {
+    return isValidMcpUri(obj['url']);
+  }
+  // Unknown urlType — reject
+  return false;
 }
 
 /**

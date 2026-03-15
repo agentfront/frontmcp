@@ -1,12 +1,12 @@
 import 'reflect-metadata';
 import { normalizeApp } from '../app.utils';
-import { AppKind } from '../../common';
+import { AppKind, AppType } from '../../common';
 import { MissingProvideError } from '../../errors';
 
 describe('normalizeApp', () => {
   it('should recognize npm remote app with package specifier (no URI scheme)', () => {
     const input = { name: '@test/esm-tools', urlType: 'npm', url: '@test/esm-tools@^1.0.0', standalone: false };
-    const result = normalizeApp(input as any);
+    const result = normalizeApp(input as AppType);
 
     expect(result.kind).toBe(AppKind.REMOTE_VALUE);
     expect(result.metadata).toMatchObject({ name: '@test/esm-tools', urlType: 'npm' });
@@ -14,7 +14,7 @@ describe('normalizeApp', () => {
 
   it('should recognize esm remote app with package specifier', () => {
     const input = { name: '@test/esm-mod', urlType: 'esm', url: '@test/esm-mod@latest', standalone: false };
-    const result = normalizeApp(input as any);
+    const result = normalizeApp(input as AppType);
 
     expect(result.kind).toBe(AppKind.REMOTE_VALUE);
     expect(result.metadata).toMatchObject({ name: '@test/esm-mod', urlType: 'esm' });
@@ -22,7 +22,7 @@ describe('normalizeApp', () => {
 
   it('should recognize url remote app with valid URI', () => {
     const input = { name: 'remote-server', urlType: 'url', url: 'https://api.example.com/mcp', standalone: false };
-    const result = normalizeApp(input as any);
+    const result = normalizeApp(input as AppType);
 
     expect(result.kind).toBe(AppKind.REMOTE_VALUE);
     expect(result.metadata).toMatchObject({ name: 'remote-server', urlType: 'url' });
@@ -30,7 +30,7 @@ describe('normalizeApp', () => {
 
   it('should recognize worker remote app with valid URI', () => {
     const input = { name: 'worker-app', urlType: 'worker', url: 'file://./workers/app.js', standalone: false };
-    const result = normalizeApp(input as any);
+    const result = normalizeApp(input as AppType);
 
     expect(result.kind).toBe(AppKind.REMOTE_VALUE);
     expect(result.metadata).toMatchObject({ name: 'worker-app', urlType: 'worker' });
@@ -38,12 +38,12 @@ describe('normalizeApp', () => {
 
   it('should throw MissingProvideError for object without provide', () => {
     const input = { name: 'bad-app', foo: 'bar' };
-    expect(() => normalizeApp(input as any)).toThrow(MissingProvideError);
+    expect(() => normalizeApp(input as AppType)).toThrow(MissingProvideError);
   });
 
   it('should use id over name for remote app symbol token', () => {
     const input = { id: 'custom-id', name: '@test/pkg', urlType: 'npm', url: '@test/pkg@^1.0.0', standalone: false };
-    const result = normalizeApp(input as any);
+    const result = normalizeApp(input as AppType);
 
     expect(result.kind).toBe(AppKind.REMOTE_VALUE);
     expect(result.provide.toString()).toContain('custom-id');
@@ -51,7 +51,13 @@ describe('normalizeApp', () => {
 
   it('should reject url type with invalid URI', () => {
     const input = { name: 'bad-url', urlType: 'url', url: 'not-a-valid-uri', standalone: false };
-    // Falls through isRemoteAppConfig since url has no scheme, hits the generic handler
-    expect(() => normalizeApp(input as any)).toThrow();
+    // Falls through isRemoteAppConfig since url has no scheme, hits the generic handler missing 'provide'
+    expect(() => normalizeApp(input as AppType)).toThrow(MissingProvideError);
+  });
+
+  it('should reject unknown urlType even with valid URI', () => {
+    const input = { name: 'unknown', urlType: 'foo', url: 'https://example.com', standalone: false };
+    // Unknown urlType rejected by isRemoteAppConfig, falls through to generic handler missing 'provide'
+    expect(() => normalizeApp(input as AppType)).toThrow(MissingProvideError);
   });
 });

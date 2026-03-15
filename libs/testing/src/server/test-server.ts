@@ -98,18 +98,40 @@ export class TestServer {
    * Start a test server with custom command
    */
   static async start(options: TestServerOptions): Promise<TestServer> {
-    // Use port registry for allocation
     const project = options.project ?? 'default';
-    const { port, release } = await reservePort(project, options.port);
+    const maxAttempts = 3;
 
-    const server = new TestServer(options, port, release);
-    try {
-      await server.startProcess();
-    } catch (error) {
-      await server.stop(); // Clean up spawned process to prevent leaks
-      throw error;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { port, release } = await reservePort(project, options.port);
+      const server = new TestServer(options, port, release);
+
+      try {
+        await server.startProcess();
+        return server;
+      } catch (error) {
+        await server.stop();
+
+        const isEADDRINUSE =
+          error instanceof Error &&
+          (error.message.includes('EADDRINUSE') || server.getLogs().some((l) => l.includes('EADDRINUSE')));
+
+        if (isEADDRINUSE && attempt < maxAttempts) {
+          const delayMs = attempt * 500;
+          if (options.debug || DEBUG_SERVER) {
+            console.warn(
+              `[TestServer] EADDRINUSE on port ${port}, retrying in ${delayMs}ms (attempt ${attempt}/${maxAttempts})`,
+            );
+          }
+          await sleep(delayMs);
+          continue;
+        }
+
+        throw error;
+      }
     }
-    return server;
+
+    // Unreachable, but TypeScript requires a return
+    throw new Error(`[TestServer] Failed to start after ${maxAttempts} attempts`);
   }
 
   /**
