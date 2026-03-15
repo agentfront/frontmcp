@@ -160,6 +160,19 @@ describe('EsmCacheManager', () => {
       expect(entry.resolvedVersion).toBe('1.0.0');
     });
 
+    it('returns entry from disk when memory cache is cold', async () => {
+      await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
+
+      // Create a fresh manager pointing at the same cacheDir — empty memoryStore
+      const freshCache = new EsmCacheManager({ cacheDir, maxAgeMs: 60_000 });
+      const entry = await freshCache.get('@acme/tools', '1.0.0');
+
+      expect(entry).toBeDefined();
+      if (!entry) throw new Error('expected cache entry from disk');
+      expect(entry.packageName).toBe('@acme/tools');
+      expect(entry.resolvedVersion).toBe('1.0.0');
+    });
+
     it('returns undefined when not cached', async () => {
       const entry = await cache.get('@acme/tools', '1.0.0');
       expect(entry).toBeUndefined();
@@ -273,10 +286,22 @@ describe('EsmCacheManager', () => {
   });
 
   describe('readBundle()', () => {
-    it('reads content from disk', async () => {
+    it('reads content from in-memory entry', async () => {
       const entry = await cache.put('@acme/tools', '1.0.0', 'export default 42;', 'https://esm.sh/x');
       const content = await cache.readBundle(entry);
       expect(content).toBe('export default 42;');
+    });
+
+    it('reads content from disk when bundleContent is absent', async () => {
+      const entry = await cache.put('@acme/tools', '1.0.0', 'export default 42;', 'https://esm.sh/x');
+
+      // Simulate a cold entry with no in-memory content
+      const coldEntry = { ...entry, bundleContent: undefined };
+      const content = await cache.readBundle(coldEntry);
+
+      // Disk content is the wrapped/cached version written by put()
+      expect(content).toBeDefined();
+      expect(typeof content).toBe('string');
     });
 
     it('returns the same bridged source for in-memory CJS content as the disk cache', async () => {

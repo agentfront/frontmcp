@@ -597,8 +597,13 @@ function withProtocolNodePathAlias(
   const aliasPackageDir = path.join(scopeDir, 'protocol');
 
   fs.mkdirSync(scopeDir, { recursive: true });
-  if (!fs.existsSync(aliasPackageDir)) {
-    fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
+  try {
+    if (!fs.existsSync(aliasPackageDir)) {
+      fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== 'EEXIST') throw error;
   }
 
   const existingNodePath = env['NODE_PATH'];

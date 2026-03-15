@@ -118,23 +118,37 @@ module.exports = {
 // PACKAGE REGISTRY
 // ═══════════════════════════════════════════════════════════════════
 
+interface VersionEntry {
+  bundle: string;
+  publishedAt: string;
+  etag: string;
+}
+
 interface PackageEntry {
   name: string;
-  versions: Record<string, { bundle: string }>;
+  versions: Record<string, VersionEntry>;
   'dist-tags': Record<string, string>;
+}
+
+function createVersionEntry(packageName: string, version: string, bundle: string): VersionEntry {
+  return {
+    bundle,
+    publishedAt: new Date().toISOString(),
+    etag: `"${packageName}@${version}:${Date.now()}"`,
+  };
 }
 
 const packages = new Map<string, PackageEntry>();
 
 packages.set('@test/esm-tools', {
   name: '@test/esm-tools',
-  versions: { '1.0.0': { bundle: ESM_TOOLS_BUNDLE } },
+  versions: { '1.0.0': createVersionEntry('@test/esm-tools', '1.0.0', ESM_TOOLS_BUNDLE) },
   'dist-tags': { latest: '1.0.0' },
 });
 
 packages.set('@test/esm-multi', {
   name: '@test/esm-multi',
-  versions: { '1.0.0': { bundle: ESM_MULTI_BUNDLE } },
+  versions: { '1.0.0': createVersionEntry('@test/esm-multi', '1.0.0', ESM_MULTI_BUNDLE) },
   'dist-tags': { latest: '1.0.0' },
 });
 
@@ -145,7 +159,14 @@ packages.set('@test/esm-multi', {
 function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
   const url = req.url ?? '/';
   const urlObj = new URL(url, `http://127.0.0.1:${port}`);
-  const pathname = decodeURIComponent(urlObj.pathname).slice(1); // Remove leading /
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(urlObj.pathname).slice(1); // Remove leading /
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid URL encoding' }));
+    return;
+  }
 
   // Admin endpoint for runtime publishing (used by hot-reload E2E tests)
   if (req.method === 'POST' && pathname === '_admin/publish') {
@@ -210,7 +231,7 @@ function handleAdminPublish(req: http.IncomingMessage, res: http.ServerResponse)
         packages.set(data.package, pkg);
       }
 
-      pkg.versions[data.version] = { bundle: data.bundle };
+      pkg.versions[data.version] = createVersionEntry(data.package, data.version, data.bundle);
       pkg['dist-tags']['latest'] = data.version;
 
       console.log(`[admin] Published ${data.package}@${data.version}`);
@@ -235,9 +256,9 @@ function serveRegistryRequest(res: http.ServerResponse, packageName: string): vo
   const versions: Record<string, unknown> = {};
   const time: Record<string, string> = {};
 
-  for (const ver of Object.keys(pkg.versions)) {
+  for (const [ver, entry] of Object.entries(pkg.versions)) {
     versions[ver] = { version: ver, name: pkg.name };
-    time[ver] = new Date().toISOString();
+    time[ver] = entry.publishedAt;
   }
 
   const registryData = {
@@ -268,7 +289,7 @@ function serveBundleRequest(res: http.ServerResponse, packageName: string, versi
 
   res.writeHead(200, {
     'Content-Type': 'application/javascript',
-    ETag: `"${packageName}@${version}"`,
+    ETag: versionEntry.etag,
   });
   res.end(versionEntry.bundle);
 }
