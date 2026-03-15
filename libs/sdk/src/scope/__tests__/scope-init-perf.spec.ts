@@ -141,6 +141,9 @@ describe('Scope initialization performance', () => {
         `Lite: ${liteMs.toFixed(2)}ms | Full: ${fullMs.toFixed(2)}ms | Ratio: ${(liteMs / fullMs).toFixed(2)}x`,
       );
     }
+
+    // Guard against catastrophic regression — lite should not be 10x slower than full
+    expect(liteMs).toBeLessThanOrEqual(fullMs * 10);
   });
 
   it('ToolEntry should cache getInputJsonSchema result', () => {

@@ -22,19 +22,23 @@ export function collectAppMetadata(cls: AppType): LocalAppMetadata {
 
 /**
  * Check if an object is a remote app configuration.
- * Validates that url is a valid MCP URI per RFC 3986.
+ * For npm/esm urlTypes the url is a package specifier (no scheme required).
+ * For url/worker urlTypes the url must have a valid URI scheme per RFC 3986.
  */
 function isRemoteAppConfig(item: unknown): item is RemoteAppMetadata {
   if (!item || typeof item !== 'object') {
     return false;
   }
   const obj = item as Record<string, unknown>;
-  return (
-    typeof obj['urlType'] === 'string' &&
-    typeof obj['url'] === 'string' &&
-    isValidMcpUri(obj['url']) &&
-    typeof obj['name'] === 'string'
-  );
+  if (typeof obj['urlType'] !== 'string' || typeof obj['url'] !== 'string' || typeof obj['name'] !== 'string') {
+    return false;
+  }
+  // For npm/esm urlTypes, url is a package specifier (no scheme required)
+  if (obj['urlType'] === 'npm' || obj['urlType'] === 'esm') {
+    return true;
+  }
+  // For url/worker types, require a valid URI scheme
+  return isValidMcpUri(obj['url']);
 }
 
 /**
