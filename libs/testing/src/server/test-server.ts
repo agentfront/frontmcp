@@ -572,7 +572,12 @@ function withWorkspaceProtocolFallback(env: NodeJS.ProcessEnv, cwd: string): Nod
     }
 
     return withProtocolNodePathAlias(env, cwd, workspacePackageDir);
-  } catch {
+  } catch (err) {
+    if (DEBUG_SERVER) {
+      console.error(
+        `[TestServer] Workspace protocol fallback failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     return env;
   }
 }

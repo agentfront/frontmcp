@@ -15,7 +15,8 @@
 
 import * as http from 'node:http';
 
-const port = parseInt(process.env['PORT'] ?? process.env['ESM_SERVER_PORT'] ?? '50400', 10);
+const rawPort = parseInt(process.env['PORT'] ?? process.env['ESM_SERVER_PORT'] ?? '50400', 10);
+const port = Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : 50400;
 
 // ═══════════════════════════════════════════════════════════════════
 // FIXTURE BUNDLES (CJS format — the cache bridge unwraps the nested default on import)
@@ -194,6 +195,15 @@ function handleAdminPublish(req: http.IncomingMessage, res: http.ServerResponse)
   const chunks: Buffer[] = [];
   let bodyBytes = 0;
   let aborted = false;
+  req.on('error', () => {
+    if (!aborted) {
+      aborted = true;
+      if (!res.headersSent) {
+        res.writeHead(499, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Client disconnected' }));
+      }
+    }
+  });
   req.on('data', (chunk: Buffer) => {
     if (aborted) return;
     bodyBytes += chunk.length;
@@ -300,6 +310,15 @@ function serveBundleRequest(res: http.ServerResponse, packageName: string, versi
 // ═══════════════════════════════════════════════════════════════════
 
 const server = http.createServer(handleRequest);
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Packages: ${[...packages.keys()].join(', ')}`);
+  } else {
+    console.error(`Server error: ${err.message}`);
+  }
+  process.exit(1);
+});
 
 server.listen(port, '127.0.0.1', () => {
   const baseUrl = `http://127.0.0.1:${port}`;
