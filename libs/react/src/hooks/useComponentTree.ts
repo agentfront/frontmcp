@@ -30,7 +30,7 @@ interface TreeNode {
   props?: Record<string, string>;
 }
 
-function walkDom(element: Element, maxDepth: number, includeProps: boolean, depth: number = 0): TreeNode | null {
+function walkDom(element: Element, maxDepth: number, includeProps: boolean, depth = 0): TreeNode | null {
   if (depth > maxDepth) return null;
 
   const component = element.getAttribute('data-component') ?? undefined;
