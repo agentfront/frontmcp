@@ -224,10 +224,10 @@ describe('EsmModuleLoader', () => {
       await expect(loader.load(specifier)).rejects.toThrow('Failed to fetch ESM bundle');
     });
 
-    it('uses custom esmShBaseUrl in fetch URL', async () => {
+    it('uses custom esmBaseUrl in fetch URL', async () => {
       const customLoader = new EsmModuleLoader({
         cache: mockCache,
-        esmShBaseUrl: 'https://my-esm.example.com',
+        esmBaseUrl: 'https://my-esm.example.com',
       });
 
       mockCache.get.mockResolvedValue(undefined);

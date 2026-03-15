@@ -44,8 +44,8 @@ export interface EsmModuleLoaderOptions {
   timeout?: number;
   /** Logger instance */
   logger?: FrontMcpLogger;
-  /** Custom esm.sh base URL */
-  esmShBaseUrl?: string;
+  /** Custom ESM CDN base URL */
+  esmBaseUrl?: string;
 }
 
 /**
@@ -64,13 +64,13 @@ export class EsmModuleLoader {
   private readonly versionResolver: VersionResolver;
   private readonly timeout: number;
   private readonly logger?: FrontMcpLogger;
-  private readonly esmShBaseUrl?: string;
+  private readonly esmBaseUrl?: string;
 
   constructor(options: EsmModuleLoaderOptions) {
     this.cache = options.cache;
     this.timeout = options.timeout ?? 30000;
     this.logger = options.logger;
-    this.esmShBaseUrl = options.esmShBaseUrl;
+    this.esmBaseUrl = options.esmBaseUrl;
     this.versionResolver = new VersionResolver({
       registryAuth: options.registryAuth,
       timeout: options.timeout,
@@ -153,7 +153,7 @@ export class EsmModuleLoader {
    */
   private async fetchAndCache(specifier: ParsedPackageSpecifier, resolvedVersion: string): Promise<EsmLoadResult> {
     const url = buildEsmShUrl(specifier, resolvedVersion, {
-      baseUrl: this.esmShBaseUrl,
+      baseUrl: this.esmBaseUrl,
       bundle: true,
     });
 

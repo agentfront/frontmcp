@@ -224,7 +224,7 @@ describe('ESM Loader E2E', () => {
       const loader = new EsmModuleLoader({
         cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
         registryAuth: { registryUrl },
-        esmShBaseUrl: esmBaseUrl,
+        esmBaseUrl,
       });
 
       const specifier = parsePackageSpecifier('@test/simple-tools@1.0.0');
@@ -243,14 +243,14 @@ describe('ESM Loader E2E', () => {
       const firstLoader = new EsmModuleLoader({
         cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
         registryAuth: { registryUrl },
-        esmShBaseUrl: esmBaseUrl,
+        esmBaseUrl,
       });
       await firstLoader.load(specifier);
 
       const cachedLoader = new EsmModuleLoader({
         cache: new EsmCacheManager({ cacheDir: tmpCacheDir, maxAgeMs: 60_000 }),
         registryAuth: { registryUrl },
-        esmShBaseUrl: esmBaseUrl,
+        esmBaseUrl,
       });
 
       const cachedResult = await cachedLoader.load(specifier);
@@ -521,7 +521,7 @@ describe('ESM Loader E2E', () => {
   });
 
   describe('Custom base URL for on-premise', () => {
-    it('custom esmShBaseUrl pointing to local server works', async () => {
+    it('custom esmBaseUrl pointing to local server works', async () => {
       const bundleUrl = `${esmBaseUrl}/@test/simple-tools@1.0.0?bundle`;
       const response = await fetch(bundleUrl);
 

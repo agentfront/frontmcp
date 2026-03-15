@@ -184,7 +184,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const mergedLoader = appConfig?.loader ?? scopeMetadata.loader;
 
     const registryAuth = this.deriveRegistryAuth(mergedLoader);
-    const esmShBaseUrl = mergedLoader?.url;
+    const esmBaseUrl = mergedLoader?.url;
 
     // Initialize the ESM module loader with cache
     const cache = new EsmCacheManager({
@@ -195,7 +195,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       cache,
       registryAuth,
       logger: scopeProviders.getActiveScope().logger,
-      esmShBaseUrl,
+      esmBaseUrl,
     });
 
     // Initialize standard registries (empty initially - populated on load)
