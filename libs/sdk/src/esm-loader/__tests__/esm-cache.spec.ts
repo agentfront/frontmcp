@@ -10,11 +10,11 @@ const store = new Map<string, string>();
 // Track directories implicitly from stored file paths
 function getDirectoryEntries(dirPath: string): string[] {
   const entries = new Set<string>();
-  const prefix = dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
+  const prefix = dirPath.endsWith(path.sep) ? dirPath : `${dirPath}${path.sep}`;
   for (const key of store.keys()) {
     if (key.startsWith(prefix)) {
       const rest = key.slice(prefix.length);
-      const firstSegment = rest.split('/')[0];
+      const firstSegment = rest.split(path.sep)[0];
       if (firstSegment) entries.add(firstSegment);
     }
   }
@@ -22,7 +22,7 @@ function getDirectoryEntries(dirPath: string): string[] {
 }
 
 function hasEntriesUnder(dirPath: string): boolean {
-  const prefix = dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
+  const prefix = dirPath.endsWith(path.sep) ? dirPath : `${dirPath}${path.sep}`;
   for (const key of store.keys()) {
     if (key.startsWith(prefix)) return true;
   }
@@ -111,8 +111,9 @@ describe('EsmCacheManager', () => {
       const entry = await cache.get('@acme/tools', '1.0.0');
 
       expect(entry).toBeDefined();
-      expect(entry!.packageName).toBe('@acme/tools');
-      expect(entry!.resolvedVersion).toBe('1.0.0');
+      if (!entry) throw new Error('expected cache entry');
+      expect(entry.packageName).toBe('@acme/tools');
+      expect(entry.resolvedVersion).toBe('1.0.0');
     });
 
     it('returns undefined when not cached', async () => {
@@ -141,7 +142,8 @@ describe('EsmCacheManager', () => {
       // In-memory cache still has the entry (with bundleContent)
       const result = await cache.get('@acme/tools', '1.0.0');
       expect(result).toBeDefined();
-      expect(result!.bundleContent).toBe('code');
+      if (!result) throw new Error('expected cache entry');
+      expect(result.bundleContent).toBe('code');
     });
 
     it('returns undefined when meta.json is empty/null', async () => {
