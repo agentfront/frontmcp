@@ -150,7 +150,7 @@ export class VersionResolver {
  * '@scope/name' -> '@scope%2fname'
  */
 function encodePackageName(name: string): string {
-  return name.replace('/', '%2f');
+  return name.replace(/\//g, '%2f');
 }
 
 /**

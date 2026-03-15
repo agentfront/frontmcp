@@ -517,9 +517,15 @@ export class AgentInstance<
 
       case AgentKind.FACTORY:
         return this.record.useFactory(this.providers) as AgentContext<InSchema, OutSchema, In, Out>;
+
+      case AgentKind.ESM:
+        throw new AgentNotConfiguredError(`ESM agent "${this.name}" cannot be created via AgentInstance.create()`);
+
+      default: {
+        const _exhaustive: never = this.record;
+        throw new Error(`Unknown agent kind: ${(_exhaustive as { kind: string }).kind}`);
+      }
     }
-    // Note: TypeScript already ensures exhaustiveness through AgentKind enum.
-    // The switch covers all AgentKind values, so this point is unreachable.
   }
 
   /**

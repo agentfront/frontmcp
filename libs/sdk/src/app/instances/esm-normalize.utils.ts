@@ -29,14 +29,14 @@ export function isDecoratedToolClass(raw: unknown): boolean {
  * Check if a raw ESM export is a class decorated with @Resource.
  */
 export function isDecoratedResourceClass(raw: unknown): boolean {
-  return isClass(raw) && !!getMetadata(FrontMcpResourceTokens.type, raw);
+  return isClass(raw) && getMetadata(FrontMcpResourceTokens.type, raw) === true;
 }
 
 /**
  * Check if a raw ESM export is a class decorated with @Prompt.
  */
 export function isDecoratedPromptClass(raw: unknown): boolean {
-  return isClass(raw) && !!getMetadata(FrontMcpPromptTokens.type, raw);
+  return isClass(raw) && getMetadata(FrontMcpPromptTokens.type, raw) === true;
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -213,7 +213,6 @@ export class EsmModuleLoader {
    */
   private async importBundle(bundleContent: string): Promise<unknown> {
     const module = { exports: {} as Record<string, unknown> };
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const fn = new Function('module', 'exports', bundleContent);
     fn(module, module.exports);
     return module.exports;

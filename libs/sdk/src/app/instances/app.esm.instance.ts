@@ -154,6 +154,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private readonly specifier: ParsedPackageSpecifier;
   private poller?: VersionPoller;
   private loadResult?: EsmLoadResult;
+  private updateInProgress = false;
 
   // Standard registries
   private readonly _tools: ToolRegistry;
@@ -182,14 +183,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const appConfig = this.metadata.packageConfig;
     const mergedLoader = appConfig?.loader ?? scopeMetadata.loader;
 
-    // Map public PackageLoader → internal EsmRegistryAuth + esmShBaseUrl
-    const registryAuth: EsmRegistryAuth | undefined = mergedLoader
-      ? {
-          registryUrl: mergedLoader.registryUrl ?? mergedLoader.url,
-          token: mergedLoader.token,
-          tokenEnvVar: mergedLoader.tokenEnvVar,
-        }
-      : undefined;
+    const registryAuth = this.deriveRegistryAuth(mergedLoader);
     const esmShBaseUrl = mergedLoader?.url;
 
     // Initialize the ESM module loader with cache
@@ -236,20 +230,12 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       // Start version poller if auto-update is enabled
       const autoUpdate = this.metadata.packageConfig?.autoUpdate;
       if (autoUpdate?.enabled) {
-        // Re-derive registryAuth from merged loader for the poller
         const scopeMeta = this.scopeProviders.getActiveScope().metadata;
         const pollerLoader = this.metadata.packageConfig?.loader ?? scopeMeta.loader;
-        const pollerRegistryAuth: EsmRegistryAuth | undefined = pollerLoader
-          ? {
-              registryUrl: pollerLoader.registryUrl ?? pollerLoader.url,
-              token: pollerLoader.token,
-              tokenEnvVar: pollerLoader.tokenEnvVar,
-            }
-          : undefined;
 
         this.poller = new VersionPoller({
           intervalMs: autoUpdate.intervalMs,
-          registryAuth: pollerRegistryAuth,
+          registryAuth: this.deriveRegistryAuth(pollerLoader),
           logger,
           onNewVersion: (pkg, oldVer, newVer) => this.handleVersionUpdate(pkg, oldVer, newVer),
         });
@@ -431,6 +417,13 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
    */
   private async handleVersionUpdate(_packageName: string, oldVersion: string, newVersion: string): Promise<void> {
     const logger = this.scopeProviders.getActiveScope().logger;
+
+    if (this.updateInProgress) {
+      logger.warn(`Update already in progress for ${this.id}, skipping ${newVersion}`);
+      return;
+    }
+    this.updateInProgress = true;
+
     logger.info(`Updating ESM app ${this.id}: ${oldVersion} → ${newVersion}`);
 
     try {
@@ -448,6 +441,26 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       logger.info(`ESM app ${this.id} updated to ${newVersion}`);
     } catch (error) {
       logger.error(`Failed to update ESM app ${this.id} to ${newVersion}: ${(error as Error).message}`);
+    } finally {
+      this.updateInProgress = false;
     }
+  }
+
+  /**
+   * Map a public PackageLoader config to internal EsmRegistryAuth.
+   */
+  private deriveRegistryAuth(loader?: {
+    url?: string;
+    registryUrl?: string;
+    token?: string;
+    tokenEnvVar?: string;
+  }): EsmRegistryAuth | undefined {
+    return loader
+      ? {
+          registryUrl: loader.registryUrl ?? loader.url,
+          token: loader.token,
+          tokenEnvVar: loader.tokenEnvVar,
+        }
+      : undefined;
   }
 }

@@ -155,7 +155,7 @@ describe('ESM Class-Based Registration', () => {
       // Plain goes through normalizeToolFromEsmExport
       const def = normalizeToolFromEsmExport(plain[0]);
       expect(def).toBeDefined();
-      expect(def!.name).toBe('plain');
+      expect(def?.name).toBe('plain');
     });
   });
 

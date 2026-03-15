@@ -73,7 +73,6 @@ function getDefaultCacheDir(): string {
     // to resolve bare specifiers through the project's node_modules tree.
     try {
       const nodeModulesDir = path.join(process.cwd(), 'node_modules');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require('node:fs');
       if (fs.existsSync(nodeModulesDir)) {
         return path.join(nodeModulesDir, '.cache', 'frontmcp-esm');
@@ -153,7 +152,7 @@ export class EsmCacheManager {
         return undefined;
       }
 
-      const meta = await readJSON<EsmCacheEntry>(metaPath);
+      const meta = await (readJSON as (p: string) => Promise<EsmCacheEntry | null>)(metaPath);
       if (!meta) {
         return undefined;
       }
@@ -263,7 +262,7 @@ export class EsmCacheManager {
       for (const dirEntry of entries) {
         const metaPath = path.join(this.cacheDir, dirEntry, 'meta.json');
         if (await fileExists(metaPath)) {
-          const meta = await readJSON<EsmCacheEntry>(metaPath);
+          const meta = await (readJSON as (p: string) => Promise<EsmCacheEntry | null>)(metaPath);
           if (meta?.packageName === packageName) {
             await rm(path.join(this.cacheDir, dirEntry), { recursive: true, force: true });
           }
@@ -313,7 +312,7 @@ export class EsmCacheManager {
       for (const dirEntry of entries) {
         const metaPath = path.join(this.cacheDir, dirEntry, 'meta.json');
         if (await fileExists(metaPath)) {
-          const meta = await readJSON<EsmCacheEntry>(metaPath);
+          const meta = await (readJSON as (p: string) => Promise<EsmCacheEntry | null>)(metaPath);
           if (meta && now - meta.cachedAt > threshold) {
             await rm(path.join(this.cacheDir, dirEntry), { recursive: true, force: true });
             removed++;

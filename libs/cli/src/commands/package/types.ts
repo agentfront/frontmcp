@@ -44,13 +44,13 @@ export function parseInstallSource(source: string): InstallSource {
     return { type: 'local', ref: source };
   }
 
-  if (source.startsWith('github:') || source.startsWith('git+') || source.endsWith('.git')) {
-    return { type: 'git', ref: source };
-  }
-
-  // ESM sources: explicit esm.sh URL or esm: prefix
+  // ESM sources: explicit esm.sh URL or esm: prefix (checked before git to avoid esm:...pkg.git misclassification)
   if (source.startsWith('https://esm.sh/') || source.startsWith('esm:')) {
     return { type: 'esm', ref: source.replace(/^esm:/, '') };
+  }
+
+  if (source.startsWith('github:') || source.startsWith('git+') || source.endsWith('.git')) {
+    return { type: 'git', ref: source };
   }
 
   return { type: 'npm', ref: source };

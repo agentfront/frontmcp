@@ -13,8 +13,8 @@
  */
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { ESM_SERVER_PORT } from './helpers';
 
-const ESM_SERVER_PORT = 50413;
 let esmServerProcess: ChildProcess | null = null;
 
 // Start local ESM package server before all tests
@@ -53,7 +53,11 @@ test.beforeAll(async () => {
 // Stop ESM package server after all tests
 test.afterAll(async () => {
   if (esmServerProcess) {
-    esmServerProcess.kill('SIGTERM');
+    try {
+      esmServerProcess.kill('SIGTERM');
+    } catch {
+      // Process may have already exited
+    }
     esmServerProcess = null;
   }
 });

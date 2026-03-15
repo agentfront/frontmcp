@@ -95,7 +95,7 @@ export function isSkillRecord(item: unknown): item is SkillRecord {
   }
 
   // Validate kind is one of the allowed values
-  const validKinds = [SkillKind.CLASS_TOKEN, SkillKind.VALUE, SkillKind.FILE];
+  const validKinds = [SkillKind.CLASS_TOKEN, SkillKind.VALUE, SkillKind.FILE, SkillKind.ESM];
   if (!validKinds.includes(record['kind'] as SkillKind)) {
     return false;
   }

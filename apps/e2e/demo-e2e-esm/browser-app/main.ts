@@ -33,9 +33,12 @@ declare global {
 }
 
 async function main(): Promise<void> {
-  const app = document.getElementById('app')!;
+  const app = document.getElementById('app');
 
   try {
+    if (!app) {
+      throw new Error('Missing #app root element');
+    }
     app.textContent = 'Connecting to FrontMCP...';
 
     // Boot a FULL FrontMCP instance in the browser via DirectClient
@@ -101,7 +104,9 @@ async function main(): Promise<void> {
       error: (err as Error).message + '\n' + (err as Error).stack,
     };
     window.__ESM_RESULTS__ = results;
-    app.textContent = 'Error: ' + (err as Error).message;
+    if (app) {
+      app.textContent = 'Error: ' + (err as Error).message;
+    }
     console.error('FrontMCP browser ESM error:', err);
   }
 }

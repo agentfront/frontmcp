@@ -27,7 +27,7 @@ export function registerEsmUpdateCommand(program: Command): void {
     .option('--check-only', 'Only check for updates without applying them', false)
     .option('--all', 'Update all ESM-installed apps', false)
     .action(async (appName: string | undefined, opts: { checkOnly: boolean; all: boolean }) => {
-      const { EsmCacheManager, EsmModuleLoader, VersionPoller, parsePackageSpecifier } = await import('@frontmcp/sdk');
+      const { EsmCacheManager, EsmModuleLoader, parsePackageSpecifier } = await import('@frontmcp/sdk');
 
       const registry = readRegistry();
       if (!registry) {

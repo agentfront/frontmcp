@@ -112,14 +112,6 @@ describe('EsmModuleLoader', () => {
         ok: true,
         status: 200,
         text: async () => bundleContent,
-        headers: new Map([['etag', '"abc"']]),
-      });
-
-      // Mock headers.get
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: async () => bundleContent,
         headers: { get: (key: string) => (key === 'etag' ? '"abc"' : null) },
       });
 

@@ -101,7 +101,7 @@ export function buildEsmToolRecord(tool: EsmToolDefinition, namespace?: string):
     name: toolName,
     id: toolName,
     description: tool.description ?? `ESM tool: ${tool.name}`,
-    inputSchema,
+    inputSchema: inputSchema as ToolMetadata['inputSchema'],
     rawInputSchema,
     outputSchema: 'json' as ToolMetadata['outputSchema'],
     annotations: {
