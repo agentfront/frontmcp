@@ -587,4 +587,160 @@ describe('parseOpenApiSpec', () => {
       expect(parseOpenApiSpec(spec)).toEqual([]);
     });
   });
+
+  // ─── Path-level parameter merging ──────────────────────────────────────
+
+  describe('path-level parameter merging', () => {
+    it('merges path-level parameters into operations', () => {
+      const spec = {
+        paths: {
+          '/users/{id}': {
+            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+            get: { operationId: 'getUser', summary: 'Get user' },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      const props = ops[0].inputSchema.properties as Record<string, unknown>;
+      expect(props).toHaveProperty('id');
+      expect(ops[0].inputSchema.required).toEqual(['id']);
+    });
+
+    it('operation-level parameters override path-level with same name+in', () => {
+      const spec = {
+        paths: {
+          '/items/{id}': {
+            parameters: [
+              { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Path level' },
+            ],
+            get: {
+              operationId: 'getItem',
+              parameters: [
+                { name: 'id', in: 'path', required: true, schema: { type: 'integer' }, description: 'Op level' },
+              ],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      const props = ops[0].inputSchema.properties as Record<string, Record<string, unknown>>;
+      expect(props.id).toEqual({ type: 'integer', description: 'Op level' });
+    });
+
+    it('merges both path-level and operation-level parameters', () => {
+      const spec = {
+        paths: {
+          '/orgs/{orgId}/users/{userId}': {
+            parameters: [{ name: 'orgId', in: 'path', required: true, schema: { type: 'string' } }],
+            get: {
+              operationId: 'getOrgUser',
+              parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      const props = ops[0].inputSchema.properties as Record<string, unknown>;
+      expect(Object.keys(props)).toEqual(['orgId', 'userId']);
+      expect(ops[0].inputSchema.required).toEqual(['orgId', 'userId']);
+    });
+
+    it('handles non-array path-level parameters gracefully', () => {
+      const spec = {
+        paths: {
+          '/x': {
+            parameters: 'not-an-array',
+            get: {
+              operationId: 'op',
+              parameters: [{ name: 'valid', in: 'query' }],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec as unknown as Record<string, unknown>);
+      const props = ops[0].inputSchema.properties as Record<string, unknown>;
+      expect(Object.keys(props)).toEqual(['valid']);
+    });
+
+    it('handles non-array operation-level parameters gracefully', () => {
+      const spec = {
+        paths: {
+          '/x': {
+            get: {
+              operationId: 'op',
+              parameters: 'not-an-array',
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec as unknown as Record<string, unknown>);
+      expect(ops[0].inputSchema).toEqual({ type: 'object', properties: {} });
+    });
+
+    it('filters null entries in parameters arrays', () => {
+      const spec = {
+        paths: {
+          '/x': {
+            parameters: [null, { name: 'pathParam', in: 'path' }],
+            get: {
+              operationId: 'op',
+              parameters: [null, undefined, { name: 'opParam', in: 'query' }],
+            },
+          },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec as unknown as Record<string, unknown>);
+      const props = ops[0].inputSchema.properties as Record<string, unknown>;
+      expect(Object.keys(props)).toEqual(['pathParam', 'opParam']);
+    });
+  });
+
+  // ─── operationId deduplication ─────────────────────────────────────────
+
+  describe('operationId deduplication', () => {
+    it('de-duplicates identical operationIds with numeric suffix', () => {
+      const spec = {
+        paths: {
+          '/a': { get: { operationId: 'fetch' } },
+          '/b': { get: { operationId: 'fetch' } },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      expect(ops[0].operationId).toBe('fetch');
+      expect(ops[1].operationId).toBe('fetch_1');
+    });
+
+    it('handles multiple collisions with incrementing suffixes', () => {
+      const spec = {
+        paths: {
+          '/a': { get: { operationId: 'op' } },
+          '/b': { get: { operationId: 'op' } },
+          '/c': { get: { operationId: 'op' } },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      expect(ops.map((o) => o.operationId)).toEqual(['op', 'op_1', 'op_2']);
+    });
+
+    it('does not de-duplicate unique operationIds', () => {
+      const spec = {
+        paths: {
+          '/a': { get: { operationId: 'getA' } },
+          '/b': { get: { operationId: 'getB' } },
+        },
+      };
+
+      const ops = parseOpenApiSpec(spec);
+      expect(ops[0].operationId).toBe('getA');
+      expect(ops[1].operationId).toBe('getB');
+    });
+  });
 });

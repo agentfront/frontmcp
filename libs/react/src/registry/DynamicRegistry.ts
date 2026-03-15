@@ -88,11 +88,12 @@ export class DynamicRegistry {
     }
   }
 
-  /** Update the read function for an existing resource. */
+  /** Update the read function for an existing resource and notify subscribers. */
   updateResourceRead(uri: string, read: DynamicResourceDef['read']): void {
     const existing = this.resources.get(uri);
     if (existing) {
       existing.read = read;
+      this.notify();
     }
   }
 

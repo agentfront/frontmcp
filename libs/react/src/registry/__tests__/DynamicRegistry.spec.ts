@@ -322,13 +322,24 @@ describe('DynamicRegistry', () => {
       expect(() => registry.updateResourceRead('missing://r', newRead)).not.toThrow();
     });
 
-    it('does not notify or increment version (silent update)', () => {
+    it('notifies and increments version when resource exists', () => {
       registry.registerResource(createResourceDef({ uri: 'silent://r' }));
       const listener = jest.fn();
       registry.subscribe(listener);
       const v = registry.getVersion();
 
       registry.updateResourceRead('silent://r', jest.fn());
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(registry.getVersion()).toBe(v + 1);
+    });
+
+    it('does not notify when resource does not exist', () => {
+      const listener = jest.fn();
+      registry.subscribe(listener);
+      const v = registry.getVersion();
+
+      registry.updateResourceRead('missing://r', jest.fn());
 
       expect(listener).not.toHaveBeenCalled();
       expect(registry.getVersion()).toBe(v);
@@ -550,11 +561,11 @@ describe('DynamicRegistry', () => {
       expect(registry.getVersion()).toBe(v);
     });
 
-    it('does not increment on updateResourceRead', () => {
+    it('increments on updateResourceRead', () => {
       registry.registerResource(createResourceDef({ uri: 'ne://r' }));
       const v = registry.getVersion();
       registry.updateResourceRead('ne://r', jest.fn());
-      expect(registry.getVersion()).toBe(v);
+      expect(registry.getVersion()).toBe(v + 1);
     });
   });
 

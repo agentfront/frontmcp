@@ -11,9 +11,15 @@ import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
 import { FrontMcpContext } from '../provider/FrontMcpContext';
 import type { StoreResourceOptions } from './state.types';
 
+const VALID_NAME_RE = /^[a-zA-Z0-9_-]+$/;
+
 export function useStoreResource(options: StoreResourceOptions): void {
   const { name, getState, subscribe, selectors, actions } = options;
   const { dynamicRegistry } = useContext(FrontMcpContext);
+
+  if (!name || !VALID_NAME_RE.test(name)) {
+    throw new Error(`useStoreResource: invalid store name "${name}". Names must match ${VALID_NAME_RE}.`);
+  }
 
   // Keep latest getState in ref
   const getStateRef = useRef(getState);
@@ -97,7 +103,11 @@ export function useStoreResource(options: StoreResourceOptions): void {
     });
     cleanups.push(unsubscribe);
 
-    return () => cleanups.forEach((fn) => fn());
+    return () => {
+      cleanups.forEach((fn) => {
+        fn();
+      });
+    };
   }, [dynamicRegistry, name, selectors, subscribe]);
 
   // Register action tools
@@ -110,7 +120,7 @@ export function useStoreResource(options: StoreResourceOptions): void {
 
       const execute = async (args: Record<string, unknown>): Promise<CallToolResult> => {
         const argsArray = args['args'];
-        const result = Array.isArray(argsArray) ? action(...argsArray) : action(args);
+        const result = await (Array.isArray(argsArray) ? action(...argsArray) : action(args));
         return {
           content: [{ type: 'text', text: JSON.stringify({ success: true, result }) }],
         };
@@ -131,6 +141,10 @@ export function useStoreResource(options: StoreResourceOptions): void {
       );
     }
 
-    return () => cleanups.forEach((fn) => fn());
+    return () => {
+      cleanups.forEach((fn) => {
+        fn();
+      });
+    };
   }, [dynamicRegistry, name, actions]);
 }

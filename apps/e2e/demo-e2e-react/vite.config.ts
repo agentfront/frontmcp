@@ -5,6 +5,7 @@ import { resolve } from 'path';
 const root = resolve(__dirname, '../../..');
 
 export default defineConfig({
+  root: __dirname,
   plugins: [react()],
   resolve: {
     conditions: ['browser', 'development', 'import'],

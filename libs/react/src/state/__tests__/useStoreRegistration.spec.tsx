@@ -15,7 +15,9 @@ function createMockStore(initialState: Record<string, unknown>) {
     getState: () => state,
     setState: (next: Record<string, unknown>) => {
       state = { ...state, ...next };
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        l();
+      });
     },
     subscribe: (cb: () => void): (() => void) => {
       listeners.add(cb);

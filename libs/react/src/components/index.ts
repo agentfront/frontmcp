@@ -17,4 +17,4 @@ export type { AgentContentProps } from './AgentContent';
 export { AgentSearch } from './AgentSearch';
 export type { AgentSearchProps, SearchInputRenderProps } from './AgentSearch';
 export { mcpComponent, mcpLazy } from './mcpComponent';
-export type { McpComponentOptions, McpComponentInstance } from './mcpComponent';
+export type { McpComponentOptions, McpComponentInstance, LazyFactory } from './mcpComponent';

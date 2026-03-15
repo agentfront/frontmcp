@@ -14,6 +14,14 @@ import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
 import type { DynamicRegistry } from '../registry/DynamicRegistry';
 import type { StoreAdapter } from '../types';
 
+const VALID_NAME_RE = /^[a-zA-Z0-9_-]+$/;
+
+function validateStoreName(name: string): void {
+  if (!name || !VALID_NAME_RE.test(name)) {
+    throw new Error(`useStoreRegistration: invalid store name "${name}". Names must match ${VALID_NAME_RE}.`);
+  }
+}
+
 export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: DynamicRegistry): void {
   useEffect(() => {
     if (stores.length === 0) return;
@@ -22,6 +30,7 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
 
     for (const adapter of stores) {
       const { name, subscribe, selectors, actions } = adapter;
+      validateStoreName(name);
 
       // Keep a ref-like closure for getState
       const getStateWrapper = () => adapter.getState();
@@ -53,6 +62,9 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
 
       if (selectors) {
         for (const [key, selector] of Object.entries(selectors)) {
+          if (!key || !VALID_NAME_RE.test(key)) {
+            throw new Error(`useStoreRegistration: invalid selector key "${key}". Keys must match ${VALID_NAME_RE}.`);
+          }
           const uri = `state://${name}/${key}`;
 
           const readSelector = async (): Promise<ReadResourceResult> => ({
@@ -95,7 +107,7 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
 
           const execute = async (args: Record<string, unknown>): Promise<CallToolResult> => {
             const argsArray = args['args'];
-            const result = Array.isArray(argsArray) ? action(...argsArray) : action(args);
+            const result = await (Array.isArray(argsArray) ? action(...argsArray) : action(args));
             return {
               content: [{ type: 'text', text: JSON.stringify({ success: true, result }) }],
             };
@@ -119,7 +131,9 @@ export function useStoreRegistration(stores: StoreAdapter[], dynamicRegistry: Dy
     }
 
     return () => {
-      cleanups.forEach((fn) => fn());
+      cleanups.forEach((fn) => {
+        fn();
+      });
     };
   }, [stores, dynamicRegistry]);
 }

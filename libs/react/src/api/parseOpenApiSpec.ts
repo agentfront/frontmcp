@@ -22,6 +22,7 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
   if (!paths) return [];
 
   const operations: ApiOperation[] = [];
+  const usedIds = new Set<string>();
 
   for (const [path, pathItem] of Object.entries(paths)) {
     if (!pathItem || typeof pathItem !== 'object') continue;
@@ -31,8 +32,16 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
       if (!operation || typeof operation !== 'object') continue;
 
       const rawOperationId = operation['operationId'];
-      const operationId =
+      let operationId =
         typeof rawOperationId === 'string' ? rawOperationId : `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+      // De-duplicate operationIds
+      if (usedIds.has(operationId)) {
+        let suffix = 1;
+        while (usedIds.has(`${operationId}_${suffix}`)) suffix++;
+        operationId = `${operationId}_${suffix}`;
+      }
+      usedIds.add(operationId);
 
       const rawSummary = operation['summary'];
       const rawDescription = operation['description'];
@@ -45,10 +54,25 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
       const properties: Record<string, unknown> = {};
       const required: string[] = [];
 
-      // Path/query/header parameters
-      const parameters = (operation['parameters'] ?? []) as OpenApiParameter[];
-      for (const param of parameters) {
-        if (typeof param !== 'object' || !param.name) continue;
+      // Merge path-level and operation-level parameters (operation overrides path)
+      const rawPathParams = pathItem['parameters'];
+      const rawOpParams = operation['parameters'];
+      const pathParams = Array.isArray(rawPathParams) ? rawPathParams.filter(Boolean) : [];
+      const opParams = Array.isArray(rawOpParams) ? rawOpParams.filter(Boolean) : [];
+
+      const paramMap = new Map<string, OpenApiParameter>();
+      for (const param of pathParams) {
+        if (typeof param === 'object' && param !== null && param.name) {
+          paramMap.set(`${param.in}:${param.name}`, param as OpenApiParameter);
+        }
+      }
+      for (const param of opParams) {
+        if (typeof param === 'object' && param !== null && param.name) {
+          paramMap.set(`${param.in}:${param.name}`, param as OpenApiParameter);
+        }
+      }
+
+      for (const param of paramMap.values()) {
         properties[param.name] = {
           ...(param.schema ?? { type: 'string' }),
           description: param.description,

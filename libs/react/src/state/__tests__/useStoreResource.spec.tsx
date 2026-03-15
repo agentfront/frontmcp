@@ -30,7 +30,9 @@ function createMockStore(initialState: Record<string, unknown>) {
     getState: () => state,
     setState: (next: Record<string, unknown>) => {
       state = { ...state, ...next };
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        l();
+      });
     },
     subscribe: (cb: () => void): (() => void) => {
       listeners.add(cb);
@@ -195,11 +197,14 @@ describe('useStoreResource (state module)', () => {
         { wrapper: createWrapper(dynamicRegistry) },
       );
 
+      const versionBefore = dynamicRegistry.getVersion();
+
       act(() => {
         store.setState({ value: 'updated' });
       });
 
       expect(updateSpy).toHaveBeenCalledWith('state://observed', expect.any(Function));
+      expect(dynamicRegistry.getVersion()).toBeGreaterThan(versionBefore);
     });
 
     it('calls updateResourceRead for selector URIs when store changes', () => {
@@ -221,6 +226,7 @@ describe('useStoreResource (state module)', () => {
       );
 
       updateSpy.mockClear();
+      const versionBefore = dynamicRegistry.getVersion();
 
       act(() => {
         store.setState({ count: 5 });
@@ -230,6 +236,7 @@ describe('useStoreResource (state module)', () => {
       expect(updateSpy).toHaveBeenCalledWith('state://sel', expect.any(Function));
       expect(updateSpy).toHaveBeenCalledWith('state://sel/count', expect.any(Function));
       expect(updateSpy).toHaveBeenCalledWith('state://sel/label', expect.any(Function));
+      expect(dynamicRegistry.getVersion()).toBeGreaterThan(versionBefore);
     });
   });
 

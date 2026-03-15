@@ -19,6 +19,7 @@ function interpolatePath(path: string, params: Record<string, unknown>): string 
 }
 
 export function useApiClient(options: ApiClientOptions): void {
+  // TODO: forward options.server to DynamicToolDef when server-scoped registries are implemented
   const { baseUrl, operations, headers, prefix = 'api', client, fetch: customFetch } = options;
   const { dynamicRegistry } = useContext(FrontMcpContext);
 
@@ -82,6 +83,10 @@ export function useApiClient(options: ApiClientOptions): void {
       );
     }
 
-    return () => cleanups.forEach((fn) => fn());
+    return () => {
+      cleanups.forEach((fn) => {
+        fn();
+      });
+    };
   }, [dynamicRegistry, baseUrl, operations, prefix, client, customFetch]);
 }

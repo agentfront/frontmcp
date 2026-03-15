@@ -24,14 +24,18 @@ import { useDynamicTool } from '../hooks/useDynamicTool';
 
 const MCP_LAZY_MARKER = Symbol.for('frontmcp:lazy');
 
+/** Brand applied by mcpLazy to distinguish lazy imports from zero-arg components. */
+type McpLazyBrand = { readonly __mcpLazy: true };
+
+/** A branded lazy factory returned by mcpLazy(). */
+export type LazyFactory<Props> = (() => Promise<{ default: ComponentType<Props> }>) & McpLazyBrand;
+
 /**
  * Brand a factory function as a lazy import so mcpComponent can
  * distinguish `() => import(...)` from zero-arg function components.
  */
-export function mcpLazy<Props>(
-  factory: () => Promise<{ default: ComponentType<Props> }>,
-): () => Promise<{ default: ComponentType<Props> }> {
-  return Object.assign(factory, { [MCP_LAZY_MARKER]: true });
+export function mcpLazy<Props>(factory: () => Promise<{ default: ComponentType<Props> }>): LazyFactory<Props> {
+  return Object.assign(factory, { [MCP_LAZY_MARKER]: true }) as unknown as LazyFactory<Props>;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -49,11 +53,7 @@ export interface McpComponentInstance<Props> extends React.FC<Partial<Props>> {
   toolName: string;
 }
 
-type ComponentArg<Props> =
-  | ComponentType<Props>
-  | ((props: Props) => ReactElement)
-  | (() => Promise<{ default: ComponentType<Props> }>)
-  | null;
+type ComponentArg<Props> = ComponentType<Props> | ((props: Props) => ReactElement) | LazyFactory<Props> | null;
 
 // ─── Default table component ────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ function DefaultTable({ rows, columns }: { rows: Record<string, unknown>[]; colu
 
 // ─── Lazy detection helper ──────────────────────────────────────────────────
 
-function isLazyImport<Props>(fn: ComponentArg<Props>): fn is () => Promise<{ default: ComponentType<Props> }> {
+function isLazyImport<Props>(fn: ComponentArg<Props>): fn is LazyFactory<Props> {
   if (typeof fn !== 'function') return false;
   // Only treat functions branded with mcpLazy as lazy imports
   return MCP_LAZY_MARKER in fn;
