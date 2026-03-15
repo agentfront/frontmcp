@@ -7,6 +7,17 @@
 import * as semver from 'semver';
 
 /**
+ * Check if a range string is a dist-tag (not a semver range).
+ * Dist-tags like 'next', 'beta', 'canary' are simple alphanumeric identifiers
+ * that are not valid semver ranges.
+ * Note: `semver.validRange('latest')` returns `'*'` (not null), so 'latest'
+ * must be guarded separately before calling this function.
+ */
+function isDistTag(range: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9]*$/.test(range) && semver.validRange(range) === null;
+}
+
+/**
  * Check if a specific version satisfies a semver range.
  *
  * @param version - Concrete version string (e.g., '1.2.3')
@@ -14,7 +25,7 @@ import * as semver from 'semver';
  * @returns true if the version satisfies the range
  */
 export function satisfiesRange(version: string, range: string): boolean {
-  if (range === 'latest') return true;
+  if (range === 'latest' || isDistTag(range)) return true;
   return semver.satisfies(version, range);
 }
 
@@ -26,7 +37,7 @@ export function satisfiesRange(version: string, range: string): boolean {
  * @returns The highest matching version, or null if none match
  */
 export function maxSatisfying(versions: string[], range: string): string | null {
-  if (range === 'latest') {
+  if (range === 'latest' || isDistTag(range)) {
     const sorted = versions.filter((v) => semver.valid(v)).sort(semver.rcompare);
     return sorted[0] ?? null;
   }
@@ -37,7 +48,7 @@ export function maxSatisfying(versions: string[], range: string): string | null 
  * Check if a string is a valid semver range.
  */
 export function isValidRange(range: string): boolean {
-  if (range === 'latest') return true;
+  if (range === 'latest' || isDistTag(range)) return true;
   return semver.validRange(range) !== null;
 }
 

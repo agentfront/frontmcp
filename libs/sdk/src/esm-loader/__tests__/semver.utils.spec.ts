@@ -22,6 +22,11 @@ describe('satisfiesRange', () => {
     expect(satisfiesRange('99.99.99', 'latest')).toBe(true);
   });
 
+  it('should return true for non-latest dist-tags', () => {
+    expect(satisfiesRange('2.0.0', 'next')).toBe(true);
+    expect(satisfiesRange('1.0.0-beta.1', 'beta')).toBe(true);
+  });
+
   it('should return true for wildcard', () => {
     expect(satisfiesRange('1.0.0', '*')).toBe(true);
   });
@@ -52,6 +57,10 @@ describe('maxSatisfying', () => {
     expect(maxSatisfying(versions, '^3.0.0')).toBeNull();
   });
 
+  it('should return the latest for non-latest dist-tags', () => {
+    expect(maxSatisfying(versions, 'next')).toBe('2.1.0');
+  });
+
   it('should return null for empty array', () => {
     expect(maxSatisfying([], '^1.0.0')).toBeNull();
   });
@@ -64,6 +73,11 @@ describe('isValidRange', () => {
     expect(isValidRange('>=1.0.0')).toBe(true);
     expect(isValidRange('latest')).toBe(true);
     expect(isValidRange('*')).toBe(true);
+  });
+
+  it('should return true for non-latest dist-tags', () => {
+    expect(isValidRange('next')).toBe(true);
+    expect(isValidRange('beta')).toBe(true);
   });
 
   it('should return false for invalid ranges', () => {

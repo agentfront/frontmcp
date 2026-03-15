@@ -347,6 +347,7 @@ describe('ESM Loader E2E', () => {
         expect(results[0].hasUpdate).toBe(true);
         expect(results[0].latestVersion).toBe('2.0.0');
         expect(results[0].currentVersion).toBe('1.0.0');
+        expect(onNewVersion).not.toHaveBeenCalled();
       } finally {
         poller.stop();
 
@@ -378,6 +379,7 @@ describe('ESM Loader E2E', () => {
 
         expect(results).toHaveLength(1);
         expect(results[0].hasUpdate).toBe(false);
+        expect(onNewVersion).not.toHaveBeenCalled();
       } finally {
         poller.stop();
       }
