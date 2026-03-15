@@ -4,6 +4,7 @@ import { useFrontMcp } from '../useFrontMcp';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue } from '../../types';
 import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
 
@@ -11,9 +12,12 @@ const mockServer = {} as DirectMcpServer;
 const mockClient = { callTool: jest.fn() } as unknown as DirectClient;
 
 function createWrapper(ctxOverrides: Partial<FrontMcpContextValue> = {}) {
+  const dynamicRegistry = new DynamicRegistry();
   const defaultCtx: FrontMcpContextValue = {
     name: 'default',
     registry: new ComponentRegistry(),
+    dynamicRegistry,
+    getDynamicRegistry: () => dynamicRegistry,
     connect: jest.fn(),
     ...ctxOverrides,
   };

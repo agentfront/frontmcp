@@ -9,13 +9,15 @@ description: React hooks, components, and AI SDK integration for FrontMCP
 
 ## Entry Points
 
-The package exposes three entry points:
+The package exposes five entry points:
 
 | Import | Purpose |
 |--------|---------|
-| `@frontmcp/react` | Provider, hooks, components, and `ServerRegistry` |
+| `@frontmcp/react` | Provider, hooks, components, `ServerRegistry`, and SDK re-exports |
 | `@frontmcp/react/ai` | AI SDK integration (`useAITools`, `useTools`, `createToolCallHandler`) |
 | `@frontmcp/react/router` | React Router bridge (`useRouterBridge`, navigation tools, route resource) |
+| `@frontmcp/react/state` | State management integration (hooks + store adapters: `reduxStore`, `valtioStore`, `createStore`) |
+| `@frontmcp/react/api` | API client integration (`useApiClient`, `parseOpenApiSpec`, `HttpClient`) |
 
 ## Architecture
 
@@ -25,6 +27,11 @@ FrontMcpProvider
        ├─ useCallTool / useReadResource / useGetPrompt
        ├─ useListTools / useListResources / useListPrompts
        ├─ useStoreResource (live subscriptions)
+       ├─ useDynamicTool / useDynamicResource (dynamic registration)
+       ├─ useComponentTree (DOM → MCP resource)
+       ├─ useApiClient (OpenAPI → MCP tools)
+       ├─ mcpComponent (type-safe agent-driven UI)
+       ├─ AgentContent / AgentSearch (legacy, deprecated)
        ├─ ToolForm / PromptForm / ResourceViewer / OutputDisplay
        └─ useAITools / useTools (AI SDK bridge)
 ```
@@ -58,12 +65,12 @@ yarn add @frontmcp/react react react-dom
 | `react` | `^18.0.0 \|\| ^19.0.0` | Yes |
 | `react-dom` | `^18.0.0 \|\| ^19.0.0` | Yes |
 | `react-router-dom` | `^7.0.0` | Optional (only for `/router`) |
+| `zod` | `^4.0.0` | Optional (for `mcpComponent` and zod-based `useDynamicTool`) |
 
 ## Quick Example
 
 ```tsx
-import { create } from '@frontmcp/sdk';
-import { FrontMcpProvider, useCallTool } from '@frontmcp/react';
+import { create, FrontMcpProvider, useCallTool } from '@frontmcp/react';
 
 const server = await create({
   info: { name: 'my-app', version: '1.0.0' },
@@ -88,6 +95,8 @@ function GreetButton() {
 }
 ```
 
+No need to install `@frontmcp/sdk` separately — `@frontmcp/react` re-exports `create`, `connect`, decorators, and context classes.
+
 ## What's Next
 
 <CardGroup cols={2}>
@@ -100,7 +109,19 @@ function GreetButton() {
   <Card title="Components" icon="puzzle-piece" href="/frontmcp/react/components">
     Pre-built headless form and display components
   </Card>
-  <Card title="AI Integration" icon="robot" href="/frontmcp/react/ai-integration">
+  <Card title="Dynamic Tools" icon="bolt" href="/frontmcp/react/dynamic-tools">
+    Register tools and resources from React components
+  </Card>
+  <Card title="Agent Components" icon="robot" href="/frontmcp/react/agent-components">
+    Type-safe agent-driven UI with mcpComponent
+  </Card>
+  <Card title="State Management" icon="database" href="/frontmcp/react/state-management">
+    Expose Redux, Valtio, or any store as MCP resources
+  </Card>
+  <Card title="API Client" icon="plug" href="/frontmcp/react/api-client">
+    Register OpenAPI operations as MCP tools with custom HTTP clients
+  </Card>
+  <Card title="AI Integration" icon="microchip" href="/frontmcp/react/ai-integration">
     Bridge MCP tools to OpenAI, Claude, and Vercel AI SDK
   </Card>
 </CardGroup>

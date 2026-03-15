@@ -20,7 +20,12 @@
         "thirdParty": false,
         "platform": "neutral",
         "assets": ["libs/react/README.md", "LICENSE", "libs/react/package.json"],
-        "additionalEntryPoints": ["libs/react/src/ai/index.ts", "libs/react/src/router/index.ts"],
+        "additionalEntryPoints": [
+          "libs/react/src/ai/index.ts",
+          "libs/react/src/router/index.ts",
+          "libs/react/src/state/index.ts",
+          "libs/react/src/api/index.ts"
+        ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
           "external": [
@@ -53,7 +58,12 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "neutral",
-        "additionalEntryPoints": ["libs/react/src/ai/index.ts", "libs/react/src/router/index.ts"],
+        "additionalEntryPoints": [
+          "libs/react/src/ai/index.ts",
+          "libs/react/src/router/index.ts",
+          "libs/react/src/state/index.ts",
+          "libs/react/src/api/index.ts"
+        ],
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },
           "external": [

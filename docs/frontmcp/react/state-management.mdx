@@ -1,0 +1,270 @@
+---
+title: State Management
+slug: react/state-management
+icon: database
+description: Expose application state as MCP resources and actions as MCP tools
+---
+
+`@frontmcp/react/state` bridges your application state with MCP. State slices become MCP resources that agents can read, and actions become MCP tools that agents can call.
+
+```tsx
+import { useStoreResource, useReduxResource, useValtioResource } from '@frontmcp/react/state';
+```
+
+## useStoreResource
+
+The generic hook that works with any state management library. `useReduxResource` and `useValtioResource` are thin wrappers around it.
+
+```tsx
+import { useStoreResource } from '@frontmcp/react/state';
+
+function StoreProvider() {
+  useStoreResource({
+    name: 'app',
+    getState: () => store.getState(),
+    subscribe: (cb) => store.subscribe(cb),
+    selectors: {
+      count: (state) => (state as { count: number }).count,
+      user: (state) => (state as { user: unknown }).user,
+    },
+    actions: {
+      increment: () => store.dispatch({ type: 'INCREMENT' }),
+      reset: () => store.dispatch({ type: 'RESET' }),
+    },
+  });
+
+  return null;
+}
+```
+
+### What Gets Registered
+
+| MCP Entity | URI / Name | Description |
+|------------|-----------|-------------|
+| Resource | `state://{name}` | Full state snapshot |
+| Resource | `state://{name}/{selectorKey}` | Each selector as a sub-resource |
+| Tool | `{name}_{actionKey}` | Each action as a callable tool |
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | — | **Required.** Name prefix for resources and tools |
+| `getState` | `() => unknown` | — | **Required.** Returns current state snapshot |
+| `subscribe` | `(cb: () => void) => () => void` | — | **Required.** Subscribe to changes, return unsubscribe |
+| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors, each becomes a sub-resource |
+| `actions` | `Record<string, (...args) => unknown>` | — | Named actions, each becomes a tool |
+| `server` | `string` | — | Target a named server |
+
+### Live Updates
+
+When the store changes, the main resource's read function automatically returns fresh state. The hook subscribes to your store and notifies the `DynamicRegistry` on every change so consumers re-read the latest value.
+
+---
+
+## useReduxResource
+
+A thin wrapper for Redux stores. Automatically binds `getState`, `subscribe`, and wraps action creators to auto-dispatch.
+
+```tsx
+import { useReduxResource } from '@frontmcp/react/state';
+import { store } from './store';
+import { increment, addTodo } from './slices';
+
+function ReduxBridge() {
+  useReduxResource({
+    store,
+    name: 'redux',
+    selectors: {
+      todos: (state) => (state as { todos: unknown }).todos,
+      count: (state) => (state as { counter: { value: number } }).counter.value,
+    },
+    actions: {
+      increment: () => increment(),
+      addTodo: (text: unknown) => addTodo(text as string),
+    },
+  });
+
+  return null;
+}
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `store` | `{ getState, dispatch, subscribe }` | — | **Required.** Redux store |
+| `name` | `string` | `'redux'` | Name prefix |
+| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors |
+| `actions` | `Record<string, (...args) => action>` | — | Action creators (auto-dispatched) |
+| `server` | `string` | — | Target a named server |
+
+---
+
+## useValtioResource
+
+A thin wrapper for [Valtio](https://github.com/pmndrs/valtio) proxies. Supports deep path selectors with dot notation.
+
+```tsx
+import { useValtioResource } from '@frontmcp/react/state';
+import { subscribe } from 'valtio/utils';
+import { state } from './store';
+
+function ValtioBridge() {
+  useValtioResource({
+    proxy: state,
+    subscribe,
+    name: 'valtio',
+    paths: {
+      userName: 'user.profile.name',
+      theme: 'settings.theme',
+      cartCount: 'cart.items.length',
+    },
+    mutations: {
+      setTheme: (theme: unknown) => {
+        state.settings.theme = theme as string;
+      },
+      clearCart: () => {
+        state.cart.items = [];
+      },
+    },
+  });
+
+  return null;
+}
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `proxy` | `Record<string, unknown>` | — | **Required.** Valtio proxy object |
+| `subscribe` | `(proxy, cb) => () => void` | — | **Required.** Valtio's subscribe function |
+| `name` | `string` | `'valtio'` | Name prefix |
+| `paths` | `Record<string, string>` | — | Deep path selectors (dot notation) |
+| `mutations` | `Record<string, (...args) => void>` | — | Named mutations (each becomes a tool) |
+| `server` | `string` | — | Target a named server |
+
+<Note>
+You must pass valtio's `subscribe` function yourself since valtio is an optional peer dependency. Import it from `valtio/utils`.
+</Note>
+
+---
+
+## Provider-Level Store Adapters
+
+Instead of using hooks inside components, you can register stores directly on the `FrontMcpProvider` via the `stores` prop. This is useful when you want store registration to happen once at the top level.
+
+```tsx
+import { FrontMcpProvider, reduxStore, valtioStore, createStore } from '@frontmcp/react';
+
+<FrontMcpProvider
+  server={server}
+  stores={[
+    reduxStore({
+      store: reduxStore,
+      selectors: { count: (s) => s.count },
+      actions: { increment: () => increment() },
+    }),
+    valtioStore({
+      proxy: state,
+      subscribe,
+      paths: { userName: 'user.name' },
+    }),
+    createStore({
+      name: 'custom',
+      getState: () => customState,
+      subscribe: (cb) => customSubscribe(cb),
+    }),
+  ]}
+>
+  <App />
+</FrontMcpProvider>
+```
+
+### reduxStore
+
+Adapter factory for Redux stores. Wraps action creators to auto-dispatch.
+
+```tsx
+import { reduxStore } from '@frontmcp/react/state';
+
+reduxStore({
+  store: myReduxStore,
+  name: 'redux',                    // optional, defaults to 'redux'
+  selectors: { count: (s) => s.counter.value },
+  actions: { increment: () => increment() },
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `store` | `{ getState, dispatch, subscribe }` | — | **Required.** Redux store |
+| `name` | `string` | `'redux'` | Logical name |
+| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors |
+| `actions` | `Record<string, (...args) => action>` | — | Action creators (auto-dispatched) |
+
+### valtioStore
+
+Adapter factory for Valtio proxies. Supports deep path selectors.
+
+```tsx
+import { valtioStore } from '@frontmcp/react/state';
+import { subscribe } from 'valtio/utils';
+
+valtioStore({
+  proxy: state,
+  subscribe,
+  name: 'valtio',                   // optional, defaults to 'valtio'
+  paths: { userName: 'user.profile.name' },
+  mutations: { setName: (name) => { state.user.profile.name = name; } },
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `proxy` | `Record<string, unknown>` | — | **Required.** Valtio proxy |
+| `subscribe` | `(proxy, cb) => () => void` | — | **Required.** Valtio subscribe |
+| `name` | `string` | `'valtio'` | Logical name |
+| `paths` | `Record<string, string>` | — | Deep path selectors (dot notation) |
+| `mutations` | `Record<string, (...args) => void>` | — | Named mutations |
+
+### createStore
+
+Generic pass-through adapter for any custom store.
+
+```tsx
+import { createStore } from '@frontmcp/react/state';
+
+createStore({
+  name: 'myStore',
+  getState: () => store.getState(),
+  subscribe: (cb) => store.subscribe(cb),
+  selectors: { count: (s) => s.count },
+  actions: { reset: () => store.reset() },
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | — | **Required.** Logical name |
+| `getState` | `() => unknown` | — | **Required.** Returns state snapshot |
+| `subscribe` | `(cb) => () => void` | — | **Required.** Subscribe to changes |
+| `selectors` | `Record<string, (state) => unknown>` | — | Named selectors |
+| `actions` | `Record<string, (...args) => unknown>` | — | Named actions |
+
+### StoreAdapter Interface
+
+All adapter factories return a `StoreAdapter`:
+
+```typescript
+interface StoreAdapter {
+  name: string;
+  getState: () => unknown;
+  subscribe: (cb: () => void) => () => void;
+  selectors?: Record<string, (state: unknown) => unknown>;
+  actions?: Record<string, (...args: unknown[]) => unknown>;
+}
+```
+
+You can also create a `StoreAdapter` directly without using a factory.

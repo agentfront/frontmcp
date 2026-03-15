@@ -5,6 +5,7 @@ import { FrontMcpProvider } from '../FrontMcpProvider';
 import { FrontMcpContext } from '../FrontMcpContext';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { useFrontMcp } from '../../hooks/useFrontMcp';
+import type { StoreAdapter } from '../../types';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ describe('FrontMcpProvider', () => {
 
   // ─── slim context ──────────────────────────────────────────────────────
 
-  it('provides slim context with name, registry, and connect', async () => {
+  it('provides slim context with name, registry, dynamicRegistry, getDynamicRegistry, and connect', async () => {
     const server = createMockServer();
     let captured: Record<string, unknown> = {};
 
@@ -96,6 +97,8 @@ describe('FrontMcpProvider', () => {
 
     expect(captured['name']).toBe('default');
     expect(captured['registry']).toBeDefined();
+    expect(captured['dynamicRegistry']).toBeDefined();
+    expect(typeof captured['getDynamicRegistry']).toBe('function');
     expect(typeof captured['connect']).toBe('function');
     // Should NOT have status/tools/etc on context
     expect(captured['status']).toBeUndefined();
@@ -257,7 +260,8 @@ describe('FrontMcpProvider', () => {
     expect(serverRegistry.has('default')).toBe(true);
     const entry = serverRegistry.get('default');
     expect(entry).toBeDefined();
-    expect(entry?.server).toBe(server);
+    // Server is wrapped with DynamicRegistry overlay, so it delegates to the original
+    expect(entry?.server).toBeDefined();
   });
 
   it('registers additional servers from the servers prop', async () => {
@@ -282,8 +286,9 @@ describe('FrontMcpProvider', () => {
     expect(serverRegistry.has('default')).toBe(true);
     expect(serverRegistry.has('analytics')).toBe(true);
     expect(serverRegistry.has('logging')).toBe(true);
-    expect(serverRegistry.get('analytics')?.server).toBe(analyticsServer);
-    expect(serverRegistry.get('logging')?.server).toBe(loggingServer);
+    // Additional servers are wrapped with their own DynamicRegistry overlay
+    expect(serverRegistry.get('analytics')?.server).toBeDefined();
+    expect(serverRegistry.get('logging')?.server).toBeDefined();
   });
 
   it('unregisters servers on unmount', async () => {
@@ -479,5 +484,291 @@ describe('FrontMcpProvider', () => {
     expect(captured['resources']).toEqual([]);
     expect(captured['resourceTemplates']).toEqual([]);
     expect(captured['prompts']).toEqual([]);
+  });
+
+  // ─── stores prop ─────────────────────────────────────────────────────
+
+  describe('stores prop', () => {
+    it('registers store resources when stores prop is provided', async () => {
+      const server = createMockServer();
+      const store: StoreAdapter = {
+        name: 'myStore',
+        getState: () => ({ count: 0 }),
+        subscribe: () => () => {},
+        selectors: {
+          count: (s: unknown) => (s as { count: number }).count,
+        },
+      };
+
+      let captured: Record<string, unknown> = {};
+
+      await act(async () => {
+        render(
+          React.createElement(
+            FrontMcpProvider,
+            { server, autoConnect: false, stores: [store] },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+      });
+
+      const dynReg = captured['dynamicRegistry'] as {
+        hasResource: (uri: string) => boolean;
+        hasTool: (name: string) => boolean;
+      };
+
+      expect(dynReg.hasResource('state://myStore')).toBe(true);
+      expect(dynReg.hasResource('state://myStore/count')).toBe(true);
+    });
+
+    it('registers store action tools when stores with actions are provided', async () => {
+      const server = createMockServer();
+      const store: StoreAdapter = {
+        name: 'cart',
+        getState: () => ({ items: [] }),
+        subscribe: () => () => {},
+        actions: {
+          addItem: jest.fn(),
+          clear: jest.fn(),
+        },
+      };
+
+      let captured: Record<string, unknown> = {};
+
+      await act(async () => {
+        render(
+          React.createElement(
+            FrontMcpProvider,
+            { server, autoConnect: false, stores: [store] },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+      });
+
+      const dynReg = captured['dynamicRegistry'] as {
+        hasResource: (uri: string) => boolean;
+        hasTool: (name: string) => boolean;
+      };
+
+      expect(dynReg.hasResource('state://cart')).toBe(true);
+      expect(dynReg.hasTool('cart_addItem')).toBe(true);
+      expect(dynReg.hasTool('cart_clear')).toBe(true);
+    });
+
+    it('works without stores prop (backward compat)', async () => {
+      const server = createMockServer();
+      let captured: Record<string, unknown> = {};
+
+      await act(async () => {
+        render(
+          React.createElement(
+            FrontMcpProvider,
+            { server, autoConnect: false },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+      });
+
+      const dynReg = captured['dynamicRegistry'] as {
+        getTools: () => unknown[];
+        getResources: () => unknown[];
+      };
+
+      // No stores registered — dynamic registry should have no store entries
+      expect(dynReg.getTools()).toEqual([]);
+      expect(dynReg.getResources()).toEqual([]);
+    });
+
+    it('cleans up store registrations on unmount', async () => {
+      const server = createMockServer();
+      const unsubscribeSpy = jest.fn();
+      const store: StoreAdapter = {
+        name: 'session',
+        getState: () => ({ user: null }),
+        subscribe: () => unsubscribeSpy,
+        selectors: {
+          user: (s: unknown) => (s as { user: unknown }).user,
+        },
+        actions: {
+          login: jest.fn(),
+        },
+      };
+
+      let captured: Record<string, unknown> = {};
+      let unmount: () => void = () => {};
+
+      await act(async () => {
+        const result = render(
+          React.createElement(
+            FrontMcpProvider,
+            { server, autoConnect: false, stores: [store] },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+        unmount = result.unmount;
+      });
+
+      const dynReg = captured['dynamicRegistry'] as {
+        hasResource: (uri: string) => boolean;
+        hasTool: (name: string) => boolean;
+      };
+
+      // Verify registered before unmount
+      expect(dynReg.hasResource('state://session')).toBe(true);
+      expect(dynReg.hasResource('state://session/user')).toBe(true);
+      expect(dynReg.hasTool('session_login')).toBe(true);
+
+      act(() => {
+        unmount();
+      });
+
+      // After unmount, registrations should be cleaned up
+      expect(dynReg.hasResource('state://session')).toBe(false);
+      expect(dynReg.hasResource('state://session/user')).toBe(false);
+      expect(dynReg.hasTool('session_login')).toBe(false);
+      expect(unsubscribeSpy).toHaveBeenCalled();
+    });
+  });
+
+  // ─── server-scoped dynamic registries ──────────────────────────────────
+
+  describe('server-scoped dynamic registries', () => {
+    it('wraps additional servers with their own DynamicRegistry', async () => {
+      const defaultServer = createMockServer();
+      const analyticsServer = createMockServer();
+      let captured: Record<string, unknown> = {};
+
+      await act(async () => {
+        render(
+          React.createElement(
+            FrontMcpProvider,
+            {
+              server: defaultServer,
+              servers: { analytics: analyticsServer },
+              autoConnect: false,
+            },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+      });
+
+      const getDynReg = captured['getDynamicRegistry'] as (server?: string) => {
+        getTools: () => unknown[];
+        getResources: () => unknown[];
+      };
+
+      // Primary and analytics registries should be separate instances
+      const primaryReg = getDynReg();
+      const analyticsReg = getDynReg('analytics');
+      expect(primaryReg).toBeDefined();
+      expect(analyticsReg).toBeDefined();
+      expect(primaryReg).not.toBe(analyticsReg);
+    });
+
+    it('getDynamicRegistry returns same instance for same server name', async () => {
+      const server = createMockServer();
+      let captured: Record<string, unknown> = {};
+
+      await act(async () => {
+        render(
+          React.createElement(
+            FrontMcpProvider,
+            { server, autoConnect: false },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+      });
+
+      const getDynReg = captured['getDynamicRegistry'] as (server?: string) => unknown;
+
+      const first = getDynReg('my-server');
+      const second = getDynReg('my-server');
+      expect(first).toBe(second);
+    });
+
+    it('getDynamicRegistry returns different instances for different servers', async () => {
+      const server = createMockServer();
+      let captured: Record<string, unknown> = {};
+
+      await act(async () => {
+        render(
+          React.createElement(
+            FrontMcpProvider,
+            { server, autoConnect: false },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+      });
+
+      const getDynReg = captured['getDynamicRegistry'] as (server?: string) => unknown;
+
+      const regA = getDynReg('server-a');
+      const regB = getDynReg('server-b');
+      expect(regA).not.toBe(regB);
+    });
+
+    it('cleans up additional server registries on unmount', async () => {
+      const defaultServer = createMockServer();
+      const extraServer = createMockServer();
+      let captured: Record<string, unknown> = {};
+      let unmount: () => void = () => {};
+
+      await act(async () => {
+        const result = render(
+          React.createElement(
+            FrontMcpProvider,
+            {
+              server: defaultServer,
+              servers: { extra: extraServer },
+              autoConnect: false,
+            },
+            React.createElement(ContextReader, {
+              onContext: (ctx: unknown) => {
+                captured = ctx as Record<string, unknown>;
+              },
+            }),
+          ),
+        );
+        unmount = result.unmount;
+      });
+
+      expect(serverRegistry.has('default')).toBe(true);
+      expect(serverRegistry.has('extra')).toBe(true);
+
+      act(() => {
+        unmount();
+      });
+
+      expect(serverRegistry.has('default')).toBe(false);
+      expect(serverRegistry.has('extra')).toBe(false);
+    });
   });
 });

@@ -63,6 +63,28 @@
         "types": "./dist/router/index.d.ts",
         "default": "./dist/esm/router/index.mjs"
       }
+    },
+    "./state": {
+      "development": "./src/state/index.ts",
+      "require": {
+        "types": "./dist/state/index.d.ts",
+        "default": "./dist/state/index.js"
+      },
+      "import": {
+        "types": "./dist/state/index.d.ts",
+        "default": "./dist/esm/state/index.mjs"
+      }
+    },
+    "./api": {
+      "development": "./src/api/index.ts",
+      "require": {
+        "types": "./dist/api/index.d.ts",
+        "default": "./dist/api/index.js"
+      },
+      "import": {
+        "types": "./dist/api/index.d.ts",
+        "default": "./dist/esm/api/index.mjs"
+      }
     }
   },
   "engines": {
@@ -71,12 +93,16 @@
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "@frontmcp/sdk": "^0.12.1",
-    "@frontmcp/utils": "^0.12.1",
-    "react-router-dom": "^7.0.0"
+    "@frontmcp/sdk": "0.12.1",
+    "@frontmcp/utils": "0.12.1",
+    "react-router-dom": "^7.0.0",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "react-router-dom": {
+      "optional": true
+    },
+    "zod": {
       "optional": true
     }
   },

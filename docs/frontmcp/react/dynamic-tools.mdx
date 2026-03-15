@@ -1,0 +1,226 @@
+---
+title: Dynamic Tools & Resources
+slug: react/dynamic-tools
+icon: bolt
+description: Register MCP tools and resources dynamically from React components
+---
+
+Dynamic tools and resources let React components register MCP capabilities on mount and automatically unregister them on unmount. This enables UI-driven tool availability — tools exist only while the component that defines them is rendered.
+
+## useDynamicTool
+
+Registers an MCP tool for the lifetime of the component. Supports both **zod schemas** (recommended) and raw **JSON Schema**.
+
+### With Zod Schema (Recommended)
+
+```tsx
+import { useDynamicTool } from '@frontmcp/react';
+import { z } from 'zod';
+
+function CartControls() {
+  const { addToCart } = useCart();
+
+  useDynamicTool({
+    name: 'add_to_cart',
+    description: 'Add an item to the shopping cart',
+    schema: z.object({
+      itemId: z.string().describe('Product ID'),
+      quantity: z.number().describe('Quantity to add').optional(),
+    }),
+    execute: async (args) => {
+      // args is typed as { itemId: string; quantity?: number }
+      await addToCart(args.itemId, args.quantity ?? 1);
+      return { content: [{ type: 'text', text: 'Added to cart' }] };
+    },
+  });
+
+  return <div>Cart controls active</div>;
+}
+```
+
+When a zod `schema` is provided:
+- The schema is converted to JSON Schema automatically via `toJSONSchema` from `zod/v4`
+- Input is validated via `safeParse` before reaching your `execute` callback
+- Invalid input returns an error `CallToolResult` with issue details
+- The `execute` callback receives fully typed, validated args
+
+### With JSON Schema (Backward Compat)
+
+```tsx
+useDynamicTool({
+  name: 'add_to_cart',
+  description: 'Add an item to the shopping cart',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      itemId: { type: 'string', description: 'Product ID' },
+      quantity: { type: 'number', description: 'Quantity to add' },
+    },
+    required: ['itemId'],
+  },
+  execute: async (args) => {
+    await addToCart(args.itemId as string, (args.quantity as number) ?? 1);
+    return { content: [{ type: 'text', text: 'Added to cart' }] };
+  },
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | — | **Required.** MCP tool name |
+| `description` | `string` | — | **Required.** Description for agents |
+| `schema` | `z.ZodObject` | — | Zod schema (mutually exclusive with `inputSchema`) |
+| `inputSchema` | `Record<string, unknown>` | — | JSON Schema (mutually exclusive with `schema`) |
+| `execute` | `(args) => Promise<CallToolResult>` | — | **Required.** Tool handler |
+| `enabled` | `boolean` | `true` | Conditionally enable/disable |
+| `server` | `string` | — | Target a named server |
+
+### Conditional Registration
+
+Use `enabled` to conditionally register/unregister tools based on application state:
+
+```tsx
+function AdminTools({ isAdmin }: { isAdmin: boolean }) {
+  useDynamicTool({
+    name: 'delete_user',
+    description: 'Delete a user account (admin only)',
+    schema: z.object({ userId: z.string() }),
+    execute: async (args) => {
+      await deleteUser(args.userId);
+      return { content: [{ type: 'text', text: 'User deleted' }] };
+    },
+    enabled: isAdmin, // Tool only available when isAdmin is true
+  });
+
+  return null;
+}
+```
+
+### Stale Closure Prevention
+
+The execute function is stored in a ref internally, so it always captures the latest closure values. You don't need to memoize it.
+
+---
+
+## useDynamicResource
+
+Registers an MCP resource for the lifetime of the component.
+
+```tsx
+import { useDynamicResource } from '@frontmcp/react';
+
+function UserPreferences({ preferences }: { preferences: UserPrefs }) {
+  useDynamicResource({
+    uri: 'app://user-preferences',
+    name: 'user-preferences',
+    description: 'Current user preferences',
+    mimeType: 'application/json',
+    read: async () => ({
+      contents: [
+        {
+          uri: 'app://user-preferences',
+          mimeType: 'application/json',
+          text: JSON.stringify(preferences),
+        },
+      ],
+    }),
+  });
+
+  return <div>Preferences loaded</div>;
+}
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `uri` | `string` | — | **Required.** Resource URI |
+| `name` | `string` | — | **Required.** Human-readable name |
+| `description` | `string` | — | Description for agents |
+| `mimeType` | `string` | — | Content MIME type |
+| `read` | `() => Promise<ReadResourceResult>` | — | **Required.** Read handler |
+| `enabled` | `boolean` | `true` | Conditionally enable/disable |
+| `server` | `string` | — | Target a named server |
+
+---
+
+## useComponentTree
+
+Exposes the DOM subtree under a ref as a JSON MCP resource. Useful for giving agents visibility into the rendered component hierarchy.
+
+```tsx
+import { useRef } from 'react';
+import { useComponentTree } from '@frontmcp/react';
+
+function Dashboard() {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useComponentTree({
+    rootRef,
+    uri: 'react://component-tree',
+    maxDepth: 10,
+    includeProps: true,
+  });
+
+  return (
+    <div ref={rootRef}>
+      <div data-component="Sidebar">...</div>
+      <div data-component="MainContent">...</div>
+    </div>
+  );
+}
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `rootRef` | `RefObject<HTMLElement \| null>` | — | **Required.** Root element ref |
+| `uri` | `string` | `'react://component-tree'` | Resource URI |
+| `maxDepth` | `number` | `10` | Maximum traversal depth |
+| `includeProps` | `boolean` | `false` | Include `data-*` attributes as props |
+| `server` | `string` | — | Target a named server |
+
+### Output Format
+
+The resource returns a JSON tree with `component`, `tag`, `children`, and optional `props`:
+
+```json
+{
+  "component": "Dashboard",
+  "tag": "div",
+  "children": [
+    { "component": "Sidebar", "tag": "div", "children": [] },
+    { "component": "MainContent", "tag": "div", "children": [] }
+  ]
+}
+```
+
+Elements with `data-component` attributes use that value as `component`. Others fall back to the tag name.
+
+---
+
+## Mount/Unmount Lifecycle
+
+Dynamic tools and resources follow React's effect lifecycle:
+
+1. **Mount**: The tool/resource is registered with the `DynamicRegistry`
+2. **Update**: If dependencies change, the old registration is cleaned up and a new one is created
+3. **Unmount**: The tool/resource is automatically unregistered
+
+This means agents only see tools that correspond to currently rendered UI. When a user navigates away from a page, its tools disappear; when they navigate back, the tools reappear.
+
+```tsx
+function App() {
+  const [page, setPage] = useState<'home' | 'settings'>('home');
+
+  return (
+    <FrontMcpProvider server={server}>
+      {page === 'home' && <HomePage />}     {/* home tools registered */}
+      {page === 'settings' && <Settings />} {/* settings tools registered */}
+    </FrontMcpProvider>
+  );
+}
+```

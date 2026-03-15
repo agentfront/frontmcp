@@ -1,0 +1,282 @@
+---
+title: Agent Components
+slug: react/agent-components
+icon: robot
+description: Agent-driven UI components for @frontmcp/react
+---
+
+Agent components are React components that register MCP tools automatically. Agents interact with these components by calling tools — pushing data into the UI or receiving UI state.
+
+## mcpComponent
+
+The recommended way to create agent-driven components. `mcpComponent()` is a factory that wraps a React component + zod schema into an MCP-registered component with full type safety.
+
+```tsx
+import { mcpComponent } from '@frontmcp/react';
+import { z } from 'zod';
+
+const WeatherCard = mcpComponent(
+  ({ city, temp }) => (
+    <div className="weather-card">
+      <h2>{city}</h2>
+      <p>{temp}°</p>
+    </div>
+  ),
+  {
+    name: 'show_weather',
+    description: 'Display weather data for a city',
+    schema: z.object({
+      city: z.string(),
+      temp: z.number(),
+    }),
+    fallback: <p>Waiting for weather data...</p>,
+  },
+);
+
+// Use it like a normal component
+function App() {
+  return <WeatherCard />;
+}
+```
+
+### How It Works
+
+1. On mount, `mcpComponent` registers an MCP tool with the given `name` and zod `schema`
+2. Input is validated against the zod schema before reaching your component
+3. Before any agent invocation, the `fallback` is rendered
+4. When an agent calls the tool, the validated data is passed as typed props
+5. The tool returns a success response to the agent
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | — | **Required.** MCP tool name agents will call |
+| `description` | `string` | `name` | Tool description for agents |
+| `schema` | `z.ZodObject` | — | **Required.** Zod schema for type-safe input |
+| `fallback` | `ReactNode` | `null` | Shown before first invocation |
+| `server` | `string` | — | Target a named server |
+| `columns` | `McpColumnDef[]` | — | Table mode column definitions |
+
+### Static Properties
+
+The returned component has a `.toolName` property:
+
+```tsx
+const WeatherCard = mcpComponent(WeatherCardImpl, { name: 'show_weather', schema });
+console.log(WeatherCard.toolName); // 'show_weather'
+```
+
+### Patterns
+
+#### Wrapping Existing Components
+
+```tsx
+import { WeatherCardImpl } from './WeatherCard';
+
+const WeatherCard = mcpComponent(WeatherCardImpl, {
+  name: 'show_weather',
+  description: 'Display weather data',
+  schema: z.object({ city: z.string(), temp: z.number() }),
+  fallback: <Skeleton />,
+});
+```
+
+#### Inline Components
+
+```tsx
+const MetricsCard = mcpComponent(
+  ({ cpu, memory }) => (
+    <div>
+      <span>CPU: {cpu}%</span>
+      <span>Memory: {memory}%</span>
+    </div>
+  ),
+  {
+    name: 'show_metrics',
+    schema: z.object({ cpu: z.number(), memory: z.number() }),
+  },
+);
+```
+
+#### Lazy Loading
+
+```tsx
+const HeavyChart = mcpComponent(
+  () => import('./HeavyChart'),
+  {
+    name: 'show_chart',
+    schema: z.object({ data: z.array(z.number()), label: z.string() }),
+    fallback: <p>Loading chart...</p>,
+  },
+);
+```
+
+#### Dashboard Widgets
+
+Use multiple `mcpComponent` instances to build agent-controlled dashboards:
+
+```tsx
+function AgentDashboard() {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <MetricsCard />
+      <WeatherCard />
+      <OrderTable />
+    </div>
+  );
+}
+```
+
+#### Direct Props
+
+The returned component accepts partial props directly, which merge with agent-provided data:
+
+```tsx
+<WeatherCard city="Default City" />
+```
+
+---
+
+## Table Mode
+
+When `component` is `null` and `columns` is provided, `mcpComponent` renders a default `<table>`. The tool schema is automatically wrapped in `{ rows: z.array(schema) }`.
+
+```tsx
+import { mcpComponent } from '@frontmcp/react';
+import { z } from 'zod';
+
+const OrderTable = mcpComponent(null, {
+  name: 'show_orders',
+  description: 'Display order data as a table',
+  schema: z.object({
+    id: z.string(),
+    product: z.string(),
+    price: z.number(),
+  }),
+  columns: [
+    { key: 'id', header: 'Order ID' },
+    { key: 'product', header: 'Product' },
+    { key: 'price', header: 'Price', render: (v) => `$${v}` },
+  ],
+});
+```
+
+### McpColumnDef
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `key` | `string` | Property key in the row object |
+| `header` | `string` | Column header text |
+| `render` | `(value) => ReactNode` | Optional custom cell renderer |
+
+### How Table Mode Works
+
+1. The agent calls the tool with `{ rows: [...] }`
+2. Each row is validated against the zod schema
+3. The table renders with the specified columns
+4. Custom `render` functions allow formatting (e.g., currency, dates)
+
+---
+
+## Legacy Components
+
+### AgentContent
+
+<Warning>
+`AgentContent` is deprecated. Use `mcpComponent()` instead for type-safe schemas.
+</Warning>
+
+A component that registers itself as an MCP tool using raw JSON Schema.
+
+```tsx
+import { AgentContent } from '@frontmcp/react';
+
+<AgentContent
+  name="show_weather"
+  description="Display weather data"
+  inputSchema={{
+    type: 'object',
+    properties: {
+      city: { type: 'string' },
+      temp: { type: 'number' },
+    },
+  }}
+  render={(data) => (
+    <div>
+      <h2>{String(data.city)}</h2>
+      <p>{String(data.temp)}°</p>
+    </div>
+  )}
+  fallback={<p>Waiting for weather data...</p>}
+/>
+```
+
+### AgentSearch
+
+<Warning>
+`AgentSearch` is deprecated. Use `mcpComponent()` with the `columns` option for table-based result rendering.
+</Warning>
+
+A headless search component that registers an MCP tool for search execution.
+
+```tsx
+import { AgentSearch } from '@frontmcp/react';
+
+<AgentSearch
+  toolName="product_search"
+  description="Search products"
+  placeholder="Search..."
+  onResults={(results) => setSearchResults(results)}
+/>
+```
+
+### Migration Guide
+
+**AgentContent → mcpComponent:**
+
+```tsx
+// Before
+<AgentContent
+  name="show_weather"
+  description="Display weather"
+  inputSchema={{ type: 'object', properties: { city: { type: 'string' } } }}
+  render={(data) => <div>{String(data.city)}</div>}
+  fallback={<p>Loading...</p>}
+/>
+
+// After
+const WeatherCard = mcpComponent(
+  ({ city }) => <div>{city}</div>,
+  {
+    name: 'show_weather',
+    description: 'Display weather',
+    schema: z.object({ city: z.string() }),
+    fallback: <p>Loading...</p>,
+  },
+);
+// Then use: <WeatherCard />
+```
+
+**AgentSearch → mcpComponent table mode:**
+
+```tsx
+// Before
+<AgentSearch
+  toolName="product_search"
+  description="Search products"
+  onResults={(results) => setResults(results)}
+/>
+
+// After
+const ProductTable = mcpComponent(null, {
+  name: 'product_search',
+  description: 'Search products',
+  schema: z.object({ name: z.string(), price: z.number() }),
+  columns: [
+    { key: 'name', header: 'Product' },
+    { key: 'price', header: 'Price', render: (v) => `$${v}` },
+  ],
+});
+// Then use: <ProductTable />
+```
