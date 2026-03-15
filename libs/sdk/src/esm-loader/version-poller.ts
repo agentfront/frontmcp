@@ -99,12 +99,16 @@ export class VersionPoller {
 
   /**
    * Update the current version for a tracked package (after hot-reload).
+   *
+   * @returns `true` if the package was found and updated, `false` if unknown.
    */
-  updateCurrentVersion(packageName: string, newVersion: string): void {
+  updateCurrentVersion(packageName: string, newVersion: string): boolean {
     const entry = this.packages.get(packageName);
     if (entry) {
       entry.currentVersion = newVersion;
+      return true;
     }
+    return false;
   }
 
   /**

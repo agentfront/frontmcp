@@ -373,12 +373,14 @@ describe('ESM Loader E2E', () => {
       const specifier = parsePackageSpecifier('@test/simple-tools@latest');
       poller.addPackage(specifier, '1.0.0');
 
-      const results = await poller.checkNow();
+      try {
+        const results = await poller.checkNow();
 
-      expect(results).toHaveLength(1);
-      expect(results[0].hasUpdate).toBe(false);
-
-      poller.stop();
+        expect(results).toHaveLength(1);
+        expect(results[0].hasUpdate).toBe(false);
+      } finally {
+        poller.stop();
+      }
     });
   });
 
