@@ -19,7 +19,7 @@ const log = DEBUG ? console.log.bind(console) : () => {};
 let esmServer: TestServer | null = null;
 
 // Port configuration
-const ESM_SERVER_PORT = 50410;
+const ESM_SERVER_PORT = 50400;
 
 // Start local ESM package server before all tests
 beforeAll(async () => {
@@ -32,6 +32,7 @@ beforeAll(async () => {
       startupTimeout: 30000,
       healthCheckPath: '/@test/esm-tools',
       debug: DEBUG,
+      env: { ESM_SERVER_PORT: String(ESM_SERVER_PORT) },
     });
     log('[E2E] ESM package server started:', esmServer.info.baseUrl);
   } catch (error) {

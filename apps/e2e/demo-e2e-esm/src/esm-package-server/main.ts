@@ -14,7 +14,7 @@
 
 import * as http from 'node:http';
 
-const port = parseInt(process.env['ESM_SERVER_PORT'] ?? '50410', 10);
+const port = parseInt(process.env['PORT'] ?? process.env['ESM_SERVER_PORT'] ?? '50400', 10);
 
 // ═══════════════════════════════════════════════════════════════════
 // FIXTURE BUNDLES (CJS format — normalizeEsmExport handles the default wrapper)

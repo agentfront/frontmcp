@@ -18,7 +18,7 @@ const log = DEBUG ? console.log.bind(console) : () => {};
 
 // ESM package server instance
 let esmServer: TestServer | null = null;
-const ESM_SERVER_PORT = 50412;
+const ESM_SERVER_PORT = 50420;
 
 // Temp cache dir to simulate homedir-style cache (avoid polluting actual homedir)
 let testCacheDir: string;

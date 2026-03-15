@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel, loadFrom } from '@frontmcp/sdk';
 
 const port = parseInt(process.env['PORT'] ?? '3115', 10);
-const esmServerUrl = `http://127.0.0.1:${parseInt(process.env['ESM_SERVER_PORT'] ?? '50410', 10)}`;
+const esmServerUrl = `http://127.0.0.1:${parseInt(process.env['ESM_SERVER_PORT'] ?? '50400', 10)}`;
 
 @FrontMcp({
   info: { name: 'Demo E2E ESM', version: '0.1.0' },
