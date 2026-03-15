@@ -2,6 +2,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { useTools } from '../useTools';
 import type { FrontMcpContextValue, ToolInfo } from '../../types';
@@ -46,6 +47,8 @@ function createWrapper(overrides?: { tools?: ToolInfo[]; status?: string; name?:
   const ctx: FrontMcpContextValue = {
     name,
     registry: new ComponentRegistry(),
+    dynamicRegistry: new DynamicRegistry(),
+    getDynamicRegistry: () => new DynamicRegistry(),
     connect: jest.fn(),
   };
   return ({ children }: { children: React.ReactNode }) =>

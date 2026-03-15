@@ -19,9 +19,9 @@ function interpolatePath(path: string, params: Record<string, unknown>): string 
 }
 
 export function useApiClient(options: ApiClientOptions): void {
-  // TODO: forward options.server to DynamicToolDef when server-scoped registries are implemented
   const { baseUrl, operations, headers, prefix = 'api', client, fetch: customFetch } = options;
-  const { dynamicRegistry } = useContext(FrontMcpContext);
+  const { getDynamicRegistry } = useContext(FrontMcpContext);
+  const dynamicRegistry = getDynamicRegistry(options.server);
 
   const headersRef = useRef(headers);
   headersRef.current = headers;

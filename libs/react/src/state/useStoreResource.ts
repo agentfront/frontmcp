@@ -14,9 +14,9 @@ import type { StoreResourceOptions } from './state.types';
 const VALID_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
 export function useStoreResource(options: StoreResourceOptions): void {
-  // TODO: forward options.server to DynamicRegistry when server-scoped registries are implemented
   const { name, getState, subscribe, selectors, actions } = options;
-  const { dynamicRegistry } = useContext(FrontMcpContext);
+  const { getDynamicRegistry } = useContext(FrontMcpContext);
+  const dynamicRegistry = getDynamicRegistry(options.server);
 
   if (!name || !VALID_NAME_RE.test(name)) {
     throw new Error(`useStoreResource: invalid store name "${name}". Names must match ${VALID_NAME_RE}.`);

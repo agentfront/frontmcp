@@ -4,6 +4,7 @@ import { useListResources } from '../useListResources';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue, ResourceInfo, ResourceTemplateInfo } from '../../types';
 import type { DirectMcpServer } from '@frontmcp/sdk';
 
@@ -31,6 +32,8 @@ function createWrapper(overrides?: {
   const ctx: FrontMcpContextValue = {
     name,
     registry: new ComponentRegistry(),
+    dynamicRegistry: new DynamicRegistry(),
+    getDynamicRegistry: () => new DynamicRegistry(),
     connect: jest.fn(),
   };
   return ({ children }: { children: React.ReactNode }) =>

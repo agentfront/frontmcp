@@ -51,6 +51,7 @@ export interface FrontMcpContextValue {
   name: string;
   registry: ComponentRegistry;
   dynamicRegistry: DynamicRegistry;
+  getDynamicRegistry: (server?: string) => DynamicRegistry;
   connect: () => Promise<void>;
 }
 

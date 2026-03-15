@@ -8,10 +8,12 @@ import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 
 function createMockContext(): FrontMcpContextValue {
+  const dynamicRegistry = new DynamicRegistry();
   return {
     name: 'test',
     registry: new ComponentRegistry(),
-    dynamicRegistry: new DynamicRegistry(),
+    dynamicRegistry,
+    getDynamicRegistry: () => dynamicRegistry,
     connect: jest.fn(),
   };
 }

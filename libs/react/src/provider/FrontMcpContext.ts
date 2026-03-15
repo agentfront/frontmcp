@@ -13,5 +13,6 @@ export const FrontMcpContext = createContext<FrontMcpContextValue>({
   name: 'default',
   registry: new ComponentRegistry(),
   dynamicRegistry: defaultDynamicRegistry,
+  getDynamicRegistry: () => defaultDynamicRegistry,
   connect: async () => {},
 });

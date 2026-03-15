@@ -51,7 +51,8 @@ export type UseDynamicToolOptions<S extends z.ZodObject<z.ZodRawShape> = z.ZodOb
 
 export function useDynamicTool<S extends z.ZodObject<z.ZodRawShape>>(options: UseDynamicToolOptions<S>): void {
   const { name, description, enabled = true } = options;
-  const { dynamicRegistry } = useContext(FrontMcpContext);
+  const { getDynamicRegistry } = useContext(FrontMcpContext);
+  const dynamicRegistry = getDynamicRegistry(options.server);
 
   // Resolve JSON Schema from zod or pass through raw inputSchema
   const resolvedInputSchema = useMemo(() => {

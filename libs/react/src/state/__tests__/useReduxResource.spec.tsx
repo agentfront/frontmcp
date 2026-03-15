@@ -15,6 +15,7 @@ function createWrapper(dynamicRegistry: DynamicRegistry) {
     name: 'test',
     registry: new ComponentRegistry(),
     dynamicRegistry,
+    getDynamicRegistry: () => dynamicRegistry,
     connect: async () => {},
   };
   return function Wrapper({ children }: { children: React.ReactNode }) {

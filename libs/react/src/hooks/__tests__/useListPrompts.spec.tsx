@@ -4,6 +4,7 @@ import { useListPrompts } from '../useListPrompts';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { serverRegistry } from '../../registry/ServerRegistry';
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { FrontMcpContextValue, PromptInfo } from '../../types';
 import type { DirectMcpServer } from '@frontmcp/sdk';
 
@@ -23,6 +24,8 @@ function createWrapper(overrides?: { prompts?: PromptInfo[]; name?: string }) {
   const ctx: FrontMcpContextValue = {
     name,
     registry: new ComponentRegistry(),
+    dynamicRegistry: new DynamicRegistry(),
+    getDynamicRegistry: () => new DynamicRegistry(),
     connect: jest.fn(),
   };
   return ({ children }: { children: React.ReactNode }) =>

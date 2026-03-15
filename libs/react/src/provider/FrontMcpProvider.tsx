@@ -64,7 +64,22 @@ export function FrontMcpProvider({
     return reg;
   }, [components]);
 
-  const dynamicRegistry = useMemo(() => new DynamicRegistry(), []);
+  const registryMapRef = useRef(new Map<string, DynamicRegistry>());
+
+  const getDynamicRegistry = useCallback(
+    (serverName?: string): DynamicRegistry => {
+      const key = serverName ?? resolvedName;
+      let reg = registryMapRef.current.get(key);
+      if (!reg) {
+        reg = new DynamicRegistry();
+        registryMapRef.current.set(key, reg);
+      }
+      return reg;
+    },
+    [resolvedName],
+  );
+
+  const dynamicRegistry = useMemo(() => getDynamicRegistry(resolvedName), [getDynamicRegistry, resolvedName]);
 
   // Register provider-level store adapters
   useStoreRegistration(stores ?? [], dynamicRegistry);
@@ -77,7 +92,9 @@ export function FrontMcpProvider({
     serverRegistry.register(resolvedName, wrappedServer);
     if (servers) {
       for (const [sName, srv] of Object.entries(servers)) {
-        serverRegistry.register(sName, srv);
+        const srvRegistry = getDynamicRegistry(sName);
+        const wrappedSrv = createWrappedServer(srv, srvRegistry);
+        serverRegistry.register(sName, wrappedSrv);
       }
     }
 
@@ -86,22 +103,29 @@ export function FrontMcpProvider({
       if (servers) {
         for (const sName of Object.keys(servers)) {
           serverRegistry.unregister(sName);
+          const srvRegistry = registryMapRef.current.get(sName);
+          if (srvRegistry) {
+            srvRegistry.clear();
+            registryMapRef.current.delete(sName);
+          }
         }
       }
     };
-  }, [resolvedName, wrappedServer, servers]);
+  }, [resolvedName, wrappedServer, servers, getDynamicRegistry]);
 
   // Refresh ServerRegistry entry when dynamic tools/resources change
   useEffect(() => {
-    return dynamicRegistry.subscribe(() => {
-      const entry = serverRegistry.get(resolvedName);
+    const refreshServerEntry = (name: string) => {
+      const entry = serverRegistry.get(name);
       if (!entry || !entry.client) return;
 
-      // Re-list tools and resources by calling the wrapped server
-      Promise.all([wrappedServer.listTools(), wrappedServer.listResources()])
+      const srv = entry.server;
+      if (!srv) return;
+
+      Promise.all([srv.listTools(), srv.listResources()])
         .then(([toolsResult, resourcesResult]) => {
           if (mountedRef.current) {
-            serverRegistry.update(resolvedName, {
+            serverRegistry.update(name, {
               tools: (toolsResult as { tools?: ToolInfo[] }).tools ?? [],
               resources: (resourcesResult as { resources?: ResourceInfo[] }).resources ?? [],
             });
@@ -110,8 +134,37 @@ export function FrontMcpProvider({
         .catch(() => {
           // Non-critical — dynamic tools may still work via callTool even if listing fails
         });
-    });
-  }, [dynamicRegistry, wrappedServer, resolvedName]);
+    };
+
+    const unsubs: (() => void)[] = [];
+
+    // Subscribe to primary server's dynamic registry
+    unsubs.push(
+      dynamicRegistry.subscribe(() => {
+        refreshServerEntry(resolvedName);
+      }),
+    );
+
+    // Subscribe to additional servers' dynamic registries
+    if (servers) {
+      for (const sName of Object.keys(servers)) {
+        const srvRegistry = registryMapRef.current.get(sName);
+        if (srvRegistry) {
+          unsubs.push(
+            srvRegistry.subscribe(() => {
+              refreshServerEntry(sName);
+            }),
+          );
+        }
+      }
+    }
+
+    return () => {
+      unsubs.forEach((fn) => {
+        fn();
+      });
+    };
+  }, [dynamicRegistry, resolvedName, servers]);
 
   const connectClient = useCallback(async () => {
     if (clientRef.current) return;
@@ -204,9 +257,10 @@ export function FrontMcpProvider({
       name: resolvedName,
       registry,
       dynamicRegistry,
+      getDynamicRegistry,
       connect: connectClient,
     }),
-    [resolvedName, registry, dynamicRegistry, connectClient],
+    [resolvedName, registry, dynamicRegistry, getDynamicRegistry, connectClient],
   );
 
   return React.createElement(FrontMcpContext.Provider, { value: contextValue }, children);

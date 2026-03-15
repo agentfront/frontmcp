@@ -23,7 +23,8 @@ export interface UseDynamicResourceOptions {
 
 export function useDynamicResource(options: UseDynamicResourceOptions): void {
   const { uri, name, description, mimeType, read, enabled = true } = options;
-  const { dynamicRegistry } = useContext(FrontMcpContext);
+  const { getDynamicRegistry } = useContext(FrontMcpContext);
+  const dynamicRegistry = getDynamicRegistry(options.server);
 
   // Keep the latest read fn in a ref to avoid stale closures
   const readRef = useRef(read);
