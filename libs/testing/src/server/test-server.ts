@@ -109,7 +109,14 @@ export class TestServer {
         await server.startProcess();
         return server;
       } catch (error) {
-        await server.stop();
+        try {
+          await server.stop();
+        } catch (cleanupError) {
+          if (options.debug || DEBUG_SERVER) {
+            const msg = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+            console.warn(`[TestServer] Cleanup failed after startup error: ${msg}`);
+          }
+        }
 
         const isEADDRINUSE =
           error instanceof Error &&

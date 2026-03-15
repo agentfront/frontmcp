@@ -22,6 +22,24 @@ function isBrowserEnv(): boolean {
 }
 
 /**
+ * Wrap CJS bundle content for ESM compatibility.
+ * CJS bundles use `module.exports = ...` which isn't valid in .mjs files.
+ * This wraps them with a module/exports shim and re-exports via `export default`.
+ */
+function wrapCjsForEsm(content: string): string {
+  // If already ESM (has export/import statements), return as-is
+  if (/\bexport\s+(default\b|{)/.test(content) || /\bimport\s+/.test(content)) {
+    return content;
+  }
+  return [
+    'const module = { exports: {} };',
+    'const exports = module.exports;',
+    content,
+    'export default module.exports;',
+  ].join('\n');
+}
+
+/**
  * Metadata stored alongside each cached ESM bundle.
  */
 export interface EsmCacheEntry {
@@ -196,7 +214,7 @@ export class EsmCacheManager {
         await ensureDir(entryDir);
 
         bundlePath = path.join(entryDir, 'bundle.mjs');
-        await writeFile(bundlePath, bundleContent);
+        await writeFile(bundlePath, wrapCjsForEsm(bundleContent));
 
         const diskEntry: EsmCacheEntry = {
           packageUrl,
