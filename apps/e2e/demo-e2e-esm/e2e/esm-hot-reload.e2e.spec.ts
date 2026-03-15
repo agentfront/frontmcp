@@ -88,6 +88,8 @@ beforeAll(async () => {
       env: { ESM_SERVER_PORT: String(ESM_SERVER_PORT) },
     });
     log('[E2E] ESM package server started:', esmServer.info.baseUrl);
+    // Propagate actual port for the test fixture's MCP demo server
+    process.env['ESM_SERVER_PORT'] = String(esmServer.info.port);
   } catch (error) {
     console.error('[E2E] Failed to start ESM package server:', error);
     throw error;
@@ -96,6 +98,7 @@ beforeAll(async () => {
 
 // Stop ESM package server after all tests
 afterAll(async () => {
+  delete process.env['ESM_SERVER_PORT'];
   if (esmServer) {
     log('[E2E] Stopping ESM package server...');
     await esmServer.stop();
@@ -110,9 +113,6 @@ test.describe('ESM Hot-Reload E2E', () => {
     publicMode: true,
     logLevel: DEBUG ? 'debug' : 'warn',
     startupTimeout: 60000,
-    env: {
-      ESM_SERVER_PORT: String(ESM_SERVER_PORT),
-    },
   });
 
   test('detects new version and registers new tools', async ({ mcp }) => {
@@ -126,7 +126,7 @@ test.describe('ESM Hot-Reload E2E', () => {
     expect(initialNames).not.toContain('esm:multiply');
 
     // Step 2: Publish v2.0.0 with 3 tools (adds multiply)
-    const publishUrl = `http://127.0.0.1:${ESM_SERVER_PORT}/_admin/publish`;
+    const publishUrl = `http://127.0.0.1:${esmServer!.info.port}/_admin/publish`;
     const publishRes = await fetch(publishUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -158,5 +158,5 @@ test.describe('ESM Hot-Reload E2E', () => {
     const result = await mcp.tools.call('esm:multiply', { a: 3, b: 4 });
     expect(result).toBeSuccessful();
     expect(result).toHaveTextContent('12');
-  }, 90000);
+  });
 });

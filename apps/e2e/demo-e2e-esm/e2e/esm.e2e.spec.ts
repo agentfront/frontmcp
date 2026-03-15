@@ -35,6 +35,8 @@ beforeAll(async () => {
       env: { ESM_SERVER_PORT: String(ESM_SERVER_PORT) },
     });
     log('[E2E] ESM package server started:', esmServer.info.baseUrl);
+    // Propagate actual port for the test fixture's MCP demo server
+    process.env['ESM_SERVER_PORT'] = String(esmServer.info.port);
   } catch (error) {
     console.error('[E2E] Failed to start ESM package server:', error);
     throw error;
@@ -43,6 +45,7 @@ beforeAll(async () => {
 
 // Stop ESM package server after all tests
 afterAll(async () => {
+  delete process.env['ESM_SERVER_PORT'];
   if (esmServer) {
     log('[E2E] Stopping ESM package server...');
     await esmServer.stop();
@@ -57,9 +60,6 @@ test.describe('ESM Package Loading E2E', () => {
     publicMode: true,
     logLevel: DEBUG ? 'debug' : 'warn',
     startupTimeout: 60000,
-    env: {
-      ESM_SERVER_PORT: String(ESM_SERVER_PORT),
-    },
   });
 
   // ═══════════════════════════════════════════════════════════════

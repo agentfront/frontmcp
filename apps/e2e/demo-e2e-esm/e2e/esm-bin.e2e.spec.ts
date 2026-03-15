@@ -65,7 +65,7 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
   beforeAll(async () => {
     const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
 
-    const esmServerUrl = `http://127.0.0.1:${ESM_SERVER_PORT}`;
+    const esmServerUrl = `http://127.0.0.1:${esmServer!.info.port}`;
 
     client = await connect(
       {
@@ -141,7 +141,7 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
 
   test('explicit cacheDir option overrides default', async () => {
     const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
-    const esmServerUrl = `http://127.0.0.1:${ESM_SERVER_PORT}`;
+    const esmServerUrl = `http://127.0.0.1:${esmServer!.info.port}`;
 
     // Use explicit cacheDir pointing to temp directory
     const customClient = await connect(
@@ -163,5 +163,5 @@ test.describe('ESM CLI/Bin Mode E2E', () => {
     const tools = await customClient.listTools();
     const toolNames = tools.tools.map((t) => t.name);
     expect(toolNames).toContain('custom:echo');
-  }, 60000);
+  });
 });
