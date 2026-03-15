@@ -99,13 +99,15 @@ async function main(): Promise<void> {
     window.__ESM_RESULTS__ = results;
     app.textContent = JSON.stringify(results, null, 2);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
     const results: EsmTestResults = {
       success: false,
-      error: (err as Error).message + '\n' + (err as Error).stack,
+      error: message + (stack ? '\n' + stack : ''),
     };
     window.__ESM_RESULTS__ = results;
     if (app) {
-      app.textContent = 'Error: ' + (err as Error).message;
+      app.textContent = 'Error: ' + message;
     }
     console.error('FrontMCP browser ESM error:', err);
   }

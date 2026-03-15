@@ -28,7 +28,10 @@ test.beforeAll(async () => {
 
     let started = false;
     const timeout = setTimeout(() => {
-      if (!started) reject(new Error('ESM server startup timeout'));
+      if (!started) {
+        esmServerProcess?.kill('SIGTERM');
+        reject(new Error('ESM server startup timeout'));
+      }
     }, 30000);
 
     esmServerProcess.stdout?.on('data', (data: Buffer) => {
@@ -45,6 +48,7 @@ test.beforeAll(async () => {
 
     esmServerProcess.on('error', (err) => {
       clearTimeout(timeout);
+      esmServerProcess?.kill('SIGTERM');
       reject(err);
     });
   });

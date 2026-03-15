@@ -14,7 +14,7 @@ import * as semver from 'semver';
  * @returns true if the version satisfies the range
  */
 export function satisfiesRange(version: string, range: string): boolean {
-  if (range === 'latest' || range === '*') return true;
+  if (range === 'latest') return true;
   return semver.satisfies(version, range);
 }
 
@@ -26,7 +26,7 @@ export function satisfiesRange(version: string, range: string): boolean {
  * @returns The highest matching version, or null if none match
  */
 export function maxSatisfying(versions: string[], range: string): string | null {
-  if (range === 'latest' || range === '*') {
+  if (range === 'latest') {
     const sorted = versions.filter((v) => semver.valid(v)).sort(semver.rcompare);
     return sorted[0] ?? null;
   }
@@ -37,7 +37,7 @@ export function maxSatisfying(versions: string[], range: string): string | null 
  * Check if a string is a valid semver range.
  */
 export function isValidRange(range: string): boolean {
-  if (range === 'latest' || range === '*') return true;
+  if (range === 'latest') return true;
   return semver.validRange(range) !== null;
 }
 

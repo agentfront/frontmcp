@@ -137,14 +137,18 @@ export const annotatedFrontMcpAdaptersSchema = z.custom<Type>(
   { message: 'adapters items must be annotated with @Adapter() | @FrontMcpAdapter().' },
 );
 
-export const annotatedFrontMcpToolsSchema = z.custom<Type>(
-  (v): v is Type => {
+export const annotatedFrontMcpToolsSchema = z.custom<Type | string>(
+  (v): v is Type | string => {
+    // ESM package specifier string (e.g., '@acme/tools@^1.0.0')
+    if (typeof v === 'string') {
+      return true;
+    }
     return (
       typeof v === 'function' &&
       (Reflect.hasMetadata(FrontMcpToolTokens.type, v) || v[FrontMcpToolTokens.type] !== undefined)
     );
   },
-  { message: 'tools items must be annotated with @Tool() | @FrontMcpTool().' },
+  { message: 'tools items must be annotated with @Tool() | @FrontMcpTool() or be a package specifier string.' },
 );
 
 export const annotatedFrontMcpResourcesSchema = z.custom<Type>(
@@ -187,6 +191,10 @@ export const annotatedFrontMcpLoggerSchema = z.custom<Type>(
 
 export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
   (v): v is AgentType => {
+    // ESM package specifier string (e.g., '@acme/agents@^1.0.0')
+    if (typeof v === 'string') {
+      return true;
+    }
     // Check for class-based @Agent decorator
     if (typeof v === 'function') {
       if (Reflect.hasMetadata(FrontMcpAgentTokens.type, v)) {

@@ -7,7 +7,7 @@ import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notifica
 import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
 import { ZodType } from 'zod';
 
-export type ToolType<T = any> = Type<T> | FuncType<T> | string;
+export type ToolType<T = unknown> = Type<T> | FuncType<T> | string;
 
 type HistoryEntry<T> = {
   at: number;

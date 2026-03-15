@@ -103,7 +103,7 @@ export function buildEsmToolRecord(tool: EsmToolDefinition, namespace?: string):
     description: tool.description ?? `ESM tool: ${tool.name}`,
     inputSchema: inputSchema as ToolMetadata['inputSchema'],
     rawInputSchema,
-    outputSchema: 'json' as ToolMetadata['outputSchema'],
+    outputSchema: (tool.outputSchema ?? 'json') as ToolMetadata['outputSchema'],
     annotations: {
       'frontmcp:esm': true,
       'frontmcp:esmTool': tool.name,

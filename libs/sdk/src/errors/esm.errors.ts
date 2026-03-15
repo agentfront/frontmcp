@@ -110,11 +110,7 @@ export class EsmRegistryAuthError extends PublicMcpError {
   readonly mcpErrorCode = MCP_ERROR_CODES.UNAUTHORIZED;
 
   constructor(registryUrl?: string, details?: string) {
-    super(
-      `Authentication failed for npm registry${registryUrl ? ` at "${registryUrl}"` : ''}${details ? `: ${details}` : ''}`,
-      'ESM_REGISTRY_AUTH_ERROR',
-      401,
-    );
+    super('Authentication failed for npm registry', 'ESM_REGISTRY_AUTH_ERROR', 401);
     this.registryUrl = registryUrl;
     this.details = details;
   }

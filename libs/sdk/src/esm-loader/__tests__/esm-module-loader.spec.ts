@@ -217,7 +217,9 @@ describe('EsmModuleLoader', () => {
       const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
       const l = new EsmModuleLoader({
         cache: mockCache,
-        logger: logger as unknown as Parameters<typeof EsmModuleLoader>[0] extends { logger?: infer L } ? L : never,
+        logger: logger as unknown as ConstructorParameters<typeof EsmModuleLoader>[0] extends { logger?: infer L }
+          ? L
+          : never,
       });
       expect(l).toBeInstanceOf(EsmModuleLoader);
     });

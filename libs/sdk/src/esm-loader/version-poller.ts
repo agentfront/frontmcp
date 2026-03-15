@@ -65,6 +65,7 @@ export class VersionPoller {
   private readonly packages: Map<string, TrackedPackage> = new Map();
   private intervalId?: ReturnType<typeof setInterval>;
   private running = false;
+  private polling = false;
 
   constructor(options: VersionPollerOptions) {
     this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
@@ -174,20 +175,26 @@ export class VersionPoller {
    * Internal polling loop iteration.
    */
   private async poll(): Promise<void> {
-    for (const [, entry] of this.packages) {
-      try {
-        const result = await this.checkPackage(entry);
-        if (result.hasUpdate) {
-          this.logger?.info(
-            `New version available for ${entry.specifier.fullName}: ${entry.currentVersion} → ${result.latestVersion}`,
-          );
-          await this.onNewVersion(entry.specifier.fullName, entry.currentVersion, result.latestVersion);
-          // Update the tracked version after successful callback
-          entry.currentVersion = result.latestVersion;
+    if (this.polling) return;
+    this.polling = true;
+    try {
+      for (const [, entry] of this.packages) {
+        try {
+          const result = await this.checkPackage(entry);
+          if (result.hasUpdate) {
+            this.logger?.info(
+              `New version available for ${entry.specifier.fullName}: ${entry.currentVersion} → ${result.latestVersion}`,
+            );
+            await this.onNewVersion(entry.specifier.fullName, entry.currentVersion, result.latestVersion);
+            // Update the tracked version after successful callback
+            entry.currentVersion = result.latestVersion;
+          }
+        } catch (error) {
+          this.logger?.warn(`Version poll failed for ${entry.specifier.fullName}: ${(error as Error).message}`);
         }
-      } catch (error) {
-        this.logger?.warn(`Version poll failed for ${entry.specifier.fullName}: ${(error as Error).message}`);
       }
+    } finally {
+      this.polling = false;
     }
   }
 

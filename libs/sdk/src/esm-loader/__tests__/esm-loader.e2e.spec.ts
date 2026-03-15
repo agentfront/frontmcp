@@ -11,7 +11,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 import { LocalEsmServer } from './helpers/local-esm-server';
 import { SIMPLE_TOOLS_V1, SIMPLE_TOOLS_V2, MULTI_PRIMITIVE, NAMED_EXPORTS } from './helpers/esm-fixtures';
 import { VersionResolver } from '../version-resolver';
@@ -72,12 +72,12 @@ describe('ESM Loader E2E', () => {
   });
 
   beforeEach(async () => {
-    tmpCacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'esm-e2e-'));
+    tmpCacheDir = await mkdtemp(path.join(os.tmpdir(), 'esm-e2e-'));
     server.clearRequestLog();
   });
 
   afterEach(async () => {
-    await fs.rm(tmpCacheDir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(tmpCacheDir, { recursive: true, force: true }).catch(() => undefined);
   });
 
   describe('VersionResolver with local registry', () => {
@@ -223,7 +223,7 @@ describe('ESM Loader E2E', () => {
       const bundleContent = await response.text();
 
       const bundlePath = path.join(tmpCacheDir, 'simple-tools-v1.js');
-      await fs.writeFile(bundlePath, bundleContent);
+      await writeFile(bundlePath, bundleContent);
 
       const mod = loadBundleFromDisk(bundlePath);
       const manifest = normalizeEsmExport(mod);
@@ -239,7 +239,7 @@ describe('ESM Loader E2E', () => {
       const bundleContent = await response.text();
 
       const bundlePath = path.join(tmpCacheDir, 'multi-primitive.js');
-      await fs.writeFile(bundlePath, bundleContent);
+      await writeFile(bundlePath, bundleContent);
 
       const mod = loadBundleFromDisk(bundlePath);
       const manifest = normalizeEsmExport(mod);
@@ -255,7 +255,7 @@ describe('ESM Loader E2E', () => {
       const bundleContent = await response.text();
 
       const bundlePath = path.join(tmpCacheDir, 'named-exports.js');
-      await fs.writeFile(bundlePath, bundleContent);
+      await writeFile(bundlePath, bundleContent);
 
       const mod = loadBundleFromDisk(bundlePath);
       const manifest = normalizeEsmExport(mod);
@@ -271,7 +271,7 @@ describe('ESM Loader E2E', () => {
       const bundleContent = await response.text();
 
       const bundlePath = path.join(tmpCacheDir, 'exec-test.js');
-      await fs.writeFile(bundlePath, bundleContent);
+      await writeFile(bundlePath, bundleContent);
 
       const mod = loadBundleFromDisk(bundlePath);
       const manifest = normalizeEsmExport(mod);
@@ -290,7 +290,7 @@ describe('ESM Loader E2E', () => {
       const bundleContent = await response.text();
 
       const bundlePath = path.join(tmpCacheDir, 'multi-exec.js');
-      await fs.writeFile(bundlePath, bundleContent);
+      await writeFile(bundlePath, bundleContent);
 
       const mod = loadBundleFromDisk(bundlePath);
       const manifest = normalizeEsmExport(mod);
@@ -340,24 +340,26 @@ describe('ESM Loader E2E', () => {
       const specifier = parsePackageSpecifier('@test/simple-tools@latest');
       poller.addPackage(specifier, '1.0.0');
 
-      const results = await poller.checkNow();
+      try {
+        const results = await poller.checkNow();
 
-      expect(results).toHaveLength(1);
-      expect(results[0].hasUpdate).toBe(true);
-      expect(results[0].latestVersion).toBe('2.0.0');
-      expect(results[0].currentVersion).toBe('1.0.0');
+        expect(results).toHaveLength(1);
+        expect(results[0].hasUpdate).toBe(true);
+        expect(results[0].latestVersion).toBe('2.0.0');
+        expect(results[0].currentVersion).toBe('1.0.0');
+      } finally {
+        poller.stop();
 
-      poller.stop();
-
-      // Restore
-      server.addPackage({
-        name: '@test/simple-tools',
-        versions: {
-          '1.0.0': { bundle: SIMPLE_TOOLS_V1 },
-          '2.0.0': { bundle: SIMPLE_TOOLS_V2 },
-        },
-        'dist-tags': { latest: '1.0.0', next: '2.0.0' },
-      });
+        // Restore
+        server.addPackage({
+          name: '@test/simple-tools',
+          versions: {
+            '1.0.0': { bundle: SIMPLE_TOOLS_V1 },
+            '2.0.0': { bundle: SIMPLE_TOOLS_V2 },
+          },
+          'dist-tags': { latest: '1.0.0', next: '2.0.0' },
+        });
+      }
     });
 
     it('reports no update when version matches', async () => {
@@ -387,7 +389,7 @@ describe('ESM Loader E2E', () => {
       const v1Content = await v1Response.text();
 
       const v1Path = path.join(tmpCacheDir, 'v1.js');
-      await fs.writeFile(v1Path, v1Content);
+      await writeFile(v1Path, v1Content);
 
       const v1Mod = loadBundleFromDisk(v1Path);
       const v1Manifest = normalizeEsmExport(v1Mod);
@@ -400,7 +402,7 @@ describe('ESM Loader E2E', () => {
       const v2Content = await v2Response.text();
 
       const v2Path = path.join(tmpCacheDir, 'v2.js');
-      await fs.writeFile(v2Path, v2Content);
+      await writeFile(v2Path, v2Content);
 
       const v2Mod = loadBundleFromDisk(v2Path);
       const v2Manifest = normalizeEsmExport(v2Mod);

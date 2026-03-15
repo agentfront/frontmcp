@@ -1,6 +1,7 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
 import { InvalidEntityError } from '../errors';
+import { parsePackageSpecifier, isPackageSpecifier } from '../esm-loader/package-specifier';
 import {
   ToolMetadata,
   FrontMcpToolTokens,
@@ -49,7 +50,6 @@ export function collectToolMetadata(cls: ToolType): ToolMetadata {
 export function normalizeTool(item: any): ToolRecord {
   // ESM package specifier string (e.g., '@acme/mcp-tools@^1.0.0')
   if (typeof item === 'string') {
-    const { parsePackageSpecifier, isPackageSpecifier } = require('../esm-loader/package-specifier');
     if (isPackageSpecifier(item)) {
       const specifier = parsePackageSpecifier(item);
       return {
