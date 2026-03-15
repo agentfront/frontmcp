@@ -55,6 +55,29 @@ Install, configure, and manage MCP apps from npm, local paths, or git repositori
 | `install <source>` | Install an MCP app from npm, local path, or git |
 | `uninstall <name>` | Remove an installed MCP app                     |
 | `configure <name>` | Re-run setup questionnaire for an installed app |
+| `esm-update [app-name]` | Check and apply ESM package updates |
+
+---
+
+### ESM Update Options
+
+| Option | Description |
+| -------------- | ----------------------------------------------- |
+| `--check-only` | Only check for updates, don't apply them |
+| `--all` | Update all ESM-installed apps |
+
+```bash
+# Check all ESM apps for updates
+frontmcp package esm-update --all --check-only
+
+# Apply updates for a specific app
+frontmcp package esm-update my-esm-app
+
+# Apply all pending updates
+frontmcp package esm-update --all
+```
+
+See [ESM Packages](/frontmcp/servers/esm-packages) for full documentation on ESM dynamic loading.
 
 ---
 

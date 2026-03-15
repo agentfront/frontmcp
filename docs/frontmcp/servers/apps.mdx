@@ -213,6 +213,34 @@ See the [Cache Plugin documentation](/frontmcp/plugins/cache-plugin#caching-remo
 
 ---
 
+## ESM Package Apps
+
+Load npm packages at runtime and register their tools, resources, and prompts in-process — no HTTP proxy needed:
+
+```ts
+import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'Gateway', version: '1.0.0' },
+  apps: [
+    loadFrom('@acme/mcp-tools@^1.0.0', {
+      namespace: 'acme',
+      autoUpdate: { enabled: true },
+    }),
+    loadFrom('@acme/analytics@^2.0.0', { namespace: 'analytics' }),
+  ],
+})
+export default class Server {}
+```
+
+<Info>
+Unlike [Remote Apps](#remote-apps) which proxy requests to external MCP servers over HTTP, ESM packages are fetched from a CDN, cached locally, and executed **in-process**. They support two-tier caching, background version polling with hot-reload, and private registry authentication.
+</Info>
+
+See the full [ESM Packages reference](/frontmcp/servers/esm-packages) for `loadFrom()` API, caching, authentication, and auto-update configuration.
+
+---
+
 ## Best Practices
 
 **Do:**
@@ -227,3 +255,10 @@ See the [Cache Plugin documentation](/frontmcp/plugins/cache-plugin#caching-remo
 - Put unrelated functionality in the same app
 - Mix authentication strategies within a single app
 - Create apps with only one tool (use the server directly)
+- Use `loadFrom()` for external MCP servers (use remote apps instead)
+
+**Choosing between app types:**
+
+- **Local `@App`**: First-party code you own and maintain
+- **`loadFrom()`**: Community or internal packages distributed via npm
+- **Remote Apps**: External MCP servers running as separate processes

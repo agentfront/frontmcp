@@ -1,0 +1,396 @@
+---
+title: ESM Packages
+sidebarTitle: ESM Packages
+slug: servers/esm-packages
+icon: box-open
+description: Load npm packages at runtime as MCP apps with caching, auto-update, and private registry support
+---
+
+ESM Packages let you **dynamically load npm packages at runtime** and register their tools, resources, and prompts into your FrontMCP server. Unlike [Remote Apps](/frontmcp/servers/apps#remote-apps) which proxy requests to external MCP servers over HTTP, ESM packages are fetched from a CDN, cached locally, and executed **in-process** — giving you the same performance as local apps with the flexibility of npm distribution.
+
+## Why ESM Packages?
+
+<CardGroup cols={2}>
+  <Card title="Zero Build Step" icon="bolt">
+    Load community or internal packages at runtime without bundling them into your server build
+  </Card>
+  <Card title="Auto-Updates" icon="arrows-rotate">
+    Background version polling with semver-aware hot-reload — tools update without restarts
+  </Card>
+  <Card title="Private Registries" icon="lock">
+    Token-based authentication for private npm registries and custom CDN endpoints
+  </Card>
+  <Card title="Cross-Platform" icon="globe">
+    Works in Node.js (disk + memory cache) and browser environments (memory-only cache)
+  </Card>
+</CardGroup>
+
+---
+
+## Quick Start
+
+```ts
+import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [
+    loadFrom('@acme/mcp-tools@^1.0.0'),
+  ],
+})
+export default class Server {}
+```
+
+The `loadFrom()` function creates an app entry that loads the npm package `@acme/mcp-tools` (any version matching `^1.0.0`) at server startup. Its tools, resources, and prompts are automatically registered.
+
+---
+
+## How It Works
+
+<Steps>
+  <Step title="Parse Specifier">
+    `loadFrom('@acme/tools@^1.0.0')` parses the package specifier into scope, name, and semver range.
+  </Step>
+  <Step title="Resolve Version">
+    The npm registry is queried to resolve the semver range (e.g., `^1.0.0`) to a concrete version (e.g., `1.2.3`).
+  </Step>
+  <Step title="Check Cache">
+    The two-tier cache is checked — first in-memory, then disk. On a hit, the cached bundle is used directly.
+  </Step>
+  <Step title="Fetch Bundle">
+    On a cache miss, the bundle is fetched from the esm.sh CDN (or a custom loader URL) and stored in both cache tiers.
+  </Step>
+  <Step title="Evaluate Module">
+    The bundle is evaluated (ESM via native `import()`, CJS via bridge wrapper) and the default export is extracted.
+  </Step>
+  <Step title="Normalize Manifest">
+    The export is normalized into a `FrontMcpPackageManifest` — supporting plain objects, decorated classes, or named exports.
+  </Step>
+  <Step title="Register Primitives">
+    Tools, resources, and prompts from the manifest are registered into standard registries with full hook and lifecycle support.
+  </Step>
+</Steps>
+
+---
+
+## `loadFrom()` API
+
+```ts
+import { loadFrom } from '@frontmcp/sdk';
+
+loadFrom(specifier: string, options?: LoadFromOptions): RemoteAppMetadata
+```
+
+### Parameters
+
+<ParamField path="specifier" type="string" required>
+  npm package specifier in the format `@scope/name@range` or `name@range`.
+  The range defaults to `latest` if omitted.
+</ParamField>
+
+### Options
+
+<ParamField path="name" type="string">
+  Override the auto-derived app name (defaults to the package's full name).
+</ParamField>
+
+<ParamField path="namespace" type="string">
+  Prefix for all tools, resources, and prompts from this package. For example, `namespace: 'acme'` turns a tool named `echo` into `acme:echo`.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Human-readable description for the app entry.
+</ParamField>
+
+<ParamField path="standalone" type="boolean | 'includeInParent'" default="false">
+  Isolation mode. `true` creates a separate scope; `'includeInParent'` lists it under the parent while keeping isolation.
+</ParamField>
+
+<ParamField path="loader" type="PackageLoader">
+  Per-app loader override. Takes precedence over the gateway-level `loader`. See [Gateway-Level Loader](#gateway-level-loader) for fields.
+</ParamField>
+
+<ParamField path="autoUpdate" type="{ enabled: boolean; intervalMs?: number }">
+  Enable background version polling. When a new version matching the semver range is published, the package is automatically reloaded. Default interval: 300,000ms (5 minutes).
+</ParamField>
+
+<ParamField path="cacheTTL" type="number">
+  Local cache time-to-live in milliseconds. Default: 86,400,000ms (24 hours).
+</ParamField>
+
+<ParamField path="importMap" type="Record<string, string>">
+  Import map overrides for ESM resolution. Maps package names to alternative URLs.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+```ts Simple
+loadFrom('@acme/tools@^1.0.0')
+```
+
+```ts With Namespace
+loadFrom('@acme/tools@^1.0.0', {
+  namespace: 'acme',
+})
+```
+
+```ts With Auto-Update
+loadFrom('@acme/tools@^1.0.0', {
+  namespace: 'acme',
+  autoUpdate: { enabled: true, intervalMs: 30000 },
+  cacheTTL: 60000,
+})
+```
+
+```ts Private Registry
+loadFrom('@internal/tools@latest', {
+  namespace: 'internal',
+  loader: {
+    registryUrl: 'https://npm.pkg.github.com',
+    tokenEnvVar: 'GITHUB_TOKEN',
+  },
+})
+```
+</CodeGroup>
+
+---
+
+## Package Specifier Format
+
+| Pattern | Example | Description |
+|---------|---------|-------------|
+| `@scope/name@range` | `@acme/tools@^1.0.0` | Scoped package with semver range |
+| `@scope/name@tag` | `@acme/tools@latest` | Scoped package with dist-tag |
+| `name@range` | `my-tools@~2.0.0` | Unscoped package with semver range |
+| `name` | `my-tools` | Unscoped package, defaults to `latest` |
+
+Supported semver ranges include `^1.0.0`, `~1.0.0`, `>=1.0.0 <2.0.0`, exact versions like `1.2.3`, and dist-tags like `latest`, `next`, `beta`.
+
+---
+
+## Gateway-Level Loader
+
+Set a default loader at the server level that applies to all `loadFrom()` apps:
+
+```ts
+@FrontMcp({
+  info: { name: 'Gateway', version: '1.0.0' },
+  loader: {
+    url: 'https://custom-cdn.corp.com',
+    tokenEnvVar: 'NPM_TOKEN',
+  },
+  apps: [
+    loadFrom('@acme/tools@^1.0.0', { namespace: 'acme' }),
+    loadFrom('@acme/analytics@^2.0.0', { namespace: 'analytics' }),
+    // Both apps use the gateway-level loader config
+  ],
+})
+export default class Server {}
+```
+
+Individual apps can override the gateway loader via `packageConfig.loader`.
+
+### PackageLoader Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `url` | `string` | `https://esm.sh` (bundles), `https://registry.npmjs.org` (registry) | Base URL for both registry API and bundle fetching |
+| `registryUrl` | `string` | Same as `url` | Separate registry URL for version resolution (if different from bundle URL) |
+| `token` | `string` | — | Bearer token for authentication |
+| `tokenEnvVar` | `string` | — | Environment variable name containing the bearer token |
+
+<Note>
+When `url` is set but `registryUrl` is not, both the registry API and bundle downloads use `url`. When `registryUrl` is also set, the registry uses `registryUrl` while bundles use `url`.
+</Note>
+
+---
+
+## Auto-Update & Hot-Reload
+
+Enable background version polling to automatically reload packages when new versions are published:
+
+```ts
+loadFrom('@acme/tools@^1.0.0', {
+  autoUpdate: {
+    enabled: true,
+    intervalMs: 60000, // Check every 60 seconds
+  },
+})
+```
+
+When a new version matching the semver range is detected:
+
+1. The new bundle is fetched and cached
+2. All tools, resources, and prompts from the old version are unregistered
+3. The new manifest is registered
+4. MCP clients receive `tools/list_changed` and `resources/list_changed` notifications
+
+<Warning>
+In production, use conservative polling intervals (5+ minutes) to avoid excessive registry traffic. The default interval is 5 minutes (300,000ms).
+</Warning>
+
+### CLI Update
+
+You can also check for and apply updates via the CLI:
+
+```bash
+# Check all ESM apps for updates
+frontmcp package esm-update --all --check-only
+
+# Apply updates for a specific app
+frontmcp package esm-update my-esm-app
+
+# Apply all pending updates
+frontmcp package esm-update --all
+```
+
+---
+
+## Caching
+
+ESM packages use a **two-tier cache** for fast startup and offline resilience:
+
+| Tier | Environment | Persistence | Speed |
+|------|-------------|-------------|-------|
+| **Memory** | All | Process lifetime | Instant |
+| **Disk** | Node.js only | Survives restarts | Fast (local I/O) |
+
+### Cache Locations (Node.js)
+
+- **Project mode**: `node_modules/.cache/frontmcp-esm/` (relative to project root)
+- **CLI mode**: `~/.frontmcp/esm-cache/` (user home directory)
+
+Each cached package is stored as a hashed directory containing the bundle file (`.mjs` or `.cjs`) and a `meta.json` with version, etag, and timestamp.
+
+### Cache TTL
+
+Configure how long cached bundles remain valid:
+
+```ts
+loadFrom('@acme/tools@^1.0.0', {
+  cacheTTL: 3600000, // 1 hour
+})
+```
+
+Default TTL is **24 hours** (86,400,000ms). After expiry, the next load triggers a fresh fetch.
+
+### Browser Mode
+
+In browser environments, only the in-memory cache is used. Bundles are evaluated via `Blob` + `URL.createObjectURL` and stored in a `Map`. See [Browser Compatibility](/frontmcp/deployment/browser-compatibility) for details.
+
+---
+
+## Private Registry Authentication
+
+<CodeGroup>
+```ts Environment Variable (Recommended)
+@FrontMcp({
+  loader: {
+    tokenEnvVar: 'NPM_TOKEN',
+  },
+  apps: [
+    loadFrom('@private/tools@^1.0.0'),
+  ],
+})
+```
+
+```ts Direct Token
+@FrontMcp({
+  loader: {
+    token: 'npm_abc123...',
+  },
+  apps: [
+    loadFrom('@private/tools@^1.0.0'),
+  ],
+})
+```
+
+```ts Custom Registry (GitHub Packages)
+@FrontMcp({
+  loader: {
+    registryUrl: 'https://npm.pkg.github.com',
+    tokenEnvVar: 'GITHUB_TOKEN',
+  },
+  apps: [
+    loadFrom('@my-org/internal-tools@^1.0.0'),
+  ],
+})
+```
+</CodeGroup>
+
+<Warning>
+Never commit tokens directly in source code. Use `tokenEnvVar` to reference environment variables instead.
+</Warning>
+
+The Bearer token is sent in the `Authorization` header for both registry API calls (version resolution) and bundle fetching.
+
+---
+
+## Comparison: ESM vs Remote vs Local Apps
+
+| Aspect | Local Apps | ESM Packages | Remote Apps |
+|--------|-----------|--------------|-------------|
+| **Declaration** | `@App` class | `loadFrom()` | `{ urlType: 'url', ... }` |
+| **Execution** | In-process | In-process | Out-of-process (HTTP) |
+| **Transport** | None | None | Streamable HTTP / SSE |
+| **Caching** | N/A | Two-tier (memory + disk) | Optional via CachePlugin |
+| **Auth** | N/A | npm registry auth | remoteAuth config |
+| **Hot-Reload** | Requires restart | Version polling | N/A |
+| **Plugins/Adapters** | Full support | Not supported | Not supported |
+| **Best For** | First-party code | Community/npm packages | External MCP servers |
+
+---
+
+## Error Handling
+
+ESM loading can fail at several stages. FrontMCP provides specific error classes for each:
+
+| Error | When | HTTP |
+|-------|------|------|
+| `EsmInvalidSpecifierError` | Package specifier format is invalid | 400 |
+| `EsmVersionResolutionError` | npm registry query fails or no matching version | 500 |
+| `EsmRegistryAuthError` | Private registry authentication fails | 401 |
+| `EsmPackageLoadError` | Bundle fetch or evaluation fails | 500 |
+| `EsmManifestInvalidError` | Package export doesn't match manifest contract | 400 |
+| `EsmCacheError` | Cache read/write operation fails | 500 |
+
+See the [ESM Errors reference](/frontmcp/sdk-reference/errors/esm-errors) for full details.
+
+---
+
+## Best Practices
+
+**Do:**
+
+- Use `namespace` to avoid naming conflicts between packages
+- Use `tokenEnvVar` instead of inline tokens for private registries
+- Set `autoUpdate` with conservative intervals in production (5+ minutes)
+- Use `cacheTTL` to balance freshness vs. startup speed
+- Test packages locally before deploying to production
+
+**Don't:**
+
+- Commit registry tokens in source code
+- Use very short polling intervals in production (avoids registry rate limits)
+- Load untrusted packages without reviewing their manifest and code
+- Rely on ESM packages for plugins or adapters (use local `@App` classes instead)
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Publishing ESM Packages" icon="box-archive" href="/frontmcp/guides/publishing-esm-packages">
+    Create and publish npm packages loadable by FrontMCP servers
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/frontmcp/getting-started/cli-reference">
+    Use `frontmcp package esm-update` to manage ESM packages
+  </Card>
+  <Card title="Apps" icon="cube" href="/frontmcp/servers/apps">
+    Full guide to local and remote app configuration
+  </Card>
+  <Card title="ESM Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/esm-errors">
+    Error classes for ESM loading, caching, and authentication
+  </Card>
+</CardGroup>

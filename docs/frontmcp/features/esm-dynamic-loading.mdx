@@ -1,0 +1,74 @@
+---
+title: ESM Dynamic Loading
+slug: features/esm-dynamic-loading
+icon: box-open
+description: Load npm packages at runtime as MCP apps with caching and auto-update
+---
+
+FrontMCP can **dynamically load npm packages at runtime** and register their tools, resources, and prompts alongside your local apps. Packages are fetched from a CDN, cached locally (memory + disk), and executed in-process — with optional background polling for automatic updates.
+
+## Three App Types
+
+FrontMCP supports three ways to compose apps:
+
+| Type | Declaration | Execution | Use Case |
+|------|------------|-----------|----------|
+| **Local** | `@App` class | In-process | First-party code you own |
+| **ESM Package** | `loadFrom()` | In-process | Community or internal npm packages |
+| **Remote** | `{ urlType: 'url', ... }` | HTTP proxy | External MCP servers |
+
+```ts
+import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'Platform', version: '1.0.0' },
+  apps: [
+    CrmApp,                                        // Local app
+    loadFrom('@acme/analytics@^2.0.0'),            // ESM package
+    { name: 'ext', urlType: 'url', url: '...' },   // Remote app
+  ],
+})
+export default class Server {}
+```
+
+## Key Capabilities
+
+1. **Dynamic Loading** — Import npm packages at server startup via `loadFrom()` without bundling them into your build
+2. **Two-Tier Caching** — In-memory + disk cache with configurable TTL for fast startup and offline resilience
+3. **Version Polling** — Background semver-aware polling with automatic hot-reload when new versions are published
+4. **Private Registries** — Token-based authentication for private npm registries and custom CDN endpoints
+5. **Browser Support** — Same `loadFrom()` API works in browser environments with in-memory-only caching
+
+## Minimal Example
+
+```ts
+import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [
+    loadFrom('@acme/mcp-tools@^1.0.0', {
+      namespace: 'acme',
+      autoUpdate: { enabled: true },
+    }),
+  ],
+})
+export default class Server {}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ESM Packages Reference" icon="box-open" href="/frontmcp/servers/esm-packages">
+    Full API reference for loadFrom(), caching, auth, and configuration
+  </Card>
+  <Card title="Publishing ESM Packages" icon="box-archive" href="/frontmcp/guides/publishing-esm-packages">
+    Create and publish npm packages loadable by FrontMCP servers
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/frontmcp/getting-started/cli-reference">
+    Manage ESM packages with `frontmcp package esm-update`
+  </Card>
+  <Card title="ESM Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/esm-errors">
+    Error classes for loading, caching, and authentication failures
+  </Card>
+</CardGroup>

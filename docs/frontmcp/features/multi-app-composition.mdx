@@ -76,6 +76,26 @@ class CrmApp {}
 
 Tools in `CrmApp` can access both `SharedCacheProvider` and `CrmDatabaseProvider`, while tools in `AnalyticsApp` can only access `SharedCacheProvider`.
 
+## ESM Package Apps
+
+You can also compose apps from npm packages loaded at runtime via `loadFrom()`:
+
+```ts
+import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'Platform', version: '1.0.0' },
+  apps: [
+    CrmApp,                                         // Local app
+    loadFrom('@acme/analytics@^2.0.0'),             // ESM package
+    { name: 'ext', urlType: 'url', url: '...' },    // Remote app
+  ],
+})
+export default class Server {}
+```
+
+ESM packages get their own tool, resource, and prompt registries with full hook and lifecycle support, but do not support plugins or adapters (use local `@App` classes for those).
+
 ## Learn More
 
 <CardGroup cols={2}>
@@ -84,5 +104,8 @@ Tools in `CrmApp` can access both `SharedCacheProvider` and `CrmDatabaseProvider
   </Card>
   <Card title="Server" icon="server" href="/frontmcp/servers/server">
     Server-level composition and configuration
+  </Card>
+  <Card title="ESM Packages" icon="box-open" href="/frontmcp/servers/esm-packages">
+    Load npm packages at runtime as MCP apps
   </Card>
 </CardGroup>
