@@ -11,6 +11,9 @@ import type { RefObject } from 'react';
 import type { ReadResourceResult } from '@frontmcp/sdk';
 import { useDynamicResource } from './useDynamicResource';
 
+/** RFC 3986 scheme pattern: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) "://" */
+const RFC_3986_SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//;
+
 export interface UseComponentTreeOptions {
   rootRef: RefObject<HTMLElement | null>;
   /** Resource URI (defaults to 'react://component-tree'). */
@@ -66,6 +69,10 @@ function walkDom(element: Element, maxDepth: number, includeProps: boolean, dept
 
 export function useComponentTree(options: UseComponentTreeOptions): void {
   const { rootRef, uri = 'react://component-tree', maxDepth = 10, includeProps = false, server } = options;
+
+  if (!RFC_3986_SCHEME_RE.test(uri)) {
+    throw new Error('URI must have a valid scheme (e.g., file://, https://, custom://)');
+  }
 
   const read = useCallback(async (): Promise<ReadResourceResult> => {
     const root = rootRef.current;

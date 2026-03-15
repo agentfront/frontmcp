@@ -72,8 +72,16 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
         }
       }
 
+      const propertyLocations = new Map<string, string>();
       for (const param of paramMap.values()) {
         if (param.name === '__proto__' || param.name === 'constructor' || param.name === 'prototype') continue;
+        const existingIn = propertyLocations.get(param.name);
+        if (existingIn && existingIn !== param.in) {
+          throw new Error(
+            `Parameter "${param.name}" appears in both "${existingIn}" and "${param.in}" — ambiguous mapping`,
+          );
+        }
+        propertyLocations.set(param.name, param.in);
         properties[param.name] = {
           ...(param.schema ?? { type: 'string' }),
           description: param.description,

@@ -609,7 +609,7 @@ describe('parseOpenApiSpec', () => {
       expect(Object.keys(props)).toEqual(['safe']);
     });
 
-    it('same-name parameters from different locations — last write wins', () => {
+    it('throws when same-name parameters appear in different locations', () => {
       const spec = {
         paths: {
           '/items/{id}': {
@@ -624,10 +624,9 @@ describe('parseOpenApiSpec', () => {
         },
       };
 
-      const ops = parseOpenApiSpec(spec);
-      const props = ops[0].inputSchema.properties as Record<string, Record<string, unknown>>;
-      // Both params map to key "id" in properties; the query one is processed second
-      expect(props.id).toEqual({ type: 'integer', description: 'Query ID' });
+      expect(() => parseOpenApiSpec(spec)).toThrow(
+        'Parameter "id" appears in both "path" and "query" — ambiguous mapping',
+      );
     });
   });
 

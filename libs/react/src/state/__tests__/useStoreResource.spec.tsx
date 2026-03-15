@@ -350,6 +350,27 @@ describe('useStoreResource (state module)', () => {
       expect(dynamicRegistry.hasResource('state://data/b')).toBe(false);
     });
 
+    it('produces "null" text when selector returns undefined', async () => {
+      const store = createMockStore({ key: 'value' });
+
+      renderHook(
+        () =>
+          useStoreResource({
+            name: 'undef',
+            getState: store.getState,
+            subscribe: store.subscribe,
+            selectors: {
+              missing: (state: unknown) => (state as Record<string, unknown>).nonexistent,
+            },
+          }),
+        { wrapper: createWrapper(dynamicRegistry) },
+      );
+
+      const resource = dynamicRegistry.findResource('state://undef/missing')!;
+      const result = await resource.read();
+      expect(result.contents[0].text).toBe('null');
+    });
+
     it('does not register selectors when none provided', () => {
       const store = createMockStore({ count: 0 });
 

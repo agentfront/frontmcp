@@ -33,7 +33,7 @@ export function useStoreResource(options: StoreResourceOptions): void {
         {
           uri: `state://${name}`,
           mimeType: 'application/json',
-          text: JSON.stringify(getStateRef.current()),
+          text: JSON.stringify(getStateRef.current() ?? null),
         },
       ],
     }),
@@ -81,7 +81,7 @@ export function useStoreResource(options: StoreResourceOptions): void {
           {
             uri,
             mimeType: 'application/json',
-            text: JSON.stringify(selectorRef.current(getStateRef.current())),
+            text: JSON.stringify(selectorRef.current(getStateRef.current()) ?? null),
           },
         ],
       });

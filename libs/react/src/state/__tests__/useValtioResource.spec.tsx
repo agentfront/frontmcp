@@ -38,7 +38,10 @@ function createMockValtioSubscribe() {
   });
 
   // Helper to trigger all listeners (simulates proxy mutation)
-  const notify = () => listeners.forEach((l) => l());
+  const notify = () =>
+    listeners.forEach((l) => {
+      l();
+    });
 
   return { subscribe, notify };
 }
@@ -253,7 +256,7 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio/deep')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBe('"deep-value"');
+      expect((result.contents[0] as { text: string }).text).toBe('"deep-value"');
     });
 
     it('getByPath returns undefined for non-existent paths', async () => {
@@ -272,8 +275,8 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio/missing')!;
       const result = await resource.read();
-      // undefined serializes to nothing in JSON.stringify — becomes undefined text
-      expect(result.contents[0].text).toBeUndefined();
+      // undefined coalesces to null for valid JSON serialization
+      expect((result.contents[0] as { text: string }).text).toBe('null');
     });
 
     it('getByPath returns undefined when traversing through a primitive', async () => {
@@ -292,7 +295,7 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio/bad')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBeUndefined();
+      expect((result.contents[0] as { text: string }).text).toBe('null');
     });
 
     it('getByPath returns undefined when state is null', async () => {
@@ -312,7 +315,7 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio/value')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBeUndefined();
+      expect((result.contents[0] as { text: string }).text).toBe('null');
     });
 
     it('does not register selectors when paths not provided', () => {
@@ -469,7 +472,7 @@ describe('useValtioResource', () => {
 
       const resource = dynamicRegistry.findResource('state://valtio/name')!;
       const result = await resource.read();
-      expect(result.contents[0].text).toBe('"Bob"');
+      expect((result.contents[0] as { text: string }).text).toBe('"Bob"');
     });
   });
 });

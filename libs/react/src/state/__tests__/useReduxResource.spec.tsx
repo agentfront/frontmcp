@@ -39,7 +39,9 @@ function createMockReduxStore(initialState: Record<string, unknown>) {
     // Test helper to mutate state and notify listeners
     _setState: (next: Record<string, unknown>) => {
       state = { ...state, ...next };
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        l();
+      });
     },
   };
 }

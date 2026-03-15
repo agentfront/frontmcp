@@ -355,6 +355,18 @@ describe('useComponentTree', () => {
     });
   });
 
+  describe('URI validation', () => {
+    it('throws when uri has no valid scheme', () => {
+      const rootRef = { current: document.createElement('div') };
+
+      expect(() => {
+        renderHook(() => useComponentTree({ rootRef, uri: '/no-scheme' }), {
+          wrapper: createWrapper(dynamicRegistry),
+        });
+      }).toThrow('URI must have a valid scheme (e.g., file://, https://, custom://)');
+    });
+  });
+
   describe('server option', () => {
     it('passes server option through to useDynamicResource', () => {
       // The server option is forwarded to useDynamicResource;

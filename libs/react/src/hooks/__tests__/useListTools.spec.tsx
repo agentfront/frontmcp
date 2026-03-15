@@ -21,11 +21,12 @@ function createWrapper(overrides?: { tools?: ToolInfo[]; name?: string }) {
     serverRegistry.update(name, { tools: overrides.tools, status: 'connected' });
   }
 
+  const dynamicRegistry = new DynamicRegistry();
   const ctx: FrontMcpContextValue = {
     name,
     registry: new ComponentRegistry(),
-    dynamicRegistry: new DynamicRegistry(),
-    getDynamicRegistry: () => new DynamicRegistry(),
+    dynamicRegistry,
+    getDynamicRegistry: () => dynamicRegistry,
     connect: jest.fn(),
   };
   return ({ children }: { children: React.ReactNode }) =>
