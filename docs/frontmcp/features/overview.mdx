@@ -40,6 +40,9 @@ FrontMCP is a TypeScript-first framework for building production-ready MCP serve
   <Card title="Workflows" icon="diagram-project" href="/frontmcp/servers/workflows">
     Compose jobs into DAG-based multi-step pipelines
   </Card>
+  <Card title="ESM Dynamic Loading" icon="box-open" href="/frontmcp/features/esm-dynamic-loading">
+    Load npm packages at runtime with caching, auto-update, and private registry auth
+  </Card>
 </CardGroup>
 
 ---
@@ -51,6 +54,7 @@ graph TD
     FM["@FrontMcp Server"] --> A1["@App: CRM"]
     FM --> A2["@App: Analytics"]
     FM --> A3["@App: Admin"]
+    FM --> A4["App.esm()"]
 
     A1 --> T1["@Tool: CreateLead"]
     A1 --> T2["@Tool: GetContacts"]
@@ -89,3 +93,4 @@ graph TD
 | **Workflows** | DAG-based multi-step pipelines       | `@Workflow`   | [Workflows](/frontmcp/servers/workflows)       |
 | **Flows**     | Request lifecycle pipelines          | `@Flow`       | [Flows](/frontmcp/servers/flows)               |
 | **Apps**      | Modular capability containers        | `@App`        | [Apps](/frontmcp/servers/apps)                 |
+| **ESM Packages** | Runtime npm package loading       | `App.esm()`   | [ESM Packages](/frontmcp/servers/esm-packages) |

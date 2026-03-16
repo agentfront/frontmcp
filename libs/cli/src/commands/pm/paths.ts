@@ -17,6 +17,7 @@ export const PM_DIRS = {
   services: path.join(FRONTMCP_HOME, 'services'),
   apps: path.join(FRONTMCP_HOME, 'apps'),
   data: path.join(FRONTMCP_HOME, 'data'),
+  esmCache: path.join(FRONTMCP_HOME, 'esm-cache'),
 } as const;
 
 export function pidFilePath(name: string): string {

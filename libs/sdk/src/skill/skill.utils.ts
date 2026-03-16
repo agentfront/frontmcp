@@ -95,7 +95,7 @@ export function isSkillRecord(item: unknown): item is SkillRecord {
   }
 
   // Validate kind is one of the allowed values
-  const validKinds = [SkillKind.CLASS_TOKEN, SkillKind.VALUE, SkillKind.FILE];
+  const validKinds = [SkillKind.CLASS_TOKEN, SkillKind.VALUE, SkillKind.FILE, SkillKind.ESM, SkillKind.REMOTE];
   if (!validKinds.includes(record['kind'] as SkillKind)) {
     return false;
   }
@@ -120,7 +120,9 @@ export function skillDiscoveryDeps(rec: SkillRecord): Token[] {
       return depsOfClass(rec.provide, 'discovery');
     case SkillKind.VALUE:
     case SkillKind.FILE:
-      // Value and file records don't have class dependencies
+    case SkillKind.ESM:
+    case SkillKind.REMOTE:
+      // Value, file, ESM, and remote records don't have class dependencies
       return [];
   }
 }

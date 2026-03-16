@@ -57,6 +57,11 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-uipack': { start: 50320, size: 10 },
   'demo-e2e-agent-adapters': { start: 50330, size: 10 },
 
+  // ESM E2E tests (50400-50449)
+  'esm-package-server': { start: 50400, size: 10 },
+  'esm-package-server-hot-reload': { start: 50410, size: 10 },
+  'esm-package-server-cli': { start: 50420, size: 10 },
+
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },
   'mock-api': { start: 50910, size: 10 },

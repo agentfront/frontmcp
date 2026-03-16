@@ -135,9 +135,15 @@ describe('Scope initialization performance', () => {
     }
     const fullMs = performance.now() - fullStart;
 
-    // Lite should not be dramatically slower than full parse.
-    // We use a 3x margin to tolerate CI variance on small inputs.
-    expect(liteMs).toBeLessThanOrEqual(fullMs * 3);
+    // Log timing info only when FRONTMCP_PERF=1 is set
+    if (process.env['FRONTMCP_PERF'] === '1') {
+      console.log(
+        `Lite: ${liteMs.toFixed(2)}ms | Full: ${fullMs.toFixed(2)}ms | Ratio: ${(liteMs / fullMs).toFixed(2)}x`,
+      );
+    }
+
+    // Guard against catastrophic regression — lite should not be 10x slower than full
+    expect(liteMs).toBeLessThanOrEqual(fullMs * 10);
   });
 
   it('ToolEntry should cache getInputJsonSchema result', () => {

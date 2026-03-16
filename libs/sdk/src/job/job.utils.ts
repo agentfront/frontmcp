@@ -21,6 +21,16 @@ export function collectJobMetadata(cls: JobType): JobMetadata {
 }
 
 export function normalizeJob(item: unknown): JobRecord {
+  // ESM/REMOTE record objects (from Job.esm() / Job.remote())
+  if (item && typeof item === 'object' && 'kind' in item && 'provide' in item && 'metadata' in item) {
+    if (item.kind === JobKind.ESM && 'specifier' in item && 'targetName' in item) {
+      return item as JobRecord;
+    }
+    if (item.kind === JobKind.REMOTE && 'url' in item && 'targetName' in item) {
+      return item as JobRecord;
+    }
+  }
+
   // Function-style job
   const fn = item as Record<string | symbol, unknown>;
   if (
@@ -58,6 +68,9 @@ export function jobDiscoveryDeps(rec: JobRecord): Token[] {
     case JobKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
     case JobKind.DYNAMIC:
-      return []; // Dynamic jobs have no compile-time deps
+    case JobKind.ESM:
+    case JobKind.REMOTE:
+      // Dynamic, ESM, and remote jobs have no compile-time deps
+      return [];
   }
 }

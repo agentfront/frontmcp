@@ -196,6 +196,16 @@ export {
   WorkflowJobTimeoutError,
 } from './workflow.errors';
 
+// Export ESM loader errors
+export {
+  EsmPackageLoadError,
+  EsmVersionResolutionError,
+  EsmManifestInvalidError,
+  EsmCacheError,
+  EsmRegistryAuthError,
+  EsmInvalidSpecifierError,
+} from './esm.errors';
+
 // Export SDK errors
 export {
   FlowExitedWithoutOutputError,

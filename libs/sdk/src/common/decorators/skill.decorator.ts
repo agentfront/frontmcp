@@ -137,8 +137,65 @@ function frontMcpSkill(providedMetadata: SkillMetadata): SkillValueRecord {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Skill.esm() and Skill.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import type { EsmOptions, RemoteOptions } from '../metadata';
+import type { SkillEsmTargetRecord, SkillRemoteRecord } from '../records/skill.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
+
+function skillEsm(specifier: string, targetName: string, options?: EsmOptions<SkillMetadata>): SkillEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: SkillKind.ESM,
+    provide: Symbol(`esm-skill:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Skill "${targetName}" from ${parsed.fullName}`,
+      instructions: options?.metadata?.instructions ?? '',
+      ...options?.metadata,
+    } as SkillMetadata,
+  };
+}
+
+function skillRemote(url: string, targetName: string, options?: RemoteOptions<SkillMetadata>): SkillRemoteRecord {
+  validateRemoteUrl(url);
+  return {
+    kind: SkillKind.REMOTE,
+    provide: Symbol(`remote-skill:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote skill "${targetName}" from ${url}`,
+      instructions: options?.metadata?.instructions ?? '',
+      ...options?.metadata,
+    } as SkillMetadata,
+  };
+}
+
+Object.assign(FrontMcpSkill, {
+  esm: skillEsm,
+  remote: skillRemote,
+});
+
+type SkillDecorator = {
+  (metadata: SkillMetadata): ClassDecorator;
+  esm: typeof skillEsm;
+  remote: typeof skillRemote;
+};
+
+const Skill = FrontMcpSkill as unknown as SkillDecorator;
+
 // Export with aliases
-export { FrontMcpSkill, FrontMcpSkill as Skill, frontMcpSkill, frontMcpSkill as skill };
+export { FrontMcpSkill, Skill, frontMcpSkill, frontMcpSkill as skill };
 
 /**
  * Check if a class has the @Skill decorator.

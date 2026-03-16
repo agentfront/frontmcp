@@ -40,6 +40,11 @@ export function collectPromptMetadata(cls: PromptType): PromptMetadata {
  *   meaningful error messages for invalid inputs.
  */
 export function normalizePrompt(item: any): PromptRecord {
+  // ESM/REMOTE record objects (from Prompt.esm() / Prompt.remote())
+  if (item && typeof item === 'object' && (item.kind === PromptKind.ESM || item.kind === PromptKind.REMOTE)) {
+    return item as PromptRecord;
+  }
+
   // Function-style decorator: prompt({ name: '...' })(handler)
   if (
     item &&
@@ -73,6 +78,10 @@ export function promptDiscoveryDeps(rec: PromptRecord): Token[] {
       return depsOfFunc(rec.provide, 'discovery');
     case PromptKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    case PromptKind.ESM:
+    case PromptKind.REMOTE:
+      // External packages/services have no local DI dependencies at discovery time
+      return [];
   }
 }
 

@@ -31,7 +31,8 @@ export type FunctionResourceType = (...args: any[]) => any;
  */
 export type ResourceType<Params extends Record<string, string> = Record<string, string>, Out = unknown> =
   | Type<ResourceInterface<Params, Out>>
-  | FunctionResourceType;
+  | FunctionResourceType
+  | string;
 
 type HistoryEntry<T> = {
   at: number;

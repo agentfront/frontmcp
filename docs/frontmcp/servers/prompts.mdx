@@ -114,6 +114,29 @@ class MyApp {}
 
 Prompts can also be generated dynamically by **adapters** or **plugins**.
 
+### Loading from npm or Remote Servers
+
+Mix local prompts with those loaded from npm or proxied from remote servers:
+
+```ts
+import { App, Prompt } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  prompts: [
+    SummarizePrompt,                                                     // Local class
+    Prompt.esm('@acme/tools@^1.0.0', 'greeting'),                       // Single prompt from npm
+    Prompt.remote('https://api.example.com/mcp', 'code-review-prompt'), // Single prompt from remote
+  ],
+})
+class MyApp {}
+```
+
+<Info>
+`Prompt.esm()` and `Prompt.remote()` load individual prompts. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+</Info>
+
 ---
 
 ## Return Values

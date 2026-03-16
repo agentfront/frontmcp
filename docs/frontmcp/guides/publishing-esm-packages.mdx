@@ -1,0 +1,363 @@
+---
+title: Publishing ESM Packages
+slug: guides/publishing-esm-packages
+icon: box-archive
+description: Create and publish npm packages that FrontMCP servers can load at runtime
+---
+
+This guide walks you through creating an npm package that FrontMCP servers can load at runtime via [`App.esm()`](/frontmcp/servers/esm-packages). By the end, you'll have a published package with tools, resources, and prompts that any FrontMCP server can consume.
+
+## Prerequisites
+
+<Info>
+- Node.js 18+ and npm
+- An npm account (or access to a private registry)
+- Familiarity with [FrontMCP tools](/frontmcp/servers/tools), [resources](/frontmcp/servers/resources), and [prompts](/frontmcp/servers/prompts)
+</Info>
+
+---
+
+## The Package Manifest Contract
+
+Every ESM package must export a `FrontMcpPackageManifest` — an object declaring what the package provides:
+
+```ts
+interface FrontMcpPackageManifest {
+  name: string;          // Package name (should match npm name)
+  version: string;       // Package version (should match npm version)
+  description?: string;  // Optional description
+  tools?: unknown[];     // Tool classes or plain tool objects
+  prompts?: unknown[];   // Prompt classes or plain prompt objects
+  resources?: unknown[]; // Resource classes or plain resource objects
+  skills?: unknown[];    // Skill definitions
+  agents?: unknown[];    // Agent classes or plain agent objects
+  jobs?: unknown[];      // Job classes or plain job objects
+  workflows?: unknown[]; // Workflow classes or plain workflow objects
+  providers?: unknown[]; // Shared providers for DI
+}
+```
+
+---
+
+## Step 1: Scaffold the Package
+
+```
+my-mcp-tools/
+├── package.json
+├── tsconfig.json
+├── src/
+│   ├── index.ts          # Default export: FrontMcpPackageManifest
+│   └── tools/
+│       ├── echo.ts
+│       └── add.ts
+```
+
+---
+
+## Step 2: Create Tools
+
+FrontMCP ESM packages support two styles for defining tools:
+
+<CodeGroup>
+```ts Plain Object (No Decorators)
+// src/tools/echo.ts
+export const echoTool = {
+  name: 'echo',
+  description: 'Echoes the input message back',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string', description: 'Message to echo' },
+    },
+    required: ['message'],
+  },
+  execute: async (input: { message: string }) => ({
+    content: [{ type: 'text', text: input.message }],
+  }),
+};
+```
+
+```ts Decorated Class
+// src/tools/echo.ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const Input = z.object({
+  message: z.string().describe('Message to echo'),
+});
+
+@Tool({
+  name: 'echo',
+  description: 'Echoes the input message back',
+  inputSchema: Input,
+})
+export class EchoTool extends ToolContext<typeof Input> {
+  async execute(input: z.infer<typeof Input>) {
+    return this.text(input.message);
+  }
+}
+```
+</CodeGroup>
+
+### Plain Object Contract
+
+When using plain objects, each tool must have:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Tool name |
+| `description` | `string` | No | Human-readable description |
+| `inputSchema` | `object` | No | JSON Schema for input validation |
+| `execute` | `function` | Yes | `(input) => Promise<CallToolResult>` |
+
+The `execute` function receives the parsed input and must return a `CallToolResult` with a `content` array.
+
+---
+
+## Step 3: Create Resources & Prompts
+
+<CodeGroup>
+```ts Plain Object Resource
+export const statusResource = {
+  name: 'status',
+  description: 'Server status endpoint',
+  uri: 'my-tools://status',
+  mimeType: 'application/json',
+  read: async () => ({
+    contents: [{
+      uri: 'my-tools://status',
+      text: JSON.stringify({ status: 'ok' }),
+    }],
+  }),
+};
+```
+
+```ts Plain Object Prompt
+export const greetingPrompt = {
+  name: 'greeting',
+  description: 'A greeting prompt template',
+  arguments: [
+    { name: 'name', description: 'Name to greet', required: true },
+  ],
+  execute: async (args: { name: string }) => ({
+    messages: [{
+      role: 'user',
+      content: {
+        type: 'text',
+        text: `Please greet ${args.name} warmly.`,
+      },
+    }],
+  }),
+};
+```
+</CodeGroup>
+
+### Resource Contract
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Resource name |
+| `description` | `string` | No | Human-readable description |
+| `uri` | `string` | Yes | Resource URI (e.g., `my-tools://status`) |
+| `mimeType` | `string` | No | MIME type of the resource content |
+| `read` | `function` | Yes | `() => Promise<ReadResourceResult>` |
+
+### Prompt Contract
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Prompt name |
+| `description` | `string` | No | Human-readable description |
+| `arguments` | `array` | No | Array of `{ name, description?, required? }` |
+| `execute` | `function` | Yes | `(args) => Promise<GetPromptResult>` |
+
+---
+
+## Step 4: Export the Manifest
+
+The package must export a `FrontMcpPackageManifest`. Three export formats are supported:
+
+<CodeGroup>
+```ts Default Export (Recommended)
+// src/index.ts
+import { echoTool } from './tools/echo';
+import { addTool } from './tools/add';
+import { statusResource } from './resources/status';
+
+export default {
+  name: '@acme/mcp-tools',
+  version: '1.0.0',
+  description: 'ACME MCP tools for task management',
+  tools: [echoTool, addTool],
+  resources: [statusResource],
+};
+```
+
+```ts Decorated Class Re-export
+// src/index.ts
+import { EchoTool } from './tools/echo';
+import { AddTool } from './tools/add';
+
+export default {
+  name: '@acme/mcp-tools',
+  version: '1.0.0',
+  tools: [EchoTool, AddTool],  // @Tool-decorated classes
+};
+```
+
+```ts Named Exports
+// src/index.ts
+export const name = '@acme/mcp-tools';
+export const version = '1.0.0';
+export { echoTool, addTool } from './tools';
+export const tools = [echoTool, addTool];
+```
+</CodeGroup>
+
+<Tip>
+The **default export** format is recommended for clarity and compatibility. FrontMCP's manifest normalizer tries the default export first, then falls back to named exports.
+</Tip>
+
+---
+
+## Step 5: Configure package.json
+
+```json
+{
+  "name": "@acme/mcp-tools",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "peerDependencies": {
+    "@frontmcp/sdk": ">=1.0.0",
+    "zod": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@frontmcp/sdk": "^1.0.0",
+    "zod": "^3.23.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "prepublishOnly": "npm run build"
+  }
+}
+```
+
+<Note>
+Declare `@frontmcp/sdk` and `zod` as **peer dependencies**, not regular dependencies. The consuming server provides these at runtime. This keeps bundle sizes small and avoids version conflicts.
+</Note>
+
+---
+
+## Step 6: Build & Publish
+
+```bash
+# Build the package
+npm run build
+
+# Publish to npm
+npm publish --access public
+
+# Or publish to a private registry
+npm publish --registry https://npm.pkg.github.com
+```
+
+---
+
+## Step 7: Consume with App.esm()
+
+Once published, any FrontMCP server can load your package:
+
+```ts
+import { FrontMcp, App } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [
+    App.esm('@acme/mcp-tools@^1.0.0', {
+      namespace: 'acme',
+    }),
+  ],
+})
+export default class Server {}
+```
+
+The server will discover `acme:echo`, `acme:add`, and `acme:status` at startup.
+
+---
+
+## Manifest Normalization
+
+<Accordion title="How FrontMCP normalizes your package export">
+FrontMCP's `normalizeEsmExport()` function tries three paths in order:
+
+1. **Default export as manifest** — Checks if `module.default` has `name` and `version` fields. If so, validates against the Zod schema.
+2. **Default export as decorated class** — Checks if `module.default` is a class with `frontmcp:type` reflect-metadata. If so, extracts the `@FrontMcp` configuration.
+3. **Named exports** — Scans the module for named exports matching manifest primitive keys (`tools`, `prompts`, `resources`, etc.) and assembles them into a manifest.
+
+If none of these paths produce a valid manifest, an `EsmManifestInvalidError` is thrown.
+</Accordion>
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive tool names and descriptions">
+    Tools loaded from ESM packages are often namespaced (e.g., `acme:echo`). Include clear descriptions so AI models understand what each tool does without seeing the source code.
+  </Accordion>
+  <Accordion title="Declare peer dependencies, don't bundle them">
+    `@frontmcp/sdk` and `zod` should be peer dependencies. Bundling them causes version conflicts and inflates package size.
+  </Accordion>
+  <Accordion title="Include both ESM and CJS outputs">
+    Use `tsup` or a similar tool to produce both `.mjs` and `.cjs` outputs. FrontMCP handles both formats, but dual output maximizes compatibility.
+  </Accordion>
+  <Accordion title="Follow semver strictly">
+    ESM consumers use semver ranges (`^1.0.0`, `~2.1.0`). Breaking changes should bump the major version. New features bump minor. Bug fixes bump patch.
+  </Accordion>
+  <Accordion title="Test locally before publishing">
+    Set up a local ESM server or use `App.esm()` with a file path during development to verify your manifest is correct before publishing.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Package loads but no tools are registered">
+    Verify your default export has `name`, `version`, and a `tools` array. Check that each tool object has at least `name` and `execute` fields. Enable debug logging on the server to see manifest normalization output.
+  </Accordion>
+  <Accordion title="Version resolution fails">
+    Check that the package is published and accessible. For private registries, verify the `token` or `tokenEnvVar` is set correctly. Try `npm view @your/package versions` to confirm the version exists.
+  </Accordion>
+  <Accordion title="Module evaluation fails">
+    Ensure your package doesn't import Node.js-only modules (`fs`, `crypto`, `path`) at the top level if it needs to work in browsers. Use dynamic imports for platform-specific code.
+  </Accordion>
+  <Accordion title="Browser environment errors">
+    In browser environments, avoid any file system operations. The ESM cache is memory-only. Modules are evaluated via `Blob` URLs, so ensure your code doesn't rely on `__filename` or `__dirname`.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="ESM Packages Reference" icon="box-open" href="/frontmcp/servers/esm-packages">
+    Full reference for App.esm(), caching, auth, and hot-reload
+  </Card>
+  <Card title="ESM Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/esm-errors">
+    Error classes for loading, caching, and authentication
+  </Card>
+</CardGroup>
