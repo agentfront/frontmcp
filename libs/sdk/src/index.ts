@@ -30,6 +30,7 @@ export {
 export * from './common';
 export * from './errors';
 export * from './elicitation';
+export * from '@frontmcp/guard';
 export * from './remote-mcp';
 
 // Re-export MCP types commonly needed by consumers

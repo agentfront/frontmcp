@@ -57,6 +57,7 @@ import type { JobType } from '../common/interfaces/job.interface';
 import type { WorkflowType } from '../common/interfaces/workflow.interface';
 import type { JobStateStore } from '../job/store/job-state.interface';
 import type { JobDefinitionStore } from '../job/store/job-definition.interface';
+import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -99,6 +100,9 @@ export class Scope extends ScopeEntry {
   private _jobExecutionManager?: JobExecutionManager;
   private _jobStateStore?: JobStateStore;
   private _jobDefinitionStore?: JobDefinitionStore;
+
+  /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
+  private _rateLimitManager?: GuardManager;
 
   /** CLI mode flag — skips non-essential initialization for faster startup */
   private readonly cliMode: boolean;
@@ -178,7 +182,19 @@ export class Scope extends ScopeEntry {
         })()
       : undefined;
 
-    // Await batch 1: hooks, flows, auth, apps + optional elicitation — all in parallel
+    // Guard manager (rate limiting, concurrency, IP filter) — conditional, skipped in CLI mode
+    const throttleConfig = this.metadata.throttle;
+    const rateLimitPromise =
+      throttleConfig?.enabled && !this.cliMode
+        ? createGuardManager({
+            config: throttleConfig,
+            logger: this.logger,
+          }).then((mgr) => {
+            this._rateLimitManager = mgr;
+          })
+        : undefined;
+
+    // Await batch 1: hooks, flows, auth, apps + optional elicitation + rate limit — all in parallel
     const batch1: Promise<void>[] = [
       this.scopeHooks.ready,
       this.scopeFlows.ready,
@@ -186,6 +202,7 @@ export class Scope extends ScopeEntry {
       this.scopeApps.ready,
     ];
     if (elicitationPromise) batch1.push(elicitationPromise);
+    if (rateLimitPromise) batch1.push(rateLimitPromise);
     await Promise.all(batch1);
     this.logger.verbose('HookRegistry initialized');
     this.logger.verbose('FlowRegistry initialized');
@@ -687,6 +704,14 @@ export class Scope extends ScopeEntry {
    */
   get eventStore(): EventStore | undefined {
     return this._eventStore;
+  }
+
+  /**
+   * Guard manager for rate limiting, concurrency control, IP filtering, and timeout.
+   * Returns undefined if throttle is not configured or disabled.
+   */
+  get rateLimitManager(): GuardManager | undefined {
+    return this._rateLimitManager;
   }
 
   /**

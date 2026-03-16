@@ -27,6 +27,8 @@ import {
   SqliteOptionsInput,
   sqliteOptionsSchema,
 } from '../types';
+import type { GuardConfig } from '@frontmcp/guard';
+import { guardConfigSchema } from '@frontmcp/guard';
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
@@ -237,6 +239,33 @@ export interface FrontMcpBaseMetadata {
       keyPrefix?: string;
     };
   };
+
+  /**
+   * Rate limiting, concurrency control, and timeout configuration.
+   * Controls global and default throttle behavior for all entities.
+   *
+   * @default { enabled: false }
+   *
+   * @example Global rate limiting by IP
+   * ```typescript
+   * throttle: {
+   *   enabled: true,
+   *   global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
+   *   defaultTimeout: { executeMs: 30_000 },
+   * }
+   * ```
+   *
+   * @example With Redis backend and per-tool defaults
+   * ```typescript
+   * throttle: {
+   *   enabled: true,
+   *   defaultRateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'session' },
+   *   defaultConcurrency: { maxConcurrent: 10 },
+   *   defaultTimeout: { executeMs: 30_000 },
+   * }
+   * ```
+   */
+  throttle?: GuardConfig;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -274,6 +303,7 @@ export const frontMcpBaseSchema = z.object({
         .optional(),
     })
     .optional(),
+  throttle: guardConfigSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
@@ -420,6 +450,7 @@ const frontMcpLiteSchema = z.object({
   sqlite: z.any().optional(),
   ui: z.any().optional(),
   jobs: z.any().optional(),
+  throttle: z.any().optional(),
 });
 
 /**

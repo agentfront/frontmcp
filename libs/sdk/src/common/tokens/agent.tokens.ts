@@ -28,6 +28,9 @@ export const FrontMcpAgentTokens = {
   tags: tokenFactory.meta('tags'),
   hideFromDiscovery: tokenFactory.meta('hideFromDiscovery'),
   metadata: tokenFactory.meta('metadata'), // used in agent({}) function construction
+  rateLimit: tokenFactory.meta('rateLimit'),
+  concurrency: tokenFactory.meta('concurrency'),
+  timeout: tokenFactory.meta('timeout'),
 } as const satisfies RawMetadataShape<AgentMetadata, ExtendFrontMcpAgentMetadata>;
 
 /**

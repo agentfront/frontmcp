@@ -484,6 +484,21 @@ export interface AgentMetadata<
    * @default false
    */
   hideFromDiscovery?: boolean;
+
+  /**
+   * Rate limiting configuration for this agent.
+   */
+  rateLimit?: import('@frontmcp/guard').RateLimitConfig;
+
+  /**
+   * Concurrency control configuration for this agent.
+   */
+  concurrency?: import('@frontmcp/guard').ConcurrencyConfig;
+
+  /**
+   * Timeout configuration for this agent's execution.
+   */
+  timeout?: import('@frontmcp/guard').TimeoutConfig;
 }
 
 // ============================================================================
@@ -578,5 +593,8 @@ export const frontMcpAgentMetadataSchema = z
     execution: executionConfigSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
+    rateLimit: z.looseObject({ maxRequests: z.number() }).optional(),
+    concurrency: z.looseObject({ maxConcurrent: z.number() }).optional(),
+    timeout: z.looseObject({ executeMs: z.number() }).optional(),
   } satisfies RawZodShape<AgentMetadata, ExtendFrontMcpAgentMetadata>)
   .passthrough();

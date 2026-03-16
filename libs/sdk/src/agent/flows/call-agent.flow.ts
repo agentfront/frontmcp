@@ -11,8 +11,10 @@ import {
   InvalidOutputError,
   AgentNotFoundError,
   AgentExecutionError,
+  RateLimitError,
 } from '../../errors';
 import { Scope } from '../../scope';
+import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 
 // ============================================================================
 // Schemas
@@ -57,6 +59,8 @@ const stateSchema = z.object({
         .optional(),
     })
     .optional(),
+  // Semaphore ticket for concurrency control (set by acquireSemaphore, used by releaseSemaphore)
+  semaphoreTicket: z.any().optional(),
 });
 
 // ============================================================================
@@ -312,7 +316,36 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   @Stage('acquireQuota')
   async acquireQuota() {
     this.logger.verbose('acquireQuota:start');
-    // Used for rate limiting
+
+    const manager = (this.scope as Scope).rateLimitManager;
+    if (!manager) {
+      this.state.agentContext?.mark('acquireQuota');
+      this.logger.verbose('acquireQuota:done (no rate limit manager)');
+      return;
+    }
+
+    const { agent } = this.state.required;
+    const context = this.tryGetContext();
+    const partitionCtx = context
+      ? {
+          sessionId: context.sessionId,
+          clientIp: context.metadata?.clientIp,
+          userId: context.authInfo?.clientId as string | undefined,
+        }
+      : undefined;
+
+    // Check global rate limit
+    const globalResult = await manager.checkGlobalRateLimit(partitionCtx);
+    if (!globalResult.allowed) {
+      throw new RateLimitError(Math.ceil((globalResult.retryAfterMs ?? 60_000) / 1000));
+    }
+
+    // Check per-agent rate limit
+    const result = await manager.checkRateLimit(agent.metadata.name, agent.metadata.rateLimit, partitionCtx);
+    if (!result.allowed) {
+      throw new RateLimitError(Math.ceil((result.retryAfterMs ?? 60_000) / 1000));
+    }
+
     this.state.agentContext?.mark('acquireQuota');
     this.logger.verbose('acquireQuota:done');
   }
@@ -323,7 +356,37 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   @Stage('acquireSemaphore')
   async acquireSemaphore() {
     this.logger.verbose('acquireSemaphore:start');
-    // Used for concurrency control
+
+    const manager = (this.scope as Scope).rateLimitManager;
+    if (!manager) {
+      this.state.agentContext?.mark('acquireSemaphore');
+      this.logger.verbose('acquireSemaphore:done (no rate limit manager)');
+      return;
+    }
+
+    const { agent } = this.state.required;
+    const config = agent.metadata.concurrency;
+    if (!config) {
+      this.state.agentContext?.mark('acquireSemaphore');
+      this.logger.verbose('acquireSemaphore:done (no concurrency config)');
+      return;
+    }
+
+    const context = this.tryGetContext();
+    const partitionCtx = context
+      ? {
+          sessionId: context.sessionId,
+          clientIp: context.metadata?.clientIp,
+          userId: context.authInfo?.clientId as string | undefined,
+        }
+      : undefined;
+
+    const ticket = await manager.acquireSemaphore(agent.metadata.name, config, partitionCtx);
+    if (!ticket) {
+      throw new ConcurrencyLimitError(agent.metadata.name, config.maxConcurrent);
+    }
+
+    this.state.set('semaphoreTicket', ticket);
     this.state.agentContext?.mark('acquireSemaphore');
     this.logger.verbose('acquireSemaphore:done');
   }
@@ -368,9 +431,21 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     agentContext.mark('execute');
 
     const startTime = Date.now();
+    const timeoutMs =
+      agent.metadata.timeout?.executeMs ??
+      agent.metadata.execution?.timeout ??
+      (this.scope as Scope).rateLimitManager?.config?.defaultTimeout?.executeMs;
 
     try {
-      agentContext.output = await agentContext.execute(agentContext.input);
+      const doExecute = async () => {
+        agentContext.output = await agentContext.execute(agentContext.input);
+      };
+
+      if (timeoutMs) {
+        await withTimeout(doExecute, timeoutMs, agent.metadata.name);
+      } else {
+        await doExecute();
+      }
 
       // Track execution metadata
       this.state.set('executionMeta', {
@@ -379,6 +454,13 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
       this.logger.verbose('execute:done');
     } catch (error) {
+      if (error instanceof ExecutionTimeoutError) {
+        this.logger.warn('execute: agent execution timed out', {
+          agent: agent.metadata.name,
+          timeoutMs,
+        });
+        throw error;
+      }
       this.logger.error('execute: agent execution failed', error);
       throw new AgentExecutionError(agent.metadata.name, error instanceof Error ? error : undefined);
     }
@@ -408,7 +490,15 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   @Stage('releaseSemaphore')
   async releaseSemaphore() {
     this.logger.verbose('releaseSemaphore:start');
-    // Release concurrency control
+    const ticket = this.state.semaphoreTicket as SemaphoreTicket | undefined;
+    if (ticket) {
+      try {
+        await ticket.release();
+        this.logger.verbose('releaseSemaphore: slot released');
+      } catch (error) {
+        this.logger.warn('releaseSemaphore: failed to release slot', error);
+      }
+    }
     this.state.agentContext?.mark('releaseSemaphore');
     this.logger.verbose('releaseSemaphore:done');
   }
@@ -419,7 +509,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   @Stage('releaseQuota')
   async releaseQuota() {
     this.logger.verbose('releaseQuota:start');
-    // Release rate limiting
+    // Sliding window counters expire naturally — no release needed
     this.state.agentContext?.mark('releaseQuota');
     this.logger.verbose('releaseQuota:done');
   }

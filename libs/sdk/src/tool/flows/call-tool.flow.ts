@@ -21,7 +21,9 @@ import {
   ToolExecutionError,
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
+  RateLimitError,
 } from '../../errors';
+import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
@@ -103,6 +105,8 @@ const stateSchema = z.object({
   progressToken: z.union([z.string(), z.number()]).optional(),
   // JSON-RPC request ID (for elicitation routing)
   jsonRpcRequestId: z.union([z.string(), z.number()]).optional(),
+  // Semaphore ticket for concurrency control (set by acquireSemaphore, used by releaseSemaphore)
+  semaphoreTicket: z.any().optional(),
 });
 
 const plan = {
@@ -452,7 +456,43 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('acquireQuota')
   async acquireQuota() {
     this.logger.verbose('acquireQuota:start');
-    // used for rate limiting
+
+    const manager = (this.scope as Scope).rateLimitManager;
+    if (!manager) {
+      this.state.toolContext?.mark('acquireQuota');
+      this.logger.verbose('acquireQuota:done (no rate limit manager)');
+      return;
+    }
+
+    const { tool } = this.state.required;
+    const context = this.tryGetContext();
+    const partitionCtx = context
+      ? {
+          sessionId: context.sessionId,
+          clientIp: context.metadata?.clientIp,
+          userId: context.authInfo?.clientId as string | undefined,
+        }
+      : undefined;
+
+    // Check global rate limit first
+    const globalResult = await manager.checkGlobalRateLimit(partitionCtx);
+    if (!globalResult.allowed) {
+      this.logger.warn('acquireQuota: global rate limit exceeded', {
+        retryAfterMs: globalResult.retryAfterMs,
+      });
+      throw new RateLimitError(Math.ceil((globalResult.retryAfterMs ?? 60_000) / 1000));
+    }
+
+    // Check per-tool rate limit
+    const result = await manager.checkRateLimit(tool.metadata.name, tool.metadata.rateLimit, partitionCtx);
+    if (!result.allowed) {
+      this.logger.warn('acquireQuota: tool rate limit exceeded', {
+        tool: tool.metadata.name,
+        retryAfterMs: result.retryAfterMs,
+      });
+      throw new RateLimitError(Math.ceil((result.retryAfterMs ?? 60_000) / 1000));
+    }
+
     this.state.toolContext?.mark('acquireQuota');
     this.logger.verbose('acquireQuota:done');
   }
@@ -460,7 +500,41 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('acquireSemaphore')
   async acquireSemaphore() {
     this.logger.verbose('acquireSemaphore:start');
-    // used for concurrency control
+
+    const manager = (this.scope as Scope).rateLimitManager;
+    if (!manager) {
+      this.state.toolContext?.mark('acquireSemaphore');
+      this.logger.verbose('acquireSemaphore:done (no rate limit manager)');
+      return;
+    }
+
+    const { tool } = this.state.required;
+    const config = tool.metadata.concurrency;
+    if (!config) {
+      this.state.toolContext?.mark('acquireSemaphore');
+      this.logger.verbose('acquireSemaphore:done (no concurrency config)');
+      return;
+    }
+
+    const context = this.tryGetContext();
+    const partitionCtx = context
+      ? {
+          sessionId: context.sessionId,
+          clientIp: context.metadata?.clientIp,
+          userId: context.authInfo?.clientId as string | undefined,
+        }
+      : undefined;
+
+    const ticket = await manager.acquireSemaphore(tool.metadata.name, config, partitionCtx);
+    if (!ticket) {
+      this.logger.warn('acquireSemaphore: concurrency limit reached', {
+        tool: tool.metadata.name,
+        maxConcurrent: config.maxConcurrent,
+      });
+      throw new ConcurrencyLimitError(tool.metadata.name, config.maxConcurrent);
+    }
+
+    this.state.set('semaphoreTicket', ticket);
     this.state.toolContext?.mark('acquireSemaphore');
     this.logger.verbose('acquireSemaphore:done');
   }
@@ -497,10 +571,31 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
     toolContext.mark('execute');
 
+    const { tool } = this.state.required;
+    const timeoutMs =
+      tool.metadata.timeout?.executeMs ?? (this.scope as Scope).rateLimitManager?.config?.defaultTimeout?.executeMs;
+
     try {
-      toolContext.output = await toolContext.execute(toolContext.input);
+      const doExecute = async () => {
+        toolContext.output = await toolContext.execute(toolContext.input);
+      };
+
+      if (timeoutMs) {
+        await withTimeout(doExecute, timeoutMs, tool.metadata.name);
+      } else {
+        await doExecute();
+      }
+
       this.logger.verbose('execute:done');
     } catch (error) {
+      // Re-throw timeout errors without wrapping
+      if (error instanceof ExecutionTimeoutError) {
+        this.logger.warn('execute: tool execution timed out', {
+          tool: tool.metadata.name,
+          timeoutMs,
+        });
+        throw error;
+      }
       // Handle elicitation fallback for clients that don't support elicitation
       if (error instanceof ElicitationFallbackRequired) {
         this.logger.info('execute: elicitation fallback required', {
@@ -605,7 +700,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('releaseSemaphore')
   async releaseSemaphore() {
     this.logger.verbose('releaseSemaphore:start');
-    // release concurrency control
+    const ticket = this.state.semaphoreTicket as SemaphoreTicket | undefined;
+    if (ticket) {
+      try {
+        await ticket.release();
+        this.logger.verbose('releaseSemaphore: slot released');
+      } catch (error) {
+        this.logger.warn('releaseSemaphore: failed to release slot', error);
+      }
+    }
     this.state.toolContext?.mark('releaseSemaphore');
     this.logger.verbose('releaseSemaphore:done');
   }

@@ -19,6 +19,7 @@
       "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],
       "@frontmcp/ui/*": ["libs/ui/dist/*/index.d.ts"],
       "@frontmcp/auth": ["libs/auth/dist/index.d.ts"],
+      "@frontmcp/guard": ["libs/guard/dist/index.d.ts"],
       "@frontmcp/protocol": ["libs/protocol/dist/index.d.ts"]
     }
   },

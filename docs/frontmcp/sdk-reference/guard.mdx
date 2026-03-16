@@ -1,0 +1,560 @@
+---
+title: Guard API Reference
+slug: sdk-reference/guard
+icon: shield-check
+description: Complete API reference for @frontmcp/guard — rate limiting, concurrency, timeout, and IP filtering.
+---
+
+Full API reference for the `@frontmcp/guard` package. This library is SDK-agnostic and works with any `StorageAdapter` backend.
+
+```bash
+npm install @frontmcp/guard
+```
+
+<Info>
+When using `@frontmcp/sdk`, guard features are integrated automatically via the `throttle` config and tool/agent decorators. You only need to import from `@frontmcp/guard` directly if building custom integrations.
+</Info>
+
+---
+
+## Configuration Types
+
+### `GuardConfig`
+
+Top-level configuration for the guard system. Passed to `@FrontMcp({ throttle: ... })` or `createGuardManager()`.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `enabled` | `boolean` | *required* | Enable or disable all guard features |
+| `storage` | `StorageConfig` | in-memory | Storage backend configuration |
+| `keyPrefix` | `string` | `'mcp:guard:'` | Prefix for all storage keys |
+| `global` | `RateLimitConfig` | — | Global rate limit for all requests |
+| `globalConcurrency` | `ConcurrencyConfig` | — | Global concurrency limit |
+| `defaultRateLimit` | `RateLimitConfig` | — | Default rate limit for entities without explicit config |
+| `defaultConcurrency` | `ConcurrencyConfig` | — | Default concurrency for entities without explicit config |
+| `defaultTimeout` | `TimeoutConfig` | — | Default timeout for entity execution |
+| `ipFilter` | `IpFilterConfig` | — | IP filtering configuration |
+
+### `RateLimitConfig`
+
+Configuration for sliding window rate limiting.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `maxRequests` | `number` | *required* | Maximum requests allowed in the window |
+| `windowMs` | `number` | `60000` | Time window in milliseconds |
+| `partitionBy` | `PartitionKey` | `'global'` | How to bucket rate limits |
+
+### `ConcurrencyConfig`
+
+Configuration for distributed semaphore concurrency control.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `maxConcurrent` | `number` | *required* | Maximum simultaneous executions |
+| `queueTimeoutMs` | `number` | `0` | Max time (ms) to wait for a slot. `0` = reject immediately |
+| `partitionBy` | `PartitionKey` | `'global'` | How to bucket concurrency limits |
+
+### `TimeoutConfig`
+
+Configuration for execution timeout.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `executeMs` | `number` | *required* | Maximum execution time in milliseconds |
+
+### `IpFilterConfig`
+
+Configuration for IP-based access control.
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `allowList` | `string[]` | `[]` | IPs or CIDR ranges to always allow |
+| `denyList` | `string[]` | `[]` | IPs or CIDR ranges to always block |
+| `defaultAction` | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
+| `trustProxy` | `boolean` | `false` | Trust `X-Forwarded-For` header |
+| `trustedProxyDepth` | `number` | `1` | Max proxy hops to trust |
+
+### `PartitionKey`
+
+Determines how limits are bucketed across requests.
+
+```typescript
+type PartitionKey = PartitionKeyStrategy | CustomPartitionKeyFn;
+
+type PartitionKeyStrategy = 'ip' | 'session' | 'userId' | 'global';
+
+type CustomPartitionKeyFn = (ctx: PartitionKeyContext) => string;
+```
+
+**`PartitionKeyContext`:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `sessionId` | `string` | MCP session identifier |
+| `clientIp` | `string \| undefined` | Client IP address |
+| `userId` | `string \| undefined` | Authenticated user identifier |
+
+---
+
+## Classes
+
+### `GuardManager`
+
+Orchestrates all guard features. Created via `createGuardManager()` or automatically by the SDK when `throttle` is configured.
+
+```typescript
+class GuardManager {
+  readonly config: GuardConfig;
+
+  constructor(storage: NamespacedStorage, config: GuardConfig);
+}
+```
+
+#### `checkRateLimit()`
+
+Check per-entity rate limit.
+
+```typescript
+async checkRateLimit(
+  entityName: string,
+  entityConfig?: RateLimitConfig,
+  context?: PartitionKeyContext,
+): Promise<RateLimitResult>
+```
+
+| Parameter | Description |
+| --------- | ----------- |
+| `entityName` | Tool or agent name |
+| `entityConfig` | Per-entity rate limit config. Falls back to `config.defaultRateLimit` if not provided |
+| `context` | Partition key context for key resolution |
+
+Returns `{ allowed: true, remaining: Infinity, resetMs: 0 }` if no config applies.
+
+#### `checkGlobalRateLimit()`
+
+Check global (server-wide) rate limit.
+
+```typescript
+async checkGlobalRateLimit(
+  context?: PartitionKeyContext,
+): Promise<RateLimitResult>
+```
+
+Uses `config.global` configuration. Returns allowed result if no global config.
+
+#### `acquireSemaphore()`
+
+Acquire a concurrency slot for an entity.
+
+```typescript
+async acquireSemaphore(
+  entityName: string,
+  entityConfig?: ConcurrencyConfig,
+  context?: PartitionKeyContext,
+): Promise<SemaphoreTicket | null>
+```
+
+| Parameter | Description |
+| --------- | ----------- |
+| `entityName` | Tool or agent name |
+| `entityConfig` | Per-entity concurrency config. Falls back to `config.defaultConcurrency` |
+| `context` | Partition key context for key resolution |
+
+Returns `SemaphoreTicket` on success, `null` if no config applies. May throw `QueueTimeoutError` if queue timeout expires.
+
+#### `acquireGlobalSemaphore()`
+
+Acquire a global concurrency slot.
+
+```typescript
+async acquireGlobalSemaphore(
+  context?: PartitionKeyContext,
+): Promise<SemaphoreTicket | null>
+```
+
+Uses `config.globalConcurrency` configuration.
+
+#### `checkIpFilter()`
+
+Check if a client IP is allowed.
+
+```typescript
+checkIpFilter(clientIp?: string): IpFilterResult | undefined
+```
+
+Returns `undefined` if no IP filter configured or `clientIp` is falsy. Otherwise returns `IpFilterResult`.
+
+#### `isIpAllowListed()`
+
+Check if a client IP is explicitly on the allow list.
+
+```typescript
+isIpAllowListed(clientIp?: string): boolean
+```
+
+Returns `true` only if an IP filter is configured, `clientIp` is provided, and the IP matches the allow list.
+
+#### `destroy()`
+
+Disconnect storage backend and clean up resources.
+
+```typescript
+async destroy(): Promise<void>
+```
+
+---
+
+### `SlidingWindowRateLimiter`
+
+Implements sliding window rate limiting with O(1) storage per key.
+
+```typescript
+class SlidingWindowRateLimiter {
+  constructor(storage: StorageAdapter);
+}
+```
+
+#### `check()`
+
+Check and consume a rate limit token.
+
+```typescript
+async check(
+  key: string,
+  maxRequests: number,
+  windowMs: number,
+): Promise<RateLimitResult>
+```
+
+**Algorithm:** Uses two adjacent fixed-window counters with weighted interpolation. The estimated count is:
+
+```
+estimatedCount = previousWindowCount * (1 - elapsedRatio) + currentWindowCount
+```
+
+If `estimatedCount < maxRequests`, the request is allowed and the current window counter is atomically incremented.
+
+**`RateLimitResult`:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `allowed` | `boolean` | Whether the request is allowed |
+| `remaining` | `number` | Requests remaining in the window |
+| `resetMs` | `number` | Milliseconds until window resets |
+| `retryAfterMs` | `number \| undefined` | Recommended retry time (only when denied) |
+
+#### `reset()`
+
+Reset rate limit counters for a key.
+
+```typescript
+async reset(key: string, windowMs: number): Promise<void>
+```
+
+---
+
+### `DistributedSemaphore`
+
+Implements a distributed counting semaphore with optional queuing.
+
+```typescript
+class DistributedSemaphore {
+  constructor(storage: StorageAdapter, ticketTtlSeconds?: number);
+}
+```
+
+Default `ticketTtlSeconds`: `300` (5 minutes).
+
+#### `acquire()`
+
+Acquire a semaphore slot.
+
+```typescript
+async acquire(
+  key: string,
+  maxConcurrent: number,
+  queueTimeoutMs: number,
+  entityName: string,
+): Promise<SemaphoreTicket | null>
+```
+
+- Returns `SemaphoreTicket` if a slot is acquired.
+- Returns `null` if `queueTimeoutMs <= 0` and no slot is available.
+- Throws `QueueTimeoutError` if queued and timeout expires.
+
+Uses pub/sub when available for efficient slot release detection, falls back to polling with exponential backoff (100ms to 1000ms).
+
+**`SemaphoreTicket`:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `ticket` | `string` | Unique ticket identifier (UUID) |
+| `release()` | `() => Promise<void>` | Release the slot back to the pool |
+
+#### `getActiveCount()`
+
+Get current number of active tickets for a key.
+
+```typescript
+async getActiveCount(key: string): Promise<number>
+```
+
+#### `forceReset()`
+
+Force-clear all tickets and reset the counter for a key.
+
+```typescript
+async forceReset(key: string): Promise<void>
+```
+
+---
+
+### `IpFilter`
+
+IP-based access control with CIDR support for IPv4 and IPv6.
+
+```typescript
+class IpFilter {
+  constructor(config: IpFilterConfig);
+}
+```
+
+Parses all CIDR rules at construction time using BigInt bitmask representation.
+
+#### `check()`
+
+Check if a client IP is allowed.
+
+```typescript
+check(clientIp: string): IpFilterResult
+```
+
+**Evaluation order:**
+1. Deny list (takes precedence)
+2. Allow list
+3. Default action
+
+**`IpFilterResult`:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `allowed` | `boolean` | Whether the IP is allowed |
+| `reason` | `'allowlisted' \| 'denylisted' \| 'default' \| undefined` | Reason for the decision |
+| `matchedRule` | `string \| undefined` | Specific IP or CIDR that matched |
+
+#### `isAllowListed()`
+
+Check if an IP is explicitly on the allow list.
+
+```typescript
+isAllowListed(clientIp: string): boolean
+```
+
+---
+
+## Functions
+
+### `createGuardManager()`
+
+Factory function to create a fully initialized `GuardManager`.
+
+```typescript
+async function createGuardManager(args: CreateGuardManagerArgs): Promise<GuardManager>
+```
+
+**`CreateGuardManagerArgs`:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `config` | `GuardConfig` | Full guard configuration |
+| `logger` | `GuardLogger \| undefined` | Optional logger for diagnostic output |
+
+**Behavior:**
+1. Creates storage backend from `config.storage` (or in-memory if not set)
+2. Connects the storage backend
+3. Creates namespaced storage with `config.keyPrefix`
+4. Returns initialized `GuardManager`
+
+```typescript
+import { createGuardManager } from '@frontmcp/guard';
+
+const manager = await createGuardManager({
+  config: {
+    enabled: true,
+    storage: { provider: 'redis', host: 'localhost', port: 6379 },
+    global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
+  },
+  logger: console,
+});
+```
+
+---
+
+### `withTimeout()`
+
+Wraps an async function with an execution deadline.
+
+```typescript
+async function withTimeout<T>(
+  fn: () => Promise<T>,
+  timeoutMs: number,
+  entityName: string,
+): Promise<T>
+```
+
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| `fn` | `() => Promise<T>` | Async function to execute |
+| `timeoutMs` | `number` | Maximum execution time in milliseconds |
+| `entityName` | `string` | Name included in error message |
+
+Throws `ExecutionTimeoutError` if the deadline is exceeded. Uses `AbortController` + `Promise.race` internally.
+
+```typescript
+import { withTimeout } from '@frontmcp/guard';
+
+const result = await withTimeout(
+  () => fetchData(),
+  5000,
+  'data-fetcher',
+);
+```
+
+---
+
+### `resolvePartitionKey()`
+
+Resolve a partition key strategy to a concrete string value.
+
+```typescript
+function resolvePartitionKey(
+  partitionBy?: PartitionKey,
+  context?: PartitionKeyContext,
+): string
+```
+
+| Strategy | Resolved Value |
+| -------- | -------------- |
+| `undefined` | `'global'` |
+| `'global'` | `'global'` |
+| `'ip'` | `context.clientIp` or `'unknown-ip'` |
+| `'session'` | `context.sessionId` |
+| `'userId'` | `context.userId` or `'anonymous'` |
+| Custom function | `fn(context)` |
+
+---
+
+### `buildStorageKey()`
+
+Build a namespaced storage key from components.
+
+```typescript
+function buildStorageKey(
+  entityName: string,
+  partitionKey: string,
+  suffix?: string,
+): string
+```
+
+**Examples:**
+
+```typescript
+buildStorageKey('search', 'user-123', 'rl');
+// → 'search:user-123:rl'
+
+buildStorageKey('search', 'global');
+// → 'search:global'
+```
+
+---
+
+## Error Classes
+
+All guard errors extend `GuardError`, which has `code` (string) and `statusCode` (number) properties.
+
+```typescript
+class GuardError extends Error {
+  readonly code: string;
+  readonly statusCode: number;
+}
+```
+
+### `ExecutionTimeoutError`
+
+Thrown when execution exceeds the configured timeout.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `'EXECUTION_TIMEOUT'` |
+| `statusCode` | `number` | `408` |
+| `entityName` | `string` | Name of the tool/agent |
+| `timeoutMs` | `number` | Configured timeout value |
+
+### `ConcurrencyLimitError`
+
+Thrown when no concurrency slot is available and `queueTimeoutMs` is 0.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `'CONCURRENCY_LIMIT'` |
+| `statusCode` | `number` | `429` |
+| `entityName` | `string` | Name of the tool/agent |
+| `maxConcurrent` | `number` | Configured concurrency limit |
+
+### `QueueTimeoutError`
+
+Thrown when a queued request exceeds its wait time.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `'QUEUE_TIMEOUT'` |
+| `statusCode` | `number` | `429` |
+| `entityName` | `string` | Name of the tool/agent |
+| `queueTimeoutMs` | `number` | Configured queue timeout |
+
+### `IpBlockedError`
+
+Thrown when a client IP matches the deny list.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `'IP_BLOCKED'` |
+| `statusCode` | `number` | `403` |
+| `clientIp` | `string` | The blocked IP address |
+
+### `IpNotAllowedError`
+
+Thrown when a client IP is not on the allow list and `defaultAction` is `'deny'`.
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `'IP_NOT_ALLOWED'` |
+| `statusCode` | `number` | `403` |
+| `clientIp` | `string` | The rejected IP address |
+
+---
+
+## Zod Schemas
+
+Validation schemas for all configuration types. Useful for validating user-provided configuration.
+
+```typescript
+import {
+  guardConfigSchema,
+  rateLimitConfigSchema,
+  concurrencyConfigSchema,
+  timeoutConfigSchema,
+  ipFilterConfigSchema,
+  partitionKeySchema,
+} from '@frontmcp/guard';
+```
+
+| Schema | Validates |
+| ------ | --------- |
+| `guardConfigSchema` | `GuardConfig` |
+| `rateLimitConfigSchema` | `RateLimitConfig` |
+| `concurrencyConfigSchema` | `ConcurrencyConfig` |
+| `timeoutConfigSchema` | `TimeoutConfig` |
+| `ipFilterConfigSchema` | `IpFilterConfig` |
+| `partitionKeySchema` | `PartitionKey` (string strategy or function) |

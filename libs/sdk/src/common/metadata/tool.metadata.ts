@@ -3,6 +3,8 @@ import { RawZodShape } from '../types';
 import { ImageContentSchema, AudioContentSchema, ResourceLinkSchema, EmbeddedResourceSchema } from '@frontmcp/protocol';
 import { ToolUIConfig } from './tool-ui.metadata';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
+import type { RateLimitConfig, ConcurrencyConfig, TimeoutConfig } from '@frontmcp/guard';
+import { rateLimitConfigSchema, concurrencyConfigSchema, timeoutConfigSchema } from '@frontmcp/guard';
 
 // ============================================
 // Auth Provider Mapping for Tools
@@ -281,6 +283,51 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * ```
    */
   authProviders?: ToolAuthProviderRef[];
+
+  /**
+   * Rate limiting configuration for this tool.
+   * Controls how many requests are allowed within a time window.
+   *
+   * @example
+   * ```typescript
+   * @Tool({
+   *   name: 'search',
+   *   inputSchema: { query: z.string() },
+   *   rateLimit: { maxRequests: 100, windowMs: 60_000, partitionBy: 'userId' },
+   * })
+   * ```
+   */
+  rateLimit?: RateLimitConfig;
+
+  /**
+   * Concurrency control configuration for this tool.
+   * Limits the number of simultaneous executions.
+   *
+   * @example
+   * ```typescript
+   * @Tool({
+   *   name: 'deploy',
+   *   inputSchema: { env: z.string() },
+   *   concurrency: { maxConcurrent: 1 },
+   * })
+   * ```
+   */
+  concurrency?: ConcurrencyConfig;
+
+  /**
+   * Timeout configuration for this tool's execution.
+   * Wraps the execute stage with a deadline.
+   *
+   * @example
+   * ```typescript
+   * @Tool({
+   *   name: 'long-task',
+   *   inputSchema: { query: z.string() },
+   *   timeout: { executeMs: 30_000 },
+   * })
+   * ```
+   */
+  timeout?: TimeoutConfig;
 }
 
 /**
@@ -324,5 +371,8 @@ export const frontMcpToolMetadataSchema = z
     examples: z.array(toolExampleSchema).optional(),
     ui: z.looseObject({}).optional(),
     authProviders: z.array(toolAuthProviderMappingSchema).optional(),
+    rateLimit: rateLimitConfigSchema.optional(),
+    concurrency: concurrencyConfigSchema.optional(),
+    timeout: timeoutConfigSchema.optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

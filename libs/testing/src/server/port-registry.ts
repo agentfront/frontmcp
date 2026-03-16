@@ -56,6 +56,7 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-serverless': { start: 50310, size: 10 },
   'demo-e2e-uipack': { start: 50320, size: 10 },
   'demo-e2e-agent-adapters': { start: 50330, size: 10 },
+  'demo-e2e-guard': { start: 50400, size: 10 },
 
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },

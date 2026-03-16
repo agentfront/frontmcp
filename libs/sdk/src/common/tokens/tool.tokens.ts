@@ -16,6 +16,9 @@ export const FrontMcpToolTokens = {
   ui: tokenFactory.meta('ui'), // UI template configuration
   metadata: tokenFactory.meta('metadata'), // used in tool({}) construction
   authProviders: tokenFactory.meta('authProviders'), // Auth provider refs (array)
+  rateLimit: tokenFactory.meta('rateLimit'), // Rate limiting configuration
+  concurrency: tokenFactory.meta('concurrency'), // Concurrency control configuration
+  timeout: tokenFactory.meta('timeout'), // Timeout configuration
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
 export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');
