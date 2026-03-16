@@ -198,7 +198,12 @@ function extractFromDecoratedClass(cls: unknown): FrontMcpPackageManifest {
   }
 
   return {
-    name: ((config['info'] as Record<string, unknown>)?.['name'] as string) ?? 'unknown',
+    name:
+      config['info'] &&
+      typeof config['info'] === 'object' &&
+      typeof (config['info'] as Record<string, unknown>)['name'] === 'string'
+        ? ((config['info'] as Record<string, unknown>)['name'] as string)
+        : 'unknown',
     version: '0.0.0',
     tools: Array.isArray(config['tools']) ? (config['tools'] as unknown[]) : undefined,
     prompts: Array.isArray(config['prompts']) ? (config['prompts'] as unknown[]) : undefined,
