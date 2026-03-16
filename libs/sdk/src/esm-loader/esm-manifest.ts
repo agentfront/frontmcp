@@ -200,14 +200,14 @@ function extractFromDecoratedClass(cls: unknown): FrontMcpPackageManifest {
   return {
     name: ((config['info'] as Record<string, unknown>)?.['name'] as string) ?? 'unknown',
     version: '0.0.0',
-    tools: config['tools'] as unknown[] | undefined,
-    prompts: config['prompts'] as unknown[] | undefined,
-    resources: config['resources'] as unknown[] | undefined,
-    skills: config['skills'] as unknown[] | undefined,
-    agents: config['agents'] as unknown[] | undefined,
-    jobs: config['jobs'] as unknown[] | undefined,
-    workflows: config['workflows'] as unknown[] | undefined,
-    providers: config['providers'] as unknown[] | undefined,
+    tools: Array.isArray(config['tools']) ? (config['tools'] as unknown[]) : undefined,
+    prompts: Array.isArray(config['prompts']) ? (config['prompts'] as unknown[]) : undefined,
+    resources: Array.isArray(config['resources']) ? (config['resources'] as unknown[]) : undefined,
+    skills: Array.isArray(config['skills']) ? (config['skills'] as unknown[]) : undefined,
+    agents: Array.isArray(config['agents']) ? (config['agents'] as unknown[]) : undefined,
+    jobs: Array.isArray(config['jobs']) ? (config['jobs'] as unknown[]) : undefined,
+    workflows: Array.isArray(config['workflows']) ? (config['workflows'] as unknown[]) : undefined,
+    providers: Array.isArray(config['providers']) ? (config['providers'] as unknown[]) : undefined,
   };
 }
 
@@ -219,14 +219,14 @@ function collectNamedExports(mod: Record<string, unknown>): FrontMcpPackageManif
     name: typeof mod['name'] === 'string' ? mod['name'] : 'unknown',
     version: typeof mod['version'] === 'string' ? mod['version'] : '0.0.0',
     description: typeof mod['description'] === 'string' ? mod['description'] : undefined,
-    tools: mod['tools'] as unknown[] | undefined,
-    prompts: mod['prompts'] as unknown[] | undefined,
-    resources: mod['resources'] as unknown[] | undefined,
-    skills: mod['skills'] as unknown[] | undefined,
-    agents: mod['agents'] as unknown[] | undefined,
-    jobs: mod['jobs'] as unknown[] | undefined,
-    workflows: mod['workflows'] as unknown[] | undefined,
-    providers: mod['providers'] as unknown[] | undefined,
+    tools: Array.isArray(mod['tools']) ? (mod['tools'] as unknown[]) : undefined,
+    prompts: Array.isArray(mod['prompts']) ? (mod['prompts'] as unknown[]) : undefined,
+    resources: Array.isArray(mod['resources']) ? (mod['resources'] as unknown[]) : undefined,
+    skills: Array.isArray(mod['skills']) ? (mod['skills'] as unknown[]) : undefined,
+    agents: Array.isArray(mod['agents']) ? (mod['agents'] as unknown[]) : undefined,
+    jobs: Array.isArray(mod['jobs']) ? (mod['jobs'] as unknown[]) : undefined,
+    workflows: Array.isArray(mod['workflows']) ? (mod['workflows'] as unknown[]) : undefined,
+    providers: Array.isArray(mod['providers']) ? (mod['providers'] as unknown[]) : undefined,
   };
 }
 
