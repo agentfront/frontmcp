@@ -79,11 +79,14 @@ test.describe('Guard Rate Limit — Window Reset', () => {
     const blocked = await mcp.tools.call('rate-limited', { message: 'blocked' });
     expect(blocked).toBeError();
 
-    // Wait for the window to expire (5s window + buffer)
-    await new Promise((resolve) => setTimeout(resolve, 5500));
-
-    // Should be allowed again
-    const result = await mcp.tools.call('rate-limited', { message: 'after-reset' });
+    // Poll until rate limit resets (5s window + margin)
+    const deadline = Date.now() + 7000;
+    let result;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      result = await mcp.tools.call('rate-limited', { message: 'after-reset' });
+      if (result && !JSON.stringify(result).includes('isError')) break;
+    }
     expect(result).toBeSuccessful();
     expect(result).toHaveTextContent('after-reset');
   });

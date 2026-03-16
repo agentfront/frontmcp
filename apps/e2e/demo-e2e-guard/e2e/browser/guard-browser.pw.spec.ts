@@ -81,6 +81,8 @@ test.describe('Guard Browser E2E', () => {
     for (let i = 0; i < 3; i++) {
       const response = await callTool(request, sessionId, 'rate-limited', { message: `req-${i}` }, `call-${i}`);
       expect(response.status()).toBe(200);
+      const body = await response.json();
+      expect(body.result?.isError).not.toBe(true);
     }
 
     // 4th request should trigger rate limit
@@ -89,6 +91,8 @@ test.describe('Guard Browser E2E', () => {
 
     // Rate limit errors surface as isError: true in the tool result
     expect(body.result?.isError).toBe(true);
+    const content = JSON.stringify(body.result?.content ?? []);
+    expect(content.toLowerCase()).toMatch(/rate.limit|retry|too.many/i);
   });
 
   test('should receive timeout error for slow execution', async ({ request }) => {

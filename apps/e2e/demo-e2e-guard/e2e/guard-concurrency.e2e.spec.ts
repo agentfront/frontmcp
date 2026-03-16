@@ -106,9 +106,9 @@ test.describe('Guard Concurrency — Queued', () => {
     const client2 = await server.createClient();
 
     try {
-      // First call holds slot for 5s, second queues (3s timeout)
+      // First call holds slot for 4.5s, second queues (3s timeout)
       const [result1, result2] = await Promise.allSettled([
-        client1.tools.call('concurrency-queued', { delayMs: 5000 }),
+        client1.tools.call('concurrency-queued', { delayMs: 4500 }),
         (async () => {
           await new Promise<void>((r) => setTimeout(r, 100));
           return client2.tools.call('concurrency-queued', { delayMs: 100 });

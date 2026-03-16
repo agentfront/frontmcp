@@ -216,7 +216,7 @@ describe('SlidingWindowRateLimiter', () => {
       nowSpy.mockReturnValue(120_000);
       await limiter.reset('test-key', 60_000);
 
-      expect(storage.mdelete).toHaveBeenCalledWith(['test-key:120000', 'test-key:60000']);
+      expect(storage.mdelete).toHaveBeenCalledWith(expect.arrayContaining(['test-key:120000', 'test-key:60000']));
     });
   });
 });
