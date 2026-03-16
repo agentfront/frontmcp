@@ -247,7 +247,7 @@ describe('IpFilter', () => {
   });
 
   describe('IPv6 CIDR ranges', () => {
-    it('should match IPs in an IPv6 /64 range', () => {
+    it('should match IPs in an IPv6 /32 range', () => {
       const filter = new IpFilter({
         allowList: ['2001:db8::/32'],
         defaultAction: 'deny',
@@ -505,7 +505,9 @@ describe('IpFilter', () => {
       // Note: exact match required for /128
       // ::ffff:192.168.1.0 is the IPv4-mapped representation
       const result = filter.check('::ffff:192.168.1.0');
-      expect(result).toBeDefined();
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('allowlisted');
+      expect(result.matchedRule).toBe('::ffff:192.168.1.0/128');
     });
 
     it('should handle IPv4-mapped IPv6 with invalid IPv4 portion', () => {

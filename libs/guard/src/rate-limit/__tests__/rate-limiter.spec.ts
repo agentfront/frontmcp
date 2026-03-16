@@ -15,7 +15,11 @@ function createMockStorage(): jest.Mocked<StorageAdapter> {
     delete: jest.fn().mockImplementation(async (key: string) => data.delete(key)),
     exists: jest.fn().mockImplementation(async (key: string) => data.has(key)),
     mget: jest.fn().mockImplementation(async (keys: string[]) => keys.map((k) => data.get(k) ?? null)),
-    mset: jest.fn().mockResolvedValue(undefined),
+    mset: jest.fn().mockImplementation(async (entries: Array<{ key: string; value: string }>) => {
+      for (const { key, value } of entries) {
+        data.set(key, value);
+      }
+    }),
     mdelete: jest.fn().mockImplementation(async (keys: string[]) => {
       let deleted = 0;
       for (const k of keys) {
@@ -25,8 +29,13 @@ function createMockStorage(): jest.Mocked<StorageAdapter> {
     }),
     expire: jest.fn().mockResolvedValue(true),
     ttl: jest.fn().mockResolvedValue(-1),
-    keys: jest.fn().mockResolvedValue([]),
-    count: jest.fn().mockResolvedValue(0),
+    keys: jest.fn().mockImplementation(async (pattern?: string) => {
+      const allKeys = Array.from(data.keys());
+      if (!pattern || pattern === '*') return allKeys;
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+      return allKeys.filter((k) => regex.test(k));
+    }),
+    count: jest.fn().mockImplementation(async () => data.size),
     incr: jest.fn().mockImplementation(async (key: string) => {
       const current = parseInt(data.get(key) ?? '0', 10);
       const next = current + 1;
@@ -145,6 +154,36 @@ describe('SlidingWindowRateLimiter', () => {
       // With max 8, should reject
       const result = await limiter.check('test-key', 8, 60_000);
       expect(result.allowed).toBe(false);
+    });
+
+    it('should apply full previous weight at exact window start', async () => {
+      const previousWindowStart = 60_000;
+      const currentWindowStart = 120_000;
+      const previousKey = `test-key:${previousWindowStart}`;
+
+      await storage.set(previousKey, '8');
+
+      // Exact start of current window: elapsed=0, weight=1 (full previous weight)
+      nowSpy.mockReturnValue(currentWindowStart);
+
+      // estimated = 8 * 1 + 0 = 8, limit=10 → allowed, remaining = floor(10-8-1) = 1
+      const result = await limiter.check('test-key', 10, 60_000);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(1);
+    });
+
+    it('should treat last ms before window boundary as end of current window', async () => {
+      // At 119999ms, Math.floor(119999/60000)*60000 = 60000 (still in that window)
+      const currentKey = `test-key:${60_000}`;
+      await storage.set(currentKey, '8');
+
+      nowSpy.mockReturnValue(119_999);
+
+      // elapsed=59999, weight=1/60000≈0, estimated ≈ 0 + 8 = 8
+      // limit=10 → allowed, remaining = floor(10-8-1) = 1
+      const result = await limiter.check('test-key', 10, 60_000);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(1);
     });
 
     it('should handle different keys independently', async () => {

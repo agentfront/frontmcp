@@ -71,7 +71,8 @@ test.describe('Guard Rate Limit — Window Reset', () => {
   test('should reset after window expires', async ({ mcp }) => {
     // Exhaust the limit (3 requests in 5s window)
     for (let i = 0; i < 3; i++) {
-      await mcp.tools.call('rate-limited', { message: `req-${i}` });
+      const warmUp = await mcp.tools.call('rate-limited', { message: `req-${i}` });
+      expect(warmUp).toBeSuccessful();
     }
 
     // Should be blocked now

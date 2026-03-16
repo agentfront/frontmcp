@@ -28,7 +28,12 @@ async function initializeSession(request: APIRequestContext) {
     headers: { 'Content-Type': 'application/json' },
   });
 
+  expect(response.ok()).toBe(true);
+  const body = await response.json();
+  expect(body.error).toBeUndefined();
+
   const sessionId = response.headers()['mcp-session-id'];
+  expect(sessionId).toBeTruthy();
   return { response, sessionId };
 }
 

@@ -46,8 +46,10 @@ test.describe('Guard Concurrency — Mutex', () => {
       // Second should have an error (concurrency limit, queue:0 = immediate reject)
       if (result2.status === 'fulfilled') {
         expect(result2.value).toBeError();
+      } else if (result2.status === 'rejected') {
+        // Transport-level rejection is acceptable for concurrency limit
+        expect(result2.reason).toBeDefined();
       }
-      // If rejected at transport level, that's also acceptable
     } finally {
       await client1.disconnect();
       await client2.disconnect();
@@ -122,6 +124,9 @@ test.describe('Guard Concurrency — Queued', () => {
       // Second should have a queue timeout error
       if (result2.status === 'fulfilled') {
         expect(result2.value).toBeError();
+      } else if (result2.status === 'rejected') {
+        // Transport-level rejection is acceptable for queue timeout
+        expect(result2.reason).toBeDefined();
       }
     } finally {
       await client1.disconnect();
