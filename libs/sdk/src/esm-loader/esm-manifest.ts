@@ -5,6 +5,13 @@
  */
 
 import { z } from 'zod';
+import {
+  isDecoratedToolClass,
+  isDecoratedResourceClass,
+  isDecoratedPromptClass,
+  isDecoratedSkillClass,
+  isDecoratedJobClass,
+} from '../app/instances/esm-normalize.utils';
 
 /**
  * The manifest that ESM packages export to declare their MCP primitives.
@@ -82,10 +89,12 @@ export type ManifestPrimitiveKey = (typeof MANIFEST_PRIMITIVE_KEYS)[number];
 /**
  * Normalize the default export of an ESM module into a FrontMcpPackageManifest.
  *
- * Handles three formats:
+ * Handles five formats:
  * 1. A plain manifest object with tools/prompts/etc arrays
  * 2. A class decorated with @FrontMcp (detected via reflect-metadata)
- * 3. A module with named exports (tools, prompts, etc.)
+ * 3. A module with named exports (tools, prompts, etc. arrays)
+ * 4. A single default export of a decorated primitive class (@Tool, @Resource, etc.)
+ * 5. Named exports of individual decorated classes (scanned and grouped by type)
  *
  * @param moduleExport - The raw module export (result of dynamic import())
  * @returns Normalized FrontMcpPackageManifest
@@ -107,14 +116,24 @@ export function normalizeEsmExport(moduleExport: unknown): FrontMcpPackageManife
       return validateManifest(defaultExport);
     }
 
-    // Case 1b: Default export is a decorated class
+    // Case 1b: Default export is a @FrontMcp-decorated class
     if (isDecoratedClass(defaultExport)) {
       return extractFromDecoratedClass(defaultExport);
     }
 
-    // Case 1c: Default is itself a module-like object with named exports
+    // Case 1c: Default export is a single decorated primitive class (@Tool, @Resource, etc.)
+    if (isDecoratedPrimitive(defaultExport)) {
+      return collectDecoratedExports({ default: defaultExport });
+    }
+
+    // Case 1d: Default is itself a module-like object with named exports
     if (hasManifestPrimitives(defaultExport)) {
       return collectNamedExports(defaultExport);
+    }
+
+    // Case 1e: Default is a module-like object with decorated class exports
+    if (hasDecoratedClassExports(defaultExport)) {
+      return collectDecoratedExports(defaultExport);
     }
   }
 
@@ -128,9 +147,15 @@ export function normalizeEsmExport(moduleExport: unknown): FrontMcpPackageManife
     return collectNamedExports(mod);
   }
 
+  // Case 4: Module has named exports of individual decorated classes
+  if (hasDecoratedClassExports(mod)) {
+    return collectDecoratedExports(mod);
+  }
+
   throw new Error(
     'ESM module does not export a valid FrontMcpPackageManifest. ' +
-      'Expected a default export with { name, version, tools?, ... } or named exports of primitive arrays.',
+      'Expected a default export with { name, version, tools?, ... }, ' +
+      'named exports of primitive arrays, or exported decorated classes (@Tool, @Resource, etc.).',
   );
 }
 
@@ -200,6 +225,57 @@ function collectNamedExports(mod: Record<string, unknown>): FrontMcpPackageManif
     jobs: mod['jobs'] as unknown[] | undefined,
     workflows: mod['workflows'] as unknown[] | undefined,
     providers: mod['providers'] as unknown[] | undefined,
+  };
+}
+
+/**
+ * Check if a value is a decorated primitive class (@Tool, @Resource, @Prompt, @Skill, @Job).
+ */
+function isDecoratedPrimitive(value: unknown): boolean {
+  return (
+    isDecoratedToolClass(value) ||
+    isDecoratedResourceClass(value) ||
+    isDecoratedPromptClass(value) ||
+    isDecoratedSkillClass(value) ||
+    isDecoratedJobClass(value)
+  );
+}
+
+/**
+ * Check if a module has any exports that are decorated primitive classes.
+ */
+function hasDecoratedClassExports(obj: Record<string, unknown>): boolean {
+  return Object.values(obj).some((value) => value && typeof value === 'function' && isDecoratedPrimitive(value));
+}
+
+/**
+ * Collect individually exported decorated classes into a manifest.
+ * Scans all exports (including `default`) and groups them by decorator type.
+ */
+function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageManifest {
+  const tools: unknown[] = [];
+  const resources: unknown[] = [];
+  const prompts: unknown[] = [];
+  const skills: unknown[] = [];
+  const jobs: unknown[] = [];
+
+  for (const value of Object.values(mod)) {
+    if (!value || typeof value !== 'function') continue;
+    if (isDecoratedToolClass(value)) tools.push(value);
+    else if (isDecoratedResourceClass(value)) resources.push(value);
+    else if (isDecoratedPromptClass(value)) prompts.push(value);
+    else if (isDecoratedSkillClass(value)) skills.push(value);
+    else if (isDecoratedJobClass(value)) jobs.push(value);
+  }
+
+  return {
+    name: (mod['name'] as string) ?? 'unknown',
+    version: (mod['version'] as string) ?? '0.0.0',
+    ...(tools.length ? { tools } : {}),
+    ...(resources.length ? { resources } : {}),
+    ...(prompts.length ? { prompts } : {}),
+    ...(skills.length ? { skills } : {}),
+    ...(jobs.length ? { jobs } : {}),
   };
 }
 

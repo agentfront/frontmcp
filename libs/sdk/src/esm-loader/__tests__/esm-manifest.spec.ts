@@ -1,4 +1,40 @@
+import 'reflect-metadata';
 import { normalizeEsmExport, frontMcpPackageManifestSchema } from '../esm-manifest';
+import {
+  FrontMcpToolTokens,
+  FrontMcpResourceTokens,
+  FrontMcpPromptTokens,
+  FrontMcpSkillTokens,
+  FrontMcpJobTokens,
+} from '../../common';
+import { extendedToolMetadata } from '../../common/tokens';
+
+/** Helper: simulate @Tool decorator metadata on a class */
+function simulateTool(cls: { new (...args: unknown[]): unknown }, name: string) {
+  Reflect.defineMetadata(FrontMcpToolTokens.type, true, cls);
+  Reflect.defineMetadata(FrontMcpToolTokens.name, name, cls);
+  Reflect.defineMetadata(extendedToolMetadata, {}, cls);
+}
+
+/** Helper: simulate @Resource decorator metadata on a class */
+function simulateResource(cls: { new (...args: unknown[]): unknown }) {
+  Reflect.defineMetadata(FrontMcpResourceTokens.type, true, cls);
+}
+
+/** Helper: simulate @Prompt decorator metadata on a class */
+function simulatePrompt(cls: { new (...args: unknown[]): unknown }) {
+  Reflect.defineMetadata(FrontMcpPromptTokens.type, true, cls);
+}
+
+/** Helper: simulate @Skill decorator metadata on a class */
+function simulateSkill(cls: { new (...args: unknown[]): unknown }) {
+  Reflect.defineMetadata(FrontMcpSkillTokens.type, true, cls);
+}
+
+/** Helper: simulate @Job decorator metadata on a class */
+function simulateJob(cls: { new (...args: unknown[]): unknown }) {
+  Reflect.defineMetadata(FrontMcpJobTokens.type, true, cls);
+}
 
 describe('normalizeEsmExport', () => {
   describe('plain manifest object via default export', () => {
@@ -75,6 +111,127 @@ describe('normalizeEsmExport', () => {
 
     it('should throw for empty object with no recognizable structure', () => {
       expect(() => normalizeEsmExport({})).toThrow('does not export a valid');
+    });
+  });
+
+  describe('decorated class named exports', () => {
+    it('should detect a single @Tool named export and collect into manifest', () => {
+      class EchoTool {}
+      simulateTool(EchoTool, 'echo');
+
+      const moduleExport = { EchoTool };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools![0]).toBe(EchoTool);
+    });
+
+    it('should detect multiple @Tool named exports', () => {
+      class EchoTool {}
+      class AddTool {}
+      simulateTool(EchoTool, 'echo');
+      simulateTool(AddTool, 'add');
+
+      const moduleExport = { EchoTool, AddTool };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(2);
+    });
+
+    it('should detect mixed primitive types as named exports', () => {
+      class MyTool {}
+      class MyResource {}
+      class MyPrompt {}
+      simulateTool(MyTool, 'my-tool');
+      simulateResource(MyResource);
+      simulatePrompt(MyPrompt);
+
+      const moduleExport = { MyTool, MyResource, MyPrompt };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(1);
+      expect(result.resources).toHaveLength(1);
+      expect(result.prompts).toHaveLength(1);
+    });
+
+    it('should detect @Skill and @Job decorated exports', () => {
+      class MySkill {}
+      class MyJob {}
+      simulateSkill(MySkill);
+      simulateJob(MyJob);
+
+      const moduleExport = { MySkill, MyJob };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.skills).toHaveLength(1);
+      expect(result.jobs).toHaveLength(1);
+    });
+
+    it('should detect all 5 primitive types in a single module', () => {
+      class T {}
+      class R {}
+      class P {}
+      class S {}
+      class J {}
+      simulateTool(T, 't');
+      simulateResource(R);
+      simulatePrompt(P);
+      simulateSkill(S);
+      simulateJob(J);
+
+      const moduleExport = { T, R, P, S, J };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(1);
+      expect(result.resources).toHaveLength(1);
+      expect(result.prompts).toHaveLength(1);
+      expect(result.skills).toHaveLength(1);
+      expect(result.jobs).toHaveLength(1);
+    });
+
+    it('should ignore non-class exports when scanning decorated classes', () => {
+      class MyTool {}
+      simulateTool(MyTool, 'my-tool');
+
+      const moduleExport = {
+        MyTool,
+        someString: 'hello',
+        someNumber: 42,
+        someObject: { foo: 'bar' },
+        __esModule: true,
+      };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(1);
+    });
+  });
+
+  describe('single decorated default export', () => {
+    it('should detect a single @Tool as default export', () => {
+      class EchoTool {}
+      simulateTool(EchoTool, 'echo');
+
+      const moduleExport = { default: EchoTool };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools![0]).toBe(EchoTool);
+    });
+
+    it('should detect a single @Resource as default export', () => {
+      class StatusResource {}
+      simulateResource(StatusResource);
+
+      const moduleExport = { default: StatusResource };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.resources).toHaveLength(1);
+    });
+  });
+
+  describe('decorated class exports nested in default', () => {
+    it('should scan default export object for decorated classes', () => {
+      class MyTool {}
+      class MyPrompt {}
+      simulateTool(MyTool, 'my-tool');
+      simulatePrompt(MyPrompt);
+
+      const moduleExport = { default: { MyTool, MyPrompt } };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.tools).toHaveLength(1);
+      expect(result.prompts).toHaveLength(1);
     });
   });
 });

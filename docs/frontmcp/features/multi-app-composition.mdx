@@ -78,17 +78,17 @@ Tools in `CrmApp` can access both `SharedCacheProvider` and `CrmDatabaseProvider
 
 ## ESM Package Apps
 
-You can also compose apps from npm packages loaded at runtime via `loadFrom()`:
+You can also compose apps from npm packages or remote MCP servers at runtime via `App.esm()` and `App.remote()`:
 
 ```ts
-import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'Platform', version: '1.0.0' },
   apps: [
     CrmApp,                                         // Local app
-    loadFrom('@acme/analytics@^2.0.0'),             // ESM package
-    { name: 'ext', urlType: 'url', url: '...' },    // Remote app
+    App.esm('@acme/analytics@^2.0.0'),              // ESM package
+    App.remote('https://ext.example.com/mcp'),      // Remote app
   ],
 })
 export default class Server {}

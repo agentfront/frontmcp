@@ -17,7 +17,7 @@ FrontMCP supports browser environments for client-side use cases like JWT verifi
 | **Storage adapters**  | `MemoryStorageAdapter`, `IndexedDBStorageAdapter`, `LocalStorageAdapter` |
 | **Agent adapters**    | `OpenAIAdapter`, `AnthropicAdapter` (HTTP-based, no Node dependencies)   |
 | **MCP client**        | Direct client connections                                                |
-| **ESM Dynamic Loading** | In-memory cache mode, Blob URL module evaluation via `loadFrom()`     |
+| **ESM Dynamic Loading** | In-memory cache mode, Blob URL module evaluation via `App.esm()`      |
 
 ## What's Node-only
 
@@ -95,7 +95,7 @@ When using LLM adapters in the browser, API keys are exposed to the client. Use 
 
 ## ESM Dynamic Loading in Browser
 
-The [`loadFrom()`](/frontmcp/servers/esm-packages) API works in browser environments with these differences:
+The [`App.esm()`](/frontmcp/servers/esm-packages) API works in browser environments with these differences:
 
 - **Cache**: Memory-only (no disk persistence). Bundles are stored in an in-memory `Map`.
 - **Module evaluation**: Bundles are evaluated via `Blob` + `URL.createObjectURL` instead of writing to the file system.

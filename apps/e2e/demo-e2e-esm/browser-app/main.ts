@@ -9,7 +9,7 @@
  * Playwright tests read results from window.__ESM_RESULTS__ after the page loads.
  */
 import 'reflect-metadata';
-import { connect, loadFrom, LogLevel } from '@frontmcp/sdk';
+import { connect, App, LogLevel } from '@frontmcp/sdk';
 
 // Read ESM server URL from query params (set by Playwright test)
 const params = new URLSearchParams(location.search);
@@ -47,8 +47,8 @@ async function main(): Promise<void> {
         info: { name: 'Browser ESM E2E', version: '0.1.0' },
         loader: { url: esmServerUrl },
         apps: [
-          loadFrom('@test/esm-tools@^1.0.0', { namespace: 'esm' }),
-          loadFrom('@test/esm-multi@^1.0.0', { namespace: 'multi' }),
+          App.esm('@test/esm-tools@^1.0.0', { namespace: 'esm' }),
+          App.esm('@test/esm-multi@^1.0.0', { namespace: 'multi' }),
         ],
         logging: { level: LogLevel.Warn },
       },

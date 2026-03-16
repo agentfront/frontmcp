@@ -5,8 +5,9 @@
  * cache-to-native-import bridge.
  *
  * Packages served:
- * - @test/esm-tools v1.0.0 — 2 tools: echo, add
- * - @test/esm-multi v1.0.0 — 1 tool + 1 resource + 1 prompt
+ * - @test/esm-tools v1.0.0 — 2 tools: echo, add (plain objects)
+ * - @test/esm-multi v1.0.0 — 1 tool + 1 resource + 1 prompt (plain objects)
+ * - @test/esm-decorated v1.0.0 — 2 tools + 1 resource + 1 prompt (real @Tool/@Resource/@Prompt decorators, esbuild-transpiled)
  *
  * URL patterns (same as esm.sh / npm registry):
  * - GET /{packageName}         → npm registry JSON (versions, dist-tags)
@@ -14,6 +15,8 @@
  */
 
 import * as http from 'node:http';
+import { buildSync } from 'esbuild';
+import * as path from 'node:path';
 
 const rawPort = parseInt(process.env['PORT'] ?? process.env['ESM_SERVER_PORT'] ?? '50400', 10);
 const port = Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : 50400;
@@ -116,6 +119,30 @@ module.exports = {
 `;
 
 // ═══════════════════════════════════════════════════════════════════
+// DECORATED FIXTURE (esbuild-transpiled TypeScript with real decorators)
+// ═══════════════════════════════════════════════════════════════════
+
+function buildFixture(filename: string): string {
+  const result = buildSync({
+    entryPoints: [path.join(__dirname, 'fixtures', filename)],
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: 'es2022',
+    write: false,
+    external: ['@frontmcp/sdk', 'zod', 'reflect-metadata'],
+  });
+  // Strip esbuild's CJS annotation comment that contains the word "import",
+  // which would cause the ESM loader's isEsmSource() to misdetect this as ESM
+  return result.outputFiles[0].text.replace(/\/\/ Annotate the CommonJS export names for ESM import in node:\n/g, '');
+}
+
+const ESM_DECORATED_BUNDLE = buildFixture('decorated-package.ts');
+const ESM_TOOLS_DECORATED_BUNDLE = buildFixture('tools-only-package.ts');
+const ESM_RESOURCES_DECORATED_BUNDLE = buildFixture('resources-only-package.ts');
+const ESM_PROMPTS_DECORATED_BUNDLE = buildFixture('prompts-only-package.ts');
+
+// ═══════════════════════════════════════════════════════════════════
 // PACKAGE REGISTRY
 // ═══════════════════════════════════════════════════════════════════
 
@@ -150,6 +177,30 @@ packages.set('@test/esm-tools', {
 packages.set('@test/esm-multi', {
   name: '@test/esm-multi',
   versions: { '1.0.0': createVersionEntry('@test/esm-multi', '1.0.0', ESM_MULTI_BUNDLE) },
+  'dist-tags': { latest: '1.0.0' },
+});
+
+packages.set('@test/esm-decorated', {
+  name: '@test/esm-decorated',
+  versions: { '1.0.0': createVersionEntry('@test/esm-decorated', '1.0.0', ESM_DECORATED_BUNDLE) },
+  'dist-tags': { latest: '1.0.0' },
+});
+
+packages.set('@test/esm-tools-decorated', {
+  name: '@test/esm-tools-decorated',
+  versions: { '1.0.0': createVersionEntry('@test/esm-tools-decorated', '1.0.0', ESM_TOOLS_DECORATED_BUNDLE) },
+  'dist-tags': { latest: '1.0.0' },
+});
+
+packages.set('@test/esm-resources-decorated', {
+  name: '@test/esm-resources-decorated',
+  versions: { '1.0.0': createVersionEntry('@test/esm-resources-decorated', '1.0.0', ESM_RESOURCES_DECORATED_BUNDLE) },
+  'dist-tags': { latest: '1.0.0' },
+});
+
+packages.set('@test/esm-prompts-decorated', {
+  name: '@test/esm-prompts-decorated',
+  versions: { '1.0.0': createVersionEntry('@test/esm-prompts-decorated', '1.0.0', ESM_PROMPTS_DECORATED_BUNDLE) },
   'dist-tags': { latest: '1.0.0' },
 });
 

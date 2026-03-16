@@ -10,12 +10,27 @@
  */
 
 import { getMetadata, isClass } from '@frontmcp/di';
-import { FrontMcpToolTokens, FrontMcpResourceTokens, FrontMcpPromptTokens } from '../../common/tokens';
+import {
+  FrontMcpToolTokens,
+  FrontMcpResourceTokens,
+  FrontMcpPromptTokens,
+  FrontMcpLocalAppTokens,
+  FrontMcpSkillTokens,
+  FrontMcpJobTokens,
+} from '../../common/tokens';
 import type { EsmToolDefinition, EsmResourceDefinition, EsmPromptDefinition } from '../../esm-loader/factories';
 
 // ═══════════════════════════════════════════════════════════════════
 // DECORATED CLASS DETECTION
 // ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Check if a raw ESM export is a class decorated with @App.
+ * Detects standard FrontMCP @App-decorated classes loaded from npm packages.
+ */
+export function isDecoratedAppClass(raw: unknown): boolean {
+  return isClass(raw) && getMetadata(FrontMcpLocalAppTokens.type, raw) === true;
+}
 
 /**
  * Check if a raw ESM export is a class decorated with @Tool.
@@ -37,6 +52,20 @@ export function isDecoratedResourceClass(raw: unknown): boolean {
  */
 export function isDecoratedPromptClass(raw: unknown): boolean {
   return isClass(raw) && getMetadata(FrontMcpPromptTokens.type, raw) === true;
+}
+
+/**
+ * Check if a raw ESM export is a class decorated with @Skill.
+ */
+export function isDecoratedSkillClass(raw: unknown): boolean {
+  return isClass(raw) && getMetadata(FrontMcpSkillTokens.type, raw) === true;
+}
+
+/**
+ * Check if a raw ESM export is a class decorated with @Job.
+ */
+export function isDecoratedJobClass(raw: unknown): boolean {
+  return isClass(raw) && getMetadata(FrontMcpJobTokens.type, raw) === true;
 }
 
 // ═══════════════════════════════════════════════════════════════════

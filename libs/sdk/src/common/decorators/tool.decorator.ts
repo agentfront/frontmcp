@@ -11,8 +11,12 @@ import {
   ToolOutputType,
 } from '../metadata';
 import type { ToolUIConfig } from '../metadata/tool-ui.metadata';
+import type { EsmOptions, RemoteOptions } from '../metadata';
 import z from 'zod';
 import { ToolContext } from '../interfaces';
+import { ToolKind } from '../records/tool.record';
+import type { ToolEsmTargetRecord, ToolRemoteRecord } from '../records/tool.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
 
 /**
  * Decorator that marks a class as a McpTool module and provides metadata
@@ -60,6 +64,49 @@ function frontMcpTool<
     return toolFunction;
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Tool.esm() and Tool.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+function toolEsm(specifier: string, targetName: string, options?: EsmOptions<ToolMetadata>): ToolEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: ToolKind.ESM,
+    provide: Symbol(`esm-tool:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Tool "${targetName}" from ${parsed.fullName}`,
+      inputSchema: {},
+      ...options?.metadata,
+    },
+  };
+}
+
+function toolRemote(url: string, targetName: string, options?: RemoteOptions<ToolMetadata>): ToolRemoteRecord {
+  return {
+    kind: ToolKind.REMOTE,
+    provide: Symbol(`remote-tool:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote tool "${targetName}" from ${url}`,
+      inputSchema: {},
+      ...options?.metadata,
+    },
+  };
+}
+
+Object.assign(FrontMcpTool, {
+  esm: toolEsm,
+  remote: toolRemote,
+});
 
 export { FrontMcpTool, FrontMcpTool as Tool, frontMcpTool, frontMcpTool as tool };
 

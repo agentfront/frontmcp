@@ -100,6 +100,56 @@ function frontMcpAgent<
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Agent.esm() and Agent.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import type { EsmOptions, RemoteOptions } from '../metadata';
+import { AgentKind } from '../records/agent.record';
+import type { AgentEsmTargetRecord, AgentRemoteRecord } from '../records/agent.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+
+function agentEsm(specifier: string, targetName: string, options?: EsmOptions<AgentMetadata>): AgentEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: AgentKind.ESM,
+    provide: Symbol(`esm-agent:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Agent "${targetName}" from ${parsed.fullName}`,
+      // Minimal placeholder - full metadata comes from the loaded class
+      llm: { adapter: 'placeholder' } as unknown as AgentMetadata['llm'],
+      ...options?.metadata,
+    },
+  };
+}
+
+function agentRemote(url: string, targetName: string, options?: RemoteOptions<AgentMetadata>): AgentRemoteRecord {
+  return {
+    kind: AgentKind.REMOTE,
+    provide: Symbol(`remote-agent:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote agent "${targetName}" from ${url}`,
+      // Minimal placeholder - full metadata comes from the remote server
+      llm: { adapter: 'placeholder' } as unknown as AgentMetadata['llm'],
+      ...options?.metadata,
+    },
+  };
+}
+
+Object.assign(FrontMcpAgent, {
+  esm: agentEsm,
+  remote: agentRemote,
+});
+
 export { FrontMcpAgent, FrontMcpAgent as Agent, frontMcpAgent, frontMcpAgent as agent };
 
 // ============================================================================

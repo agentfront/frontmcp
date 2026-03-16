@@ -155,6 +155,30 @@ Skills are automatically:
 - Indexed for search via `searchSkills`
 - Loadable via `loadSkill` with tool availability info
 
+### Loading from npm or Remote Servers
+
+Mix local skills with those loaded from npm or proxied from remote servers:
+
+```ts
+import { App, Skill } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  tools: [GitHubTool, DockerTool, K8sTool],
+  skills: [
+    ReviewPRSkill,                                                  // Local class
+    Skill.esm('@acme/skills@^1.0.0', 'deploy'),                    // Single skill from npm
+    Skill.remote('https://api.example.com/mcp', 'security-audit'), // Single skill from remote
+  ],
+})
+class MyApp {}
+```
+
+<Info>
+`Skill.esm()` and `Skill.remote()` load individual skills. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+</Info>
+
 ---
 
 ## Skill Metadata

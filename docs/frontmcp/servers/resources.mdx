@@ -145,6 +145,29 @@ class MyApp {}
 
 Resources can also be generated dynamically by **adapters** (e.g., OpenAPI adapter) or **plugins**.
 
+### Loading from npm or Remote Servers
+
+Mix local resources with those loaded from npm or proxied from remote servers:
+
+```ts
+import { App, Resource } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  resources: [
+    AppConfig,                                                        // Local class
+    Resource.esm('@acme/tools@^1.0.0', 'status'),                    // Single resource from npm
+    Resource.remote('https://api.example.com/mcp', 'system-health'), // Single resource from remote
+  ],
+})
+class MyApp {}
+```
+
+<Info>
+`Resource.esm()` and `Resource.remote()` load individual resources. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+</Info>
+
 ---
 
 ## Return Values

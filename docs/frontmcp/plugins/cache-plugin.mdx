@@ -300,12 +300,9 @@ CachePlugin.init({
 ```ts Combined with Remote Apps
 @FrontMcp({
   apps: [
-    {
-      name: 'mintlify-docs',
-      urlType: 'url',
-      url: 'https://mintlify.com/docs/mcp',
+    App.remote('https://mintlify.com/docs/mcp', {
       namespace: 'mintlify',
-    },
+    }),
   ],
   plugins: [
     CachePlugin.init({

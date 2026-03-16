@@ -63,7 +63,7 @@ describe('ESM CLI/Bin Mode E2E', () => {
   let client: Awaited<ReturnType<(typeof import('@frontmcp/sdk'))['connect']>>;
 
   beforeAll(async () => {
-    const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
+    const { connect, App, LogLevel } = await import('@frontmcp/sdk');
 
     if (!esmServer) throw new Error('ESM package server was not started');
     const esmServerUrl = `http://127.0.0.1:${esmServer.info.port}`;
@@ -73,7 +73,7 @@ describe('ESM CLI/Bin Mode E2E', () => {
         info: { name: 'ESM CLI Test', version: '0.1.0' },
         loader: { url: esmServerUrl },
         apps: [
-          loadFrom('@test/esm-tools@^1.0.0', {
+          App.esm('@test/esm-tools@^1.0.0', {
             namespace: 'esm',
             cacheTTL: 60000,
           }),
@@ -147,7 +147,7 @@ describe('ESM CLI/Bin Mode E2E', () => {
   });
 
   it('second client with different namespace loads independently', async () => {
-    const { connect, loadFrom, LogLevel } = await import('@frontmcp/sdk');
+    const { connect, App, LogLevel } = await import('@frontmcp/sdk');
     if (!esmServer) throw new Error('ESM package server was not started');
     const esmServerUrl = `http://127.0.0.1:${esmServer.info.port}`;
 
@@ -156,7 +156,7 @@ describe('ESM CLI/Bin Mode E2E', () => {
         info: { name: 'ESM CLI Custom Cache', version: '0.1.0' },
         loader: { url: esmServerUrl },
         apps: [
-          loadFrom('@test/esm-tools@^1.0.0', {
+          App.esm('@test/esm-tools@^1.0.0', {
             namespace: 'custom',
             cacheTTL: 60000,
           }),

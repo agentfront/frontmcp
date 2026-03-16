@@ -54,7 +54,7 @@ graph TD
     FM["@FrontMcp Server"] --> A1["@App: CRM"]
     FM --> A2["@App: Analytics"]
     FM --> A3["@App: Admin"]
-    FM --> A4["loadFrom: @acme/tools"]
+    FM --> A4["App.esm: @acme/tools"]
 
     A1 --> T1["@Tool: CreateLead"]
     A1 --> T2["@Tool: GetContacts"]
@@ -93,4 +93,4 @@ graph TD
 | **Workflows** | DAG-based multi-step pipelines       | `@Workflow`   | [Workflows](/frontmcp/servers/workflows)       |
 | **Flows**     | Request lifecycle pipelines          | `@Flow`       | [Flows](/frontmcp/servers/flows)               |
 | **Apps**      | Modular capability containers        | `@App`        | [Apps](/frontmcp/servers/apps)                 |
-| **ESM Packages** | Runtime npm package loading       | `loadFrom()`  | [ESM Packages](/frontmcp/servers/esm-packages) |
+| **ESM Packages** | Runtime npm package loading       | `App.esm()`   | [ESM Packages](/frontmcp/servers/esm-packages) |

@@ -2,6 +2,8 @@ import { Type } from '@frontmcp/di';
 import { SkillContext } from '../interfaces';
 import { SkillMetadata } from '../metadata';
 import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
+import type { EsmOptions } from '../metadata';
 
 /**
  * Kinds of skill records supported by the framework.
@@ -26,6 +28,11 @@ export enum SkillKind {
    * ESM-loaded skill from an npm package via esm.sh.
    */
   ESM = 'ESM',
+
+  /**
+   * Skill proxied from a remote MCP server.
+   */
+  REMOTE = 'REMOTE',
 }
 
 /**
@@ -71,7 +78,37 @@ export type SkillEsmRecord = {
   metadata: SkillMetadata;
 };
 
+/** Single named skill loaded from an npm package at runtime */
+export type SkillEsmTargetRecord = {
+  kind: SkillKind.ESM;
+  provide: symbol;
+  specifier: ParsedPackageSpecifier;
+  /** Which skill to load from the package */
+  targetName: string;
+  options?: EsmOptions;
+  metadata: SkillMetadata;
+};
+
+/** Single named skill proxied from a remote MCP server */
+export type SkillRemoteRecord = {
+  kind: SkillKind.REMOTE;
+  provide: symbol;
+  /** Remote MCP server URL */
+  url: string;
+  /** Which skill to proxy */
+  targetName: string;
+  transportOptions?: RemoteTransportOptions;
+  remoteAuth?: RemoteAuthConfig;
+  metadata: SkillMetadata;
+};
+
 /**
  * Union of all skill record types.
  */
-export type SkillRecord = SkillClassTokenRecord | SkillValueRecord | SkillFileRecord | SkillEsmRecord;
+export type SkillRecord =
+  | SkillClassTokenRecord
+  | SkillValueRecord
+  | SkillFileRecord
+  | SkillEsmRecord
+  | SkillEsmTargetRecord
+  | SkillRemoteRecord;

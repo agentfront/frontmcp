@@ -6,11 +6,20 @@
  * into ToolClassTokenRecords — the same path used by local tools.
  */
 import 'reflect-metadata';
-import { FrontMcpToolTokens, FrontMcpResourceTokens, FrontMcpPromptTokens, ToolKind } from '../../common';
+import {
+  FrontMcpToolTokens,
+  FrontMcpResourceTokens,
+  FrontMcpPromptTokens,
+  FrontMcpSkillTokens,
+  FrontMcpJobTokens,
+  ToolKind,
+} from '../../common';
 import {
   isDecoratedToolClass,
   isDecoratedResourceClass,
   isDecoratedPromptClass,
+  isDecoratedSkillClass,
+  isDecoratedJobClass,
   normalizeToolFromEsmExport,
   normalizeResourceFromEsmExport,
   normalizePromptFromEsmExport,
@@ -172,6 +181,40 @@ describe('ESM Class-Based Registration', () => {
       Reflect.defineMetadata(FrontMcpPromptTokens.type, true, GreetPrompt);
       expect(isDecoratedPromptClass(GreetPrompt)).toBe(true);
       expect(normalizePromptFromEsmExport(GreetPrompt)).toBeUndefined();
+    });
+  });
+
+  describe('Skill and Job detection', () => {
+    it('detects @Skill-decorated class', () => {
+      class ReviewSkill {}
+      Reflect.defineMetadata(FrontMcpSkillTokens.type, true, ReviewSkill);
+      expect(isDecoratedSkillClass(ReviewSkill)).toBe(true);
+    });
+
+    it('does not detect undecorated class as @Skill', () => {
+      class PlainClass {}
+      expect(isDecoratedSkillClass(PlainClass)).toBe(false);
+    });
+
+    it('does not detect plain objects as @Skill', () => {
+      const obj = { name: 'review', instructions: 'do stuff' };
+      expect(isDecoratedSkillClass(obj)).toBe(false);
+    });
+
+    it('detects @Job-decorated class', () => {
+      class ProcessJob {}
+      Reflect.defineMetadata(FrontMcpJobTokens.type, true, ProcessJob);
+      expect(isDecoratedJobClass(ProcessJob)).toBe(true);
+    });
+
+    it('does not detect undecorated class as @Job', () => {
+      class PlainClass {}
+      expect(isDecoratedJobClass(PlainClass)).toBe(false);
+    });
+
+    it('does not detect plain objects as @Job', () => {
+      const obj = { name: 'process', execute: jest.fn() };
+      expect(isDecoratedJobClass(obj)).toBe(false);
     });
   });
 });

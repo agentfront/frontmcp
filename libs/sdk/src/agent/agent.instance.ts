@@ -521,6 +521,9 @@ export class AgentInstance<
       case AgentKind.ESM:
         throw new AgentNotConfiguredError(`ESM agent "${this.name}" cannot be created via AgentInstance.create()`);
 
+      case AgentKind.REMOTE:
+        throw new AgentNotConfiguredError(`Remote agent "${this.name}" cannot be created via AgentInstance.create()`);
+
       default: {
         const _exhaustive: never = this.record;
         throw new Error(`Unknown agent kind: ${(_exhaustive as { kind: string }).kind}`);

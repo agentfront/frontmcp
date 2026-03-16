@@ -118,6 +118,62 @@ function frontMcpResourceTemplate<T extends ResourceTemplateMetadata>(
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Resource.esm() and Resource.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import type { EsmOptions, RemoteOptions } from '../metadata';
+import { ResourceKind } from '../records/resource.record';
+import type { ResourceEsmTargetRecord, ResourceRemoteRecord } from '../records/resource.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+
+function resourceEsm(
+  specifier: string,
+  targetName: string,
+  options?: EsmOptions<ResourceMetadata>,
+): ResourceEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: ResourceKind.ESM,
+    provide: Symbol(`esm-resource:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Resource "${targetName}" from ${parsed.fullName}`,
+      uri: `esm://${targetName}`,
+      ...options?.metadata,
+    },
+  };
+}
+
+function resourceRemote(
+  url: string,
+  targetName: string,
+  options?: RemoteOptions<ResourceMetadata>,
+): ResourceRemoteRecord {
+  return {
+    kind: ResourceKind.REMOTE,
+    provide: Symbol(`remote-resource:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote resource "${targetName}" from ${url}`,
+      uri: `remote://${targetName}`,
+      ...options?.metadata,
+    },
+  };
+}
+
+Object.assign(FrontMcpResource, {
+  esm: resourceEsm,
+  remote: resourceRemote,
+});
+
 export {
   FrontMcpResource,
   FrontMcpResource as Resource,

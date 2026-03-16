@@ -114,35 +114,30 @@ export default class BillingApp {}
 
 ## Remote Apps
 
-Connect to external MCP servers and proxy their tools, resources, and prompts through your gateway:
+Connect to external MCP servers and proxy their tools, resources, and prompts through your gateway using `App.remote()`:
 
 ```ts
+import { FrontMcp, App } from '@frontmcp/sdk';
+
 @FrontMcp({
   info: { name: 'Gateway', version: '1.0.0' },
   apps: [
     // Remote MCP server connected via URL
-    {
-      name: 'mintlify-docs',
-      urlType: 'url',
-      url: 'https://mintlify.com/docs/mcp',
+    App.remote('https://mintlify.com/docs/mcp', {
       namespace: 'mintlify', // Tools prefixed as 'mintlify:ToolName'
       transportOptions: {
         timeout: 60000,
         retryAttempts: 2,
       },
-      standalone: false,
-    },
+    }),
     // Local MCP server on different port
-    {
-      name: 'local-service',
-      urlType: 'url',
-      url: 'http://localhost:3099/',
+    App.remote('http://localhost:3099/', {
       namespace: 'local',
       transportOptions: {
         timeout: 30000,
         retryAttempts: 3,
       },
-    },
+    }),
   ],
 })
 export default class GatewayServer {}
@@ -150,14 +145,19 @@ export default class GatewayServer {}
 
 ### Remote App Options
 
-| Option             | Type      | Description                                                             |
-| ------------------ | --------- | ----------------------------------------------------------------------- |
-| `name`             | `string`  | Unique identifier for the remote app                                    |
-| `urlType`          | `'url'`   | Must be `'url'` for remote apps                                         |
-| `url`              | `string`  | MCP server endpoint URL                                                 |
-| `namespace`        | `string`  | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
-| `transportOptions` | `object`  | Connection settings (timeout, retry attempts)                           |
-| `standalone`       | `boolean` | If `true`, don't merge with parent scope                                |
+`App.remote(url, options?)` accepts the MCP server URL as the first argument and an optional options object:
+
+| Option             | Type                              | Description                                                             |
+| ------------------ | --------------------------------- | ----------------------------------------------------------------------- |
+| `name`             | `string`                          | Override the auto-derived app name (defaults to hostname)               |
+| `namespace`        | `string`                          | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
+| `description`      | `string`                          | Human-readable description                                              |
+| `standalone`       | `boolean \| 'includeInParent'`    | Isolation mode (default: `false`)                                       |
+| `transportOptions` | `object`                          | Connection settings (timeout, retry attempts)                           |
+| `remoteAuth`       | `RemoteAuthConfig`                | Authentication config for the remote server                             |
+| `refreshInterval`  | `number`                          | Interval (ms) to refresh capabilities from the remote server            |
+| `cacheTTL`         | `number`                          | TTL (ms) for cached capabilities                                        |
+| `filter`           | `AppFilterConfig`                 | Include/exclude filter for selectively importing primitives              |
 
 ### Transport Options
 
@@ -175,12 +175,9 @@ Remote tools don't have cache metadata, so use the `toolPatterns` option in Cach
 ```ts
 @FrontMcp({
   apps: [
-    {
-      name: 'external-api',
-      urlType: 'url',
-      url: 'https://api.example.com/mcp',
+    App.remote('https://api.example.com/mcp', {
       namespace: 'api',
-    },
+    }),
   ],
   plugins: [
     CachePlugin.init({
@@ -215,19 +212,19 @@ See the [Cache Plugin documentation](/frontmcp/plugins/cache-plugin#caching-remo
 
 ## ESM Package Apps
 
-Load npm packages at runtime and register their tools, resources, and prompts in-process — no HTTP proxy needed:
+Load npm packages at runtime and register their tools, resources, and prompts in-process — no HTTP proxy needed — using `App.esm()`:
 
 ```ts
-import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'Gateway', version: '1.0.0' },
   apps: [
-    loadFrom('@acme/mcp-tools@^1.0.0', {
+    App.esm('@acme/mcp-tools@^1.0.0', {
       namespace: 'acme',
       autoUpdate: { enabled: true },
     }),
-    loadFrom('@acme/analytics@^2.0.0', { namespace: 'analytics' }),
+    App.esm('@acme/analytics@^2.0.0', { namespace: 'analytics' }),
   ],
 })
 export default class Server {}
@@ -237,7 +234,39 @@ export default class Server {}
 Unlike [Remote Apps](#remote-apps) which proxy requests to external MCP servers over HTTP, ESM packages are fetched from a CDN, cached locally, and executed **in-process**. They support two-tier caching, background version polling with hot-reload, and private registry authentication.
 </Info>
 
-See the full [ESM Packages reference](/frontmcp/servers/esm-packages) for `loadFrom()` API, caching, authentication, and auto-update configuration.
+See the full [ESM Packages reference](/frontmcp/servers/esm-packages) for `App.esm()` API, caching, authentication, and auto-update configuration.
+
+---
+
+## Per-Primitive Loading
+
+In addition to loading entire apps, you can load **individual primitives** (tools, resources, prompts, agents, skills, jobs) from npm packages or remote servers using static methods on each decorator:
+
+```ts
+import { FrontMcp, App, Tool, Resource, Prompt } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  tools: [
+    LocalEchoTool,                                            // Local @Tool class
+    Tool.esm('@acme/tools@^1.0.0', 'echo'),                  // Single tool from npm
+    Tool.remote('https://api.example.com/mcp', 'search'),     // Proxy single tool from remote
+  ],
+  resources: [
+    LocalConfig,
+    Resource.esm('@acme/tools@^1.0.0', 'status'),            // Single resource from npm
+  ],
+  prompts: [
+    Prompt.remote('https://api.example.com/mcp', 'greeting'), // Proxy single prompt
+  ],
+})
+class MyApp {}
+```
+
+<Tip>
+Per-primitive loading gives you fine-grained control. Instead of importing an entire package's tools, you can pick exactly the ones you need. See each component's documentation page ([Tools](/frontmcp/servers/tools), [Resources](/frontmcp/servers/resources), [Prompts](/frontmcp/servers/prompts), [Agents](/frontmcp/servers/agents), [Skills](/frontmcp/servers/skills), [Jobs](/frontmcp/servers/jobs)) for details.
+</Tip>
 
 ---
 
@@ -255,10 +284,10 @@ See the full [ESM Packages reference](/frontmcp/servers/esm-packages) for `loadF
 - Put unrelated functionality in the same app
 - Mix authentication strategies within a single app
 - Create apps with only one tool (use the server directly)
-- Use `loadFrom()` for external MCP servers (use remote apps instead)
+- Use `App.esm()` for external MCP servers (use `App.remote()` instead)
 
 **Choosing between app types:**
 
 - **Local `@App`**: First-party code you own and maintain
-- **`loadFrom()`**: Community or internal packages distributed via npm
-- **Remote Apps**: External MCP servers running as separate processes
+- **`App.esm()`**: Community or internal packages distributed via npm
+- **`App.remote()`**: External MCP servers running as separate processes

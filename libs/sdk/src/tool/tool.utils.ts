@@ -48,6 +48,11 @@ export function collectToolMetadata(cls: ToolType): ToolMetadata {
 }
 
 export function normalizeTool(item: any): ToolRecord {
+  // ESM/REMOTE record objects (from Tool.esm() / Tool.remote())
+  if (item && typeof item === 'object' && (item.kind === ToolKind.ESM || item.kind === ToolKind.REMOTE)) {
+    return item as ToolRecord;
+  }
+
   // ESM package specifier string (e.g., '@acme/mcp-tools@^1.0.0')
   if (typeof item === 'string') {
     if (isPackageSpecifier(item)) {
@@ -100,7 +105,8 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
     case ToolKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
     case ToolKind.ESM:
-      // ESM packages have no local DI dependencies
+    case ToolKind.REMOTE:
+      // External packages/services have no local DI dependencies at discovery time
       return [];
   }
 }

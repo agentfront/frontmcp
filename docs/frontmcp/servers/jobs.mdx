@@ -114,6 +114,29 @@ import { App } from '@frontmcp/sdk';
 class TextProcessingApp {}
 ```
 
+### Loading from npm or Remote Servers
+
+Mix local jobs with those loaded from npm or proxied from remote servers:
+
+```ts
+import { App, Job } from '@frontmcp/sdk';
+
+@App({
+  id: 'text-processing',
+  name: 'Text Processing',
+  jobs: [
+    AnalyzeTextJob,                                                 // Local class
+    Job.esm('@acme/jobs@^1.0.0', 'cleanup'),                       // Single job from npm
+    Job.remote('https://api.example.com/mcp', 'sync-data'),        // Single job from remote
+  ],
+})
+class TextProcessingApp {}
+```
+
+<Info>
+`Job.esm()` and `Job.remote()` load individual jobs. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+</Info>
+
 To enable the jobs system on your server, configure `jobsConfig`:
 
 ```ts

@@ -137,6 +137,51 @@ function frontMcpSkill(providedMetadata: SkillMetadata): SkillValueRecord {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Skill.esm() and Skill.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import type { EsmOptions, RemoteOptions } from '../metadata';
+import type { SkillEsmTargetRecord, SkillRemoteRecord } from '../records/skill.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+
+function skillEsm(specifier: string, targetName: string, options?: EsmOptions<SkillMetadata>): SkillEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: SkillKind.ESM,
+    provide: Symbol(`esm-skill:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Skill "${targetName}" from ${parsed.fullName}`,
+      ...options?.metadata,
+    } as SkillMetadata,
+  };
+}
+
+function skillRemote(url: string, targetName: string, options?: RemoteOptions<SkillMetadata>): SkillRemoteRecord {
+  return {
+    kind: SkillKind.REMOTE,
+    provide: Symbol(`remote-skill:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote skill "${targetName}" from ${url}`,
+      ...options?.metadata,
+    } as SkillMetadata,
+  };
+}
+
+Object.assign(FrontMcpSkill, {
+  esm: skillEsm,
+  remote: skillRemote,
+});
+
 // Export with aliases
 export { FrontMcpSkill, FrontMcpSkill as Skill, frontMcpSkill, frontMcpSkill as skill };
 

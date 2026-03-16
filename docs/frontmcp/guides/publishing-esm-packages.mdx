@@ -5,7 +5,7 @@ icon: box-archive
 description: Create and publish npm packages that FrontMCP servers can load at runtime
 ---
 
-This guide walks you through creating an npm package that FrontMCP servers can load at runtime via [`loadFrom()`](/frontmcp/servers/esm-packages). By the end, you'll have a published package with tools, resources, and prompts that any FrontMCP server can consume.
+This guide walks you through creating an npm package that FrontMCP servers can load at runtime via [`App.esm()`](/frontmcp/servers/esm-packages). By the end, you'll have a published package with tools, resources, and prompts that any FrontMCP server can consume.
 
 ## Prerequisites
 
@@ -274,17 +274,17 @@ npm publish --registry https://npm.pkg.github.com
 
 ---
 
-## Step 7: Consume with loadFrom()
+## Step 7: Consume with App.esm()
 
 Once published, any FrontMCP server can load your package:
 
 ```ts
-import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [
-    loadFrom('@acme/mcp-tools@^1.0.0', {
+    App.esm('@acme/mcp-tools@^1.0.0', {
       namespace: 'acme',
     }),
   ],
@@ -326,7 +326,7 @@ If none of these paths produce a valid manifest, an `EsmManifestInvalidError` is
     ESM consumers use semver ranges (`^1.0.0`, `~2.1.0`). Breaking changes should bump the major version. New features bump minor. Bug fixes bump patch.
   </Accordion>
   <Accordion title="Test locally before publishing">
-    Set up a local ESM server or use `loadFrom()` with a file path during development to verify your manifest is correct before publishing.
+    Set up a local ESM server or use `App.esm()` with a file path during development to verify your manifest is correct before publishing.
   </Accordion>
 </AccordionGroup>
 
@@ -355,7 +355,7 @@ If none of these paths produce a valid manifest, an `EsmManifestInvalidError` is
 
 <CardGroup cols={2}>
   <Card title="ESM Packages Reference" icon="box-open" href="/frontmcp/servers/esm-packages">
-    Full reference for loadFrom(), caching, auth, and hot-reload
+    Full reference for App.esm(), caching, auth, and hot-reload
   </Card>
   <Card title="ESM Errors" icon="triangle-exclamation" href="/frontmcp/sdk-reference/errors/esm-errors">
     Error classes for loading, caching, and authentication

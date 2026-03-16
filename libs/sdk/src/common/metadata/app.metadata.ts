@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { isValidMcpUri } from '@frontmcp/utils';
 import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
+import type { AppFilterConfig } from './app-filter.metadata';
+import { appFilterConfigSchema } from './app-filter.metadata';
+import type { EsmOptions, RemoteOptions } from './remote-primitive.metadata';
 import type {
   AgentType,
   ProviderType,
@@ -369,6 +372,18 @@ export interface RemoteAppMetadata {
   };
 
   /**
+   * Include/exclude filter for selectively importing primitives from this app.
+   * Supports per-type filtering (tools, resources, prompts, etc.) with glob patterns.
+   *
+   * @example
+   * ```ts
+   * { default: 'include', exclude: { tools: ['dangerous-*'] } }
+   * { default: 'exclude', include: { tools: ['echo', 'add'] } }
+   * ```
+   */
+  filter?: AppFilterConfig;
+
+  /**
    * If true, the app will NOT be included and will act as a separated scope.
    * If false, the app will be included in MultiApp frontmcp server.
    * If 'includeInParent', the app will be included in the gateway's
@@ -439,6 +454,7 @@ export const frontMcpRemoteAppMetadataSchema = z
     refreshInterval: z.number().optional(),
     cacheTTL: z.number().optional(),
     packageConfig: packageConfigSchema.optional(),
+    filter: appFilterConfigSchema.optional(),
     standalone: z
       .union([z.literal('includeInParent'), z.boolean()])
       .optional()
@@ -455,3 +471,49 @@ export const frontMcpRemoteAppMetadataSchema = z
   );
 
 export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;
+
+// ═══════════════════════════════════════════════════════════════════
+// App.esm() / App.remote() OPTION TYPES
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Options for `App.esm()` — loads an @App-decorated class from an npm package.
+ * Extends {@link EsmOptions} with app-specific fields.
+ */
+export interface EsmAppOptions extends EsmOptions {
+  /** Override the auto-derived app name */
+  name?: string;
+  /** Namespace prefix for tools, resources, and prompts */
+  namespace?: string;
+  /** Human-readable description */
+  description?: string;
+  /** Standalone mode */
+  standalone?: boolean | 'includeInParent';
+  /** Auto-update configuration for semver-based polling */
+  autoUpdate?: { enabled: boolean; intervalMs?: number };
+  /** Import map overrides for ESM resolution */
+  importMap?: Record<string, string>;
+  /** Include/exclude filter for selectively importing primitives */
+  filter?: AppFilterConfig;
+}
+
+/**
+ * Options for `App.remote()` — connects to an external MCP server via HTTP.
+ * Extends {@link RemoteOptions} with app-specific fields.
+ */
+export interface RemoteUrlAppOptions extends RemoteOptions {
+  /** Override the auto-derived app name */
+  name?: string;
+  /** Namespace prefix for tools, resources, and prompts */
+  namespace?: string;
+  /** Human-readable description */
+  description?: string;
+  /** Standalone mode */
+  standalone?: boolean | 'includeInParent';
+  /** Interval (ms) to refresh capabilities from the remote server */
+  refreshInterval?: number;
+  /** TTL (ms) for cached capabilities */
+  cacheTTL?: number;
+  /** Include/exclude filter for selectively importing primitives */
+  filter?: AppFilterConfig;
+}

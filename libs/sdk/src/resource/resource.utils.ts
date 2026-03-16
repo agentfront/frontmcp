@@ -56,6 +56,11 @@ export function collectResourceTemplateMetadata(cls: ResourceTemplateType): Reso
  * Normalize any resource input (class or function) to a ResourceRecord
  */
 export function normalizeResource(item: any): ResourceRecord {
+  // ESM/REMOTE record objects (from Resource.esm() / Resource.remote())
+  if (item && typeof item === 'object' && (item.kind === ResourceKind.ESM || item.kind === ResourceKind.REMOTE)) {
+    return item as ResourceRecord;
+  }
+
   // Function-style decorator: resource({ uri: '...' })(handler)
   if (
     item &&
@@ -142,6 +147,8 @@ export function resourceDiscoveryDeps(rec: ResourceRecord | ResourceTemplateReco
     case ResourceTemplateKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
     case ResourceKind.ESM:
+    case ResourceKind.REMOTE:
+      // External packages/services have no local DI dependencies at discovery time
       return [];
   }
 }

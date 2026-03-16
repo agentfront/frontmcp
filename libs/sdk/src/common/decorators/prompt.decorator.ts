@@ -53,4 +53,52 @@ function frontMcpPrompt<T extends PromptMetadata>(
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Prompt.esm() and Prompt.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import type { EsmOptions, RemoteOptions } from '../metadata';
+import { PromptKind } from '../records/prompt.record';
+import type { PromptEsmTargetRecord, PromptRemoteRecord } from '../records/prompt.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+
+function promptEsm(specifier: string, targetName: string, options?: EsmOptions<PromptMetadata>): PromptEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: PromptKind.ESM,
+    provide: Symbol(`esm-prompt:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Prompt "${targetName}" from ${parsed.fullName}`,
+      arguments: [],
+      ...options?.metadata,
+    },
+  };
+}
+
+function promptRemote(url: string, targetName: string, options?: RemoteOptions<PromptMetadata>): PromptRemoteRecord {
+  return {
+    kind: PromptKind.REMOTE,
+    provide: Symbol(`remote-prompt:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote prompt "${targetName}" from ${url}`,
+      arguments: [],
+      ...options?.metadata,
+    },
+  };
+}
+
+Object.assign(FrontMcpPrompt, {
+  esm: promptEsm,
+  remote: promptRemote,
+});
+
 export { FrontMcpPrompt, FrontMcpPrompt as Prompt, frontMcpPrompt, frontMcpPrompt as prompt };

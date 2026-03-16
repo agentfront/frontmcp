@@ -2,6 +2,8 @@ import { Token, Type } from '@frontmcp/di';
 import { ProviderType } from '../interfaces';
 import { AgentMetadata } from '../metadata';
 import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
+import type { EsmOptions } from '../metadata';
 
 /**
  * Discriminator enum for agent record types.
@@ -17,6 +19,8 @@ export enum AgentKind {
   FACTORY = 'FACTORY',
   /** Agent loaded from an npm package via esm.sh */
   ESM = 'ESM',
+  /** Agent proxied from a remote MCP server */
+  REMOTE = 'REMOTE',
 }
 
 /**
@@ -104,6 +108,32 @@ export interface AgentEsmRecord {
   providers?: ProviderType[];
 }
 
+/** Single named agent loaded from an npm package at runtime */
+export interface AgentEsmTargetRecord {
+  kind: AgentKind.ESM;
+  provide: symbol;
+  specifier: ParsedPackageSpecifier;
+  /** Which agent to load from the package */
+  targetName: string;
+  options?: EsmOptions;
+  metadata: AgentMetadata;
+  providers?: ProviderType[];
+}
+
+/** Single named agent proxied from a remote MCP server */
+export interface AgentRemoteRecord {
+  kind: AgentKind.REMOTE;
+  provide: symbol;
+  /** Remote MCP server URL */
+  url: string;
+  /** Which agent to proxy */
+  targetName: string;
+  transportOptions?: RemoteTransportOptions;
+  remoteAuth?: RemoteAuthConfig;
+  metadata: AgentMetadata;
+  providers?: ProviderType[];
+}
+
 /**
  * Union type of all possible agent record types.
  */
@@ -112,4 +142,6 @@ export type AgentRecord =
   | AgentFunctionTokenRecord
   | AgentValueRecord
   | AgentFactoryRecord
-  | AgentEsmRecord;
+  | AgentEsmRecord
+  | AgentEsmTargetRecord
+  | AgentRemoteRecord;

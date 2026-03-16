@@ -30,18 +30,18 @@ ESM Packages let you **dynamically load npm packages at runtime** and register t
 ## Quick Start
 
 ```ts
-import { FrontMcp, loadFrom } from '@frontmcp/sdk';
+import { FrontMcp, App } from '@frontmcp/sdk';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
   apps: [
-    loadFrom('@acme/mcp-tools@^1.0.0'),
+    App.esm('@acme/mcp-tools@^1.0.0'),
   ],
 })
 export default class Server {}
 ```
 
-The `loadFrom()` function creates an app entry that loads the npm package `@acme/mcp-tools` (any version matching `^1.0.0`) at server startup. Its tools, resources, and prompts are automatically registered.
+The `App.esm()` method creates an app entry that loads the npm package `@acme/mcp-tools` (any version matching `^1.0.0`) at server startup. Its tools, resources, and prompts are automatically registered.
 
 ---
 
@@ -49,7 +49,7 @@ The `loadFrom()` function creates an app entry that loads the npm package `@acme
 
 <Steps>
   <Step title="Parse Specifier">
-    `loadFrom('@acme/tools@^1.0.0')` parses the package specifier into scope, name, and semver range.
+    `App.esm('@acme/tools@^1.0.0')` parses the npm package specifier into scope, name, and semver range.
   </Step>
   <Step title="Resolve Version">
     The npm registry is queried to resolve the semver range (e.g., `^1.0.0`) to a concrete version (e.g., `1.2.3`).
@@ -73,12 +73,12 @@ The `loadFrom()` function creates an app entry that loads the npm package `@acme
 
 ---
 
-## `loadFrom()` API
+## `App.esm()` API
 
 ```ts
-import { loadFrom } from '@frontmcp/sdk';
+import { App } from '@frontmcp/sdk';
 
-loadFrom(specifier: string, options?: LoadFromOptions): RemoteAppMetadata
+App.esm(specifier: string, options?: EsmAppOptions): RemoteAppMetadata
 ```
 
 ### Parameters
@@ -122,21 +122,25 @@ loadFrom(specifier: string, options?: LoadFromOptions): RemoteAppMetadata
   Import map overrides for ESM resolution. Maps package names to alternative URLs.
 </ParamField>
 
+<ParamField path="filter" type="AppFilterConfig">
+  Include/exclude filter for selectively importing primitives. See [Per-Primitive Loading](/frontmcp/servers/apps#per-primitive-loading) for details.
+</ParamField>
+
 ### Examples
 
 <CodeGroup>
 ```ts Simple
-loadFrom('@acme/tools@^1.0.0')
+App.esm('@acme/tools@^1.0.0')
 ```
 
 ```ts With Namespace
-loadFrom('@acme/tools@^1.0.0', {
+App.esm('@acme/tools@^1.0.0', {
   namespace: 'acme',
 })
 ```
 
 ```ts With Auto-Update
-loadFrom('@acme/tools@^1.0.0', {
+App.esm('@acme/tools@^1.0.0', {
   namespace: 'acme',
   autoUpdate: { enabled: true, intervalMs: 30000 },
   cacheTTL: 60000,
@@ -144,7 +148,7 @@ loadFrom('@acme/tools@^1.0.0', {
 ```
 
 ```ts Private Registry
-loadFrom('@internal/tools@latest', {
+App.esm('@internal/tools@latest', {
   namespace: 'internal',
   loader: {
     registryUrl: 'https://npm.pkg.github.com',
@@ -171,7 +175,7 @@ Supported semver ranges include `^1.0.0`, `~1.0.0`, `>=1.0.0 <2.0.0`, exact vers
 
 ## Gateway-Level Loader
 
-Set a default loader at the server level that applies to all `loadFrom()` apps:
+Set a default loader at the server level that applies to all npm apps:
 
 ```ts
 @FrontMcp({
@@ -181,15 +185,15 @@ Set a default loader at the server level that applies to all `loadFrom()` apps:
     tokenEnvVar: 'NPM_TOKEN',
   },
   apps: [
-    loadFrom('@acme/tools@^1.0.0', { namespace: 'acme' }),
-    loadFrom('@acme/analytics@^2.0.0', { namespace: 'analytics' }),
+    App.esm('@acme/tools@^1.0.0', { namespace: 'acme' }),
+    App.esm('@acme/analytics@^2.0.0', { namespace: 'analytics' }),
     // Both apps use the gateway-level loader config
   ],
 })
 export default class Server {}
 ```
 
-Individual apps can override the gateway loader via `packageConfig.loader`.
+Individual apps can override the gateway loader via the `loader` option in `App.esm()`.
 
 ### PackageLoader Fields
 
@@ -211,7 +215,7 @@ When `url` is set but `registryUrl` is not, both the registry API and bundle dow
 Enable background version polling to automatically reload packages when new versions are published:
 
 ```ts
-loadFrom('@acme/tools@^1.0.0', {
+App.esm('@acme/tools@^1.0.0', {
   autoUpdate: {
     enabled: true,
     intervalMs: 60000, // Check every 60 seconds
@@ -268,7 +272,7 @@ Each cached package is stored as a hashed directory containing the bundle file (
 Configure how long cached bundles remain valid:
 
 ```ts
-loadFrom('@acme/tools@^1.0.0', {
+App.esm('@acme/tools@^1.0.0', {
   cacheTTL: 3600000, // 1 hour
 })
 ```
@@ -290,7 +294,7 @@ In browser environments, only the in-memory cache is used. Bundles are evaluated
     tokenEnvVar: 'NPM_TOKEN',
   },
   apps: [
-    loadFrom('@private/tools@^1.0.0'),
+    App.esm('@private/tools@^1.0.0'),
   ],
 })
 ```
@@ -301,7 +305,7 @@ In browser environments, only the in-memory cache is used. Bundles are evaluated
     token: 'npm_abc123...',
   },
   apps: [
-    loadFrom('@private/tools@^1.0.0'),
+    App.esm('@private/tools@^1.0.0'),
   ],
 })
 ```
@@ -313,7 +317,7 @@ In browser environments, only the in-memory cache is used. Bundles are evaluated
     tokenEnvVar: 'GITHUB_TOKEN',
   },
   apps: [
-    loadFrom('@my-org/internal-tools@^1.0.0'),
+    App.esm('@my-org/internal-tools@^1.0.0'),
   ],
 })
 ```
@@ -331,7 +335,7 @@ The Bearer token is sent in the `Authorization` header for both registry API cal
 
 | Aspect | Local Apps | ESM Packages | Remote Apps |
 |--------|-----------|--------------|-------------|
-| **Declaration** | `@App` class | `loadFrom()` | `{ urlType: 'url', ... }` |
+| **Declaration** | `@App` class | `App.esm()` | `App.remote()` |
 | **Execution** | In-process | In-process | Out-of-process (HTTP) |
 | **Transport** | None | None | Streamable HTTP / SSE |
 | **Caching** | N/A | Two-tier (memory + disk) | Optional via CachePlugin |
