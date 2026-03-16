@@ -8,7 +8,8 @@
     "declarationMap": true,
     "types": ["node"],
     "paths": {
-      "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"]
+      "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"],
+      "@frontmcp/utils": ["libs/utils/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

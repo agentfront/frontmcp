@@ -135,6 +135,13 @@ describe('Scope initialization performance', () => {
     }
     const fullMs = performance.now() - fullStart;
 
+    // Log timing info only when FRONTMCP_PERF=1 is set
+    if (process.env['FRONTMCP_PERF'] === '1') {
+      console.log(
+        `Lite: ${liteMs.toFixed(2)}ms | Full: ${fullMs.toFixed(2)}ms | Ratio: ${(liteMs / fullMs).toFixed(2)}x`,
+      );
+    }
+
     // Lite should not be dramatically slower than full parse.
     // On small inputs both are sub-ms; we use a 5x margin to tolerate CI variance.
     // The real benefit of parseFrontMcpConfigLite is on large configs, not micro-benchmarks.

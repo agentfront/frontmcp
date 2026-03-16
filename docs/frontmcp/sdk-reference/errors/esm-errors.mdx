@@ -1,0 +1,145 @@
+---
+title: ESM Errors
+slug: sdk-reference/errors/esm-errors
+icon: box-open
+description: Error classes for ESM package loading, version resolution, manifest validation, caching, and registry authentication
+---
+
+Error classes thrown during [ESM package loading](/frontmcp/servers/esm-packages). Import them from `@frontmcp/sdk`:
+
+```ts
+import {
+  EsmPackageLoadError,
+  EsmVersionResolutionError,
+  EsmManifestInvalidError,
+  EsmCacheError,
+  EsmRegistryAuthError,
+  EsmInvalidSpecifierError,
+} from '@frontmcp/sdk';
+```
+
+## Overview
+
+| Error | Base Class | Error Code | HTTP | Description |
+|-------|-----------|------------|------|-------------|
+| `EsmPackageLoadError` | `InternalMcpError` | `ESM_PACKAGE_LOAD_ERROR` | 500 | Bundle fetch or module evaluation failed |
+| `EsmVersionResolutionError` | `InternalMcpError` | `ESM_VERSION_RESOLUTION_ERROR` | 500 | npm registry version resolution failed |
+| `EsmManifestInvalidError` | `PublicMcpError` | `-32602` (INVALID_PARAMS) | 400 | Package manifest is invalid or missing required fields |
+| `EsmCacheError` | `InternalMcpError` | `ESM_CACHE_ERROR` | 500 | Cache read/write operation failed |
+| `EsmRegistryAuthError` | `PublicMcpError` | `-32001` (UNAUTHORIZED) | 401 | Private registry authentication failed |
+| `EsmInvalidSpecifierError` | `PublicMcpError` | `-32602` (INVALID_PARAMS) | 400 | Package specifier string is malformed |
+
+---
+
+## EsmPackageLoadError
+
+Thrown when loading an ESM package fails — including network errors, CDN timeouts, and module evaluation failures.
+
+```ts
+class EsmPackageLoadError extends InternalMcpError {
+  readonly packageName: string;
+  readonly version?: string;
+  readonly originalError?: Error;
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `packageName` | `string` | Full package name (e.g., `@acme/tools`) |
+| `version` | `string?` | Resolved version that failed to load |
+| `originalError` | `Error?` | Underlying fetch or evaluation error |
+
+---
+
+## EsmVersionResolutionError
+
+Thrown when the npm registry cannot resolve a version for the given semver range — including network errors, 404s, and no matching version.
+
+```ts
+class EsmVersionResolutionError extends InternalMcpError {
+  readonly packageName: string;
+  readonly range: string;
+  readonly originalError?: Error;
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `packageName` | `string` | Full package name |
+| `range` | `string` | Semver range that failed to resolve (e.g., `^3.0.0`) |
+| `originalError` | `Error?` | Underlying registry error |
+
+---
+
+## EsmManifestInvalidError
+
+Thrown when a package's default export does not conform to the `FrontMcpPackageManifest` contract — missing `name`, `version`, or invalid primitive arrays.
+
+```ts
+class EsmManifestInvalidError extends PublicMcpError {
+  readonly packageName: string;
+  readonly details?: string;
+  readonly mcpErrorCode = -32602; // INVALID_PARAMS
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `packageName` | `string` | Full package name |
+| `details` | `string?` | Zod validation error details |
+
+---
+
+## EsmCacheError
+
+Thrown when a cache operation (read, write, cleanup) fails — typically due to file system permission issues or disk space.
+
+```ts
+class EsmCacheError extends InternalMcpError {
+  readonly operation: string;
+  readonly packageName?: string;
+  readonly originalError?: Error;
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `operation` | `string` | Cache operation that failed (e.g., `'get'`, `'put'`, `'cleanup'`) |
+| `packageName` | `string?` | Package involved in the operation |
+| `originalError` | `Error?` | Underlying I/O error |
+
+---
+
+## EsmRegistryAuthError
+
+Thrown when authentication to a private npm registry fails — invalid token, expired credentials, or wrong registry URL.
+
+```ts
+class EsmRegistryAuthError extends PublicMcpError {
+  readonly registryUrl?: string;
+  readonly details?: string;
+  readonly mcpErrorCode = -32001; // UNAUTHORIZED
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `registryUrl` | `string?` | Registry URL that rejected authentication |
+| `details` | `string?` | Additional error details |
+
+---
+
+## EsmInvalidSpecifierError
+
+Thrown when a package specifier string is malformed — does not match the expected `@scope/name@range` or `name@range` pattern.
+
+```ts
+class EsmInvalidSpecifierError extends PublicMcpError {
+  readonly specifier: string;
+  readonly mcpErrorCode = -32602; // INVALID_PARAMS
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `specifier` | `string` | The invalid specifier string |

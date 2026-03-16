@@ -44,6 +44,11 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
       case 'git':
         packageDir = await fetchFromGit(source.ref, tmpDir);
         break;
+      case 'esm':
+        throw new Error(
+          'ESM sources cannot be installed via "frontmcp install". ' +
+            'Use loadFrom() in your FrontMcp config to load ESM packages at runtime.',
+        );
     }
 
     // 2. Look for manifest

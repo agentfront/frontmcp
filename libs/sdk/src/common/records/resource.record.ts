@@ -1,6 +1,9 @@
 import { Type } from '@frontmcp/di';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ResourceEntry } from '../entries';
+import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
+import type { EsmOptions } from '../metadata';
 
 // ============================================================================
 // Static Resource Records
@@ -9,6 +12,8 @@ import { ResourceEntry } from '../entries';
 export enum ResourceKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
   FUNCTION = 'FUNCTION',
+  ESM = 'ESM',
+  REMOTE = 'REMOTE',
 }
 
 export type ResourceClassTokenRecord = {
@@ -25,7 +30,43 @@ export type ResourceFunctionRecord = {
   metadata: ResourceMetadata;
 };
 
-export type ResourceRecord = ResourceClassTokenRecord | ResourceFunctionRecord;
+export type ResourceEsmRecord = {
+  kind: ResourceKind.ESM;
+  provide: string;
+  specifier: ParsedPackageSpecifier;
+  metadata: ResourceMetadata;
+};
+
+/** Single named resource loaded from an npm package at runtime */
+export type ResourceEsmTargetRecord = {
+  kind: ResourceKind.ESM;
+  provide: symbol;
+  specifier: ParsedPackageSpecifier;
+  /** Which resource to load from the package */
+  targetName: string;
+  options?: EsmOptions;
+  metadata: ResourceMetadata;
+};
+
+/** Single named resource proxied from a remote MCP server */
+export type ResourceRemoteRecord = {
+  kind: ResourceKind.REMOTE;
+  provide: symbol;
+  /** Remote MCP server URL */
+  url: string;
+  /** Which resource to proxy */
+  targetName: string;
+  transportOptions?: RemoteTransportOptions;
+  remoteAuth?: RemoteAuthConfig;
+  metadata: ResourceMetadata;
+};
+
+export type ResourceRecord =
+  | ResourceClassTokenRecord
+  | ResourceFunctionRecord
+  | ResourceEsmRecord
+  | ResourceEsmTargetRecord
+  | ResourceRemoteRecord;
 
 // ============================================================================
 // Resource Template Records

@@ -54,4 +54,64 @@ function frontMcpJob<
   };
 }
 
-export { FrontMcpJob, FrontMcpJob as Job, frontMcpJob, frontMcpJob as job };
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Job.esm() and Job.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import type { EsmOptions, RemoteOptions } from '../metadata';
+import { JobKind } from '../records/job.record';
+import type { JobEsmTargetRecord, JobRemoteRecord } from '../records/job.record';
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
+
+function jobEsm(specifier: string, targetName: string, options?: EsmOptions<JobMetadata>): JobEsmTargetRecord {
+  const parsed = parsePackageSpecifier(specifier);
+  return {
+    kind: JobKind.ESM,
+    provide: Symbol(`esm-job:${parsed.fullName}:${targetName}`),
+    specifier: parsed,
+    targetName,
+    options,
+    metadata: {
+      name: targetName,
+      description: `Job "${targetName}" from ${parsed.fullName}`,
+      inputSchema: {},
+      outputSchema: {},
+      ...options?.metadata,
+    },
+  };
+}
+
+function jobRemote(url: string, targetName: string, options?: RemoteOptions<JobMetadata>): JobRemoteRecord {
+  validateRemoteUrl(url);
+  return {
+    kind: JobKind.REMOTE,
+    provide: Symbol(`remote-job:${url}:${targetName}`),
+    url,
+    targetName,
+    transportOptions: options?.transportOptions,
+    remoteAuth: options?.remoteAuth,
+    metadata: {
+      name: targetName,
+      description: `Remote job "${targetName}" from ${url}`,
+      inputSchema: {},
+      outputSchema: {},
+      ...options?.metadata,
+    },
+  };
+}
+
+Object.assign(FrontMcpJob, {
+  esm: jobEsm,
+  remote: jobRemote,
+});
+
+type JobDecorator = {
+  (metadata: JobMetadata): ClassDecorator;
+  esm: typeof jobEsm;
+  remote: typeof jobRemote;
+};
+
+const Job = FrontMcpJob as unknown as JobDecorator;
+
+export { FrontMcpJob, Job, frontMcpJob, frontMcpJob as job };

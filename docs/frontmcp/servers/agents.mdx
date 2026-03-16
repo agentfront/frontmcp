@@ -139,6 +139,29 @@ Each agent is automatically exposed as a tool:
 - `invoke_calculator-agent`
 - `invoke_writer-agent`
 
+### Loading from npm or Remote Servers
+
+Mix local agents with those loaded from npm or proxied from remote servers:
+
+```ts
+import { App, Agent } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  agents: [
+    ResearchAgent,                                                  // Local class
+    Agent.esm('@acme/agents@^1.0.0', 'writer'),                    // Single agent from npm
+    Agent.remote('https://api.example.com/mcp', 'assistant'),      // Single agent from remote
+  ],
+})
+class MyApp {}
+```
+
+<Info>
+`Agent.esm()` and `Agent.remote()` load individual agents. For loading **entire apps**, use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+</Info>
+
 ---
 
 ## LLM Configuration

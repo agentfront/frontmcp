@@ -87,6 +87,30 @@ class MyApp {}
 
 Tools can also be generated dynamically by **adapters** (e.g., OpenAPI adapter) or **plugins**.
 
+### Loading from npm or Remote Servers
+
+You can mix local tool classes with tools loaded from npm packages or proxied from remote MCP servers:
+
+```ts
+import { App, Tool } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  tools: [
+    GreetTool,                                                // Local class
+    Tool.esm('@acme/tools@^1.0.0', 'echo'),                  // Single tool from npm
+    Tool.remote('https://api.example.com/mcp', 'search'),     // Single tool from remote server
+  ],
+})
+class MyApp {}
+```
+
+<Info>
+`Tool.esm()` loads a single named tool from an npm package at runtime. `Tool.remote()` proxies a single tool from a remote MCP server.
+For loading **entire apps** (all tools, resources, prompts), use [`App.esm()`](/frontmcp/servers/esm-packages) or [`App.remote()`](/frontmcp/servers/apps#remote-apps).
+</Info>
+
 ---
 
 ## Input Schemas

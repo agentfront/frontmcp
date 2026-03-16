@@ -8,7 +8,7 @@ import { SkillRecord } from '../records';
 /**
  * Type for skill definitions that can be passed to FrontMcp apps/plugins.
  */
-export type SkillType<T = unknown> = Type<T> | SkillRecord;
+export type SkillType<T = unknown> = Type<T> | SkillRecord | string;
 
 /**
  * Full content returned when loading a skill.

@@ -21,7 +21,7 @@ export interface PromptInterface {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FunctionalPromptType = (() => any) & { [key: symbol]: unknown };
 
-export type PromptType = Type<PromptInterface> | FuncType<PromptInterface> | FunctionalPromptType;
+export type PromptType = Type<PromptInterface> | FuncType<PromptInterface> | FunctionalPromptType | string;
 
 type HistoryEntry<T> = {
   at: number;

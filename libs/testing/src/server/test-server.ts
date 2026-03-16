@@ -4,6 +4,7 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
+import { sha256Hex } from '@frontmcp/utils';
 import { ServerStartError } from '../errors';
 import { reservePort } from './port-registry';
 
@@ -98,18 +99,47 @@ export class TestServer {
    * Start a test server with custom command
    */
   static async start(options: TestServerOptions): Promise<TestServer> {
-    // Use port registry for allocation
     const project = options.project ?? 'default';
-    const { port, release } = await reservePort(project, options.port);
+    const maxAttempts = 3;
 
-    const server = new TestServer(options, port, release);
-    try {
-      await server.startProcess();
-    } catch (error) {
-      await server.stop(); // Clean up spawned process to prevent leaks
-      throw error;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { port, release } = await reservePort(project, options.port);
+      const server = new TestServer(options, port, release);
+
+      try {
+        await server.startProcess();
+        return server;
+      } catch (error) {
+        try {
+          await server.stop();
+        } catch (cleanupError) {
+          if (options.debug || DEBUG_SERVER) {
+            const msg = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+            console.warn(`[TestServer] Cleanup failed after startup error: ${msg}`);
+          }
+        }
+
+        const isEADDRINUSE =
+          error instanceof Error &&
+          (error.message.includes('EADDRINUSE') || server.getLogs().some((l) => l.includes('EADDRINUSE')));
+
+        if (isEADDRINUSE && attempt < maxAttempts) {
+          const delayMs = attempt * 500;
+          if (options.debug || DEBUG_SERVER) {
+            console.warn(
+              `[TestServer] EADDRINUSE on port ${port}, retrying in ${delayMs}ms (attempt ${attempt}/${maxAttempts})`,
+            );
+          }
+          await sleep(delayMs);
+          continue;
+        }
+
+        throw error;
+      }
     }
-    return server;
+
+    // Unreachable, but TypeScript requires a return
+    throw new Error(`[TestServer] Failed to start after ${maxAttempts} attempts`);
   }
 
   /**
@@ -123,25 +153,54 @@ export class TestServer {
       );
     }
 
-    // Use the Nx project name for port range allocation
-    const { port, release } = await reservePort(project, options.port);
+    const maxAttempts = 3;
 
-    const serverOptions: TestServerOptions = {
-      ...options,
-      port,
-      project,
-      command: `npx nx serve ${project} --port ${port}`,
-      cwd: options.cwd ?? process.cwd(),
-    };
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { port, release } = await reservePort(project, options.port);
 
-    const server = new TestServer(serverOptions, port, release);
-    try {
-      await server.startProcess();
-    } catch (error) {
-      await server.stop(); // Clean up spawned process to prevent leaks
-      throw error;
+      const serverOptions: TestServerOptions = {
+        ...options,
+        port,
+        project,
+        command: `npx nx serve ${project} --port ${port}`,
+        cwd: options.cwd ?? process.cwd(),
+      };
+
+      const server = new TestServer(serverOptions, port, release);
+      try {
+        await server.startProcess();
+        return server;
+      } catch (error) {
+        try {
+          await server.stop();
+        } catch (cleanupError) {
+          if (options.debug || DEBUG_SERVER) {
+            const msg = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+            console.warn(`[TestServer] Cleanup failed after startup error: ${msg}`);
+          }
+        }
+
+        const isEADDRINUSE =
+          error instanceof Error &&
+          (error.message.includes('EADDRINUSE') || server.getLogs().some((l) => l.includes('EADDRINUSE')));
+
+        if (isEADDRINUSE && attempt < maxAttempts) {
+          const delayMs = attempt * 500;
+          if (options.debug || DEBUG_SERVER) {
+            console.warn(
+              `[TestServer] EADDRINUSE on port ${port}, retrying in ${delayMs}ms (attempt ${attempt}/${maxAttempts})`,
+            );
+          }
+          await sleep(delayMs);
+          continue;
+        }
+
+        throw error;
+      }
     }
-    return server;
+
+    // Unreachable, but TypeScript requires a return
+    throw new Error(`[TestServer] Failed to start after ${maxAttempts} attempts`);
   }
 
   /**
@@ -308,6 +367,7 @@ export class TestServer {
       ...this.options.env,
       PORT: String(this.options.port),
     };
+    const runtimeEnv = withWorkspaceProtocolFallback(env, this.options.cwd);
 
     // Release port reservation just before spawning so the server can bind it
     if (this.portRelease) {
@@ -321,7 +381,7 @@ export class TestServer {
     // This avoids fragile command parsing with split(' ')
     this.process = spawn(this.options.command, [], {
       cwd: this.options.cwd,
-      env,
+      env: runtimeEnv,
       shell: true,
       detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -504,6 +564,149 @@ export class TestServer {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Ensure spawned test servers can resolve the protocol workspace package.
+ *
+ * Some local installs miss the workspace symlink at `node_modules/@frontmcp/protocol`
+ * even though the built package exists under `libs/protocol/dist`. `tsx` does not
+ * reliably honor NODE_PATH in this path, so prefer creating the missing workspace
+ * link and only fall back to NODE_PATH aliasing when that is not possible.
+ */
+function withWorkspaceProtocolFallback(env: NodeJS.ProcessEnv, cwd: string): NodeJS.ProcessEnv {
+  if (findInstalledProtocolPackageDir(cwd)) {
+    return env;
+  }
+
+  try {
+    const workspacePackageDir = findWorkspaceProtocolDir(cwd);
+    if (!workspacePackageDir) {
+      return env;
+    }
+
+    ensureWorkspaceProtocolLink(cwd, workspacePackageDir);
+    if (findInstalledProtocolPackageDir(cwd)) {
+      return env;
+    }
+
+    return withProtocolNodePathAlias(env, cwd, workspacePackageDir);
+  } catch (err) {
+    if (DEBUG_SERVER) {
+      console.error(
+        `[TestServer] Workspace protocol fallback failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return env;
+  }
+}
+
+function ensureWorkspaceProtocolLink(cwd: string, workspacePackageDir: string): void {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  const nodeModulesDir = findWorkspaceNodeModulesDir(cwd);
+  if (!nodeModulesDir) {
+    return;
+  }
+  const scopeDir = path.join(nodeModulesDir, '@frontmcp');
+
+  const aliasPackageDir = path.join(scopeDir, 'protocol');
+  if (fs.existsSync(aliasPackageDir)) {
+    return;
+  }
+
+  fs.mkdirSync(scopeDir, { recursive: true });
+  try {
+    fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== 'EEXIST') {
+      throw error;
+    }
+  }
+}
+
+// NOTE: The helpers below use synchronous node:fs/node:path/node:os because they
+// run in a synchronous code path. @frontmcp/utils only provides async FS wrappers,
+// so native APIs are required here for existsSync, mkdirSync, and symlinkSync.
+
+function withProtocolNodePathAlias(
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  workspacePackageDir: string,
+): NodeJS.ProcessEnv {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+
+  // Use a short deterministic hash to avoid Windows 260-char path limits
+  // (Buffer.from(cwd).toString('hex') would produce very long directory names).
+  const aliasRoot = path.join(os.tmpdir(), 'frontmcp-test-node-path', sha256Hex(cwd).slice(0, 12));
+  const scopeDir = path.join(aliasRoot, '@frontmcp');
+  const aliasPackageDir = path.join(scopeDir, 'protocol');
+
+  fs.mkdirSync(scopeDir, { recursive: true });
+  try {
+    if (!fs.existsSync(aliasPackageDir)) {
+      fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== 'EEXIST') throw error;
+  }
+
+  const existingNodePath = env['NODE_PATH'];
+  const nodePathEntries = [aliasRoot, ...(existingNodePath ? existingNodePath.split(path.delimiter) : [])].filter(
+    Boolean,
+  );
+
+  return {
+    ...env,
+    NODE_PATH: [...new Set(nodePathEntries)].join(path.delimiter),
+  };
+}
+
+/**
+ * Walk up from startDir until testFn returns a truthy value, or reach the root.
+ */
+function findUp<T>(startDir: string, testFn: (dir: string) => T | undefined): T | undefined {
+  const path = require('node:path');
+  let currentDir = startDir;
+  while (true) {
+    const result = testFn(currentDir);
+    if (result !== undefined) return result;
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) return undefined;
+    currentDir = parentDir;
+  }
+}
+
+function findWorkspaceProtocolDir(startDir: string): string | undefined {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  return findUp(startDir, (dir) => {
+    const candidate = path.join(dir, 'libs', 'protocol');
+    return fs.existsSync(path.join(candidate, 'dist', 'index.js')) ? candidate : undefined;
+  });
+}
+
+function findInstalledProtocolPackageDir(startDir: string): string | undefined {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  return findUp(startDir, (dir) => {
+    const candidate = path.join(dir, 'node_modules', '@frontmcp', 'protocol');
+    return fs.existsSync(path.join(candidate, 'package.json')) ? candidate : undefined;
+  });
+}
+
+function findWorkspaceNodeModulesDir(startDir: string): string | undefined {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  return findUp(startDir, (dir) => {
+    const candidate = path.join(dir, 'node_modules');
+    return fs.existsSync(candidate) ? candidate : undefined;
+  });
 }
 
 // Re-export port registry utilities

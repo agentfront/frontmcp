@@ -92,6 +92,7 @@
                   "frontmcp/servers/elicitation",
                   "frontmcp/servers/skills",
                   "frontmcp/servers/discovery",
+                  "frontmcp/servers/esm-packages",
                   "frontmcp/servers/flows",
                   "frontmcp/servers/jobs",
                   "frontmcp/servers/workflows",
@@ -159,7 +160,8 @@
               "frontmcp/features/deployment-targets",
               "frontmcp/features/plugin-system",
               "frontmcp/features/testing-framework",
-              "frontmcp/features/skill-based-workflows"
+              "frontmcp/features/skill-based-workflows",
+              "frontmcp/features/esm-dynamic-loading"
             ]
           },
           {
@@ -249,6 +251,7 @@
                   "frontmcp/guides/customize-flow-stages",
                   "frontmcp/guides/building-tool-ui",
                   "frontmcp/guides/prompts-and-resources",
+                  "frontmcp/guides/publishing-esm-packages",
                   "frontmcp/guides/rate-limiting-and-guards"
                 ]
               },
@@ -345,7 +348,8 @@
               "frontmcp/sdk-reference/errors/decorator-errors",
               "frontmcp/sdk-reference/errors/normalization-errors",
               "frontmcp/sdk-reference/errors/sdk-errors",
-              "frontmcp/sdk-reference/errors/auth-internal-errors"
+              "frontmcp/sdk-reference/errors/auth-internal-errors",
+              "frontmcp/sdk-reference/errors/esm-errors"
             ]
           }
         ]

@@ -5,7 +5,7 @@ import { FlowControl } from './flow.interface';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
-export type JobType<T = unknown> = Type<T> | FuncType<T>;
+export type JobType<T = unknown> = Type<T> | FuncType<T> | string;
 
 export type JobCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: JobMetadata;

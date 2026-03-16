@@ -168,14 +168,16 @@ export class ToolInstance<
   }
 
   override parseInput(input: CallToolRequest['params']): CallToolRequest['params']['arguments'] {
-    // For remote tools, use passthrough to preserve all arguments since validation
-    // happens on the remote server. Remote tools have 'frontmcp:remote' annotation.
+    // Tools backed by raw JSON Schema cannot be validated with the local Zod raw shape.
+    // Preserve their object arguments instead of stripping everything to `{}`.
+    // This covers remote tools plus local adapters (including ESM) that provide
+    // rawInputSchema for discovery/runtime interoperability.
     const isRemoteTool = this.metadata.annotations?.['frontmcp:remote'] === true;
+    const hasRawJsonSchema = this.rawInputSchema !== undefined && this.rawInputSchema !== null;
 
-    if (isRemoteTool) {
+    if (isRemoteTool || hasRawJsonSchema) {
       // Pass through all arguments without stripping unknown keys
-      const inputSchema = z.object(this.inputSchema).passthrough();
-      return inputSchema.parse(input.arguments);
+      return z.looseObject({}).parse(input.arguments ?? {});
     }
 
     // For local tools, use strict validation

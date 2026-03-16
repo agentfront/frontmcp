@@ -1,6 +1,7 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
 import { InvalidEntityError } from '../errors';
+import { parsePackageSpecifier, isPackageSpecifier } from '../esm-loader/package-specifier';
 import {
   ToolMetadata,
   FrontMcpToolTokens,
@@ -47,6 +48,29 @@ export function collectToolMetadata(cls: ToolType): ToolMetadata {
 }
 
 export function normalizeTool(item: any): ToolRecord {
+  // ESM/REMOTE record objects (from Tool.esm() / Tool.remote())
+  if (item && typeof item === 'object' && (item.kind === ToolKind.ESM || item.kind === ToolKind.REMOTE)) {
+    return item as ToolRecord;
+  }
+
+  // ESM package specifier string (e.g., '@acme/mcp-tools@^1.0.0')
+  if (typeof item === 'string') {
+    if (isPackageSpecifier(item)) {
+      const specifier = parsePackageSpecifier(item);
+      return {
+        kind: ToolKind.ESM,
+        provide: item,
+        specifier,
+        metadata: {
+          name: specifier.fullName,
+          description: `ESM tools from ${specifier.fullName}`,
+          inputSchema: {},
+        },
+      };
+    }
+    throw new InvalidEntityError('tool', item, 'a class, a tool object, or a valid package specifier');
+  }
+
   if (
     item &&
     typeof item === 'function' &&
@@ -80,6 +104,10 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
       return depsOfFunc(rec.provide, 'discovery');
     case ToolKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    case ToolKind.ESM:
+    case ToolKind.REMOTE:
+      // External packages/services have no local DI dependencies at discovery time
+      return [];
   }
 }
 

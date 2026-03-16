@@ -81,7 +81,6 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
       return this.transport.handleMessage(req.body, {
         requestInfo: {
           headers: req.headers as Record<string, string | string[] | undefined>,
-          url: req.url ? new URL(req.url, 'http://localhost') : undefined,
         },
         authInfo,
       });

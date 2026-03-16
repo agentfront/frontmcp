@@ -18,6 +18,8 @@ export default [
             '@langchain/google-genai', // Optional: dynamic import
             '@langchain/mistralai', // Optional: dynamic import
             '@langchain/groq', // Optional: dynamic import
+            'openai', // Optional peer dep: dynamic import in agent adapters
+            '@anthropic-ai/sdk', // Optional peer dep: dynamic import in agent adapters
           ],
         },
       ],
