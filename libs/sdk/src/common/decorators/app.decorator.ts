@@ -6,8 +6,6 @@ import {
   RemoteAppMetadata,
   EsmAppOptions,
   RemoteUrlAppOptions,
-  RemoteTransportOptions,
-  RemoteAuthConfig,
 } from '../metadata';
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
