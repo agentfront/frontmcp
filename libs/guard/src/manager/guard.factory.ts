@@ -5,9 +5,9 @@
  * Accepts a StorageConfig from @frontmcp/utils.
  */
 
-import type { RootStorage, StorageConfig } from '@frontmcp/utils';
+import type { RootStorage } from '@frontmcp/utils';
 import { createStorage, createMemoryStorage } from '@frontmcp/utils';
-import type { GuardConfig, GuardLogger, CreateGuardManagerArgs } from './types';
+import type { CreateGuardManagerArgs } from './types';
 import { GuardManager } from './guard.manager';
 
 /**
@@ -43,7 +43,7 @@ export async function createGuardManager(args: CreateGuardManagerArgs): Promise<
     hasDefaultConcurrency: !!config.defaultConcurrency,
     hasDefaultTimeout: !!config.defaultTimeout,
     hasIpFilter: !!config.ipFilter,
-  } as unknown as string);
+  });
 
   return new GuardManager(namespacedStorage, config);
 }

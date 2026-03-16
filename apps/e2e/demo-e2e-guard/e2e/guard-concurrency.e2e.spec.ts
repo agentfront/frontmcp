@@ -31,13 +31,17 @@ test.describe('Guard Concurrency — Mutex', () => {
       // Launch two calls: first holds the slot for 2s, second arrives 100ms later
       const [result1, result2] = await Promise.allSettled([
         client1.tools.call('concurrency-mutex', { delayMs: 2000 }),
-        new Promise<Awaited<ReturnType<typeof client2.tools.call>>>((resolve) =>
-          setTimeout(async () => resolve(await client2.tools.call('concurrency-mutex', { delayMs: 100 })), 100),
-        ),
+        (async () => {
+          await new Promise<void>((r) => setTimeout(r, 100));
+          return client2.tools.call('concurrency-mutex', { delayMs: 100 });
+        })(),
       ]);
 
       // First should succeed
       expect(result1.status).toBe('fulfilled');
+      if (result1.status === 'fulfilled') {
+        expect(result1.value).toBeSuccessful();
+      }
 
       // Second should have an error (concurrency limit, queue:0 = immediate reject)
       if (result2.status === 'fulfilled') {
@@ -74,9 +78,10 @@ test.describe('Guard Concurrency — Queued', () => {
       // First call holds slot for 500ms, second queues (3s timeout)
       const [result1, result2] = await Promise.allSettled([
         client1.tools.call('concurrency-queued', { delayMs: 500 }),
-        new Promise<Awaited<ReturnType<typeof client2.tools.call>>>((resolve) =>
-          setTimeout(async () => resolve(await client2.tools.call('concurrency-queued', { delayMs: 100 })), 100),
-        ),
+        (async () => {
+          await new Promise<void>((r) => setTimeout(r, 100));
+          return client2.tools.call('concurrency-queued', { delayMs: 100 });
+        })(),
       ]);
 
       expect(result1.status).toBe('fulfilled');
@@ -102,13 +107,17 @@ test.describe('Guard Concurrency — Queued', () => {
       // First call holds slot for 5s, second queues (3s timeout)
       const [result1, result2] = await Promise.allSettled([
         client1.tools.call('concurrency-queued', { delayMs: 5000 }),
-        new Promise<Awaited<ReturnType<typeof client2.tools.call>>>((resolve) =>
-          setTimeout(async () => resolve(await client2.tools.call('concurrency-queued', { delayMs: 100 })), 100),
-        ),
+        (async () => {
+          await new Promise<void>((r) => setTimeout(r, 100));
+          return client2.tools.call('concurrency-queued', { delayMs: 100 });
+        })(),
       ]);
 
       // First should succeed (eventually)
       expect(result1.status).toBe('fulfilled');
+      if (result1.status === 'fulfilled') {
+        expect(result1.value).toBeSuccessful();
+      }
 
       // Second should have a queue timeout error
       if (result2.status === 'fulfilled') {

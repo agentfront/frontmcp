@@ -115,7 +115,6 @@ describe('SlidingWindowRateLimiter', () => {
       // Put 8 requests in the previous window
       const previousWindowStart = 60_000;
       const currentWindowStart = 120_000;
-      const currentKey = `test-key:${currentWindowStart}`;
       const previousKey = `test-key:${previousWindowStart}`;
 
       // Pre-populate storage

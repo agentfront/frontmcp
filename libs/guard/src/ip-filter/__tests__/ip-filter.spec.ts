@@ -1,5 +1,4 @@
 import { IpFilter } from '../index';
-import type { IpFilterConfig, IpFilterResult } from '../index';
 
 describe('IpFilter', () => {
   describe('empty config', () => {
@@ -312,19 +311,15 @@ describe('IpFilter', () => {
     });
 
     it('should handle invalid CIDR rules gracefully', () => {
-      // Invalid CIDR rules create a rule with ip=0n, mask=0n which
-      // matches any IP of the same address family (mask 0 means all bits are wild).
-      // This is a known behavior — invalid rules degrade to "match all".
+      // Invalid CIDR rules are marked as valid=false and never match,
+      // so the default action applies.
       const filter = new IpFilter({
         denyList: ['not-a-cidr'],
       });
 
-      // Invalid rules are parsed as IPv4 with ip=0n, mask=0n — they won't
-      // match because parseIp('not-a-cidr') returns null and parseCidr creates
-      // isV6=false. The matchesCidr check passes since (any & 0n) === 0n.
       const result = filter.check('10.0.0.1');
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('denylisted');
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('default');
     });
   });
 
@@ -424,15 +419,15 @@ describe('IpFilter', () => {
     });
 
     it('should handle CIDR with invalid prefix length > maxBits (IPv4)', () => {
-      // /33 is invalid for IPv4 (max is /32) — should create a never-matching rule
+      // /33 is invalid for IPv4 (max is /32) — invalid rules are ignored
       const filter = new IpFilter({
         denyList: ['10.0.0.0/33'],
         defaultAction: 'allow',
       });
 
       const result = filter.check('10.0.0.1');
-      // Invalid CIDR with ip=0n, mask=0n matches any IPv4 because (any & 0n) === 0n
-      expect(result).toBeDefined();
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('default');
     });
 
     it('should handle CIDR with negative prefix length', () => {
@@ -442,18 +437,20 @@ describe('IpFilter', () => {
       });
 
       const result = filter.check('10.0.0.1');
-      expect(result).toBeDefined();
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('default');
     });
 
     it('should handle CIDR with invalid prefix length > maxBits (IPv6)', () => {
-      // /129 is invalid for IPv6 (max is /128)
+      // /129 is invalid for IPv6 (max is /128) — invalid rules are ignored
       const filter = new IpFilter({
         denyList: ['2001:db8::/129'],
         defaultAction: 'allow',
       });
 
       const result = filter.check('2001:db8::1');
-      expect(result).toBeDefined();
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('default');
     });
 
     it('should handle CIDR with non-numeric prefix', () => {
@@ -463,7 +460,8 @@ describe('IpFilter', () => {
       });
 
       const result = filter.check('10.0.0.1');
-      expect(result).toBeDefined();
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('default');
     });
   });
 
@@ -474,12 +472,11 @@ describe('IpFilter', () => {
         defaultAction: 'deny',
       });
 
-      // This invalid IPv6 should not match anything properly
-      // The allow rule itself is invalid, so the IP shouldn't match it
+      // The allow rule is invalid (9 groups), so it never matches.
+      // With defaultAction: 'deny', the IP is denied.
       const result = filter.check('2001:db8:1:2:3:4:5:6');
-      // The allowList rule is invalid (ip=0n, mask=0n) which means it matches everything
-      // for the same address family, so we just verify it doesn't crash
-      expect(result).toBeDefined();
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('default');
     });
 
     it('should reject IPv6 with multiple "::" expansions', () => {

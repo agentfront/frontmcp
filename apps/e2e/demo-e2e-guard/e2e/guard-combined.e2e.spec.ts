@@ -62,14 +62,21 @@ test.describe('Guard Combined — Concurrency', () => {
         client1.tools.call('combined-guard', { delayMs: 1500 }),
         client2.tools.call('combined-guard', { delayMs: 1500 }),
         // Small delay to ensure first two get the slots
-        new Promise<Awaited<ReturnType<typeof client3.tools.call>>>((resolve) =>
-          setTimeout(async () => resolve(await client3.tools.call('combined-guard', { delayMs: 100 })), 100),
-        ),
+        (async () => {
+          await new Promise<void>((r) => setTimeout(r, 100));
+          return client3.tools.call('combined-guard', { delayMs: 100 });
+        })(),
       ]);
 
       // First two should succeed
       expect(results[0].status).toBe('fulfilled');
       expect(results[1].status).toBe('fulfilled');
+      if (results[0].status === 'fulfilled') {
+        expect(results[0].value).toBeSuccessful();
+      }
+      if (results[1].status === 'fulfilled') {
+        expect(results[1].value).toBeSuccessful();
+      }
 
       // Third should have an error (queue timeout)
       if (results[2].status === 'fulfilled') {

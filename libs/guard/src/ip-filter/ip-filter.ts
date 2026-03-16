@@ -15,6 +15,7 @@ interface ParsedCidr {
   ip: bigint;
   mask: bigint;
   isV6: boolean;
+  valid: boolean;
 }
 
 export class IpFilter {
@@ -161,14 +162,14 @@ function parseCidr(cidr: string): ParsedCidr {
 
   if (parsed === null) {
     // Invalid — create a rule that never matches
-    return { raw: cidr, ip: 0n, mask: 0n, isV6: false };
+    return { raw: cidr, ip: 0n, mask: 0n, isV6: false, valid: false };
   }
 
   const maxBits = parsed.isV6 ? 128 : 32;
   const prefixLen = prefixPart !== undefined ? parseInt(prefixPart, 10) : maxBits;
 
   if (isNaN(prefixLen) || prefixLen < 0 || prefixLen > maxBits) {
-    return { raw: cidr, ip: 0n, mask: 0n, isV6: parsed.isV6 };
+    return { raw: cidr, ip: 0n, mask: 0n, isV6: parsed.isV6, valid: false };
   }
 
   const mask = prefixLen === 0 ? 0n : ((1n << BigInt(maxBits)) - 1n) << BigInt(maxBits - prefixLen);
@@ -178,6 +179,7 @@ function parseCidr(cidr: string): ParsedCidr {
     ip: parsed.value & mask,
     mask,
     isV6: parsed.isV6,
+    valid: true,
   };
 }
 
@@ -185,7 +187,7 @@ function parseCidr(cidr: string): ParsedCidr {
  * Check if a parsed IP matches a CIDR rule.
  */
 function matchesCidr(ip: ParsedIp, rule: ParsedCidr): boolean {
-  // Type mismatch (IPv4 vs IPv6) — no match
+  if (!rule.valid) return false;
   if (ip.isV6 !== rule.isV6) return false;
   return (ip.value & rule.mask) === rule.ip;
 }

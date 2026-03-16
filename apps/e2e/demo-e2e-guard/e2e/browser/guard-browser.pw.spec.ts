@@ -6,15 +6,15 @@
  *
  * Uses Playwright's `request` API fixture for HTTP testing (no DOM needed).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 
 const MCP_ENDPOINT = '/mcp';
 
 /**
  * Initialize an MCP session and return the session ID from the response header.
  */
-async function initializeSession(request: ReturnType<typeof test.extend>['request'] extends infer R ? R : never) {
-  const response = await (request as { post: Function }).post(MCP_ENDPOINT, {
+async function initializeSession(request: APIRequestContext) {
+  const response = await request.post(MCP_ENDPOINT, {
     data: {
       jsonrpc: '2.0',
       id: 'init-1',
@@ -36,13 +36,13 @@ async function initializeSession(request: ReturnType<typeof test.extend>['reques
  * Call a tool via raw JSON-RPC POST.
  */
 async function callTool(
-  request: unknown,
+  request: APIRequestContext,
   sessionId: string,
   toolName: string,
   args: Record<string, unknown>,
   id: string | number = 'call-1',
 ) {
-  return (request as { post: Function }).post(MCP_ENDPOINT, {
+  return request.post(MCP_ENDPOINT, {
     data: {
       jsonrpc: '2.0',
       id,

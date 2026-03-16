@@ -46,7 +46,8 @@ test.describe('Guard Rate Limit — Per-Tool Isolation', () => {
   test('should maintain separate limits per tool', async ({ mcp }) => {
     // Exhaust rate-limited tool (3 requests)
     for (let i = 0; i < 3; i++) {
-      await mcp.tools.call('rate-limited', { message: `req-${i}` });
+      const warmUp = await mcp.tools.call('rate-limited', { message: `req-${i}` });
+      expect(warmUp).toBeSuccessful();
     }
 
     // rate-limited should now be blocked

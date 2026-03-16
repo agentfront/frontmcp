@@ -157,7 +157,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
   @Stage('acquireQuota')
   async acquireQuota() {
-    const manager = (this.scope as unknown as Scope).rateLimitManager;
+    const manager = (this.scope as Scope).rateLimitManager;
     if (!manager?.config?.global) return;
 
     const context = this.tryGetContext();
@@ -181,6 +181,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           { status: 429, headers: { 'Retry-After': String(retryAfter) } },
         ),
       );
+      return;
     }
   }
 
