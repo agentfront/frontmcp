@@ -108,6 +108,7 @@ import type { EsmOptions, RemoteOptions } from '../metadata';
 import { AgentKind } from '../records/agent.record';
 import type { AgentEsmTargetRecord, AgentRemoteRecord } from '../records/agent.record';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function agentEsm(specifier: string, targetName: string, options?: EsmOptions<AgentMetadata>): AgentEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);
@@ -128,6 +129,7 @@ function agentEsm(specifier: string, targetName: string, options?: EsmOptions<Ag
 }
 
 function agentRemote(url: string, targetName: string, options?: RemoteOptions<AgentMetadata>): AgentRemoteRecord {
+  validateRemoteUrl(url);
   return {
     kind: AgentKind.REMOTE,
     provide: Symbol(`remote-agent:${url}:${targetName}`),

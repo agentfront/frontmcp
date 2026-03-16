@@ -24,7 +24,6 @@
 import { parsePackageSpecifier } from './package-specifier';
 import type { RemoteAppMetadata } from '../common/metadata/app.metadata';
 import type { EsmAppOptions, RemoteUrlAppOptions } from '../common/metadata/app.metadata';
-import type { AppFilterConfig } from '../common/metadata/app-filter.metadata';
 
 export type { EsmAppOptions, RemoteUrlAppOptions } from '../common/metadata/app.metadata';
 export type { PackageLoader } from '../common/metadata/app.metadata';

@@ -10,6 +10,7 @@
  */
 
 import { getMetadata, isClass } from '@frontmcp/di';
+import { isValidMcpUri } from '@frontmcp/utils';
 import {
   FrontMcpToolTokens,
   FrontMcpResourceTokens,
@@ -17,6 +18,8 @@ import {
   FrontMcpLocalAppTokens,
   FrontMcpSkillTokens,
   FrontMcpJobTokens,
+  FrontMcpAgentTokens,
+  FrontMcpWorkflowTokens,
 } from '../../common/tokens';
 import type { EsmToolDefinition, EsmResourceDefinition, EsmPromptDefinition } from '../../esm-loader/factories';
 
@@ -68,6 +71,20 @@ export function isDecoratedJobClass(raw: unknown): boolean {
   return isClass(raw) && getMetadata(FrontMcpJobTokens.type, raw) === true;
 }
 
+/**
+ * Check if a raw ESM export is a class decorated with @Agent.
+ */
+export function isDecoratedAgentClass(raw: unknown): boolean {
+  return isClass(raw) && getMetadata(FrontMcpAgentTokens.type, raw) === true;
+}
+
+/**
+ * Check if a raw ESM export is a class decorated with @Workflow.
+ */
+export function isDecoratedWorkflowClass(raw: unknown): boolean {
+  return isClass(raw) && getMetadata(FrontMcpWorkflowTokens.type, raw) === true;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // PLAIN OBJECT NORMALIZATION
 // ═══════════════════════════════════════════════════════════════════
@@ -86,11 +103,15 @@ export function normalizeToolFromEsmExport(raw: unknown): EsmToolDefinition | un
 
   const obj = raw as Record<string, unknown>;
   if (typeof obj['execute'] === 'function' && typeof obj['name'] === 'string') {
+    const description = obj['description'];
+    const inputSchema = obj['inputSchema'];
+    const outputSchema = obj['outputSchema'];
     return {
       name: obj['name'] as string,
-      description: obj['description'] as string | undefined,
-      inputSchema: obj['inputSchema'] as Record<string, unknown> | undefined,
-      outputSchema: obj['outputSchema'],
+      description: typeof description === 'string' ? description : undefined,
+      inputSchema:
+        inputSchema && typeof inputSchema === 'object' ? (inputSchema as Record<string, unknown>) : undefined,
+      outputSchema: outputSchema && typeof outputSchema === 'object' ? outputSchema : undefined,
       execute: obj['execute'] as EsmToolDefinition['execute'],
     };
   }
@@ -110,11 +131,15 @@ export function normalizeResourceFromEsmExport(raw: unknown): EsmResourceDefinit
 
   const obj = raw as Record<string, unknown>;
   if (typeof obj['read'] === 'function' && typeof obj['name'] === 'string' && typeof obj['uri'] === 'string') {
+    const uri = obj['uri'] as string;
+    if (!isValidMcpUri(uri)) return undefined;
+    const description = obj['description'];
+    const mimeType = obj['mimeType'];
     return {
       name: obj['name'] as string,
-      description: obj['description'] as string | undefined,
-      uri: obj['uri'] as string,
-      mimeType: obj['mimeType'] as string | undefined,
+      description: typeof description === 'string' ? description : undefined,
+      uri,
+      mimeType: typeof mimeType === 'string' ? mimeType : undefined,
       read: obj['read'] as EsmResourceDefinition['read'],
     };
   }
@@ -134,10 +159,12 @@ export function normalizePromptFromEsmExport(raw: unknown): EsmPromptDefinition 
 
   const obj = raw as Record<string, unknown>;
   if (typeof obj['execute'] === 'function' && typeof obj['name'] === 'string') {
+    const description = obj['description'];
+    const args = obj['arguments'];
     return {
       name: obj['name'] as string,
-      description: obj['description'] as string | undefined,
-      arguments: obj['arguments'] as EsmPromptDefinition['arguments'],
+      description: typeof description === 'string' ? description : undefined,
+      arguments: Array.isArray(args) ? (args as EsmPromptDefinition['arguments']) : undefined,
       execute: obj['execute'] as EsmPromptDefinition['execute'],
     };
   }

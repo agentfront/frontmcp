@@ -61,6 +61,7 @@ import type { EsmOptions, RemoteOptions } from '../metadata';
 import { PromptKind } from '../records/prompt.record';
 import type { PromptEsmTargetRecord, PromptRemoteRecord } from '../records/prompt.record';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function promptEsm(specifier: string, targetName: string, options?: EsmOptions<PromptMetadata>): PromptEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);
@@ -80,6 +81,7 @@ function promptEsm(specifier: string, targetName: string, options?: EsmOptions<P
 }
 
 function promptRemote(url: string, targetName: string, options?: RemoteOptions<PromptMetadata>): PromptRemoteRecord {
+  validateRemoteUrl(url);
   return {
     kind: PromptKind.REMOTE,
     provide: Symbol(`remote-prompt:${url}:${targetName}`),

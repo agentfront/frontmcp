@@ -6,6 +6,8 @@ import {
   FrontMcpPromptTokens,
   FrontMcpSkillTokens,
   FrontMcpJobTokens,
+  FrontMcpAgentTokens,
+  FrontMcpWorkflowTokens,
 } from '../../common';
 import { extendedToolMetadata } from '../../common/tokens';
 
@@ -17,23 +19,39 @@ function simulateTool(cls: { new (...args: unknown[]): unknown }, name: string) 
 }
 
 /** Helper: simulate @Resource decorator metadata on a class */
-function simulateResource(cls: { new (...args: unknown[]): unknown }) {
+function simulateResource(cls: { new (...args: unknown[]): unknown }, name?: string) {
   Reflect.defineMetadata(FrontMcpResourceTokens.type, true, cls);
+  if (name) Reflect.defineMetadata(FrontMcpResourceTokens.name, name, cls);
 }
 
 /** Helper: simulate @Prompt decorator metadata on a class */
-function simulatePrompt(cls: { new (...args: unknown[]): unknown }) {
+function simulatePrompt(cls: { new (...args: unknown[]): unknown }, name?: string) {
   Reflect.defineMetadata(FrontMcpPromptTokens.type, true, cls);
+  if (name) Reflect.defineMetadata(FrontMcpPromptTokens.name, name, cls);
 }
 
 /** Helper: simulate @Skill decorator metadata on a class */
-function simulateSkill(cls: { new (...args: unknown[]): unknown }) {
+function simulateSkill(cls: { new (...args: unknown[]): unknown }, name?: string) {
   Reflect.defineMetadata(FrontMcpSkillTokens.type, true, cls);
+  if (name) Reflect.defineMetadata(FrontMcpSkillTokens.name, name, cls);
 }
 
 /** Helper: simulate @Job decorator metadata on a class */
-function simulateJob(cls: { new (...args: unknown[]): unknown }) {
+function simulateJob(cls: { new (...args: unknown[]): unknown }, name?: string) {
   Reflect.defineMetadata(FrontMcpJobTokens.type, true, cls);
+  if (name) Reflect.defineMetadata(FrontMcpJobTokens.name, name, cls);
+}
+
+/** Helper: simulate @Agent decorator metadata on a class */
+function simulateAgent(cls: { new (...args: unknown[]): unknown }, name?: string) {
+  Reflect.defineMetadata(FrontMcpAgentTokens.type, true, cls);
+  if (name) Reflect.defineMetadata(FrontMcpAgentTokens.name, name, cls);
+}
+
+/** Helper: simulate @Workflow decorator metadata on a class */
+function simulateWorkflow(cls: { new (...args: unknown[]): unknown }, name?: string) {
+  Reflect.defineMetadata(FrontMcpWorkflowTokens.type, true, cls);
+  if (name) Reflect.defineMetadata(FrontMcpWorkflowTokens.name, name, cls);
 }
 
 describe('normalizeEsmExport', () => {
@@ -163,25 +181,45 @@ describe('normalizeEsmExport', () => {
       expect(result.jobs).toHaveLength(1);
     });
 
-    it('should detect all 5 primitive types in a single module', () => {
+    it('should detect all 7 primitive types in a single module', () => {
       class T {}
       class R {}
       class P {}
       class S {}
       class J {}
+      class AG {}
+      class WF {}
       simulateTool(T, 't');
-      simulateResource(R);
-      simulatePrompt(P);
-      simulateSkill(S);
-      simulateJob(J);
+      simulateResource(R, 'r');
+      simulatePrompt(P, 'p');
+      simulateSkill(S, 's');
+      simulateJob(J, 'j');
+      simulateAgent(AG, 'ag');
+      simulateWorkflow(WF, 'wf');
 
-      const moduleExport = { T, R, P, S, J };
+      const moduleExport = { T, R, P, S, J, AG, WF };
       const result = normalizeEsmExport(moduleExport);
       expect(result.tools).toHaveLength(1);
       expect(result.resources).toHaveLength(1);
       expect(result.prompts).toHaveLength(1);
       expect(result.skills).toHaveLength(1);
       expect(result.jobs).toHaveLength(1);
+      expect(result.agents).toHaveLength(1);
+      expect(result.workflows).toHaveLength(1);
+    });
+
+    it('should detect @Agent and @Workflow decorated exports', () => {
+      class MyAgent {}
+      class MyWorkflow {}
+      simulateAgent(MyAgent, 'my-agent');
+      simulateWorkflow(MyWorkflow, 'my-workflow');
+
+      const moduleExport = { MyAgent, MyWorkflow };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.agents).toHaveLength(1);
+      expect(result.agents![0]).toBe(MyAgent);
+      expect(result.workflows).toHaveLength(1);
+      expect(result.workflows![0]).toBe(MyWorkflow);
     });
 
     it('should ignore non-class exports when scanning decorated classes', () => {
@@ -213,11 +251,31 @@ describe('normalizeEsmExport', () => {
 
     it('should detect a single @Resource as default export', () => {
       class StatusResource {}
-      simulateResource(StatusResource);
+      simulateResource(StatusResource, 'status');
 
       const moduleExport = { default: StatusResource };
       const result = normalizeEsmExport(moduleExport);
       expect(result.resources).toHaveLength(1);
+    });
+
+    it('should detect a single @Agent as default export', () => {
+      class ResearchAgent {}
+      simulateAgent(ResearchAgent, 'research');
+
+      const moduleExport = { default: ResearchAgent };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.agents).toHaveLength(1);
+      expect(result.agents![0]).toBe(ResearchAgent);
+    });
+
+    it('should detect a single @Workflow as default export', () => {
+      class PipelineWorkflow {}
+      simulateWorkflow(PipelineWorkflow, 'pipeline');
+
+      const moduleExport = { default: PipelineWorkflow };
+      const result = normalizeEsmExport(moduleExport);
+      expect(result.workflows).toHaveLength(1);
+      expect(result.workflows![0]).toBe(PipelineWorkflow);
     });
   });
 

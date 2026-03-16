@@ -126,6 +126,7 @@ import type { EsmOptions, RemoteOptions } from '../metadata';
 import { ResourceKind } from '../records/resource.record';
 import type { ResourceEsmTargetRecord, ResourceRemoteRecord } from '../records/resource.record';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function resourceEsm(
   specifier: string,
@@ -153,6 +154,7 @@ function resourceRemote(
   targetName: string,
   options?: RemoteOptions<ResourceMetadata>,
 ): ResourceRemoteRecord {
+  validateRemoteUrl(url);
   return {
     kind: ResourceKind.REMOTE,
     provide: Symbol(`remote-resource:${url}:${targetName}`),

@@ -109,7 +109,7 @@ Everything else is optional with sensible defaults.
     url?: string,           // Base URL for registry + bundle fetching
     registryUrl?: string,   // Separate registry URL (if different)
     token?: string,         // Bearer token for auth
-    tokenEnvVar?: string,   // Env var name containing bearer token
+    tokenEnvVar?: string,   // Env var name containing bearer token (takes precedence over `token`)
   },
 
   logging?: {

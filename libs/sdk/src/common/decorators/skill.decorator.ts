@@ -144,6 +144,7 @@ function frontMcpSkill(providedMetadata: SkillMetadata): SkillValueRecord {
 import type { EsmOptions, RemoteOptions } from '../metadata';
 import type { SkillEsmTargetRecord, SkillRemoteRecord } from '../records/skill.record';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function skillEsm(specifier: string, targetName: string, options?: EsmOptions<SkillMetadata>): SkillEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);
@@ -156,12 +157,14 @@ function skillEsm(specifier: string, targetName: string, options?: EsmOptions<Sk
     metadata: {
       name: targetName,
       description: `Skill "${targetName}" from ${parsed.fullName}`,
+      instructions: options?.metadata?.instructions ?? '',
       ...options?.metadata,
     } as SkillMetadata,
   };
 }
 
 function skillRemote(url: string, targetName: string, options?: RemoteOptions<SkillMetadata>): SkillRemoteRecord {
+  validateRemoteUrl(url);
   return {
     kind: SkillKind.REMOTE,
     provide: Symbol(`remote-skill:${url}:${targetName}`),
@@ -172,6 +175,7 @@ function skillRemote(url: string, targetName: string, options?: RemoteOptions<Sk
     metadata: {
       name: targetName,
       description: `Remote skill "${targetName}" from ${url}`,
+      instructions: options?.metadata?.instructions ?? '',
       ...options?.metadata,
     } as SkillMetadata,
   };

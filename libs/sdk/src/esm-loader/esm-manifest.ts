@@ -11,6 +11,8 @@ import {
   isDecoratedPromptClass,
   isDecoratedSkillClass,
   isDecoratedJobClass,
+  isDecoratedAgentClass,
+  isDecoratedWorkflowClass,
 } from '../app/instances/esm-normalize.utils';
 
 /**
@@ -229,7 +231,7 @@ function collectNamedExports(mod: Record<string, unknown>): FrontMcpPackageManif
 }
 
 /**
- * Check if a value is a decorated primitive class (@Tool, @Resource, @Prompt, @Skill, @Job).
+ * Check if a value is a decorated primitive class (@Tool, @Resource, @Prompt, @Skill, @Job, @Agent, @Workflow).
  */
 function isDecoratedPrimitive(value: unknown): boolean {
   return (
@@ -237,7 +239,9 @@ function isDecoratedPrimitive(value: unknown): boolean {
     isDecoratedResourceClass(value) ||
     isDecoratedPromptClass(value) ||
     isDecoratedSkillClass(value) ||
-    isDecoratedJobClass(value)
+    isDecoratedJobClass(value) ||
+    isDecoratedAgentClass(value) ||
+    isDecoratedWorkflowClass(value)
   );
 }
 
@@ -258,6 +262,8 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
   const prompts: unknown[] = [];
   const skills: unknown[] = [];
   const jobs: unknown[] = [];
+  const agents: unknown[] = [];
+  const workflows: unknown[] = [];
 
   for (const value of Object.values(mod)) {
     if (!value || typeof value !== 'function') continue;
@@ -266,6 +272,8 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
     else if (isDecoratedPromptClass(value)) prompts.push(value);
     else if (isDecoratedSkillClass(value)) skills.push(value);
     else if (isDecoratedJobClass(value)) jobs.push(value);
+    else if (isDecoratedAgentClass(value)) agents.push(value);
+    else if (isDecoratedWorkflowClass(value)) workflows.push(value);
   }
 
   return {
@@ -276,6 +284,8 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
     ...(prompts.length ? { prompts } : {}),
     ...(skills.length ? { skills } : {}),
     ...(jobs.length ? { jobs } : {}),
+    ...(agents.length ? { agents } : {}),
+    ...(workflows.length ? { workflows } : {}),
   };
 }
 

@@ -17,6 +17,7 @@ import { ToolContext } from '../interfaces';
 import { ToolKind } from '../records/tool.record';
 import type { ToolEsmTargetRecord, ToolRemoteRecord } from '../records/tool.record';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
  * Decorator that marks a class as a McpTool module and provides metadata
@@ -87,6 +88,7 @@ function toolEsm(specifier: string, targetName: string, options?: EsmOptions<Too
 }
 
 function toolRemote(url: string, targetName: string, options?: RemoteOptions<ToolMetadata>): ToolRemoteRecord {
+  validateRemoteUrl(url);
   return {
     kind: ToolKind.REMOTE,
     provide: Symbol(`remote-tool:${url}:${targetName}`),

@@ -62,6 +62,7 @@ import type { EsmOptions, RemoteOptions } from '../metadata';
 import { JobKind } from '../records/job.record';
 import type { JobEsmTargetRecord, JobRemoteRecord } from '../records/job.record';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function jobEsm(specifier: string, targetName: string, options?: EsmOptions<JobMetadata>): JobEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);
@@ -82,6 +83,7 @@ function jobEsm(specifier: string, targetName: string, options?: EsmOptions<JobM
 }
 
 function jobRemote(url: string, targetName: string, options?: RemoteOptions<JobMetadata>): JobRemoteRecord {
+  validateRemoteUrl(url);
   return {
     kind: JobKind.REMOTE,
     provide: Symbol(`remote-job:${url}:${targetName}`),

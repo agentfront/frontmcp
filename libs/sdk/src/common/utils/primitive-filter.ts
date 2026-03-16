@@ -22,9 +22,30 @@ function matchPattern(name: string, pattern: string): boolean {
   if (pattern === '*') return true;
   if (!pattern.includes('*')) return name === pattern;
 
-  // Convert glob pattern to regex: escape special chars, replace * with .*
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}$`).test(name);
+  // Linear-time segment matching (avoids regex-based ReDoS)
+  const segments = pattern.split('*');
+  let pos = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (i === 0) {
+      // First segment must match at the start
+      if (!name.startsWith(seg)) return false;
+      pos = seg.length;
+    } else if (i === segments.length - 1) {
+      // Last segment must match at the end
+      if (!name.endsWith(seg)) return false;
+      // Ensure no overlap with earlier matched portion
+      if (name.length - seg.length < pos) return false;
+    } else {
+      // Middle segments: find next occurrence after current position
+      const idx = name.indexOf(seg, pos);
+      if (idx === -1) return false;
+      pos = idx + seg.length;
+    }
+  }
+
+  return true;
 }
 
 /**
