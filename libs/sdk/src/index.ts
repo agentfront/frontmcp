@@ -30,6 +30,7 @@ export {
 export * from './common';
 export * from './errors';
 export * from './elicitation';
+export * from '@frontmcp/guard';
 export * from './remote-mcp';
 export * from './esm-loader';
 

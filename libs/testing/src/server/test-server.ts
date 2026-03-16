@@ -252,8 +252,17 @@ export class TestServer {
         return;
       }
 
-      // Try graceful shutdown first
-      this.process.kill('SIGTERM');
+      // Kill entire process group to ensure all child processes exit
+      const pid = this.process.pid;
+      try {
+        if (pid !== undefined) {
+          process.kill(-pid, 'SIGTERM');
+        } else {
+          this.process.kill('SIGTERM');
+        }
+      } catch {
+        this.process.kill('SIGTERM');
+      }
 
       // Wait for process to exit
       const exitPromise = new Promise<void>((resolve) => {
@@ -268,7 +277,16 @@ export class TestServer {
       const killTimeout = setTimeout(() => {
         if (this.process) {
           this.log('Force killing server after timeout...');
-          this.process.kill('SIGKILL');
+          const killPid = this.process.pid;
+          try {
+            if (killPid !== undefined) {
+              process.kill(-killPid, 'SIGKILL');
+            } else {
+              this.process.kill('SIGKILL');
+            }
+          } catch {
+            this.process.kill('SIGKILL');
+          }
         }
       }, 5000);
 
@@ -365,6 +383,7 @@ export class TestServer {
       cwd: this.options.cwd,
       env: runtimeEnv,
       shell: true,
+      detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

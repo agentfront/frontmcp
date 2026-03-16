@@ -107,7 +107,7 @@ describe('Scope initialization performance', () => {
     expect(result.serve).toBe(false);
   });
 
-  it('parseFrontMcpConfigLite should be faster than full parse', () => {
+  it('parseFrontMcpConfigLite should not be dramatically slower than full parse', () => {
     const { parseFrontMcpConfigLite, frontMcpMetadataSchema } = require('../../common/metadata/front-mcp.metadata');
 
     const input = {
@@ -142,8 +142,10 @@ describe('Scope initialization performance', () => {
       );
     }
 
-    // Guard against catastrophic regression — lite should not be 10x slower than full
-    expect(liteMs).toBeLessThanOrEqual(fullMs * 10);
+    // Lite should not be dramatically slower than full parse.
+    // On small inputs both are sub-ms; we use a 5x margin to tolerate CI variance.
+    // The real benefit of parseFrontMcpConfigLite is on large configs, not micro-benchmarks.
+    expect(liteMs).toBeLessThanOrEqual(fullMs * 5);
   });
 
   it('ToolEntry should cache getInputJsonSchema result', () => {

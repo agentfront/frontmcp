@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 import { randomUUID } from '@frontmcp/utils';
 import { SessionVerificationFailedError } from '../../errors';
+import type { Scope } from '../scope.instance';
 
 const plan = {
   pre: [
@@ -152,6 +153,36 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       }),
     );
     this.logger.debug(`[${this.requestId}] HEADERS`, { headers: sanitizedHeaders });
+  }
+
+  @Stage('acquireQuota')
+  async acquireQuota() {
+    const manager = (this.scope as Scope).rateLimitManager;
+    if (!manager?.config?.global) return;
+
+    const context = this.tryGetContext();
+    const partitionCtx = context
+      ? {
+          sessionId: context.sessionId,
+          clientIp: context.metadata?.clientIp,
+          userId: context.authInfo?.clientId as string | undefined,
+        }
+      : undefined;
+
+    const result = await manager.checkGlobalRateLimit(partitionCtx);
+    if (!result.allowed) {
+      const retryAfter = Math.ceil((result.retryAfterMs ?? 60_000) / 1000);
+      this.respond(
+        httpRespond.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32029, message: `Rate limit exceeded. Retry after ${retryAfter} seconds` },
+          },
+          { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+        ),
+      );
+      return;
+    }
   }
 
   @Stage('checkAuthorization')

@@ -1,0 +1,69 @@
+{
+  "name": "demo-e2e-guard",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-guard/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:guard"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-guard",
+        "main": "apps/e2e/demo-e2e-guard/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-guard/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-guard/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-guard/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-guard"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-guard/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-guard-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-guard/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:cli": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-guard/jest.cli.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:pw": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --config=apps/e2e/demo-e2e-guard/playwright.config.ts",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

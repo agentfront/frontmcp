@@ -81,6 +81,7 @@
       "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
       "@frontmcp/protocol": ["libs/protocol/src/index.ts"],
       "@frontmcp/auth": ["libs/auth/src/index.ts"],
+      "@frontmcp/guard": ["libs/guard/src/index.ts"],
       "@frontmcp/storage-sqlite": ["libs/storage-sqlite/src/index.ts"],
       "@frontmcp/nx": ["libs/nx-plugin/src/index.ts"],
       "@frontmcp/react": ["libs/react/src/index.ts"],

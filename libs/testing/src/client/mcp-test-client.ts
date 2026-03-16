@@ -142,14 +142,30 @@ export class McpTestClient {
     // Connect transport
     await this.transport.connect();
 
-    // Perform MCP initialization
-    const initResponse = await this.initialize();
+    // Retry initialization to handle brief window where server is up but routes not ready
+    const maxRetries = 3;
+    const retryDelayMs = 500;
+    let lastError: string | undefined;
 
-    if (!initResponse.success || !initResponse.data) {
-      throw new Error(`Failed to initialize MCP connection: ${initResponse.error?.message ?? 'Unknown error'}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const initResponse = await this.initialize();
+
+      if (initResponse.success && initResponse.data) {
+        this.initResult = initResponse.data;
+        break;
+      }
+
+      lastError = initResponse.error?.message ?? 'Unknown error';
+
+      if (attempt < maxRetries) {
+        this.log('debug', `MCP init attempt ${attempt} failed (${lastError}), retrying in ${retryDelayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
     }
 
-    this.initResult = initResponse.data;
+    if (!this.initResult) {
+      throw new Error(`Failed to initialize MCP connection after ${maxRetries} attempts: ${lastError}`);
+    }
     this._sessionId = this.transport.getSessionId();
     this._sessionInfo = {
       id: this._sessionId ?? `session-${Date.now()}`,

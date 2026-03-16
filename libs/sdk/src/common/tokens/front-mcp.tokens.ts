@@ -41,4 +41,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   jobs: tokenFactory.meta('jobs'),
   // default package loader for ESM apps
   loader: tokenFactory.meta('loader'),
+  // rate limiting, concurrency control, and timeout
+  throttle: tokenFactory.meta('throttle'),
 };

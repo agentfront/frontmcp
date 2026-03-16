@@ -1,0 +1,487 @@
+---
+title: Guard
+slug: servers/guard
+icon: shield-check
+description: Rate limiting, concurrency control, execution timeout, and IP filtering for FrontMCP tools and agents.
+---
+
+Guard provides **rate limiting**, **concurrency control**, **execution timeout**, and **IP filtering** for your MCP server. It protects against abuse, ensures fair resource allocation, and prevents runaway requests.
+
+<Info>
+Guard is powered by the `@frontmcp/guard` library and integrates directly into tool and agent flows. All guard checks run automatically before execution, with cleanup handled in finalize stages.
+</Info>
+
+## Why Guard?
+
+| Threat | Without Guard | With Guard |
+| ------ | ------------- | ---------- |
+| **Client flooding requests** | Server overwhelmed | Rate-limited per user/IP |
+| **Tool running forever** | Hangs, resource leak | Timeout protection |
+| **Unbounded parallelism** | Resource exhaustion | Controlled concurrency |
+| **Malicious IPs** | Open access | IP allow/deny filtering |
+
+---
+
+## Quick Start
+
+Add rate limiting and a timeout to any tool with decorator options:
+
+<CodeGroup>
+```typescript Class Style
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'search',
+  description: 'Search documents',
+  inputSchema: { query: z.string() },
+  rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
+  timeout: { executeMs: 10_000 },
+})
+class SearchTool extends ToolContext<typeof SearchTool> {
+  async execute({ query }: { query: string }) {
+    return { results: await this.get(SearchService).search(query) };
+  }
+}
+```
+
+```typescript Function Style
+import { tool } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const SearchTool = tool({
+  name: 'search',
+  description: 'Search documents',
+  inputSchema: { query: z.string() },
+  rateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'userId' },
+  timeout: { executeMs: 10_000 },
+})(async ({ query }, ctx) => {
+  return { results: await ctx.get(SearchService).search(query) };
+});
+```
+</CodeGroup>
+
+---
+
+## How Guard Integrates with Flows
+
+Guard checks are implemented as flow stages that run automatically in the tool and agent execution pipelines:
+
+```
+Pre stages:      ... → acquireQuota → acquireSemaphore → ...
+Execute stages:  validateInput → execute (wrapped with timeout) → validateOutput
+Finalize stages: releaseSemaphore → releaseQuota → ...
+```
+
+1. **acquireQuota** — Checks global and per-entity rate limits. Throws `RateLimitError` if exceeded.
+2. **acquireSemaphore** — Acquires a concurrency slot. Throws `ConcurrencyLimitError` if no slot available.
+3. **execute** — Wrapped with `withTimeout` if a timeout is configured. Throws `ExecutionTimeoutError` if exceeded.
+4. **releaseSemaphore** — Releases the concurrency slot back to the pool.
+5. **releaseQuota** — Cleans up rate limit state.
+
+---
+
+## Rate Limiting
+
+FrontMCP uses a **sliding window** algorithm for rate limiting. It provides smooth, accurate throttling with O(1) storage per key.
+
+### Per-Tool Rate Limiting
+
+```typescript
+@Tool({
+  name: 'api:call',
+  inputSchema: { endpoint: z.string() },
+  rateLimit: {
+    maxRequests: 100,       // 100 requests
+    windowMs: 60_000,       // per 60 seconds
+    partitionBy: 'userId',  // per user
+  },
+})
+class ApiCallTool extends ToolContext<typeof ApiCallTool> {
+  async execute({ endpoint }: { endpoint: string }) {
+    return await this.get(ApiService).call(endpoint);
+  }
+}
+```
+
+### Global Rate Limiting
+
+Set a server-wide rate limit in your app configuration:
+
+```typescript
+@FrontMcp({
+  name: 'my-server',
+  throttle: {
+    enabled: true,
+    global: {
+      maxRequests: 1000,
+      windowMs: 60_000,
+      partitionBy: 'ip',
+    },
+  },
+  tools: [ApiCallTool, SearchTool],
+})
+class MyApp {}
+```
+
+The global rate limit is checked **before** per-entity limits. Both must pass for a request to proceed.
+
+### Partition Strategies
+
+Partition keys determine how rate limits are bucketed:
+
+| Strategy | Description | Use Case |
+| -------- | ----------- | -------- |
+| `'global'` | Single shared bucket | Server-wide limits |
+| `'ip'` | Per client IP address | Prevent IP-based abuse |
+| `'session'` | Per MCP session ID | Per-connection limits |
+| `'userId'` | Per authenticated user | Per-user quotas |
+| Custom function | `(ctx) => string` | Tenant, org, or custom grouping |
+
+**Custom partition key example:**
+
+```typescript
+@Tool({
+  name: 'tenant:query',
+  inputSchema: { query: z.string() },
+  rateLimit: {
+    maxRequests: 500,
+    windowMs: 60_000,
+    partitionBy: (ctx) => ctx.userId?.split(':')[0] ?? 'anonymous',
+  },
+})
+class TenantQueryTool extends ToolContext<typeof TenantQueryTool> { /* ... */ }
+```
+
+---
+
+## Concurrency Control
+
+Concurrency control uses a **distributed semaphore** to limit how many instances of a tool or agent can execute simultaneously.
+
+### Per-Tool Concurrency
+
+```typescript
+@Tool({
+  name: 'report:generate',
+  inputSchema: { reportId: z.string() },
+  concurrency: {
+    maxConcurrent: 3,        // At most 3 simultaneous executions
+    queueTimeoutMs: 10_000,  // Wait up to 10s for a slot
+    partitionBy: 'global',   // Shared across all users
+  },
+})
+class GenerateReportTool extends ToolContext<typeof GenerateReportTool> {
+  async execute({ reportId }: { reportId: string }) {
+    return await this.get(ReportService).generate(reportId);
+  }
+}
+```
+
+### Mutex Pattern
+
+Set `maxConcurrent: 1` to ensure only one execution at a time:
+
+```typescript
+@Tool({
+  name: 'db:migrate',
+  inputSchema: { version: z.string() },
+  concurrency: { maxConcurrent: 1 },
+})
+class MigrateTool extends ToolContext<typeof MigrateTool> { /* ... */ }
+```
+
+### Queue Behavior
+
+When `queueTimeoutMs` is set, requests that cannot acquire a slot immediately will wait in a queue:
+
+- **`queueTimeoutMs: 0`** (default) — Immediately reject if no slot available. Throws `ConcurrencyLimitError`.
+- **`queueTimeoutMs: 5000`** — Wait up to 5 seconds for a slot. Throws `QueueTimeoutError` if the wait expires.
+
+The semaphore uses pub/sub notifications when available (Redis) for efficient slot release detection, falling back to polling with exponential backoff.
+
+---
+
+## Execution Timeout
+
+Timeout wraps the `execute` stage with a deadline. If execution exceeds the configured duration, it throws `ExecutionTimeoutError`.
+
+### Per-Tool Timeout
+
+```typescript
+@Tool({
+  name: 'llm:summarize',
+  inputSchema: { text: z.string() },
+  timeout: { executeMs: 30_000 },  // 30-second deadline
+})
+class SummarizeTool extends ToolContext<typeof SummarizeTool> {
+  async execute({ text }: { text: string }) {
+    return await this.get(LlmService).summarize(text);
+  }
+}
+```
+
+### Default Timeout
+
+Set a default timeout for all tools and agents at the app level:
+
+```typescript
+@FrontMcp({
+  name: 'my-server',
+  throttle: {
+    enabled: true,
+    defaultTimeout: { executeMs: 15_000 },
+  },
+  tools: [SummarizeTool, SearchTool],
+})
+class MyApp {}
+```
+
+Per-entity timeout takes precedence over the app default.
+
+---
+
+## IP Filtering
+
+IP filtering allows or blocks requests based on client IP address, supporting IPv4, IPv6, and CIDR ranges.
+
+```typescript
+@FrontMcp({
+  name: 'my-server',
+  throttle: {
+    enabled: true,
+    ipFilter: {
+      allowList: ['10.0.0.0/8', '172.16.0.0/12'],
+      denyList: ['192.0.2.1', '198.51.100.0/24'],
+      defaultAction: 'deny',
+      trustProxy: true,
+      trustedProxyDepth: 1,
+    },
+  },
+  tools: [MyTool],
+})
+class MyApp {}
+```
+
+### Filter Precedence
+
+1. **Deny list** is checked first. If matched, the request is blocked with `IpBlockedError` (403).
+2. **Allow list** is checked next. If matched, the request proceeds.
+3. **Default action** applies if neither list matches:
+   - `'allow'` (default) — Request proceeds.
+   - `'deny'` — Request is blocked with `IpNotAllowedError` (403).
+
+### Supported IP Formats
+
+| Format | Example |
+| ------ | ------- |
+| IPv4 address | `192.168.1.1` |
+| IPv4 CIDR | `10.0.0.0/8` |
+| IPv6 address | `2001:db8::1` |
+| IPv6 CIDR | `2001:db8::/32` |
+| IPv4-mapped IPv6 | `::ffff:192.168.1.1` |
+
+### Proxy Configuration
+
+When your server is behind a reverse proxy (Nginx, CloudFront, etc.), enable `trustProxy` to read the client IP from the `X-Forwarded-For` header:
+
+```typescript
+ipFilter: {
+  trustProxy: true,
+  trustedProxyDepth: 2,  // Trust up to 2 proxy hops
+  // ...
+}
+```
+
+---
+
+## App-Level Configuration
+
+The `throttle` field in `@FrontMcp` configures all guard features at the app level:
+
+```typescript
+@FrontMcp({
+  name: 'production-server',
+  throttle: {
+    enabled: true,
+
+    // Storage backend (defaults to in-memory)
+    storage: { provider: 'redis', host: 'localhost', port: 6379 },
+    keyPrefix: 'mcp:guard:',
+
+    // Global limits (checked before per-entity)
+    global: { maxRequests: 1000, windowMs: 60_000, partitionBy: 'ip' },
+    globalConcurrency: { maxConcurrent: 50 },
+
+    // Defaults for entities without explicit config
+    defaultRateLimit: { maxRequests: 60, windowMs: 60_000, partitionBy: 'session' },
+    defaultConcurrency: { maxConcurrent: 10 },
+    defaultTimeout: { executeMs: 30_000 },
+
+    // IP filtering
+    ipFilter: {
+      allowList: ['203.0.113.0/24'],
+      denyList: ['192.0.2.1'],
+      defaultAction: 'allow',
+      trustProxy: true,
+    },
+  },
+  tools: [SearchTool, ReportTool],
+})
+class ProductionApp {}
+```
+
+### Configuration Precedence
+
+| Guard Type | Per-Entity Config | App Default | Fallback |
+| ---------- | ---------------- | ----------- | -------- |
+| Rate limit | `@Tool({ rateLimit })` | `throttle.defaultRateLimit` | No limit |
+| Concurrency | `@Tool({ concurrency })` | `throttle.defaultConcurrency` | No limit |
+| Timeout | `@Tool({ timeout })` | `throttle.defaultTimeout` | No timeout |
+| IP filter | N/A (app-level only) | `throttle.ipFilter` | No filter |
+| Global rate limit | N/A (app-level only) | `throttle.global` | No limit |
+
+---
+
+## Storage Backends
+
+Guard supports multiple storage backends for distributed deployments.
+
+### Memory (Development)
+
+The default backend. Suitable for single-instance development. No configuration needed.
+
+```typescript
+throttle: {
+  enabled: true,
+  // storage not set = in-memory
+}
+```
+
+<Warning>
+In-memory storage does not persist across restarts and does not work with multiple server instances. Use Redis for production.
+</Warning>
+
+### Redis (Production)
+
+For distributed rate limiting across multiple server instances:
+
+```typescript
+throttle: {
+  enabled: true,
+  storage: {
+    provider: 'redis',
+    host: 'redis.example.com',
+    port: 6379,
+    password: process.env.REDIS_PASSWORD,
+    tls: true,
+  },
+}
+```
+
+Redis enables pub/sub-based semaphore notifications for more efficient concurrency slot release detection.
+
+### Vercel KV / Upstash
+
+For serverless environments:
+
+```typescript
+throttle: {
+  enabled: true,
+  storage: {
+    provider: 'vercel-kv',
+    url: process.env.KV_REST_API_URL,
+    token: process.env.KV_REST_API_TOKEN,
+  },
+}
+```
+
+---
+
+## Error Handling
+
+Guard throws specific error classes when limits are exceeded:
+
+| Error Class | Code | HTTP Status | When Thrown |
+| ----------- | ---- | ----------- | ---------- |
+| `RateLimitError` | `RATE_LIMIT_EXCEEDED` | 429 | Request exceeds rate limit |
+| `ConcurrencyLimitError` | `CONCURRENCY_LIMIT` | 429 | No concurrency slot available |
+| `QueueTimeoutError` | `QUEUE_TIMEOUT` | 429 | Queue wait time exceeded |
+| `ExecutionTimeoutError` | `EXECUTION_TIMEOUT` | 408 | Execution exceeded deadline |
+| `IpBlockedError` | `IP_BLOCKED` | 403 | Client IP is on deny list |
+| `IpNotAllowedError` | `IP_NOT_ALLOWED` | 403 | Client IP not on allow list |
+
+These errors are automatically serialized to appropriate MCP error responses by the transport layer.
+
+---
+
+## Agent Guard
+
+Agents support the same guard options as tools:
+
+```typescript
+@Agent({
+  name: 'research-agent',
+  description: 'Research assistant',
+  rateLimit: { maxRequests: 10, windowMs: 60_000, partitionBy: 'userId' },
+  concurrency: { maxConcurrent: 2 },
+  timeout: { executeMs: 120_000 },
+})
+class ResearchAgent extends AgentContext<typeof ResearchAgent> {
+  async execute(input: unknown) {
+    // Agent execution with guard protection
+  }
+}
+```
+
+The agent flow follows the same stage ordering: `acquireQuota` → `acquireSemaphore` → `execute` (with timeout) → `releaseSemaphore` → `releaseQuota`.
+
+---
+
+## Configuration Reference
+
+### `RateLimitConfig`
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `maxRequests` | `number` | *required* | Maximum requests allowed in the window |
+| `windowMs` | `number` | `60000` | Time window in milliseconds |
+| `partitionBy` | `PartitionKey` | `'global'` | Partition strategy for bucketing |
+
+### `ConcurrencyConfig`
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `maxConcurrent` | `number` | *required* | Maximum simultaneous executions |
+| `queueTimeoutMs` | `number` | `0` | Max wait time for a slot (0 = no wait) |
+| `partitionBy` | `PartitionKey` | `'global'` | Partition strategy for bucketing |
+
+### `TimeoutConfig`
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `executeMs` | `number` | *required* | Maximum execution time in milliseconds |
+
+### `IpFilterConfig`
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `allowList` | `string[]` | `[]` | IPs or CIDR ranges to always allow |
+| `denyList` | `string[]` | `[]` | IPs or CIDR ranges to always block |
+| `defaultAction` | `'allow' \| 'deny'` | `'allow'` | Action when IP matches neither list |
+| `trustProxy` | `boolean` | `false` | Trust `X-Forwarded-For` header |
+| `trustedProxyDepth` | `number` | `1` | Max proxy hops to trust |
+
+### `GuardConfig` (App-Level)
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `enabled` | `boolean` | *required* | Enable or disable all guard features |
+| `storage` | `StorageConfig` | in-memory | Storage backend configuration |
+| `keyPrefix` | `string` | `'mcp:guard:'` | Prefix for all storage keys |
+| `global` | `RateLimitConfig` | — | Global rate limit for all requests |
+| `globalConcurrency` | `ConcurrencyConfig` | — | Global concurrency limit |
+| `defaultRateLimit` | `RateLimitConfig` | — | Default per-entity rate limit |
+| `defaultConcurrency` | `ConcurrencyConfig` | — | Default per-entity concurrency |
+| `defaultTimeout` | `TimeoutConfig` | — | Default per-entity timeout |
+| `ipFilter` | `IpFilterConfig` | — | IP filtering configuration |

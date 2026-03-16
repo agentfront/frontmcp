@@ -51,11 +51,12 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-transport-recreation': { start: 50280, size: 10 },
   'demo-e2e-jobs': { start: 50290, size: 10 },
 
-  // Infrastructure E2E tests (50300-50399)
+  // Infrastructure E2E tests (50300-50409)
   'demo-e2e-redis': { start: 50300, size: 10 },
   'demo-e2e-serverless': { start: 50310, size: 10 },
   'demo-e2e-uipack': { start: 50320, size: 10 },
   'demo-e2e-agent-adapters': { start: 50330, size: 10 },
+  'demo-e2e-guard': { start: 50340, size: 10 },
 
   // ESM E2E tests (50400-50449)
   'esm-package-server': { start: 50400, size: 10 },
