@@ -103,4 +103,12 @@ Object.assign(FrontMcpPrompt, {
   remote: promptRemote,
 });
 
-export { FrontMcpPrompt, FrontMcpPrompt as Prompt, frontMcpPrompt, frontMcpPrompt as prompt };
+type PromptDecorator = {
+  (metadata: PromptMetadata): ClassDecorator;
+  esm: typeof promptEsm;
+  remote: typeof promptRemote;
+};
+
+const Prompt = FrontMcpPrompt as unknown as PromptDecorator;
+
+export { FrontMcpPrompt, Prompt, frontMcpPrompt, frontMcpPrompt as prompt };

@@ -174,9 +174,7 @@ describe('App.remote()', () => {
     expect(result.filter).toEqual({ exclude: { tools: ['dangerous-*'] } });
   });
 
-  it('handles invalid URLs gracefully', () => {
-    const result = App.remote('not-a-url');
-    expect(result.name).toBe('not-a-url');
-    expect(result.url).toBe('not-a-url');
+  it('rejects invalid URLs without a valid scheme', () => {
+    expect(() => App.remote('not-a-url')).toThrow('URI must have a valid scheme');
   });
 });

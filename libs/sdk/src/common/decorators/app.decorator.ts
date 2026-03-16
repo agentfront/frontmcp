@@ -9,6 +9,7 @@ import {
 } from '../metadata';
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
  * Decorator that marks a class as a McpApp module and provides metadata.
@@ -126,6 +127,7 @@ function esmApp(specifier: string, options?: EsmAppOptions): RemoteAppMetadata {
  * @param options - Optional per-app overrides
  */
 function remoteApp(url: string, options?: RemoteUrlAppOptions): RemoteAppMetadata {
+  validateRemoteUrl(url);
   let derivedName: string;
   try {
     const parsed = new URL(url);

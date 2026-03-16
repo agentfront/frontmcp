@@ -106,4 +106,12 @@ Object.assign(FrontMcpJob, {
   remote: jobRemote,
 });
 
-export { FrontMcpJob, FrontMcpJob as Job, frontMcpJob, frontMcpJob as job };
+type JobDecorator = {
+  (metadata: JobMetadata): ClassDecorator;
+  esm: typeof jobEsm;
+  remote: typeof jobRemote;
+};
+
+const Job = FrontMcpJob as unknown as JobDecorator;
+
+export { FrontMcpJob, Job, frontMcpJob, frontMcpJob as job };

@@ -25,7 +25,10 @@ export function normalizeJob(item: unknown): JobRecord {
   if (
     item &&
     typeof item === 'object' &&
-    ((item as any).kind === JobKind.ESM || (item as any).kind === JobKind.REMOTE)
+    'kind' in item &&
+    (item.kind === JobKind.ESM || item.kind === JobKind.REMOTE) &&
+    'provide' in item &&
+    'metadata' in item
   ) {
     return item as JobRecord;
   }

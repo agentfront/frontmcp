@@ -140,7 +140,8 @@ describe('normalizeEsmExport', () => {
       const moduleExport = { EchoTool };
       const result = normalizeEsmExport(moduleExport);
       expect(result.tools).toHaveLength(1);
-      expect(result.tools![0]).toBe(EchoTool);
+      expect(result.tools).toBeDefined();
+      expect(result.tools?.[0]).toBe(EchoTool);
     });
 
     it('should detect multiple @Tool named exports', () => {
@@ -217,9 +218,11 @@ describe('normalizeEsmExport', () => {
       const moduleExport = { MyAgent, MyWorkflow };
       const result = normalizeEsmExport(moduleExport);
       expect(result.agents).toHaveLength(1);
-      expect(result.agents![0]).toBe(MyAgent);
+      expect(result.agents).toBeDefined();
+      expect(result.agents?.[0]).toBe(MyAgent);
       expect(result.workflows).toHaveLength(1);
-      expect(result.workflows![0]).toBe(MyWorkflow);
+      expect(result.workflows).toBeDefined();
+      expect(result.workflows?.[0]).toBe(MyWorkflow);
     });
 
     it('should ignore non-class exports when scanning decorated classes', () => {
@@ -246,7 +249,8 @@ describe('normalizeEsmExport', () => {
       const moduleExport = { default: EchoTool };
       const result = normalizeEsmExport(moduleExport);
       expect(result.tools).toHaveLength(1);
-      expect(result.tools![0]).toBe(EchoTool);
+      expect(result.tools).toBeDefined();
+      expect(result.tools?.[0]).toBe(EchoTool);
     });
 
     it('should detect a single @Resource as default export', () => {
@@ -265,7 +269,8 @@ describe('normalizeEsmExport', () => {
       const moduleExport = { default: ResearchAgent };
       const result = normalizeEsmExport(moduleExport);
       expect(result.agents).toHaveLength(1);
-      expect(result.agents![0]).toBe(ResearchAgent);
+      expect(result.agents).toBeDefined();
+      expect(result.agents?.[0]).toBe(ResearchAgent);
     });
 
     it('should detect a single @Workflow as default export', () => {
@@ -275,7 +280,8 @@ describe('normalizeEsmExport', () => {
       const moduleExport = { default: PipelineWorkflow };
       const result = normalizeEsmExport(moduleExport);
       expect(result.workflows).toHaveLength(1);
-      expect(result.workflows![0]).toBe(PipelineWorkflow);
+      expect(result.workflows).toBeDefined();
+      expect(result.workflows?.[0]).toBe(PipelineWorkflow);
     });
   });
 

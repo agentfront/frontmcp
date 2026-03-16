@@ -14,6 +14,6 @@ import { isValidMcpUri } from '@frontmcp/utils';
  */
 export function validateRemoteUrl(url: string): void {
   if (!isValidMcpUri(url)) {
-    throw new Error(`Invalid remote URL "${url}": URI must have a valid scheme (e.g., file://, https://, custom://)`);
+    throw new Error('Invalid remote URL: URI must have a valid scheme (e.g., file://, https://, custom://)');
   }
 }

@@ -216,9 +216,9 @@ function extractFromDecoratedClass(cls: unknown): FrontMcpPackageManifest {
  */
 function collectNamedExports(mod: Record<string, unknown>): FrontMcpPackageManifest {
   return {
-    name: (mod['name'] as string) ?? 'unknown',
-    version: (mod['version'] as string) ?? '0.0.0',
-    description: mod['description'] as string | undefined,
+    name: typeof mod['name'] === 'string' ? mod['name'] : 'unknown',
+    version: typeof mod['version'] === 'string' ? mod['version'] : '0.0.0',
+    description: typeof mod['description'] === 'string' ? mod['description'] : undefined,
     tools: mod['tools'] as unknown[] | undefined,
     prompts: mod['prompts'] as unknown[] | undefined,
     resources: mod['resources'] as unknown[] | undefined,
@@ -277,8 +277,8 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
   }
 
   return {
-    name: (mod['name'] as string) ?? 'unknown',
-    version: (mod['version'] as string) ?? '0.0.0',
+    name: typeof mod['name'] === 'string' ? mod['name'] : 'unknown',
+    version: typeof mod['version'] === 'string' ? mod['version'] : '0.0.0',
     ...(tools.length ? { tools } : {}),
     ...(resources.length ? { resources } : {}),
     ...(prompts.length ? { prompts } : {}),

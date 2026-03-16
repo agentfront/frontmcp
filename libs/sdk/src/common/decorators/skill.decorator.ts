@@ -186,8 +186,16 @@ Object.assign(FrontMcpSkill, {
   remote: skillRemote,
 });
 
+type SkillDecorator = {
+  (metadata: SkillMetadata): ClassDecorator;
+  esm: typeof skillEsm;
+  remote: typeof skillRemote;
+};
+
+const Skill = FrontMcpSkill as unknown as SkillDecorator;
+
 // Export with aliases
-export { FrontMcpSkill, FrontMcpSkill as Skill, frontMcpSkill, frontMcpSkill as skill };
+export { FrontMcpSkill, Skill, frontMcpSkill, frontMcpSkill as skill };
 
 /**
  * Check if a class has the @Skill decorator.

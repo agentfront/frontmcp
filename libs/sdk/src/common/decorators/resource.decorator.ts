@@ -176,9 +176,17 @@ Object.assign(FrontMcpResource, {
   remote: resourceRemote,
 });
 
+type ResourceDecorator = {
+  (metadata: ResourceMetadata): ClassDecorator;
+  esm: typeof resourceEsm;
+  remote: typeof resourceRemote;
+};
+
+const Resource = FrontMcpResource as unknown as ResourceDecorator;
+
 export {
   FrontMcpResource,
-  FrontMcpResource as Resource,
+  Resource,
   FrontMcpResourceTemplate,
   FrontMcpResourceTemplate as ResourceTemplate,
   frontMcpResource,
