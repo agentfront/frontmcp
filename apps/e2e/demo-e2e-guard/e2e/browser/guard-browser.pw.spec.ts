@@ -61,6 +61,15 @@ async function callTool(
   });
 }
 
+async function warmUpRateLimited(request: APIRequestContext, sessionId: string, count: number, idPrefix = 'call') {
+  for (let i = 0; i < count; i++) {
+    const response = await callTool(request, sessionId, 'rate-limited', { message: `req-${i}` }, `${idPrefix}-${i}`);
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.result?.isError).not.toBe(true);
+  }
+}
+
 test.describe('Guard Browser E2E', () => {
   test('should call tool successfully via browser HTTP', async ({ request }) => {
     const { sessionId } = await initializeSession(request);
@@ -78,15 +87,11 @@ test.describe('Guard Browser E2E', () => {
     const { sessionId } = await initializeSession(request);
 
     // Send 3 requests (within limit)
-    for (let i = 0; i < 3; i++) {
-      const response = await callTool(request, sessionId, 'rate-limited', { message: `req-${i}` }, `call-${i}`);
-      expect(response.status()).toBe(200);
-      const body = await response.json();
-      expect(body.result?.isError).not.toBe(true);
-    }
+    await warmUpRateLimited(request, sessionId, 3);
 
     // 4th request should trigger rate limit
     const response = await callTool(request, sessionId, 'rate-limited', { message: 'over-limit' }, 'call-blocked');
+    expect(response.status()).toBe(200);
     const body = await response.json();
 
     // Rate limit errors surface as isError: true in the tool result
@@ -100,6 +105,7 @@ test.describe('Guard Browser E2E', () => {
 
     // timeout-tool has 500ms timeout, 1000ms delay exceeds it
     const response = await callTool(request, sessionId, 'timeout-tool', { delayMs: 1000 }, 'call-timeout');
+    expect(response.status()).toBe(200);
     const body = await response.json();
 
     expect(body.result?.isError).toBe(true);
@@ -111,12 +117,7 @@ test.describe('Guard Browser E2E', () => {
     const { sessionId } = await initializeSession(request);
 
     // Call rate-limited tool 3 times (within limit)
-    for (let i = 0; i < 3; i++) {
-      const response = await callTool(request, sessionId, 'rate-limited', { message: `req-${i}` }, `call-${i}`);
-      expect(response.status()).toBe(200);
-      const body = await response.json();
-      expect(body.result?.isError).not.toBe(true);
-    }
+    await warmUpRateLimited(request, sessionId, 3);
 
     // 4th call should hit the per-tool rate limit
     const response = await callTool(request, sessionId, 'rate-limited', { message: 'over' }, 'call-blocked');

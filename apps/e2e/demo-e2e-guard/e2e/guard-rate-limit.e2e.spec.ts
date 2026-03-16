@@ -85,7 +85,7 @@ test.describe('Guard Rate Limit — Window Reset', () => {
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       result = await mcp.tools.call('rate-limited', { message: 'after-reset' });
-      if (result && !JSON.stringify(result).includes('isError')) break;
+      if (result && !result.isError) break;
     }
     expect(result).toBeSuccessful();
     expect(result).toHaveTextContent('after-reset');

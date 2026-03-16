@@ -194,8 +194,13 @@ export class TestServer {
       }
 
       // Kill entire process group to ensure all child processes exit
+      const pid = this.process.pid;
       try {
-        process.kill(-this.process.pid!, 'SIGTERM');
+        if (pid !== undefined) {
+          process.kill(-pid, 'SIGTERM');
+        } else {
+          this.process.kill('SIGTERM');
+        }
       } catch {
         this.process.kill('SIGTERM');
       }
@@ -213,8 +218,13 @@ export class TestServer {
       const killTimeout = setTimeout(() => {
         if (this.process) {
           this.log('Force killing server after timeout...');
+          const killPid = this.process.pid;
           try {
-            process.kill(-this.process.pid!, 'SIGKILL');
+            if (killPid !== undefined) {
+              process.kill(-killPid, 'SIGKILL');
+            } else {
+              this.process.kill('SIGKILL');
+            }
           } catch {
             this.process.kill('SIGKILL');
           }

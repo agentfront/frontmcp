@@ -55,6 +55,8 @@ function createMockStorage(): jest.Mocked<StorageAdapter> {
   } as unknown as jest.Mocked<StorageAdapter>;
 }
 
+// Note: Storage error/resilience tests (e.g., storage failures, malformed data)
+// are optional and can be added separately if desired.
 describe('SlidingWindowRateLimiter', () => {
   let storage: jest.Mocked<StorageAdapter>;
   let limiter: SlidingWindowRateLimiter;
@@ -217,6 +219,14 @@ describe('SlidingWindowRateLimiter', () => {
       await limiter.reset('test-key', 60_000);
 
       expect(storage.mdelete).toHaveBeenCalledWith(expect.arrayContaining(['test-key:120000', 'test-key:60000']));
+    });
+
+    it('should be idempotent for nonexistent keys', async () => {
+      nowSpy.mockReturnValue(120_000);
+      await expect(limiter.reset('nonexistent-key', 60_000)).resolves.not.toThrow();
+      expect(storage.mdelete).toHaveBeenCalledWith(
+        expect.arrayContaining(['nonexistent-key:120000', 'nonexistent-key:60000']),
+      );
     });
   });
 });
