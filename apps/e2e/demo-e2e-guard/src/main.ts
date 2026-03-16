@@ -1,7 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { GuardApp } from './apps/guard';
 
-const port = parseInt(process.env['PORT'] ?? '50400', 10);
+const port = parseInt(process.env['PORT'] ?? '50340', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Guard', version: '0.1.0' },

@@ -56,7 +56,7 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-serverless': { start: 50310, size: 10 },
   'demo-e2e-uipack': { start: 50320, size: 10 },
   'demo-e2e-agent-adapters': { start: 50330, size: 10 },
-  'demo-e2e-guard': { start: 50400, size: 10 },
+  'demo-e2e-guard': { start: 50340, size: 10 },
 
   // ESM E2E tests (50400-50449)
   'esm-package-server': { start: 50400, size: 10 },

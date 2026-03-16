@@ -10,12 +10,14 @@
  */
 import { test, expect } from '@frontmcp/testing';
 
-test.describe('Guard Concurrency — Mutex', () => {
+test.describe('Guard Concurrency', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-guard/src/main.ts',
     project: 'demo-e2e-guard',
     publicMode: true,
   });
+
+  // ── Mutex (maxConcurrent: 1, queueTimeoutMs: 0) ──
 
   test('should allow single execution', async ({ mcp }) => {
     const result = await mcp.tools.call('concurrency-mutex', { delayMs: 100 });
@@ -63,14 +65,8 @@ test.describe('Guard Concurrency — Mutex', () => {
     const result2 = await mcp.tools.call('concurrency-mutex', { delayMs: 100 });
     expect(result2).toBeSuccessful();
   });
-});
 
-test.describe('Guard Concurrency — Queued', () => {
-  test.use({
-    server: 'apps/e2e/demo-e2e-guard/src/main.ts',
-    project: 'demo-e2e-guard',
-    publicMode: true,
-  });
+  // ── Queued (maxConcurrent: 1, queueTimeoutMs: 3000) ──
 
   test('should queue and succeed when slot frees in time', async ({ server }) => {
     const client1 = await server.createClient();

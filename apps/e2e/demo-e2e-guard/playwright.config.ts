@@ -11,7 +11,7 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     headless: true,
-    baseURL: 'http://localhost:50400',
+    baseURL: 'http://localhost:50340',
     ...devices['Desktop Chrome'],
   },
   projects: [
@@ -22,10 +22,10 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npx tsx apps/e2e/demo-e2e-guard/src/main.ts',
-    port: 50400,
+    port: 50340,
     timeout: 30_000,
     reuseExistingServer: !process.env['CI'],
     cwd: root,
-    env: { PORT: '50400' },
+    env: { PORT: '50340' },
   },
 });
