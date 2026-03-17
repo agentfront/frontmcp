@@ -17,9 +17,10 @@ Build and run your first MCP server with FrontMCP. This quickstart gets you from
 
 ---
 
-## Option 1: Quick Start (Recommended)
+<Tabs>
+  <Tab title="Standard">
 
-Create a new project with the FrontMCP CLI:
+## Create a new project
 
 <CodeGroup>
 
@@ -66,7 +67,7 @@ The CLI creates a complete project structure with:
 
 ---
 
-## Option 2: Add to Existing Project
+## Add to Existing Project
 
 If you already have a Node.js project, install FrontMCP:
 
@@ -164,7 +165,185 @@ After creating your project, you'll have:
   </Tab>
 </Tabs>
 
-### Server Configuration
+---
+
+## Available Commands
+
+Your project includes these scripts:
+
+<CodeGroup>
+
+```bash Development
+npm run dev
+# Starts server with hot-reload and type-checking
+```
+
+```bash Build
+npm run build
+# Compiles TypeScript to ./dist
+```
+
+```bash Production
+npm run start
+# Runs the compiled server
+```
+
+```bash Inspector
+npm run inspect
+# Opens the MCP Inspector UI
+```
+
+```bash Doctor
+npm run doctor
+# Verifies Node/npm versions and config
+```
+
+</CodeGroup>
+
+  </Tab>
+  <Tab title="Nx Monorepo">
+
+## Create the workspace
+
+<CodeGroup>
+
+```bash npm
+npx frontmcp create my-platform --nx
+cd my-platform
+```
+
+```bash pnpm
+pnpm dlx frontmcp create my-platform --nx --pm pnpm
+cd my-platform
+```
+
+```bash yarn
+npx frontmcp create my-platform --nx --pm yarn
+cd my-platform
+```
+
+</CodeGroup>
+
+This scaffolds the full monorepo structure with a sample app, including `apps/`, `libs/`, and `servers/` directories.
+
+---
+
+## Build your first app
+
+<Steps>
+  <Step title="Generate an app">
+    ```bash
+    nx g @frontmcp/nx:app crm
+    ```
+
+    Creates `apps/crm/` with a main entry point, app class, and sample tool.
+
+  </Step>
+
+  <Step title="Add a tool">
+    ```bash
+    nx g @frontmcp/nx:tool fetch-contacts --project crm
+    ```
+
+    Creates `apps/crm/src/tools/fetch-contacts.tool.ts` — edit the `execute()` method to add your logic.
+
+  </Step>
+
+  <Step title="Generate a shared library">
+    ```bash
+    nx g @frontmcp/nx:lib shared-utils
+    ```
+
+    Creates `libs/shared-utils/` — use it for code shared across apps.
+
+  </Step>
+
+  <Step title="Generate a server">
+    ```bash
+    nx g @frontmcp/nx:server production --apps crm --deploymentTarget node
+    ```
+
+    Creates `servers/production/` with a Dockerfile, docker-compose.yml, and an entry point that composes the CRM app.
+
+  </Step>
+
+  <Step title="Start development">
+    ```bash
+    nx dev crm
+    ```
+
+    Starts the CRM app in development mode with hot-reload.
+
+  </Step>
+
+  <Step title="Build and test">
+    ```bash
+    nx build production
+    nx test crm
+    ```
+
+    Compiles the production server and runs tests.
+
+  </Step>
+</Steps>
+
+<Check>Your monorepo is ready! Add more apps, tools, and libraries as your platform grows.</Check>
+
+---
+
+## Project Structure
+
+After completing the steps above, your workspace looks like this:
+
+```
+my-platform/
+├── apps/
+│   └── crm/
+│       ├── src/
+│       │   ├── main.ts
+│       │   ├── crm.app.ts
+│       │   └── tools/
+│       │       ├── hello.tool.ts
+│       │       └── fetch-contacts.tool.ts
+│       ├── project.json
+│       └── tsconfig.json
+├── libs/
+│   └── shared-utils/
+│       ├── src/
+│       │   ├── shared-utils.ts
+│       │   └── index.ts
+│       └── project.json
+├── servers/
+│   └── production/
+│       ├── src/main.ts
+│       ├── Dockerfile
+│       ├── docker-compose.yml
+│       └── project.json
+├── nx.json
+├── tsconfig.base.json
+└── package.json
+```
+
+---
+
+## Common Commands
+
+| Command                | Description                  |
+| ---------------------- | ---------------------------- |
+| `nx dev <app>`         | Start an app with hot-reload |
+| `nx build <project>`   | Build an app or server       |
+| `nx test <project>`    | Run tests                    |
+| `nx inspector <app>`   | Launch MCP Inspector         |
+| `nx graph`             | Visualize dependency graph   |
+| `nx affected -t test`  | Test only affected projects  |
+| `nx run-many -t build` | Build all projects           |
+
+  </Tab>
+</Tabs>
+
+---
+
+## Server Configuration
 
 ```ts src/main.ts
 import 'reflect-metadata';
@@ -249,41 +428,6 @@ export default class HelloApp {}
 
 ---
 
-## Available Commands
-
-Your project includes these scripts:
-
-<CodeGroup>
-
-```bash Development
-npm run dev
-# Starts server with hot-reload and type-checking
-```
-
-```bash Build
-npm run build
-# Compiles TypeScript to ./dist
-```
-
-```bash Production
-npm run start
-# Runs the compiled server
-```
-
-```bash Inspector
-npm run inspect
-# Opens the MCP Inspector UI
-```
-
-```bash Doctor
-npm run doctor
-# Verifies Node/npm versions and config
-```
-
-</CodeGroup>
-
----
-
 ## Test Your Server
 
 <Steps>
@@ -324,7 +468,7 @@ npm run doctor
   </Step>
 </Steps>
 
-<Check>Congratulations! You've built and tested your first MCP server! 🎉</Check>
+<Check>Congratulations! You've built and tested your first MCP server!</Check>
 
 ---
 
@@ -368,6 +512,7 @@ npm run doctor
 | ---------------------------------- | ------------------------------------------- |
 | `npx frontmcp create <name>`       | Create a new FrontMCP project (interactive) |
 | `npx frontmcp create <name> --yes` | Create with defaults (non-interactive)      |
+| `npx frontmcp create <name> --nx`  | Create an Nx monorepo                       |
 | `npx frontmcp init`                | Add FrontMCP to existing project            |
 | `npm run dev`                      | Start with hot-reload                       |
 | `npm run build`                    | Compile to production                       |
