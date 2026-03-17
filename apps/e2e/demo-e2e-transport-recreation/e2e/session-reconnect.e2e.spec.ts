@@ -37,6 +37,7 @@ async function sendDelete(baseUrl: string, sessionId: string): Promise<{ status:
 async function sendInitialize(
   baseUrl: string,
   sessionId?: string,
+  capabilities?: Record<string, unknown>,
 ): Promise<{ status: number; sessionId: string | null; body: ParsedResponse }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -55,7 +56,7 @@ async function sendInitialize(
       method: 'initialize',
       params: {
         protocolVersion: '2025-11-25',
-        capabilities: {},
+        capabilities: capabilities ?? {},
         clientInfo: { name: 'reconnect-test', version: '1.0.0' },
       },
     }),
@@ -241,6 +242,81 @@ test.describe('Session Reconnect E2E', () => {
       expect(r3).toHaveTextContent('"newValue":1');
 
       await newClient.disconnect();
+    });
+  });
+
+  test.describe('Capabilities preservation through reconnect', () => {
+    test('should accept initialize with elicitation capabilities', async ({ server }) => {
+      const initResult = await sendInitialize(server.info.baseUrl, undefined, {
+        elicitation: { form: {} },
+      });
+
+      expect(initResult.status).toBe(200);
+      expect(initResult.sessionId).toBeTruthy();
+      expect('raw' in initResult.body).toBe(false);
+
+      // Verify server responded with valid initialize result
+      const body = initResult.body as Record<string, unknown>;
+      expect(body['result']).toBeDefined();
+      const result = body['result'] as Record<string, unknown>;
+      expect(result['protocolVersion']).toBeDefined();
+      expect(result['capabilities']).toBeDefined();
+      expect(result['serverInfo']).toBeDefined();
+    });
+
+    test('should preserve session validity after reconnect with capabilities', async ({ server }) => {
+      // Step 1: Initialize with elicitation capabilities
+      const init1 = await sendInitialize(server.info.baseUrl, undefined, {
+        elicitation: { form: {} },
+        roots: { listChanged: true },
+      });
+      expect(init1.status).toBe(200);
+      const sessionId1 = init1.sessionId!;
+      expect(sessionId1).toBeTruthy();
+
+      // Step 2: Verify session works (tools/list)
+      const listResult = await sendToolsList(server.info.baseUrl, sessionId1);
+      expect(listResult.status).toBe(200);
+
+      // Step 3: Terminate session
+      const { status: deleteStatus } = await sendDelete(server.info.baseUrl, sessionId1);
+      expect(deleteStatus).toBe(204);
+
+      // Step 4: Re-initialize with capabilities (new session)
+      const init2 = await sendInitialize(server.info.baseUrl, undefined, {
+        elicitation: { form: {} },
+        roots: { listChanged: true },
+      });
+      expect(init2.status).toBe(200);
+      const sessionId2 = init2.sessionId!;
+      expect(sessionId2).toBeTruthy();
+      expect(sessionId2).not.toBe(sessionId1);
+
+      // Step 5: Verify new session works
+      const listResult2 = await sendToolsList(server.info.baseUrl, sessionId2);
+      expect(listResult2.status).toBe(200);
+    });
+
+    test('should handle reconnect with different capabilities', async ({ server }) => {
+      // Initialize without elicitation capabilities
+      const init1 = await sendInitialize(server.info.baseUrl, undefined, {});
+      expect(init1.status).toBe(200);
+      const sessionId1 = init1.sessionId!;
+
+      // Terminate
+      await sendDelete(server.info.baseUrl, sessionId1);
+
+      // Re-initialize WITH elicitation capabilities
+      const init2 = await sendInitialize(server.info.baseUrl, undefined, {
+        elicitation: { form: {} },
+      });
+      expect(init2.status).toBe(200);
+      expect(init2.sessionId).toBeTruthy();
+      expect(init2.sessionId).not.toBe(sessionId1);
+
+      // Verify session works
+      const listResult = await sendToolsList(server.info.baseUrl, init2.sessionId!);
+      expect(listResult.status).toBe(200);
     });
   });
 });

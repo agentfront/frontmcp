@@ -44,10 +44,16 @@ describe('initializeRequestHandler', () => {
     setClientInfo: jest.fn(),
   };
 
+  // Mock transport service
+  const mockTransportService = {
+    updateStoredSessionCapabilities: jest.fn().mockResolvedValue(undefined),
+  };
+
   // Mock scope
   const mockScope = {
     logger: mockLogger,
     notifications: mockNotifications,
+    transportService: mockTransportService,
     metadata: {
       info: { name: 'TestServer', version: '1.0.0' },
       transport: { platformDetection: undefined },
@@ -389,6 +395,15 @@ describe('initializeRequestHandler', () => {
           sampling: {},
         }),
       );
+
+      // Should also persist capabilities to session store for recreation
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({
+          roots: { listChanged: true },
+          sampling: {},
+        }),
+      );
     });
 
     it('should store client info in notification service', async () => {
@@ -408,6 +423,90 @@ describe('initializeRequestHandler', () => {
   });
 
   // ============================================
+  // Capability Persistence to Session Store
+  // ============================================
+
+  describe('capability persistence to session store', () => {
+    it('should call updateStoredSessionCapabilities with sessionId and capabilities', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: {
+          roots: { listChanged: true },
+          sampling: {},
+        },
+      });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({
+          roots: { listChanged: true },
+          sampling: {},
+        }),
+      );
+    });
+
+    it('should persist elicitation capabilities to session store', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: {
+          elicitation: { form: {} },
+        },
+      });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({
+          elicitation: { form: {} },
+        }),
+      );
+    });
+
+    it('should not call updateStoredSessionCapabilities when no capabilities provided', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({ capabilities: undefined });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).not.toHaveBeenCalled();
+    });
+
+    it('should not call updateStoredSessionCapabilities when no sessionId', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: { roots: { listChanged: true } },
+      });
+      const ctx = { authInfo: { sessionId: undefined, sessionIdPayload: undefined } };
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).not.toHaveBeenCalled();
+    });
+
+    it('should await updateStoredSessionCapabilities before returning', async () => {
+      let resolved = false;
+      mockTransportService.updateStoredSessionCapabilities.mockImplementation(async () => {
+        resolved = true;
+      });
+
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({ capabilities: { roots: {} } });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      // If awaited, resolved must be true after handler returns
+      expect(resolved).toBe(true);
+    });
+  });
+
+  // ============================================
   // Edge Cases and Error Handling
   // ============================================
 
@@ -422,6 +521,7 @@ describe('initializeRequestHandler', () => {
 
       expect(result.serverInfo.name).toBe('TestServer');
       expect(mockUpdateSessionPayload).not.toHaveBeenCalled();
+      expect(mockTransportService.updateStoredSessionCapabilities).not.toHaveBeenCalled();
     });
 
     it('should handle missing sessionIdPayload gracefully', async () => {
