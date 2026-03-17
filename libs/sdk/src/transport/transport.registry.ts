@@ -22,6 +22,7 @@ import { createSessionStore } from '../auth/session/session-store.factory';
 import type { SessionStore } from '@frontmcp/auth';
 import type { RedisOptions } from '../common/types/options/redis';
 import { getMachineId } from '@frontmcp/auth';
+import type { ClientCapabilities } from '../notification/notification.service';
 
 export class TransportService {
   readonly ready: Promise<void>;
@@ -340,6 +341,16 @@ export class TransportService {
 
     this.insertLocal(key, transporter);
 
+    // Restore client capabilities from stored session so that
+    // elicitation, root listing, and notification delivery work after recreation.
+    // Capabilities were persisted during the original initialize handshake.
+    if (storedSession.clientCapabilities) {
+      this.scope.notifications.setClientCapabilities(sessionId, storedSession.clientCapabilities as ClientCapabilities);
+      this.scope.logger.verbose('[TransportService] Restored client capabilities from stored session', {
+        sessionId: sessionId.slice(0, 20),
+      });
+    }
+
     // Update session access time in Redis
     if (sessionStore) {
       const updatedSession: StoredSession = {
@@ -473,6 +484,45 @@ export class TransportService {
     }
 
     throw new InvalidTransportSessionError('Invalid session: cannot destroy non-existent transporter.');
+  }
+
+  /**
+   * Update the stored session in Redis with client capabilities from the initialize handshake.
+   * This ensures capabilities survive session recreation (e.g., after server restart or transport eviction).
+   *
+   * Best-effort: failures are logged but do not throw.
+   * No-op when sessionStore is not configured.
+   */
+  async updateStoredSessionCapabilities(sessionId: string, clientCapabilities: Record<string, unknown>): Promise<void> {
+    if (!this.sessionStore) return;
+
+    try {
+      const stored = await this.sessionStore.get(sessionId);
+      if (!stored) {
+        this.scope.logger.verbose('[TransportService] Cannot update capabilities: session not found in store', {
+          sessionId: sessionId.slice(0, 20),
+        });
+        return;
+      }
+
+      const updatedSession: StoredSession = {
+        ...stored,
+        clientCapabilities,
+        lastAccessedAt: Date.now(),
+      };
+
+      const defaultTtlMs = this.getDefaultTtlMs();
+      await this.sessionStore.set(sessionId, updatedSession, defaultTtlMs);
+
+      this.scope.logger.verbose('[TransportService] Persisted client capabilities to session store', {
+        sessionId: sessionId.slice(0, 20),
+      });
+    } catch (err) {
+      this.scope.logger.warn('[TransportService] Failed to persist client capabilities', {
+        sessionId: sessionId.slice(0, 20),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**

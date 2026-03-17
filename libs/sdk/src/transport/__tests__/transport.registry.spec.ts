@@ -51,13 +51,19 @@ const mockScope = {
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    verbose: jest.fn(),
     child: jest.fn().mockReturnValue({
       info: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
+      verbose: jest.fn(),
     }),
   },
   registryFlows: jest.fn().mockResolvedValue(undefined),
+  notifications: {
+    setClientCapabilities: jest.fn().mockReturnValue(true),
+    registerServer: jest.fn(),
+  },
 };
 
 // Mock response object
@@ -637,6 +643,82 @@ describe('TransportService', () => {
   });
 
   // ============================================
+  // updateStoredSessionCapabilities Tests
+  // ============================================
+
+  describe('updateStoredSessionCapabilities', () => {
+    it('should update stored session with client capabilities', async () => {
+      service = new TransportService(mockScope as never, {
+        enabled: true,
+        redis: { host: 'localhost' },
+      });
+      await service.ready;
+
+      const storedSession = {
+        session: { id: 'cap-update-session', protocol: 'streamable-http' },
+        authorizationId: 'hash',
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+        initialized: true,
+      };
+      mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+      const capabilities = { elicitation: { form: {} }, roots: { listChanged: true } };
+      await service.updateStoredSessionCapabilities('cap-update-session', capabilities);
+
+      expect(mockRedisSessionStore.set).toHaveBeenCalled();
+      const [storedId, storedData] = mockRedisSessionStore.set.mock.calls[0];
+      expect(storedId).toBe('cap-update-session');
+      expect(storedData).toEqual(expect.objectContaining({ clientCapabilities: capabilities }));
+    });
+
+    it('should not throw when session not found in store', async () => {
+      service = new TransportService(mockScope as never, {
+        enabled: true,
+        redis: { host: 'localhost' },
+      });
+      await service.ready;
+
+      mockRedisSessionStore.get.mockResolvedValue(null);
+      await expect(
+        service.updateStoredSessionCapabilities('nonexistent', { elicitation: { form: {} } }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should be a no-op when session store is not configured', async () => {
+      service = new TransportService(mockScope as never);
+      await service.ready;
+
+      await expect(
+        service.updateStoredSessionCapabilities('any-session', { elicitation: { form: {} } }),
+      ).resolves.not.toThrow();
+      expect(mockRedisSessionStore.get).not.toHaveBeenCalled();
+    });
+
+    it('should handle Redis write failure gracefully', async () => {
+      service = new TransportService(mockScope as never, {
+        enabled: true,
+        redis: { host: 'localhost' },
+      });
+      await service.ready;
+
+      mockRedisSessionStore.get.mockResolvedValue({
+        session: { id: 'fail-session' },
+        authorizationId: 'hash',
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      });
+      mockRedisSessionStore.set.mockRejectedValueOnce(new Error('Redis write failed'));
+
+      await expect(service.updateStoredSessionCapabilities('fail-session', { roots: {} })).resolves.not.toThrow();
+      expect(mockScope.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to persist client capabilities'),
+        expect.any(Object),
+      );
+    });
+  });
+
+  // ============================================
   // Transport Recreation - Production Scenarios
   // ============================================
 
@@ -1004,6 +1086,70 @@ describe('TransportService', () => {
         const session = await service.getStoredSession('streamable-http', 'test-token', 'partial-session');
         // Should return undefined due to token mismatch
         expect(session).toBeUndefined();
+      });
+    });
+
+    describe('client capabilities restoration', () => {
+      beforeEach(async () => {
+        service = new TransportService(mockScope as never, {
+          enabled: true,
+          redis: { host: 'localhost' },
+        });
+        await service.ready;
+      });
+
+      it('should restore client capabilities from stored session on recreation', async () => {
+        const tokenHash = createHash('sha256').update('cap-token', 'utf8').digest('hex');
+        const clientCapabilities = { elicitation: { form: {} }, roots: { listChanged: true } };
+        const storedSession = {
+          session: {
+            id: 'cap-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now(),
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+          clientCapabilities,
+        };
+
+        await service.recreateTransporter(
+          'streamable-http',
+          'cap-token',
+          'cap-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+
+        expect(mockScope.notifications.setClientCapabilities).toHaveBeenCalledWith('cap-session', clientCapabilities);
+      });
+
+      it('should skip capability restoration when stored session has no capabilities', async () => {
+        const tokenHash = createHash('sha256').update('no-cap-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'no-cap-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now(),
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+
+        await service.recreateTransporter(
+          'streamable-http',
+          'no-cap-token',
+          'no-cap-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+
+        expect(mockScope.notifications.setClientCapabilities).not.toHaveBeenCalled();
       });
     });
 

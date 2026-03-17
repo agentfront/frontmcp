@@ -169,6 +169,8 @@ export interface StoredSession {
    * This prevents indefinite session extension via sliding expiration.
    */
   maxLifetimeAt?: number;
+  /** Client capabilities from the MCP initialize request, persisted for session recreation */
+  clientCapabilities?: Record<string, unknown>;
 }
 
 /**
@@ -381,6 +383,7 @@ export const storedSessionSchema = z.object({
   lastAccessedAt: z.number(),
   initialized: z.boolean().optional(),
   maxLifetimeAt: z.number().optional(),
+  clientCapabilities: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const redisConfigSchema = z.object({
