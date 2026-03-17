@@ -300,14 +300,29 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
           // Check if the session has been terminated (via DELETE)
           // Per MCP spec, requests to terminated sessions should return 404
+          // EXCEPTION: initialize requests are allowed through to support reconnect.
+          // When a client sends DELETE followed by initialize with the old session ID
+          // (e.g. MCP Inspector), we create a fresh session instead of returning 404.
           if (this.scope.notifications.isSessionTerminated(sessionId)) {
-            this.logger.warn(`[${this.requestId}] Request to terminated session: ${sessionId.slice(0, 20)}...`);
-            this.respond(httpRespond.notFound('Session not found'));
-            return;
+            const body = request.body as { method?: string } | undefined;
+            if (body?.method === 'initialize') {
+              this.logger.info(
+                `[${this.requestId}] Initialize with terminated session ${sessionId.slice(0, 20)}... - allowing reconnect`,
+              );
+              // Clear session references so handle:streamable-http parseInput creates a new session
+              authorization.session = undefined;
+              delete request[ServerRequestTokens.sessionId];
+              delete request.headers['mcp-session-id'];
+              // Fall through to decision-based routing (don't return 404)
+            } else {
+              this.logger.warn(`[${this.requestId}] Request to terminated session: ${sessionId.slice(0, 20)}...`);
+              this.respond(httpRespond.notFound('Session not found'));
+              return;
+            }
           }
 
           // Safely access payload.protocol with null check
-          const protocol = authorization.session.payload?.protocol;
+          const protocol = authorization.session?.payload?.protocol;
           if (protocol) {
             this.logger.info(`[${this.requestId}] decision from session: ${protocol}`);
             this.state.set('intent', protocol);
