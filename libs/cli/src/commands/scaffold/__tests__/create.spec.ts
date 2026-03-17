@@ -1,7 +1,21 @@
 import * as path from 'path';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
+
+// Mock runCmd to prevent actual package manager execution (used only in Nx scaffold path)
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return { ...actual, runCmd: jest.fn().mockResolvedValue(undefined) };
+});
+
+// Mock createRequire for Nx scaffold tests (loads nx from installed location)
+jest.mock('module', () => {
+  const actual = jest.requireActual('module');
+  return { ...actual, createRequire: jest.fn() };
+});
+
 import { runCreate } from '../create';
+import { runCmd, mkdtemp, mkdir, rm, readFileSync, writeFile, fileExists } from '@frontmcp/utils';
+import { createRequire } from 'module';
 
 // Capture console output during tests
 let consoleLogs: string[] = [];
@@ -10,7 +24,7 @@ describe('runCreate', () => {
   let tempDir: string;
   let originalCwd: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     consoleLogs = [];
     jest.spyOn(console, 'log').mockImplementation((...args) => {
       consoleLogs.push(args.join(' '));
@@ -20,7 +34,7 @@ describe('runCreate', () => {
     });
 
     // Create temp directory for testing
-    tempDir = mkdtempSync(path.join(tmpdir(), 'cli-test-'));
+    tempDir = await mkdtemp(path.join(tmpdir(), 'cli-test-'));
     originalCwd = process.cwd();
 
     // Mock process.chdir to track directory changes
@@ -41,13 +55,13 @@ describe('runCreate', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.restoreAllMocks();
     process.chdir(originalCwd);
 
     // Clean up temp directory
     try {
-      rmSync(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
     }
@@ -171,13 +185,21 @@ describe('runCreate', () => {
       await runCreate('vercel-no-dockerignore', { yes: true, target: 'vercel' });
 
       const base = path.join(tempDir, 'vercel-no-dockerignore');
-      expect(existsSync(path.join(base, '.dockerignore'))).toBe(false);
+      expect(await fileExists(path.join(base, '.dockerignore'))).toBe(false);
     });
 
     it('should create README.md', async () => {
       await runCreate('my-app', { yes: true });
 
       expect(consoleLogs.some((log) => log.includes('README.md'))).toBe(true);
+    });
+
+    it('should create .nvmrc with Node.js 24', async () => {
+      await runCreate('nvmrc-app', { yes: true });
+
+      const nvmrcPath = path.join(tempDir, 'nvmrc-app', '.nvmrc');
+      expect(await fileExists(nvmrcPath)).toBe(true);
+      expect(readFileSync(nvmrcPath, 'utf8').trim()).toBe('24');
     });
 
     it('should use parent-relative paths in ci/docker-compose.yml for node target', async () => {
@@ -364,27 +386,27 @@ describe('runCreate', () => {
         await runCreate('vercel-no-docker', { yes: true, target: 'vercel' });
 
         const base = path.join(tempDir, 'vercel-no-docker');
-        expect(existsSync(path.join(base, 'ci', 'Dockerfile'))).toBe(false);
-        expect(existsSync(path.join(base, 'ci', 'docker-compose.yml'))).toBe(false);
-        expect(existsSync(path.join(base, 'ci', '.env.docker'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', 'Dockerfile'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', 'docker-compose.yml'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', '.env.docker'))).toBe(false);
       });
 
       it('should not create Docker files for lambda target', async () => {
         await runCreate('lambda-no-docker', { yes: true, target: 'lambda' });
 
         const base = path.join(tempDir, 'lambda-no-docker');
-        expect(existsSync(path.join(base, 'ci', 'Dockerfile'))).toBe(false);
-        expect(existsSync(path.join(base, 'ci', 'docker-compose.yml'))).toBe(false);
-        expect(existsSync(path.join(base, 'ci', '.env.docker'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', 'Dockerfile'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', 'docker-compose.yml'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', '.env.docker'))).toBe(false);
       });
 
       it('should not create Docker files for cloudflare target', async () => {
         await runCreate('cloudflare-no-docker', { yes: true, target: 'cloudflare' });
 
         const base = path.join(tempDir, 'cloudflare-no-docker');
-        expect(existsSync(path.join(base, 'ci', 'Dockerfile'))).toBe(false);
-        expect(existsSync(path.join(base, 'ci', 'docker-compose.yml'))).toBe(false);
-        expect(existsSync(path.join(base, 'ci', '.env.docker'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', 'Dockerfile'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', 'docker-compose.yml'))).toBe(false);
+        expect(await fileExists(path.join(base, 'ci', '.env.docker'))).toBe(false);
       });
 
       it('should not include docker scripts in package.json for non-node targets', async () => {
@@ -524,8 +546,8 @@ describe('helper functions', () => {
   // Since they're not exported, we test them indirectly through runCreate
 
   describe('sanitizeForFolder', () => {
-    beforeEach(() => {
-      const tempDir = mkdtempSync(path.join(tmpdir(), 'cli-test-'));
+    beforeEach(async () => {
+      const tempDir = await mkdtemp(path.join(tmpdir(), 'cli-test-'));
       jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
       jest.spyOn(process, 'chdir').mockImplementation(() => {
         // No-op for testing
@@ -557,5 +579,201 @@ describe('helper functions', () => {
 
       expect(logs.some((log) => log.includes('my-project-name'))).toBe(true);
     });
+  });
+});
+
+describe('Nx scaffold (--nx flag)', () => {
+  let tempDir: string;
+  let consoleLogs: string[] = [];
+  const mockedCreateRequire = jest.mocked(createRequire);
+  const mockedRunCmd = jest.mocked(runCmd);
+
+  let mockWorkspaceGenerator: jest.Mock;
+  let mockFlushChanges: jest.Mock;
+  let mockFsTree: jest.Mock;
+
+  beforeEach(async () => {
+    consoleLogs = [];
+    jest.spyOn(console, 'log').mockImplementation((...args) => {
+      consoleLogs.push(args.join(' '));
+    });
+    jest.spyOn(console, 'error').mockImplementation((...args) => {
+      consoleLogs.push(args.join(' '));
+    });
+
+    tempDir = await mkdtemp(path.join(tmpdir(), 'cli-nx-test-'));
+    jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    jest.spyOn(process, 'chdir').mockImplementation(() => {});
+    jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as never);
+
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    // Set up Nx mocks
+    mockWorkspaceGenerator = jest.fn().mockResolvedValue(jest.fn());
+    mockFlushChanges = jest.fn();
+    mockFsTree = jest.fn().mockImplementation((root: string) => ({
+      root,
+      listChanges: jest.fn().mockReturnValue([]),
+    }));
+
+    const mockLocalRequire = jest.fn().mockImplementation((specifier: string) => {
+      if (specifier === 'nx/src/generators/tree.js') {
+        return { FsTree: mockFsTree, flushChanges: mockFlushChanges };
+      }
+      if (specifier === '@frontmcp/nx') {
+        return { workspaceGenerator: mockWorkspaceGenerator };
+      }
+      throw new Error(`Cannot find module '${specifier}'`);
+    });
+
+    mockedCreateRequire.mockReturnValue(mockLocalRequire as unknown as NodeRequire);
+    mockedRunCmd.mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    mockedCreateRequire.mockReset();
+    mockedRunCmd.mockReset();
+
+    try {
+      await rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should create bootstrap package.json with nx dependencies', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    const bootstrapPath = path.join(tempDir, 'my-nx-app', 'package.json');
+    expect(await fileExists(bootstrapPath)).toBe(true);
+    const pkg = JSON.parse(readFileSync(bootstrapPath, 'utf8'));
+    expect(pkg.devDependencies['nx']).toBe('22.3.3');
+    expect(pkg.devDependencies['@nx/devkit']).toBe('22.3.3');
+    expect(pkg.devDependencies['@frontmcp/nx']).toBeDefined();
+  });
+
+  it('should run package manager install in project directory', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    expect(mockedRunCmd).toHaveBeenCalledWith(
+      'npm',
+      ['install'],
+      expect.objectContaining({ cwd: path.join(tempDir, 'my-nx-app') }),
+    );
+  });
+
+  it('should use createRequire to load nx from installed location', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    expect(mockedCreateRequire).toHaveBeenCalledWith(path.join(tempDir, 'my-nx-app', 'package.json'));
+  });
+
+  it('should call workspaceGenerator with skipInstall: true', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    expect(mockWorkspaceGenerator).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        name: 'my-nx-app',
+        skipInstall: true,
+        createSampleApp: true,
+      }),
+    );
+  });
+
+  it('should run install twice (bootstrap + full)', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    expect(mockedRunCmd).toHaveBeenCalledTimes(2);
+  });
+
+  it('should use specified package manager for install', async () => {
+    await runCreate('my-nx-app', { nx: true, pm: 'yarn' });
+
+    expect(mockedRunCmd).toHaveBeenCalledWith(
+      'yarn',
+      ['install'],
+      expect.objectContaining({ cwd: path.join(tempDir, 'my-nx-app') }),
+    );
+  });
+
+  it('should use pnpm when specified', async () => {
+    await runCreate('my-nx-app', { nx: true, pm: 'pnpm' });
+
+    expect(mockedRunCmd).toHaveBeenCalledWith(
+      'pnpm',
+      ['install'],
+      expect.objectContaining({ cwd: path.join(tempDir, 'my-nx-app') }),
+    );
+  });
+
+  it('should sanitize project name for directory', async () => {
+    await runCreate('My Nx Project', { nx: true });
+
+    expect(mockedRunCmd).toHaveBeenCalledWith(
+      'npm',
+      ['install'],
+      expect.objectContaining({ cwd: path.join(tempDir, 'my-nx-project') }),
+    );
+  });
+
+  it('should show success message on completion', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    expect(consoleLogs.some((log) => log.includes('Nx monorepo created'))).toBe(true);
+    expect(consoleLogs.some((log) => log.includes('my-nx-app'))).toBe(true);
+  });
+
+  it('should show next steps after successful scaffold', async () => {
+    await runCreate('my-nx-app', { nx: true });
+
+    expect(consoleLogs.some((log) => log.includes('nx g @frontmcp/nx:app'))).toBe(true);
+    expect(consoleLogs.some((log) => log.includes('nx dev demo'))).toBe(true);
+  });
+
+  it('should handle install failure with helpful message', async () => {
+    mockedRunCmd.mockRejectedValueOnce(new Error('npm exited with code 1'));
+
+    await expect(runCreate('my-nx-app', { nx: true })).rejects.toThrow('process.exit called');
+
+    expect(consoleLogs.some((log) => log.includes('Failed to scaffold Nx workspace'))).toBe(true);
+  });
+
+  it('should handle createRequire failure with network message', async () => {
+    mockedRunCmd.mockResolvedValueOnce(undefined);
+    const failingRequire = jest.fn().mockImplementation(() => {
+      throw new Error('Cannot find package nx');
+    });
+    mockedCreateRequire.mockReturnValue(failingRequire as unknown as NodeRequire);
+
+    await expect(runCreate('my-nx-app', { nx: true })).rejects.toThrow('process.exit called');
+
+    expect(consoleLogs.some((log) => log.includes('Failed to install Nx tooling'))).toBe(true);
+  });
+
+  it('should refuse to scaffold into non-empty directory', async () => {
+    const projectDir = path.join(tempDir, 'existing-dir');
+    await mkdir(projectDir);
+    await writeFile(path.join(projectDir, 'file.txt'), 'content');
+
+    await expect(runCreate('existing-dir', { nx: true })).rejects.toThrow('process.exit called');
+
+    expect(consoleLogs.some((log) => log.includes('non-empty directory'))).toBe(true);
+  });
+
+  it('should default project name to frontmcp-app when not provided', async () => {
+    await runCreate(undefined, { nx: true });
+
+    expect(mockWorkspaceGenerator).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ name: 'frontmcp-app' }),
+    );
   });
 });

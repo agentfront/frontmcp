@@ -1,7 +1,8 @@
 import * as path from 'path';
+import { createRequire } from 'module';
 import { promises as fsp } from 'fs';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON } from '@frontmcp/utils';
+import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON, runCmd, stat } from '@frontmcp/utils';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
@@ -1128,6 +1129,17 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 └── tsconfig.e2e.json  # TypeScript config for E2E tests
 \`\`\`
 
+## Scaling to a Monorepo
+
+To migrate to an Nx monorepo with multiple apps and shared libraries:
+
+\`\`\`bash
+npx frontmcp create my-workspace --nx
+\`\`\`
+
+This scaffolds an Nx workspace with generators for tools, resources, prompts, and more.
+See the [FrontMCP Nx Plugin docs](https://docs.agentfront.dev) for details.
+
 ## Learn More
 
 - [FrontMCP Documentation](https://docs.agentfront.dev)
@@ -1151,19 +1163,78 @@ function getDefaults(projectArg?: string): CreateOptions {
   };
 }
 
+function getInstallCommand(pm: PackageManager): { cmd: string; args: string[] } {
+  switch (pm) {
+    case 'npm':
+      return { cmd: 'npm', args: ['install'] };
+    case 'yarn':
+      return { cmd: 'yarn', args: ['install'] };
+    case 'pnpm':
+      return { cmd: 'pnpm', args: ['install'] };
+  }
+}
+
 async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Promise<void> {
+  const pm = flags?.pm ?? 'npm';
+  const folder = sanitizeForFolder(projectName);
+  const projectDir = path.resolve(process.cwd(), folder);
+
+  // Validate target directory
   try {
-    const { FsTree } = await import('nx/src/generators/tree.js');
-    const { workspaceGenerator } = await import('@frontmcp/nx');
-    const { flushChanges } = await import('nx/src/generators/tree.js');
+    const s = await stat(projectDir);
+    if (!s.isDirectory()) {
+      console.error(
+        c('red', `Refusing to scaffold into non-directory path: ${path.relative(process.cwd(), projectDir)}`),
+      );
+      console.log(c('gray', 'Pick a different project name or remove/rename the existing file.'));
+      process.exit(1);
+    }
+    if (!(await isDirEmpty(projectDir))) {
+      console.error(
+        c('red', `Refusing to scaffold into non-empty directory: ${path.relative(process.cwd(), projectDir)}`),
+      );
+      console.log(c('gray', 'Pick a different name or start with an empty folder.'));
+      process.exit(1);
+    }
+  } catch (e: unknown) {
+    if (e && typeof e === 'object' && 'code' in e && e.code === 'ENOENT') {
+      await ensureDir(projectDir);
+    } else {
+      throw e;
+    }
+  }
 
+  try {
+    // Step 1: Write bootstrap package.json with nx tooling
+    const selfVersion = getSelfVersion();
+    await writeJSON(path.join(projectDir, 'package.json'), {
+      name: folder,
+      version: '0.0.1',
+      private: true,
+      devDependencies: {
+        nx: '22.3.3',
+        '@nx/devkit': '22.3.3',
+        '@frontmcp/nx': `~${selfVersion}`,
+      },
+    });
+
+    // Step 2: Install nx tooling
+    console.log(c('cyan', `\nInstalling Nx tooling in ./${folder}...\n`));
+    const install = getInstallCommand(pm);
+    await runCmd(install.cmd, install.args, { cwd: projectDir });
+
+    // Step 3: Load nx and @frontmcp/nx from the installed location
+    const localRequire = createRequire(path.join(projectDir, 'package.json'));
+    const { FsTree, flushChanges } = localRequire('nx/src/generators/tree.js');
+    const { workspaceGenerator } = localRequire('@frontmcp/nx');
+
+    // Step 4: Run the workspace generator
     console.log(c('cyan', `\nScaffolding Nx monorepo: ${projectName}...\n`));
-
     const tree = new FsTree(process.cwd(), false);
     const callback = await workspaceGenerator(tree, {
-      name: projectName,
-      packageManager: flags?.pm ?? 'npm',
-      skipInstall: false,
+      name: folder,
+      packageManager: pm,
+      skipInstall: true,
       skipGit: false,
       createSampleApp: true,
     });
@@ -1174,21 +1245,28 @@ async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Pr
       await callback();
     }
 
-    console.log(c('green', `\n✅ Nx monorepo created at ./${projectName}\n`));
+    // Step 5: Install full project dependencies
+    console.log(c('cyan', '\nInstalling project dependencies...\n'));
+    await runCmd(install.cmd, install.args, { cwd: projectDir });
+
+    console.log(c('green', `\n✅ Nx monorepo created at ./${folder}\n`));
     console.log(c('dim', 'Next steps:'));
-    console.log(c('dim', `  cd ${projectName}`));
+    console.log(c('dim', `  cd ${folder}`));
     console.log(c('dim', '  nx g @frontmcp/nx:app my-app      # Add an app'));
     console.log(c('dim', '  nx g @frontmcp/nx:lib my-lib       # Add a library'));
     console.log(c('dim', '  nx g @frontmcp/nx:tool my-tool     # Add a tool to an app'));
     console.log(c('dim', '  nx dev demo                        # Start dev server'));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    if (message.includes('Cannot find module') || message.includes('MODULE_NOT_FOUND')) {
-      console.error(c('red', '\n@frontmcp/nx is not installed.'));
-      console.log(c('dim', 'Install it first:'));
-      console.log(c('bold', '  npm install -D @frontmcp/nx nx @nx/devkit'));
-      console.log(c('dim', '\nThen retry:'));
-      console.log(c('bold', `  frontmcp create ${projectName} --nx`));
+    if (
+      message.includes('Cannot find module') ||
+      message.includes('Cannot find package') ||
+      message.includes('MODULE_NOT_FOUND')
+    ) {
+      console.error(c('red', '\nFailed to install Nx tooling.'));
+      console.log(c('dim', 'Check your network connection and try again.'));
+      console.log(c('dim', 'You can also install manually:'));
+      console.log(c('bold', `  cd ${folder} && ${pm} install`));
     } else {
       console.error(c('red', `\nFailed to scaffold Nx workspace: ${message}`));
     }
@@ -1476,6 +1554,9 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // Git configuration
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.gitignore'), TEMPLATE_GITIGNORE);
+
+  // Node version
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.nvmrc'), '24\n');
 
   // Deployment-specific files
   await scaffoldDeploymentFiles(targetDir, options);
