@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 
 // Mock runCmd to prevent actual package manager execution (used only in Nx scaffold path)
@@ -761,8 +761,8 @@ describe('Nx scaffold (--nx flag)', () => {
 
   it('should refuse to scaffold into non-empty directory', async () => {
     const projectDir = path.join(tempDir, 'existing-dir');
-    require('fs').mkdirSync(projectDir);
-    require('fs').writeFileSync(path.join(projectDir, 'file.txt'), 'content');
+    mkdirSync(projectDir);
+    writeFileSync(path.join(projectDir, 'file.txt'), 'content');
 
     await expect(runCreate('existing-dir', { nx: true })).rejects.toThrow('process.exit called');
 

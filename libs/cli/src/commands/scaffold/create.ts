@@ -2,7 +2,7 @@ import * as path from 'path';
 import { createRequire } from 'module';
 import { promises as fsp } from 'fs';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON, runCmd } from '@frontmcp/utils';
+import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON, runCmd, stat } from '@frontmcp/utils';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
@@ -1181,8 +1181,8 @@ async function scaffoldNxWorkspace(projectName: string, flags?: CreateFlags): Pr
 
   // Validate target directory
   try {
-    const stat = await fsp.stat(projectDir);
-    if (!stat.isDirectory()) {
+    const s = await stat(projectDir);
+    if (!s.isDirectory()) {
       console.error(
         c('red', `Refusing to scaffold into non-directory path: ${path.relative(process.cwd(), projectDir)}`),
       );
