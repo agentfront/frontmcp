@@ -1,0 +1,70 @@
+# <%= name %>
+
+A FrontMCP Nx monorepo — TypeScript-first framework for building production-grade MCP servers.
+
+## Quick Start
+
+```bash
+# Install dependencies
+<%= packageManager %> install
+
+# Start dev server (sample app)
+npx nx dev demo
+
+# Build all projects
+npx nx run-many -t build
+
+# Run all tests
+npx nx run-many -t test
+```
+
+## Project Structure
+
+```
+<%= name %>/
+  apps/     # MCP application definitions (@App decorator)
+  libs/     # Shared libraries (tools, resources, providers)
+  servers/  # Deployment shells (Express/Fastify adapters)
+```
+
+## Nx Generators
+
+Use generators to scaffold new code:
+
+| Generator | Command | Description |
+|-----------|---------|-------------|
+| app | `npx nx g @frontmcp/nx:app <name>` | MCP application |
+| lib | `npx nx g @frontmcp/nx:lib <name>` | Shared library |
+| server | `npx nx g @frontmcp/nx:server <name>` | Deployment shell |
+| tool | `npx nx g @frontmcp/nx:tool <Name> --project <lib>` | MCP tool with Zod schemas |
+| resource | `npx nx g @frontmcp/nx:resource <Name> --project <lib>` | MCP resource |
+| prompt | `npx nx g @frontmcp/nx:prompt <Name> --project <lib>` | MCP prompt |
+| provider | `npx nx g @frontmcp/nx:provider <Name> --project <lib>` | DI provider |
+
+See `CLAUDE.md` for the full list of generators and architecture patterns.
+
+## Development Commands
+
+```bash
+# Build a specific project
+npx nx build <project>
+
+# Test a specific project
+npx nx test <project>
+
+# Serve a project with watch
+npx nx dev <project>
+
+# Launch MCP Inspector
+npx nx inspector <project>
+
+# Run across all projects
+npx nx run-many -t build
+npx nx run-many -t test
+```
+
+## Learn More
+
+- [FrontMCP Documentation](https://docs.agentfront.dev)
+- [MCP Specification](https://modelcontextprotocol.io)
+- AI coding agents can use the `frontmcp-docs` MCP server configured in `.mcp.json`

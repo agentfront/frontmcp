@@ -60,7 +60,8 @@
       "plugin": "@nx/eslint/plugin",
       "options": {
         "targetName": "lint"
-      }
+      },
+      "exclude": ["apps/e2e/**/*"]
     },
     {
       "plugin": "@nx/jest/plugin",

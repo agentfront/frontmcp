@@ -15,6 +15,9 @@ icon: arrow-down-to-line
 
 ---
 
+<Tabs>
+  <Tab title="Standard">
+
 ## Option A — Create a new project
 
 Use the built-in project generator. It will create a new folder under your current directory.
@@ -126,7 +129,7 @@ npx frontmcp init
 
 ## Package scripts
 
-After `create` or `init`, you’ll have these scripts:
+After `create` or `init`, you'll have these scripts:
 
 ```json
 {
@@ -161,10 +164,120 @@ npm run doctor
   exactly what to fix.
 </Info>
 
+  </Tab>
+  <Tab title="Nx Monorepo">
+
+## Option A — New monorepo
+
+Scaffold a complete FrontMCP Nx workspace from scratch:
+
+<CodeGroup>
+    ```bash npm
+    npx frontmcp create my-workspace --nx
+    ```
+
+    ```bash pnpm
+    pnpm dlx frontmcp create my-workspace --nx --pm pnpm
+    ```
+
+    ```bash yarn
+    npx frontmcp create my-workspace --nx --pm yarn
+    ```
+
+</CodeGroup>
+
+This creates:
+
+- Nx workspace with `nx.json` configuration
+- `apps/`, `libs/`, `servers/` directory structure
+- `@frontmcp/sdk`, `@frontmcp/cli`, `@frontmcp/nx` pre-installed
+- Sample application (optional)
+- TypeScript, Jest, ESLint pre-configured
+
+---
+
+## Option B — Existing Nx workspace
+
+Add `@frontmcp/nx` to an existing Nx workspace:
+
+<CodeGroup>
+```bash npm
+npm install -D @frontmcp/nx @frontmcp/sdk @frontmcp/cli @frontmcp/testing
+```
+
+```bash yarn
+yarn add -D @frontmcp/nx @frontmcp/sdk @frontmcp/cli @frontmcp/testing
+```
+
+```bash pnpm
+pnpm add -D @frontmcp/nx @frontmcp/sdk @frontmcp/cli @frontmcp/testing
+```
+
+</CodeGroup>
+
+Ensure your `tsconfig.base.json` includes decorator support:
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "es2022",
+    "module": "esnext",
+    "strict": true
+  }
+}
+```
+
+---
+
+## Verify installation
+
+List available generators to confirm the plugin is installed:
+
+```bash
+nx list @frontmcp/nx
+```
+
+You should see all generators and executors listed.
+
+---
+
+## Nx commands
+
+After setting up your workspace, use Nx to manage projects:
+
+```bash
+# Generate a new app
+nx g @frontmcp/nx:app my-app
+
+# Generate a shared library
+nx g @frontmcp/nx:lib shared-utils
+
+# Generate a tool in an app
+nx g @frontmcp/nx:tool my-tool --project my-app
+
+# Start dev server
+nx dev my-app
+
+# Build all projects
+nx run-many -t build
+
+# Run all tests
+nx run-many -t test
+```
+
+<Info>
+  See the full [Nx Plugin documentation](/frontmcp/nx-plugin/overview) for all 18 generators and 7 executors.
+</Info>
+
+  </Tab>
+</Tabs>
+
 ---
 
 ## Next steps
 
-- Start developing: `npm run dev`
-- Build for distribution: `npm run build`
-- Explore tools and messages live: `npm run inspect`
+- Start developing: `npm run dev` (standard) or `nx dev <app>` (Nx)
+- Build for distribution: `npm run build` (standard) or `nx build <project>` (Nx)
+- Explore tools and messages live: `npm run inspect` (standard) or `nx inspector <app>` (Nx)
