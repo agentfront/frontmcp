@@ -37,7 +37,7 @@ async function sendDelete(baseUrl: string, sessionId: string): Promise<{ status:
 async function sendInitialize(
   baseUrl: string,
   sessionId?: string,
-): Promise<{ status: number; sessionId: string | null; body: Record<string, unknown> }> {
+): Promise<{ status: number; sessionId: string | null; body: ParsedResponse }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
@@ -91,16 +91,28 @@ async function sendToolsList(baseUrl: string, sessionId: string): Promise<{ stat
   return { status: response.status, body };
 }
 
+/** Successful parse result with arbitrary JSON-RPC fields. */
+type ParsedJsonResponse = Record<string, unknown>;
+
+/** Failure sentinel returned when neither SSE nor JSON parsing succeeds. */
+type ParseFailure = { raw: string };
+
+/** Discriminated return type for {@link parseSSEOrJSON}. */
+type ParsedResponse = ParsedJsonResponse | ParseFailure;
+
 /**
  * Parse a response that may be SSE format or plain JSON.
- * SSE format: "event: message\ndata: {...}\n\n"
+ * SSE format: `event: message\ndata: {...}\n\n`
+ *
+ * On parse failure, returns `{ raw: string }` containing the original text
+ * so callers can discriminate via the `'raw' in result` check.
  */
-function parseSSEOrJSON(text: string): Record<string, unknown> {
+function parseSSEOrJSON(text: string): ParsedResponse {
   // Try SSE format first
   const dataMatch = text.match(/^data: (.+)$/m);
   if (dataMatch) {
     try {
-      return JSON.parse(dataMatch[1]) as Record<string, unknown>;
+      return JSON.parse(dataMatch[1]) as ParsedJsonResponse;
     } catch {
       // fall through to plain JSON
     }
@@ -108,7 +120,7 @@ function parseSSEOrJSON(text: string): Record<string, unknown> {
 
   // Try plain JSON
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    return JSON.parse(text) as ParsedJsonResponse;
   } catch {
     return { raw: text };
   }
