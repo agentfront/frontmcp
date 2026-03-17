@@ -123,6 +123,34 @@ describe('workspace generator', () => {
     expect(agentsMd).toContain('yarn');
   });
 
+  it('should generate README.md', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    expect(tree.exists('my-project/README.md')).toBe(true);
+  });
+
+  it('should generate .nvmrc with Node.js 24', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    expect(tree.exists('my-project/.nvmrc')).toBe(true);
+    const nvmrc = tree.read('my-project/.nvmrc', 'utf-8');
+    expect(nvmrc?.trim()).toBe('24');
+  });
+
+  it('should include workspace name in README.md', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', skipInstall: true });
+
+    const readme = tree.read('my-project/README.md', 'utf-8');
+    expect(readme).toContain('my-project');
+  });
+
+  it('should include package manager install command in README.md', async () => {
+    await workspaceGenerator(tree, { name: 'my-project', packageManager: 'yarn', skipInstall: true });
+
+    const readme = tree.read('my-project/README.md', 'utf-8');
+    expect(readme).toContain('yarn install');
+  });
+
   it('should export default', async () => {
     const mod = await import('./workspace');
     expect(mod.default).toBe(workspaceGenerator);
