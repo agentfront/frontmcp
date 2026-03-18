@@ -237,7 +237,7 @@ describe('session-id.utils', () => {
         clientVersion: '1.0.0',
       });
 
-      expect(updated).toBe(true);
+      expect(updated).not.toBeNull();
     });
 
     it('should merge partial updates correctly', () => {
@@ -285,7 +285,7 @@ describe('session-id.utils', () => {
         clientName: 'Test',
       });
 
-      expect(result).toBe(false);
+      expect(result).toBeNull();
     });
 
     it('should decrypt and update if not in cache', () => {

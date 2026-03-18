@@ -162,34 +162,43 @@ export function extractSessionFromCookie(cookie?: string): string | undefined {
 }
 
 /**
- * Update a cached session payload with new data.
- * This is used to persist changes like platformType detection that happen
- * after the initial session creation.
+ * Update a cached session payload with new data and re-encrypt to produce
+ * a new session ID that carries the updated payload.
  *
- * @param sessionId - The session ID to update
+ * This ensures that any node in a distributed system (including Vercel Edge
+ * and Cloudflare Workers) can decrypt the session ID and get the full
+ * payload with initialization data (e.g., supportsElicitation, platformType).
+ *
+ * @param sessionId - The current session ID to update
  * @param updates - Partial payload updates to merge
- * @returns true if the session was found and updated, false otherwise
+ * @returns The new session ID with the updated payload baked in, or null if session was invalid
  */
-export function updateSessionPayload(sessionId: string, updates: Partial<SessionIdPayload>): boolean {
+export function updateSessionPayload(sessionId: string, updates: Partial<SessionIdPayload>): string | null {
+  let payload: SessionIdPayload | undefined;
+
   const existing = cache.get(sessionId);
   if (existing) {
-    // Merge updates into existing payload
-    Object.assign(existing, updates);
-    // Re-set to refresh TTL
-    cache.set(sessionId, existing);
-    return true;
+    payload = existing;
+  } else {
+    const decrypted = safeDecrypt(sessionId);
+    if (hasValidSessionStructure(decrypted) || isValidPublicSessionPayload(decrypted)) {
+      payload = decrypted as SessionIdPayload;
+    }
   }
 
-  // Try to decrypt and update if not in cache
-  const decrypted = safeDecrypt(sessionId);
-  if (hasValidSessionStructure(decrypted) || isValidPublicSessionPayload(decrypted)) {
-    const payload = decrypted as SessionIdPayload;
-    Object.assign(payload, updates);
-    cache.set(sessionId, payload);
-    return true;
-  }
+  if (!payload) return null;
 
-  return false;
+  // Merge updates into payload
+  Object.assign(payload, updates);
+
+  // Re-encrypt to produce a new session ID carrying the updated payload
+  const newSessionId = encryptJson(payload);
+
+  // Cache under BOTH old and new session IDs so lookups by either key work
+  cache.set(sessionId, payload);
+  cache.set(newSessionId, payload);
+
+  return newSessionId;
 }
 
 /**

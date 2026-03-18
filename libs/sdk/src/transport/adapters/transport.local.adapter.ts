@@ -34,6 +34,28 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
    */
   protected pendingElicit?: PendingElicit;
 
+  /**
+   * Session payload fields set during MCP initialize.
+   * Stored on the adapter instance so they survive across requests in SSE mode
+   * (where each POST creates a fresh anonymous HTTP session) and are available
+   * in distributed environments without relying on local in-memory caches.
+   */
+  private initSessionPayload?: Partial<{
+    supportsElicitation: boolean;
+    platformType: string;
+    clientName: string;
+    clientVersion: string;
+  }>;
+
+  /**
+   * Called by the initialize request handler to persist initialization data
+   * on the transport adapter instance. This data is merged into the session
+   * payload on every subsequent request via ensureAuthInfo().
+   */
+  setInitSessionPayload(payload: NonNullable<LocalTransportAdapter<T>['initSessionPayload']>): void {
+    this.initSessionPayload = payload;
+  }
+
   #requestId = 1;
   ready: Promise<void>;
   server: McpServer;
@@ -99,6 +121,8 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // load asynchronously after connection and may emit change notifications
     const remoteCapabilities = hasRemoteApps ? this.buildRemoteCapabilities() : {};
 
+    const elicitationCapability = this.scope.metadata.elicitation?.enabled ? { elicitation: {} } : {};
+
     const serverOptions = {
       instructions: '',
       capabilities: {
@@ -110,6 +134,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
         ...completionsCapability,
         // MCP logging protocol support - allows clients to set log level via logging/setLevel
         logging: {},
+        ...elicitationCapability,
       },
       serverInfo: info,
     };
@@ -201,6 +226,28 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // But add defensive fallback for safety in case session is undefined
     const sessionId = session?.id ?? `fallback:${Date.now()}`;
     const sessionPayload = session?.payload ?? { protocol: 'streamable-http' as const };
+
+    // Enrich session payload with initialization data stored on the adapter.
+    // In SSE mode, each HTTP request creates a fresh anonymous session, so
+    // fields set during MCP initialize (supportsElicitation, platformType, etc.)
+    // are lost. The adapter instance persists for the transport's lifetime, so
+    // we merge the initialization payload here. This works in distributed mode
+    // too: the adapter is always on the node that owns the transport session.
+    if (this.initSessionPayload) {
+      const init = this.initSessionPayload;
+      if (init.supportsElicitation !== undefined && sessionPayload.supportsElicitation === undefined) {
+        sessionPayload.supportsElicitation = init.supportsElicitation;
+      }
+      if (init.platformType !== undefined && sessionPayload.platformType === undefined) {
+        (sessionPayload as Record<string, unknown>)['platformType'] = init.platformType;
+      }
+      if (init.clientName !== undefined && sessionPayload.clientName === undefined) {
+        sessionPayload.clientName = init.clientName;
+      }
+      if (init.clientVersion !== undefined && sessionPayload.clientVersion === undefined) {
+        sessionPayload.clientVersion = init.clientVersion;
+      }
+    }
 
     const authInfo: SdkAuthInfo = {
       token,
