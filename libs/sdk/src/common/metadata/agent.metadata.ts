@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { FuncType, Type, Token } from '@frontmcp/di';
 import { RawZodShape } from '../types';
+import type { RateLimitConfig, ConcurrencyConfig, TimeoutConfig } from '@frontmcp/guard';
+import { rateLimitConfigSchema, concurrencyConfigSchema, timeoutConfigSchema } from '@frontmcp/guard';
 import { ProviderType } from '../interfaces/provider.interface';
 import { PluginType } from '../interfaces/plugin.interface';
 import { AdapterType } from '../interfaces/adapter.interface';
@@ -488,17 +490,17 @@ export interface AgentMetadata<
   /**
    * Rate limiting configuration for this agent.
    */
-  rateLimit?: import('@frontmcp/guard').RateLimitConfig;
+  rateLimit?: RateLimitConfig;
 
   /**
    * Concurrency control configuration for this agent.
    */
-  concurrency?: import('@frontmcp/guard').ConcurrencyConfig;
+  concurrency?: ConcurrencyConfig;
 
   /**
    * Timeout configuration for this agent's execution.
    */
-  timeout?: import('@frontmcp/guard').TimeoutConfig;
+  timeout?: TimeoutConfig;
 }
 
 // ============================================================================
@@ -593,8 +595,8 @@ export const frontMcpAgentMetadataSchema = z
     execution: executionConfigSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
-    rateLimit: z.looseObject({ maxRequests: z.number() }).optional(),
-    concurrency: z.looseObject({ maxConcurrent: z.number() }).optional(),
-    timeout: z.looseObject({ executeMs: z.number() }).optional(),
+    rateLimit: rateLimitConfigSchema.optional(),
+    concurrency: concurrencyConfigSchema.optional(),
+    timeout: timeoutConfigSchema.optional(),
   } satisfies RawZodShape<AgentMetadata, ExtendFrontMcpAgentMetadata>)
   .passthrough();
