@@ -13,6 +13,8 @@ import {
   tokenRefreshConfigSchema,
   tokenStorageConfigSchema,
 } from './shared.schemas';
+import type { RawZodShape } from '../common/zod-utils';
+import type { LocalAuthOptionsInterface, RemoteAuthOptionsInterface } from './interfaces';
 
 // ============================================
 // SHARED LOCAL/REMOTE FIELDS
@@ -40,7 +42,7 @@ const sharedAuthFields = {
 export const localAuthSchema = z.object({
   mode: z.literal('local'),
   ...sharedAuthFields,
-});
+} satisfies RawZodShape<LocalAuthOptionsInterface>);
 
 // ============================================
 // REMOTE AUTH MODE (formerly orchestrated remote)
@@ -50,17 +52,17 @@ export const remoteAuthSchema = z.object({
   mode: z.literal('remote'),
   ...flatRemoteProviderFields,
   ...sharedAuthFields,
-});
+} satisfies RawZodShape<RemoteAuthOptionsInterface>);
 
 // ============================================
 // TYPE EXPORTS
 // ============================================
 
 export type LocalAuthOptions = z.infer<typeof localAuthSchema>;
-export type LocalAuthOptionsInput = z.input<typeof localAuthSchema>;
+export type LocalAuthOptionsInput = LocalAuthOptionsInterface;
 
 export type RemoteAuthOptions = z.infer<typeof remoteAuthSchema>;
-export type RemoteAuthOptionsInput = z.input<typeof remoteAuthSchema>;
+export type RemoteAuthOptionsInput = RemoteAuthOptionsInterface;
 
 // Unified type for local + remote
 export type LocalOrRemoteAuthOptions = LocalAuthOptions | RemoteAuthOptions;
