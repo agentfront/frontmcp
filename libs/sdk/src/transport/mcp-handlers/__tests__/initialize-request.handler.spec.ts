@@ -44,10 +44,16 @@ describe('initializeRequestHandler', () => {
     setClientInfo: jest.fn(),
   };
 
+  // Mock transport service
+  const mockTransportService = {
+    updateStoredSessionCapabilities: jest.fn().mockResolvedValue(undefined),
+  };
+
   // Mock scope
   const mockScope = {
     logger: mockLogger,
     notifications: mockNotifications,
+    transportService: mockTransportService,
     metadata: {
       info: { name: 'TestServer', version: '1.0.0' },
       transport: { platformDetection: undefined },
@@ -389,6 +395,15 @@ describe('initializeRequestHandler', () => {
           sampling: {},
         }),
       );
+
+      // Should also persist capabilities to session store for recreation
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({
+          roots: { listChanged: true },
+          sampling: {},
+        }),
+      );
     });
 
     it('should store client info in notification service', async () => {
@@ -408,6 +423,108 @@ describe('initializeRequestHandler', () => {
   });
 
   // ============================================
+  // Capability Persistence to Session Store
+  // ============================================
+
+  describe('capability persistence to session store', () => {
+    it('should call updateStoredSessionCapabilities with sessionId and capabilities', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: {
+          roots: { listChanged: true },
+          sampling: {},
+        },
+      });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({
+          roots: { listChanged: true },
+          sampling: {},
+        }),
+      );
+    });
+
+    it('should persist elicitation capabilities to session store', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: {
+          elicitation: { form: {} },
+        },
+      });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(
+        'test-session-id-123',
+        expect.objectContaining({
+          elicitation: { form: {} },
+        }),
+      );
+    });
+
+    it('should not call updateStoredSessionCapabilities when no capabilities provided', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({ capabilities: undefined });
+      const ctx = createContext();
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).not.toHaveBeenCalled();
+    });
+
+    it('should not call updateStoredSessionCapabilities when no sessionId', async () => {
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({
+        capabilities: { roots: { listChanged: true } },
+      });
+      const ctx = { authInfo: { sessionId: undefined, sessionIdPayload: undefined } };
+
+      await handler.handler(request, ctx as any);
+
+      expect(mockTransportService.updateStoredSessionCapabilities).not.toHaveBeenCalled();
+    });
+
+    it('should await updateStoredSessionCapabilities before returning', async () => {
+      let release: (() => void) | null = null;
+      const persistencePromise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockTransportService.updateStoredSessionCapabilities.mockReturnValue(persistencePromise);
+
+      const handler = initializeRequestHandler(handlerOptions);
+      const request = createRequest({ capabilities: { roots: {} } });
+      const ctx = createContext();
+
+      // Start the handler — it should be blocked awaiting the persistence promise
+      const handlerPromise = handler.handler(request, ctx as any);
+
+      // Yield microtask queue so the handler can run up to the await point
+      await Promise.resolve();
+
+      let settled = false;
+      handlerPromise.finally(() => {
+        settled = true;
+      });
+      // Yield again so .finally can attach
+      await Promise.resolve();
+
+      // Handler must NOT have settled yet (it's awaiting the unresolved promise)
+      expect(settled).toBe(false);
+
+      // Release the persistence promise
+      release?.();
+
+      // Now the handler should resolve
+      await expect(handlerPromise).resolves.toBeDefined();
+    });
+  });
+
+  // ============================================
   // Edge Cases and Error Handling
   // ============================================
 
@@ -422,6 +539,7 @@ describe('initializeRequestHandler', () => {
 
       expect(result.serverInfo.name).toBe('TestServer');
       expect(mockUpdateSessionPayload).not.toHaveBeenCalled();
+      expect(mockTransportService.updateStoredSessionCapabilities).not.toHaveBeenCalled();
     });
 
     it('should handle missing sessionIdPayload gracefully', async () => {
