@@ -8,6 +8,7 @@ export type {
   RedisProviderOptionsInterface,
   VercelKvProviderOptionsInterface,
   RedisOptionsInterface,
+  PubsubOptionsInterface,
 } from './interfaces';
 
 export {

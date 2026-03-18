@@ -3,6 +3,8 @@
 
 import { z } from 'zod';
 import { flatRemoteProviderFields, publicAccessConfigSchema } from './shared.schemas';
+import type { RawZodShape } from '../common/zod-utils';
+import type { TransparentAuthOptionsInterface } from './interfaces';
 
 // ============================================
 // TRANSPARENT MODE
@@ -46,7 +48,7 @@ export const transparentAuthOptionsSchema = z.object({
    * Public access config for anonymous users (when allowAnonymous=true)
    */
   publicAccess: publicAccessConfigSchema.optional(),
-});
+} satisfies RawZodShape<TransparentAuthOptionsInterface>);
 
 // ============================================
 // TYPE EXPORTS

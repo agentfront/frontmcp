@@ -2,6 +2,7 @@
 // Zod schema for Redis/storage configuration
 
 import { z } from 'zod';
+import type { RedisOptionsInterface, PubsubOptionsInterface } from './interfaces';
 
 // ============================================
 // Storage Provider Types
@@ -177,9 +178,10 @@ export const redisOptionsSchema = z.union([redisProviderSchema, vercelKvProvider
 export type RedisOptions = z.infer<typeof redisOptionsSchema>;
 
 /**
- * Storage configuration input type (for user configuration)
+ * Storage configuration input type (for user configuration).
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type RedisOptionsInput = z.input<typeof redisOptionsSchema>;
+export type RedisOptionsInput = RedisOptionsInterface;
 
 // ============================================
 // Pub/Sub Options Schema (Redis-only)
@@ -207,9 +209,10 @@ export const pubsubOptionsSchema = z.union([redisProviderSchema, legacyRedisSche
 export type PubsubOptions = z.infer<typeof pubsubOptionsSchema>;
 
 /**
- * Pub/Sub configuration input type
+ * Pub/Sub configuration input type.
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type PubsubOptionsInput = z.input<typeof pubsubOptionsSchema>;
+export type PubsubOptionsInput = PubsubOptionsInterface;
 
 // ============================================
 // Type Guards
