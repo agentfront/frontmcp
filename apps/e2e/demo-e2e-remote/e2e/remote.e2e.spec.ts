@@ -26,40 +26,50 @@ let localMcpServer: TestServer | null = null;
 // Mock Mintlify MCP server instance
 let mockMintlifyServer: TestServer | null = null;
 
-// Port configuration from E2E_PORT_RANGES:
-// - demo-e2e-remote: 50210-50219 (using 50210 for gateway, 50211 for local MCP)
+// Preferred port configuration from E2E_PORT_RANGES:
+// - demo-e2e-remote: 50210-50219 (using 50211 for local MCP)
 // - mock-api: 50910-50919 (using 50910 for mock Mintlify)
-const MOCK_MINTLIFY_PORT = 50910;
-const LOCAL_MCP_PORT = 50211;
+// Actual ports may differ if preferred ports are occupied (CI parallel runs).
+const PREFERRED_MOCK_MINTLIFY_PORT = 50910;
+const PREFERRED_LOCAL_MCP_PORT = 50211;
+
+// Mutable env object — updated in beforeAll with actual allocated ports.
+// test.use stores the reference, so mutations are visible when the gateway starts.
+const gatewayEnv: Record<string, string> = {
+  LOCAL_MCP_PORT: String(PREFERRED_LOCAL_MCP_PORT),
+  MOCK_MINTLIFY_PORT: String(PREFERRED_MOCK_MINTLIFY_PORT),
+};
 
 // Start local MCP and mock Mintlify servers before all tests
 beforeAll(async () => {
-  log(`[E2E] Starting mock Mintlify server on port ${MOCK_MINTLIFY_PORT}...`);
+  log(`[E2E] Starting mock Mintlify server on preferred port ${PREFERRED_MOCK_MINTLIFY_PORT}...`);
   try {
     mockMintlifyServer = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-remote/src/mock-mintlify-server/main.ts',
       project: 'mock-api',
-      port: MOCK_MINTLIFY_PORT,
+      port: PREFERRED_MOCK_MINTLIFY_PORT,
       startupTimeout: 60000,
       healthCheckPath: '/',
       debug: DEBUG,
     });
+    gatewayEnv.MOCK_MINTLIFY_PORT = String(mockMintlifyServer.info.port);
     log('[E2E] Mock Mintlify server started:', mockMintlifyServer.info.baseUrl);
   } catch (error) {
     console.error('[E2E] Failed to start mock Mintlify server:', error);
     throw error;
   }
 
-  log(`[E2E] Starting local MCP server on port ${LOCAL_MCP_PORT}...`);
+  log(`[E2E] Starting local MCP server on preferred port ${PREFERRED_LOCAL_MCP_PORT}...`);
   try {
     localMcpServer = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
       project: 'demo-e2e-remote',
-      port: LOCAL_MCP_PORT,
+      port: PREFERRED_LOCAL_MCP_PORT,
       startupTimeout: 60000,
       healthCheckPath: '/', // Root path returns 404 which is OK for health check
       debug: DEBUG,
     });
+    gatewayEnv.LOCAL_MCP_PORT = String(localMcpServer.info.port);
     log('[E2E] Local MCP server started:', localMcpServer.info.baseUrl);
 
     // Give the local server extra time to fully initialize
@@ -94,10 +104,7 @@ test.describe('Remote MCP Server Orchestration E2E', () => {
     publicMode: true,
     logLevel: DEBUG ? 'debug' : 'warn',
     startupTimeout: 60000, // Give gateway more time to connect to servers
-    env: {
-      LOCAL_MCP_PORT: String(LOCAL_MCP_PORT), // Match the port where local MCP server is started
-      MOCK_MINTLIFY_PORT: String(MOCK_MINTLIFY_PORT), // Match the port where mock Mintlify server is started
-    },
+    env: gatewayEnv, // Reference to mutable object updated with actual ports in beforeAll
   });
 
   test('basic connectivity test', async ({ mcp }) => {

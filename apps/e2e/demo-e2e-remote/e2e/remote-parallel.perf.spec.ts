@@ -6,36 +6,55 @@
  */
 import { perfTest, expect, TestServer } from '@frontmcp/testing';
 
-// Port configuration from E2E_PORT_RANGES:
-// - demo-e2e-remote: 50210-50219 (using 50210 for gateway, 50211 for local MCP)
+// Preferred port configuration from E2E_PORT_RANGES:
+// - demo-e2e-remote: 50210-50219 (using 50211 for local MCP)
 // - mock-api: 50910-50919 (using 50910 for mock Mintlify)
-const LOCAL_MCP_PORT = 50211;
-const MOCK_MINTLIFY_PORT = 50910;
+// Actual ports may differ if preferred ports are occupied (CI parallel runs).
+const PREFERRED_LOCAL_MCP_PORT = 50211;
+const PREFERRED_MOCK_MINTLIFY_PORT = 50910;
+
+// Mutable env object — updated in beforeAll with actual allocated ports.
+// perfTest.use stores the reference, so mutations are visible when the gateway starts.
+const gatewayEnv: Record<string, string> = {
+  LOCAL_MCP_PORT: String(PREFERRED_LOCAL_MCP_PORT),
+  MOCK_MINTLIFY_PORT: String(PREFERRED_MOCK_MINTLIFY_PORT),
+};
 
 // Local MCP server instance
 let localMcpServer: TestServer | null = null;
 // Mock Mintlify MCP server instance
 let mockMintlifyServer: TestServer | null = null;
 
-// Start local MCP and mock Mintlify servers before all perf tests
+// Start local MCP and mock Mintlify servers before all perf tests.
+// Wrapped in try/catch so that if the second server fails to start,
+// the first is stopped to avoid leaking child processes.
 perfTest.beforeAll(async () => {
-  // Start mock Mintlify server first
+  // Start mock Mintlify server first (port may differ from preferred if occupied)
   mockMintlifyServer = await TestServer.start({
     command: 'npx tsx apps/e2e/demo-e2e-remote/src/mock-mintlify-server/main.ts',
     project: 'mock-api',
-    port: MOCK_MINTLIFY_PORT,
+    port: PREFERRED_MOCK_MINTLIFY_PORT,
     startupTimeout: 60000,
     healthCheckPath: '/',
   });
+  gatewayEnv.MOCK_MINTLIFY_PORT = String(mockMintlifyServer.info.port);
 
-  // Then start local MCP server
-  localMcpServer = await TestServer.start({
-    command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
-    project: 'demo-e2e-remote',
-    port: LOCAL_MCP_PORT,
-    startupTimeout: 60000,
-    healthCheckPath: '/',
-  });
+  // Then start local MCP server (port may differ from preferred if occupied)
+  try {
+    localMcpServer = await TestServer.start({
+      command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
+      project: 'demo-e2e-remote',
+      port: PREFERRED_LOCAL_MCP_PORT,
+      startupTimeout: 60000,
+      healthCheckPath: '/',
+    });
+  } catch (err) {
+    // Stop the already-started mock server to avoid leaking child processes
+    await mockMintlifyServer.stop();
+    mockMintlifyServer = null;
+    throw err;
+  }
+  gatewayEnv.LOCAL_MCP_PORT = String(localMcpServer.info.port);
 
   // Give the servers extra time to fully initialize
   // The health check passes when HTTP is ready, but MCP handlers need more time
@@ -59,10 +78,7 @@ perfTest.describe('Remote Gateway Parallel Stress Testing', () => {
     server: 'apps/e2e/demo-e2e-remote/src/main.ts',
     project: 'demo-e2e-remote',
     publicMode: true,
-    env: {
-      LOCAL_MCP_PORT: String(LOCAL_MCP_PORT),
-      MOCK_MINTLIFY_PORT: String(MOCK_MINTLIFY_PORT),
-    },
+    env: gatewayEnv,
   });
 
   perfTest('parallel stress: 5000 total local:echo operations', async ({ perf, server }) => {

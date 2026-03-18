@@ -443,4 +443,92 @@ test.describe('Elicitation E2E', () => {
       }
     });
   });
+
+  /**
+   * Tests for elicitation behavior after session reconnect (Issue #279).
+   *
+   * Verifies that client capabilities (specifically elicitation support) are
+   * correctly preserved when a new client connects after a session is terminated.
+   * This guards against the bug where recreated sessions lost their capability
+   * state, causing native elicitation to fall back to markdown instructions.
+   */
+  test.describe('elicitation after session reconnect', () => {
+    test('should support native elicitation on a fresh client after session termination', async ({ mcp, server }) => {
+      // Step 1: Original client - verify native elicitation works
+      mcp.onElicitation(async () => ({
+        action: 'accept',
+        content: { confirmed: true },
+      }));
+
+      const result1 = await mcp.tools.call('confirm-action', { action: 'initial test' });
+      expect(result1).toBeSuccessful();
+      expect(result1.text()).toContain('confirmed and executed');
+
+      // Step 2: Terminate the original session via DELETE
+      const sessionId = mcp.sessionId;
+      expect(sessionId).toBeTruthy();
+
+      const deleteRes = await fetch(`${server.info.baseUrl}/`, {
+        method: 'DELETE',
+        headers: { 'mcp-session-id': sessionId },
+      });
+      expect(deleteRes.status).toBe(204);
+
+      // Step 3: Create a new client with elicitation capabilities and test elicitation
+      const newClient = await server.createClient();
+      try {
+        newClient.onElicitation(async () => ({
+          action: 'accept',
+          content: { confirmed: true },
+        }));
+
+        const result2 = await newClient.tools.call('confirm-action', { action: 'post-reconnect test' });
+        expect(result2).toBeSuccessful();
+        // Should get native elicitation result, not fallback instructions
+        expect(result2.text()).toContain('confirmed and executed');
+        expect(result2.text()).not.toContain('sendElicitationResult');
+      } finally {
+        await newClient.disconnect();
+      }
+    });
+
+    test('should fall back to instructions when reconnecting client lacks elicitation capabilities', async ({
+      mcp,
+      server,
+    }) => {
+      // Step 1: Original client with elicitation - verify it works natively
+      mcp.onElicitation(async () => ({
+        action: 'accept',
+        content: { confirmed: true },
+      }));
+
+      const result1 = await mcp.tools.call('confirm-action', { action: 'initial test' });
+      expect(result1).toBeSuccessful();
+      expect(result1.text()).toContain('confirmed and executed');
+
+      // Step 2: Terminate session
+      const sessionId = mcp.sessionId;
+      const deleteRes = await fetch(`${server.info.baseUrl}/`, {
+        method: 'DELETE',
+        headers: { 'mcp-session-id': sessionId },
+      });
+      expect(deleteRes.status).toBe(204);
+
+      // Step 3: Create a new client WITHOUT elicitation capabilities
+      const noElicitClient = await server
+        .createClientBuilder()
+        .withCapabilities({}) // No elicitation support
+        .withPublicMode()
+        .buildAndConnect();
+
+      try {
+        const result2 = await noElicitClient.tools.call('confirm-action', { action: 'no-elicit test' });
+        expect(result2).toBeSuccessful();
+        // Should get fallback instructions, not native elicitation
+        expect(result2.text()).toContain('sendElicitationResult');
+      } finally {
+        await noElicitClient.disconnect();
+      }
+    });
+  });
 });
