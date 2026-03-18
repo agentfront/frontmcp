@@ -476,18 +476,20 @@ test.describe('Elicitation E2E', () => {
 
       // Step 3: Create a new client with elicitation capabilities and test elicitation
       const newClient = await server.createClient();
-      newClient.onElicitation(async () => ({
-        action: 'accept',
-        content: { confirmed: true },
-      }));
+      try {
+        newClient.onElicitation(async () => ({
+          action: 'accept',
+          content: { confirmed: true },
+        }));
 
-      const result2 = await newClient.tools.call('confirm-action', { action: 'post-reconnect test' });
-      expect(result2).toBeSuccessful();
-      // Should get native elicitation result, not fallback instructions
-      expect(result2.text()).toContain('confirmed and executed');
-      expect(result2.text()).not.toContain('sendElicitationResult');
-
-      await newClient.disconnect();
+        const result2 = await newClient.tools.call('confirm-action', { action: 'post-reconnect test' });
+        expect(result2).toBeSuccessful();
+        // Should get native elicitation result, not fallback instructions
+        expect(result2.text()).toContain('confirmed and executed');
+        expect(result2.text()).not.toContain('sendElicitationResult');
+      } finally {
+        await newClient.disconnect();
+      }
     });
 
     test('should fall back to instructions when reconnecting client lacks elicitation capabilities', async ({
@@ -506,10 +508,11 @@ test.describe('Elicitation E2E', () => {
 
       // Step 2: Terminate session
       const sessionId = mcp.sessionId;
-      await fetch(`${server.info.baseUrl}/`, {
+      const deleteRes = await fetch(`${server.info.baseUrl}/`, {
         method: 'DELETE',
         headers: { 'mcp-session-id': sessionId },
       });
+      expect(deleteRes.status).toBe(204);
 
       // Step 3: Create a new client WITHOUT elicitation capabilities
       const noElicitClient = await server

@@ -490,19 +490,37 @@ describe('initializeRequestHandler', () => {
     });
 
     it('should await updateStoredSessionCapabilities before returning', async () => {
-      let resolved = false;
-      mockTransportService.updateStoredSessionCapabilities.mockImplementation(async () => {
-        resolved = true;
+      let release: (() => void) | null = null;
+      const persistencePromise = new Promise<void>((resolve) => {
+        release = resolve;
       });
+      mockTransportService.updateStoredSessionCapabilities.mockReturnValue(persistencePromise);
 
       const handler = initializeRequestHandler(handlerOptions);
       const request = createRequest({ capabilities: { roots: {} } });
       const ctx = createContext();
 
-      await handler.handler(request, ctx as any);
+      // Start the handler — it should be blocked awaiting the persistence promise
+      const handlerPromise = handler.handler(request, ctx as any);
 
-      // If awaited, resolved must be true after handler returns
-      expect(resolved).toBe(true);
+      // Yield microtask queue so the handler can run up to the await point
+      await Promise.resolve();
+
+      let settled = false;
+      handlerPromise.finally(() => {
+        settled = true;
+      });
+      // Yield again so .finally can attach
+      await Promise.resolve();
+
+      // Handler must NOT have settled yet (it's awaiting the unresolved promise)
+      expect(settled).toBe(false);
+
+      // Release the persistence promise
+      release?.();
+
+      // Now the handler should resolve
+      await expect(handlerPromise).resolves.toBeDefined();
     });
   });
 
