@@ -2,7 +2,8 @@
 // Zod schema for skills HTTP configuration
 
 import { z } from 'zod';
-import type { SkillsConfigAuthMode } from './interfaces';
+import type { RawZodShape } from '../../common.types';
+import type { SkillsConfigAuthMode, SkillsConfigOptions as SkillsConfigOptionsInterface } from './interfaces';
 
 /**
  * Authentication mode schema for skills HTTP endpoints.
@@ -66,7 +67,7 @@ export const skillsConfigOptionsSchema = z.object({
   api: skillsConfigEndpointInputSchema.optional().default(true),
   mcpTools: z.boolean().optional().default(true),
   cache: skillsConfigCacheOptionsSchema.optional(),
-});
+} satisfies RawZodShape<SkillsConfigOptionsInterface>);
 
 /**
  * Skills HTTP options type (with defaults applied).
@@ -75,8 +76,9 @@ export type SkillsConfigOptions = z.infer<typeof skillsConfigOptionsSchema>;
 
 /**
  * Skills HTTP options input type (for user configuration).
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type SkillsConfigOptionsInput = z.input<typeof skillsConfigOptionsSchema>;
+export type SkillsConfigOptionsInput = SkillsConfigOptionsInterface;
 
 /**
  * Skills HTTP endpoint config type (with defaults applied).

@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { annotatedFrontMcpLoggerSchema } from '../../../schemas';
-import { RawZodShape } from '../../common.types';
+import type { RawZodShape } from '../../common.types';
 import { LogLevel, LoggingOptionsInterface } from './interfaces';
 
 /**
@@ -28,5 +28,6 @@ export type LoggingOptions = z.infer<typeof loggingOptionsSchema>;
 
 /**
  * Logging options input type (for user configuration).
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type LoggingOptionsInput = z.input<typeof loggingOptionsSchema>;
+export type LoggingOptionsInput = LoggingOptionsInterface;

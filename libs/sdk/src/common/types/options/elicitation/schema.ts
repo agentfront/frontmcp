@@ -54,8 +54,6 @@ export type ElicitationOptions = z.infer<typeof elicitationOptionsSchema>;
 
 /**
  * Elicitation options input type (for user configuration).
- *
- * This is the type users should use when configuring elicitation
- * options in the `@FrontMcp` decorator.
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type ElicitationOptionsInput = z.input<typeof elicitationOptionsSchema>;
+export type ElicitationOptionsInput = ElicitationOptionsInterface;

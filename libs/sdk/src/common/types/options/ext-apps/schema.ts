@@ -2,6 +2,8 @@
 // Zod schema for ext-apps configuration
 
 import { z } from 'zod';
+import type { RawZodShape } from '../../common.types';
+import type { ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from './interfaces';
 
 /**
  * Host capabilities schema for ext-apps.
@@ -65,7 +67,7 @@ export const extAppsHostCapabilitiesSchema = z.object({
    * @default true (when extApps.enabled is true)
    */
   logging: z.boolean().optional(),
-});
+} satisfies RawZodShape<ExtAppsHostCapabilitiesInterface>);
 
 /**
  * Ext-apps options Zod schema.
@@ -110,7 +112,7 @@ export const extAppsOptionsSchema = z.object({
    * - logging: true
    */
   hostCapabilities: extAppsHostCapabilitiesSchema.optional(),
-});
+} satisfies RawZodShape<ExtAppsOptionsInterface>);
 
 /**
  * Ext-apps options type (with defaults applied).
@@ -119,5 +121,6 @@ export type ExtAppsOptions = z.infer<typeof extAppsOptionsSchema>;
 
 /**
  * Ext-apps options input type (for user configuration).
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type ExtAppsOptionsInput = z.input<typeof extAppsOptionsSchema>;
+export type ExtAppsOptionsInput = ExtAppsOptionsInterface;
