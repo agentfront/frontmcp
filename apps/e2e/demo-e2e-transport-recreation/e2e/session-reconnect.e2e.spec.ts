@@ -308,7 +308,8 @@ test.describe('Session Reconnect E2E', () => {
       if (!sessionId1) throw new Error('Expected sessionId after initialize');
 
       // Terminate
-      await sendDelete(server.info.baseUrl, sessionId1);
+      const { status: deleteStatus } = await sendDelete(server.info.baseUrl, sessionId1);
+      expect(deleteStatus).toBe(204);
 
       // Re-initialize with stale session ID and different (elicitation) capabilities
       const init2 = await sendInitialize(server.info.baseUrl, sessionId1, {
