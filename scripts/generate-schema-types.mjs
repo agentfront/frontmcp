@@ -93,6 +93,12 @@ function getZodTypeName(schema) {
  * Unwrap layers of ZodOptional, ZodDefault, ZodEffects, ZodNullable
  * and collect metadata along the way.
  */
+/** Stringify a JS value using single quotes for strings (prettier-compatible). */
+function toTsLiteral(value) {
+  if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`;
+  return JSON.stringify(value);
+}
+
 function unwrapSchema(schema) {
   let optional = false;
   let defaultValue;
@@ -119,7 +125,11 @@ function unwrapSchema(schema) {
       optional = true;
       const dv = current._def.defaultValue;
       if (typeof dv === 'function') {
-        try { defaultValue = JSON.stringify(dv()); } catch { /* ignore */ }
+        try {
+          defaultValue = JSON.stringify(dv());
+        } catch {
+          /* ignore */
+        }
       } else if (dv !== undefined) {
         defaultValue = JSON.stringify(dv);
       }
@@ -198,19 +208,19 @@ function zodToTsType(schema, depth = 0) {
       return 'unknown';
 
     case 'ZodLiteral':
-      return JSON.stringify(schema._def.value);
+      return toTsLiteral(schema._def.value);
 
     case 'ZodEnum': {
       // Zod v4 uses _def.entries (object), v3 uses _def.values (array)
       const entries = schema._def.entries || {};
       const vals = Array.isArray(schema._def.values) ? schema._def.values : Object.values(entries);
-      return vals.map(v => JSON.stringify(v)).join(' | ');
+      return vals.map((v) => toTsLiteral(v)).join(' | ');
     }
 
     case 'ZodNativeEnum': {
       const enumObj = schema._def.values || {};
-      const vals = Object.values(enumObj).filter(v => typeof v === 'string' || typeof v === 'number');
-      return vals.map(v => JSON.stringify(v)).join(' | ') || 'unknown';
+      const vals = Object.values(enumObj).filter((v) => typeof v === 'string' || typeof v === 'number');
+      return vals.map((v) => toTsLiteral(v)).join(' | ') || 'unknown';
     }
 
     case 'ZodArray':
@@ -240,7 +250,7 @@ function zodToTsType(schema, depth = 0) {
     case 'ZodUnion':
     case 'ZodDiscriminatedUnion': {
       const options = schema._def.options || [];
-      return options.map(o => zodToTsType(o, depth)).join(' | ') || 'unknown';
+      return options.map((o) => zodToTsType(o, depth)).join(' | ') || 'unknown';
     }
 
     case 'ZodIntersection': {
@@ -251,7 +261,7 @@ function zodToTsType(schema, depth = 0) {
 
     case 'ZodTuple': {
       const items = schema._def.items || [];
-      return `[${items.map(i => zodToTsType(i, depth)).join(', ')}]`;
+      return `[${items.map((i) => zodToTsType(i, depth)).join(', ')}]`;
     }
 
     case 'ZodOptional':
