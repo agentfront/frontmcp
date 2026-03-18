@@ -245,6 +245,13 @@ test.describe('Session Reconnect E2E', () => {
     });
   });
 
+  // NOTE: These tests verify that the reconnect flow accepts and round-trips
+  // client capabilities without errors, but do NOT assert capability-dependent
+  // behavior (e.g. elicitation prompts). This E2E project has no elicitation
+  // tools enabled, and the MCP initialize response only returns *server*
+  // capabilities — client capabilities aren't echoed back. Capability-dependent
+  // assertions live in demo-e2e-elicitation/e2e/elicitation.e2e.spec.ts
+  // ("elicitation after session reconnect" describe block).
   test.describe('Capabilities preservation through reconnect', () => {
     test('should accept initialize with elicitation capabilities', async ({ server }) => {
       const initResult = await sendInitialize(server.info.baseUrl, undefined, {

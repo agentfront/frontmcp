@@ -25,7 +25,9 @@ let localMcpServer: TestServer | null = null;
 // Mock Mintlify MCP server instance
 let mockMintlifyServer: TestServer | null = null;
 
-// Start local MCP and mock Mintlify servers before all perf tests
+// Start local MCP and mock Mintlify servers before all perf tests.
+// Wrapped in try/catch so that if the second server fails to start,
+// the first is stopped to avoid leaking child processes.
 perfTest.beforeAll(async () => {
   // Start mock Mintlify server first (port may differ from preferred if occupied)
   mockMintlifyServer = await TestServer.start({
@@ -38,13 +40,20 @@ perfTest.beforeAll(async () => {
   gatewayEnv.MOCK_MINTLIFY_PORT = String(mockMintlifyServer.info.port);
 
   // Then start local MCP server (port may differ from preferred if occupied)
-  localMcpServer = await TestServer.start({
-    command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
-    project: 'demo-e2e-remote',
-    port: PREFERRED_LOCAL_MCP_PORT,
-    startupTimeout: 60000,
-    healthCheckPath: '/',
-  });
+  try {
+    localMcpServer = await TestServer.start({
+      command: 'npx tsx apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts',
+      project: 'demo-e2e-remote',
+      port: PREFERRED_LOCAL_MCP_PORT,
+      startupTimeout: 60000,
+      healthCheckPath: '/',
+    });
+  } catch (err) {
+    // Stop the already-started mock server to avoid leaking child processes
+    await mockMintlifyServer.stop();
+    mockMintlifyServer = null;
+    throw err;
+  }
   gatewayEnv.LOCAL_MCP_PORT = String(localMcpServer.info.port);
 
   // Give the servers extra time to fully initialize
