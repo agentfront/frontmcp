@@ -12,6 +12,7 @@ import {
 } from '../metadata';
 import type { ToolUIConfig } from '../metadata/tool-ui.metadata';
 import type { EsmOptions, RemoteOptions } from '../metadata';
+import type { ConcurrencyConfigInput, RateLimitConfigInput, TimeoutConfigInput } from '@frontmcp/guard';
 import z from 'zod';
 import { ToolContext } from '../interfaces';
 import { ToolKind } from '../records/tool.record';
@@ -228,39 +229,20 @@ type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetad
  * The `ui` property accepts a `ToolUIConfig` from `@frontmcp/ui/types`
  * for configuring interactive widget rendering.
  */
-export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = __ToolMetadataBase<I, O> & {
-  /**
-   * UI template configuration for rendering interactive widgets.
-   *
-   * The template builder function receives typed `ctx.input` and `ctx.output`
-   * based on the tool's `inputSchema` and `outputSchema`.
-   *
-   * @see {@link ToolUIConfig} for all available options including:
-   * - `template`: React component, HTML string, or builder function
-   * - `servingMode`: 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'
-   * - `csp`: Content Security Policy configuration
-   * - `widgetAccessible`: Enable MCP bridge for tool calls from widget
-   * - `displayMode`: 'inline' | 'fullscreen' | 'pip'
-   * - And more...
-   *
-   * @example HTML template builder with typed context
-   * ```typescript
-   * ui: {
-   *   template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`,
-   *   // ctx.output is typed based on outputSchema
-   *   servingMode: 'inline',
-   * }
-   * ```
-   *
-   * @example React component
-   * ```typescript
-   * import WeatherCard from './weather-ui';
-   * ui: {
-   *   template: WeatherCard,
-   *   servingMode: 'static',
-   * }
-   * ```
-   */
+/**
+ * Tool metadata options with permissive guard config types for IDE IntelliSense.
+ *
+ * Guard fields (concurrency, rateLimit, timeout) use auto-generated Input types
+ * where all fields are optional. Required fields are validated at runtime by Zod.
+ * @see schemas.generated.ts in @frontmcp/guard
+ */
+export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = Omit<
+  __ToolMetadataBase<I, O>,
+  'concurrency' | 'rateLimit' | 'timeout'
+> & {
+  concurrency?: ConcurrencyConfigInput;
+  rateLimit?: RateLimitConfigInput;
+  timeout?: TimeoutConfigInput;
   ui?: ToolUIConfig<ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
 };
 
@@ -338,29 +320,19 @@ declare module '@frontmcp/sdk' {
   // @ts-expect-error - Module augmentation requires decorator overload
   export function Tool<
     I extends __Shape,
-    O extends __OutputSchema, // Use our new output schema constraint
-    T extends ToolMetadataOptions<I, O> & { outputSchema: any }, // ensure present
+    O extends __OutputSchema,
+    T extends ToolMetadataOptions<I, O> & { outputSchema: any },
   >(
     opts: T,
   ): <C extends __Ctor>(
-    cls: C &
-      __MustExtendCtx<C> &
-      __MustParam<C, ToolInputOf<T>> & // <-- Will now show a rich error
-      __MustReturn<C, ToolOutputOf<T>>, // <-- Will now show a rich error
+    cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<T>> & __MustReturn<C, ToolOutputOf<T>>,
   ) => __Rewrap<C, ToolInputOf<T>, ToolOutputOf<T>>;
 
   // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
   // @ts-expect-error - Module augmentation requires decorator overload
-  export function Tool<
-    I extends __Shape,
-    // Note: 'O' is omitted, 'any' is used for the generic
-    T extends ToolMetadataOptions<I, any> & { outputSchema?: never }, // ensure absent
-  >(
+  export function Tool<I extends __Shape, T extends ToolMetadataOptions<I, any> & { outputSchema?: never }>(
     opts: T,
   ): <C extends __Ctor>(
-    cls: C &
-      __MustExtendCtx<C> &
-      __MustParam<C, ToolInputOf<T>> & // <-- Will now show a rich error
-      __MustReturn<C, ToolOutputOf<T>>, // <-- Will now show 'any'
+    cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<T>> & __MustReturn<C, ToolOutputOf<T>>,
   ) => __Rewrap<C, ToolInputOf<T>, ToolOutputOf<T>>;
 }

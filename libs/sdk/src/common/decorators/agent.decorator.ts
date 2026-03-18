@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { extendedAgentMetadata, FrontMcpAgentTokens } from '../tokens';
 import { ToolInputType, ToolOutputType, AgentMetadata, frontMcpAgentMetadataSchema } from '../metadata';
+import type { ConcurrencyConfigInput, RateLimitConfigInput, TimeoutConfigInput } from '@frontmcp/guard';
 import z from 'zod';
 
 // Forward reference - AgentContext will be defined in agent.interface.ts
@@ -303,9 +304,20 @@ type __AgentSingleOutputType = __PrimitiveOutputType | __StructuredOutputType;
 type __OutputSchema = __AgentSingleOutputType | __AgentSingleOutputType[];
 
 /**
- * Agent metadata options with type constraints.
+ * Agent metadata options with permissive guard config types for IDE IntelliSense.
+ *
+ * Guard fields (concurrency, rateLimit, timeout) use auto-generated Input types
+ * where all fields are optional. Required fields are validated at runtime by Zod.
+ * @see schemas.generated.ts in @frontmcp/guard
  */
-export type AgentMetadataOptions<I extends __Shape, O extends __OutputSchema> = AgentMetadata<I, O>;
+export type AgentMetadataOptions<I extends __Shape, O extends __OutputSchema> = Omit<
+  AgentMetadata<I, O>,
+  'concurrency' | 'rateLimit' | 'timeout'
+> & {
+  concurrency?: ConcurrencyConfigInput;
+  rateLimit?: RateLimitConfigInput;
+  timeout?: TimeoutConfigInput;
+};
 
 declare module '@frontmcp/sdk' {
   // ---------- the decorator (overloads) ----------
