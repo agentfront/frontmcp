@@ -21,11 +21,20 @@ describe('supportsElicitation', () => {
       expect(supportsElicitation(capabilities)).toBe(false);
     });
 
-    it('should return false when elicitation is empty object', () => {
+    it('should return true when elicitation is empty object (per MCP spec 2025-06-18)', () => {
       const capabilities: ClientCapabilities = {
         elicitation: {},
       };
-      expect(supportsElicitation(capabilities)).toBe(false);
+      // Per MCP spec: presence of elicitation object means client supports it
+      expect(supportsElicitation(capabilities)).toBe(true);
+    });
+
+    it('should return false when checking specific mode on empty elicitation', () => {
+      const capabilities: ClientCapabilities = {
+        elicitation: {},
+      };
+      expect(supportsElicitation(capabilities, 'form')).toBe(false);
+      expect(supportsElicitation(capabilities, 'url')).toBe(false);
     });
   });
 
@@ -267,6 +276,17 @@ describe('supportsElicitation', () => {
       };
 
       expect(supportsElicitation(legacyCapabilities)).toBe(false);
+    });
+
+    it('should work with MCP Inspector capabilities (elicitation: {})', () => {
+      // MCP Inspector sends elicitation: {} per MCP spec 2025-06-18
+      const inspectorCapabilities: ClientCapabilities = {
+        sampling: {},
+        elicitation: {},
+        roots: { listChanged: true },
+      };
+
+      expect(supportsElicitation(inspectorCapabilities)).toBe(true);
     });
   });
 });
