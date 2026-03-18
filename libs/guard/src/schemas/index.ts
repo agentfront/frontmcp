@@ -6,3 +6,10 @@ export {
   ipFilterConfigSchema,
   guardConfigSchema,
 } from './schemas';
+export type {
+  ConcurrencyConfigInput,
+  RateLimitConfigInput,
+  TimeoutConfigInput,
+  IpFilterConfigInput,
+  GuardConfigInput,
+} from './schemas.generated';

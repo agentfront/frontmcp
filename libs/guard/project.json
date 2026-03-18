@@ -5,9 +5,15 @@
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
   "targets": {
+    "generate-types": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx scripts/generate-schema-types.mjs"
+      }
+    },
     "build-cjs": {
       "executor": "@nx/esbuild:esbuild",
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate-types"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/guard/dist",
