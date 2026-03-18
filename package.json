@@ -25,6 +25,7 @@
     "coverage:all": "yarn test:unit:coverage && yarn test:e2e:coverage && yarn coverage:merge",
     "coverage:check": "npx nyc check-coverage --temp-dir=coverage/merged",
     "fix:imports": "node scripts/fix-unused-imports.mjs",
+    "generate:types": "npx tsx scripts/generate-schema-types.mjs",
     "build:ui": "nx run-many -t build --projects='@frontmcp/ui'",
     "publish:ui": "nx run-many -t publish --projects='@frontmcp/ui'"
   },
