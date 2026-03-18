@@ -30,8 +30,10 @@ type _VercelKvAssignable = AssertTrue<IsAssignable<VercelKvProviderOptionsInterf
 type _PubsubSchemaInput = z.input<typeof pubsubOptionsSchema>;
 type _PubsubRedisProviderAssignable = AssertTrue<IsAssignable<RedisProviderOptionsInterface, _PubsubSchemaInput>>;
 
-// Verify RedisOptionsInterface covers all union members
+// Verify RedisOptionsInterface covers all union members (bidirectional)
 type _RedisInterfaceCheck = AssertTrue<IsAssignable<RedisOptionsInterface, _RedisSchemaInput>>;
+type _RedisSchemaToInterfaceCheck = AssertTrue<IsAssignable<_RedisSchemaInput, RedisOptionsInterface>>;
 type _PubsubInterfaceCheck = AssertTrue<IsAssignable<PubsubOptionsInterface, _PubsubSchemaInput>>;
+type _PubsubSchemaToInterfaceCheck = AssertTrue<IsAssignable<_PubsubSchemaInput, PubsubOptionsInterface>>;
 
 export {};

@@ -59,10 +59,10 @@ export const remoteAuthSchema = z.object({
 // ============================================
 
 export type LocalAuthOptions = z.infer<typeof localAuthSchema>;
-export type LocalAuthOptionsInput = z.input<typeof localAuthSchema>;
+export type LocalAuthOptionsInput = LocalAuthOptionsInterface;
 
 export type RemoteAuthOptions = z.infer<typeof remoteAuthSchema>;
-export type RemoteAuthOptionsInput = z.input<typeof remoteAuthSchema>;
+export type RemoteAuthOptionsInput = RemoteAuthOptionsInterface;
 
 // Unified type for local + remote
 export type LocalOrRemoteAuthOptions = LocalAuthOptions | RemoteAuthOptions;

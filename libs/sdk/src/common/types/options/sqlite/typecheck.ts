@@ -10,6 +10,7 @@ type AssertTrue<T extends true> = T;
 
 type _SqliteSchemaInput = z.input<typeof sqliteOptionsSchema>;
 type _SqliteInterfaceCheck = AssertTrue<IsAssignable<SqliteOptionsInterface, _SqliteSchemaInput>>;
+type _SqliteSchemaToInterfaceCheck = AssertTrue<IsAssignable<_SqliteSchemaInput, SqliteOptionsInterface>>;
 
 type _SchemaKeys = keyof _SqliteSchemaInput;
 type _InterfaceKeys = keyof SqliteOptionsInterface;

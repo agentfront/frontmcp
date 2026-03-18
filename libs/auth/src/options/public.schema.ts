@@ -56,4 +56,4 @@ export const publicAuthOptionsSchema = z.object({
 // ============================================
 
 export type PublicAuthOptions = z.infer<typeof publicAuthOptionsSchema>;
-export type PublicAuthOptionsInput = z.input<typeof publicAuthOptionsSchema>;
+export type PublicAuthOptionsInput = PublicAuthOptionsInterface;

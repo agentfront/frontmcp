@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { annotatedFrontMcpLoggerSchema } from '../../../schemas';
-import { RawZodShape } from '../../common.types';
+import type { RawZodShape } from '../../common.types';
 import { LogLevel, LoggingOptionsInterface } from './interfaces';
 
 /**

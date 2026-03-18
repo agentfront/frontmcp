@@ -55,4 +55,4 @@ export const transparentAuthOptionsSchema = z.object({
 // ============================================
 
 export type TransparentAuthOptions = z.infer<typeof transparentAuthOptionsSchema>;
-export type TransparentAuthOptionsInput = z.input<typeof transparentAuthOptionsSchema>;
+export type TransparentAuthOptionsInput = TransparentAuthOptionsInterface;
