@@ -2,7 +2,8 @@
 // Zod schema for HTTP configuration
 
 import { z } from 'zod';
-import type { CorsOptions } from './interfaces';
+import type { RawZodShape } from '../../common.types';
+import type { CorsOptions, HttpOptionsInterface } from './interfaces';
 
 type CorsOriginCallback = Extract<CorsOptions['origin'], Function>;
 
@@ -45,7 +46,7 @@ export const httpOptionsSchema = z.object({
    * - CorsOptions object: custom CORS config
    */
   cors: z.union([z.literal(false), corsOptionsSchema]).optional(),
-});
+} satisfies RawZodShape<HttpOptionsInterface>);
 
 /**
  * HTTP configuration type (with defaults applied).
@@ -54,5 +55,6 @@ export type HttpOptions = z.infer<typeof httpOptionsSchema>;
 
 /**
  * HTTP configuration input type (for user configuration).
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type HttpOptionsInput = z.input<typeof httpOptionsSchema>;
+export type HttpOptionsInput = HttpOptionsInterface;

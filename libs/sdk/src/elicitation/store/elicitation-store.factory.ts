@@ -225,7 +225,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
 
     if (isNewRedisFormat || isLegacyRedisFormat) {
       // Safely extract Redis config with type validation
-      const redisConfig = redis as Record<string, unknown>;
+      const redisConfig = redis as unknown as Record<string, unknown>;
       const redisHost = typeof redisConfig['host'] === 'string' ? redisConfig['host'] : undefined;
       const redisPort = typeof redisConfig['port'] === 'number' ? redisConfig['port'] : 6379;
       const redisPassword = typeof redisConfig['password'] === 'string' ? redisConfig['password'] : undefined;

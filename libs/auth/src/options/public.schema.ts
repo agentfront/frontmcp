@@ -4,6 +4,8 @@
 import { z } from 'zod';
 import { jsonWebKeySetSchema, jwkSchema } from '../common/jwt.types';
 import { publicAccessConfigSchema } from './shared.schemas';
+import type { RawZodShape } from '../common/zod-utils';
+import type { PublicAuthOptionsInterface } from './interfaces';
 
 // ============================================
 // PUBLIC MODE
@@ -47,11 +49,11 @@ export const publicAuthOptionsSchema = z.object({
    * @default auto-generated
    */
   signKey: jwkSchema.or(z.instanceof(Uint8Array)).optional(),
-});
+} satisfies RawZodShape<PublicAuthOptionsInterface>);
 
 // ============================================
 // TYPE EXPORTS
 // ============================================
 
 export type PublicAuthOptions = z.infer<typeof publicAuthOptionsSchema>;
-export type PublicAuthOptionsInput = z.input<typeof publicAuthOptionsSchema>;
+export type PublicAuthOptionsInput = PublicAuthOptionsInterface;

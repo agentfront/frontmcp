@@ -2,4 +2,4 @@
 // Barrel export for ext-apps options
 
 export * from './schema';
-export * from './interfaces';
+export type { ExtAppsHostCapabilities, ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from './interfaces';

@@ -5,6 +5,8 @@
  */
 
 import { z } from 'zod';
+import type { RawZodShape } from '../../common.types';
+import type { SqliteOptionsInterface } from './interfaces';
 
 /**
  * SQLite storage configuration schema.
@@ -34,12 +36,13 @@ export const sqliteOptionsSchema = z.object({
    * @default true
    */
   walMode: z.boolean().optional().default(true),
-});
+} satisfies RawZodShape<SqliteOptionsInterface>);
 
 /**
  * SQLite storage input type (before Zod defaults).
+ * Uses explicit interface for better IDE autocomplete.
  */
-export type SqliteOptionsInput = z.input<typeof sqliteOptionsSchema>;
+export type SqliteOptionsInput = SqliteOptionsInterface;
 
 /**
  * SQLite storage output type (after Zod defaults).

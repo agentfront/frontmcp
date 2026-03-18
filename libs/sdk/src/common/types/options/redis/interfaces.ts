@@ -96,3 +96,10 @@ export type RedisOptionsInterface =
   | RedisProviderOptionsInterface
   | VercelKvProviderOptionsInterface
   | (RedisConnectionInterface & CommonStorageOptionsInterface);
+
+/**
+ * Pub/Sub options type (Redis-only, no Vercel KV support).
+ */
+export type PubsubOptionsInterface =
+  | RedisProviderOptionsInterface
+  | (RedisConnectionInterface & CommonStorageOptionsInterface);
