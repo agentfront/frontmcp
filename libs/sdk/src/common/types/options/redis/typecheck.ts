@@ -12,14 +12,19 @@ import type {
 
 type IsAssignable<T, U> = T extends U ? true : false;
 type AssertTrue<T extends true> = T;
+type HasSameKeys<T, U> = [Exclude<keyof T, keyof U>, Exclude<keyof U, keyof T>] extends [never, never] ? true : false;
 
-// Redis provider checks
+// Redis provider checks (bidirectional assignability + exact key parity)
 type _RedisProviderSchemaInput = z.input<typeof redisProviderSchema>;
 type _RedisProviderCheck = AssertTrue<IsAssignable<RedisProviderOptionsInterface, _RedisProviderSchemaInput>>;
+type _RedisProviderReverseCheck = AssertTrue<IsAssignable<_RedisProviderSchemaInput, RedisProviderOptionsInterface>>;
+type _RedisProviderKeysCheck = AssertTrue<HasSameKeys<RedisProviderOptionsInterface, _RedisProviderSchemaInput>>;
 
-// Vercel KV provider checks
+// Vercel KV provider checks (bidirectional assignability + exact key parity)
 type _VercelKvSchemaInput = z.input<typeof vercelKvProviderSchema>;
 type _VercelKvCheck = AssertTrue<IsAssignable<VercelKvProviderOptionsInterface, _VercelKvSchemaInput>>;
+type _VercelKvReverseCheck = AssertTrue<IsAssignable<_VercelKvSchemaInput, VercelKvProviderOptionsInterface>>;
+type _VercelKvKeysCheck = AssertTrue<HasSameKeys<VercelKvProviderOptionsInterface, _VercelKvSchemaInput>>;
 
 // Combined Redis options (union) - each interface member must be assignable to schema input
 type _RedisSchemaInput = z.input<typeof redisOptionsSchema>;
