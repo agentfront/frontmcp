@@ -119,6 +119,8 @@ export function supportsElicitation(capabilities?: ClientCapabilities, mode?: 'f
     return false;
   }
 
+  // Per MCP spec (2025-06-18): presence of the elicitation object means
+  // the client supports it. Sub-fields (form, url) are optional refinements.
   if (mode === 'form') {
     return capabilities.elicitation.form !== undefined;
   }
@@ -127,8 +129,8 @@ export function supportsElicitation(capabilities?: ClientCapabilities, mode?: 'f
     return capabilities.elicitation.url !== undefined;
   }
 
-  // If no mode specified, check for any elicitation support
-  return capabilities.elicitation.form !== undefined || capabilities.elicitation.url !== undefined;
+  // No mode specified → elicitation object exists, client supports it
+  return true;
 }
 
 /**
