@@ -531,4 +531,87 @@ test.describe('Elicitation E2E', () => {
       }
     });
   });
+
+  /**
+   * Tests for elicitation capability round-trip.
+   *
+   * These tests verify the full capability negotiation flow that was missing
+   * from previous tests, causing two production bugs to go undetected:
+   * - Bug #1: Server not advertising elicitation in capabilities response
+   * - Bug #2: supportsElicitation flag lost across requests in SSE mode
+   */
+  test.describe('elicitation capability round-trip', () => {
+    test('server should advertise elicitation in capabilities', async ({ mcp }) => {
+      const caps = mcp.capabilities as Record<string, unknown>;
+      expect(caps.elicitation).toBeDefined();
+    });
+
+    test('elicitation should work after prior requests in same session', async ({ mcp }) => {
+      // Do normal requests first — exercises session state persistence
+      const tools = await mcp.tools.list();
+      expect(tools.length).toBeGreaterThan(0);
+
+      // Second request in same session
+      const tools2 = await mcp.tools.list();
+      expect(tools2.length).toEqual(tools.length);
+
+      // Now trigger elicitation — must still work after prior requests
+      mcp.onElicitation(async () => ({
+        action: 'accept',
+        content: { confirmed: true },
+      }));
+
+      const result = await mcp.tools.call('confirm-action', { action: 'test after requests' });
+      expect(result).toBeSuccessful();
+      expect(result.text()).toContain('confirmed and executed');
+      // Must NOT contain fallback instructions — native elicitation should work
+      expect(result.text()).not.toContain('sendElicitationResult');
+    });
+
+    test('tools/list should NOT include sendElicitationResult for elicitation-capable clients', async ({ mcp }) => {
+      const tools = await mcp.tools.list();
+      const toolNames = tools.map((t) => t.name);
+      expect(toolNames).not.toContain('sendElicitationResult');
+    });
+
+    test('should handle multiple sequential elicitations in same session', async ({ mcp }) => {
+      // Do a normal request first
+      await mcp.tools.list();
+
+      // First elicitation
+      mcp.onElicitation(async () => ({
+        action: 'accept',
+        content: { confirmed: true },
+      }));
+      const result1 = await mcp.tools.call('confirm-action', { action: 'first action' });
+      expect(result1).toBeSuccessful();
+      expect(result1.text()).toContain('confirmed and executed');
+
+      // Second elicitation in same session — session state must persist
+      mcp.onElicitation(async () => ({
+        action: 'accept',
+        content: { userInput: 'hello' },
+      }));
+      const result2 = await mcp.tools.call('get-user-input', { prompt: 'say hi' });
+      expect(result2).toBeSuccessful();
+      expect(result2.text()).toContain('hello');
+    });
+
+    test('non-supporting client should get fallback even after prior requests', async ({ server }) => {
+      const noElicitClient = await server.createClientBuilder().withCapabilities({}).withPublicMode().buildAndConnect();
+
+      try {
+        // Do some normal requests first
+        const tools = await noElicitClient.tools.list();
+        expect(tools.map((t) => t.name)).toContain('sendElicitationResult');
+
+        // Now trigger elicitation — should get fallback
+        const result = await noElicitClient.tools.call('confirm-action', { action: 'test' });
+        expect(result).toBeSuccessful();
+        expect(result.text()).toContain('sendElicitationResult');
+      } finally {
+        await noElicitClient.disconnect();
+      }
+    });
+  });
 });

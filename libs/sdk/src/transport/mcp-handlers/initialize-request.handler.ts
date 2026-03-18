@@ -5,6 +5,7 @@ import { UnsupportedClientVersionError } from '../../errors';
 import type { ClientCapabilities } from '../../notification';
 import { detectPlatformFromCapabilities, detectAIPlatform, supportsElicitation } from '../../notification';
 import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
+import type { SdkAuthInfo } from '../../server/server.types';
 
 /**
  * Validates that the client's protocol version is a valid date string format.
@@ -102,14 +103,23 @@ export default function initializeRequestHandler({
               ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
             }
 
-            // Persist to session cache so subsequent requests can access client info
-            // This is critical for HTTP transports where sessions are parsed from encrypted headers
-            updateSessionPayload(sessionId, {
+            const initPayload = {
               clientName,
               clientVersion,
               supportsElicitation: clientSupportsElicitation,
               ...(finalPlatform && { platformType: finalPlatform }),
-            });
+            };
+
+            // Persist to session cache so subsequent requests can access client info
+            // This is critical for HTTP transports where sessions are parsed from encrypted headers
+            updateSessionPayload(sessionId, initPayload);
+
+            // Persist initialization data on the transport adapter instance.
+            // This ensures the data survives across SSE requests (fresh HTTP sessions)
+            // and works in distributed environments (Vercel Edge, Cloudflare Workers)
+            // where the encrypted session payload carries the correct initialization state.
+            const transport = (ctx.authInfo as SdkAuthInfo)?.transport;
+            transport?.setInitSessionPayload(initPayload);
           }
         } else if (ctx.authInfo?.sessionIdPayload) {
           // Update platform and elicitation support even without client info
@@ -118,11 +128,17 @@ export default function initializeRequestHandler({
             ctx.authInfo.sessionIdPayload.platformType = detectedPlatform;
           }
 
-          // Persist to session cache
-          updateSessionPayload(sessionId, {
+          const initPayload = {
             supportsElicitation: clientSupportsElicitation,
             ...(detectedPlatform && { platformType: detectedPlatform }),
-          });
+          };
+
+          // Persist to session cache
+          updateSessionPayload(sessionId, initPayload);
+
+          // Persist on transport adapter instance
+          const transport = (ctx.authInfo as SdkAuthInfo)?.transport;
+          transport?.setInitSessionPayload(initPayload);
         }
       }
 
