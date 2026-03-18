@@ -95,7 +95,7 @@ function getZodTypeName(schema) {
  */
 /** Stringify a JS value using single quotes for strings (prettier-compatible). */
 function toTsLiteral(value) {
-  if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`;
+  if (typeof value === 'string') return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
   return JSON.stringify(value);
 }
 
