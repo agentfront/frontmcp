@@ -8,6 +8,26 @@ import { updateSessionPayload } from '../../auth/session/utils/session-id.utils'
 import type { SdkAuthInfo } from '../../server/server.types';
 
 /**
+ * Persist initialization data to the session cache and transport adapter.
+ *
+ * The returned new session ID from updateSessionPayload is intentionally not
+ * propagated to the client. The transport session ID is fixed at creation —
+ * changing it mid-session would break MCP protocol (the client references the
+ * original ID). The re-encrypted payload is cached under both old and new IDs
+ * for future lookups on any node.
+ */
+function persistInitPayload(
+  sessionId: string,
+  initPayload: Partial<Record<string, unknown>>,
+  ctx: { authInfo?: unknown },
+): void {
+  updateSessionPayload(sessionId, initPayload);
+
+  const transport = (ctx.authInfo as SdkAuthInfo)?.transport;
+  transport?.setInitSessionPayload(initPayload);
+}
+
+/**
  * Validates that the client's protocol version is a valid date string format.
  * Per MCP spec, older versions should be accepted if supported - version negotiation
  * determines which version to use, not this guard.
@@ -103,23 +123,16 @@ export default function initializeRequestHandler({
               ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
             }
 
-            const initPayload = {
-              clientName,
-              clientVersion,
-              supportsElicitation: clientSupportsElicitation,
-              ...(finalPlatform && { platformType: finalPlatform }),
-            };
-
-            // Persist to session cache so subsequent requests can access client info
-            // This is critical for HTTP transports where sessions are parsed from encrypted headers
-            updateSessionPayload(sessionId, initPayload);
-
-            // Persist initialization data on the transport adapter instance.
-            // This ensures the data survives across SSE requests (fresh HTTP sessions)
-            // and works in distributed environments (Vercel Edge, Cloudflare Workers)
-            // where the encrypted session payload carries the correct initialization state.
-            const transport = (ctx.authInfo as SdkAuthInfo)?.transport;
-            transport?.setInitSessionPayload(initPayload);
+            persistInitPayload(
+              sessionId,
+              {
+                clientName,
+                clientVersion,
+                supportsElicitation: clientSupportsElicitation,
+                ...(finalPlatform && { platformType: finalPlatform }),
+              },
+              ctx,
+            );
           }
         } else if (ctx.authInfo?.sessionIdPayload) {
           // Update platform and elicitation support even without client info
@@ -128,17 +141,14 @@ export default function initializeRequestHandler({
             ctx.authInfo.sessionIdPayload.platformType = detectedPlatform;
           }
 
-          const initPayload = {
-            supportsElicitation: clientSupportsElicitation,
-            ...(detectedPlatform && { platformType: detectedPlatform }),
-          };
-
-          // Persist to session cache
-          updateSessionPayload(sessionId, initPayload);
-
-          // Persist on transport adapter instance
-          const transport = (ctx.authInfo as SdkAuthInfo)?.transport;
-          transport?.setInitSessionPayload(initPayload);
+          persistInitPayload(
+            sessionId,
+            {
+              supportsElicitation: clientSupportsElicitation,
+              ...(detectedPlatform && { platformType: detectedPlatform }),
+            },
+            ctx,
+          );
         }
       }
 
