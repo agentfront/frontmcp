@@ -5,6 +5,7 @@ import { UnsupportedClientVersionError } from '../../errors';
 import type { ClientCapabilities } from '../../notification';
 import { detectPlatformFromCapabilities, detectAIPlatform, supportsElicitation } from '../../notification';
 import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
+import type { SessionIdPayload } from '@frontmcp/auth';
 import type { SdkAuthInfo } from '../../server/server.types';
 
 /**
@@ -18,7 +19,7 @@ import type { SdkAuthInfo } from '../../server/server.types';
  */
 function persistInitPayload(
   sessionId: string,
-  initPayload: Partial<Record<string, unknown>>,
+  initPayload: Partial<SessionIdPayload>,
   ctx: { authInfo?: unknown },
 ): void {
   updateSessionPayload(sessionId, initPayload);
