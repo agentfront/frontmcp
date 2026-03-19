@@ -238,6 +238,7 @@ describe('session-id.utils', () => {
       });
 
       expect(updated).not.toBeNull();
+      expect(typeof updated).toBe('string');
     });
 
     it('should merge partial updates correctly', () => {
@@ -278,7 +279,7 @@ describe('session-id.utils', () => {
       expect(payload.skillsOnlyMode).toBe(true);
     });
 
-    it('should return false for non-existent session', () => {
+    it('should return null for non-existent session', () => {
       mockSafeDecrypt.mockReturnValue(null);
 
       const result = updateSessionPayload('non-existent-session-id', {
