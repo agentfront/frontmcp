@@ -84,7 +84,7 @@ export default function initializeRequestHandler({
             // Include elicitation capability for interactive user input support
             elicitation: request.params.capabilities.elicitation as ClientCapabilities['elicitation'],
           };
-          scope.notifications.setClientCapabilities(sessionId!, clientCapabilities);
+          scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
 
           // Persist capabilities to session store for recreation after transport eviction/restart
           await scope.transportService.updateStoredSessionCapabilities(
@@ -102,7 +102,7 @@ export default function initializeRequestHandler({
           const { name: clientName, version: clientVersion } = request.params.clientInfo;
 
           // Try to store in notification service (may fail for HTTP transports without registered server)
-          scope.notifications.setClientInfo(sessionId!, {
+          scope.notifications.setClientInfo(sessionId, {
             name: clientName,
             version: clientVersion,
           });

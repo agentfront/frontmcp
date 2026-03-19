@@ -351,8 +351,8 @@ const RULES: Rule[] = [
     },
   },
   {
-    care: CH_MASK | B_STREAMABLE_EN,
-    match: CH_POST_SSE /* streamable disabled */,
+    care: CH_MASK | B_STREAMABLE_EN | B_STATELESS_EN,
+    match: CH_POST_SSE /* streamable disabled, stateless disabled */,
     outcome: {
       intent: 'unknown',
       reason: 'Streamable HTTP disabled.',
@@ -382,8 +382,8 @@ const RULES: Rule[] = [
     },
   },
   {
-    care: CH_MASK | B_STATEFUL_EN | B_STREAMABLE_EN,
-    match: CH_POST_JSON /* neither enabled */,
+    care: CH_MASK | B_STATEFUL_EN | B_STREAMABLE_EN | B_STATELESS_EN,
+    match: CH_POST_JSON /* neither enabled, stateless disabled */,
     outcome: {
       intent: 'unknown',
       reason: 'JSON mode disabled.',
