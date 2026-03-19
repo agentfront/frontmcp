@@ -43,6 +43,13 @@ export interface StreamableHTTPServerTransportOptions {
    * Callback when a session is closed.
    */
   onsessionclosed?: (sessionId?: string) => void | Promise<void>;
+
+  /**
+   * When true, the transport operates in stateless mode and recreates
+   * the internal WebStandardStreamableHTTPServerTransport for each request.
+   * This is needed because MCP SDK 1.26.0 enforces single-use for stateless transports.
+   */
+  isStateless?: boolean;
 }
 
 /**
@@ -70,9 +77,17 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    */
   private readonly _constructorOptions: StreamableHTTPServerTransportOptions;
 
+  /**
+   * When true, the transport recreates the internal transport for each request.
+   * Decoupled from sessionIdGenerator so stateless transports can still
+   * provide a session ID (e.g., '__stateless__') in the response header.
+   */
+  private readonly _isStateless: boolean;
+
   constructor(options: StreamableHTTPServerTransportOptions = {}) {
     super(options);
     this._constructorOptions = options;
+    this._isStateless = options.isStateless ?? false;
   }
 
   /**
@@ -160,11 +175,14 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const oldWebTransport = (this as any)._webStandardTransport;
 
-    // MCP SDK 1.26.0 enforces single-use for stateless transports (no sessionIdGenerator).
+    // MCP SDK 1.26.0 enforces single-use for stateless transports.
     // FrontMCP manages its own session lifecycle and reuses the adapter across requests.
     // Create a fresh WebStandardStreamableHTTPServerTransport for each subsequent stateless
     // request to align with the SDK's intended per-request transport lifecycle.
-    if (oldWebTransport && !oldWebTransport.sessionIdGenerator && oldWebTransport._hasHandledRequest) {
+    // Uses _isStateless flag instead of checking sessionIdGenerator, because stateless
+    // transports now provide a sessionIdGenerator (returning '__stateless__') to ensure
+    // the Mcp-Session-Id response header is set per the MCP spec.
+    if (oldWebTransport && this._isStateless && oldWebTransport._hasHandledRequest) {
       const fresh = new WebStandardStreamableHTTPServerTransport(this._constructorOptions);
       // Transfer MCP Server connection handlers to the fresh transport
       fresh.onmessage = oldWebTransport.onmessage;
