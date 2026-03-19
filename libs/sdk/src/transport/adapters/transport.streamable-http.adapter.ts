@@ -11,16 +11,18 @@ import { ElicitResult, ElicitOptions } from '../../elicitation';
 import { ElicitationTimeoutError } from '../../errors';
 
 /**
- * Stateless HTTP requests must be able to send multiple initialize calls without
- * tripping the MCP transport's "already initialized" guard. The upstream SDK
- * treats any transport with a session ID generator as stateful, so we disable
- * session generation entirely for stateless transports.
+ * Resolves the session ID generator for the transport.
+ *
+ * For stateless-http, returns a generator that always yields '__stateless__'
+ * so the MCP SDK sets the Mcp-Session-Id response header (required by the
+ * MCP spec for streamable HTTP). The per-request recreation logic uses the
+ * dedicated `isStateless` flag instead of checking sessionIdGenerator.
  */
 export const resolveSessionIdGenerator = (
   transportType: TransportType,
   sessionId: string,
 ): (() => string) | undefined => {
-  return transportType === 'stateless-http' ? undefined : () => sessionId;
+  return transportType === 'stateless-http' ? () => '__stateless__' : () => sessionId;
 };
 
 export class TransportStreamableHttpAdapter extends LocalTransportAdapter<RecreateableStreamableHTTPServerTransport> {
@@ -32,8 +34,11 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     // Enable via transport.eventStore config if your clients support SSE resumability.
     const eventStore = this.scope.eventStore;
 
+    const isStateless = this.key.type === 'stateless-http';
+
     return new RecreateableStreamableHTTPServerTransport({
       sessionIdGenerator,
+      isStateless,
       onsessionclosed: () => {
         // Note: We don't call this.destroy() here because the adapter
         // lifecycle is managed by the transport registry, not session events.

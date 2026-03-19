@@ -62,6 +62,7 @@ export default function initializeRequestHandler({
       // Store client capabilities and client info from the initialize request
       // The session ID is available in the auth info from the transport
       const sessionId = ctx.authInfo?.sessionId;
+
       let detectedPlatform: ReturnType<typeof detectPlatformFromCapabilities> = undefined;
 
       // Determine if client supports elicitation from capabilities

@@ -294,10 +294,13 @@ const RULES: Rule[] = [
   },
 
   // D) Initialize (POST → SSE)
-  // D1) Stateless initialize (no session, stateless enabled) - must come before streamable rules
+  // D1) Stateless initialize (no session, stateless enabled, streamable NOT enabled)
+  // When streamable is also enabled, prefer streamable-http (which creates a session).
+  // Per MCP spec, first initialize naturally has no session — stateless should only
+  // match when it's the sole enabled protocol.
   {
-    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN,
-    match: CH_POST_INIT_SSE | B_STATELESS_EN /* no session */,
+    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN | B_STREAMABLE_EN,
+    match: CH_POST_INIT_SSE | B_STATELESS_EN /* no session, no streamable */,
     outcome: { intent: 'stateless-http', reason: 'Stateless initialize (no session).' },
   },
   {
@@ -316,10 +319,10 @@ const RULES: Rule[] = [
   },
 
   // E) Initialize (POST → JSON)
-  // E1) Stateless initialize JSON (no session, stateless enabled) - must come before stateful rules
+  // E1) Stateless initialize JSON (no session, stateless enabled, streamable NOT enabled)
   {
-    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN,
-    match: CH_POST_INIT_JSON | B_STATELESS_EN /* no session */,
+    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN | B_STREAMABLE_EN,
+    match: CH_POST_INIT_JSON | B_STATELESS_EN /* no session, no streamable */,
     outcome: { intent: 'stateless-http', reason: 'Stateless initialize JSON (no session).' },
   },
   {
@@ -348,17 +351,18 @@ const RULES: Rule[] = [
     },
   },
   {
-    care: CH_MASK | B_STREAMABLE_EN,
-    match: CH_POST_SSE /* streamable disabled */,
+    care: CH_MASK | B_STREAMABLE_EN | B_STATELESS_EN,
+    match: CH_POST_SSE /* streamable disabled, stateless disabled */,
     outcome: {
       intent: 'unknown',
       reason: 'Streamable HTTP disabled.',
       recommendation: { httpStatus: 405, message: 'Streamable HTTP disabled' },
     },
   },
+  // Stateless short-lived SSE only when streamable is NOT enabled
   {
-    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN,
-    match: CH_POST_SSE | B_STATELESS_EN /* no session */,
+    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN | B_STREAMABLE_EN,
+    match: CH_POST_SSE | B_STATELESS_EN /* no session, no streamable */,
     outcome: { intent: 'stateless-http', reason: 'Stateless short-lived SSE.' },
   },
   {
@@ -378,17 +382,18 @@ const RULES: Rule[] = [
     },
   },
   {
-    care: CH_MASK | B_STATEFUL_EN | B_STREAMABLE_EN,
-    match: CH_POST_JSON /* neither enabled */,
+    care: CH_MASK | B_STATEFUL_EN | B_STREAMABLE_EN | B_STATELESS_EN,
+    match: CH_POST_JSON /* neither enabled, stateless disabled */,
     outcome: {
       intent: 'unknown',
       reason: 'JSON mode disabled.',
       recommendation: { httpStatus: 405, message: 'JSON mode disabled' },
     },
   },
+  // Stateless JSON only when streamable is NOT enabled
   {
-    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN,
-    match: CH_POST_JSON | B_STATELESS_EN /* no session */,
+    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN | B_STREAMABLE_EN,
+    match: CH_POST_JSON | B_STATELESS_EN /* no session, no streamable */,
     outcome: { intent: 'stateless-http', reason: 'Stateless JSON request.' },
   },
   {
