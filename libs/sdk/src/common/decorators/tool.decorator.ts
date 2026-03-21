@@ -238,7 +238,7 @@ type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetad
  */
 export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = Omit<
   __ToolMetadataBase<I, O>,
-  'concurrency' | 'rateLimit' | 'timeout'
+  'concurrency' | 'rateLimit' | 'timeout' | 'ui'
 > & {
   concurrency?: ConcurrencyConfigInput;
   rateLimit?: RateLimitConfigInput;
@@ -318,21 +318,20 @@ declare module '@frontmcp/sdk' {
 
   // 1) Overload: outputSchema PROVIDED → strict return typing
   // @ts-expect-error - Module augmentation requires decorator overload
-  export function Tool<
-    I extends __Shape,
-    O extends __OutputSchema,
-    T extends ToolMetadataOptions<I, O> & { outputSchema: any },
-  >(
-    opts: T,
+  export function Tool<I extends __Shape, O extends __OutputSchema>(
+    opts: ToolMetadataOptions<I, O> & { outputSchema: O },
   ): <C extends __Ctor>(
-    cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<T>> & __MustReturn<C, ToolOutputOf<T>>,
-  ) => __Rewrap<C, ToolInputOf<T>, ToolOutputOf<T>>;
+    cls: C &
+      __MustExtendCtx<C> &
+      __MustParam<C, ToolInputOf<{ inputSchema: I }>> &
+      __MustReturn<C, ToolOutputOf<{ outputSchema: O }>>,
+  ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
 
   // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
   // @ts-expect-error - Module augmentation requires decorator overload
-  export function Tool<I extends __Shape, T extends ToolMetadataOptions<I, any> & { outputSchema?: never }>(
-    opts: T,
+  export function Tool<I extends __Shape>(
+    opts: ToolMetadataOptions<I, any> & { outputSchema?: never },
   ): <C extends __Ctor>(
-    cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<T>> & __MustReturn<C, ToolOutputOf<T>>,
-  ) => __Rewrap<C, ToolInputOf<T>, ToolOutputOf<T>>;
+    cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<{ inputSchema: I }>> & __MustReturn<C, ToolOutputOf<{}>>,
+  ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{}>>;
 }

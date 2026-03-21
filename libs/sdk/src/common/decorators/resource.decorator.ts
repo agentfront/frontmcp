@@ -8,6 +8,7 @@ import {
 } from '../metadata';
 
 import { ReadResourceRequest, ReadResourceResult } from '@frontmcp/protocol';
+import { ResourceContext } from '../interfaces';
 
 /**
  * Decorator that marks a class as a McpResource module and provides metadata
@@ -176,19 +177,40 @@ Object.assign(FrontMcpResource, {
   remote: resourceRemote,
 });
 
+// ============================================================================
+// Type Checking Helpers
+// ============================================================================
+
+// ---------- ctor & reflection ----------
+type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);
+type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
+  ? R
+  : C extends abstract new (...a: any[]) => infer R
+    ? R
+    : never;
+
+// ---------- friendly branded errors ----------
+type __MustExtendResourceCtx<C extends __Ctor> =
+  __R<C> extends ResourceContext ? unknown : { 'Resource class error': 'Class must extend ResourceContext' };
+
 type ResourceDecorator = {
-  (metadata: ResourceMetadata): ClassDecorator;
+  (metadata: ResourceMetadata): <C extends __Ctor>(cls: C & __MustExtendResourceCtx<C>) => C;
   esm: typeof resourceEsm;
   remote: typeof resourceRemote;
 };
 
+type ResourceTemplateDecorator = {
+  (metadata: ResourceTemplateMetadata): <C extends __Ctor>(cls: C & __MustExtendResourceCtx<C>) => C;
+};
+
 const Resource = FrontMcpResource as unknown as ResourceDecorator;
+const _ResourceTemplate = FrontMcpResourceTemplate as unknown as ResourceTemplateDecorator;
 
 export {
   FrontMcpResource,
   Resource,
   FrontMcpResourceTemplate,
-  FrontMcpResourceTemplate as ResourceTemplate,
+  _ResourceTemplate as ResourceTemplate,
   frontMcpResource,
   frontMcpResource as resource,
   frontMcpResourceTemplate,

@@ -4,7 +4,7 @@
  * The ESM loader detects decorated classes automatically — no manifest needed.
  */
 import 'reflect-metadata';
-import { Resource } from '@frontmcp/sdk';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'config',
@@ -12,12 +12,12 @@ import { Resource } from '@frontmcp/sdk';
   mimeType: 'application/json',
   description: 'Application configuration',
 })
-export class ConfigResource {
-  execute() {
+export class ConfigResource extends ResourceContext {
+  async execute(uri: string) {
     return {
       contents: [
         {
-          uri: 'esm://config',
+          uri,
           text: JSON.stringify({ env: 'test', version: '1.0.0' }),
         },
       ],
@@ -31,12 +31,12 @@ export class ConfigResource {
   mimeType: 'application/json',
   description: 'Health check endpoint',
 })
-export class HealthResource {
-  execute() {
+export class HealthResource extends ResourceContext {
+  async execute(uri: string) {
     return {
       contents: [
         {
-          uri: 'esm://health',
+          uri,
           text: JSON.stringify({ healthy: true, uptime: 12345 }),
         },
       ],
