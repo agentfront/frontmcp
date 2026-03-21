@@ -125,13 +125,14 @@ type __PrimitiveOutputType =
   | z.ZodBoolean
   | z.ZodBigInt
   | z.ZodDate;
+type __MediaOutputType = 'image' | 'audio' | 'resource' | 'resource_link';
 type __StructuredOutputType =
   | z.ZodRawShape
   | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
   | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
   | z.ZodDiscriminatedUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>;
-type __JobSingleOutputType = __PrimitiveOutputType | __StructuredOutputType;
+type __JobSingleOutputType = __PrimitiveOutputType | __MediaOutputType | __StructuredOutputType;
 type __OutputSchema = __JobSingleOutputType | __JobSingleOutputType[];
 
 // ---------- ctor & reflection ----------
@@ -207,13 +208,6 @@ interface JobDecorator {
       __MustParam<C, ToolInputOf<{ inputSchema: I }>> &
       __MustReturn<C, ToolOutputOf<{ outputSchema: O }>>,
   ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{ outputSchema: O }>>;
-
-  // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
-  <I extends __Shape>(
-    opts: JobMetadata<I, any> & { outputSchema?: never },
-  ): <C extends __Ctor>(
-    cls: C & __MustExtendCtx<C> & __MustParam<C, ToolInputOf<{ inputSchema: I }>> & __MustReturn<C, ToolOutputOf<{}>>,
-  ) => __Rewrap<C, ToolInputOf<{ inputSchema: I }>, ToolOutputOf<{}>>;
 
   esm: typeof jobEsm;
   remote: typeof jobRemote;

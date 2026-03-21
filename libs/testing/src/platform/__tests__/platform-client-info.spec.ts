@@ -28,8 +28,9 @@ describe('getPlatformClientInfo', () => {
   });
 
   it('should return default info for an unrecognized platform value', () => {
-    // The default case in the switch handles unknown strings
-    const info = getPlatformClientInfo('unknown');
+    // Cast a truly unrecognized value to exercise the default switch branch.
+    // 'unknown' is a valid TestPlatformType, so we need a value outside the union.
+    const info = getPlatformClientInfo('not-a-real-platform' as TestPlatformType);
     expect(info).toEqual({ name: 'mcp-test-client', version: '1.0' });
   });
 });
@@ -113,7 +114,8 @@ describe('getPlatformCapabilities', () => {
     expect(caps.sampling).toEqual({});
     expect(caps.elicitation).toEqual({ form: {} });
     expect(caps.experimental).toBeDefined();
-    expect(caps.experimental![MCP_APPS_EXTENSION_KEY]).toEqual({
+    if (!caps.experimental) return;
+    expect(caps.experimental[MCP_APPS_EXTENSION_KEY]).toEqual({
       mimeTypes: ['text/html;profile=mcp-app'],
     });
   });

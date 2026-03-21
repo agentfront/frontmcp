@@ -80,11 +80,29 @@ function _testWrongParamType() {
   void WrongParamAgent;
 }
 
+// ── Invalid: class not extending AgentContext ───────────────
+
+function _testNotAgentContext() {
+  // @ts-expect-error - class must extend AgentContext
+  @Agent({
+    name: 'not-agent-context',
+    inputSchema: { topic: z.string() },
+    llm: { provider: 'openai', model: 'gpt-4', apiKey: 'test-key' },
+  })
+  class NotAgentContext {
+    async execute(input: { topic: string }) {
+      return {};
+    }
+  }
+  void NotAgentContext;
+}
+
 // Suppress unused variable/function warnings
 void ValidAgent;
 void ValidAgentWithGuards;
 void _testInvalidConcurrency;
 void _testWrongParamType;
+void _testNotAgentContext;
 
 // ════════════════════════════════════════════════════════════════
 // Runtime placeholder (required by Jest)

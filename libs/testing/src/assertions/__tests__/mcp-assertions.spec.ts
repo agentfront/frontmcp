@@ -54,7 +54,7 @@ describe('McpAssertions', () => {
         error: undefined,
         durationMs: 10,
         requestId: 1,
-      } as any;
+      } as Record<string, unknown>;
       expect(() => McpAssertions.assertSuccess(response)).toThrow(/Unknown error/);
     });
   });
@@ -77,7 +77,7 @@ describe('McpAssertions', () => {
     });
 
     it('should throw when error info is undefined', () => {
-      const response = { success: false, error: undefined, durationMs: 10, requestId: 1 } as any;
+      const response = { success: false, error: undefined, durationMs: 10, requestId: 1 } as Record<string, unknown>;
       expect(() => McpAssertions.assertError(response)).toThrow('Expected error info but got undefined');
     });
 
@@ -105,12 +105,15 @@ describe('McpAssertions', () => {
 
   describe('assertToolSuccess', () => {
     it('should pass for ToolResultWrapper with isError false', () => {
-      const wrapper = { raw: { content: [] }, isError: false, isSuccess: true } as any;
+      const wrapper = { raw: { content: [] }, isError: false, isSuccess: true } as Record<string, unknown>;
       expect(() => McpAssertions.assertToolSuccess(wrapper)).not.toThrow();
     });
 
     it('should throw for ToolResultWrapper with isError true', () => {
-      const wrapper = { raw: { content: [] }, isError: true, error: { message: 'tool failed' } } as any;
+      const wrapper = { raw: { content: [] }, isError: true, error: { message: 'tool failed' } } as Record<
+        string,
+        unknown
+      >;
       expect(() => McpAssertions.assertToolSuccess(wrapper)).toThrow('Tool call failed: tool failed');
     });
 
@@ -137,12 +140,12 @@ describe('McpAssertions', () => {
 
   describe('assertToolContent', () => {
     it('should pass when ToolResultWrapper has matching content type', () => {
-      const wrapper = { raw: { content: [{ type: 'text', text: 'hello' }] } } as any;
+      const wrapper = { raw: { content: [{ type: 'text', text: 'hello' }] } } as Record<string, unknown>;
       expect(() => McpAssertions.assertToolContent(wrapper, 'text')).not.toThrow();
     });
 
     it('should throw when ToolResultWrapper lacks matching content type', () => {
-      const wrapper = { raw: { content: [{ type: 'image', data: '', mimeType: '' }] } } as any;
+      const wrapper = { raw: { content: [{ type: 'image', data: '', mimeType: '' }] } } as Record<string, unknown>;
       expect(() => McpAssertions.assertToolContent(wrapper, 'text')).toThrow(
         'Expected tool result to have text content',
       );
@@ -175,7 +178,7 @@ describe('McpAssertions', () => {
         raw: { contents: [] },
         isError: false,
         text: () => 'resource text',
-      } as any;
+      } as Record<string, unknown>;
       const text = McpAssertions.assertTextResource(wrapper);
       expect(text).toBe('resource text');
     });
@@ -186,7 +189,7 @@ describe('McpAssertions', () => {
         isError: true,
         error: { message: 'read fail' },
         text: () => undefined,
-      } as any;
+      } as Record<string, unknown>;
       expect(() => McpAssertions.assertTextResource(wrapper)).toThrow('Resource read failed: read fail');
     });
 
@@ -195,7 +198,7 @@ describe('McpAssertions', () => {
         raw: { contents: [] },
         isError: false,
         text: () => undefined,
-      } as any;
+      } as Record<string, unknown>;
       expect(() => McpAssertions.assertTextResource(wrapper)).toThrow('Expected text content but got undefined');
     });
 
@@ -246,26 +249,26 @@ describe('McpAssertions', () => {
       const tools = [
         { name: 'tool-a', description: 'A' },
         { name: 'tool-b', description: 'B' },
-      ] as any[];
+      ] as Array<Record<string, unknown>>;
       const tool = McpAssertions.assertContainsTool(tools, 'tool-b');
       expect(tool.name).toBe('tool-b');
     });
 
     it('should throw when tool is not found', () => {
-      const tools = [{ name: 'tool-a' }] as any[];
+      const tools = [{ name: 'tool-a' }] as Array<Record<string, unknown>>;
       expect(() => McpAssertions.assertContainsTool(tools, 'missing')).toThrow(/Expected to find tool "missing"/);
     });
   });
 
   describe('assertContainsResource', () => {
     it('should return the resource when found', () => {
-      const resources = [{ uri: 'file://a' }, { uri: 'file://b' }] as any[];
+      const resources = [{ uri: 'file://a' }, { uri: 'file://b' }] as Array<Record<string, unknown>>;
       const resource = McpAssertions.assertContainsResource(resources, 'file://b');
       expect(resource.uri).toBe('file://b');
     });
 
     it('should throw when resource is not found', () => {
-      const resources = [{ uri: 'file://a' }] as any[];
+      const resources = [{ uri: 'file://a' }] as Array<Record<string, unknown>>;
       expect(() => McpAssertions.assertContainsResource(resources, 'file://missing')).toThrow(
         /Expected to find resource "file:\/\/missing"/,
       );
@@ -274,13 +277,13 @@ describe('McpAssertions', () => {
 
   describe('assertContainsResourceTemplate', () => {
     it('should return the template when found', () => {
-      const templates = [{ uriTemplate: 'file://{id}' }] as any[];
+      const templates = [{ uriTemplate: 'file://{id}' }] as Array<Record<string, unknown>>;
       const t = McpAssertions.assertContainsResourceTemplate(templates, 'file://{id}');
       expect(t.uriTemplate).toBe('file://{id}');
     });
 
     it('should throw when template is not found', () => {
-      const templates = [] as any[];
+      const templates = [] as Array<Record<string, unknown>>;
       expect(() => McpAssertions.assertContainsResourceTemplate(templates, 'missing://{x}')).toThrow(
         /Expected to find resource template/,
       );
@@ -289,13 +292,13 @@ describe('McpAssertions', () => {
 
   describe('assertContainsPrompt', () => {
     it('should return the prompt when found', () => {
-      const prompts = [{ name: 'greeting' }, { name: 'farewell' }] as any[];
+      const prompts = [{ name: 'greeting' }, { name: 'farewell' }] as Array<Record<string, unknown>>;
       const p = McpAssertions.assertContainsPrompt(prompts, 'farewell');
       expect(p.name).toBe('farewell');
     });
 
     it('should throw when prompt is not found', () => {
-      const prompts = [{ name: 'greeting' }] as any[];
+      const prompts = [{ name: 'greeting' }] as Array<Record<string, unknown>>;
       expect(() => McpAssertions.assertContainsPrompt(prompts, 'missing')).toThrow(/Expected to find prompt "missing"/);
     });
   });
@@ -304,11 +307,11 @@ describe('McpAssertions', () => {
 describe('helper functions', () => {
   describe('containsTool', () => {
     it('should return true when tool exists', () => {
-      expect(containsTool([{ name: 'a' }] as any[], 'a')).toBe(true);
+      expect(containsTool([{ name: 'a' }] as Array<Record<string, unknown>>, 'a')).toBe(true);
     });
 
     it('should return false when tool does not exist', () => {
-      expect(containsTool([{ name: 'a' }] as any[], 'b')).toBe(false);
+      expect(containsTool([{ name: 'a' }] as Array<Record<string, unknown>>, 'b')).toBe(false);
     });
 
     it('should return false for empty array', () => {
@@ -318,17 +321,19 @@ describe('helper functions', () => {
 
   describe('containsResource', () => {
     it('should return true when resource exists', () => {
-      expect(containsResource([{ uri: 'file://a' }] as any[], 'file://a')).toBe(true);
+      expect(containsResource([{ uri: 'file://a' }] as Array<Record<string, unknown>>, 'file://a')).toBe(true);
     });
 
     it('should return false when resource does not exist', () => {
-      expect(containsResource([{ uri: 'file://a' }] as any[], 'file://b')).toBe(false);
+      expect(containsResource([{ uri: 'file://a' }] as Array<Record<string, unknown>>, 'file://b')).toBe(false);
     });
   });
 
   describe('containsResourceTemplate', () => {
     it('should return true when template exists', () => {
-      expect(containsResourceTemplate([{ uriTemplate: 'file://{id}' }] as any[], 'file://{id}')).toBe(true);
+      expect(
+        containsResourceTemplate([{ uriTemplate: 'file://{id}' }] as Array<Record<string, unknown>>, 'file://{id}'),
+      ).toBe(true);
     });
 
     it('should return false when template does not exist', () => {
@@ -338,69 +343,72 @@ describe('helper functions', () => {
 
   describe('containsPrompt', () => {
     it('should return true when prompt exists', () => {
-      expect(containsPrompt([{ name: 'greeting' }] as any[], 'greeting')).toBe(true);
+      expect(containsPrompt([{ name: 'greeting' }] as Array<Record<string, unknown>>, 'greeting')).toBe(true);
     });
 
     it('should return false when prompt does not exist', () => {
-      expect(containsPrompt([{ name: 'greeting' }] as any[], 'missing')).toBe(false);
+      expect(containsPrompt([{ name: 'greeting' }] as Array<Record<string, unknown>>, 'missing')).toBe(false);
     });
   });
 
   describe('isSuccessful', () => {
     it('should return true when isSuccess is true', () => {
-      const wrapper = { isSuccess: true, isError: false } as any;
+      const wrapper = { isSuccess: true, isError: false } as Record<string, unknown>;
       expect(isSuccessful(wrapper)).toBe(true);
     });
 
     it('should return false when isSuccess is false', () => {
-      const wrapper = { isSuccess: false, isError: true } as any;
+      const wrapper = { isSuccess: false, isError: true } as Record<string, unknown>;
       expect(isSuccessful(wrapper)).toBe(false);
     });
   });
 
   describe('isError', () => {
     it('should return true when isError is true', () => {
-      const wrapper = { isSuccess: false, isError: true, error: { code: -1, message: 'x' } } as any;
+      const wrapper = { isSuccess: false, isError: true, error: { code: -1, message: 'x' } } as Record<string, unknown>;
       expect(isError(wrapper)).toBe(true);
     });
 
     it('should return false when isError is false', () => {
-      const wrapper = { isSuccess: true, isError: false } as any;
+      const wrapper = { isSuccess: true, isError: false } as Record<string, unknown>;
       expect(isError(wrapper)).toBe(false);
     });
 
     it('should check error code when expectedCode is provided', () => {
-      const wrapper = { isSuccess: false, isError: true, error: { code: -32600, message: 'bad' } } as any;
+      const wrapper = { isSuccess: false, isError: true, error: { code: -32600, message: 'bad' } } as Record<
+        string,
+        unknown
+      >;
       expect(isError(wrapper, -32600)).toBe(true);
       expect(isError(wrapper, -32602)).toBe(false);
     });
 
     it('should return false when isError false even with expectedCode', () => {
-      const wrapper = { isSuccess: true, isError: false } as any;
+      const wrapper = { isSuccess: true, isError: false } as Record<string, unknown>;
       expect(isError(wrapper, -32600)).toBe(false);
     });
   });
 
   describe('hasTextContent', () => {
     it('should return true when wrapper has text content', () => {
-      const wrapper = { hasTextContent: () => true } as any;
+      const wrapper = { hasTextContent: () => true } as Record<string, unknown>;
       expect(hasTextContent(wrapper)).toBe(true);
     });
 
     it('should return false when wrapper has no text content', () => {
-      const wrapper = { hasTextContent: () => false } as any;
+      const wrapper = { hasTextContent: () => false } as Record<string, unknown>;
       expect(hasTextContent(wrapper)).toBe(false);
     });
   });
 
   describe('hasMimeType', () => {
     it('should return true when MIME type matches', () => {
-      const wrapper = { hasMimeType: (t: string) => t === 'application/json' } as any;
+      const wrapper = { hasMimeType: (t: string) => t === 'application/json' } as Record<string, unknown>;
       expect(hasMimeType(wrapper, 'application/json')).toBe(true);
     });
 
     it('should return false when MIME type does not match', () => {
-      const wrapper = { hasMimeType: (t: string) => t === 'application/json' } as any;
+      const wrapper = { hasMimeType: (t: string) => t === 'application/json' } as Record<string, unknown>;
       expect(hasMimeType(wrapper, 'text/plain')).toBe(false);
     });
   });

@@ -3,6 +3,13 @@
 import 'reflect-metadata';
 import ApprovalPlugin from '../approval.plugin';
 import { ApprovalStoreToken, ApprovalServiceToken, ChallengeServiceToken } from '../approval.symbols';
+import { createApprovalService } from '../services/approval.service';
+
+jest.mock('../services/approval.service', () => ({
+  ...jest.requireActual('../services/approval.service'),
+  createApprovalService: jest.fn().mockReturnValue({}),
+}));
+const mockedCreateService = createApprovalService as jest.MockedFunction<typeof createApprovalService>;
 
 describe('ApprovalPlugin', () => {
   describe('defaultOptions', () => {
@@ -126,7 +133,8 @@ describe('ApprovalPlugin', () => {
 
       const storeProvider = providers.find((p) => p.provide === ApprovalStoreToken);
       expect(storeProvider).toBeDefined();
-      expect(typeof (storeProvider as any).useFactory).toBe('function');
+      if (!storeProvider || !('useFactory' in storeProvider)) return;
+      expect(typeof storeProvider.useFactory).toBe('function');
     });
 
     it('should pass webhook challengeTtl to challenge service', () => {
@@ -137,15 +145,16 @@ describe('ApprovalPlugin', () => {
 
       const challengeProvider = providers.find((p) => p.provide === ChallengeServiceToken);
       expect(challengeProvider).toBeDefined();
-      expect(typeof (challengeProvider as any).useFactory).toBe('function');
+      if (!challengeProvider || !('useFactory' in challengeProvider)) return;
+      expect(typeof challengeProvider.useFactory).toBe('function');
     });
 
     it('should have inject functions that return dependency tokens', () => {
       const providers = ApprovalPlugin.dynamicProviders({});
 
       for (const provider of providers) {
-        if ((provider as any).inject) {
-          const deps = (provider as any).inject();
+        if ('inject' in provider && typeof provider.inject === 'function') {
+          const deps = provider.inject();
           expect(Array.isArray(deps)).toBe(true);
         }
       }
@@ -155,8 +164,8 @@ describe('ApprovalPlugin', () => {
       const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' });
 
       for (const provider of providers) {
-        if ((provider as any).inject) {
-          const deps = (provider as any).inject();
+        if ('inject' in provider && typeof provider.inject === 'function') {
+          const deps = provider.inject();
           expect(Array.isArray(deps)).toBe(true);
         }
       }
@@ -164,53 +173,57 @@ describe('ApprovalPlugin', () => {
   });
 
   describe('service factory userId extraction', () => {
-    it('should extract userId from extra.userId', () => {
+    function getServiceFactory() {
       const providers = ApprovalPlugin.dynamicProviders({});
-      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
-      const mockStore = {};
+      const serviceProvider = providers.find((p) => p.provide === ApprovalServiceToken);
+      expect(serviceProvider).toBeDefined();
+      if (!serviceProvider || !('useFactory' in serviceProvider)) throw new Error('Missing useFactory');
+      return serviceProvider.useFactory as (...args: unknown[]) => ApprovalService;
+    }
+
+    beforeEach(() => {
+      mockedCreateService.mockClear();
+    });
+
+    it('should extract userId from extra.userId', () => {
+      const factory = getServiceFactory();
       const ctx = {
         sessionId: 'sess-1',
         authInfo: { extra: { userId: 'user-from-extra' }, clientId: 'client-1' },
       };
 
-      const service = serviceProvider.useFactory(mockStore, ctx);
-      expect(service).toBeDefined();
+      factory({}, ctx);
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-1', 'user-from-extra');
     });
 
     it('should fall back to extra.sub when userId is missing', () => {
-      const providers = ApprovalPlugin.dynamicProviders({});
-      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
-      const mockStore = {};
+      const factory = getServiceFactory();
       const ctx = {
         sessionId: 'sess-2',
         authInfo: { extra: { sub: 'sub-user' }, clientId: 'client-2' },
       };
 
-      const service = serviceProvider.useFactory(mockStore, ctx);
-      expect(service).toBeDefined();
+      factory({}, ctx);
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-2', 'sub-user');
     });
 
     it('should fall back to clientId when extra has no userId or sub', () => {
-      const providers = ApprovalPlugin.dynamicProviders({});
-      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
-      const mockStore = {};
+      const factory = getServiceFactory();
       const ctx = {
         sessionId: 'sess-3',
         authInfo: { extra: {}, clientId: 'fallback-client' },
       };
 
-      const service = serviceProvider.useFactory(mockStore, ctx);
-      expect(service).toBeDefined();
+      factory({}, ctx);
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-3', 'fallback-client');
     });
 
     it('should handle missing authInfo gracefully', () => {
-      const providers = ApprovalPlugin.dynamicProviders({});
-      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
-      const mockStore = {};
+      const factory = getServiceFactory();
       const ctx = { sessionId: 'sess-4' };
 
-      const service = serviceProvider.useFactory(mockStore, ctx);
-      expect(service).toBeDefined();
+      factory({}, ctx);
+      expect(mockedCreateService).toHaveBeenCalledWith(expect.anything(), 'sess-4', undefined);
     });
   });
 

@@ -115,4 +115,12 @@ describe('createTestUser', () => {
     const user: TestUserFixture = createTestUser({ sub: 'type-check-001' });
     expect(user).toBeDefined();
   });
+
+  it('should return isolated scopes arrays per call (mutation safety)', () => {
+    const userA = createTestUser({ sub: 'iso-a' });
+    const userB = createTestUser({ sub: 'iso-b' });
+    userA.scopes.push('mutated');
+    expect(userA.scopes).toEqual(['mutated']);
+    expect(userB.scopes).toEqual([]);
+  });
 });

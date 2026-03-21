@@ -1,5 +1,5 @@
 import { DefaultMockRegistry, mockResponse } from '../mock-registry';
-import type { JsonRpcRequest, JsonRpcResponse } from '../../transport/transport.interface';
+import type { JsonRpcRequest } from '../../transport/transport.interface';
 import type { MockDefinition } from '../interceptor.types';
 
 function makeRequest(method: string, params?: Record<string, unknown>, id?: string | number): JsonRpcRequest {
@@ -81,7 +81,8 @@ describe('DefaultMockRegistry', () => {
       registry.add({ method: 'tools/list', response });
       const result = registry.match(makeRequest('tools/list'));
       expect(result).toBeDefined();
-      expect(result!.method).toBe('tools/list');
+      if (!result) return;
+      expect(result.method).toBe('tools/list');
     });
 
     it('should return undefined when no mock matches', () => {

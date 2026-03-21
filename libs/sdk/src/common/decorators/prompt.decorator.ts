@@ -109,6 +109,8 @@ Object.assign(FrontMcpPrompt, {
 // ============================================================================
 
 // ---------- ctor & reflection ----------
+// `any` is intentional in __Ctor and __R: using `unknown[]` breaks constructor
+// inference and instance type extraction needed for decorator type checking.
 type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);
 type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
   ? R

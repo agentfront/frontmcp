@@ -1,12 +1,5 @@
 import 'reflect-metadata';
-import {
-  ApprovalError,
-  ApprovalNotFoundError,
-  ApprovalOperationError,
-  ApprovalScopeNotAllowedError,
-  ApprovalExpiredError,
-  ChallengeValidationError,
-} from '../errors';
+import { ApprovalError, ApprovalScopeNotAllowedError, ApprovalExpiredError, ChallengeValidationError } from '../errors';
 import { ApprovalScope } from '../types';
 
 describe('approval errors', () => {

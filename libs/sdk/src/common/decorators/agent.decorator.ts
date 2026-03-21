@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { extendedAgentMetadata, FrontMcpAgentTokens } from '../tokens';
 import { ToolInputType, ToolOutputType, AgentMetadata, frontMcpAgentMetadataSchema } from '../metadata';
 import type { ConcurrencyConfigInput, RateLimitConfigInput, TimeoutConfigInput } from '@frontmcp/guard';
+import { AgentContext } from '../interfaces';
 import z from 'zod';
 
 // Forward reference - AgentContext will be defined in agent.interface.ts
@@ -275,6 +276,10 @@ type __MustReturn<C extends __Ctor, Out> =
           'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
         };
 
+// Must extend AgentContext
+type __MustExtendCtx<C extends __Ctor> =
+  __R<C> extends AgentContext ? unknown : { 'Agent class error': 'Class must extend AgentContext' };
+
 // Rewrapped constructor with updated AgentContext generic params
 type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
   ? C & (abstract new (...a: __A<C>) => AgentContextBase & __R<C>)
@@ -327,7 +332,10 @@ declare module '@frontmcp/sdk' {
   export function Agent<I extends __Shape, O extends __OutputSchema>(
     opts: AgentMetadataOptions<I, O> & { outputSchema: O },
   ): <C extends __Ctor>(
-    cls: C & __MustParam<C, AgentInputOf<{ inputSchema: I }>> & __MustReturn<C, AgentOutputOf<{ outputSchema: O }>>,
+    cls: C &
+      __MustExtendCtx<C> &
+      __MustParam<C, AgentInputOf<{ inputSchema: I }>> &
+      __MustReturn<C, AgentOutputOf<{ outputSchema: O }>>,
   ) => __Rewrap<C, AgentInputOf<{ inputSchema: I }>, AgentOutputOf<{ outputSchema: O }>>;
 
   // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
@@ -335,6 +343,6 @@ declare module '@frontmcp/sdk' {
   export function Agent<I extends __Shape>(
     opts: AgentMetadataOptions<I, any> & { outputSchema?: never },
   ): <C extends __Ctor>(
-    cls: C & __MustParam<C, AgentInputOf<{ inputSchema: I }>> & __MustReturn<C, AgentOutputOf<{}>>,
+    cls: C & __MustExtendCtx<C> & __MustParam<C, AgentInputOf<{ inputSchema: I }>> & __MustReturn<C, AgentOutputOf<{}>>,
   ) => __Rewrap<C, AgentInputOf<{ inputSchema: I }>, AgentOutputOf<{}>>;
 }
