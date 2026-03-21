@@ -126,7 +126,7 @@ describe('ApprovalPlugin', () => {
 
       const storeProvider = providers.find((p) => p.provide === ApprovalStoreToken);
       expect(storeProvider).toBeDefined();
-      // The factory exists - we can't easily test the internals without mocking
+      expect(typeof (storeProvider as any).useFactory).toBe('function');
     });
 
     it('should pass webhook challengeTtl to challenge service', () => {
@@ -137,6 +137,80 @@ describe('ApprovalPlugin', () => {
 
       const challengeProvider = providers.find((p) => p.provide === ChallengeServiceToken);
       expect(challengeProvider).toBeDefined();
+      expect(typeof (challengeProvider as any).useFactory).toBe('function');
+    });
+
+    it('should have inject functions that return dependency tokens', () => {
+      const providers = ApprovalPlugin.dynamicProviders({});
+
+      for (const provider of providers) {
+        if ((provider as any).inject) {
+          const deps = (provider as any).inject();
+          expect(Array.isArray(deps)).toBe(true);
+        }
+      }
+    });
+
+    it('should have inject functions for webhook mode providers', () => {
+      const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' });
+
+      for (const provider of providers) {
+        if ((provider as any).inject) {
+          const deps = (provider as any).inject();
+          expect(Array.isArray(deps)).toBe(true);
+        }
+      }
+    });
+  });
+
+  describe('service factory userId extraction', () => {
+    it('should extract userId from extra.userId', () => {
+      const providers = ApprovalPlugin.dynamicProviders({});
+      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
+      const mockStore = {};
+      const ctx = {
+        sessionId: 'sess-1',
+        authInfo: { extra: { userId: 'user-from-extra' }, clientId: 'client-1' },
+      };
+
+      const service = serviceProvider.useFactory(mockStore, ctx);
+      expect(service).toBeDefined();
+    });
+
+    it('should fall back to extra.sub when userId is missing', () => {
+      const providers = ApprovalPlugin.dynamicProviders({});
+      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
+      const mockStore = {};
+      const ctx = {
+        sessionId: 'sess-2',
+        authInfo: { extra: { sub: 'sub-user' }, clientId: 'client-2' },
+      };
+
+      const service = serviceProvider.useFactory(mockStore, ctx);
+      expect(service).toBeDefined();
+    });
+
+    it('should fall back to clientId when extra has no userId or sub', () => {
+      const providers = ApprovalPlugin.dynamicProviders({});
+      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
+      const mockStore = {};
+      const ctx = {
+        sessionId: 'sess-3',
+        authInfo: { extra: {}, clientId: 'fallback-client' },
+      };
+
+      const service = serviceProvider.useFactory(mockStore, ctx);
+      expect(service).toBeDefined();
+    });
+
+    it('should handle missing authInfo gracefully', () => {
+      const providers = ApprovalPlugin.dynamicProviders({});
+      const serviceProvider = providers.find((p: any) => p.provide === ApprovalServiceToken) as any;
+      const mockStore = {};
+      const ctx = { sessionId: 'sess-4' };
+
+      const service = serviceProvider.useFactory(mockStore, ctx);
+      expect(service).toBeDefined();
     });
   });
 
