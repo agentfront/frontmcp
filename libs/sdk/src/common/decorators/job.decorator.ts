@@ -9,7 +9,7 @@ import z from 'zod';
 /**
  * Decorator that marks a class as a Job and provides metadata.
  */
-function FrontMcpJob(providedMetadata: JobMetadata): ClassDecorator {
+function _FrontMcpJob(providedMetadata: JobMetadata): ClassDecorator {
   return (target: any) => {
     const metadata = frontMcpJobMetadataSchema.parse(providedMetadata);
     Reflect.defineMetadata(FrontMcpJobTokens.type, true, target);
@@ -102,7 +102,7 @@ function jobRemote(url: string, targetName: string, options?: RemoteOptions<JobM
   };
 }
 
-Object.assign(FrontMcpJob, {
+Object.assign(_FrontMcpJob, {
   esm: jobEsm,
   remote: jobRemote,
 });
@@ -178,17 +178,19 @@ type __MustParam<C extends __Ctor, In> =
             actual_parameter_type: __Param<C>;
           };
 
-// execute return must be Out or Promise<Out>
+// execute return must be Out or Promise<Out> (and not be any)
 type __MustReturn<C extends __Ctor, Out> =
   __IsAny<Out> extends true
     ? unknown
-    : __Unwrap<__Return<C>> extends Out
-      ? unknown
-      : {
-          'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
-          expected_output_type: Out;
-          'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
-        };
+    : __IsAny<__Unwrap<__Return<C>>> extends true
+      ? { 'execute() return type error': "Return type must not be 'any'."; expected_output_type: Out }
+      : __Unwrap<__Return<C>> extends Out
+        ? unknown
+        : {
+            'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
+            expected_output_type: Out;
+            'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
+          };
 
 // Rewrapped constructor with updated JobContext generic params
 type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
@@ -213,6 +215,7 @@ interface JobDecorator {
   remote: typeof jobRemote;
 }
 
-const Job = FrontMcpJob as unknown as JobDecorator;
+const FrontMcpJob = _FrontMcpJob as unknown as JobDecorator;
+const Job = _FrontMcpJob as unknown as JobDecorator;
 
 export { FrontMcpJob, Job, frontMcpJob, frontMcpJob as job };

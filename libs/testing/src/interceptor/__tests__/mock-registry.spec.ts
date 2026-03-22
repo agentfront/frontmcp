@@ -3,7 +3,7 @@ import type { JsonRpcRequest } from '../../transport/transport.interface';
 import type { MockDefinition } from '../interceptor.types';
 
 function makeRequest(method: string, params?: Record<string, unknown>, id?: string | number): JsonRpcRequest {
-  return { jsonrpc: '2.0', id: id ?? 1, method, params };
+  return { jsonrpc: '2.0', id: id ?? 1, method, ...(params !== undefined && { params }) };
 }
 
 describe('DefaultMockRegistry', () => {
@@ -326,7 +326,9 @@ describe('DefaultMockRegistry', () => {
       registry.add({ method: 'tools/list', response: resp2 });
 
       const result = registry.match(makeRequest('tools/list'));
-      expect(result!.response).toBe(resp1);
+      expect(result).toBeDefined();
+      if (!result) return;
+      expect(result.response).toBe(resp1);
     });
 
     it('should fall through to next mock when first is exhausted', () => {
@@ -335,8 +337,15 @@ describe('DefaultMockRegistry', () => {
       registry.add({ method: 'tools/list', response: resp1, times: 1 });
       registry.add({ method: 'tools/list', response: resp2 });
 
-      expect(registry.match(makeRequest('tools/list'))!.response).toBe(resp1);
-      expect(registry.match(makeRequest('tools/list'))!.response).toBe(resp2);
+      const r1 = registry.match(makeRequest('tools/list'));
+      expect(r1).toBeDefined();
+      if (!r1) return;
+      expect(r1.response).toBe(resp1);
+
+      const r2 = registry.match(makeRequest('tools/list'));
+      expect(r2).toBeDefined();
+      if (!r2) return;
+      expect(r2.response).toBe(resp2);
     });
   });
 });
@@ -376,7 +385,9 @@ describe('mockResponse', () => {
 
     it('should include data when provided', () => {
       const resp = mockResponse.error(-32602, 'Invalid params', { field: 'name' });
-      expect(resp.error!.data).toEqual({ field: 'name' });
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.data).toEqual({ field: 'name' });
     });
 
     it('should allow null id', () => {
@@ -471,45 +482,59 @@ describe('mockResponse', () => {
   describe('errors', () => {
     it('methodNotFound should create error with code -32601', () => {
       const resp = mockResponse.errors.methodNotFound('tools/call');
-      expect(resp.error!.code).toBe(-32601);
-      expect(resp.error!.message).toBe('Method not found: tools/call');
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32601);
+      expect(resp.error.message).toBe('Method not found: tools/call');
     });
 
     it('invalidParams should create error with code -32602', () => {
       const resp = mockResponse.errors.invalidParams('missing field');
-      expect(resp.error!.code).toBe(-32602);
-      expect(resp.error!.message).toBe('missing field');
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32602);
+      expect(resp.error.message).toBe('missing field');
     });
 
     it('internalError should create error with code -32603', () => {
       const resp = mockResponse.errors.internalError('something broke');
-      expect(resp.error!.code).toBe(-32603);
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32603);
     });
 
     it('resourceNotFound should create error with code -32002 and data', () => {
       const resp = mockResponse.errors.resourceNotFound('file://missing');
-      expect(resp.error!.code).toBe(-32002);
-      expect(resp.error!.message).toBe('Resource not found: file://missing');
-      expect(resp.error!.data).toEqual({ uri: 'file://missing' });
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32002);
+      expect(resp.error.message).toBe('Resource not found: file://missing');
+      expect(resp.error.data).toEqual({ uri: 'file://missing' });
     });
 
     it('toolNotFound should create error with code -32601 and data', () => {
       const resp = mockResponse.errors.toolNotFound('my-tool');
-      expect(resp.error!.code).toBe(-32601);
-      expect(resp.error!.message).toBe('Tool not found: my-tool');
-      expect(resp.error!.data).toEqual({ name: 'my-tool' });
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32601);
+      expect(resp.error.message).toBe('Tool not found: my-tool');
+      expect(resp.error.data).toEqual({ name: 'my-tool' });
     });
 
     it('unauthorized should create error with code -32001', () => {
       const resp = mockResponse.errors.unauthorized();
-      expect(resp.error!.code).toBe(-32001);
-      expect(resp.error!.message).toBe('Unauthorized');
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32001);
+      expect(resp.error.message).toBe('Unauthorized');
     });
 
     it('forbidden should create error with code -32003', () => {
       const resp = mockResponse.errors.forbidden();
-      expect(resp.error!.code).toBe(-32003);
-      expect(resp.error!.message).toBe('Forbidden');
+      expect(resp.error).toBeDefined();
+      if (!resp.error) return;
+      expect(resp.error.code).toBe(-32003);
+      expect(resp.error.message).toBe('Forbidden');
     });
 
     it('all error helpers should accept a custom id', () => {

@@ -264,17 +264,19 @@ type __MustParam<C extends __Ctor, In> =
               actual_parameter_type: __Param<C>;
             };
 
-// execute return must be Out or Promise<Out>
+// execute return must be Out or Promise<Out> (and not be any)
 type __MustReturn<C extends __Ctor, Out> =
   __IsAny<Out> extends true
     ? unknown
-    : __Unwrap<__Return<C>> extends Out
-      ? unknown
-      : {
-          'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
-          expected_output_type: Out;
-          'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
-        };
+    : __IsAny<__Unwrap<__Return<C>>> extends true
+      ? { 'execute() return type error': "Return type must not be 'any'."; expected_output_type: Out }
+      : __Unwrap<__Return<C>> extends Out
+        ? unknown
+        : {
+            'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
+            expected_output_type: Out;
+            'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
+          };
 
 // Must extend AgentContext
 type __MustExtendCtx<C extends __Ctor> =
