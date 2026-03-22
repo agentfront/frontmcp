@@ -4,7 +4,7 @@
  * The ESM loader detects decorated classes automatically — no manifest needed.
  */
 import 'reflect-metadata';
-import { Prompt } from '@frontmcp/sdk';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'summarize',
@@ -14,8 +14,8 @@ import { Prompt } from '@frontmcp/sdk';
     { name: 'style', description: 'Summary style (brief/detailed)', required: false },
   ],
 })
-export class SummarizePrompt {
-  execute(args: Record<string, string>) {
+export class SummarizePrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
     const style = args?.['style'] ?? 'brief';
     return {
       messages: [

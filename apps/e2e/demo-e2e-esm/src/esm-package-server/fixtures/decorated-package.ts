@@ -15,7 +15,17 @@
  * - 1 Job: process-data (input/output schemas)
  */
 import 'reflect-metadata';
-import { Tool, ToolContext, Resource, Prompt, Skill, Job, JobContext } from '@frontmcp/sdk';
+import {
+  Tool,
+  ToolContext,
+  Resource,
+  ResourceContext,
+  Prompt,
+  PromptContext,
+  Skill,
+  Job,
+  JobContext,
+} from '@frontmcp/sdk';
 import { z } from 'zod';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -57,12 +67,12 @@ export class AddTool extends ToolContext {
   mimeType: 'application/json',
   description: 'Server status from decorated package',
 })
-export class StatusResource {
-  execute() {
+export class StatusResource extends ResourceContext {
+  async execute(uri: string) {
     return {
       contents: [
         {
-          uri: 'esm://status',
+          uri,
           text: JSON.stringify({ status: 'ok', source: 'decorated-package' }),
         },
       ],
@@ -79,8 +89,8 @@ export class StatusResource {
   description: 'A greeting prompt template',
   arguments: [{ name: 'name', description: 'Name to greet', required: true }],
 })
-export class GreetingPrompt {
-  execute(args: Record<string, string>) {
+export class GreetingPrompt extends PromptContext {
+  async execute(args: Record<string, string>) {
     return {
       messages: [
         {
