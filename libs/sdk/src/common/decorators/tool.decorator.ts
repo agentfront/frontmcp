@@ -310,6 +310,8 @@ type __MustReturn<C extends __Ctor, Out> =
           };
 
 // Rewrapped constructor with updated ToolContext generic params
+// `any` in schema positions is intentional: ToolContext's InSchema/OutSchema generics
+// require ZodRawShape/ToolOutputType constraints that `unknown` cannot satisfy.
 type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
   ? C & (abstract new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
   : C extends new (...a: __A<C>) => __R<C>
