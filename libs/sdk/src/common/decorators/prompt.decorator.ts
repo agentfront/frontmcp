@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { FrontMcpPromptTokens, extendedPromptMetadata } from '../tokens';
 import { PromptMetadata, frontMcpPromptMetadataSchema } from '../metadata';
 import { GetPromptResult, GetPromptRequest } from '@frontmcp/protocol';
+import { PromptContext } from '../interfaces';
 
 /**
  * Decorator that marks a class as a McpPrompt module and provides metadata
@@ -103,8 +104,26 @@ Object.assign(FrontMcpPrompt, {
   remote: promptRemote,
 });
 
+// ============================================================================
+// Type Checking Helpers
+// ============================================================================
+
+// ---------- ctor & reflection ----------
+// `any` is intentional in __Ctor and __R: using `unknown[]` breaks constructor
+// inference and instance type extraction needed for decorator type checking.
+type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);
+type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
+  ? R
+  : C extends abstract new (...a: any[]) => infer R
+    ? R
+    : never;
+
+// ---------- friendly branded errors ----------
+type __MustExtendPromptCtx<C extends __Ctor> =
+  __R<C> extends PromptContext ? unknown : { 'Prompt class error': 'Class must extend PromptContext' };
+
 type PromptDecorator = {
-  (metadata: PromptMetadata): ClassDecorator;
+  (metadata: PromptMetadata): <C extends __Ctor>(cls: C & __MustExtendPromptCtx<C>) => C;
   esm: typeof promptEsm;
   remote: typeof promptRemote;
 };
