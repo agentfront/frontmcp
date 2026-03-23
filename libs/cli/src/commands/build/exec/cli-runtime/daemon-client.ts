@@ -91,6 +91,7 @@ function createDaemonClient(socketPath) {
   }
 
   return {
+    _isDaemon: true,
     ping: function() {
       return call('ping');
     },

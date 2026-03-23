@@ -155,4 +155,47 @@ describe('workspace generator', () => {
     const mod = await import('./workspace');
     expect(mod.default).toBe(workspaceGenerator);
   });
+
+  describe('git initialization', () => {
+    let execSyncMock: jest.SpyInstance;
+
+    beforeEach(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cp = require('child_process');
+      execSyncMock = jest.spyOn(cp, 'execSync').mockImplementation(() => Buffer.from(''));
+    });
+
+    afterEach(() => {
+      execSyncMock.mockRestore();
+    });
+
+    it('should initialize git repository by default', async () => {
+      const callback = await workspaceGenerator(tree, { name: 'git-project', skipInstall: true });
+      callback();
+
+      expect(execSyncMock).toHaveBeenCalledWith('git init', expect.objectContaining({ stdio: 'ignore' }));
+      expect(execSyncMock).toHaveBeenCalledWith('git add -A', expect.objectContaining({ stdio: 'ignore' }));
+      expect(execSyncMock).toHaveBeenCalledWith(
+        'git commit -m "Initial commit"',
+        expect.objectContaining({ stdio: 'ignore' }),
+      );
+    });
+
+    it('should skip git init when skipGit is true', async () => {
+      const callback = await workspaceGenerator(tree, { name: 'no-git-project', skipInstall: true, skipGit: true });
+      callback();
+
+      expect(execSyncMock).not.toHaveBeenCalledWith('git init', expect.anything());
+    });
+
+    it('should silently skip git init when git is not available', async () => {
+      execSyncMock.mockImplementation(() => {
+        throw new Error('git: command not found');
+      });
+
+      const callback = await workspaceGenerator(tree, { name: 'no-git-binary', skipInstall: true });
+      // Should not throw
+      expect(() => callback()).not.toThrow();
+    });
+  });
 });

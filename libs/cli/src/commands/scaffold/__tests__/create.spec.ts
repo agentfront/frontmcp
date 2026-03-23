@@ -13,6 +13,13 @@ jest.mock('module', () => {
   return { ...actual, createRequire: jest.fn() };
 });
 
+// Mock child_process for git init tests
+const mockExecSync = jest.fn();
+jest.mock('child_process', () => ({
+  ...jest.requireActual('child_process'),
+  execSync: mockExecSync,
+}));
+
 import { runCreate } from '../create';
 import { runCmd, mkdtemp, mkdir, rm, readFileSync, writeFile, fileExists } from '@frontmcp/utils';
 import { createRequire } from 'module';
@@ -418,6 +425,86 @@ describe('runCreate', () => {
         expect(pkgJson.scripts['docker:down']).toBeUndefined();
         expect(pkgJson.scripts['docker:build']).toBeUndefined();
       });
+    });
+  });
+
+  describe('git initialization', () => {
+    beforeEach(() => {
+      jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
+      mockExecSync.mockReset();
+      mockExecSync.mockReturnValue(Buffer.from(''));
+    });
+
+    it('should initialize git repository after scaffolding', async () => {
+      await runCreate('git-init-app', { yes: true });
+
+      expect(mockExecSync).toHaveBeenCalledWith('git init', expect.objectContaining({ stdio: 'ignore' }));
+      expect(mockExecSync).toHaveBeenCalledWith('git add -A', expect.objectContaining({ stdio: 'ignore' }));
+      expect(mockExecSync).toHaveBeenCalledWith(
+        'git commit -m "Initial commit"',
+        expect.objectContaining({ stdio: 'ignore' }),
+      );
+    });
+
+    it('should log success message after git init', async () => {
+      await runCreate('git-msg-app', { yes: true });
+
+      expect(consoleLogs.some((log) => log.includes('Initialized git repository'))).toBe(true);
+    });
+
+    it('should silently skip git init when git is not available', async () => {
+      mockExecSync.mockImplementation(() => {
+        throw new Error('git: command not found');
+      });
+
+      // Should not throw — git init failure is silently ignored
+      await runCreate('no-git-app', { yes: true });
+
+      // Should NOT have the success message
+      expect(consoleLogs.some((log) => log.includes('Initialized git repository'))).toBe(false);
+    });
+  });
+
+  describe('docker-compose selective rebuild instructions', () => {
+    beforeEach(() => {
+      jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    });
+
+    it('should include selective rebuild comment in docker-compose with Redis', async () => {
+      await runCreate('rebuild-redis-app', { yes: true, target: 'node', redis: 'docker' });
+
+      const content = readFileSync(path.join(tempDir, 'rebuild-redis-app', 'ci', 'docker-compose.yml'), 'utf8');
+      expect(content).toContain('Selective rebuild');
+      expect(content).toContain('docker compose');
+      expect(content).toContain('--build app');
+    });
+
+    it('should include selective rebuild comment in docker-compose without Redis', async () => {
+      await runCreate('rebuild-no-redis-app', { yes: true, target: 'node', redis: 'none' });
+
+      const content = readFileSync(path.join(tempDir, 'rebuild-no-redis-app', 'ci', 'docker-compose.yml'), 'utf8');
+      expect(content).toContain('Selective rebuild');
+      expect(content).toContain('--build app');
+    });
+  });
+
+  describe('E2E test template', () => {
+    beforeEach(() => {
+      jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    });
+
+    it('should include frontmcp test comment in E2E test template', async () => {
+      await runCreate('e2e-template-app', { yes: true });
+
+      const content = readFileSync(path.join(tempDir, 'e2e-template-app', 'e2e', 'server.e2e.spec.ts'), 'utf8');
+      expect(content).toContain('frontmcp test');
+    });
+
+    it('should include resource listing test in E2E template', async () => {
+      await runCreate('e2e-resources-app', { yes: true });
+
+      const content = readFileSync(path.join(tempDir, 'e2e-resources-app', 'e2e', 'server.e2e.spec.ts'), 'utf8');
+      expect(content).toContain('resources.list()');
     });
   });
 

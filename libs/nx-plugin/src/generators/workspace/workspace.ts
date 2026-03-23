@@ -1,4 +1,5 @@
 import { type Tree, formatFiles, generateFiles, installPackagesTask, type GeneratorCallback } from '@nx/devkit';
+import { execSync } from 'child_process';
 import { join } from 'path';
 import type { WorkspaceGeneratorSchema } from './schema.js';
 import { normalizeOptions } from './lib/index.js';
@@ -40,6 +41,11 @@ async function workspaceGeneratorInternal(tree: Tree, schema: WorkspaceGenerator
   await formatFiles(tree);
 
   if (options.skipInstall) {
+    if (!options.skipGit) {
+      return () => {
+        initGitRepository(options.workspaceRoot);
+      };
+    }
     return () => {
       /* noop */
     };
@@ -47,7 +53,20 @@ async function workspaceGeneratorInternal(tree: Tree, schema: WorkspaceGenerator
 
   return () => {
     installPackagesTask(tree);
+    if (!options.skipGit) {
+      initGitRepository(options.workspaceRoot);
+    }
   };
+}
+
+function initGitRepository(workspaceRoot: string): void {
+  try {
+    execSync('git init', { cwd: workspaceRoot, stdio: 'ignore' });
+    execSync('git add -A', { cwd: workspaceRoot, stdio: 'ignore' });
+    execSync('git commit -m "Initial commit"', { cwd: workspaceRoot, stdio: 'ignore' });
+  } catch {
+    // git may not be installed — silently skip
+  }
 }
 
 export default workspaceGenerator;

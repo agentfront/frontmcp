@@ -29,9 +29,28 @@ class GetWeatherTool extends ToolContext {
 ## Signature
 
 ```typescript
-function Tool<I extends Shape, O extends OutputSchema>(
+function Tool<I extends ZodRawShape, O extends OutputSchema>(
   opts: ToolMetadataOptions<I, O>
-): ClassDecorator
+): TypedClassDecorator
+```
+
+## Type Safety
+
+The `@Tool` decorator provides compile-time type checking:
+
+- **Input validation**: The `execute()` parameter type must exactly match the `inputSchema`. Mismatches produce a descriptive error at compile time.
+- **Output validation**: When `outputSchema` is provided, the `execute()` return type must be assignable to the inferred output type.
+- **Context check**: The decorated class must extend `ToolContext`. Using `@Tool` on a plain class produces a compile error.
+- **Invalid options**: Typos in decorator options (e.g., `concurrency: { maxConcurrensst: 5 }`) are caught at compile time with specific error messages, without losing autocomplete on other fields.
+
+```typescript
+// Compile error: parameter type { query: number } doesn't match inputSchema { query: string }
+@Tool({ name: 'search', inputSchema: { query: z.string() } })
+class BadTool extends ToolContext {
+  async execute(input: { query: number }) { // TS error on this class
+    return { result: input.query };
+  }
+}
 ```
 
 ## Configuration Options

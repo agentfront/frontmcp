@@ -150,10 +150,22 @@ describe('generateDaemonClientSource', () => {
     });
   });
 
+  it('should include _isDaemon flag on client object', () => {
+    expect(source).toContain('_isDaemon: true');
+  });
+
+  it('should warn about notification limitations in daemon mode', () => {
+    expect(source).toContain('Notifications are not supported in daemon mode');
+  });
+
+  it('should warn about resource subscription limitations in daemon mode', () => {
+    expect(source).toContain('Resource subscriptions are not supported in daemon mode');
+  });
+
   it('should be parseable as JavaScript', () => {
     // Verify the generated source is valid JS by creating a function from it
     expect(() => {
-       
+
       new Function(source);
     }).not.toThrow();
   });
