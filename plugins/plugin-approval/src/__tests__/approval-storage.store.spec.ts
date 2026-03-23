@@ -765,3 +765,67 @@ describe('createApprovalMemoryStore', () => {
     expect(store).toBeInstanceOf(ApprovalStorageStore);
   });
 });
+
+describe('parseRecord edge cases', () => {
+  let store: ApprovalStorageStore;
+  let mockStorage: {
+    set: jest.Mock;
+    get: jest.Mock;
+    delete: jest.Mock;
+    exists: jest.Mock;
+    keys: jest.Mock;
+    mget: jest.Mock;
+    mdelete: jest.Mock;
+    root: { disconnect: jest.Mock };
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+
+    mockStorage = {
+      set: jest.fn(),
+      get: jest.fn(),
+      delete: jest.fn(),
+      exists: jest.fn(),
+      keys: jest.fn().mockResolvedValue([]),
+      mget: jest.fn().mockResolvedValue([]),
+      mdelete: jest.fn().mockResolvedValue(0),
+      root: { disconnect: jest.fn() },
+    };
+
+    const mockRootStorage = {
+      namespace: jest.fn().mockReturnValue(mockStorage),
+    };
+
+    (createStorage as jest.Mock).mockResolvedValue(mockRootStorage);
+
+    store = new ApprovalStorageStore({ cleanupIntervalSeconds: 0 });
+    await store.initialize();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should return undefined for invalid JSON from storage', async () => {
+    mockStorage.get.mockResolvedValue('not-valid-json{{{');
+
+    const result = await store.getApproval('tool-1', 'session-1');
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined for valid JSON that fails schema validation', async () => {
+    mockStorage.get.mockResolvedValue(JSON.stringify({ invalid: 'record', missing: 'fields' }));
+
+    const result = await store.getApproval('tool-1', 'session-1');
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined for null value from storage', async () => {
+    mockStorage.get.mockResolvedValue(null);
+
+    const result = await store.getApproval('tool-1', 'session-1');
+    expect(result).toBeUndefined();
+  });
+});

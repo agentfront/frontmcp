@@ -16,14 +16,12 @@ module.exports = {
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/testing',
-  // Testing package has extensive coverage gaps - using lower threshold for incremental improvement
-  // TODO: Increase thresholds as more tests are added
   coverageThreshold: {
     global: {
-      statements: 8,
-      branches: 7,
-      functions: 4,
-      lines: 8,
+      statements: 18,
+      branches: 17,
+      functions: 20,
+      lines: 18,
     },
   },
 };
