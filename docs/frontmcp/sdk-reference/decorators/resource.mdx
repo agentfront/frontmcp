@@ -31,8 +31,12 @@ class AppConfigResource extends ResourceContext {
 ## Signature
 
 ```typescript
-function Resource(providedMetadata: ResourceMetadata): ClassDecorator
+function Resource(opts: ResourceMetadata): TypedClassDecorator
 ```
+
+The `@Resource` decorator validates at compile time that the decorated class extends `ResourceContext`. Using it on a plain class produces a descriptive compile error.
+
+The same applies to `@ResourceTemplate`.
 
 ## Configuration Options
 

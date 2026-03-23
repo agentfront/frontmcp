@@ -38,10 +38,23 @@ export default class ResearchAgent extends AgentContext {
 ## Signature
 
 ```typescript
-function Agent<InSchema, OutSchema>(
-  providedMetadata: AgentMetadata<InSchema, OutSchema>
-): ClassDecorator
+function Agent<I extends ZodRawShape, O extends OutputSchema>(
+  opts: AgentMetadataOptions<I, O>
+): TypedClassDecorator
 ```
+
+## Type Safety
+
+The `@Agent` decorator validates at compile time that:
+
+- The decorated class extends `AgentContext`
+- When `inputSchema` is provided, the `execute()` parameter matches the schema type
+- When `outputSchema` is provided, the `execute()` return type is compatible
+- Invalid metadata options (e.g., typos in `concurrency`) produce specific compile-time errors
+
+<Note>
+Agents can use the default `execute()` from `AgentContext` (which runs the LLM agent loop) without overriding it. The type checker allows this pattern.
+</Note>
 
 ## Configuration Options
 

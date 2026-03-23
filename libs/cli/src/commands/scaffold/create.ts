@@ -180,6 +180,13 @@ export default class AddTool extends ToolContext {
 const TEMPLATE_E2E_TEST_TS = `
 import { test, expect } from '@frontmcp/testing';
 
+/**
+ * E2E tests for the MCP server.
+ *
+ * Run with:
+ *   frontmcp test          # recommended
+ *   npm run test:e2e       # alternative
+ */
 test.describe('Server E2E', () => {
   test.use({
     server: './src/main.ts',
@@ -199,6 +206,11 @@ test.describe('Server E2E', () => {
   test('should call add tool', async ({ mcp }) => {
     const result = await mcp.tools.call('add', { a: 2, b: 3 });
     expect(result).toBeSuccessful();
+  });
+
+  test('should list resources', async ({ mcp }) => {
+    const resources = await mcp.resources.list();
+    expect(resources).toBeDefined();
   });
 });
 `;
@@ -522,6 +534,10 @@ services:
 
 volumes:
   redis-data:
+
+# Selective rebuild:
+#   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
+#   docker compose -f ci/docker-compose.yml up --build       # rebuild everything
 `;
 }
 
@@ -537,6 +553,9 @@ services:
     environment:
       - NODE_ENV=\${NODE_ENV:-development}
       - PORT=\${PORT:-3000}
+
+# Selective rebuild:
+#   docker compose -f ci/docker-compose.yml up --build app   # rebuild only the app
 `;
 }
 
@@ -1568,6 +1587,17 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // Dynamic README
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'README.md'), generateReadme(options));
+
+  // Initialize git repository
+  try {
+    const { execSync } = await import('child_process');
+    execSync('git init', { cwd: targetDir, stdio: 'ignore' });
+    execSync('git add -A', { cwd: targetDir, stdio: 'ignore' });
+    execSync('git commit -m "Initial commit"', { cwd: targetDir, stdio: 'ignore' });
+    console.log(`${c('green', '✓')} Initialized git repository`);
+  } catch {
+    // git may not be installed — silently skip
+  }
 
   // Print next steps
   printNextSteps(folder, deploymentTarget, redisSetup, enableGitHubActions, packageManager);

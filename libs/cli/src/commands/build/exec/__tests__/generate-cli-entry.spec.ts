@@ -1111,6 +1111,70 @@ describe('extractTemplateParams', () => {
   });
 });
 
+describe('daemon config extraction', () => {
+  it('should use Reflect.getMetadata for class config resolution in daemon script', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('Reflect.getMetadata("__frontmcp:config"');
+  });
+
+  it('should require reflect-metadata in daemon script', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('require("reflect-metadata")');
+  });
+
+  it('should fall back to raw module if not a function', () => {
+    const source = generateCliEntry(makeOptions());
+    // The daemon script checks typeof raw === "function" before using Reflect
+    expect(source).toContain('typeof raw === "function"');
+  });
+});
+
+describe('doctor --fix app directory', () => {
+  it('should create app directory when --fix is used', () => {
+    const source = generateCliEntry(makeOptions({
+      nativeDeps: {},
+    }));
+    expect(source).toContain('fs.mkdirSync(appDir, { recursive: true })');
+    expect(source).toContain('[fixed] Created');
+  });
+
+  it('should only create directory when opts.fix is true', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('if (opts.fix)');
+    expect(source).toContain('App directory not found');
+  });
+});
+
+describe('subscribe commands', () => {
+  it('should include setInterval for event loop keep-alive', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('setInterval(function() {}, 2147483647)');
+  });
+
+  it('should define getSubscribeClient function', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('async function getSubscribeClient()');
+  });
+
+  it('should use getSubscribeClient instead of getClient for subscribe commands', () => {
+    const source = generateCliEntry(makeOptions());
+    // Subscribe resource and notification should use getSubscribeClient
+    expect(source).toContain('await getSubscribeClient()');
+  });
+
+  it('should detect daemon mode via _isDaemon flag', () => {
+    const source = generateCliEntry(makeOptions());
+    expect(source).toContain('client._isDaemon');
+  });
+
+  it('should reconnect via in-process when daemon is detected', () => {
+    const source = generateCliEntry(makeOptions());
+    // When daemon detected, should clear cached client and use connect()
+    expect(source).toContain('_client = null');
+    expect(source).toContain("connect(configOrClass, { mode: 'cli' })");
+  });
+});
+
 describe('RESERVED_COMMANDS', () => {
   it('should contain all expected reserved names', () => {
     expect(RESERVED_COMMANDS.has('resource')).toBe(true);

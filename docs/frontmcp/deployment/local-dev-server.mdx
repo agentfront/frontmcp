@@ -86,6 +86,9 @@ npm run docker:down
 
 # Rebuild the Docker image
 npm run docker:build
+
+# Rebuild only the app service (selective rebuild — skips Redis)
+docker compose -f ci/docker-compose.yml up --build app
 ```
 
 ---

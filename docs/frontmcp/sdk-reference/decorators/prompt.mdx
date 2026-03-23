@@ -40,8 +40,10 @@ class ResearchPrompt extends PromptContext {
 ## Signature
 
 ```typescript
-function Prompt(providedMetadata: PromptMetadata): ClassDecorator
+function Prompt(opts: PromptMetadata): TypedClassDecorator
 ```
+
+The `@Prompt` decorator validates at compile time that the decorated class extends `PromptContext`. Using it on a plain class produces a descriptive compile error.
 
 ## Configuration Options
 
