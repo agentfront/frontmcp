@@ -833,14 +833,33 @@ workflowCmd
 }
 
 function generateSubscribeCommands(): string {
-  return `var subscribeCmd = program.command('subscribe').description('Subscribe to updates');
+  return `
+// Subscribe commands need push support (onNotification/onResourceUpdated).
+// Daemon HTTP cannot push, so we force in-process when daemon was used.
+async function getSubscribeClient() {
+  var client = await getClient();
+  // If connected via daemon, the onNotification/onResourceUpdated are no-ops.
+  // Reconnect via in-process for push support.
+  if (client._isDaemon) {
+    _client = null; // clear cached daemon client
+    var mod = require(SERVER_BUNDLE);
+    var configOrClass = mod.default || mod;
+    var sdk = require('@frontmcp/sdk');
+    var connect = sdk.connect || sdk.direct.connect;
+    _client = await connect(configOrClass, { mode: 'cli' });
+    return _client;
+  }
+  return client;
+}
+
+var subscribeCmd = program.command('subscribe').description('Subscribe to updates');
 
 subscribeCmd
   .command('resource <uri>')
   .description('Stream resource updates (Ctrl+C to stop)')
   .action(async function(uri) {
     try {
-      var client = await getClient();
+      var client = await getSubscribeClient();
       await client.subscribeResource(uri);
       var mode = program.opts().output || 'text';
       console.log('Subscribed to resource: ' + uri);
@@ -853,7 +872,9 @@ subscribeCmd
         try { await client.unsubscribeResource(uri); } catch (_) { /* ok */ }
         process.exit(0);
       });
-      // Keep process alive
+      // Keep process alive — setInterval creates an active event loop handle
+      // so Node.js won't exit even with InMemoryTransport (no persistent I/O)
+      setInterval(function() {}, 2147483647);
       await new Promise(function() {});
     } catch (err) {
       console.error('Error:', err.message || err);
@@ -866,7 +887,7 @@ subscribeCmd
   .description('Stream notifications (Ctrl+C to stop)')
   .action(async function(name) {
     try {
-      var client = await getClient();
+      var client = await getSubscribeClient();
       var mode = program.opts().output || 'text';
       console.log('Listening for notification: ' + name);
       console.log('Waiting for events... (Ctrl+C to stop)\\n');
@@ -879,7 +900,9 @@ subscribeCmd
         console.log('\\nStopping...');
         process.exit(0);
       });
-      // Keep process alive
+      // Keep process alive — setInterval creates an active event loop handle
+      // so Node.js won't exit even with InMemoryTransport (no persistent I/O)
+      setInterval(function() {}, 2147483647);
       await new Promise(function() {});
     } catch (err) {
       console.error('Error:', err.message || err);
@@ -1097,6 +1120,10 @@ ${checks.join(',\n')}
     } else {
       console.log('  [!!] App directory not found: ' + appDir);
       ok = false;
+      if (opts.fix) {
+        fs.mkdirSync(appDir, { recursive: true });
+        console.log('      [fixed] Created ' + appDir);
+      }
     }
 
     if (ok) console.log('\\nAll checks passed.');
@@ -1261,10 +1288,14 @@ daemonCmd
     // Start the daemon using runUnixSocket via a small wrapper script
     // Always use absolute path for the server bundle (SCRIPT_DIR resolves to __dirname at runtime)
     var serverBundlePath = pathMod.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});
-    var daemonScript = 'var mod = require(' + JSON.stringify(serverBundlePath) + ');' +
+    var daemonScript = 'require("reflect-metadata");' +
+      'var mod = require(' + JSON.stringify(serverBundlePath) + ');' +
       'var sdk = require("@frontmcp/sdk");' +
       'var FrontMcpInstance = sdk.FrontMcpInstance || sdk.default.FrontMcpInstance;' +
-      'var config = mod.default || mod;' +
+      'var raw = mod.default || mod;' +
+      // If the export is a @FrontMcp-decorated class, extract config via Reflect metadata
+      'var config = (typeof raw === "function" && typeof Reflect !== "undefined" && Reflect.getMetadata) ' +
+      '  ? (Reflect.getMetadata("__frontmcp:config", raw) || raw) : raw;' +
       'FrontMcpInstance.runUnixSocket(Object.assign({}, config, { socketPath: ' + JSON.stringify(socketPath) + ' }))' +
       '.then(function() { console.log("Daemon listening on " + ' + JSON.stringify(socketPath) + '); })' +
       '.catch(function(e) { console.error("Daemon failed:", e); process.exit(1); });';

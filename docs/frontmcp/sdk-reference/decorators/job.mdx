@@ -35,10 +35,19 @@ class SendEmailJob extends JobContext {
 ## Signature
 
 ```typescript
-function Job<I extends ToolInputType, O extends ToolOutputType>(
-  opts: JobMetadata<I, O>
-): ClassDecorator
+function Job<I extends ZodRawShape, O extends OutputSchema>(
+  opts: JobMetadata<I, O> & { outputSchema: O }
+): TypedClassDecorator
 ```
+
+## Type Safety
+
+The `@Job` decorator enforces at compile time:
+
+- The decorated class must extend `JobContext`
+- The `execute()` parameter must exactly match the `inputSchema` type
+- The `execute()` return type must match the `outputSchema` type
+- Both `inputSchema` and `outputSchema` are required for Jobs
 
 ## Configuration Options
 

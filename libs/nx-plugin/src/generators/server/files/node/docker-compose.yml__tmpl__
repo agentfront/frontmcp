@@ -1,14 +1,13 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: ../..
       dockerfile: <%= projectRoot %>/Dockerfile
     ports:
-      - '3000:3000'
+      - '${PORT:-3000}:3000'
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-3000}
 <% if (redis === 'docker') { %>
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -20,9 +19,19 @@ services:
     image: redis:7-alpine
     ports:
       - '6379:6379'
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
+      interval: 3s
       timeout: 5s
       retries: 3
+
+volumes:
+  redis-data:
 <% } %>
+
+# Selective rebuild:
+#   docker compose up --build app   # rebuild only the app
+#   docker compose up --build       # rebuild everything
