@@ -47,7 +47,9 @@ The `@Tool` decorator provides compile-time type checking:
 // Compile error: parameter type { query: number } doesn't match inputSchema { query: string }
 @Tool({ name: 'search', inputSchema: { query: z.string() } })
 class BadTool extends ToolContext {
-  async execute(input: { query: number }) { ... } // TS error here
+  async execute(input: { query: number }) { // TS error on this class
+    return { result: input.query };
+  }
 }
 ```
 

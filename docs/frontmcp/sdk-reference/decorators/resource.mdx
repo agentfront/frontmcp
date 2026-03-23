@@ -34,6 +34,8 @@ class AppConfigResource extends ResourceContext {
 function Resource(opts: ResourceMetadata): TypedClassDecorator
 ```
 
+## Type Safety
+
 The `@Resource` decorator validates at compile time that the decorated class extends `ResourceContext`. Using it on a plain class produces a descriptive compile error.
 
 The same applies to `@ResourceTemplate`.

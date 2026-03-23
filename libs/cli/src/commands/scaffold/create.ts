@@ -1,8 +1,7 @@
 import * as path from 'path';
 import { createRequire } from 'module';
-import { promises as fsp } from 'fs';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON, runCmd, stat } from '@frontmcp/utils';
+import { ensureDir, fileExists, isDirEmpty, writeFile, writeJSON, readJSON, runCmd, stat } from '@frontmcp/utils';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
@@ -130,7 +129,7 @@ async function scaffoldFileIfMissing(baseDir: string, p: string, content: string
     return;
   }
   await ensureDir(path.dirname(p));
-  await fsp.writeFile(p, content.replace(/^\n/, ''), 'utf8');
+  await writeFile(p, content.replace(/^\n/, ''));
   console.log(c('green', `✓ created ${path.relative(baseDir, p)}`));
 }
 
@@ -1520,8 +1519,8 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // Validate directory
   try {
-    const stat = await fsp.stat(targetDir);
-    if (!stat.isDirectory()) {
+    const targetStat = await stat(targetDir);
+    if (!targetStat.isDirectory()) {
       console.error(
         c('red', `Refusing to scaffold into non-directory path: ${path.relative(process.cwd(), targetDir)}`),
       );
