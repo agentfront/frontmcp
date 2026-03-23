@@ -23,7 +23,7 @@ Commands for building, testing, and debugging your FrontMCP server.
 | `build --exec --cli` | Build CLI executable with subcommands per tool                |
 | `test`               | Run E2E tests with auto-injected Jest configuration           |
 | `init`               | Create or fix a tsconfig.json suitable for FrontMCP           |
-| `doctor`             | Check Node/npm versions and tsconfig requirements             |
+| `doctor`             | Check Node/npm versions and tsconfig requirements. Use `--fix` to auto-repair (installs missing deps, creates app directories) |
 | `inspector`          | Launch MCP Inspector (`npx @modelcontextprotocol/inspector`)  |
 | `create [name]`      | Scaffold a new FrontMCP project (interactive if name omitted) |
 | `socket <entry>`     | Start Unix socket daemon for local MCP server                 |
@@ -141,6 +141,11 @@ See [ESM Packages](/frontmcp/servers/esm-packages) for full documentation on ESM
 | `--cicd`            | Enable GitHub Actions CI/CD                                  |
 | `--no-cicd`         | Disable GitHub Actions CI/CD                                 |
 | `--nx`              | Scaffold an Nx monorepo workspace                            |
+
+<Info>
+The `create` command automatically initializes a git repository and creates an initial commit after scaffolding.
+If `git` is not installed, this step is silently skipped.
+</Info>
 
 ### Socket Options
 
