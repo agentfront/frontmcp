@@ -464,11 +464,9 @@ test.describe('Session Reconnect E2E', () => {
       const content2 = result2['content'] as Array<{ text: string }>;
       const info2 = JSON.parse(content2[0].text) as { sessionId: string; hasSession: boolean };
 
-      // CRITICAL: The session ID in the tool's auth context must NOT be a fallback
-      expect(info2.sessionId).not.toContain('fallback');
+      // CRITICAL: The session ID in the tool's auth context must match the new session
+      expect(info2.sessionId).toBe(sessionId2);
       expect(info2.hasSession).toBe(true);
-      // Session ID should differ from the old session
-      expect(info2.sessionId).not.toBe(info1.sessionId);
     });
 
     test('full reconnect protocol handshake should work end-to-end', async ({ server }) => {
@@ -739,6 +737,18 @@ test.describe('Session Reconnect E2E', () => {
   });
 
   test.describe('SSE listener with stale session', () => {
+    test('should return 200 for GET SSE with an active session ID', async ({ server }) => {
+      const init = await sendInitialize(server.info.baseUrl);
+      const s = init.sessionId;
+      if (!s) throw new Error('Expected session');
+
+      await sendNotificationInitialized(server.info.baseUrl, s);
+
+      const sse = await sendSseGet(server.info.baseUrl, s);
+      expect(sse.status).toBe(200);
+      expect(sse.contentType).toContain('text/event-stream');
+    });
+
     test('should return 404 for GET SSE with terminated session ID', async ({ server }) => {
       const init = await sendInitialize(server.info.baseUrl);
       const s = init.sessionId;

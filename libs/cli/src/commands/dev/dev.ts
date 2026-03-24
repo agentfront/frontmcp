@@ -7,7 +7,7 @@ import { loadDevEnv } from '../../shared/env';
 
 function killQuiet(proc?: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
   try {
-    if (proc && !proc.killed) {
+    if (proc && proc.exitCode === null && proc.signalCode === null) {
       proc.kill(signal);
     }
   } catch {
@@ -106,8 +106,10 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     checker.on('close', () => {
       markClosed('checker');
     });
-    checker.on('error', () => {
+    checker.on('error', (err) => {
       clearForceKillTimer();
+      cleanup();
+      reject(err);
     });
   });
 }

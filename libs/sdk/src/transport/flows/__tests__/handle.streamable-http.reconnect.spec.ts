@@ -9,8 +9,6 @@
  * 3. No mutation occurs when authorization.session already exists (normal flow)
  */
 
-import { ServerRequestTokens } from '../../../common';
-
 describe('Streamable HTTP Flow - Reconnect Session Sync', () => {
   /**
    * Simulates the session sync logic from onInitialize in

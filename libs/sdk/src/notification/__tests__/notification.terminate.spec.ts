@@ -156,7 +156,7 @@ describe('NotificationService - terminateSession', () => {
       const childLogger = mockScope.logger.child.mock.results[0]?.value;
       const warnCalls = childLogger?.warn?.mock?.calls ?? [];
       const alreadyRegisteredCalls = warnCalls.filter(
-        (call: string[]) => typeof call[0] === 'string' && call[0].includes('already registered'),
+        (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('already registered'),
       );
       expect(alreadyRegisteredCalls.length).toBe(0);
     });

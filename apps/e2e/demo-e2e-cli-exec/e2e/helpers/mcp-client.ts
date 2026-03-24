@@ -64,6 +64,9 @@ export function httpRequest(port: number, options: HttpRequestOptions = {}): Pro
       });
       res.on('error', reject);
     });
+    req.setTimeout(5_000, () => {
+      req.destroy(new Error('HTTP request timed out after 5000ms'));
+    });
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
@@ -94,6 +97,9 @@ export function httpOverSocket(socketPath: string, options: HttpRequestOptions =
       });
       res.on('error', reject);
     });
+    req.setTimeout(5_000, () => {
+      req.destroy(new Error('HTTP request timed out after 5000ms'));
+    });
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
@@ -123,10 +129,10 @@ export async function waitForPort(port: number, timeoutMs = 15_000): Promise<voi
 
 /** Wait for a Unix socket to respond to a health check. */
 export async function waitForSocket(socketPath: string, timeoutMs = 15_000): Promise<void> {
+  const { fileExists } = await import('@frontmcp/utils');
   const start = Date.now();
-  const fs = await import('node:fs');
   while (Date.now() - start < timeoutMs) {
-    if (!fs.existsSync(socketPath)) {
+    if (!(await fileExists(socketPath))) {
       await sleep(100);
       continue;
     }
