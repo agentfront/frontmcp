@@ -74,8 +74,19 @@ export class FrontMcpInstance implements FrontMcpInterface {
     return this.scopes.getScopes();
   }
 
-  public static async bootstrap(options: FrontMcpConfigType) {
-    const frontMcp = new FrontMcpInstance(options);
+  public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
+    // When FRONTMCP_DAEMON_SOCKET is set (e.g., SEA binary started as daemon),
+    // run in Unix socket mode instead of normal HTTP server
+    const daemonSocket = process.env['FRONTMCP_DAEMON_SOCKET'];
+    if (daemonSocket) {
+      await FrontMcpInstance.runUnixSocket({ ...options, socketPath: daemonSocket });
+      return;
+    }
+
+    // Parse through schema to apply defaults (transport, logging, etc.)
+    // Safe for already-parsed configs since Zod parsing is idempotent
+    const parsedConfig = frontMcpMetadataSchema.parse(options);
+    const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
     await frontMcp.start();

@@ -189,6 +189,16 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     });
 
     try {
+      // Sync session to request auth context for ensureAuthInfo.
+      // After reconnect with a terminated session, http.request.flow clears
+      // authorization.session to allow fresh session creation in parseInput.
+      // We must set it back so the transport adapter's ensureAuthInfo gets
+      // the correct session ID instead of using a weak fallback.
+      const authorization = request[ServerRequestTokens.auth] as Authorization;
+      if (!authorization.session) {
+        authorization.session = session;
+      }
+
       const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
       logger.info('onInitialize: transport created, calling initialize');
       await transport.initialize(request, response);

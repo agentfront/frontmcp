@@ -40,7 +40,8 @@ export default class GetCredentialsTool extends ToolContext {
       throw new Error('providerId requires appId to be specified');
     }
 
-    const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
+    const ctx = this.tryGetContext();
+    const sessionId = ctx?.sessionId ?? this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 
     let credentials;

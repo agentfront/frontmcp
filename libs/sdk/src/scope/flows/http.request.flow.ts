@@ -520,6 +520,19 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         return;
       }
 
+      // Destroy the transport to free resources and clean up Redis.
+      // Without this, the transport stays in memory until evicted and the Redis
+      // session persists, allowing recreation on other nodes in distributed mode.
+      const authorization = request[ServerRequestTokens.auth] as { token: string } | undefined;
+      if (authorization?.token) {
+        try {
+          const transportService = (this.scope as Scope).transportService;
+          await transportService.destroyTransporter('streamable-http', authorization.token, sessionId);
+        } catch {
+          // Transport may already be evicted or not found — non-critical
+        }
+      }
+
       this.logger.info(`[${this.requestId}] Session terminated: ${sessionId}`);
       this.respond(httpRespond.noContent());
     } catch (error) {

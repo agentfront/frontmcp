@@ -22,7 +22,7 @@ module.exports = {
     ],
   },
   sea: {
-    enabled: true,
+    enabled: false,
   },
   cli: {
     enabled: true,

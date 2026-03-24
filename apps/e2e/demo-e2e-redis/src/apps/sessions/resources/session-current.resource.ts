@@ -19,8 +19,9 @@ export default class SessionCurrentResource extends ResourceContext<
   z.infer<typeof outputSchema>
 > {
   async execute(): Promise<z.infer<typeof outputSchema>> {
-    // Use shared session ID from authInfo so data is consistent across tools and resources
-    const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
+    // Prefer FrontMcpContext.sessionId (always available in public mode) over authInfo.sessionId
+    const ctx = this.tryGetContext();
+    const sessionId = ctx?.sessionId ?? this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 
     const data = store.getAll();

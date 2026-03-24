@@ -20,9 +20,12 @@ const sessionRequestCounts = new Map<string, number>();
 })
 export default class GetSessionInfoTool extends ToolContext {
   async execute(_input: Record<string, never>): Promise<z.infer<typeof outputSchema>> {
+    // Prefer FrontMcpContext.sessionId (set when context exists) over authInfo.sessionId
+    // (may be undefined in public mode). Matches increment-counter pattern.
+    const ctx = this.tryGetContext();
     const authInfo = this.getAuthInfo();
-    const sessionId = authInfo.sessionId ?? 'no-session';
-    const hasSession = !!authInfo.sessionId;
+    const sessionId = ctx?.sessionId ?? authInfo.sessionId ?? 'no-session';
+    const hasSession = !!sessionId && sessionId !== 'no-session';
 
     // Get current count and increment
     const currentCount = sessionRequestCounts.get(sessionId) ?? 0;

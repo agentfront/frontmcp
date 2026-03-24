@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from 'child_process';
+import { execFileSync, spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../fixture');
@@ -67,6 +67,18 @@ export function runCli(args: string[], extraEnv?: Record<string, string>): CliRe
       exitCode: error.status ?? 1,
     };
   }
+}
+
+/**
+ * Spawn a long-running server process (CLI serve or server bundle).
+ * Returns the ChildProcess for manual lifecycle management.
+ */
+export function spawnServer(command: string[], extraEnv?: Record<string, string>): ChildProcess {
+  const [bin, ...args] = command;
+  return spawn(bin, args, {
+    cwd: DIST_DIR,
+    env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
+  });
 }
 
 export function spawnCli(args: string[], timeoutMs = 3000, extraEnv?: Record<string, string>): Promise<CliResult> {

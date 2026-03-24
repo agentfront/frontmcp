@@ -25,7 +25,8 @@ const outputSchema = z
 })
 export default class CheckSessionTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
-    const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
+    const ctx = this.tryGetContext();
+    const sessionId = ctx?.sessionId ?? this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 
     // Get all state keys
