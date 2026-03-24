@@ -222,10 +222,18 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   protected ensureAuthInfo(req: AuthenticatedServerRequest, transport: LocalTransportAdapter<T>) {
     const { token, user, session } = req[ServerRequestTokens.auth];
 
-    // Session should always exist now (created in session.verify for public mode)
-    // But add defensive fallback for safety in case session is undefined
-    const sessionId = session?.id ?? `fallback:${Date.now()}`;
-    const sessionPayload = session?.payload ?? { protocol: 'streamable-http' as const };
+    // Session must always exist at this point — created in session.verify (public mode)
+    // or synced from flow state in onInitialize (reconnect). A missing session indicates
+    // a bug in session propagation, not a recoverable runtime condition.
+    // The previous fallback:${Date.now()} was predictable, unencrypted, and could collide.
+    if (!session?.id) {
+      throw new Error(
+        'Session ID is required in ensureAuthInfo. ' +
+          'This indicates a bug in session propagation — the session should have been set by the flow.',
+      );
+    }
+    const sessionId = session.id;
+    const sessionPayload = session.payload ?? { protocol: 'streamable-http' as const };
 
     // Enrich session payload with initialization data stored on the adapter.
     // In SSE mode, each HTTP request creates a fresh anonymous session, so

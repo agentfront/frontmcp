@@ -83,4 +83,32 @@ perfTest.describe('Redis Leak Detection', () => {
 
     expect(result.growthRate).toBeLessThan(500 * 1024);
   });
+
+  (SKIP_REDIS ? perfTest.skip : perfTest)('no memory leak on DELETE/reconnect cycles', async ({ server, perf }) => {
+    const result = await perf.checkLeak(
+      async () => {
+        // Create a fresh client, do work, then DELETE the session
+        const client = await server.createClient();
+        await client.tools.call('set-session-data', { key: 'leak-cycle', value: 'data' });
+        const sessionId = client.sessionId;
+
+        // DELETE via raw fetch
+        await fetch(`${server.info.baseUrl}/`, {
+          method: 'DELETE',
+          headers: { 'mcp-session-id': sessionId },
+        });
+
+        await client.disconnect();
+      },
+      {
+        iterations: 15,
+        threshold: 10 * 1024 * 1024,
+        warmupIterations: 3,
+      },
+    );
+
+    // Each DELETE/reconnect cycle should not leak significant memory.
+    // Transport, session, providers, and notification entries should all be cleaned up.
+    expect(result.growthRate).toBeLessThan(500 * 1024); // < 500KB per cycle
+  });
 });

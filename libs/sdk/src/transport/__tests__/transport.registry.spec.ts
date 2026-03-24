@@ -453,6 +453,85 @@ describe('TransportService', () => {
   });
 
   // ============================================
+  // destroyTransporter Cleanup Verification Tests
+  // ============================================
+
+  describe('destroyTransporter cleanup', () => {
+    beforeEach(async () => {
+      // Use Redis-enabled service so onDispose triggers sessionStore.delete
+      service = new TransportService(mockScope as never, {
+        enabled: true,
+        redis: { host: 'localhost' },
+      });
+      await service.ready;
+      mockRedisSessionStore.delete.mockClear();
+      mockRedisSessionStore.set.mockClear();
+    });
+
+    it('should delete session from Redis on destroy', async () => {
+      await service.createTransporter('streamable-http', 'test-token', 'redis-cleanup-1', mockResponse as never);
+      await service.destroyTransporter('streamable-http', 'test-token', 'redis-cleanup-1');
+
+      expect(mockRedisSessionStore.delete).toHaveBeenCalledWith('redis-cleanup-1');
+    });
+
+    it('should persist session to Redis on create and delete on destroy', async () => {
+      await service.createTransporter('streamable-http', 'test-token', 'redis-lifecycle', mockResponse as never);
+
+      // Session should have been persisted to Redis on create
+      expect(mockRedisSessionStore.set).toHaveBeenCalledWith(
+        'redis-lifecycle',
+        expect.objectContaining({
+          session: expect.objectContaining({ id: 'redis-lifecycle' }),
+        }),
+        undefined, // defaultTtlMs not configured in this test
+      );
+
+      mockRedisSessionStore.set.mockClear();
+      await service.destroyTransporter('streamable-http', 'test-token', 'redis-lifecycle');
+
+      // Session should be deleted from Redis on destroy
+      expect(mockRedisSessionStore.delete).toHaveBeenCalledWith('redis-lifecycle');
+    });
+
+    it('should allow fresh transport creation after destroy', async () => {
+      await service.createTransporter('streamable-http', 'test-token', 'redis-recreate', mockResponse as never);
+      await service.destroyTransporter('streamable-http', 'test-token', 'redis-recreate');
+
+      // Should be able to create again (not cached from old)
+      const newTransport = await service.createTransporter(
+        'streamable-http',
+        'test-token',
+        'redis-recreate',
+        mockResponse as never,
+      );
+      expect(newTransport).toBeDefined();
+    });
+
+    it('should call onDispose callback which triggers Redis delete', async () => {
+      const { LocalTransporter } = jest.requireMock('../transport.local') as {
+        LocalTransporter: jest.Mock;
+      };
+      LocalTransporter.mockClear();
+
+      await service.createTransporter('streamable-http', 'test-token', 'dispose-chain', mockResponse as never);
+
+      // Verify LocalTransporter was called with an onDispose function
+      expect(LocalTransporter).toHaveBeenCalledWith(
+        expect.anything(), // scope
+        expect.anything(), // key
+        expect.anything(), // res
+        expect.any(Function), // onDispose callback
+      );
+
+      await service.destroyTransporter('streamable-http', 'test-token', 'dispose-chain');
+
+      // The onDispose callback should have triggered Redis delete
+      expect(mockRedisSessionStore.delete).toHaveBeenCalledWith('dispose-chain');
+    });
+  });
+
+  // ============================================
   // wasSessionCreated Tests
   // ============================================
 
