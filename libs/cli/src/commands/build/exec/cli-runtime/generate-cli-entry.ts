@@ -80,10 +80,10 @@ export function generateCliEntry(options: CliEntryOptions): string {
       generateLogoutCommand(appName),
       generateSessionCommands(),
     ] : []),
-    generateServeCommand(serverBundleFilename),
+    generateServeCommand(serverBundleFilename, selfContained),
     generateDoctorCommand(appName, options.nativeDeps),
     generateInstallCommand(appName, options.nativeDeps, selfContained),
-    generateDaemonCommands(appName, serverBundleFilename),
+    generateDaemonCommands(appName, serverBundleFilename, selfContained),
     generateFooter(),
   ];
 
@@ -1032,17 +1032,31 @@ program
   });`;
 }
 
-function generateServeCommand(serverBundleFilename: string): string {
+function generateServeCommand(serverBundleFilename: string, selfContained?: boolean): string {
+  // In self-contained/SEA mode, use a static relative require that esbuild can resolve at bundle time.
+  // In normal mode, use dynamic path.join for runtime resolution from disk.
+  const requireExpr = selfContained
+    ? `require(${JSON.stringify('../' + serverBundleFilename)})`
+    : `require(path.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)}))`;
+
   return `program
   .command('serve')
   .description('Start the HTTP/SSE server')
   .option('-p, --port <port>', 'Port number', function(v) { return parseInt(v, 10); })
   .action(async function(opts) {
-    var mod = require(path.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)}));
+    var mod = ${requireExpr};
     if (opts.port) process.env.PORT = String(opts.port);
-    // The server bundle should self-start when required
-    if (typeof mod.start === 'function') await mod.start();
-    else if (typeof mod.default?.start === 'function') await mod.default.start();
+    // If the bundle exports a start() function (@FrontMcp-decorated class auto-bootstraps), use it
+    if (typeof mod.start === 'function') { await mod.start(); return; }
+    if (typeof mod.default?.start === 'function') { await mod.default.start(); return; }
+    // Otherwise, bootstrap the plain config object via FrontMcpInstance
+    var raw = mod.default || mod;
+    var sdk = require('@frontmcp/sdk');
+    var FrontMcpInstance = sdk.FrontMcpInstance || sdk.default.FrontMcpInstance;
+    var config = (typeof raw === 'function' && typeof Reflect !== 'undefined' && Reflect.getMetadata)
+      ? (Reflect.getMetadata('__frontmcp:config', raw) || raw) : raw;
+    if (opts.port) config = Object.assign({}, config, { http: Object.assign({}, config.http || {}, { port: opts.port }) });
+    await FrontMcpInstance.bootstrap(config);
   });`;
 }
 
@@ -1245,7 +1259,7 @@ program
   });`;
 }
 
-function generateDaemonCommands(appName: string, serverBundleFilename: string): string {
+function generateDaemonCommands(appName: string, serverBundleFilename: string, selfContained?: boolean): string {
   return `var daemonCmd = program.command('daemon').description('Daemon management');
 
 daemonCmd
@@ -1293,7 +1307,7 @@ daemonCmd
       'var sdk = require("@frontmcp/sdk");' +
       'var FrontMcpInstance = sdk.FrontMcpInstance || sdk.default.FrontMcpInstance;' +
       'var raw = mod.default || mod;' +
-      // If the export is a @FrontMcp-decorated class, extract config via Reflect metadata
+      ${'// If the export is a @FrontMcp-decorated class, extract config via Reflect metadata'}
       'var config = (typeof raw === "function" && typeof Reflect !== "undefined" && Reflect.getMetadata) ' +
       '  ? (Reflect.getMetadata("__frontmcp:config", raw) || raw) : raw;' +
       'FrontMcpInstance.runUnixSocket(Object.assign({}, config, { socketPath: ' + JSON.stringify(socketPath) + ' }))' +

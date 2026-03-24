@@ -864,6 +864,23 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'serve'");
       expect(source).toContain('my-app.bundle.js');
     });
+
+    it('should use dynamic path.join require in normal mode', () => {
+      const source = generateCliEntry(makeOptions({
+        serverBundleFilename: 'my-app.bundle.js',
+        selfContained: false,
+      }));
+      expect(source).toContain('require(path.join(SCRIPT_DIR');
+    });
+
+    it('should use static relative require in selfContained/SEA mode', () => {
+      const source = generateCliEntry(makeOptions({
+        serverBundleFilename: 'my-app.bundle.js',
+        selfContained: true,
+      }));
+      // Serve command should use a static require that esbuild can resolve
+      expect(source).toContain("require('../my-app.bundle.js')");
+    });
   });
 
   describe('daemon commands', () => {
@@ -876,6 +893,25 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'logs'");
       expect(source).toContain('SIGTERM');
       expect(source).toContain('.pid');
+    });
+
+    it('should spawn node with inline script in normal mode', () => {
+      const source = generateCliEntry(makeOptions({
+        selfContained: false,
+      }));
+      expect(source).toContain("spawn('node'");
+      expect(source).toContain('runUnixSocket');
+    });
+
+    it('should use node -e with runUnixSocket in selfContained/SEA mode', () => {
+      const source = generateCliEntry(makeOptions({
+        appName: 'my-server',
+        selfContained: true,
+      }));
+      // Even in SEA mode, daemon uses node -e with runUnixSocket for compatibility
+      expect(source).toContain("spawn('node'");
+      expect(source).toContain('runUnixSocket');
+      expect(source).toContain('FRONTMCP_DAEMON_SOCKET');
     });
   });
 

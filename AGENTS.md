@@ -1,0 +1,32 @@
+- This repository is an Nx-based TypeScript monorepo.
+- Package manager: `yarn`.
+- Workspaces live under `apps/*`, `libs/*`, and `plugins/*`.
+- Primary publishable libraries are under the `@frontmcp/*` scope.
+- `libs/sdk`: core FrontMCP SDK.
+- `libs/cli`: command-line interface.
+- `libs/adapters`: framework adapters and integrations.
+- `libs/plugins`: plugin system and extensions.
+- `libs/auth`: authentication, session management, credential vault, CIMD, and OAuth extensions.
+- `apps/demo`: demo application for development and testing.
+- Prefer minimal, focused changes.
+- Follow existing TypeScript patterns and keep strict typing.
+- Do not introduce `any` without clear justification.
+- For MCP protocol outputs, prefer concrete MCP result types rather than `unknown`.
+- Keep auth-related code in `libs/auth`, not `libs/sdk`.
+- Test files must use `.spec.ts` or `.spec.tsx` naming.
+- Avoid legacy or compatibility re-exports in barrel files.
+- Install dependencies: `yarn install`
+- Run demo app: `yarn dev`
+- Build all projects: `yarn build`
+- Lint all projects: `yarn lint`
+- Run all tests: `yarn test`
+- Run unit tests: `yarn test:unit`
+- Run e2e tests: `yarn test:e2e`
+- Run Playwright tests: `yarn test:pw`
+- Maintain strict TypeScript correctness.
+- Keep builds free of warnings where possible.
+- Preserve or improve test coverage for touched code.
+- Do not make unrelated refactors while addressing a focused task.
+- `node_modules` is already present in the workspace.
+- Generated outputs such as `dist`, `coverage`, `tmp`, `perf-results`, and `test-results` are already ignored by git.
+- Check for more specific instructions in nested `AGENTS.md` files before editing subdirectories.

@@ -5,6 +5,10 @@ dist
 tmp
 out-tsc
 
+.junie
+
+.env
+
 # dependencies
 node_modules
 
