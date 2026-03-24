@@ -74,8 +74,18 @@ export class FrontMcpInstance implements FrontMcpInterface {
     return this.scopes.getScopes();
   }
 
-  public static async bootstrap(options: FrontMcpConfigType) {
-    const frontMcp = new FrontMcpInstance(options);
+  public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
+    const parsedConfig = frontMcpMetadataSchema.parse(options);
+
+    // When FRONTMCP_DAEMON_SOCKET is set (e.g., SEA binary started as daemon),
+    // run in Unix socket mode instead of normal HTTP server
+    const daemonSocket = process.env['FRONTMCP_DAEMON_SOCKET'];
+    if (daemonSocket) {
+      await FrontMcpInstance.runUnixSocket({ ...parsedConfig, socketPath: daemonSocket });
+      return;
+    }
+
+    const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
     await frontMcp.start();
@@ -245,7 +255,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * ```
    */
   public static async runUnixSocket(
-    options: FrontMcpConfigInput & {
+    options: (FrontMcpConfigInput | FrontMcpConfigType) & {
       socketPath: string;
       sqlite?: SqliteOptionsInput;
     },

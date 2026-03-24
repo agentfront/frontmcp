@@ -8,6 +8,7 @@ import {
   FlowHooksOf,
   httpRespond,
   ServerRequestTokens,
+  ServerResponse,
   Authorization,
   FlowControl,
   validateMcpSessionHeader,
@@ -15,6 +16,7 @@ import {
 import { InternalMcpError } from '../../errors';
 import { z } from 'zod';
 import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
+import type { StoredSession } from '@frontmcp/auth';
 import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
@@ -50,6 +52,148 @@ export const stateSchema = z.object({
   session: stateSessionSchema,
   requestType: z.enum(['initialize', 'message', 'elicitResult', 'sseListener', 'extApps']).optional(),
 });
+
+type StreamableHttpSession = z.infer<typeof stateSchema>['session'];
+export type StreamableHttpRequestType = NonNullable<z.infer<typeof stateSchema>['requestType']>;
+
+export function resolveStreamableHttpSession(params: {
+  rawHeader: unknown;
+  authorizationSession?: StreamableHttpSession;
+  createSession: () => StreamableHttpSession;
+}): {
+  responded404: boolean;
+  session?: StreamableHttpSession;
+  createdNew: boolean;
+} {
+  const { rawHeader, authorizationSession, createSession } = params;
+  const rawMcpSessionHeader = typeof rawHeader === 'string' ? rawHeader : undefined;
+  const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
+
+  if (rawHeader !== undefined && !mcpSessionHeader) {
+    return { responded404: true, createdNew: false };
+  }
+
+  if (mcpSessionHeader) {
+    if (authorizationSession?.id === mcpSessionHeader) {
+      return { session: authorizationSession, createdNew: false, responded404: false };
+    }
+
+    return { session: { id: mcpSessionHeader }, createdNew: false, responded404: false };
+  }
+
+  if (authorizationSession) {
+    return { session: authorizationSession, createdNew: false, responded404: false };
+  }
+
+  return { session: createSession(), createdNew: true, responded404: false };
+}
+
+export function classifyStreamableHttpRequest(params: {
+  method: string;
+  body: unknown;
+}): { requestType: StreamableHttpRequestType } | { error: 'Invalid Request' } {
+  const { method, body } = params;
+
+  if (method.toUpperCase() === 'GET') {
+    return { requestType: 'sseListener' };
+  }
+
+  const jsonRpcMethod = (body as { method?: string } | undefined)?.method;
+
+  if (jsonRpcMethod === 'initialize') {
+    return { requestType: 'initialize' };
+  }
+
+  if (typeof jsonRpcMethod === 'string' && jsonRpcMethod.startsWith('ui/')) {
+    return { requestType: 'extApps' };
+  }
+
+  if (ElicitResultSchema.safeParse((body as { result?: unknown } | undefined)?.result).success) {
+    return { requestType: 'elicitResult' };
+  }
+
+  if (jsonRpcMethod && RequestSchema.safeParse(body).success) {
+    return { requestType: 'message' };
+  }
+
+  return { error: 'Invalid Request' };
+}
+
+export function syncStreamableHttpAuthorizationSession(
+  authorization: { session?: StreamableHttpSession },
+  session: StreamableHttpSession,
+): void {
+  if (!authorization.session) {
+    authorization.session = session;
+  }
+}
+
+export interface StreamableHttpTransport {
+  handleRequest(request: unknown, response: unknown): Promise<void>;
+}
+
+export interface StreamableHttpTransportLookupService {
+  getTransporter(
+    type: 'streamable-http',
+    token: string,
+    sessionId: string,
+  ): Promise<StreamableHttpTransport | undefined>;
+  getStoredSession(type: 'streamable-http', token: string, sessionId: string): Promise<StoredSession | undefined>;
+  recreateTransporter(
+    type: 'streamable-http',
+    token: string,
+    sessionId: string,
+    storedSession: StoredSession,
+    response: ServerResponse,
+  ): Promise<StreamableHttpTransport | undefined>;
+  wasSessionCreatedAsync(type: 'streamable-http', token: string, sessionId: string): Promise<boolean>;
+}
+
+export type StreamableHttpTransportLookupResult =
+  | { kind: 'transport'; source: 'memory' | 'redis'; transport: StreamableHttpTransport }
+  | { kind: 'session-expired'; recreationError?: unknown }
+  | { kind: 'session-not-initialized'; recreationError?: unknown };
+
+export async function lookupStreamableHttpTransport(params: {
+  transportService: StreamableHttpTransportLookupService;
+  token: string;
+  sessionId: string;
+  response: ServerResponse;
+}): Promise<StreamableHttpTransportLookupResult> {
+  const { transportService, token, sessionId, response } = params;
+
+  const inMemoryTransport = await transportService.getTransporter('streamable-http', token, sessionId);
+  if (inMemoryTransport) {
+    return { kind: 'transport', source: 'memory', transport: inMemoryTransport };
+  }
+
+  let recreationError: unknown;
+  try {
+    const storedSession = await transportService.getStoredSession('streamable-http', token, sessionId);
+    if (storedSession) {
+      const recreatedTransport = await transportService.recreateTransporter(
+        'streamable-http',
+        token,
+        sessionId,
+        storedSession,
+        response,
+      );
+
+      if (recreatedTransport) {
+        return { kind: 'transport', source: 'redis', transport: recreatedTransport };
+      }
+    }
+  } catch (error) {
+    recreationError = error;
+  }
+
+  const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, sessionId);
+  if (wasCreated) {
+    return { kind: 'session-expired', recreationError };
+  }
+
+  return { kind: 'session-not-initialized', recreationError };
+}
 
 const name = 'handle:streamable-http' as const;
 const { Stage } = FlowHooksOf(name);
@@ -91,43 +235,30 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     //             This is the ID the client received from initialize and is referencing.
     // Priority 2: Use session from authorization if header matches or is absent
     // Priority 3: Create new session (first request - no header, no authorization.session)
-    const raw = request.headers?.['mcp-session-id'];
-    const rawMcpSessionHeader = typeof raw === 'string' ? raw : undefined;
-    const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
+    const sessionResolution = resolveStreamableHttpSession({
+      rawHeader: request.headers?.['mcp-session-id'],
+      authorizationSession: authorization.session,
+      createSession: () => {
+        // No session - create new one (initialize request)
+        // Detect skills_only mode from query params
+        const query = request.query as Record<string, string | string[]> | undefined;
+        const skillsOnlyMode = detectSkillsOnlyMode(query);
 
-    // If client sent a header but validation failed, return 404
-    if (raw !== undefined && !mcpSessionHeader) {
+        return createSessionId('streamable-http', token, {
+          userAgent: request.headers?.['user-agent'] as string | undefined,
+          platformDetectionConfig: (this.scope as Scope).metadata.transport?.platformDetection,
+          skillsOnlyMode,
+        });
+      },
+    });
+
+    if (sessionResolution.responded404 || !sessionResolution.session) {
       logger.warn('parseInput: invalid mcp-session-id header');
       this.respond(httpRespond.sessionNotFound('invalid session id'));
       return;
     }
 
-    let session: { id: string; payload?: z.infer<typeof stateSchema>['session']['payload'] };
-
-    if (mcpSessionHeader) {
-      // Client sent session ID - ALWAYS use it for transport lookup
-      // If authorization.session exists and matches, use its payload for protocol detection
-      // If authorization.session differs or is missing, still use header ID (payload may be undefined)
-      if (authorization.session?.id === mcpSessionHeader) {
-        session = authorization.session;
-      } else {
-        session = { id: mcpSessionHeader };
-      }
-    } else if (authorization.session) {
-      // No header but authorization has session - use it (shouldn't happen in normal flow)
-      session = authorization.session;
-    } else {
-      // No session - create new one (initialize request)
-      // Detect skills_only mode from query params
-      const query = request.query as Record<string, string | string[]> | undefined;
-      const skillsOnlyMode = detectSkillsOnlyMode(query);
-
-      session = createSessionId('streamable-http', token, {
-        userAgent: request.headers?.['user-agent'] as string | undefined,
-        platformDetectionConfig: (this.scope as Scope).metadata.transport?.platformDetection,
-        skillsOnlyMode,
-      });
-    }
+    const session = sessionResolution.session;
 
     this.state.set(stateSchema.parse({ token, session }));
 
@@ -139,36 +270,31 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { request } = this.rawInput;
     const logger = this.scopeLogger.child('handle:streamable-http:router');
 
-    // GET requests are SSE listener streams - no body expected
-    // Per MCP spec, clients can open SSE stream with GET + Accept: text/event-stream
-    if (request.method.toUpperCase() === 'GET') {
-      this.state.set('requestType', 'sseListener');
-      logger.info('router: requestType=sseListener, method=GET');
+    const classification = classifyStreamableHttpRequest({
+      method: request.method,
+      body: request.body,
+    });
+
+    if ('error' in classification) {
+      logger.warn('router: invalid request, no valid method');
+      this.respond(httpRespond.rpcError('Invalid Request'));
       return;
     }
 
-    // POST requests have MCP JSON-RPC body
-    const body = request.body as { method?: string } | undefined;
-    const method = body?.method;
+    this.state.set('requestType', classification.requestType);
 
-    // Use method-based detection for routing (more permissive than strict schema)
-    // The actual schema validation happens in the MCP SDK's transport layer
-    if (method === 'initialize') {
-      this.state.set('requestType', 'initialize');
+    if (classification.requestType === 'sseListener') {
+      logger.info('router: requestType=sseListener, method=GET');
+    } else if (classification.requestType === 'initialize') {
       logger.info('router: requestType=initialize, method=POST');
-    } else if (typeof method === 'string' && method.startsWith('ui/')) {
-      // Ext-apps methods: ui/initialize, ui/callServerTool, etc.
-      this.state.set('requestType', 'extApps');
+    } else if (classification.requestType === 'extApps') {
+      const method = (request.body as { method?: string } | undefined)?.method;
       logger.info(`router: requestType=extApps, method=${method}`);
-    } else if (ElicitResultSchema.safeParse((request.body as { result?: unknown })?.result).success) {
-      this.state.set('requestType', 'elicitResult');
+    } else if (classification.requestType === 'elicitResult') {
       logger.info('router: requestType=elicitResult, method=POST');
-    } else if (method && RequestSchema.safeParse(request.body).success) {
-      this.state.set('requestType', 'message');
-      logger.info(`router: requestType=message, method=${method}`);
     } else {
-      logger.warn('router: invalid request, no valid method');
-      this.respond(httpRespond.rpcError('Invalid Request'));
+      const method = (request.body as { method?: string } | undefined)?.method;
+      logger.info(`router: requestType=message, method=${method}`);
     }
   }
 
@@ -189,6 +315,14 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     });
 
     try {
+      // Sync session to request auth context for ensureAuthInfo.
+      // After reconnect with a terminated session, http.request.flow clears
+      // authorization.session to allow fresh session creation in parseInput.
+      // We must set it back so the transport adapter's ensureAuthInfo gets
+      // the correct session ID instead of using a weak fallback.
+      const authorization = request[ServerRequestTokens.auth] as Authorization;
+      syncStreamableHttpAuthorizationSession(authorization, session);
+
       const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
       logger.info('onInitialize: transport created, calling initialize');
       await transport.initialize(request, response);
@@ -291,51 +425,27 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       hasToken: !!token,
     });
 
-    // 1. Try to get existing transport from memory
-    let transport = await transportService.getTransporter('streamable-http', token, session.id);
-    logger.verbose('onMessage: getTransporter result', { found: !!transport });
+    const transportLookup = await lookupStreamableHttpTransport({
+      transportService,
+      token,
+      sessionId: session.id,
+      response,
+    });
 
-    // 2. If not in memory, check if session exists in Redis and recreate
-    if (!transport) {
-      try {
-        logger.verbose('onMessage: transport not in memory, checking Redis', {
-          sessionId: session.id?.slice(0, 20),
-        });
-        const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
-        logger.verbose('onMessage: getStoredSession result', {
-          found: !!storedSession,
-          initialized: storedSession?.initialized,
-        });
-        if (storedSession) {
-          logger.verbose('onMessage: recreating transport from stored session', {
-            sessionId: session.id?.slice(0, 20),
-            createdAt: storedSession.createdAt,
-            initialized: storedSession.initialized,
-          });
-          transport = await transportService.recreateTransporter(
-            'streamable-http',
-            token,
-            session.id,
-            storedSession,
-            response,
-          );
-          logger.verbose('onMessage: transport recreated successfully');
-        }
-      } catch (error) {
-        // Log and fall through to 404 logic - transport remains undefined
-        logger.warn('Failed to recreate transport from stored session', {
-          sessionId: session.id?.slice(0, 20),
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    if (!transport) {
-      // Check if session was ever created to differentiate error types per MCP Spec 2025-11-25
-      const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, session.id);
+    if (transportLookup.kind !== 'transport') {
       const body = request.body as Record<string, unknown> | undefined;
 
-      if (wasCreated) {
+      if (transportLookup.recreationError) {
+        logger.warn('Failed to recreate transport from stored session', {
+          sessionId: session.id?.slice(0, 20),
+          error:
+            transportLookup.recreationError instanceof Error
+              ? transportLookup.recreationError.message
+              : String(transportLookup.recreationError),
+        });
+      }
+
+      if (transportLookup.kind === 'session-expired') {
         // Session existed but was terminated/evicted → HTTP 404 (client should re-initialize)
         logger.info('Session expired - client should re-initialize', {
           sessionId: session.id?.slice(0, 20),
@@ -359,6 +469,9 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       }
       return;
     }
+
+    const transport = transportLookup.transport;
+    logger.verbose('onMessage: transport resolved', { source: transportLookup.source });
 
     try {
       await transport.handleRequest(request, response);

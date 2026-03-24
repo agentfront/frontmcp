@@ -17,6 +17,7 @@ import {
   normalizeScopeBase,
   FlowControl,
   toLegacyProtocolFlags,
+  Authorization,
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
@@ -518,6 +519,21 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         this.logger.warn(`[${this.requestId}] Session not found for DELETE: ${sessionId}`);
         this.respond(httpRespond.notFound('Session not found'));
         return;
+      }
+
+      // Destroy the transport to free resources and clean up Redis.
+      // Without this, the transport stays in memory until evicted and the Redis
+      // session persists, allowing recreation on other nodes in distributed mode.
+      const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
+      if (authorization?.token) {
+        const transportService = (this.scope as Scope).transportService;
+        for (const protocol of ['streamable-http', 'sse'] as const) {
+          try {
+            await transportService.destroyTransporter(protocol, authorization.token, sessionId);
+          } catch {
+            // Transport may already be evicted or not found — non-critical
+          }
+        }
       }
 
       this.logger.info(`[${this.requestId}] Session terminated: ${sessionId}`);

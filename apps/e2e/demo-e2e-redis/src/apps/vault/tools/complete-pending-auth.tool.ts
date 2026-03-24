@@ -1,6 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getVault } from '../data/vault.store';
+import { resolveDemoSessionId } from '../../resolve-session-id';
 
 const inputSchema = {
   entryId: z.string().describe('Vault entry ID'),
@@ -23,7 +24,8 @@ const outputSchema = z
 })
 export default class CompletePendingAuthTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
-    const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
+    const ctx = this.tryGetContext();
+    const sessionId = resolveDemoSessionId(ctx?.sessionId, this.getAuthInfo().sessionId);
     const vault = await getVault(sessionId);
 
     try {

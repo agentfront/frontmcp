@@ -5,10 +5,10 @@ import { c } from '../../core/colors';
 import { resolveEntry } from '../../shared/fs';
 import { loadDevEnv } from '../../shared/env';
 
-function killQuiet(proc?: ChildProcess) {
+function killQuiet(proc?: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
   try {
-    if (proc) {
-      proc.kill('SIGINT');
+    if (proc && proc.exitCode === null && proc.signalCode === null) {
+      proc.kill(signal);
     }
   } catch {
     // ignore
@@ -33,31 +33,81 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
 
   // Use --conditions node to ensure proper Node.js module resolution
   // This helps with dynamic require() calls in packages like ioredis
+  // Only use shell on Windows where npx.cmd requires it; on Unix, direct spawn
+  // allows proper SIGINT propagation without intermediate shell processes
+  const useShell = process.platform === 'win32';
   const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
     stdio: 'inherit',
-    shell: true,
+    shell: useShell,
   });
   const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
     stdio: 'inherit',
-    shell: true,
+    shell: useShell,
   });
 
-  const cleanup = () => {
+  const cleanup = (clearTimer = true) => {
+    if (clearTimer) {
+      clearForceKillTimer();
+    }
     killQuiet(checker);
     killQuiet(app);
   };
 
+  let forceKillTimer: NodeJS.Timeout | undefined;
+  let appClosed = false;
+  let checkerClosed = false;
+
+  const clearForceKillTimer = () => {
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = undefined;
+    }
+  };
+
+  const markClosed = (child: 'app' | 'checker') => {
+    if (child === 'app') {
+      appClosed = true;
+    } else {
+      checkerClosed = true;
+    }
+    if (appClosed && checkerClosed) {
+      clearForceKillTimer();
+    }
+  };
+
   process.on('SIGINT', () => {
+    cleanup(false);
+    // Force-kill after 2s if children haven't exited
+    clearForceKillTimer();
+    forceKillTimer = setTimeout(() => {
+      killQuiet(checker, 'SIGKILL');
+      killQuiet(app, 'SIGKILL');
+      process.exit(1);
+    }, 2000);
+    forceKillTimer.unref();
+  });
+
+  process.on('SIGTERM', () => {
     cleanup();
     process.exit(0);
   });
 
   await new Promise<void>((resolve, reject) => {
     app.on('close', () => {
-      cleanup();
+      markClosed('app');
+      cleanup(false);
       resolve();
     });
     app.on('error', (err) => {
+      clearForceKillTimer();
+      cleanup();
+      reject(err);
+    });
+    checker.on('close', () => {
+      markClosed('checker');
+    });
+    checker.on('error', (err) => {
+      clearForceKillTimer();
       cleanup();
       reject(err);
     });
