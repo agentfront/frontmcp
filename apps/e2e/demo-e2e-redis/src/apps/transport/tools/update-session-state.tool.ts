@@ -1,6 +1,7 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getSessionStore } from '../../sessions/data/session.store';
+import { resolveDemoSessionId } from '../../resolve-session-id';
 
 const inputSchema = {
   key: z.string().describe('State key to update'),
@@ -25,7 +26,7 @@ const outputSchema = z
 export default class UpdateSessionStateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const ctx = this.tryGetContext();
-    const sessionId = ctx?.sessionId ?? this.getAuthInfo().sessionId ?? 'mock-session-default';
+    const sessionId = resolveDemoSessionId(ctx?.sessionId, this.getAuthInfo().sessionId);
     const store = getSessionStore(sessionId);
 
     // Store transport state under a prefixed key

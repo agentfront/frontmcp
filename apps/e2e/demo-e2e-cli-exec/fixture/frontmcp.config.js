@@ -22,6 +22,7 @@ module.exports = {
     ],
   },
   sea: {
+    // Disabled here so these fixture tests stay focused on bundle/runtime flows rather than SEA packaging.
     enabled: false,
   },
   cli: {

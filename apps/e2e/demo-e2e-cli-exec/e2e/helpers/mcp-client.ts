@@ -29,6 +29,8 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
+type JsonRpcNotification = Omit<JsonRpcRequest, 'id'>;
+
 interface JsonRpcResponse {
   jsonrpc: '2.0';
   id?: number;
@@ -267,7 +269,7 @@ export class McpJsonRpcClient {
 
   /** Send a JSON-RPC notification (no response expected). */
   async notify(method: string, params?: Record<string, unknown>): Promise<void> {
-    const rpcNotification: JsonRpcRequest = { jsonrpc: '2.0', method, params: params ?? {} };
+    const rpcNotification: JsonRpcNotification = { jsonrpc: '2.0', method, params: params ?? {} };
 
     const headers: Record<string, string> = {
       'content-type': 'application/json',

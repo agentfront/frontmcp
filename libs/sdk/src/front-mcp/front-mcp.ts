@@ -75,17 +75,16 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
+    const parsedConfig = frontMcpMetadataSchema.parse(options);
+
     // When FRONTMCP_DAEMON_SOCKET is set (e.g., SEA binary started as daemon),
     // run in Unix socket mode instead of normal HTTP server
     const daemonSocket = process.env['FRONTMCP_DAEMON_SOCKET'];
     if (daemonSocket) {
-      await FrontMcpInstance.runUnixSocket({ ...options, socketPath: daemonSocket });
+      await FrontMcpInstance.runUnixSocket({ ...parsedConfig, socketPath: daemonSocket });
       return;
     }
 
-    // Parse through schema to apply defaults (transport, logging, etc.)
-    // Safe for already-parsed configs since Zod parsing is idempotent
-    const parsedConfig = frontMcpMetadataSchema.parse(options);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
@@ -256,7 +255,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * ```
    */
   public static async runUnixSocket(
-    options: FrontMcpConfigInput & {
+    options: (FrontMcpConfigInput | FrontMcpConfigType) & {
       socketPath: string;
       sqlite?: SqliteOptionsInput;
     },

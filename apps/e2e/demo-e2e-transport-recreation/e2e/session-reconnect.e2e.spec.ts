@@ -127,15 +127,9 @@ async function sendSseGet(baseUrl: string, sessionId: string): Promise<{ status:
       },
       signal: controller.signal,
     });
-    clearTimeout(timer);
     return { status: response.status, contentType: response.headers.get('content-type') };
-  } catch (err) {
+  } finally {
     clearTimeout(timer);
-    // AbortError means the connection was established (200 SSE stream opened)
-    if ((err as Error).name === 'AbortError') {
-      return { status: 200, contentType: 'text/event-stream' };
-    }
-    throw err;
   }
 }
 
@@ -468,7 +462,7 @@ test.describe('Session Reconnect E2E', () => {
       const body2 = toolResult2.body as Record<string, unknown>;
       const result2 = body2['result'] as Record<string, unknown>;
       const content2 = result2['content'] as Array<{ text: string }>;
-      const info2 = JSON.parse(content2[0].text) as { sessionId: string };
+      const info2 = JSON.parse(content2[0].text) as { sessionId: string; hasSession: boolean };
 
       // CRITICAL: The session ID in the tool's auth context must NOT be a fallback
       expect(info2.sessionId).not.toContain('fallback');

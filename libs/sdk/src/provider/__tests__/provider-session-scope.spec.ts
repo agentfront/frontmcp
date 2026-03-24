@@ -448,22 +448,29 @@ describe('ProviderRegistry - Context Scope', () => {
 
   describe('cleanupSession', () => {
     it('should remove session from cache', async () => {
+      const constructCount = { value: 0 };
+
+      @Injectable()
+      class TrackingContextService {
+        constructor() {
+          constructCount.value++;
+        }
+      }
+
       const registry = new ProviderRegistry([
-        createClassProvider(GlobalService, { name: 'GlobalService', scope: ProviderScope.CONTEXT }),
+        createClassProvider(TrackingContextService, { name: 'TrackingContextService', scope: ProviderScope.CONTEXT }),
       ]);
       await registry.ready;
 
       // Build views to populate session cache
       await registry.buildViews('session-to-clean');
+      expect(constructCount.value).toBe(1);
 
       // Cleanup the session
       registry.cleanupSession('session-to-clean');
 
-      // Next build should create fresh instance (not cached)
-      // We verify by building again - if cache was cleared, CONTEXT providers rebuild
-      const callsBefore = GlobalService.prototype.constructor.length; // baseline
       await registry.buildViews('session-to-clean');
-      // No error means it worked - cache was cleared and rebuilt successfully
+      expect(constructCount.value).toBe(2);
     });
 
     it('should be no-op for non-existent session', async () => {

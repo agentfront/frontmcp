@@ -45,21 +45,46 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     shell: useShell,
   });
 
-  const cleanup = () => {
+  const cleanup = (clearTimer = true) => {
+    if (clearTimer) {
+      clearForceKillTimer();
+    }
     killQuiet(checker);
     killQuiet(app);
   };
 
+  let forceKillTimer: NodeJS.Timeout | undefined;
+  let appClosed = false;
+  let checkerClosed = false;
+
+  const clearForceKillTimer = () => {
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = undefined;
+    }
+  };
+
+  const markClosed = (child: 'app' | 'checker') => {
+    if (child === 'app') {
+      appClosed = true;
+    } else {
+      checkerClosed = true;
+    }
+    if (appClosed && checkerClosed) {
+      clearForceKillTimer();
+    }
+  };
+
   process.on('SIGINT', () => {
-    cleanup();
+    cleanup(false);
     // Force-kill after 2s if children haven't exited
-    const timer = setTimeout(() => {
+    clearForceKillTimer();
+    forceKillTimer = setTimeout(() => {
       killQuiet(checker, 'SIGKILL');
       killQuiet(app, 'SIGKILL');
       process.exit(1);
     }, 2000);
-    timer.unref();
-    process.exit(0);
+    forceKillTimer.unref();
   });
 
   process.on('SIGTERM', () => {
@@ -69,12 +94,20 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     app.on('close', () => {
-      cleanup();
+      markClosed('app');
+      cleanup(false);
       resolve();
     });
     app.on('error', (err) => {
+      clearForceKillTimer();
       cleanup();
       reject(err);
+    });
+    checker.on('close', () => {
+      markClosed('checker');
+    });
+    checker.on('error', () => {
+      clearForceKillTimer();
     });
   });
 }

@@ -121,17 +121,15 @@ describe('NotificationService - terminateSession', () => {
 
   describe('LRU eviction', () => {
     it('should evict oldest terminated session when exceeding max', () => {
-      // Access the static MAX_TERMINATED_SESSIONS
-      // We can't easily test 10,000 entries, so we'll test the behavior
-      // by terminating enough sessions and checking the first is still tracked
-      const sessions = Array.from({ length: 100 }, (_, i) => `evict-session-${i}`);
+      service = new NotificationService(mockScope as never, { maxTerminatedSessions: 10 });
+
+      const sessions = Array.from({ length: 11 }, (_, i) => `evict-session-${i}`);
       for (const s of sessions) {
         service.terminateSession(s);
       }
 
-      // All should be tracked (well under 10,000 limit)
-      expect(service.isSessionTerminated('evict-session-0')).toBe(true);
-      expect(service.isSessionTerminated('evict-session-99')).toBe(true);
+      expect(service.isSessionTerminated('evict-session-0')).toBe(false);
+      expect(service.isSessionTerminated('evict-session-10')).toBe(true);
     });
 
     it('should call providers.cleanupSession for every terminated session', () => {

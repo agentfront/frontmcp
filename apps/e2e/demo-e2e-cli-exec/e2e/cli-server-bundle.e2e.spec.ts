@@ -7,10 +7,9 @@
  */
 
 import { ChildProcess, spawn } from 'child_process';
+import * as net from 'node:net';
 import { ensureBuild, getServerBundlePath, getDistDir } from './helpers/exec-cli';
 import { McpJsonRpcClient, waitForPort } from './helpers/mcp-client';
-
-const TEST_PORT = 50453;
 
 function killQuiet(proc: ChildProcess | null): void {
   try {
@@ -18,6 +17,28 @@ function killQuiet(proc: ChildProcess | null): void {
   } catch {
     /* ignore */
   }
+}
+
+async function getAvailablePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('Failed to resolve available TCP port'));
+        return;
+      }
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+  });
 }
 
 describe('CLI Server Bundle Direct Execution E2E', () => {
@@ -39,6 +60,8 @@ describe('CLI Server Bundle Direct Execution E2E', () => {
    */
   function startServer(port: number): ChildProcess {
     const bundlePath = getServerBundlePath();
+    // Build an inline script so the transpiled bundle runs in a separate Node
+    // process from `getDistDir()`, matching how the real `serve` command boots it.
     const script = [
       'require("reflect-metadata");',
       `var mod = require(${JSON.stringify(bundlePath)});`,
@@ -61,16 +84,18 @@ describe('CLI Server Bundle Direct Execution E2E', () => {
   }
 
   it('should bootstrap server bundle and respond to health check', async () => {
-    startServer(TEST_PORT);
-    await waitForPort(TEST_PORT, 20_000);
+    const actualPort = await getAvailablePort();
+    startServer(actualPort);
+    await waitForPort(actualPort, 20_000);
   });
 
   it('should serve MCP protocol from bootstrapped bundle', async () => {
-    startServer(TEST_PORT);
-    await waitForPort(TEST_PORT, 20_000);
+    const actualPort = await getAvailablePort();
+    startServer(actualPort);
+    await waitForPort(actualPort, 20_000);
 
     // entryPath defaults to '' (root), so MCP endpoint is at '/'
-    const client = McpJsonRpcClient.forPort(TEST_PORT, '/');
+    const client = McpJsonRpcClient.forPort(actualPort, '/');
     const result = await client.initialize();
 
     expect(result.result).toBeDefined();
@@ -82,10 +107,11 @@ describe('CLI Server Bundle Direct Execution E2E', () => {
   });
 
   it('should list and execute tools from bootstrapped bundle', async () => {
-    startServer(TEST_PORT);
-    await waitForPort(TEST_PORT, 20_000);
+    const actualPort = await getAvailablePort();
+    startServer(actualPort);
+    await waitForPort(actualPort, 20_000);
 
-    const client = McpJsonRpcClient.forPort(TEST_PORT, '/');
+    const client = McpJsonRpcClient.forPort(actualPort, '/');
     await client.initialize();
 
     const listResult = await client.listTools();
@@ -100,8 +126,9 @@ describe('CLI Server Bundle Direct Execution E2E', () => {
   });
 
   it('should exit cleanly on SIGTERM', async () => {
-    const proc = startServer(TEST_PORT);
-    await waitForPort(TEST_PORT, 20_000);
+    const actualPort = await getAvailablePort();
+    const proc = startServer(actualPort);
+    await waitForPort(actualPort, 20_000);
 
     const exitPromise = new Promise<number | null>((resolve) => {
       proc.on('close', (code) => resolve(code));

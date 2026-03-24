@@ -357,8 +357,17 @@ export class NotificationService {
   /** Maximum number of terminated sessions to track before eviction */
   private static readonly MAX_TERMINATED_SESSIONS = 10000;
 
-  constructor(private readonly scope: Scope) {
+  constructor(
+    private readonly scope: Scope,
+    private readonly options: {
+      maxTerminatedSessions?: number;
+    } = {},
+  ) {
     this.logger = scope.logger.child('NotificationService');
+  }
+
+  private get maxTerminatedSessions(): number {
+    return this.options.maxTerminatedSessions ?? NotificationService.MAX_TERMINATED_SESSIONS;
   }
 
   /**
@@ -468,7 +477,7 @@ export class NotificationService {
 
     // Add to terminated sessions set (even if not registered, to handle edge cases)
     // Implement LRU-style eviction to prevent unbounded memory growth
-    if (this.terminatedSessions.size >= NotificationService.MAX_TERMINATED_SESSIONS) {
+    if (this.terminatedSessions.size >= this.maxTerminatedSessions) {
       // Remove the oldest entry (first item in Set maintains insertion order)
       const oldest = this.terminatedSessions.values().next().value;
       if (oldest) {

@@ -1,11 +1,14 @@
 /**
- * Tests for the onMessage stage three-tier transport lookup.
+ * Tests for the production streamable HTTP transport lookup helper.
  *
- * Validates the transport resolution priority per MCP Spec 2025-11-25:
- * 1. In-memory transport → handle request
- * 2. Redis stored session → recreate transport → handle request
- * 3. No transport → differentiate session-expired vs session-not-found → HTTP 404
+ * Validates the three-tier resolution priority:
+ * 1. In-memory transport
+ * 2. Redis stored session recreation
+ * 3. Session-expired vs session-not-found differentiation
  */
+
+import type { StoredSession } from '@frontmcp/auth';
+import { lookupStreamableHttpTransport } from '../handle.streamable-http.flow';
 
 describe('HandleStreamableHttpFlow - onMessage transport lookup', () => {
   interface MockTransport {
@@ -33,103 +36,57 @@ describe('HandleStreamableHttpFlow - onMessage transport lookup', () => {
     return { handleRequest: jest.fn().mockResolvedValue(undefined) };
   }
 
-  /**
-   * Simulates the onMessage three-tier lookup logic from
-   * handle.streamable-http.flow.ts lines 289-371.
-   */
-  async function simulateOnMessage(params: {
-    transportService: MockTransportService;
-    token: string;
-    sessionId: string;
-    request: Record<string, unknown>;
-    response: Record<string, unknown>;
-  }): Promise<{
-    handled: boolean;
-    respondedWith?: string;
-    error?: Error;
-  }> {
-    const { transportService, token, sessionId, request, response } = params;
-
-    // 1. Try memory
-    let transport = await transportService.getTransporter('streamable-http', token, sessionId);
-
-    // 2. If not in memory, try Redis
-    if (!transport) {
-      try {
-        const storedSession = await transportService.getStoredSession('streamable-http', token, sessionId);
-        if (storedSession) {
-          transport = await transportService.recreateTransporter(
-            'streamable-http',
-            token,
-            sessionId,
-            storedSession,
-            response,
-          );
-        }
-      } catch {
-        // Fall through to 404 logic
-      }
-    }
-
-    // 3. If still not found
-    if (!transport) {
-      const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, sessionId);
-      if (wasCreated) {
-        return { handled: false, respondedWith: 'session expired' };
-      } else {
-        return { handled: false, respondedWith: 'session not initialized' };
-      }
-    }
-
-    try {
-      await transport.handleRequest(request, response);
-      return { handled: true };
-    } catch (error) {
-      return { handled: false, error: error as Error };
-    }
-  }
-
   describe('tier 1: in-memory transport', () => {
-    it('should find transport in memory and handle request', async () => {
+    it('should find transport in memory and return it', async () => {
       const transport = createMockTransport();
       const svc = createMockTransportService({
         getTransporter: jest.fn().mockResolvedValue(transport),
       });
 
-      const result = await simulateOnMessage({
+      const result = await lookupStreamableHttpTransport({
         transportService: svc,
         token: 'token-1',
         sessionId: 'session-1',
-        request: { body: { method: 'tools/list' } },
-        response: {},
+        response: {} as never,
       });
 
-      expect(result.handled).toBe(true);
-      expect(transport.handleRequest).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({ kind: 'transport', source: 'memory' });
       expect(svc.getStoredSession).not.toHaveBeenCalled();
+
+      if (result.kind !== 'transport') {
+        throw new Error(`Expected transport result, received ${result.kind}`);
+      }
+
+      await result.transport.handleRequest({ body: { method: 'tools/list' } }, {});
+      expect(transport.handleRequest).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('tier 2: Redis recreation', () => {
     it('should recreate transport from Redis when not in memory', async () => {
       const transport = createMockTransport();
-      const storedSession = { initialized: true, createdAt: Date.now() };
+      const storedSession = { initialized: true, createdAt: Date.now() } as StoredSession;
       const svc = createMockTransportService({
         getStoredSession: jest.fn().mockResolvedValue(storedSession),
         recreateTransporter: jest.fn().mockResolvedValue(transport),
       });
 
-      const result = await simulateOnMessage({
+      const result = await lookupStreamableHttpTransport({
         transportService: svc,
         token: 'token-1',
         sessionId: 'session-1',
-        request: { body: { method: 'tools/call' } },
-        response: {},
+        response: {} as never,
       });
 
-      expect(result.handled).toBe(true);
+      expect(result).toMatchObject({ kind: 'transport', source: 'redis' });
       expect(svc.getStoredSession).toHaveBeenCalledWith('streamable-http', 'token-1', 'session-1');
       expect(svc.recreateTransporter).toHaveBeenCalled();
+
+      if (result.kind !== 'transport') {
+        throw new Error(`Expected transport result, received ${result.kind}`);
+      }
+
+      await result.transport.handleRequest({ body: { method: 'tools/call' } }, {});
       expect(transport.handleRequest).toHaveBeenCalled();
     });
 
@@ -139,17 +96,18 @@ describe('HandleStreamableHttpFlow - onMessage transport lookup', () => {
         wasSessionCreatedAsync: jest.fn().mockResolvedValue(false),
       });
 
-      const result = await simulateOnMessage({
+      const result = await lookupStreamableHttpTransport({
         transportService: svc,
         token: 'token-1',
         sessionId: 'session-1',
-        request: { body: { method: 'tools/list' } },
-        response: {},
+        response: {} as never,
       });
 
-      expect(result.handled).toBe(false);
-      expect(result.respondedWith).toBe('session not initialized');
-      // Should NOT throw — gracefully falls through to 404
+      expect(result.kind).toBe('session-not-initialized');
+      if (result.kind === 'transport') {
+        throw new Error('Expected lookup to fail after Redis recreation error');
+      }
+      expect(result.recreationError).toBeInstanceOf(Error);
     });
   });
 
@@ -159,16 +117,14 @@ describe('HandleStreamableHttpFlow - onMessage transport lookup', () => {
         wasSessionCreatedAsync: jest.fn().mockResolvedValue(true),
       });
 
-      const result = await simulateOnMessage({
+      const result = await lookupStreamableHttpTransport({
         transportService: svc,
         token: 'token-1',
         sessionId: 'expired-session',
-        request: { body: { method: 'tools/list' } },
-        response: {},
+        response: {} as never,
       });
 
-      expect(result.handled).toBe(false);
-      expect(result.respondedWith).toBe('session expired');
+      expect(result.kind).toBe('session-expired');
     });
 
     it('should respond "session not initialized" when session never existed', async () => {
@@ -176,37 +132,37 @@ describe('HandleStreamableHttpFlow - onMessage transport lookup', () => {
         wasSessionCreatedAsync: jest.fn().mockResolvedValue(false),
       });
 
-      const result = await simulateOnMessage({
+      const result = await lookupStreamableHttpTransport({
         transportService: svc,
         token: 'token-1',
         sessionId: 'fabricated-session',
-        request: { body: { method: 'tools/call' } },
-        response: {},
+        response: {} as never,
       });
 
-      expect(result.handled).toBe(false);
-      expect(result.respondedWith).toBe('session not initialized');
+      expect(result.kind).toBe('session-not-initialized');
     });
   });
 
   describe('error handling', () => {
-    it('should propagate errors from handleRequest', async () => {
+    it('should surface transport handleRequest errors from the resolved transport', async () => {
       const transport = createMockTransport();
       transport.handleRequest.mockRejectedValue(new Error('MCP error'));
       const svc = createMockTransportService({
         getTransporter: jest.fn().mockResolvedValue(transport),
       });
 
-      const result = await simulateOnMessage({
+      const result = await lookupStreamableHttpTransport({
         transportService: svc,
         token: 'token-1',
         sessionId: 'session-1',
-        request: { body: { method: 'tools/call' } },
-        response: {},
+        response: {} as never,
       });
 
-      expect(result.handled).toBe(false);
-      expect(result.error?.message).toBe('MCP error');
+      if (result.kind !== 'transport') {
+        throw new Error(`Expected transport result, received ${result.kind}`);
+      }
+
+      await expect(result.transport.handleRequest({ body: { method: 'tools/call' } }, {})).rejects.toThrow('MCP error');
     });
   });
 });

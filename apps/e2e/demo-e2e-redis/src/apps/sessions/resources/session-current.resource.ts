@@ -1,6 +1,7 @@
 import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { getSessionStore } from '../data/session.store';
+import { resolveDemoSessionId } from '../../resolve-session-id';
 
 const outputSchema = z.object({
   sessionId: z.string(),
@@ -21,7 +22,7 @@ export default class SessionCurrentResource extends ResourceContext<
   async execute(): Promise<z.infer<typeof outputSchema>> {
     // Prefer FrontMcpContext.sessionId (always available in public mode) over authInfo.sessionId
     const ctx = this.tryGetContext();
-    const sessionId = ctx?.sessionId ?? this.getAuthInfo().sessionId ?? 'mock-session-default';
+    const sessionId = resolveDemoSessionId(ctx?.sessionId, this.getAuthInfo().sessionId);
     const store = getSessionStore(sessionId);
 
     const data = store.getAll();

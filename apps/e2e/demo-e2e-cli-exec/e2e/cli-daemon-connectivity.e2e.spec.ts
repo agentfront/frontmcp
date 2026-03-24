@@ -6,10 +6,10 @@
  * are reachable over the Unix socket via FrontMcpInstance.runUnixSocket().
  */
 
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ChildProcess, spawn } from 'child_process';
+import { mkdtemp, rm } from '@frontmcp/utils';
 import { ensureBuild, getServerBundlePath, runCli } from './helpers/exec-cli';
 import { McpJsonRpcClient, httpOverSocket, waitForSocket } from './helpers/mcp-client';
 
@@ -28,7 +28,7 @@ describe('CLI Daemon Connectivity E2E', () => {
 
   beforeAll(async () => {
     await ensureBuild();
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-daemon-conn-'));
+    homeDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-daemon-conn-'));
   });
 
   afterAll(async () => {
@@ -36,7 +36,7 @@ describe('CLI Daemon Connectivity E2E', () => {
     daemonProc = null;
     await new Promise((r) => setTimeout(r, 500));
     try {
-      fs.rmSync(homeDir, { recursive: true, force: true });
+      await rm(homeDir, { recursive: true, force: true });
     } catch {
       /* ok */
     }
@@ -145,7 +145,9 @@ describe('CLI Daemon Connectivity E2E', () => {
   it('should route CLI tool commands through running daemon', () => {
     // Use the CLI's built-in tool routing which checks for daemon socket
     // We need a daemon on the expected socket path for CLI auto-routing
-    const { stdout, exitCode } = runCli(['add', '--a', '1', '--b', '2']);
+    const { stdout, exitCode } = runCli(['add', '--a', '1', '--b', '2'], {
+      FRONTMCP_DAEMON_SOCKET: socketPath,
+    });
     expect(exitCode).toBe(0);
     expect(stdout).toContain('3');
   });
