@@ -72,6 +72,10 @@ export class LocalTransporter implements Transporter {
     }
   }
 
+  get isInitialized(): boolean {
+    return this.adapter.isInitialized;
+  }
+
   /**
    * Marks this transport as pre-initialized for session recreation.
    * This is needed when recreating a transport from Redis because the
@@ -79,6 +83,10 @@ export class LocalTransporter implements Transporter {
    */
   markAsInitialized(): void {
     this.adapter.markAsInitialized();
+  }
+
+  resetForReinitialization(): void {
+    this.adapter.resetForReinitialization();
   }
 
   async destroy(reason: string): Promise<void> {

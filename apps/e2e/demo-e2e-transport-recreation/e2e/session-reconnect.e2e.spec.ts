@@ -766,6 +766,172 @@ test.describe('Session Reconnect E2E', () => {
       expect(sse.status).toBe(404);
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INITIALIZE RETRY WITH SAME SESSION (REGRESSION)
+  //
+  // These tests cover the exact production bug where a client retries
+  // initialize with a session whose transport is already initialized,
+  // causing a 400 "server already initialized" error.
+  //
+  // The scenario: DELETE → init (get session B) → stale notification
+  // with old session A → 404 → client retries init with B → must be 200.
+  // ═══════════════════════════════════════════════════════════════════
+
+  test.describe('Initialize retry with same session (regression #reinit)', () => {
+    test('exact production bug: DELETE → init → stale notification → retry initialize with same session', async ({
+      server,
+    }) => {
+      // Step 1: Full initial handshake with session A
+      const initA = await sendInitialize(server.info.baseUrl);
+      expect(initA.status).toBe(200);
+      const sessionA = initA.sessionId;
+      if (!sessionA) throw new Error('Expected session A');
+
+      const notifA = await sendNotificationInitialized(server.info.baseUrl, sessionA);
+      expect(notifA.status).toBe(202);
+
+      // Step 2: Verify session A works
+      const toolA = await sendToolCall(server.info.baseUrl, sessionA, 'get-session-info');
+      expect(toolA.status).toBe(200);
+
+      // Step 3: DELETE session A
+      const del = await sendDelete(server.info.baseUrl, sessionA);
+      expect(del.status).toBe(204);
+
+      // Step 4: Initialize with stale session A → reconnect creates session B
+      const initB = await sendInitialize(server.info.baseUrl, sessionA);
+      expect(initB.status).toBe(200);
+      const sessionB = initB.sessionId;
+      if (!sessionB) throw new Error('Expected session B');
+      expect(sessionB).not.toBe(sessionA);
+
+      // Step 5: Client sends notifications/initialized with OLD session A → 404
+      const staleNotif = await sendNotificationInitialized(server.info.baseUrl, sessionA);
+      expect(staleNotif.status).toBe(404);
+
+      // Step 6: THE BUG — Client retries initialize with session B
+      // Before fix: 400 "server already initialized"
+      // After fix: 200 with re-initialized session
+      const retryInit = await sendInitialize(server.info.baseUrl, sessionB);
+      expect(retryInit.status).toBe(200);
+
+      // Step 7: Complete handshake and verify tools work
+      const retrySessionId = retryInit.sessionId;
+      if (!retrySessionId) throw new Error('Expected session after retry');
+
+      const notifB = await sendNotificationInitialized(server.info.baseUrl, retrySessionId);
+      expect(notifB.status).toBe(202);
+
+      const toolB = await sendToolCall(server.info.baseUrl, retrySessionId, 'get-session-info');
+      expect(toolB.status).toBe(200);
+    });
+
+    test('multiple initialize retries on same session should all succeed', async ({ server }) => {
+      const init1 = await sendInitialize(server.info.baseUrl);
+      expect(init1.status).toBe(200);
+      const sessionId = init1.sessionId;
+      if (!sessionId) throw new Error('Expected session');
+
+      // Retry initialize 3 times with same session
+      for (let i = 0; i < 3; i++) {
+        const retry = await sendInitialize(server.info.baseUrl, sessionId);
+        expect(retry.status).toBe(200);
+      }
+
+      // Session should still work after retries
+      const retryResult = await sendInitialize(server.info.baseUrl, sessionId);
+      const finalSession = retryResult.sessionId;
+      if (!finalSession) throw new Error('Expected final session');
+
+      await sendNotificationInitialized(server.info.baseUrl, finalSession);
+      const tool = await sendToolCall(server.info.baseUrl, finalSession, 'get-session-info');
+      expect(tool.status).toBe(200);
+    });
+
+    test('retry initialize then use tools normally', async ({ server }) => {
+      // Initialize
+      const init1 = await sendInitialize(server.info.baseUrl);
+      expect(init1.status).toBe(200);
+      const s = init1.sessionId;
+      if (!s) throw new Error('Expected session');
+
+      // Retry initialize with same session
+      const init2 = await sendInitialize(server.info.baseUrl, s);
+      expect(init2.status).toBe(200);
+      const s2 = init2.sessionId;
+      if (!s2) throw new Error('Expected session after retry');
+
+      // Complete handshake
+      await sendNotificationInitialized(server.info.baseUrl, s2);
+
+      // All standard operations should work
+      const list = await sendToolsList(server.info.baseUrl, s2);
+      expect(list.status).toBe(200);
+
+      const tool = await sendToolCall(server.info.baseUrl, s2, 'increment-counter', { amount: 7 });
+      expect(tool.status).toBe(200);
+      const body = tool.body as Record<string, unknown>;
+      const result = body['result'] as Record<string, unknown>;
+      const content = result['content'] as Array<{ text: string }>;
+      const output = JSON.parse(content[0].text) as { newValue: number };
+      expect(output.newValue).toBe(7);
+    });
+
+    test('rapid DELETE + init + retry cycles', async ({ server }) => {
+      for (let cycle = 0; cycle < 3; cycle++) {
+        // Initialize
+        const init1 = await sendInitialize(server.info.baseUrl);
+        expect(init1.status).toBe(200);
+        const s = init1.sessionId;
+        if (!s) throw new Error(`Expected session in cycle ${cycle}`);
+
+        // Retry initialize (simulates client retry)
+        const retry = await sendInitialize(server.info.baseUrl, s);
+        expect(retry.status).toBe(200);
+
+        const retrySession = retry.sessionId;
+        if (!retrySession) throw new Error(`Expected retry session in cycle ${cycle}`);
+
+        // Verify it works
+        await sendNotificationInitialized(server.info.baseUrl, retrySession);
+        const tool = await sendToolCall(server.info.baseUrl, retrySession, 'get-session-info');
+        expect(tool.status).toBe(200);
+
+        // DELETE before next cycle
+        await sendDelete(server.info.baseUrl, retrySession);
+      }
+    });
+
+    test('concurrent clients: one clients retry does not break another', async ({ server }) => {
+      // Client A initializes
+      const initA = await sendInitialize(server.info.baseUrl);
+      expect(initA.status).toBe(200);
+      const sA = initA.sessionId;
+      if (!sA) throw new Error('Expected session A');
+      await sendNotificationInitialized(server.info.baseUrl, sA);
+
+      // Client B initializes
+      const initB = await sendInitialize(server.info.baseUrl);
+      expect(initB.status).toBe(200);
+      const sB = initB.sessionId;
+      if (!sB) throw new Error('Expected session B');
+      await sendNotificationInitialized(server.info.baseUrl, sB);
+
+      // Client A retries initialize (should not affect B)
+      const retryA = await sendInitialize(server.info.baseUrl, sA);
+      expect(retryA.status).toBe(200);
+
+      // Client B should still work fine
+      const toolB = await sendToolCall(server.info.baseUrl, sB, 'get-session-info');
+      expect(toolB.status).toBe(200);
+      const bodyB = toolB.body as Record<string, unknown>;
+      const resultB = bodyB['result'] as Record<string, unknown>;
+      const contentB = resultB['content'] as Array<{ text: string }>;
+      const infoB = JSON.parse(contentB[0].text) as { hasSession: boolean };
+      expect(infoB.hasSession).toBe(true);
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════

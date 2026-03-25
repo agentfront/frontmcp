@@ -144,6 +144,30 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
   }
 
   /**
+   * Resets the transport's initialization state to allow re-initialization.
+   *
+   * This is needed when a client reconnects after terminating its session:
+   * the cached transport is still marked as initialized, but the client
+   * needs to re-initialize. Resetting _initialized and sessionId allows
+   * the MCP SDK to process a fresh initialize request.
+   *
+   * This is the inverse of setInitializationState().
+   */
+  resetForReinitialization(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const webTransport = (this as any)._webStandardTransport;
+    if (!webTransport) {
+      this._pendingInitState = undefined;
+      return;
+    }
+
+    if ('_initialized' in webTransport) {
+      webTransport._initialized = false;
+      webTransport.sessionId = undefined;
+    }
+  }
+
+  /**
    * Applies initialization state to the internal transport.
    * @param webTransport - The internal _webStandardTransport object
    * @param sessionId - The session ID to set

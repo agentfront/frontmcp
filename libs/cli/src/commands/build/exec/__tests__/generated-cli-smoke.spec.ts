@@ -46,6 +46,11 @@ describe('generated CLI smoke tests', () => {
       expect(() => new Function(stripShebang(source))).not.toThrow();
     });
 
+    it('should produce valid JavaScript in selfContained/SEA mode', () => {
+      const source = generateCliEntry(makeOptions({ selfContained: true }));
+      expect(() => new Function(stripShebang(source))).not.toThrow();
+    });
+
     it('should produce valid JavaScript with multiple tools', () => {
       const source = generateCliEntry(makeOptions({
         schema: makeSchema({

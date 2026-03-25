@@ -340,6 +340,89 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
   });
 
+  describe('resetForReinitialization', () => {
+    it('should reset _initialized to false and sessionId to undefined', () => {
+      transport.setInitializationState('session-123');
+      expect(transport.isInitialized).toBe(true);
+
+      transport.resetForReinitialization();
+
+      const webTransport = (transport as any)._webStandardTransport;
+      expect(webTransport._initialized).toBe(false);
+      expect(webTransport.sessionId).toBeUndefined();
+    });
+
+    it('should return isInitialized === false after reset', () => {
+      transport.setInitializationState('session-abc');
+      expect(transport.isInitialized).toBe(true);
+
+      transport.resetForReinitialization();
+      expect(transport.isInitialized).toBe(false);
+    });
+
+    it('should handle missing _webStandardTransport gracefully', () => {
+      (transport as any)._webStandardTransport = undefined;
+
+      expect(() => transport.resetForReinitialization()).not.toThrow();
+      expect(transport.isInitialized).toBe(false);
+    });
+
+    it('should clear pending init state when transport not ready', () => {
+      (transport as any)._webStandardTransport = undefined;
+      transport.setInitializationState('pending-session');
+      expect(transport.hasPendingInitState).toBe(true);
+
+      transport.resetForReinitialization();
+      expect(transport.hasPendingInitState).toBe(false);
+    });
+
+    it('should be safe on an already-uninitialized transport', () => {
+      expect(transport.isInitialized).toBe(false);
+      expect(() => transport.resetForReinitialization()).not.toThrow();
+      expect(transport.isInitialized).toBe(false);
+    });
+
+    it('should be idempotent - multiple reset calls', () => {
+      transport.setInitializationState('session-xyz');
+
+      transport.resetForReinitialization();
+      transport.resetForReinitialization();
+      transport.resetForReinitialization();
+
+      expect(transport.isInitialized).toBe(false);
+      expect((transport as any)._webStandardTransport.sessionId).toBeUndefined();
+    });
+
+    it('should not affect other transport instances', () => {
+      const transport2 = new RecreateableStreamableHTTPServerTransport();
+      transport.setInitializationState('session-1');
+      transport2.setInitializationState('session-2');
+
+      transport.resetForReinitialization();
+
+      expect(transport.isInitialized).toBe(false);
+      expect(transport2.isInitialized).toBe(true);
+      expect((transport2 as any)._webStandardTransport.sessionId).toBe('session-2');
+    });
+
+    it('should allow full cycle: init → reset → re-init', () => {
+      // Phase 1: Initialize
+      transport.setInitializationState('session-first');
+      expect(transport.isInitialized).toBe(true);
+      expect((transport as any)._webStandardTransport.sessionId).toBe('session-first');
+
+      // Phase 2: Reset
+      transport.resetForReinitialization();
+      expect(transport.isInitialized).toBe(false);
+      expect((transport as any)._webStandardTransport.sessionId).toBeUndefined();
+
+      // Phase 3: Re-initialize with new session
+      transport.setInitializationState('session-second');
+      expect(transport.isInitialized).toBe(true);
+      expect((transport as any)._webStandardTransport.sessionId).toBe('session-second');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle very long session IDs', () => {
       const longSessionId = 'a'.repeat(1000);
