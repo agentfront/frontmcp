@@ -10,6 +10,10 @@ Agents are **autonomous AI units** that have their own LLM provider, can execute
 Agents build on the MCP Tools specification—each agent is automatically exposed as an `invoke_<agent-id>` tool that any MCP client can call.
 </Info>
 
+<Tip>
+**Nx users:** Scaffold with `nx g @frontmcp/nx:agent my-agent --project my-app`. See [Agent Generator](/frontmcp/nx-plugin/generators/agent).
+</Tip>
+
 ## Why Agents?
 
 In the Model Context Protocol, agents serve a distinct purpose from tools, resources, and prompts:

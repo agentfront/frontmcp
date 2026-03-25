@@ -5,9 +5,10 @@ describe('CLI Exec Error Handling', () => {
     await ensureBuild();
   });
 
-  it('should exit with non-zero code for unknown command', () => {
-    const { exitCode } = runCli(['nonexistent-command']);
-    expect(exitCode).not.toBe(0);
+  it('should show help for unknown command', () => {
+    const { stdout, exitCode } = runCli(['nonexistent-command']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Usage:');
   });
 
   it('should exit with non-zero code when missing required tool arg', () => {

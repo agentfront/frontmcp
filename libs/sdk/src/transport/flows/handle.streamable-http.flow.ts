@@ -324,6 +324,18 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       syncStreamableHttpAuthorizationSession(authorization, session);
 
       const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
+
+      // If the transport is already initialized, this is a retry of a successful
+      // initialize (e.g., client retried after its notifications/initialized with
+      // the old session ID was 404'd). Reset initialization state so the MCP SDK
+      // accepts the new initialize request instead of rejecting with 400.
+      if (transport.isInitialized) {
+        logger.info('onInitialize: transport already initialized, resetting for re-initialization', {
+          sessionId: session.id?.slice(0, 20),
+        });
+        transport.resetForReinitialization();
+      }
+
       logger.info('onInitialize: transport created, calling initialize');
       await transport.initialize(request, response);
       logger.info('onInitialize: completed successfully');

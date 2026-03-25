@@ -10,6 +10,10 @@ Workflows are **DAG-based multi-step pipelines** that compose [Jobs](/frontmcp/s
 Workflows execute jobs in dependency order with automatic cycle detection, parallel batching, and per-step error handling.
 </Info>
 
+<Tip>
+**Nx users:** Scaffold with `nx g @frontmcp/nx:workflow my-workflow --project my-app`. See [Workflow Generator](/frontmcp/nx-plugin/generators/workflow).
+</Tip>
+
 ## Why Workflows?
 
 Workflows handle orchestration that individual jobs cannot:

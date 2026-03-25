@@ -13,6 +13,10 @@ They're declared with `@Provider()` and registered at **server** or **app** scop
   Provider metadata, records, and DI helpers remain available through `@frontmcp/sdk` as type-only exports, so your existing `@frontmcp/di` imports keep working while bundlers drop unused types. Enums such as `ProviderScope` and `ProviderKind` still expose their runtime values, so you can configure scopes the same way you always have.
 </Info>
 
+<Tip>
+**Nx users:** Scaffold with `nx g @frontmcp/nx:provider my-provider --project my-app`. See [Provider Generator](/frontmcp/nx-plugin/generators/provider).
+</Tip>
+
 ## Define a provider
 
 ```ts

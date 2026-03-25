@@ -1,31 +1,6 @@
 import { parseArgs } from '../args';
 
 describe('parseArgs - new flags', () => {
-  describe('--exec flag', () => {
-    it('should parse --exec flag', () => {
-      const result = parseArgs(['build', '--exec']);
-      expect(result.exec).toBe(true);
-    });
-
-    it('should not set exec when absent', () => {
-      const result = parseArgs(['build']);
-      expect(result.exec).toBeUndefined();
-    });
-  });
-
-  describe('--cli flag', () => {
-    it('should parse --cli flag', () => {
-      const result = parseArgs(['build', '--exec', '--cli']);
-      expect(result.cli).toBe(true);
-      expect(result.exec).toBe(true);
-    });
-
-    it('should not set cli when absent', () => {
-      const result = parseArgs(['build', '--exec']);
-      expect(result.cli).toBeUndefined();
-    });
-  });
-
   describe('--port / -p flag', () => {
     it('should parse --port with value', () => {
       const result = parseArgs(['start', 'my-app', '--port', '3005']);

@@ -94,10 +94,26 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   abstract handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
 
   /**
+   * Whether this transport has already been initialized via the MCP initialize handshake.
+   * Override in subclasses that track initialization state.
+   */
+  get isInitialized(): boolean {
+    return false;
+  }
+
+  /**
    * Marks this transport as pre-initialized for session recreation.
    * Override in subclasses that need to set the MCP SDK's _initialized flag.
    */
   markAsInitialized(): void {
+    // Default no-op - override in subclasses
+  }
+
+  /**
+   * Resets initialization state to allow re-initialization.
+   * Override in subclasses that support session re-initialization.
+   */
+  resetForReinitialization(): void {
     // Default no-op - override in subclasses
   }
 
