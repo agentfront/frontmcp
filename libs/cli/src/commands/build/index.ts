@@ -81,9 +81,9 @@ async function generateAdapterFiles(
 
 /** Map target names to internal adapter names. */
 const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
-  'vercel-edge': 'vercel',
+  'vercel': 'vercel',
   'lambda': 'lambda',
-  'cloudflare-worker': 'cloudflare',
+  'cloudflare': 'cloudflare',
 };
 
 /**
@@ -96,9 +96,9 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
  * frontmcp build --target cli --js      # CLI without SEA
  * frontmcp build --target sdk           # Library (CJS+ESM+types)
  * frontmcp build --target browser       # Browser ESM bundle
- * frontmcp build --target vercel-edge   # Vercel serverless
+ * frontmcp build --target vercel        # Vercel serverless
  * frontmcp build --target lambda        # AWS Lambda
- * frontmcp build --target cloudflare-worker  # Cloudflare Workers
+ * frontmcp build --target cloudflare    # Cloudflare Workers
  * ```
  */
 export async function runBuild(opts: ParsedArgs): Promise<void> {
@@ -121,14 +121,14 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
       const { buildBrowser } = await import('./browser/index.js');
       return buildBrowser(opts);
     }
-    case 'vercel-edge':
+    case 'vercel':
     case 'lambda':
-    case 'cloudflare-worker': {
+    case 'cloudflare': {
       const adapter = TARGET_TO_ADAPTER[target];
       return runAdapterBuild(opts, adapter);
     }
     default:
-      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare-worker, vercel-edge, lambda`);
+      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda`);
   }
 }
 

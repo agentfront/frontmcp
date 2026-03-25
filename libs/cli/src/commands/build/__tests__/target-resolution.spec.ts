@@ -28,9 +28,9 @@ describe('Build target resolution', () => {
       expect(args.buildTarget).toBe('browser');
     });
 
-    it('--target vercel-edge should set buildTarget to vercel-edge', () => {
-      const args = toParsedArgs('build', [], { target: 'vercel-edge' });
-      expect(args.buildTarget).toBe('vercel-edge');
+    it('--target vercel should set buildTarget to vercel', () => {
+      const args = toParsedArgs('build', [], { target: 'vercel' });
+      expect(args.buildTarget).toBe('vercel');
     });
 
     it('--target lambda should set buildTarget to lambda', () => {
@@ -38,9 +38,9 @@ describe('Build target resolution', () => {
       expect(args.buildTarget).toBe('lambda');
     });
 
-    it('--target cloudflare-worker should set buildTarget to cloudflare-worker', () => {
-      const args = toParsedArgs('build', [], { target: 'cloudflare-worker' });
-      expect(args.buildTarget).toBe('cloudflare-worker');
+    it('--target cloudflare should set buildTarget to cloudflare', () => {
+      const args = toParsedArgs('build', [], { target: 'cloudflare' });
+      expect(args.buildTarget).toBe('cloudflare');
     });
   });
 

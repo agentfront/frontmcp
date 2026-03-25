@@ -23,7 +23,19 @@ export type Command =
   | 'configure';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
-export type BuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare-worker' | 'vercel-edge' | 'lambda';
+export type BuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda';
+
+const DEPLOYMENT_ADAPTERS: readonly DeploymentAdapter[] = ['node', 'vercel', 'lambda', 'cloudflare'];
+const BUILD_TARGETS: readonly BuildTarget[] = ['cli', 'node', 'sdk', 'browser', 'cloudflare', 'vercel', 'lambda'];
+
+export function isDeploymentAdapter(val: string): val is DeploymentAdapter {
+  return (DEPLOYMENT_ADAPTERS as readonly string[]).includes(val);
+}
+
+export function isBuildTarget(val: string): val is BuildTarget {
+  return (BUILD_TARGETS as readonly string[]).includes(val);
+}
+
 export type RedisSetupOption = 'docker' | 'existing' | 'none';
 export type PackageManagerOption = 'npm' | 'yarn' | 'pnpm';
 
@@ -85,8 +97,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--target') {
       const val = argv[++i];
-      out.target = val as DeploymentAdapter;
-      out.buildTarget = val as BuildTarget;
+      if (isDeploymentAdapter(val)) out.target = val;
+      if (isBuildTarget(val)) out.buildTarget = val;
     } else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
     else if (a === '--cicd') out.cicd = true;
     else if (a === '--no-cicd') out.cicd = false;

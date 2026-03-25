@@ -1,4 +1,4 @@
-import { parseArgs } from '../args';
+import { parseArgs, isDeploymentAdapter, isBuildTarget } from '../args';
 
 describe('parseArgs', () => {
   describe('positional arguments', () => {
@@ -49,6 +49,30 @@ describe('parseArgs', () => {
     it('should parse --target with cloudflare value', () => {
       const result = parseArgs(['create', '--target', 'cloudflare']);
       expect(result.target).toBe('cloudflare');
+    });
+
+    it('should set both target and buildTarget for values in both unions', () => {
+      const result = parseArgs(['build', '--target', 'node']);
+      expect(result.target).toBe('node');
+      expect(result.buildTarget).toBe('node');
+    });
+
+    it('should set only buildTarget for build-only targets like sdk', () => {
+      const result = parseArgs(['build', '--target', 'sdk']);
+      expect(result.target).toBeUndefined();
+      expect(result.buildTarget).toBe('sdk');
+    });
+
+    it('should set both for values in both unions like vercel', () => {
+      const result = parseArgs(['create', '--target', 'vercel']);
+      expect(result.target).toBe('vercel');
+      expect(result.buildTarget).toBe('vercel');
+    });
+
+    it('should set neither for unrecognized target values', () => {
+      const result = parseArgs(['build', '--target', 'unknown']);
+      expect(result.target).toBeUndefined();
+      expect(result.buildTarget).toBeUndefined();
     });
   });
 
@@ -244,5 +268,37 @@ describe('parseArgs', () => {
       expect(result.coverage).toBe(true);
       expect(result.timeout).toBe(30000);
     });
+  });
+});
+
+describe('isDeploymentAdapter', () => {
+  it('should return true for valid deployment adapters', () => {
+    expect(isDeploymentAdapter('node')).toBe(true);
+    expect(isDeploymentAdapter('vercel')).toBe(true);
+    expect(isDeploymentAdapter('lambda')).toBe(true);
+    expect(isDeploymentAdapter('cloudflare')).toBe(true);
+  });
+
+  it('should return false for non-adapter values', () => {
+    expect(isDeploymentAdapter('cli')).toBe(false);
+    expect(isDeploymentAdapter('sdk')).toBe(false);
+    expect(isDeploymentAdapter('unknown')).toBe(false);
+  });
+});
+
+describe('isBuildTarget', () => {
+  it('should return true for valid build targets', () => {
+    expect(isBuildTarget('cli')).toBe(true);
+    expect(isBuildTarget('node')).toBe(true);
+    expect(isBuildTarget('vercel')).toBe(true);
+    expect(isBuildTarget('lambda')).toBe(true);
+    expect(isBuildTarget('cloudflare')).toBe(true);
+    expect(isBuildTarget('sdk')).toBe(true);
+    expect(isBuildTarget('browser')).toBe(true);
+  });
+
+  it('should return false for non-target values', () => {
+    expect(isBuildTarget('unknown')).toBe(false);
+    expect(isBuildTarget('docker')).toBe(false);
   });
 });

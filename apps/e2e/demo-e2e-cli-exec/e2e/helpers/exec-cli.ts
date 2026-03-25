@@ -41,7 +41,7 @@ export async function ensureBuild(): Promise<string> {
   const frontmcpBin = path.join(rootDir, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 
   console.log('[e2e] Building CLI exec bundle...');
-  execFileSync('node', [frontmcpBin, 'build', '--exec', '--cli'], {
+  execFileSync('node', [frontmcpBin, 'build', '--target', 'cli'], {
     cwd: FIXTURE_DIR,
     stdio: 'pipe',
     timeout: 90000,
@@ -155,7 +155,7 @@ export async function ensureSeaBuild(): Promise<boolean> {
 
   console.log('[e2e:sea] Building CLI exec bundle with SEA...');
   try {
-    execFileSync('node', [frontmcpBin, 'build', '--exec', '--cli', '--sea', '--out-dir', 'dist-sea'], {
+    execFileSync('node', [frontmcpBin, 'build', '--target', 'cli', '--out-dir', 'dist-sea'], {
       cwd: FIXTURE_DIR,
       stdio: 'pipe',
       timeout: 180000,

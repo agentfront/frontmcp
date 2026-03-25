@@ -71,7 +71,7 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     if (!manifest) {
       throw new Error(
         'Could not find or generate a manifest. Ensure the package has a ' +
-          'frontmcp.config.js or was built with "frontmcp build --target node".',
+          'frontmcp.config.js (or frontmcp.config.json) or was built with "frontmcp build --target node".',
       );
     }
 

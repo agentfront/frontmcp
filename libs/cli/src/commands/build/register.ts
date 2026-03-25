@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { toParsedArgs } from '../../core/bridge';
 
-const BUILD_TARGETS = ['cli', 'node', 'sdk', 'browser', 'cloudflare-worker', 'vercel-edge', 'lambda'];
+const BUILD_TARGETS = ['cli', 'node', 'sdk', 'browser', 'cloudflare', 'vercel', 'lambda'];
 
 export function registerBuildCommands(program: Command): void {
   program

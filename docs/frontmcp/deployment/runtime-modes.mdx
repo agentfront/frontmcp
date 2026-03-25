@@ -271,7 +271,7 @@ export default async function handler(req, res) {
     npx frontmcp create my-app --target vercel
 
     # Or build existing project
-    frontmcp build --target vercel-edge
+    frontmcp build --target vercel
 
     # Deploy
     vercel deploy
@@ -298,7 +298,7 @@ export default async function handler(req, res) {
     npx frontmcp create my-app --target cloudflare
 
     # Build and deploy
-    frontmcp build --target cloudflare-worker
+    frontmcp build --target cloudflare
     wrangler deploy
     ```
 

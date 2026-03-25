@@ -7,6 +7,10 @@ description: Build custom FrontMCP plugins using the DynamicPlugin API
 
 Build custom plugins to extend FrontMCP with cross-cutting capabilities like caching, authorization, logging, and more.
 
+<Tip>
+**Nx users:** Scaffold with `nx g @frontmcp/nx:plugin my-plugin --project my-app`. See [Plugin Generator](/frontmcp/nx-plugin/generators/plugin).
+</Tip>
+
 ## Plugin Architecture
 
 FrontMCP plugins use the `@Plugin` decorator and typically extend `DynamicPlugin`. They can:

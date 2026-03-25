@@ -29,7 +29,7 @@ export interface CliConfig {
   oauth?: OAuthConfig;
 }
 
-export type ConfigBuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare-worker' | 'vercel-edge' | 'lambda';
+export type ConfigBuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda';
 
 export interface FrontmcpExecConfig {
   name: string;

@@ -28,15 +28,17 @@ describe('toParsedArgs', () => {
     expect(result.maxRestarts).toBe(3);
   });
 
-  it('should map build command with target/outDir', () => {
+  it('should map build command with target/outDir/js', () => {
     const result = toParsedArgs('build', [], {
       target: 'cli',
       outDir: 'build',
+      js: true,
     });
 
     expect(result._).toEqual(['build']);
     expect(result.buildTarget).toBe('cli');
     expect(result.outDir).toBe('build');
+    expect(result.js).toBe(true);
   });
 
   it('should map test command with all test options', () => {
