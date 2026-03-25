@@ -22,7 +22,7 @@ export async function ensureBuild(): Promise<string> {
   const frontmcpBin = path.join(rootDir, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 
   console.log('[e2e] Building Guard CLI exec bundle...');
-  execFileSync('node', [frontmcpBin, 'build', '--target', 'cli'], {
+  execFileSync('node', [frontmcpBin, 'build', '--target', 'cli', '--js'], {
     cwd: FIXTURE_DIR,
     stdio: 'pipe',
     timeout: 90000,
