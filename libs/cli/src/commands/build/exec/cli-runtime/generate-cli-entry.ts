@@ -1422,10 +1422,8 @@ daemonCmd
 }
 
 function generateFooter(): string {
-  return `program.showHelpAfterError();
-program.on('command:*', function(args) {
+  return `program.on('command:*', function(args) {
   console.error('Unknown command: ' + args[0]);
-  program.outputHelp();
   process.exitCode = 1;
 });
 program.parseAsync(process.argv).catch(function(err) {
