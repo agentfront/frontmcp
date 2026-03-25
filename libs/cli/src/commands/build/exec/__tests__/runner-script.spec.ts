@@ -52,12 +52,12 @@ describe('runner-script', () => {
       expect(script).not.toContain('BUNDLE="${SCRIPT_DIR}/my-app.bundle.js"');
     });
 
-    it('should include --cli in comment when cliMode is true', () => {
+    it('should include --target cli in comment when cliMode is true', () => {
       const config: FrontmcpExecConfig = { name: 'my-app' };
       const script = generateRunnerScript(config, true);
 
       expect(script).toContain('CLI Executable');
-      expect(script).toContain('--cli');
+      expect(script).toContain('--target cli');
     });
 
     it('should use server bundle when cliMode is false', () => {
@@ -85,11 +85,11 @@ describe('runner-script', () => {
       expect(script).toContain('my-app-cli-bin');
     });
 
-    it('should include --sea in comment', () => {
+    it('should include --target node in comment for SEA mode', () => {
       const config: FrontmcpExecConfig = { name: 'my-app' };
       const script = generateRunnerScript(config, false, true);
 
-      expect(script).toContain('--sea');
+      expect(script).toContain('--target node');
       expect(script).toContain('single executable');
     });
 

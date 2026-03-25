@@ -38,7 +38,7 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
   <Tab title="Vercel">
     ```bash
     # Build for Vercel
-    frontmcp build --adapter vercel
+    frontmcp build --target vercel
 
     # Deploy
     vercel deploy
@@ -51,7 +51,7 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
     npm install @codegenie/serverless-express
 
     # Build for Lambda
-    frontmcp build --adapter lambda
+    frontmcp build --target lambda
 
     # Deploy with your preferred tool (SAM, CDK, Serverless Framework)
     ```
@@ -60,7 +60,7 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
   <Tab title="Cloudflare">
     ```bash
     # Build for Cloudflare Workers
-    frontmcp build --adapter cloudflare
+    frontmcp build --target cloudflare
 
     # Deploy
     wrangler deploy
@@ -82,16 +82,22 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/frontmcp/deploy
 1. Build your project:
 
    ```bash
-   frontmcp build --adapter vercel
+   frontmcp build --target vercel
    ```
 
 2. This generates:
 
    ```
    dist/
-     main.js      # Your compiled server
-     index.js     # Vercel handler wrapper
-   vercel.json    # Vercel configuration
+     main.js              # Your compiled server
+     index.js             # Vercel handler wrapper
+   vercel.json            # Vercel configuration
+   .vercel/output/        # Build Output API structure
+     config.json          # Routes all requests to index function
+     functions/
+       index.func/
+         .vc-config.json  # Node.js 22 runtime config
+         handler.cjs      # Bundled handler
    ```
 
 3. Deploy:
@@ -104,13 +110,13 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/frontmcp/deploy
 ```json
 {
   "version": 2,
-  "builds": [{ "src": "dist/index.js", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "/dist/index.js" }]
+  "buildCommand": "yarn build",
+  "installCommand": "yarn install"
 }
 ```
 
 <Note>
-You can customize this file after generation. The build command will not overwrite existing config files.
+The `buildCommand` and `installCommand` are auto-detected based on the lockfile in your project (yarn, npm, pnpm, or bun). The `vercel` target deploys a **Node.js** handler using Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), not Vercel Edge Runtime. You can customize this file after generation — the build command will not overwrite existing config files.
 </Note>
 
 ### How It Works
@@ -157,7 +163,7 @@ npm run deploy  # Runs: cd ci && sam build && sam deploy
 1. Build your project:
 
    ```bash
-   frontmcp build --adapter lambda
+   frontmcp build --target lambda
    ```
 
 2. This generates:
@@ -260,7 +266,7 @@ npm run deploy  # Runs: wrangler deploy
 1. Build your project:
 
    ```bash
-   frontmcp build --adapter cloudflare
+   frontmcp build --target cloudflare
    ```
 
 2. This generates:
@@ -361,7 +367,7 @@ RememberPlugin.init({
 ┌─────────────────────────────────────────────────────────────┐
 │                     Build Time                               │
 ├─────────────────────────────────────────────────────────────┤
-│  frontmcp build --adapter vercel                            │
+│  frontmcp build --target vercel                            │
 │       │                                                      │
 │       ├── Compiles TypeScript with --module esnext          │
 │       ├── Generates platform-specific index.js wrapper      │
@@ -456,16 +462,16 @@ Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfi
 frontmcp build
 
 # Build for Vercel (ESM)
-frontmcp build --adapter vercel
+frontmcp build --target vercel
 
 # Build for AWS Lambda (ESM)
-frontmcp build --adapter lambda
+frontmcp build --target lambda
 
 # Build for Cloudflare Workers (CommonJS)
-frontmcp build --adapter cloudflare
+frontmcp build --target cloudflare
 
 # Specify output directory
-frontmcp build --adapter vercel --outDir build
+frontmcp build --target vercel --out-dir build
 ```
 
 ### SDK Exports

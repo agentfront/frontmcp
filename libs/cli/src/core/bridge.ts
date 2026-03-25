@@ -1,11 +1,8 @@
-import { DeploymentAdapter, PackageManagerOption, ParsedArgs, RedisSetupOption } from './args';
+import { BuildTarget, DeploymentAdapter, PackageManagerOption, ParsedArgs, RedisSetupOption } from './args';
 
 /**
  * Convert commander's parsed command name, positional arguments, and options
- * into the legacy {@link ParsedArgs} shape expected by existing handlers.
- *
- * This is a Phase-1 bridge — it will be removed once each handler accepts
- * its own typed options interface (Phase 2).
+ * into the {@link ParsedArgs} shape expected by existing handlers.
  */
 export function toParsedArgs(
   commandName: string,
@@ -17,16 +14,16 @@ export function toParsedArgs(
   // General
   if (options['outDir'] !== undefined) out.outDir = options['outDir'] as string;
   if (options['entry'] !== undefined) out.entry = options['entry'] as string;
-  if (options['adapter'] !== undefined) out.adapter = options['adapter'] as DeploymentAdapter;
 
-  // Build
-  if (options['exec'] !== undefined) out.exec = options['exec'] as boolean;
-  if (options['cli'] !== undefined) out.cli = options['cli'] as boolean;
-  if (options['sea'] !== undefined) out.sea = options['sea'] as boolean;
+  // Build --target resolution
+  if (commandName === 'build') {
+    if (options['target'] !== undefined) out.buildTarget = options['target'] as BuildTarget;
+    if (options['js'] !== undefined) out.js = options['js'] as boolean;
+  }
 
   // Create
   if (options['yes'] !== undefined) out.yes = options['yes'] as boolean;
-  if (options['target'] !== undefined) out.target = options['target'] as DeploymentAdapter;
+  if (commandName === 'create' && options['target'] !== undefined) out.target = options['target'] as DeploymentAdapter;
   if (options['redis'] !== undefined) out.redis = options['redis'] as RedisSetupOption;
   if (options['cicd'] !== undefined) out.cicd = options['cicd'] as boolean;
   if (options['pm'] !== undefined) out.pm = options['pm'] as PackageManagerOption;

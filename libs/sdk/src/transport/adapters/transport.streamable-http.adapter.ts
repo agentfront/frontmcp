@@ -275,6 +275,22 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     });
   }
 
+  override get isInitialized(): boolean {
+    return this.transport.isInitialized || this.transport.hasPendingInitState;
+  }
+
+  /**
+   * Resets the transport's initialization state to allow re-initialization.
+   * Used when a client retries initialize on an already-initialized session
+   * (e.g., after reconnect following session termination).
+   */
+  override resetForReinitialization(): void {
+    this.transport.resetForReinitialization();
+    this.logger.info('[StreamableHttpAdapter] Reset transport for re-initialization', {
+      sessionId: this.key.sessionId?.slice(0, 20),
+    });
+  }
+
   /**
    * Marks this transport as pre-initialized for session recreation.
    * This is needed when recreating a transport from Redis because the

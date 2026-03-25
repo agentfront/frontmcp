@@ -19,8 +19,8 @@ Commands for building, testing, and debugging your FrontMCP server.
 | -------------------- | ------------------------------------------------------------- |
 | `dev`                | Start in development mode (tsx --watch + async type-check)    |
 | `build`              | Compile entry with TypeScript (tsc)                           |
-| `build --exec`       | Build distributable executable bundle (esbuild)               |
-| `build --exec --cli` | Build CLI executable with subcommands per tool                |
+| `build --target node` | Build distributable executable bundle (esbuild)               |
+| `build --target cli`  | Build CLI executable with subcommands per tool                |
 | `test`               | Run E2E tests with auto-injected Jest configuration           |
 | `init`               | Create or fix a tsconfig.json suitable for FrontMCP           |
 | `doctor`             | Check Node/npm versions and tsconfig requirements. Use `--fix` to auto-repair (installs missing deps, creates app directories) |
@@ -93,11 +93,10 @@ See [ESM Packages](/frontmcp/servers/esm-packages) for full documentation on ESM
 
 ### Build Options
 
-| Option                 | Description                                                  |
-| ---------------------- | ------------------------------------------------------------ |
-| `--exec`               | Build distributable executable bundle                        |
-| `--cli`                | Generate CLI with subcommands per tool (use with `--exec`)   |
-| `-a, --adapter <name>` | Deployment adapter: `node`, `vercel`, `lambda`, `cloudflare` |
+| Option                 | Description                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `--target <target>`    | Build target: `node`, `cli`, `vercel`, `lambda`, `cloudflare`        |
+| `--js`                 | Emit plain JavaScript bundle instead of SEA (use with `--target cli`)            |
 
 ### Start Options
 
@@ -169,15 +168,15 @@ If `git` is not installed, this step is silently skipped.
 
 ## Generated Executable CLI
 
-When you build with `--exec --cli`, the output is a self-contained executable whose commands are auto-generated from your MCP server's tools, resources, prompts, and templates.
+When you build with `--target cli`, the output is a self-contained executable whose commands are auto-generated from your MCP server's tools, resources, prompts, and templates.
 
 ### Building
 
 ```bash
-frontmcp build --exec --cli
+frontmcp build --target cli
 ```
 
-This produces a standalone JavaScript bundle in `dist/` that can be distributed and run with Node.js.
+This produces a self-contained executable in `dist/` that can be distributed and run directly. Use `--js` to emit a plain JavaScript bundle instead.
 
 ### Global Options
 
@@ -276,10 +275,10 @@ frontmcp dev
 frontmcp build --out-dir build
 
 # Build distributable executable
-frontmcp build --exec
+frontmcp build --target node
 
 # Build CLI executable with subcommands per tool
-frontmcp build --exec --cli
+frontmcp build --target cli
 
 # Run E2E tests sequentially
 frontmcp test --runInBand

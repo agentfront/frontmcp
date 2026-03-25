@@ -116,10 +116,16 @@ test.describe('ESM Hot-Reload E2E', () => {
   });
 
   test('detects new version and registers new tools', async ({ mcp }) => {
-    // Step 1: Verify initial state — only echo and add
-    const initialTools = await mcp.tools.list();
-    const initialNames = initialTools.map((t: { name: string }) => t.name);
-    log('[TEST] Initial tools:', initialNames);
+    // Step 1: Wait for ESM tools to load (async loading after server start)
+    let initialTools: Array<{ name: string }> = [];
+    let initialNames: string[] = [];
+    for (let i = 0; i < 15; i++) {
+      initialTools = await mcp.tools.list();
+      initialNames = initialTools.map((t: { name: string }) => t.name);
+      log('[TEST] Poll initial tools:', initialNames);
+      if (initialNames.includes('esm:echo') && initialNames.includes('esm:add')) break;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
 
     expect(initialTools).toContainTool('esm:echo');
     expect(initialTools).toContainTool('esm:add');

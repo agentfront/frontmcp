@@ -413,10 +413,10 @@ cd "$TEST_DIR/test-docker-app"
 # Get the project name from package.json
 APP_NAME=$(node -e "console.log(require('./package.json').name)")
 
-if npx --registry "$VERDACCIO_URL" frontmcp build --exec 2>&1; then
-  echo "  ✅ frontmcp build --exec succeeded"
+if npx --registry "$VERDACCIO_URL" frontmcp build --target node 2>&1; then
+  echo "  ✅ frontmcp build --target node succeeded"
 else
-  echo "  ❌ frontmcp build --exec failed"
+  echo "  ❌ frontmcp build --target node failed"
   exit 1
 fi
 
@@ -451,14 +451,14 @@ fi
 
 # Test 14: Build executable bundle with CLI
 echo ""
-echo "Test 14: Build executable bundle with --cli"
+echo "Test 14: Build executable bundle with CLI"
 cd "$TEST_DIR/test-docker-app"
 rm -rf dist
 
-if npx --registry "$VERDACCIO_URL" frontmcp build --exec --cli 2>&1; then
-  echo "  ✅ frontmcp build --exec --cli succeeded"
+if npx --registry "$VERDACCIO_URL" frontmcp build --target cli --js 2>&1; then
+  echo "  ✅ frontmcp build --target cli --js succeeded"
 else
-  echo "  ❌ frontmcp build --exec --cli failed"
+  echo "  ❌ frontmcp build --target cli --js failed"
   exit 1
 fi
 

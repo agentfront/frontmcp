@@ -272,7 +272,15 @@
                   "frontmcp/guides/testing-plugins-and-hooks"
                 ]
               },
-              "frontmcp/guides/ui-library"
+              "frontmcp/guides/ui-library",
+              {
+                "group": "Nx Plugin",
+                "pages": [
+                  "frontmcp/nx-plugin/overview",
+                  "frontmcp/nx-plugin/guides/monorepo-patterns",
+                  "frontmcp/nx-plugin/guides/migration-from-standalone"
+                ]
+              }
             ]
           }
         ]
@@ -351,60 +359,48 @@
               "frontmcp/sdk-reference/errors/auth-internal-errors",
               "frontmcp/sdk-reference/errors/esm-errors"
             ]
-          }
-        ]
-      },
-      {
-        "dropdown": "Nx Plugin",
-        "icon": "hexagon",
-        "groups": [
-          {
-            "group": "Getting Started",
-            "pages": ["frontmcp/nx-plugin/overview", "frontmcp/nx-plugin/installation", "frontmcp/nx-plugin/quickstart"]
           },
           {
-            "group": "Generators",
+            "group": "Nx Plugin",
             "pages": [
-              "frontmcp/nx-plugin/generators/overview",
-              "frontmcp/nx-plugin/generators/workspace",
-              "frontmcp/nx-plugin/generators/app",
-              "frontmcp/nx-plugin/generators/lib",
-              "frontmcp/nx-plugin/generators/server",
-              "frontmcp/nx-plugin/generators/tool",
-              "frontmcp/nx-plugin/generators/resource",
-              "frontmcp/nx-plugin/generators/prompt",
-              "frontmcp/nx-plugin/generators/skill",
-              "frontmcp/nx-plugin/generators/agent",
-              "frontmcp/nx-plugin/generators/provider",
-              "frontmcp/nx-plugin/generators/plugin",
-              "frontmcp/nx-plugin/generators/adapter",
-              "frontmcp/nx-plugin/generators/auth-provider",
-              "frontmcp/nx-plugin/generators/flow",
-              "frontmcp/nx-plugin/generators/job",
-              "frontmcp/nx-plugin/generators/workflow",
-              "frontmcp/nx-plugin/generators/ui-component",
-              "frontmcp/nx-plugin/generators/ui-page",
-              "frontmcp/nx-plugin/generators/ui-shell"
-            ]
-          },
-          {
-            "group": "Executors",
-            "pages": [
-              "frontmcp/nx-plugin/executors/overview",
-              "frontmcp/nx-plugin/executors/build",
-              "frontmcp/nx-plugin/executors/build-exec",
-              "frontmcp/nx-plugin/executors/dev",
-              "frontmcp/nx-plugin/executors/serve",
-              "frontmcp/nx-plugin/executors/test",
-              "frontmcp/nx-plugin/executors/inspector",
-              "frontmcp/nx-plugin/executors/deploy"
-            ]
-          },
-          {
-            "group": "Guides",
-            "pages": [
-              "frontmcp/nx-plugin/guides/monorepo-patterns",
-              "frontmcp/nx-plugin/guides/migration-from-standalone"
+              {
+                "group": "Generators",
+                "pages": [
+                  "frontmcp/nx-plugin/generators/overview",
+                  "frontmcp/nx-plugin/generators/workspace",
+                  "frontmcp/nx-plugin/generators/app",
+                  "frontmcp/nx-plugin/generators/lib",
+                  "frontmcp/nx-plugin/generators/server",
+                  "frontmcp/nx-plugin/generators/tool",
+                  "frontmcp/nx-plugin/generators/resource",
+                  "frontmcp/nx-plugin/generators/prompt",
+                  "frontmcp/nx-plugin/generators/skill",
+                  "frontmcp/nx-plugin/generators/agent",
+                  "frontmcp/nx-plugin/generators/provider",
+                  "frontmcp/nx-plugin/generators/plugin",
+                  "frontmcp/nx-plugin/generators/adapter",
+                  "frontmcp/nx-plugin/generators/auth-provider",
+                  "frontmcp/nx-plugin/generators/flow",
+                  "frontmcp/nx-plugin/generators/job",
+                  "frontmcp/nx-plugin/generators/workflow",
+                  "frontmcp/nx-plugin/generators/ui-component",
+                  "frontmcp/nx-plugin/generators/ui-page",
+                  "frontmcp/nx-plugin/generators/ui-shell"
+                ]
+              },
+              {
+                "group": "Executors",
+                "pages": [
+                  "frontmcp/nx-plugin/executors/overview",
+                  "frontmcp/nx-plugin/executors/build",
+                  "frontmcp/nx-plugin/executors/build-exec",
+                  "frontmcp/nx-plugin/executors/dev",
+                  "frontmcp/nx-plugin/executors/serve",
+                  "frontmcp/nx-plugin/executors/test",
+                  "frontmcp/nx-plugin/executors/inspector",
+                  "frontmcp/nx-plugin/executors/deploy"
+                ]
+              }
             ]
           }
         ]
@@ -431,6 +427,14 @@
     {
       "source": "/frontmcp/plugins/introduction",
       "destination": "/frontmcp/plugins/overview"
+    },
+    {
+      "source": "/frontmcp/nx-plugin/installation",
+      "destination": "/frontmcp/getting-started/installation"
+    },
+    {
+      "source": "/frontmcp/nx-plugin/quickstart",
+      "destination": "/frontmcp/getting-started/quickstart"
     }
   ]
 }

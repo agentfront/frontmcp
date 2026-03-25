@@ -1,16 +1,16 @@
 import { Command } from 'commander';
 import { toParsedArgs } from '../../core/bridge';
 
+const BUILD_TARGETS = ['cli', 'node', 'sdk', 'browser', 'cloudflare', 'vercel', 'lambda'];
+
 export function registerBuildCommands(program: Command): void {
   program
     .command('build')
-    .description('Compile entry with TypeScript (tsc)')
+    .description('Build for a deployment target')
+    .option('-t, --target <target>', `Build target: ${BUILD_TARGETS.join(', ')}`)
+    .option('--js', 'Output JS bundle instead of native binary (cli target only)')
     .option('-o, --out-dir <dir>', 'Output directory')
     .option('-e, --entry <path>', 'Manually specify entry file path')
-    .option('-a, --adapter <name>', 'Deployment adapter: node, vercel, lambda, cloudflare')
-    .option('--exec', 'Build distributable executable bundle (esbuild)')
-    .option('--cli', 'Generate CLI with subcommands per tool (use with --exec)')
-    .option('--sea', 'Build as single executable binary (use with --exec, Node.js 20.13+ required)')
     .action(async (options) => {
       options.outDir = options.outDir || 'dist';
       const { runBuild } = await import('./index.js');

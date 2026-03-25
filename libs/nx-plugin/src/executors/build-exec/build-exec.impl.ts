@@ -6,7 +6,7 @@ export default async function buildExecExecutor(
   options: BuildExecExecutorSchema,
   context: ExecutorContext,
 ): Promise<{ success: boolean }> {
-  const args: string[] = ['npx', 'frontmcp', 'build', '--exec'];
+  const args: string[] = ['npx', 'frontmcp', 'build', '--target', 'node'];
   if (options.entry) args.push('--entry', options.entry);
   if (options.outputPath) args.push('--out-dir', options.outputPath);
 

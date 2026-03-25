@@ -32,7 +32,15 @@ export class RemoteTransporter implements Transporter {
     throw new MethodNotImplementedError('RemoteTransporter', 'destroy');
   }
 
+  get isInitialized(): boolean {
+    return false;
+  }
+
   markAsInitialized(): void {
+    // No-op for remote transporters - initialization state is managed on the remote node
+  }
+
+  resetForReinitialization(): void {
     // No-op for remote transporters - initialization state is managed on the remote node
   }
 }

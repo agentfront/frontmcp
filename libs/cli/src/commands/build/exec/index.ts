@@ -27,7 +27,7 @@ import { validateStepGraph } from './setup';
 import { ensureDir, fileExists, runCmd } from '@frontmcp/utils';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 
-export async function buildExec(opts: ParsedArgs): Promise<void> {
+export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolean }): Promise<void> {
   const cwd = process.cwd();
   const outDir = path.resolve(cwd, opts.outDir || 'dist');
 
