@@ -57,7 +57,7 @@ describe('customizeHelp', () => {
     const help = getHelpOutput();
     expect(help).toContain('Examples');
     expect(help).toContain('frontmcp dev');
-    expect(help).toContain('frontmcp build --exec');
+    expect(help).toContain('frontmcp build --target node');
   });
 
   it('should show subcommand help for build', () => {
@@ -67,8 +67,8 @@ describe('customizeHelp', () => {
     let output = '';
     buildCmd.configureOutput({ writeOut: (str) => (output += str) });
     buildCmd.outputHelp();
-    expect(output).toContain('--exec');
-    expect(output).toContain('--cli');
+    expect(output).toContain('--target');
+    expect(output).toContain('--js');
     expect(output).toContain('--out-dir');
   });
 });

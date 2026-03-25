@@ -271,7 +271,7 @@ export default async function handler(req, res) {
     npx frontmcp create my-app --target vercel
 
     # Or build existing project
-    frontmcp build --adapter vercel
+    frontmcp build --target vercel-edge
 
     # Deploy
     vercel deploy
@@ -287,7 +287,7 @@ export default async function handler(req, res) {
     npm install @codegenie/serverless-express
 
     # Build and deploy
-    frontmcp build --adapter lambda
+    frontmcp build --target lambda
     cd ci && sam build && sam deploy
     ```
 
@@ -298,7 +298,7 @@ export default async function handler(req, res) {
     npx frontmcp create my-app --target cloudflare
 
     # Build and deploy
-    frontmcp build --adapter cloudflare
+    frontmcp build --target cloudflare-worker
     wrangler deploy
     ```
 

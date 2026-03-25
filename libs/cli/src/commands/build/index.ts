@@ -79,50 +79,77 @@ async function generateAdapterFiles(
   }
 }
 
+/** Map target names to internal adapter names. */
+const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
+  'vercel-edge': 'vercel',
+  'lambda': 'lambda',
+  'cloudflare-worker': 'cloudflare',
+};
+
 /**
  * Build the FrontMCP server for a specific deployment target.
  *
- * @param opts - Build options from CLI arguments
- *
  * @example
  * ```bash
- * # Build for Node.js (default)
- * frontmcp build
- *
- * # Build for Vercel
- * frontmcp build --adapter vercel
- *
- * # Build for AWS Lambda
- * frontmcp build --adapter lambda
- *
- * # Build for Cloudflare Workers
- * frontmcp build --adapter cloudflare
+ * frontmcp build --target node          # Node.js server bundle
+ * frontmcp build --target cli           # CLI with SEA binary
+ * frontmcp build --target cli --js      # CLI without SEA
+ * frontmcp build --target sdk           # Library (CJS+ESM+types)
+ * frontmcp build --target browser       # Browser ESM bundle
+ * frontmcp build --target vercel-edge   # Vercel serverless
+ * frontmcp build --target lambda        # AWS Lambda
+ * frontmcp build --target cloudflare-worker  # Cloudflare Workers
  * ```
  */
 export async function runBuild(opts: ParsedArgs): Promise<void> {
-  // Executable bundle build (esbuild single-file + scripts)
-  if (opts.exec) {
-    const { buildExec } = await import('./exec/index.js');
-    return buildExec(opts);
-  }
+  const target = opts.buildTarget ?? 'node';
 
+  switch (target) {
+    case 'cli': {
+      const { buildExec } = await import('./exec/index.js');
+      return buildExec({ ...opts, cli: true, sea: !opts.js } as ParsedArgs & { cli: boolean; sea: boolean });
+    }
+    case 'node': {
+      const { buildExec } = await import('./exec/index.js');
+      return buildExec(opts);
+    }
+    case 'sdk': {
+      const { buildSdk } = await import('./sdk/index.js');
+      return buildSdk(opts);
+    }
+    case 'browser': {
+      const { buildBrowser } = await import('./browser/index.js');
+      return buildBrowser(opts);
+    }
+    case 'vercel-edge':
+    case 'lambda':
+    case 'cloudflare-worker': {
+      const adapter = TARGET_TO_ADAPTER[target];
+      return runAdapterBuild(opts, adapter);
+    }
+    default:
+      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare-worker, vercel-edge, lambda`);
+  }
+}
+
+/**
+ * Build using a deployment adapter (serverless platforms).
+ */
+async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<void> {
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
   const outDir = path.resolve(cwd, opts.outDir || 'dist');
-  const adapter = (opts.adapter || 'node') as AdapterName;
   await ensureDir(outDir);
 
-  // Validate adapter
   const template = ADAPTERS[adapter];
   if (!template) {
     const available = Object.keys(ADAPTERS).join(', ');
     throw new Error(`Unknown adapter: ${adapter}. Available: ${available}`);
   }
 
-  // Warn about experimental adapters
   if (adapter === 'cloudflare') {
     console.log(
-      c('yellow', '⚠️  Cloudflare Workers adapter is experimental. See docs for limitations.'),
+      c('yellow', 'Cloudflare Workers adapter is experimental. See docs for limitations.'),
     );
   }
 
@@ -130,9 +157,8 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
 
   console.log(`${c('cyan', '[build]')} entry: ${path.relative(cwd, entry)}`);
   console.log(`${c('cyan', '[build]')} outDir: ${path.relative(cwd, outDir)}`);
-  console.log(`${c('cyan', '[build]')} adapter: ${adapter} (${moduleFormat})`);
+  console.log(`${c('cyan', '[build]')} target: ${adapter} (${moduleFormat})`);
 
-  // Build TypeScript compiler arguments
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
   const hasTsconfig = await fileExists(tsconfigPath);
   const args: string[] = ['-y', 'tsc'];
@@ -151,21 +177,18 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
     args.push('--target', REQUIRED_DECORATOR_FIELDS.target);
   }
 
-  // Always pass module format to override tsconfig
   args.push('--module', moduleFormat);
   args.push('--outDir', outDir);
   args.push('--skipLibCheck');
 
-  // Run TypeScript compiler
   await runCmd('npx', args);
 
-  // Generate adapter-specific files
   if (adapter !== 'node') {
     console.log(c('cyan', `[build] Generating ${adapter} deployment files...`));
     const entryBasename = path.basename(entry);
     await generateAdapterFiles(adapter, outDir, entryBasename, cwd);
   }
 
-  console.log(c('green', '✅ Build completed.'));
+  console.log(c('green', 'Build completed.'));
   console.log(c('gray', `Output placed in ${path.relative(cwd, outDir)}`));
 }

@@ -144,18 +144,6 @@ describe('parseArgs', () => {
     });
   });
 
-  describe('--adapter / -a flag', () => {
-    it('should parse --adapter with value', () => {
-      const result = parseArgs(['build', '--adapter', 'vercel']);
-      expect(result.adapter).toBe('vercel');
-    });
-
-    it('should parse -a short flag with value', () => {
-      const result = parseArgs(['build', '-a', 'lambda']);
-      expect(result.adapter).toBe('lambda');
-    });
-  });
-
   describe('--verbose / -v flag', () => {
     it('should parse --verbose flag', () => {
       const result = parseArgs(['dev', '--verbose']);

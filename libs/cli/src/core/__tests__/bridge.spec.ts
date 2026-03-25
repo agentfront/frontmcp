@@ -28,19 +28,15 @@ describe('toParsedArgs', () => {
     expect(result.maxRestarts).toBe(3);
   });
 
-  it('should map build command with exec/cli/outDir/adapter', () => {
+  it('should map build command with target/outDir', () => {
     const result = toParsedArgs('build', [], {
-      exec: true,
-      cli: true,
+      target: 'cli',
       outDir: 'build',
-      adapter: 'vercel',
     });
 
     expect(result._).toEqual(['build']);
-    expect(result.exec).toBe(true);
-    expect(result.cli).toBe(true);
+    expect(result.buildTarget).toBe('cli');
     expect(result.outDir).toBe('build');
-    expect(result.adapter).toBe('vercel');
   });
 
   it('should map test command with all test options', () => {
@@ -109,7 +105,7 @@ describe('toParsedArgs', () => {
     expect(result._).toEqual(['list']);
     expect(result.outDir).toBeUndefined();
     expect(result.entry).toBeUndefined();
-    expect(result.exec).toBeUndefined();
+    expect(result.buildTarget).toBeUndefined();
   });
 
   it('should map stop command with force flag', () => {
@@ -139,9 +135,9 @@ describe('toParsedArgs', () => {
   });
 
   it('should not set fields for undefined option values', () => {
-    const result = toParsedArgs('build', [], { exec: undefined });
+    const result = toParsedArgs('build', [], { target: undefined });
 
-    expect(result.exec).toBeUndefined();
-    expect('exec' in result).toBe(false);
+    expect(result.buildTarget).toBeUndefined();
+    expect('buildTarget' in result).toBe(false);
   });
 });

@@ -46,7 +46,7 @@ export async function bundleWithEsbuild(
     esbuild = require('esbuild');
   } catch {
     throw new Error(
-      'esbuild is required for --exec builds. Install it: npm install -D esbuild',
+      'esbuild is required for build targets. Install it: npm install -D esbuild',
     );
   }
 

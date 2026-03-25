@@ -38,7 +38,7 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
   <Tab title="Vercel">
     ```bash
     # Build for Vercel
-    frontmcp build --adapter vercel
+    frontmcp build --target vercel-edge
 
     # Deploy
     vercel deploy
@@ -51,7 +51,7 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
     npm install @codegenie/serverless-express
 
     # Build for Lambda
-    frontmcp build --adapter lambda
+    frontmcp build --target lambda
 
     # Deploy with your preferred tool (SAM, CDK, Serverless Framework)
     ```
@@ -60,7 +60,7 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
   <Tab title="Cloudflare">
     ```bash
     # Build for Cloudflare Workers
-    frontmcp build --adapter cloudflare
+    frontmcp build --target cloudflare-worker
 
     # Deploy
     wrangler deploy
@@ -82,7 +82,7 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/frontmcp/deploy
 1. Build your project:
 
    ```bash
-   frontmcp build --adapter vercel
+   frontmcp build --target vercel-edge
    ```
 
 2. This generates:
@@ -157,7 +157,7 @@ npm run deploy  # Runs: cd ci && sam build && sam deploy
 1. Build your project:
 
    ```bash
-   frontmcp build --adapter lambda
+   frontmcp build --target lambda
    ```
 
 2. This generates:
@@ -260,7 +260,7 @@ npm run deploy  # Runs: wrangler deploy
 1. Build your project:
 
    ```bash
-   frontmcp build --adapter cloudflare
+   frontmcp build --target cloudflare-worker
    ```
 
 2. This generates:
@@ -361,7 +361,7 @@ RememberPlugin.init({
 ┌─────────────────────────────────────────────────────────────┐
 │                     Build Time                               │
 ├─────────────────────────────────────────────────────────────┤
-│  frontmcp build --adapter vercel                            │
+│  frontmcp build --target vercel-edge                            │
 │       │                                                      │
 │       ├── Compiles TypeScript with --module esnext          │
 │       ├── Generates platform-specific index.js wrapper      │
@@ -456,16 +456,16 @@ Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfi
 frontmcp build
 
 # Build for Vercel (ESM)
-frontmcp build --adapter vercel
+frontmcp build --target vercel-edge
 
 # Build for AWS Lambda (ESM)
-frontmcp build --adapter lambda
+frontmcp build --target lambda
 
 # Build for Cloudflare Workers (CommonJS)
-frontmcp build --adapter cloudflare
+frontmcp build --target cloudflare-worker
 
 # Specify output directory
-frontmcp build --adapter vercel --outDir build
+frontmcp build --target vercel-edge --outDir build
 ```
 
 ### SDK Exports

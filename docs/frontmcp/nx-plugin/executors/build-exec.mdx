@@ -2,7 +2,7 @@
 title: Build Exec Executor
 slug: nx-plugin/executors/build-exec
 icon: box
-description: Build a distributable bundle using frontmcp build --exec
+description: Build a distributable bundle using frontmcp build --target node
 ---
 
 Builds a distributable executable bundle using esbuild. Produces a single-file output ideal for containerized deployments.
@@ -40,7 +40,7 @@ nx build-exec my-app
 
 ## CLI Mode
 
-Pass `cli: true` (or use `frontmcp build --exec --cli`) to generate a standalone CLI executable with auto-generated subcommands for every tool, resource, prompt, and template in your MCP server.
+Pass `cli: true` (or use `frontmcp build --target cli`) to generate a standalone CLI executable with auto-generated subcommands for every tool, resource, prompt, and template in your MCP server.
 
 ```json project.json
 {

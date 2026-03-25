@@ -61,7 +61,7 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 
       if (fs.existsSync(configPath) || fs.existsSync(configJsonPath)) {
         console.log(`${c('cyan', '[install]')} no manifest found, building from config...`);
-        await runCmd('npx', ['frontmcp', 'build', '--exec'], {
+        await runCmd('npx', ['frontmcp', 'build', '--target', 'node'], {
           cwd: packageDir,
         });
         manifest = findManifest(path.join(packageDir, 'dist')) || findManifest(packageDir);
@@ -71,7 +71,7 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     if (!manifest) {
       throw new Error(
         'Could not find or generate a manifest. Ensure the package has a ' +
-          'frontmcp.config.js or was built with "frontmcp build --exec".',
+          'frontmcp.config.js or was built with "frontmcp build --target node".',
       );
     }
 

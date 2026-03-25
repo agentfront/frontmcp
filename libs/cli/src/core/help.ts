@@ -65,9 +65,9 @@ export function customizeHelp(program: Command): void {
     `
 ${c('bold', 'Examples')}
   frontmcp dev
-  frontmcp build --out-dir build
-  frontmcp build --exec
-  frontmcp build --exec --cli
+  frontmcp build --target node
+  frontmcp build --target cli
+  frontmcp build --target cli --js
   frontmcp test --runInBand
   frontmcp init
   frontmcp doctor

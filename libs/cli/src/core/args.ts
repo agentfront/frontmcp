@@ -23,6 +23,7 @@ export type Command =
   | 'configure';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
+export type BuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare-worker' | 'vercel-edge' | 'lambda';
 export type RedisSetupOption = 'docker' | 'existing' | 'none';
 export type PackageManagerOption = 'npm' | 'yarn' | 'pnpm';
 
@@ -36,7 +37,10 @@ export interface ParsedArgs {
   verbose?: boolean;
   timeout?: number;
   coverage?: boolean;
-  adapter?: DeploymentAdapter;
+  // Build --target flag (unified build target)
+  buildTarget?: BuildTarget;
+  // Build --js flag (cli target: produce JS bundle instead of SEA binary)
+  js?: boolean;
   // Create command flags
   yes?: boolean;
   target?: DeploymentAdapter;
@@ -47,12 +51,6 @@ export interface ParsedArgs {
   socket?: string;
   db?: string;
   background?: boolean;
-  // Build --exec flag
-  exec?: boolean;
-  // Build --exec --cli flag
-  cli?: boolean;
-  // Build --exec --sea flag
-  sea?: boolean;
   // Process Manager flags
   port?: number;
   force?: boolean;
@@ -75,7 +73,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const a = argv[i];
     if (a === '--out-dir' || a === '-o') out.outDir = argv[++i];
     else if (a === '--entry' || a === '-e') out.entry = argv[++i];
-    else if (a === '--adapter' || a === '-a') out.adapter = argv[++i] as DeploymentAdapter;
     else if (a === '--help' || a === '-h') out.help = true;
     else if (a === '--runInBand' || a === '-i') out.runInBand = true;
     else if (a === '--watch' || a === '-w') out.watch = true;
@@ -86,8 +83,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
     } else if (a === '--coverage' || a === '-c') out.coverage = true;
     // Create command flags
     else if (a === '--yes' || a === '-y') out.yes = true;
-    else if (a === '--target') out.target = argv[++i] as DeploymentAdapter;
-    else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
+    else if (a === '--target') {
+      const val = argv[++i];
+      out.target = val as DeploymentAdapter;
+      out.buildTarget = val as BuildTarget;
+    } else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
     else if (a === '--cicd') out.cicd = true;
     else if (a === '--no-cicd') out.cicd = false;
     else if (a === '--pm') out.pm = argv[++i] as PackageManagerOption;
@@ -95,10 +95,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--socket' || a === '-s') out.socket = argv[++i];
     else if (a === '--db') out.db = argv[++i];
     else if (a === '--background' || a === '-b') out.background = true;
-    // Build --exec flag
-    else if (a === '--exec') out.exec = true;
-    else if (a === '--cli') out.cli = true;
-    else if (a === '--sea') out.sea = true;
+    else if (a === '--js') out.js = true;
     // Process Manager flags
     else if (a === '--port' || a === '-p') {
       const parsed = parseInt(argv[++i], 10);
