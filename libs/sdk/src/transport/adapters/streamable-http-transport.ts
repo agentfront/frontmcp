@@ -170,6 +170,7 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
 
     webTransport._initialized = false;
     webTransport.sessionId = undefined;
+    this._pendingInitState = undefined;
   }
 
   /**
