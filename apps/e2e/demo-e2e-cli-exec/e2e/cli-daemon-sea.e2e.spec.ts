@@ -13,11 +13,11 @@
  * all tests pass trivially with a warning.
  */
 
-import * as fs from 'fs';
-import * as os from 'os';
+import { realpathSync } from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { ensureSeaBuild, isSeaBuildAvailable, runSeaCli } from './helpers/exec-cli';
+import { fileExists, mkdtemp, readFile, stat, rm } from '@frontmcp/utils';
+import { ensureSeaBuild, runSeaCli } from './helpers/exec-cli';
 import { McpJsonRpcClient, httpOverSocket, waitForSocket } from './helpers/mcp-client';
 
 const APP_NAME = 'cli-exec-demo';
@@ -65,7 +65,7 @@ function killByPid(pid: number): void {
 async function waitForFile(filePath: string, timeoutMs = 10000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (fs.existsSync(filePath)) return true;
+    if (await fileExists(filePath)) return true;
     await new Promise((r) => setTimeout(r, 100));
   }
   return false;
@@ -80,9 +80,9 @@ describe('SEA CLI Daemon E2E', () => {
     }
 
     // Set up isolated directories
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-sea-daemon-'));
-    prefixDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-sea-install-'));
-    binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-sea-bin-'));
+    homeDir = await mkdtemp(path.join(require('os').tmpdir(), 'frontmcp-sea-daemon-'));
+    prefixDir = await mkdtemp(path.join(require('os').tmpdir(), 'frontmcp-sea-install-'));
+    binDir = await mkdtemp(path.join(require('os').tmpdir(), 'frontmcp-sea-bin-'));
 
     // Install the SEA binary to a temp prefix
     const { stdout, exitCode } = runSeaCli(['install', '--prefix', prefixDir, '--bin-dir', binDir]);
@@ -97,9 +97,9 @@ describe('SEA CLI Daemon E2E', () => {
     const seaBinaryInInstall = path.join(appDir, `${APP_NAME}-cli-bin`);
     const symlinkPath = path.join(binDir, APP_NAME);
 
-    if (fs.existsSync(symlinkPath)) {
-      installedBinaryPath = fs.realpathSync(symlinkPath);
-    } else if (fs.existsSync(seaBinaryInInstall)) {
+    if (await fileExists(symlinkPath)) {
+      installedBinaryPath = realpathSync(symlinkPath);
+    } else if (await fileExists(seaBinaryInInstall)) {
       installedBinaryPath = seaBinaryInInstall;
     } else {
       console.warn('[e2e:sea] Could not find installed SEA binary');
@@ -131,7 +131,7 @@ describe('SEA CLI Daemon E2E', () => {
     // Clean up temp dirs
     for (const dir of [homeDir, prefixDir, binDir]) {
       try {
-        fs.rmSync(dir, { recursive: true, force: true });
+        await rm(dir, { recursive: true, force: true });
       } catch {
         /* ok */
       }
@@ -140,10 +140,10 @@ describe('SEA CLI Daemon E2E', () => {
 
   // ─── Build & Install Verification ──────────────────────────────────────
 
-  it('should have SEA CLI binary available', () => {
+  it('should have SEA CLI binary available', async () => {
     if (!seaAvailable) return;
-    expect(fs.existsSync(installedBinaryPath)).toBe(true);
-    const stats = fs.statSync(installedBinaryPath);
+    expect(await fileExists(installedBinaryPath)).toBe(true);
+    const stats = await stat(installedBinaryPath);
     expect(stats.mode & 0o111).not.toBe(0); // executable
   });
 
@@ -169,7 +169,7 @@ describe('SEA CLI Daemon E2E', () => {
     }
 
     // Wait for socket file to appear
-    if (!fs.existsSync(socketPath)) {
+    if (!(await fileExists(socketPath))) {
       const appeared = await waitForFile(socketPath, 15000);
       expect(appeared).toBe(true);
     }
@@ -197,21 +197,21 @@ describe('SEA CLI Daemon E2E', () => {
     expect(stdout).toContain('already running');
   });
 
-  it('PID file should have correct structure', () => {
+  it('PID file should have correct structure', async () => {
     if (!seaAvailable) return;
-    expect(fs.existsSync(pidPath)).toBe(true);
-    const pidData = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
+    expect(await fileExists(pidPath)).toBe(true);
+    const pidData = JSON.parse(await readFile(pidPath));
     expect(pidData.pid).toEqual(expect.any(Number));
     expect(pidData.socketPath).toContain('.sock');
     expect(pidData.startedAt).toEqual(expect.any(String));
     expect(() => process.kill(pidData.pid, 0)).not.toThrow();
   });
 
-  it('daemon logs should not contain ZodError or MODULE_NOT_FOUND', () => {
+  it('daemon logs should not contain ZodError or MODULE_NOT_FOUND', async () => {
     if (!seaAvailable) return;
     const logPath = path.join(homeDir, 'logs', `${APP_NAME}.log`);
-    if (fs.existsSync(logPath)) {
-      const content = fs.readFileSync(logPath, 'utf8');
+    if (await fileExists(logPath)) {
+      const content = await readFile(logPath);
       expect(content).not.toContain('ZodError');
       expect(content).not.toContain('MODULE_NOT_FOUND');
       expect(content).not.toContain('Cannot find module');
@@ -310,14 +310,14 @@ describe('SEA CLI Daemon E2E', () => {
     expect(stdout).toMatch(/Not running/);
   });
 
-  it('socket file should be removed after stop', () => {
+  it('socket file should be removed after stop', async () => {
     if (!seaAvailable) return;
-    expect(fs.existsSync(socketPath)).toBe(false);
+    expect(await fileExists(socketPath)).toBe(false);
   });
 
-  it('PID file should be removed after stop', () => {
+  it('PID file should be removed after stop', async () => {
     if (!seaAvailable) return;
-    expect(fs.existsSync(pidPath)).toBe(false);
+    expect(await fileExists(pidPath)).toBe(false);
   });
 
   // ─── Daemon Restart ────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ describe('SEA CLI Daemon E2E', () => {
       daemonPid = parseInt(pidMatch[1], 10);
     }
 
-    if (!fs.existsSync(socketPath)) {
+    if (!(await fileExists(socketPath))) {
       await waitForFile(socketPath, 15000);
     }
     await waitForSocket(socketPath, 20000);

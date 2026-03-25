@@ -841,10 +841,12 @@ test.describe('Session Reconnect E2E', () => {
 
       // Session should still work after retries
       const retryResult = await sendInitialize(server.info.baseUrl, sessionId);
+      expect(retryResult.status).toBe(200);
       const finalSession = retryResult.sessionId;
       if (!finalSession) throw new Error('Expected final session');
 
-      await sendNotificationInitialized(server.info.baseUrl, finalSession);
+      const notif = await sendNotificationInitialized(server.info.baseUrl, finalSession);
+      expect(notif.status).toBe(202);
       const tool = await sendToolCall(server.info.baseUrl, finalSession, 'get-session-info');
       expect(tool.status).toBe(200);
     });
@@ -894,12 +896,14 @@ test.describe('Session Reconnect E2E', () => {
         if (!retrySession) throw new Error(`Expected retry session in cycle ${cycle}`);
 
         // Verify it works
-        await sendNotificationInitialized(server.info.baseUrl, retrySession);
+        const notif = await sendNotificationInitialized(server.info.baseUrl, retrySession);
+        expect(notif.status).toBe(202);
         const tool = await sendToolCall(server.info.baseUrl, retrySession, 'get-session-info');
         expect(tool.status).toBe(200);
 
         // DELETE before next cycle
-        await sendDelete(server.info.baseUrl, retrySession);
+        const del = await sendDelete(server.info.baseUrl, retrySession);
+        expect(del.status).toBe(204);
       }
     });
 

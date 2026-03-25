@@ -1,6 +1,6 @@
 import { execFileSync, spawn, ChildProcess } from 'child_process';
-import * as fs from 'fs';
 import * as path from 'path';
+import { fileExists } from '@frontmcp/utils';
 import type { StdioOptions } from 'node:child_process';
 
 const APP_NAME = 'cli-exec-demo';
@@ -170,7 +170,7 @@ export async function ensureSeaBuild(): Promise<boolean> {
     );
   }
 
-  seaBuildAvailable = fs.existsSync(SEA_CLI_BINARY);
+  seaBuildAvailable = await fileExists(SEA_CLI_BINARY);
   seaBuildDone = true;
 
   if (seaBuildAvailable) {

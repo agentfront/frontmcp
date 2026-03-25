@@ -276,7 +276,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
   }
 
   override get isInitialized(): boolean {
-    return this.transport.isInitialized;
+    return this.transport.isInitialized || this.transport.hasPendingInitState;
   }
 
   /**

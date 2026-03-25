@@ -123,7 +123,7 @@ test.describe('ESM Hot-Reload E2E', () => {
       initialTools = await mcp.tools.list();
       initialNames = initialTools.map((t: { name: string }) => t.name);
       log('[TEST] Poll initial tools:', initialNames);
-      if (initialNames.includes('esm:echo')) break;
+      if (initialNames.includes('esm:echo') && initialNames.includes('esm:add')) break;
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 

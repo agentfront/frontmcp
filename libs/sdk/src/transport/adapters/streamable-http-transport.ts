@@ -161,10 +161,15 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
       return;
     }
 
-    if ('_initialized' in webTransport) {
-      webTransport._initialized = false;
-      webTransport.sessionId = undefined;
+    if (!('_initialized' in webTransport)) {
+      throw new InvalidTransportSessionError(
+        '[RecreateableStreamableHTTPServerTransport] Expected _initialized field not found on internal transport. ' +
+          'This may indicate an incompatible MCP SDK version.',
+      );
     }
+
+    webTransport._initialized = false;
+    webTransport.sessionId = undefined;
   }
 
   /**
