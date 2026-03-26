@@ -59,11 +59,23 @@ export interface Transporter {
   ping(timeoutMs?: number): Promise<boolean>;
 
   /**
+   * Whether this transport has already been initialized via the MCP initialize handshake.
+   */
+  readonly isInitialized: boolean;
+
+  /**
    * Marks this transport as pre-initialized for session recreation.
    * This is needed when recreating a transport from Redis because the
    * original initialize request was processed by a different transport instance.
    */
   markAsInitialized(): void;
+
+  /**
+   * Resets initialization state to allow re-initialization.
+   * Used when a client retries initialize on an already-initialized transport
+   * (e.g., after reconnect following session termination).
+   */
+  resetForReinitialization(): void;
 }
 
 export interface TransportRegistryOptions {

@@ -8,7 +8,7 @@
     "build-exec": {
       "implementation": "./src/executors/build-exec/build-exec.impl",
       "schema": "./src/executors/build-exec/schema.json",
-      "description": "Build a distributable bundle using frontmcp build --exec"
+      "description": "Build a distributable bundle using frontmcp build --target node"
     },
     "dev": {
       "implementation": "./src/executors/dev/dev.impl",

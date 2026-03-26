@@ -18,16 +18,19 @@ const mockContext: ExecutorContext = {
 describe('build-exec executor', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('should run frontmcp build --exec', async () => {
+  it('should run frontmcp build --target node', async () => {
     const result = await buildExecExecutor({}, mockContext);
-    expect(execSync).toHaveBeenCalledWith('npx frontmcp build --exec', expect.objectContaining({ cwd: '/workspace' }));
+    expect(execSync).toHaveBeenCalledWith(
+      'npx frontmcp build --target node',
+      expect.objectContaining({ cwd: '/workspace' }),
+    );
     expect(result.success).toBe(true);
   });
 
   it('should pass entry and outputPath', async () => {
     await buildExecExecutor({ entry: 'src/main.ts', outputPath: 'dist' }, mockContext);
     expect(execSync).toHaveBeenCalledWith(
-      'npx frontmcp build --exec --entry src/main.ts --out-dir dist',
+      'npx frontmcp build --target node --entry src/main.ts --out-dir dist',
       expect.anything(),
     );
   });

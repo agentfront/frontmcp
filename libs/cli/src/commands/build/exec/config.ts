@@ -29,10 +29,14 @@ export interface CliConfig {
   oauth?: OAuthConfig;
 }
 
+export type ConfigBuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda';
+
 export interface FrontmcpExecConfig {
   name: string;
   version?: string;
   entry?: string;
+  /** Build target. When set, takes precedence over cli.enabled / sea.enabled. */
+  target?: ConfigBuildTarget;
   storage?: {
     type: 'sqlite' | 'redis' | 'none';
     required?: boolean;
@@ -89,7 +93,7 @@ export async function loadExecConfig(cwd: string): Promise<FrontmcpExecConfig> {
   const pkgPath = path.join(cwd, 'package.json');
   if (!fs.existsSync(pkgPath)) {
     throw new Error(
-      'No frontmcp.config.js/json found and no package.json. Create a frontmcp.config.js to use --exec.',
+      'No frontmcp.config.js/json found and no package.json. Create a frontmcp.config.js for build targets.',
     );
   }
 

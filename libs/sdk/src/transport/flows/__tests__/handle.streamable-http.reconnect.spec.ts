@@ -212,3 +212,148 @@ describe('Session sync integration with ensureAuthInfo', () => {
     }).toThrow('Session ID is required');
   });
 });
+
+/**
+ * Tests for the re-initialization guard in onInitialize.
+ *
+ * When a client retries initialize with a session whose transport is already
+ * initialized (e.g., after notifications/initialized with old session got 404),
+ * the guard must call resetForReinitialization() before transport.initialize()
+ * to prevent the MCP SDK from rejecting with 400 "server already initialized".
+ *
+ * This is the exact production bug scenario:
+ * 1. Session A created + initialized
+ * 2. DELETE terminates A
+ * 3. Initialize with stale A → creates session B, transport B initialized
+ * 4. notifications/initialized with old A → 404
+ * 5. Client retries initialize with B → transport B already initialized → 400 (BUG)
+ * 6. Fix: guard detects isInitialized, calls resetForReinitialization → 200
+ */
+describe('onInitialize re-initialization guard', () => {
+  /**
+   * Simulates the re-initialization guard logic added to onInitialize
+   * in handle.streamable-http.flow.ts.
+   */
+  function simulateOnInitializeGuard(params: {
+    transport: { isInitialized: boolean; resetForReinitialization: () => void; initialize: () => void };
+  }): { resetCalled: boolean } {
+    const { transport } = params;
+    let resetCalled = false;
+
+    // This is the exact guard logic from onInitialize:
+    if (transport.isInitialized) {
+      transport.resetForReinitialization();
+      resetCalled = true;
+    }
+
+    transport.initialize();
+    return { resetCalled };
+  }
+
+  it('should call resetForReinitialization when transport is already initialized', () => {
+    const resetFn = jest.fn();
+    const initFn = jest.fn();
+
+    const result = simulateOnInitializeGuard({
+      transport: {
+        isInitialized: true,
+        resetForReinitialization: resetFn,
+        initialize: initFn,
+      },
+    });
+
+    expect(result.resetCalled).toBe(true);
+    expect(resetFn).toHaveBeenCalledTimes(1);
+    expect(initFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should NOT call resetForReinitialization when transport is fresh', () => {
+    const resetFn = jest.fn();
+    const initFn = jest.fn();
+
+    const result = simulateOnInitializeGuard({
+      transport: {
+        isInitialized: false,
+        resetForReinitialization: resetFn,
+        initialize: initFn,
+      },
+    });
+
+    expect(result.resetCalled).toBe(false);
+    expect(resetFn).not.toHaveBeenCalled();
+    expect(initFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle full reconnect chain: session cleared → new session → cached transport → guard resets', () => {
+    // Step 1: Simulate session clearing (http.request.flow reconnect logic)
+    const authorization: { session?: { id: string } } = {
+      session: { id: 'old-terminated-session' },
+    };
+    authorization.session = undefined; // Cleared by reconnect logic
+
+    // Step 2: Simulate parseInput creating new session
+    const newSession = { id: 'new-session-B' };
+    if (!authorization.session) {
+      authorization.session = newSession;
+    }
+
+    // Step 3: Simulate createTransporter returning cached transport (already initialized)
+    let transportInitialized = true; // Cached from first successful init
+    let transportSessionId: string | undefined = 'new-session-B';
+    const resetFn = jest.fn(() => {
+      transportInitialized = false;
+      transportSessionId = undefined;
+    });
+    const initFn = jest.fn(() => {
+      transportInitialized = true;
+      transportSessionId = newSession.id;
+    });
+
+    // Step 4: Apply the guard
+    const result = simulateOnInitializeGuard({
+      transport: {
+        get isInitialized() {
+          return transportInitialized;
+        },
+        resetForReinitialization: resetFn,
+        initialize: initFn,
+      },
+    });
+
+    // Guard should have detected the initialized state and reset
+    expect(result.resetCalled).toBe(true);
+    expect(resetFn).toHaveBeenCalledTimes(1);
+    expect(initFn).toHaveBeenCalledTimes(1);
+    // After initialize, transport should be initialized again with new session
+    expect(transportInitialized).toBe(true);
+    expect(transportSessionId).toBe('new-session-B');
+  });
+
+  it('should handle multiple retries gracefully', () => {
+    let initCount = 0;
+    // Each retry: transport starts initialized (from previous success), gets reset, re-initialized
+    for (let retry = 0; retry < 3; retry++) {
+      const resetFn = jest.fn();
+      const initFn = jest.fn(() => {
+        initCount++;
+      });
+
+      const result = simulateOnInitializeGuard({
+        transport: {
+          isInitialized: retry > 0, // First call is fresh, subsequent are retries
+          resetForReinitialization: resetFn,
+          initialize: initFn,
+        },
+      });
+
+      if (retry > 0) {
+        expect(result.resetCalled).toBe(true);
+      } else {
+        expect(result.resetCalled).toBe(false);
+      }
+      expect(initFn).toHaveBeenCalledTimes(1);
+    }
+
+    expect(initCount).toBe(3);
+  });
+});

@@ -903,15 +903,38 @@ describe('generateCliEntry', () => {
       expect(source).toContain('runUnixSocket');
     });
 
-    it('should use node -e with runUnixSocket in selfContained/SEA mode', () => {
+    it('should spawn process.execPath with daemon mode env in selfContained/SEA mode', () => {
       const source = generateCliEntry(makeOptions({
         appName: 'my-server',
         selfContained: true,
       }));
-      // Even in SEA mode, daemon uses node -e with runUnixSocket for compatibility
-      expect(source).toContain("spawn('node'");
-      expect(source).toContain('runUnixSocket');
+      // SEA mode: spawn self (process.execPath) instead of node -e
+      expect(source).toContain('process.execPath');
+      expect(source).toContain('__FRONTMCP_DAEMON_MODE');
       expect(source).toContain('FRONTMCP_DAEMON_SOCKET');
+    });
+
+    it('should include daemon mode handler in header for selfContained mode', () => {
+      const source = generateCliEntry(makeOptions({
+        serverBundleFilename: 'my-app.bundle.js',
+        selfContained: true,
+      }));
+      // Daemon mode guard should appear before commander setup
+      expect(source).toContain("process.env.__FRONTMCP_DAEMON_MODE === '1'");
+      expect(source).toContain('runUnixSocket');
+      expect(source).toContain("require('../my-app.bundle.js')");
+      expect(source).toContain("require('@frontmcp/sdk')");
+      expect(source).toContain("require('reflect-metadata')");
+      const daemonIdx = source.indexOf('__FRONTMCP_DAEMON_MODE');
+      const commanderIdx = source.indexOf("require('commander')");
+      expect(daemonIdx).toBeLessThan(commanderIdx);
+    });
+
+    it('should not include daemon mode handler in header for non-selfContained mode', () => {
+      const source = generateCliEntry(makeOptions({
+        selfContained: false,
+      }));
+      expect(source).not.toContain('__FRONTMCP_DAEMON_MODE');
     });
   });
 

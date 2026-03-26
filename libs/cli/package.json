@@ -45,7 +45,6 @@
   "devDependencies": {
     "typescript": "^5.5.3",
     "tsx": "^4.20.6",
-    "@types/node": "^24.0.0",
-    "@modelcontextprotocol/inspector": "^0.21.1"
+    "@types/node": "^24.0.0"
   }
 }

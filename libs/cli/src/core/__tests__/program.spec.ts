@@ -36,7 +36,7 @@ describe('createProgram', () => {
     ]);
   });
 
-  it('should parse build --exec --cli options', async () => {
+  it('should parse build --target option', async () => {
     const program = createProgram();
     program.exitOverride();
     // Prevent the action from running (we only test parsing)
@@ -46,11 +46,10 @@ describe('createProgram', () => {
       /* no-op */
     });
 
-    await program.parseAsync(['node', 'frontmcp', 'build', '--exec', '--cli']);
+    await program.parseAsync(['node', 'frontmcp', 'build', '--target', 'cli']);
 
     const opts = buildCmd.opts();
-    expect(opts.exec).toBe(true);
-    expect(opts.cli).toBe(true);
+    expect(opts.target).toBe('cli');
   });
 
   it('should parse start with name and --port option', async () => {

@@ -122,7 +122,24 @@ function generateHeader(
   groupEntries.push(`      'System': []`);
 
   return `'use strict';
-
+${selfContained ? `
+// SEA daemon mode: when spawned by 'daemon start', run the server directly
+// using the inlined (bundled) server code — no external requires needed.
+if (process.env.__FRONTMCP_DAEMON_MODE === '1') {
+  require('reflect-metadata');
+  var _dMod = require(${JSON.stringify('../' + serverBundleFilename)});
+  var _dSdk = require('@frontmcp/sdk');
+  var _FMI = _dSdk.FrontMcpInstance || _dSdk.default.FrontMcpInstance;
+  var _raw = _dMod.default || _dMod;
+  var _cfg = (typeof _raw === 'function' && typeof Reflect !== 'undefined' && Reflect.getMetadata)
+    ? (Reflect.getMetadata('__frontmcp:config', _raw) || _raw) : _raw;
+  var _sp = process.env.FRONTMCP_DAEMON_SOCKET;
+  _FMI.runUnixSocket(Object.assign({}, _cfg, { socketPath: _sp }))
+    .then(function() { console.log('Daemon listening on ' + _sp); })
+    .catch(function(e) { console.error('Daemon failed:', e); process.exit(1); });
+  return;
+}
+` : ''}
 var { Command, Option } = require('commander');
 var path = require('path');
 var fs = require('fs');
@@ -1299,7 +1316,13 @@ daemonCmd
     var out = fs.openSync(logPath, 'a');
     var err = fs.openSync(logPath, 'a');
 
-    // Start the daemon using runUnixSocket via a small wrapper script
+${selfContained ? `    // SEA mode: spawn the binary itself in daemon mode — all code is inlined
+    env.__FRONTMCP_DAEMON_MODE = '1';
+    var child = spawn(process.execPath, [], {
+      detached: true,
+      stdio: ['ignore', out, err],
+      env: env
+    });` : `    // Start the daemon using runUnixSocket via a small wrapper script
     // Always use absolute path for the server bundle (SCRIPT_DIR resolves to __dirname at runtime)
     var serverBundlePath = pathMod.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});
     var daemonScript = 'require("reflect-metadata");' +
@@ -1318,7 +1341,7 @@ daemonCmd
       detached: true,
       stdio: ['ignore', out, err],
       env: env
-    });
+    });`}
 
     fs.writeFileSync(pidPath, JSON.stringify({
       pid: child.pid,
@@ -1399,7 +1422,11 @@ daemonCmd
 }
 
 function generateFooter(): string {
-  return `program.parseAsync(process.argv).catch(function(err) {
+  return `program.on('command:*', function(args) {
+  console.error('Unknown command: ' + args[0]);
+  process.exitCode = 1;
+});
+program.parseAsync(process.argv).catch(function(err) {
   console.error('Fatal:', err.message || err);
   process.exit(1);
 });`;
