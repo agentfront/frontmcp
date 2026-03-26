@@ -12,7 +12,6 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { RequestSchema } from '@frontmcp/protocol';
-import { Scope } from '../../scope';
 
 export const plan = {
   pre: ['parseInput', 'router'],

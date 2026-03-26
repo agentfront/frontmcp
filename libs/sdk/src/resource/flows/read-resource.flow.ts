@@ -12,7 +12,6 @@ import {
   ResourceReadError,
 } from '../../errors';
 import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
-import { Scope } from '../../scope';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({

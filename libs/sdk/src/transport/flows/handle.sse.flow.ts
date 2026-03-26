@@ -14,7 +14,6 @@ import {
   validateMcpSessionHeader,
 } from '../../common';
 import { z } from 'zod';
-import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 

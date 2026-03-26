@@ -14,7 +14,6 @@ import { InvalidInputError } from '../../errors';
 import type { ElicitMode } from '../elicitation.types';
 import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
-import type { Scope } from '../../scope';
 
 const inputSchema = z.object({
   /** Related request ID from the transport */

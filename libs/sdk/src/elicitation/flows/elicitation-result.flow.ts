@@ -11,7 +11,6 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../com
 import { z } from 'zod';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
-import type { Scope } from '../../scope';
 import { InvalidInputError } from '../../errors';
 import { validateElicitationContent } from '../helpers';
 

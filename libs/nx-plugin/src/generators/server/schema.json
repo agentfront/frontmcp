@@ -51,6 +51,12 @@
       "description": "Comma-separated tags",
       "x-priority": "internal"
     },
+    "skills": {
+      "type": "string",
+      "description": "Skills bundle to include: recommended, minimal, full, none",
+      "enum": ["recommended", "minimal", "full", "none"],
+      "default": "recommended"
+    },
     "skipFormat": {
       "type": "boolean",
       "description": "Skip formatting files",

@@ -1,0 +1,33 @@
+{
+  "name": "@frontmcp/skills",
+  "version": "1.0.0-beta.8",
+  "description": "Curated skills catalog for FrontMCP projects",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "skills",
+    "mcp",
+    "agentfront",
+    "frontmcp",
+    "catalog",
+    "agent-skills",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/skills"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  }
+}
