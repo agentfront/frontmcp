@@ -8,7 +8,6 @@ import {
   FrontMcpAuth,
   FrontMcpLogger,
   FrontMcpServer,
-  HookRegistryInterface,
   ProviderScope,
   ScopeEntry,
   ScopeRecord,
@@ -43,7 +42,6 @@ import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
 import { ElicitationStore, createElicitationStore } from '../elicitation';
 import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
-import { ElicitationStoreNotInitializedError } from '../errors/elicitation.error';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import { normalizeTool } from '../tool/tool.utils';
 import { ToolInstance } from '../tool/tool.instance';
@@ -597,7 +595,7 @@ export class Scope extends ScopeEntry {
     return this.scopeAuth.getPrimary();
   }
 
-  get hooks(): HookRegistryInterface {
+  get hooks(): HookRegistry {
     return this.scopeHooks;
   }
 
@@ -678,10 +676,7 @@ export class Scope extends ScopeEntry {
    *
    * @see createElicitationStore for factory implementation details
    */
-  get elicitationStore(): ElicitationStore {
-    if (!this._elicitationStore) {
-      throw new ElicitationStoreNotInitializedError();
-    }
+  get elicitationStore(): ElicitationStore | undefined {
     return this._elicitationStore;
   }
 

@@ -1,5 +1,5 @@
 import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '../common';
+import { AppEntry, EntryLineage, EntryOwnerRef, ScopeEntry, ToolEntry, ToolRecord, ToolType } from '../common';
 import { ToolChangeEvent, ToolEmitter } from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
 import { ensureMaxLen, sepFor } from '@frontmcp/utils';
@@ -12,8 +12,6 @@ import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.type
 import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
 import { ServerCapabilities } from '@frontmcp/protocol';
-import { Scope } from '../scope';
-import { AppEntry } from '../common';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
 import {
   NameDisambiguationError,
@@ -22,14 +20,11 @@ import {
   RegistryGraphEntryNotFoundError,
 } from '../errors';
 
-export default class ToolRegistry
-  extends RegistryAbstract<
-    ToolInstance, // IMPORTANT: instances map holds ToolInstance (not the interface)
-    ToolRecord,
-    ToolType[]
-  >
-  implements ToolRegistryInterface
-{
+export default class ToolRegistry extends RegistryAbstract<
+  ToolInstance, // IMPORTANT: instances map holds ToolInstance (not the interface)
+  ToolRecord,
+  ToolType[]
+> {
   /** Who owns this registry (used for provenance). Optional. */
   owner: EntryOwnerRef;
 
@@ -193,7 +188,7 @@ export default class ToolRegistry
    * Remote apps expose tools via proxy entries that forward execution to the remote server.
    * This also subscribes to updates from the remote app's registry for lazy-loaded tools.
    */
-  private adoptToolsFromRemoteApp(app: AppEntry, scope: Scope): void {
+  private adoptToolsFromRemoteApp(app: AppEntry, scope: ScopeEntry): void {
     // Validate that app.tools has the expected interface before casting
     // Remote apps may have different registry implementations
     if (!app.tools || typeof app.tools.getTools !== 'function') {

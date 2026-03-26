@@ -115,15 +115,15 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     return this.appPlugins;
   }
 
-  get tools(): Readonly<ToolRegistry> {
+  get tools(): ToolRegistry {
     return this.appTools;
   }
 
-  get resources(): Readonly<ResourceRegistry> {
+  get resources(): ResourceRegistry {
     return this.appResources;
   }
 
-  get prompts(): Readonly<PromptRegistry> {
+  get prompts(): PromptRegistry {
     return this.appPrompts;
   }
 

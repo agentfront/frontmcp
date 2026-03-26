@@ -176,15 +176,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
     const sessionId = authInfo.sessionId;
 
-    // Cast scope to access notifications service for platform detection
-    const scope = this.scope as Scope;
-
     // Get platform type: first check sessionIdPayload (detected from user-agent),
     // then fall back to notification service (detected from MCP clientInfo),
     // finally default to 'unknown'
     const platformType: AIPlatformType =
       authInfo.sessionIdPayload?.platformType ??
-      (sessionId ? scope.notifications?.getPlatformType(sessionId) : undefined) ??
+      (sessionId ? this.scope.notifications?.getPlatformType(sessionId) : undefined) ??
       'unknown';
 
     this.logger.verbose(`parseInput: detected platform=${platformType}`);
@@ -340,9 +337,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const allResolved = this.state.required.resolvedTools;
       const platformType = this.state.platformType ?? 'unknown';
 
-      // Get pagination config from scope
-      const scope = this.scope as Scope;
-      const paginationConfig = scope.pagination?.tools;
+      // Get pagination config from scope metadata
+      const paginationConfig = this.scope.metadata.pagination?.tools;
 
       // Determine if pagination should apply
       const usePagination = this.shouldPaginate(allResolved.length, paginationConfig);

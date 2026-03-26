@@ -17,7 +17,6 @@ import { InternalMcpError } from '../../errors';
 import { z } from 'zod';
 import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
 import type { StoredSession } from '@frontmcp/auth';
-import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 import { createExtAppsMessageHandler, type ExtAppsJsonRpcRequest, type ExtAppsHostCapabilities } from '../../ext-apps';
@@ -246,7 +245,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
         return createSessionId('streamable-http', token, {
           userAgent: request.headers?.['user-agent'] as string | undefined,
-          platformDetectionConfig: (this.scope as Scope).metadata.transport?.platformDetection,
+          platformDetectionConfig: this.scope.metadata.transport?.platformDetection,
           skillsOnlyMode,
         });
       },
@@ -302,8 +301,11 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'initialize',
   })
   async onInitialize() {
-    const transportService = (this.scope as Scope).transportService;
-    const logger = (this.scope as Scope).logger.child('handle:streamable-http:onInitialize');
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new Error('Transport service not available');
+    }
+    const logger = this.scope.logger.child('handle:streamable-http:onInitialize');
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
@@ -357,7 +359,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'elicitResult',
   })
   async onElicitResult() {
-    const transportService = (this.scope as Scope).transportService;
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new Error('Transport service not available');
+    }
     const logger = this.scopeLogger.child('handle:streamable-http:onElicitResult');
 
     const { request, response } = this.rawInput;
@@ -426,7 +431,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'message',
   })
   async onMessage() {
-    const transportService = (this.scope as Scope).transportService;
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new Error('Transport service not available');
+    }
     const logger = this.scopeLogger.child('handle:streamable-http:onMessage');
 
     const { request, response } = this.rawInput;
@@ -507,7 +515,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'sseListener',
   })
   async onSseListener() {
-    const transportService = (this.scope as Scope).transportService;
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new Error('Transport service not available');
+    }
     const logger = this.scopeLogger.child('handle:streamable-http:onSseListener');
 
     const { request, response } = this.rawInput;
@@ -557,7 +568,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'extApps',
   })
   async onExtApps() {
-    const transportService = (this.scope as Scope).transportService;
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new Error('Transport service not available');
+    }
     const logger = this.scopeLogger.child('handle:streamable-http:onExtApps');
 
     const { request, response } = this.rawInput;
@@ -618,10 +632,9 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     }
 
     // 4. Create ExtAppsMessageHandler with session context
-    const scope = this.scope as Scope;
 
     // Get host capabilities from scope metadata, with defaults
-    const configuredCapabilities = scope.metadata.extApps?.hostCapabilities;
+    const configuredCapabilities = this.scope.metadata.extApps?.hostCapabilities;
     const hostCapabilities: ExtAppsHostCapabilities = {
       serverToolProxy: configuredCapabilities?.serverToolProxy ?? true,
       logging: configuredCapabilities?.logging ?? true,
@@ -631,10 +644,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const handler = createExtAppsMessageHandler({
       context: {
         sessionId: session.id,
-        logger: scope.logger,
+        logger: this.scope.logger,
         callTool: async (name, args) => {
           // Route through CallToolFlow with session's authInfo
-          const result = await scope.runFlow('tools:call-tool', {
+          const result = await this.scope.runFlow('tools:call-tool', {
             request: { method: 'tools/call', params: { name, arguments: args } },
             ctx: {
               authInfo: {

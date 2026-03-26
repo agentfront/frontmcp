@@ -121,7 +121,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     const expiresAt = Date.now() + ttl;
 
     // Store pending elicitation in the store (for distributed mode)
-    await this.elicitStore.setPending({
+    const store = this.requireElicitStore();
+    await store.setPending({
       elicitId,
       sessionId,
       createdAt: Date.now(),
@@ -179,13 +180,13 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
         settled = true;
         this.pendingElicit = undefined;
         await unsubscribe?.();
-        await this.elicitStore.deletePending(sessionId);
+        await store.deletePending(sessionId);
         reject(new ElicitationTimeoutError(elicitId, ttl));
       }, ttl);
 
       // Subscribe to results via the store (for distributed mode)
       // Pass sessionId for encrypted stores to enable decryption
-      this.elicitStore
+      store
         .subscribeResult<S extends ZodType<infer O> ? O : unknown>(
           elicitId,
           (result) => {
@@ -203,7 +204,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
           await unsubscribe?.();
-          await this.elicitStore.deletePending(sessionId);
+          await store.deletePending(sessionId);
           reject(err);
         });
 

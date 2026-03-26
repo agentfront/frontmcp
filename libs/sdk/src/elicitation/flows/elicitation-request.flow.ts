@@ -163,7 +163,10 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
     this.logger.verbose('storePendingRecord:start');
 
     const { elicitId, sessionId, message, mode, expiresAt, requestedSchema } = this.state.required;
-    const scope = this.scope as Scope;
+    const store = this.scope.elicitationStore;
+    if (!store) {
+      throw new Error('Elicitation store not initialized');
+    }
 
     const pendingRecord: PendingElicitRecord = {
       elicitId,
@@ -175,7 +178,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       requestedSchema,
     };
 
-    await scope.elicitationStore.setPending(pendingRecord);
+    await store.setPending(pendingRecord);
     this.state.set('pendingRecord', pendingRecord);
 
     this.logger.verbose('storePendingRecord:done', { elicitId, sessionId });

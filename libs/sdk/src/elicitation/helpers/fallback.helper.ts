@@ -147,7 +147,12 @@ export async function handleWaitingFallback(
     }, ttl);
 
     // Subscribe to fallback results
-    scope.elicitationStore
+    const store = scope.elicitationStore;
+    if (!store) {
+      reject(new Error('Elicitation store not initialized'));
+      return;
+    }
+    store
       .subscribeFallbackResult(
         error.elicitId,
         (result: FallbackExecutionResult) => {

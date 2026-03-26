@@ -53,11 +53,10 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
 
     this.logger.info('sendElicitationResult: processing', { elicitId, action });
 
-    // Cast scope to Scope type to access elicitationStore
-    const scope = this.scope as unknown as Scope;
+    const store = this.scope.elicitationStore;
 
-    // Guard: ensure scope and elicitationStore exist
-    if (!scope?.elicitationStore) {
+    // Guard: ensure elicitationStore is available
+    if (!store) {
       this.logger.error('sendElicitationResult: scope or elicitationStore not available');
       return {
         content: [
@@ -71,7 +70,7 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
     }
 
     // Get pending fallback context
-    const pending = await scope.elicitationStore.getPendingFallback(elicitId);
+    const pending = await store.getPendingFallback(elicitId);
     if (!pending) {
       this.logger.warn('sendElicitationResult: no pending elicitation found', { elicitId });
       return {
@@ -87,7 +86,7 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
 
     // Check expiration
     if (Date.now() > pending.expiresAt) {
-      await scope.elicitationStore.deletePendingFallback(elicitId);
+      await store.deletePendingFallback(elicitId);
       this.logger.warn('sendElicitationResult: elicitation expired', { elicitId });
       return {
         content: [
@@ -107,10 +106,10 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
     };
 
     // Store resolved result for re-invocation (pass sessionId for encryption support)
-    await scope.elicitationStore.setResolvedResult(elicitId, elicitResult, pending.sessionId);
+    await store.setResolvedResult(elicitId, elicitResult, pending.sessionId);
 
     // Clean up pending fallback
-    await scope.elicitationStore.deletePendingFallback(elicitId);
+    await store.deletePendingFallback(elicitId);
 
     this.logger.info('sendElicitationResult: re-invoking original tool', {
       elicitId,
@@ -127,7 +126,7 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
       // Re-invoke the original tool using the flow
       // The pre-resolved result is in the async context, so the tool's elicit()
       // will return it immediately instead of throwing ElicitationFallbackRequired
-      const toolResult = await scope.runFlowForOutput('tools:call-tool', {
+      const toolResult = await (this.scope as unknown as Scope).runFlowForOutput('tools:call-tool', {
         request: {
           method: 'tools/call',
           params: {
@@ -146,26 +145,26 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
 
       // Publish the result to notify any waiting requests (distributed mode)
       // This allows the original request on a different node to receive the result
-      await scope.elicitationStore.publishFallbackResult(elicitId, pending.sessionId, {
+      await store.publishFallbackResult(elicitId, pending.sessionId, {
         success: true,
         result: toolResult,
       });
 
       // Clean up resolved result
-      await scope.elicitationStore.deleteResolvedResult(elicitId);
+      await store.deleteResolvedResult(elicitId);
 
       return toolResult;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       // Publish the error to notify any waiting requests (distributed mode)
-      await scope.elicitationStore.publishFallbackResult(elicitId, pending.sessionId, {
+      await store.publishFallbackResult(elicitId, pending.sessionId, {
         success: false,
         error: errorMessage,
       });
 
       // Clean up resolved result on error
-      await scope.elicitationStore.deleteResolvedResult(elicitId);
+      await store.deleteResolvedResult(elicitId);
 
       this.logger.error('sendElicitationResult: original tool failed', {
         elicitId,

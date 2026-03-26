@@ -15,6 +15,7 @@ import {
   HookEntry,
   HookMetadata,
   Reference,
+  ScopeEntry,
   ServerRequest,
   Token,
   Type,
@@ -22,7 +23,6 @@ import {
 import ProviderRegistry from '../provider/provider.registry';
 import { collectFlowHookMap, StageMap, cloneStageMap, mergeHookMetasIntoStageMap } from './flow.stages';
 import { writeHttpResponse } from '../server/server.validation';
-import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { FrontMcpContextStorage, FRONTMCP_CONTEXT } from '../context';
 import { RequestContextNotAvailableError, InternalMcpError } from '../errors';
@@ -58,14 +58,14 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   private hooks: HookRegistry;
   private readonly logger: FrontMcpLogger;
 
-  constructor(scope: Scope, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
+  constructor(scope: ScopeEntry, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
     this.deps = [...deps];
     this.globalProviders = globalProviders;
     this.FlowClass = this.record.provide;
     this.ready = this.initialize();
     this.plan = this.record.metadata.plan;
-    this.hooks = scope.providers.getHooksRegistry();
+    this.hooks = scope.hooks;
     this.logger = scope.logger.child('FlowInstance');
   }
 

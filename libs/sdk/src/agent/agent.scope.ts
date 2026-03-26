@@ -66,7 +66,7 @@ export class AgentScope {
   readonly logger: FrontMcpLogger;
   readonly ready: Promise<void>;
 
-  private readonly parentScope: Scope;
+  private readonly parentScope: ScopeEntry;
   private readonly agentOwner: EntryOwnerRef;
 
   // Agent's own registries (like an app)
@@ -81,7 +81,7 @@ export class AgentScope {
   private agentFlows!: FlowRegistry;
 
   constructor(
-    parentScope: Scope,
+    parentScope: ScopeEntry,
     agentId: string,
     private readonly metadata: AgentMetadata,
     agentToken: Token,
@@ -260,6 +260,14 @@ export class AgentScope {
     return this.parentScope.toolUI;
   }
 
+  get skills() {
+    return this.parentScope.skills;
+  }
+
+  get scopeMetadata() {
+    return this.parentScope.metadata;
+  }
+
   // ============================================================================
   // Flow Execution
   // ============================================================================
@@ -345,12 +353,40 @@ class AgentScopeEntry {
     return this.agentScope.agents;
   }
 
+  get skills() {
+    return this.agentScope.skills;
+  }
+
   get notifications() {
     return this.agentScope.notifications;
   }
 
   get toolUI() {
     return this.agentScope.toolUI;
+  }
+
+  get transportService(): undefined {
+    return undefined;
+  }
+
+  get rateLimitManager(): undefined {
+    return undefined;
+  }
+
+  get elicitationStore(): undefined {
+    return undefined;
+  }
+
+  get metadata() {
+    return this.agentScope.scopeMetadata;
+  }
+
+  get record(): undefined {
+    return undefined;
+  }
+
+  get ready() {
+    return this.agentScope.ready;
   }
 
   registryFlows(...flows: FlowType[]): Promise<void> {
