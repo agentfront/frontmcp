@@ -5,7 +5,6 @@
 
 import { PluginMetadata } from '../../common/metadata';
 import { createProviderMetadata } from './provider.fixtures';
-import { createToolMetadata } from './tool.fixtures';
 
 /**
  * Creates a simple plugin metadata object

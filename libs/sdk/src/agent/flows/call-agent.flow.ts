@@ -13,7 +13,6 @@ import {
   AgentExecutionError,
   RateLimitError,
 } from '../../errors';
-import { Scope } from '../../scope';
 import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 
 // ============================================================================

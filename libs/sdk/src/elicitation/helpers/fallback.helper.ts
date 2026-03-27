@@ -11,7 +11,11 @@ import type { FrontMcpLogger } from '../../common';
 import type { Scope } from '../../scope';
 import type { FallbackExecutionResult } from '../elicitation.types';
 import { DEFAULT_FALLBACK_WAIT_TTL } from '../elicitation.types';
-import { ElicitationFallbackRequired, ElicitationSubscriptionError } from '../../errors';
+import {
+  ElicitationFallbackRequired,
+  ElicitationSubscriptionError,
+  ElicitationStoreNotInitializedError,
+} from '../../errors';
 import type { CallToolResult } from '@frontmcp/protocol';
 
 /**
@@ -149,7 +153,9 @@ export async function handleWaitingFallback(
     // Subscribe to fallback results
     const store = scope.elicitationStore;
     if (!store) {
-      reject(new Error('Elicitation store not initialized'));
+      resolved = true;
+      clearTimeout(timeoutHandle);
+      reject(new ElicitationStoreNotInitializedError());
       return;
     }
     store

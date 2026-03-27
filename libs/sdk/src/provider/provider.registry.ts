@@ -37,7 +37,6 @@ import {
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
-import HookRegistry from '../hooks/hook.registry';
 import { validateSessionId } from '../context/frontmcp-context';
 import { type DistributedEnabled, shouldCacheProviders } from '../common/types/options/transport';
 

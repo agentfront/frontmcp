@@ -13,7 +13,7 @@ import {
   FlowControl,
   validateMcpSessionHeader,
 } from '../../common';
-import { InternalMcpError } from '../../errors';
+import { InternalMcpError, TransportServiceNotAvailableError } from '../../errors';
 import { z } from 'zod';
 import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
 import type { StoredSession } from '@frontmcp/auth';
@@ -303,7 +303,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async onInitialize() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scope.logger.child('handle:streamable-http:onInitialize');
 
@@ -361,7 +361,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async onElicitResult() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scopeLogger.child('handle:streamable-http:onElicitResult');
 
@@ -433,7 +433,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async onMessage() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scopeLogger.child('handle:streamable-http:onMessage');
 
@@ -517,7 +517,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async onSseListener() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scopeLogger.child('handle:streamable-http:onSseListener');
 
@@ -570,7 +570,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async onExtApps() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scopeLogger.child('handle:streamable-http:onExtApps');
 

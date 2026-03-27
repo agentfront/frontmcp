@@ -9,7 +9,6 @@ import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AgentInstance } from './agent.instance';
 import type { Tool, ServerCapabilities } from '@frontmcp/protocol';
 import { DependencyNotFoundError } from '../errors/mcp.error';
-import ToolRegistry from '../tool/tool.registry';
 
 // ============================================================================
 // Types

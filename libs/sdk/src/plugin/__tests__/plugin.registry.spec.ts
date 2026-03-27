@@ -7,7 +7,7 @@ import PluginRegistry, { PluginScopeInfo } from '../plugin.registry';
 import { FlowCtxOf } from '../../common/interfaces';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
 import { FlowHooksOf } from '../../common/decorators/hook.decorator';
-import { createClassProvider, createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
+import { createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 import { createProviderRegistryWithScope, createMockScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { InvalidPluginScopeError } from '../../errors';
 import { Scope } from '../../scope';

@@ -400,4 +400,12 @@ class AgentScopeEntry {
   ): Promise<FlowOutputOf<Name> | undefined> {
     return this.agentScope.runFlow(name, input, deps);
   }
+
+  runFlowForOutput<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    deps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name>> {
+    return this.agentScope.runFlowForOutput(name, input, deps);
+  }
 }

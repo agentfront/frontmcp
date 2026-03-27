@@ -165,6 +165,7 @@ export {
   TransportNotConnectedError,
   TransportAlreadyStartedError,
   UnsupportedContentTypeError,
+  TransportServiceNotAvailableError,
 } from './transport.errors';
 
 // Export auth internal errors

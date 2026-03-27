@@ -74,4 +74,10 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
     input: FlowInputOf<Name>,
     additionalDeps?: Map<Token, Type>,
   ): Promise<FlowOutputOf<Name> | undefined>;
+
+  abstract runFlowForOutput<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    additionalDeps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name>>;
 }

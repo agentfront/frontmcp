@@ -16,7 +16,6 @@ import { z } from 'zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
-import type { Scope } from '../scope';
 
 const inputSchema = {
   elicitId: z.string().describe('The elicitation ID from the pending request'),
@@ -126,7 +125,7 @@ export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
       // Re-invoke the original tool using the flow
       // The pre-resolved result is in the async context, so the tool's elicit()
       // will return it immediately instead of throwing ElicitationFallbackRequired
-      const toolResult = await (this.scope as unknown as Scope).runFlowForOutput('tools:call-tool', {
+      const toolResult = await this.scope.runFlowForOutput('tools:call-tool', {
         request: {
           method: 'tools/call',
           params: {
