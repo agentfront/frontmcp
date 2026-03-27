@@ -11,7 +11,13 @@
 
 import * as yaml from 'js-yaml';
 import { readFile } from '@frontmcp/utils';
-import type { SkillMetadata, SkillResources } from '../common/metadata/skill.metadata';
+import type {
+  SkillMetadata,
+  SkillResources,
+  SkillToolRef,
+  SkillParameter,
+  SkillExample,
+} from '../common/metadata/skill.metadata';
 
 /**
  * Result of parsing SKILL.md frontmatter.
@@ -115,6 +121,107 @@ export function skillMdFrontmatterToMetadata(
   // Tags
   if (Array.isArray(frontmatter['tags'])) {
     result.tags = frontmatter['tags'].filter((t): t is string => typeof t === 'string');
+  }
+
+  // Tools — string names or detailed refs from YAML
+  if (Array.isArray(frontmatter['tools'])) {
+    result.tools = frontmatter['tools']
+      .map((t: unknown): string | SkillToolRef | undefined => {
+        if (typeof t === 'string') return t;
+        if (
+          typeof t === 'object' &&
+          t !== null &&
+          'name' in t &&
+          typeof (t as Record<string, unknown>)['name'] === 'string'
+        ) {
+          const ref: SkillToolRef = { name: (t as Record<string, unknown>)['name'] as string };
+          if (typeof (t as Record<string, unknown>)['purpose'] === 'string')
+            ref.purpose = (t as Record<string, unknown>)['purpose'] as string;
+          if (typeof (t as Record<string, unknown>)['required'] === 'boolean')
+            ref.required = (t as Record<string, unknown>)['required'] as boolean;
+          return ref;
+        }
+        return undefined;
+      })
+      .filter((t): t is string | SkillToolRef => t !== undefined);
+  }
+
+  // Parameters
+  if (Array.isArray(frontmatter['parameters'])) {
+    result.parameters = frontmatter['parameters']
+      .filter((p: unknown): p is Record<string, unknown> => typeof p === 'object' && p !== null && 'name' in p)
+      .map((p: Record<string, unknown>): SkillParameter => {
+        const param: SkillParameter = { name: String(p['name']) };
+        if (typeof p['description'] === 'string') param.description = p['description'];
+        if (typeof p['required'] === 'boolean') param.required = p['required'];
+        if (typeof p['type'] === 'string') param.type = p['type'] as SkillParameter['type'];
+        if (p['default'] !== undefined) param.default = p['default'];
+        return param;
+      });
+  }
+
+  // Examples
+  if (Array.isArray(frontmatter['examples'])) {
+    result.examples = frontmatter['examples']
+      .filter((e: unknown): e is Record<string, unknown> => typeof e === 'object' && e !== null && 'scenario' in e)
+      .map((e: Record<string, unknown>): SkillExample => {
+        const example: SkillExample = { scenario: String(e['scenario']) };
+        if (typeof e['parameters'] === 'object' && e['parameters'] !== null) {
+          example.parameters = e['parameters'] as Record<string, unknown>;
+        }
+        if (typeof e['expectedOutcome'] === 'string') example.expectedOutcome = e['expectedOutcome'];
+        if (typeof e['expected-outcome'] === 'string') example.expectedOutcome = e['expected-outcome'];
+        return example;
+      });
+  }
+
+  // Priority
+  if (typeof frontmatter['priority'] === 'number') {
+    result.priority = frontmatter['priority'];
+  }
+
+  // Visibility
+  const vis = frontmatter['visibility'];
+  if (vis === 'mcp' || vis === 'http' || vis === 'both') {
+    result.visibility = vis;
+  }
+
+  // hideFromDiscovery (supports kebab-case from YAML)
+  const hide = frontmatter['hideFromDiscovery'] ?? frontmatter['hide-from-discovery'];
+  if (typeof hide === 'boolean') {
+    result.hideFromDiscovery = hide;
+  }
+
+  // toolValidation (supports kebab-case from YAML)
+  const tv = frontmatter['toolValidation'] ?? frontmatter['tool-validation'];
+  if (tv === 'strict' || tv === 'warn' || tv === 'ignore') {
+    result.toolValidation = tv;
+  }
+
+  // Pass unknown fields through to specMetadata (preserves provider-specific fields like user-invocable)
+  const knownKeys = new Set([
+    'name',
+    'description',
+    'license',
+    'compatibility',
+    'metadata',
+    'allowed-tools',
+    'tags',
+    'tools',
+    'parameters',
+    'examples',
+    'priority',
+    'visibility',
+    'hideFromDiscovery',
+    'hide-from-discovery',
+    'toolValidation',
+    'tool-validation',
+  ]);
+  for (const [key, val] of Object.entries(frontmatter)) {
+    if (!knownKeys.has(key) && val !== undefined) {
+      if (!result.specMetadata) result.specMetadata = {};
+      result.specMetadata[key] = typeof val === 'string' ? val : JSON.stringify(val);
+    }
   }
 
   // Body becomes instructions

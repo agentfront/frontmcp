@@ -11,7 +11,7 @@ describe('createProgram', () => {
     expect(program.version()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('should register all 18 commands', () => {
+  it('should register all 19 commands', () => {
     const program = createProgram();
     const names = program.commands.map((c) => c.name()).sort();
     expect(names).toEqual([
@@ -27,6 +27,7 @@ describe('createProgram', () => {
       'logs',
       'restart',
       'service',
+      'skills',
       'socket',
       'start',
       'status',

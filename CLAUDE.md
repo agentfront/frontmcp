@@ -14,6 +14,7 @@ Located in `/libs/*`:
 - **sdk** (`libs/sdk`) - Core FrontMCP SDK
 - **adapters** (`libs/adapters`) - Framework adapters and integrations
 - **plugins** (`libs/plugins`) - Plugin system and extensions
+- **skills** (`libs/skills`) - Curated SKILL.md catalog for scaffold and install tooling
 
 > **Note:** `ast-guard`, `vectoriadb`, `enclave-vm`, `json-schema-to-zod-v3`, and `mcp-from-openapi` have been moved to external repositories.
 
@@ -82,6 +83,15 @@ export * from './errors';
 - **Purpose**: Authentication, session management, credential vault, CIMD, and OAuth extensions
 - **Scope**: Standalone auth library used by SDK and other packages
 - **Note**: All authentication-related code should be placed in this library, not in SDK
+
+#### @frontmcp/skills
+
+- **Purpose**: Curated SKILL.md catalog for scaffolding and future skill installation
+- **Scope**: Publishable catalog of markdown-based skills organized by category and deployment target
+- **Structure**: `catalog/` contains SKILL.md directories; `src/` has manifest types and loader helpers
+- **Build**: Custom asset-aware build that copies `catalog/**` into dist (not stock Nx lib generator)
+- **Manifest**: `catalog/skills-manifest.json` is the single source of truth for scaffold filtering and future installer
+- **Adding skills**: Create dir in `catalog/<category>/<name>/`, add `SKILL.md`, update manifest, run `nx test skills`
 
 ### Demo Applications
 
