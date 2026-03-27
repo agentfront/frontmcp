@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import type { DeploymentTarget, RedisSetup, PackageManager } from './create.js';
+import type { DeploymentTarget, RedisSetup, PackageManager, SkillsBundle } from './create.js';
 
 export function registerScaffoldCommands(program: Command): void {
   program
@@ -13,10 +13,19 @@ export function registerScaffoldCommands(program: Command): void {
     .option('--cicd', 'Enable GitHub Actions CI/CD')
     .option('--no-cicd', 'Disable GitHub Actions CI/CD')
     .option('--nx', 'Scaffold an Nx monorepo instead of standalone project')
+    .option('--skills <bundle>', 'Skills bundle: recommended, minimal, full, none (default: recommended)')
     .action(
       async (
         name: string | undefined,
-        options: { yes?: boolean; target?: string; redis?: string; pm?: string; cicd?: boolean; nx?: boolean },
+        options: {
+          yes?: boolean;
+          target?: string;
+          redis?: string;
+          pm?: string;
+          cicd?: boolean;
+          nx?: boolean;
+          skills?: string;
+        },
       ) => {
         const { runCreate } = await import('./create.js');
         await runCreate(name, {
@@ -26,6 +35,7 @@ export function registerScaffoldCommands(program: Command): void {
           cicd: options.cicd,
           pm: options.pm as PackageManager | undefined,
           nx: options.nx,
+          skills: options.skills as SkillsBundle | undefined,
         });
       },
     );

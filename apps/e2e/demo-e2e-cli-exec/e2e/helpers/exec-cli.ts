@@ -78,6 +78,35 @@ export function runCli(args: string[], extraEnv?: Record<string, string>): CliRe
   }
 }
 
+// ─── FrontMCP CLI Helpers ─────────────────────────────────────────────────────
+
+const ROOT_DIR = path.resolve(__dirname, '../../../../..');
+const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
+
+/**
+ * Run the frontmcp CLI binary directly (not a bundled demo app).
+ * Used for testing CLI-level commands like `skills search`, `skills list`, etc.
+ * Resolves @frontmcp/skills via monorepo workspace symlinks.
+ */
+export function runFrontmcpCli(args: string[], extraEnv?: Record<string, string>): CliResult {
+  try {
+    const stdout = execFileSync('node', [FRONTMCP_BIN, ...args], {
+      cwd: ROOT_DIR,
+      timeout: 30000,
+      encoding: 'utf-8',
+      env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
+    });
+    return { stdout: stdout.toString(), stderr: '', exitCode: 0 };
+  } catch (err: unknown) {
+    const error = err as { stdout?: string | Buffer; stderr?: string | Buffer; status?: number };
+    return {
+      stdout: (error.stdout || '').toString(),
+      stderr: (error.stderr || '').toString(),
+      exitCode: error.status ?? 1,
+    };
+  }
+}
+
 /**
  * Spawn a long-running server process (CLI serve or server bundle).
  * Returns the ChildProcess for manual lifecycle management.

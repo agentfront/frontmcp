@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "name": "frontmcp-setup",
+      "category": "setup",
+      "description": "Domain router for project setup and scaffolding \u2014 new projects, project structure, Nx workspaces, storage backends, multi-app composition, and the skills system. Use when starting or organizing a FrontMCP project.",
+      "path": "frontmcp-setup",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "setup", "scaffold", "project", "nx", "redis", "sqlite", "structure", "guide"],
+      "bundle": ["recommended", "minimal", "full"]
+    },
+    {
+      "name": "frontmcp-development",
+      "category": "development",
+      "description": "Domain router for building MCP components \u2014 tools, resources, prompts, agents, providers, jobs, workflows, and skills. Use when starting any FrontMCP development task and need to find the right skill.",
+      "path": "frontmcp-development",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "development", "tools", "resources", "prompts", "agents", "skills", "guide"],
+      "bundle": ["recommended", "minimal", "full"]
+    },
+    {
+      "name": "frontmcp-deployment",
+      "category": "deployment",
+      "description": "Domain router for shipping MCP servers \u2014 deploy to Node, Vercel, Lambda, Cloudflare, or build for CLI, browser, and SDK. Use when choosing a deployment target or build format.",
+      "path": "frontmcp-deployment",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "deployment", "node", "vercel", "lambda", "cloudflare", "cli", "browser", "sdk", "guide"],
+      "bundle": ["recommended", "minimal", "full"]
+    },
+    {
+      "name": "frontmcp-testing",
+      "category": "testing",
+      "description": "Domain router for testing MCP servers \u2014 unit tests, E2E tests, coverage, and quality assurance. Use when starting any testing task for a FrontMCP application.",
+      "path": "frontmcp-testing",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "testing", "jest", "e2e", "coverage", "quality", "guide"],
+      "bundle": ["recommended", "full"]
+    },
+    {
+      "name": "frontmcp-config",
+      "category": "config",
+      "description": "Domain router for configuring MCP servers \u2014 transport, HTTP, throttle, elicitation, auth, sessions, and storage. Use when configuring any aspect of a FrontMCP server.",
+      "path": "frontmcp-config",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "config", "transport", "http", "auth", "session", "redis", "sqlite", "throttle", "guide"],
+      "bundle": ["recommended", "full"]
+    },
+    {
+      "name": "frontmcp-guides",
+      "category": "guides",
+      "description": "End-to-end examples and best practices for building FrontMCP MCP servers. Use when starting a new project from scratch, learning architectural patterns, or following a complete build walkthrough.",
+      "path": "frontmcp-guides",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["guides", "examples", "best-practices", "architecture", "walkthrough", "end-to-end"],
+      "bundle": ["recommended", "full"]
+    }
+  ]
+}

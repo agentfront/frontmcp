@@ -1,10 +1,38 @@
 import * as path from 'path';
 import { createRequire } from 'module';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, isDirEmpty, writeFile, writeJSON, readJSON, runCmd, stat } from '@frontmcp/utils';
+import {
+  ensureDir,
+  fileExists,
+  isDirEmpty,
+  writeFile,
+  writeJSON,
+  readFile,
+  readJSON,
+  runCmd,
+  stat,
+  cp,
+  copyFile,
+} from '@frontmcp/utils';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
+// Inline skill manifest types to avoid build dependency on @frontmcp/skills source
+interface SkillCatalogEntry {
+  name: string;
+  category: string;
+  description: string;
+  path: string;
+  targets: string[];
+  hasResources: boolean;
+  tags: string[];
+  bundle?: string[];
+  install: { destinations: string[]; mergeStrategy: string; dependencies?: string[] };
+}
+interface SkillManifest {
+  version: number;
+  skills: SkillCatalogEntry[];
+}
 
 // =============================================================================
 // Types
@@ -13,6 +41,7 @@ import { clack } from '../../shared/prompts';
 export type DeploymentTarget = 'node' | 'vercel' | 'lambda' | 'cloudflare';
 export type RedisSetup = 'docker' | 'existing' | 'none';
 export type PackageManager = 'npm' | 'yarn' | 'pnpm';
+export type SkillsBundle = 'recommended' | 'minimal' | 'full' | 'none';
 
 export interface CreateOptions {
   projectName: string;
@@ -21,6 +50,7 @@ export interface CreateOptions {
   enableGitHubActions: boolean;
   packageManager: PackageManager;
   nxScaffolded?: boolean;
+  skillsBundle?: SkillsBundle;
 }
 
 export interface CreateFlags {
@@ -30,6 +60,7 @@ export interface CreateFlags {
   cicd?: boolean;
   pm?: PackageManager;
   nx?: boolean;
+  skills?: SkillsBundle;
 }
 
 interface PmConfig {
@@ -1423,6 +1454,93 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
   };
 }
 
+async function scaffoldSkills(targetDir: string, options: CreateOptions): Promise<void> {
+  const bundle = options.skillsBundle ?? 'recommended';
+  if (bundle === 'none') return;
+
+  let manifest: SkillManifest;
+  try {
+    const catalogDir = path.resolve(__dirname, '..', '..', '..', '..', 'skills', 'catalog');
+    const manifestPath = path.join(catalogDir, 'skills-manifest.json');
+
+    // Try bundled catalog first, then fallback to @frontmcp/skills package
+    let manifestContent: string;
+    if (await fileExists(manifestPath)) {
+      manifestContent = await readFile(manifestPath);
+    } else {
+      try {
+        const require_ = createRequire(__filename);
+        const pkgManifest = require_.resolve('@frontmcp/skills/catalog/skills-manifest.json');
+        manifestContent = await readFile(pkgManifest);
+      } catch {
+        // Skills catalog not available — skip silently
+        return;
+      }
+    }
+    manifest = JSON.parse(manifestContent) as SkillManifest;
+  } catch {
+    return;
+  }
+
+  const target = options.deploymentTarget;
+
+  // Filter skills by target and bundle
+  const matchingSkills = manifest.skills.filter((s) => {
+    const targetMatch = s.targets.includes('all') || s.targets.includes(target);
+    const bundleMatch = s.bundle?.includes(bundle);
+    return targetMatch && bundleMatch;
+  });
+
+  if (matchingSkills.length === 0) return;
+
+  const skillsDir = path.join(targetDir, 'skills');
+
+  for (const skill of matchingSkills) {
+    const skillTargetDir = path.join(skillsDir, skill.name);
+    await ensureDir(skillTargetDir);
+
+    // Resolve source skill directory
+    let sourceDir: string | undefined;
+    const bundledSource = path.resolve(__dirname, '..', '..', '..', '..', 'skills', 'catalog', skill.path);
+    if (await fileExists(path.join(bundledSource, 'SKILL.md'))) {
+      sourceDir = bundledSource;
+    } else {
+      try {
+        const require_ = createRequire(__filename);
+        const pkgCatalog = path.dirname(require_.resolve('@frontmcp/skills/catalog/skills-manifest.json'));
+        const pkgSource = path.join(pkgCatalog, skill.path);
+        if (await fileExists(path.join(pkgSource, 'SKILL.md'))) {
+          sourceDir = pkgSource;
+        }
+      } catch {
+        // Package not available
+      }
+    }
+
+    if (!sourceDir) continue;
+
+    // Copy SKILL.md (binary-safe)
+    const skillMdSrc = path.join(sourceDir, 'SKILL.md');
+    if (await fileExists(skillMdSrc)) {
+      await copyFile(skillMdSrc, path.join(skillTargetDir, 'SKILL.md'));
+    }
+
+    // Copy resource directories if present (binary-safe recursive copy)
+    if (skill.hasResources) {
+      for (const resDir of ['scripts', 'references', 'assets']) {
+        const srcRes = path.join(sourceDir, resDir);
+        if (await fileExists(srcRes)) {
+          await cp(srcRes, path.join(skillTargetDir, resDir), { recursive: true });
+        }
+      }
+    }
+
+    console.log(c('green', `✓ added skill: ${skill.name}`));
+  }
+
+  console.log(c('gray', `  ${matchingSkills.length} skills added (bundle: ${bundle})`));
+}
+
 async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions): Promise<void> {
   const { deploymentTarget, redisSetup, projectName } = options;
 
@@ -1569,6 +1687,9 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.spec.ts'), TEMPLATE_E2E_TEST_TS);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'jest.e2e.config.ts'), TEMPLATE_JEST_E2E_CONFIG);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'tsconfig.e2e.json'), TEMPLATE_TSCONFIG_E2E);
+
+  // Skills scaffolding
+  await scaffoldSkills(targetDir, options);
 
   // Git configuration
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.gitignore'), TEMPLATE_GITIGNORE);
@@ -1779,6 +1900,7 @@ export async function runCreate(projectArg?: string, flags?: CreateFlags): Promi
     if (flags?.redis) options.redisSetup = flags.redis;
     if (flags?.cicd !== undefined) options.enableGitHubActions = flags.cicd;
     if (flags?.pm) options.packageManager = flags.pm;
+    if (flags?.skills) options.skillsBundle = flags.skills;
     if (projectArg) options.projectName = projectArg;
 
     if (!options.projectName) {
