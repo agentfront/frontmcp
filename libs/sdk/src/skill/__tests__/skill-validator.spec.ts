@@ -5,7 +5,7 @@
  */
 
 import { SkillToolValidator, ToolValidationResult } from '../skill-validator';
-import { ToolRegistryInterface } from '../../common/interfaces/internal';
+import type ToolRegistry from '../../tool/tool.registry';
 import { ToolEntry } from '../../common';
 
 // Mock tool entries for testing
@@ -23,7 +23,7 @@ const createMockTool = (name: string, hidden = false): ToolEntry =>
   }) as unknown as ToolEntry;
 
 // Create a mock tool registry
-const createMockToolRegistry = (visibleTools: string[], hiddenTools: string[] = []): ToolRegistryInterface => {
+const createMockToolRegistry = (visibleTools: string[], hiddenTools: string[] = []): ToolRegistry => {
   const allToolList: ToolEntry[] = [
     ...visibleTools.map((name) => createMockTool(name, false)),
     ...hiddenTools.map((name) => createMockTool(name, true)),
@@ -41,7 +41,7 @@ const createMockToolRegistry = (visibleTools: string[], hiddenTools: string[] = 
     getCapabilities: jest.fn(),
     getInlineTools: jest.fn(),
     owner: { kind: 'scope', id: 'test', ref: {} },
-  } as unknown as ToolRegistryInterface;
+  } as unknown as ToolRegistry;
 };
 
 describe('skill-validator', () => {

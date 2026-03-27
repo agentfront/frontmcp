@@ -5,7 +5,7 @@
 import 'reflect-metadata';
 import { normalizePlugin, collectPluginMetadata, pluginDiscoveryDeps } from '../plugin.utils';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
-import { PluginInterface } from '../../common/interfaces';
+
 import { PluginKind } from '../../common/records';
 import { createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 
@@ -16,7 +16,7 @@ describe('Plugin Utils', () => {
         name: 'TestPlugin',
         description: 'A test plugin',
       })
-      class TestPlugin implements PluginInterface {}
+      class TestPlugin {}
 
       const metadata = collectPluginMetadata(TestPlugin);
 
@@ -39,7 +39,7 @@ describe('Plugin Utils', () => {
         description: 'Plugin with providers',
         providers: [],
       })
-      class PluginWithProviders implements PluginInterface {}
+      class PluginWithProviders {}
 
       const metadata = collectPluginMetadata(PluginWithProviders);
 
@@ -55,7 +55,7 @@ describe('Plugin Utils', () => {
         providers: [],
         exports: [],
       })
-      class PluginWithExports implements PluginInterface {}
+      class PluginWithExports {}
 
       const metadata = collectPluginMetadata(PluginWithExports);
 
@@ -72,7 +72,7 @@ describe('Plugin Utils', () => {
         resources: [],
         prompts: [],
       })
-      class FullPlugin implements PluginInterface {}
+      class FullPlugin {}
 
       const metadata = collectPluginMetadata(FullPlugin);
 
@@ -90,7 +90,7 @@ describe('Plugin Utils', () => {
           name: 'TestPlugin',
           description: 'A test plugin',
         })
-        class TestPlugin implements PluginInterface {}
+        class TestPlugin {}
 
         const record = normalizePlugin(TestPlugin);
 
@@ -114,7 +114,7 @@ describe('Plugin Utils', () => {
       it('should normalize a plugin object with useClass to CLASS kind', () => {
         const PLUGIN_TOKEN = Symbol('PLUGIN');
 
-        class TestPluginImpl implements PluginInterface {}
+        class TestPluginImpl {}
 
         const plugin = {
           provide: PLUGIN_TOKEN,
@@ -378,7 +378,7 @@ describe('Plugin Utils', () => {
 
     describe('CLASS Plugin Dependencies', () => {
       it('should return empty array for plugins without dependencies', () => {
-        class TestPlugin implements PluginInterface {
+        class TestPlugin {
           constructor() {}
         }
 
@@ -395,7 +395,7 @@ describe('Plugin Utils', () => {
       });
 
       it('should filter dependencies based on type', () => {
-        class TestPlugin implements PluginInterface {
+        class TestPlugin {
           constructor(
             public dep1: unknown,
             public primitive: string,
@@ -425,7 +425,7 @@ describe('Plugin Utils', () => {
           name: 'TestPlugin',
           description: 'Test plugin',
         })
-        class TestPlugin implements PluginInterface {
+        class TestPlugin {
           constructor() {}
         }
 
@@ -441,7 +441,7 @@ describe('Plugin Utils', () => {
           name: 'TestPlugin',
           description: 'Test plugin',
         })
-        class TestPlugin implements PluginInterface {
+        class TestPlugin {
           constructor(
             public dep1: unknown,
             public nullable: unknown,
@@ -464,7 +464,7 @@ describe('Plugin Utils', () => {
           name: 'TestPlugin',
           description: 'Test plugin',
         })
-        class TestPlugin implements PluginInterface {
+        class TestPlugin {
           constructor(
             public dep1: unknown,
             public stringDep: string,
@@ -497,7 +497,7 @@ describe('Plugin Utils', () => {
         resources: [],
         prompts: [],
       })
-      class ComplexPlugin implements PluginInterface {}
+      class ComplexPlugin {}
 
       const record = normalizePlugin(ComplexPlugin);
 
@@ -518,7 +518,7 @@ describe('Plugin Utils', () => {
         name: 'DependentPlugin',
         description: 'Plugin with dependencies',
       })
-      class DependentPlugin implements PluginInterface {
+      class DependentPlugin {
         constructor() {}
       }
 

@@ -9,6 +9,7 @@ import {
   PluginRegistryInterface,
   PluginType,
   ProviderEntry,
+  ScopeEntry,
 } from '../common';
 import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
@@ -19,7 +20,6 @@ import PromptRegistry from '../prompt/prompt.registry';
 import SkillRegistry from '../skill/skill.registry';
 import { normalizeProvider } from '../provider/provider.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { InvalidPluginScopeError, RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
 import { installContextExtensions } from '../context';
@@ -32,9 +32,9 @@ import { FrontMcpLogger } from '../common';
  */
 export interface PluginScopeInfo {
   /** The scope where the plugin is defined (app's own scope) */
-  ownScope: Scope;
+  ownScope: ScopeEntry;
   /** Parent scope for non-standalone apps (gateway scope) */
-  parentScope?: Scope;
+  parentScope?: ScopeEntry;
   /** Whether the app is standalone (standalone: true) */
   isStandaloneApp: boolean;
 }
@@ -58,7 +58,7 @@ export default class PluginRegistry
   /** skills by token */
   private readonly pSkills: Map<Token, SkillRegistry> = new Map();
 
-  private readonly scope: Scope;
+  private readonly scope: ScopeEntry;
   private readonly scopeInfo?: PluginScopeInfo;
   private readonly owner?: EntryOwnerRef;
   private readonly logger?: FrontMcpLogger;
@@ -225,7 +225,7 @@ export default class PluginRegistry
         // Determine which scope to use for hook registration:
         // - scope='app' (default): register hooks to own scope (app-level)
         // - scope='server': register hooks to parent scope (gateway-level) if available
-        let targetHookScope: Scope;
+        let targetHookScope: ScopeEntry;
         if (pluginScope === 'server' && this.scopeInfo?.parentScope) {
           targetHookScope = this.scopeInfo.parentScope;
         } else {

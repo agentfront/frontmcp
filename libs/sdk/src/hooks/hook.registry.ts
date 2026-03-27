@@ -7,7 +7,6 @@ import {
   FlowStagesOf,
   HookEntry,
   HookRecord,
-  HookRegistryInterface,
   HookType,
   ScopeEntry,
   Token,
@@ -17,10 +16,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import { HookInstance } from './hook.instance';
 import { UnsupportedHookOwnerKindError } from '../errors';
 
-export default class HookRegistry
-  extends RegistryAbstract<HookEntry, HookRecord, HookType[]>
-  implements HookRegistryInterface
-{
+export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord, HookType[]> {
   scope: ScopeEntry;
 
   /** Historical records by class (kept if you still want access to raw records) */

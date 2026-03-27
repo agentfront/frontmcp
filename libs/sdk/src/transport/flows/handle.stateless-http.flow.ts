@@ -12,7 +12,7 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { RequestSchema } from '@frontmcp/protocol';
-import { Scope } from '../../scope';
+import { TransportServiceNotAvailableError } from '../../errors';
 
 export const plan = {
   pre: ['parseInput', 'router'],
@@ -55,7 +55,7 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
-    const logger = (this.scope as Scope).logger.child('HandleStatelessHttpFlow');
+    const logger = this.scope.logger.child('HandleStatelessHttpFlow');
 
     // Check if we have auth info
     const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
@@ -75,7 +75,7 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   @Stage('router')
   async router() {
     const { request } = this.rawInput;
-    const logger = (this.scope as Scope).logger.child('HandleStatelessHttpFlow');
+    const logger = this.scope.logger.child('HandleStatelessHttpFlow');
     const body = request.body as { method?: string } | undefined;
     const method = body?.method;
 
@@ -95,8 +95,11 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
 
   @Stage('handleRequest')
   async handleRequest() {
-    const transportService = (this.scope as Scope).transportService;
-    const logger = (this.scope as Scope).logger.child('HandleStatelessHttpFlow');
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new TransportServiceNotAvailableError();
+    }
+    const logger = this.scope.logger.child('HandleStatelessHttpFlow');
     const { request, response } = this.rawInput;
     const { token, isAuthenticated, requestType } = this.state;
 

@@ -10,7 +10,7 @@
  */
 
 import type { FrontMcpLogger } from '../common';
-import type { ToolRegistryInterface } from '../common/interfaces/internal';
+import type ToolRegistry from '../tool/tool.registry';
 import type { SkillStorageProvider, SkillStorageProviderType } from './skill-storage.interface';
 import { SkillToolValidator } from './skill-validator';
 import { MemorySkillProvider, MemorySkillProviderOptions } from './providers/memory-skill.provider';
@@ -127,7 +127,7 @@ export interface SkillStorageFactoryOptions {
    * Tool registry for validating tool references.
    * Required for tool validation in search results.
    */
-  toolRegistry?: ToolRegistryInterface;
+  toolRegistry?: ToolRegistry;
 
   /**
    * Logger instance.
@@ -291,7 +291,7 @@ export function createSkillStorageProvider(
  */
 export function createMemorySkillProvider(
   options: {
-    toolRegistry?: ToolRegistryInterface;
+    toolRegistry?: ToolRegistry;
     defaultTopK?: number;
     defaultMinScore?: number;
     logger?: FrontMcpLogger;

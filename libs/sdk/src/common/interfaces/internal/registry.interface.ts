@@ -1,25 +1,15 @@
 import { Token } from '@frontmcp/di';
-import {
-  ScopeEntry,
-  FlowEntry,
-  AuthProviderEntry,
-  AppEntry,
-  ProviderEntry,
-  PluginEntry,
-  AdapterEntry,
-  PromptEntry,
-  ResourceEntry,
-  ToolEntry,
-  LoggerEntry,
-  AgentEntry,
-  EntryOwnerRef,
-  HookEntry,
-} from '../../entries';
-import { FrontMcpAuth } from './primary-auth-provider.interface';
+import { ScopeEntry, FlowEntry, ProviderEntry, PluginEntry, AdapterEntry, LoggerEntry } from '../../entries';
 import { FlowName } from '../../metadata';
-import { FlowCtxOf, FlowInputOf, FlowStagesOf } from '../flow.interface';
-import { HookRecord } from '../../records';
-import { ToolChangeEvent } from '../../../tool/tool.events';
+
+// Import concrete registry classes using `import type` to avoid circular deps
+import type HookRegistryCls from '../../../hooks/hook.registry';
+import type { AuthRegistry as AuthRegistryCls } from '../../../auth/auth.registry';
+import type AppRegistryCls from '../../../app/app.registry';
+import type ToolRegistryCls from '../../../tool/tool.registry';
+import type ResourceRegistryCls from '../../../resource/resource.registry';
+import type PromptRegistryCls from '../../../prompt/prompt.registry';
+import type AgentRegistryCls from '../../../agent/agent.registry';
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -27,49 +17,6 @@ export interface ScopeRegistryInterface {
 
 export interface FlowRegistryInterface {
   getFlows(): FlowEntry<FlowName>[];
-}
-
-export interface HookRegistryInterface {
-  /**
-   * used to pull hooks registered by a class and related to that class only,
-   * like registering hooks on specific tool execution
-   * @param token
-   */
-  getClsHooks(token: Token): HookEntry[];
-
-  /**
-   * Used to pull all hooks registered to specific flow by name,
-   * this is used to construct the flow graph and execute hooks in order
-   * @param flow
-   */
-  getFlowHooks<Name extends FlowName>(
-    flow: Name,
-  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
-
-  /**
-   * Used to pull all hooks registered to specific flow and stage by name,
-   * this is used to construct the flow graph and execute hooks in order
-   * @param flow
-   * @param stage
-   */
-  getFlowStageHooks<Name extends FlowName>(
-    flow: Name,
-    stage: FlowStagesOf<Name> | string,
-  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
-
-  /**
-   * Used to pull hooks for a specific flow, optionally filtered by owner ID.
-   * Returns all hooks if no ownerId is provided, or only hooks belonging to
-   * the specified owner or global hooks (no owner) if ownerId is provided.
-   * @param flow
-   * @param ownerId
-   */
-  getFlowHooksForOwner<Name extends FlowName>(
-    flow: Name,
-    ownerId?: string,
-  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
-
-  registerHooks(embedded: boolean, ...records: HookRecord[]): Promise<void[]>;
 }
 
 export interface ProviderViews {
@@ -93,16 +40,6 @@ export interface ProviderRegistryInterface {
   buildViews(session: any): Promise<ProviderViews>;
 }
 
-export interface AuthRegistryInterface {
-  getPrimary(): FrontMcpAuth;
-
-  getAuthProviders(): AuthProviderEntry[];
-}
-
-export interface AppRegistryInterface {
-  getApps(): AppEntry[];
-}
-
 export interface PluginRegistryInterface {
   getPlugins(): PluginEntry[];
   getPluginNames(): string[];
@@ -112,78 +49,8 @@ export interface AdapterRegistryInterface {
   getAdapters(): AdapterEntry[];
 }
 
-export interface ToolRegistryInterface {
-  owner: EntryOwnerRef;
-
-  // inline tools plus discovered by nested tool registries
-  getTools(includeHidden?: boolean): ToolEntry[];
-
-  // tools appropriate for MCP listing based on client elicitation support
-  getToolsForListing(supportsElicitation?: boolean): ToolEntry[];
-
-  // inline tools only
-  getInlineTools(): ToolEntry<any, any>[];
-
-  // subscribe to tool change events
-  subscribe(
-    opts: { immediate?: boolean; filter?: (i: ToolEntry) => boolean },
-    cb: (evt: ToolChangeEvent) => void,
-  ): () => void;
-}
-
-export interface ResourceRegistryInterface {
-  // owner of this registry
-  owner: EntryOwnerRef;
-
-  // inline resources plus discovered by nested resource registries
-  getResources(includeHidden?: boolean): ResourceEntry<any, any>[];
-
-  // resource templates
-  getResourceTemplates(): ResourceEntry<any, any>[];
-
-  // inline resources only
-  getInlineResources(): ResourceEntry<any, any>[];
-
-  // find a resource by URI (exact match first, then template matching)
-  findResourceForUri(uri: string): { instance: ResourceEntry<any, any>; params: Record<string, string> } | undefined;
-}
-
-export interface PromptRegistryInterface {
-  // owner reference for the registry
-  owner: EntryOwnerRef;
-
-  // inline prompts plus discovered by nested prompt registries
-  getPrompts(includeHidden?: boolean): PromptEntry[];
-
-  // inline prompts only
-  getInlinePrompts(): PromptEntry[];
-
-  // find a prompt by name
-  findByName(name: string): PromptEntry | undefined;
-}
-
 export interface LoggerRegistryInterface {
   getLoggers(): LoggerEntry[];
-}
-
-export interface AgentRegistryInterface {
-  // owner reference for the registry
-  owner: EntryOwnerRef;
-
-  // all agents (inline plus discovered from nested registries)
-  getAgents(includeHidden?: boolean): AgentEntry[];
-
-  // inline agents only
-  getInlineAgents(): AgentEntry[];
-
-  // find agent by ID
-  findById(id: string): AgentEntry | undefined;
-
-  // find agent by name
-  findByName(name: string): AgentEntry | undefined;
-
-  // get agents visible to a specific agent
-  getVisibleAgentsFor(agentId: string): AgentEntry[];
 }
 
 export type GlobalRegistryKind = 'LoggerRegistry' | 'ScopeRegistry';
@@ -213,16 +80,16 @@ export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;
   ScopeRegistry: ScopeRegistryInterface;
   FlowRegistry: FlowRegistryInterface;
-  HookRegistry: HookRegistryInterface;
-  AppRegistry: AppRegistryInterface;
-  AuthRegistry: AuthRegistryInterface;
+  HookRegistry: HookRegistryCls;
+  AppRegistry: AppRegistryCls;
+  AuthRegistry: AuthRegistryCls;
   ProviderRegistry: ProviderRegistryInterface;
   PluginRegistry: PluginRegistryInterface;
   AdapterRegistry: AdapterRegistryInterface;
-  ToolRegistry: ToolRegistryInterface;
-  ResourceRegistry: ResourceRegistryInterface;
-  PromptRegistry: PromptRegistryInterface;
-  AgentRegistry: AgentRegistryInterface;
+  ToolRegistry: ToolRegistryCls;
+  ResourceRegistry: ResourceRegistryCls;
+  PromptRegistry: PromptRegistryCls;
+  AgentRegistry: AgentRegistryCls;
   SkillRegistry: SkillRegistryInterface;
   JobRegistry: JobRegistryInterface;
   WorkflowRegistry: WorkflowRegistryInterface;

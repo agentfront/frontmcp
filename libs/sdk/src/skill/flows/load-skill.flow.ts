@@ -8,7 +8,6 @@ import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import type { SkillSessionManager } from '../session/skill-session.manager';
 import type { SkillPolicyMode, SkillActivationResult } from '../session/skill-session.types';
-import type { Scope } from '../../scope';
 
 // Input schema matching MCP request format - supports multiple skill IDs
 const inputSchema = z.object({
@@ -273,7 +272,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const toolRegistry = (this.scope as Scope).tools;
+    const toolRegistry = this.scope.tools;
     const skillResults: z.infer<typeof skillResultSchema>[] = [];
     let totalTools = 0;
     let allToolsAvailable = true;

@@ -2,26 +2,30 @@ import { Token, Type } from '@frontmcp/di';
 import { BaseEntry } from './base.entry';
 import { ScopeRecord } from '../records';
 import {
-  ScopeInterface,
   ProviderRegistryInterface,
-  AppRegistryInterface,
-  AuthRegistryInterface,
   FrontMcpAuth,
   FlowInputOf,
   FlowOutputOf,
   FlowType,
   FrontMcpLogger,
-  ToolRegistryInterface,
-  HookRegistryInterface,
-  ResourceRegistryInterface,
-  PromptRegistryInterface,
 } from '../interfaces';
 import { FlowName, ScopeMetadata } from '../metadata';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
 import type { NotificationService } from '../../notification';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import type { ToolUIRegistry } from '../../tool/ui/ui-shared';
+import type { TransportService } from '../../transport/transport.registry';
+import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
+import type { GuardManager } from '@frontmcp/guard';
+import type HookRegistry from '../../hooks/hook.registry';
+import type { AuthRegistry } from '../../auth/auth.registry';
+import type AppRegistry from '../../app/app.registry';
+import type ToolRegistry from '../../tool/tool.registry';
+import type ResourceRegistry from '../../resource/resource.registry';
+import type PromptRegistry from '../../prompt/prompt.registry';
+import type AgentRegistry from '../../agent/agent.registry';
 
-export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
+export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMetadata> {
   abstract readonly id: string;
   abstract readonly entryPath: string;
   abstract readonly routeBase: string;
@@ -35,23 +39,33 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
 
   abstract get auth(): FrontMcpAuth;
 
-  abstract get hooks(): HookRegistryInterface;
+  abstract get hooks(): HookRegistry;
 
-  abstract get authProviders(): AuthRegistryInterface;
+  abstract get authProviders(): AuthRegistry;
 
   abstract get providers(): ProviderRegistryInterface;
 
-  abstract get apps(): AppRegistryInterface;
+  abstract get apps(): AppRegistry;
 
-  abstract get tools(): ToolRegistryInterface;
+  abstract get tools(): ToolRegistry;
 
-  abstract get resources(): ResourceRegistryInterface;
+  abstract get resources(): ResourceRegistry;
 
-  abstract get prompts(): PromptRegistryInterface;
+  abstract get prompts(): PromptRegistry;
 
   abstract get skills(): SkillRegistryInterface;
 
   abstract get notifications(): NotificationService;
+
+  abstract get agents(): AgentRegistry;
+
+  abstract get toolUI(): ToolUIRegistry | undefined;
+
+  abstract get transportService(): TransportService | undefined;
+
+  abstract get rateLimitManager(): GuardManager | undefined;
+
+  abstract get elicitationStore(): ElicitationStore | undefined;
 
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 
@@ -60,4 +74,10 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
     input: FlowInputOf<Name>,
     additionalDeps?: Map<Token, Type>,
   ): Promise<FlowOutputOf<Name> | undefined>;
+
+  abstract runFlowForOutput<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    additionalDeps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name>>;
 }

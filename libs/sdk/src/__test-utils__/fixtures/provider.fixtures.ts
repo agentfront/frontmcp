@@ -5,7 +5,6 @@
 
 import 'reflect-metadata';
 import { ProviderMetadata, ProviderScope } from '../../common/metadata';
-import { ProviderInterface } from '../../common/interfaces';
 import { FrontMcpProviderTokens } from '../../common/tokens/provider.tokens';
 
 /**
@@ -21,7 +20,7 @@ function Injectable() {
  * Simple test service class
  */
 @Injectable()
-export class TestService implements ProviderInterface {
+export class TestService {
   public readonly name = 'TestService';
 
   constructor() {}
@@ -35,7 +34,7 @@ export class TestService implements ProviderInterface {
  * Service that depends on another service
  */
 @Injectable()
-export class DependentService implements ProviderInterface {
+export class DependentService {
   constructor(public readonly testService: TestService) {}
 
   callGreet(): string {
@@ -47,7 +46,7 @@ export class DependentService implements ProviderInterface {
  * Service with async initialization
  */
 @Injectable()
-export class AsyncService implements ProviderInterface {
+export class AsyncService {
   private initialized = false;
 
   async with(callback: (service: this) => Promise<void>): Promise<void> {

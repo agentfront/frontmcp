@@ -20,7 +20,7 @@ import {
 import ProviderRegistry from '../provider/provider.registry';
 import { z } from 'zod';
 import HookRegistry from '../hooks/hook.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type { CallToolRequest } from '@frontmcp/protocol';
 import { buildParsedToolResult } from './tool.utils';
@@ -45,7 +45,7 @@ export class ToolInstance<
   /** The provider registry this tool is bound to (captured at construction) */
   private readonly _providers: ProviderRegistry;
   /** The scope this tool operates in (captured at construction from providers) */
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
   /** The hook registry for this tool's scope (captured at construction) */
   readonly hooks: HookRegistry;
 
@@ -56,7 +56,7 @@ export class ToolInstance<
     this.name = record.metadata.id || record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this._providers.getActiveScope();
-    this.hooks = this.scope.providers.getHooksRegistry();
+    this.hooks = this.scope.hooks;
 
     // inputSchema is always a ZodRawShape
     this.inputSchema = (record.metadata.inputSchema ?? {}) as InSchema;

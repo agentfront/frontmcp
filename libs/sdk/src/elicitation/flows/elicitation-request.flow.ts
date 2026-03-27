@@ -10,11 +10,10 @@
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
-import { InvalidInputError } from '../../errors';
+import { InvalidInputError, ElicitationStoreNotInitializedError } from '../../errors';
 import type { ElicitMode } from '../elicitation.types';
 import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
-import type { Scope } from '../../scope';
 
 const inputSchema = z.object({
   /** Related request ID from the transport */
@@ -163,7 +162,10 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
     this.logger.verbose('storePendingRecord:start');
 
     const { elicitId, sessionId, message, mode, expiresAt, requestedSchema } = this.state.required;
-    const scope = this.scope as Scope;
+    const store = this.scope.elicitationStore;
+    if (!store) {
+      throw new ElicitationStoreNotInitializedError();
+    }
 
     const pendingRecord: PendingElicitRecord = {
       elicitId,
@@ -175,7 +177,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       requestedSchema,
     };
 
-    await scope.elicitationStore.setPending(pendingRecord);
+    await store.setPending(pendingRecord);
     this.state.set('pendingRecord', pendingRecord);
 
     this.logger.verbose('storePendingRecord:done', { elicitId, sessionId });

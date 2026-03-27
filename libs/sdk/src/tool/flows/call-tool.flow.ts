@@ -22,6 +22,7 @@ import {
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
   RateLimitError,
+  InternalMcpError,
 } from '../../errors';
 import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
@@ -457,7 +458,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async acquireQuota() {
     this.logger.verbose('acquireQuota:start');
 
-    const manager = (this.scope as Scope).rateLimitManager;
+    const manager = this.scope.rateLimitManager;
     if (!manager) {
       this.state.toolContext?.mark('acquireQuota');
       this.logger.verbose('acquireQuota:done (no rate limit manager)');
@@ -501,7 +502,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async acquireSemaphore() {
     this.logger.verbose('acquireSemaphore:start');
 
-    const manager = (this.scope as Scope).rateLimitManager;
+    const manager = this.scope.rateLimitManager;
     if (!manager) {
       this.state.toolContext?.mark('acquireSemaphore');
       this.logger.verbose('acquireSemaphore:done (no rate limit manager)');
@@ -573,7 +574,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const { tool } = this.state.required;
     const timeoutMs =
-      tool.metadata.timeout?.executeMs ?? (this.scope as Scope).rateLimitManager?.config?.defaultTimeout?.executeMs;
+      tool.metadata.timeout?.executeMs ?? this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
 
     try {
       const doExecute = async () => {
@@ -607,9 +608,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         const authInfo = this.state.authInfo;
         const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
         const sessionId = authInfo?.sessionId ?? 'anonymous';
-        const scope = this.scope as Scope;
+        const store = this.scope.elicitationStore;
+        if (!store) {
+          throw new InternalMcpError('Elicitation store not initialized');
+        }
 
-        await scope.elicitationStore.setPendingFallback({
+        await store.setPendingFallback({
           elicitId: error.elicitId,
           sessionId,
           toolName: error.toolName,
@@ -627,14 +631,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // 1. Transport is streamable-http (supports keeping connection open)
         // 2. Notifications can be delivered (session is registered in NotificationService)
         // Some LLMs don't support MCP notifications, so we need to fall back to fire-and-forget
-        if (transportType === 'streamable-http' && canDeliverNotifications(scope, sessionId)) {
+        if (transportType === 'streamable-http' && canDeliverNotifications(this.scope as Scope, sessionId)) {
           // Waiting mode: Send notification + wait for pub/sub result
           // This keeps the request open and returns the actual tool result
           // when sendElicitationResult is called
           this.logger.info('execute: using waiting fallback for streamable-http', {
             elicitId: error.elicitId,
           });
-          const deps: FallbackHandlerDeps = { scope, sessionId, logger: this.logger };
+          const deps: FallbackHandlerDeps = { scope: this.scope as Scope, sessionId, logger: this.logger };
           const result = await handleWaitingFallback(deps, error);
           toolContext.output = result;
           this.logger.verbose('execute:done (elicitation waiting fallback)');
@@ -745,8 +749,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     try {
-      // Cast scope to Scope to access toolUI and notifications
-      const scope = this.scope as Scope;
+      const scope = this.scope;
 
       // Get session info for platform detection from authInfo (already in state from parseInput)
       const { authInfo } = this.state;
@@ -785,6 +788,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const useStructuredContent = resolvedMode.useStructuredContent;
       let htmlContent: string | undefined;
       let uiMeta: Record<string, unknown> = {};
+
+      if (!scope.toolUI) {
+        this.logger.verbose('applyUI: toolUI not available, skipping UI rendering');
+        return;
+      }
 
       if (servingMode === 'static') {
         // For static mode: no additional rendering needed

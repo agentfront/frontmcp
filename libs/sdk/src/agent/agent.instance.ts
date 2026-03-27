@@ -29,7 +29,7 @@ import { ToolInstance } from '../tool/tool.instance';
 import { normalizeTool } from '../tool/tool.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { createAdapter, CreateAdapterOptions, ConfigResolver } from './adapters';
 import { ConfigService } from '../builtin/config';
@@ -92,7 +92,7 @@ export class AgentInstance<
   Out = AgentOutputOf<{ outputSchema: OutSchema }>,
 > extends AgentEntry<InSchema, OutSchema, In, Out> {
   private readonly providers: ProviderRegistry;
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
 
   /** The LLM adapter for this agent */
@@ -119,7 +119,7 @@ export class AgentInstance<
     this.id = record.metadata.id ?? record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this.providers.getActiveScope();
-    this.hooks = this.scope.providers.getHooksRegistry();
+    this.hooks = this.scope.hooks;
 
     // inputSchema is always a ZodRawShape
     this.inputSchema = (record.metadata.inputSchema ?? {}) as InSchema;

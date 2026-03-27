@@ -2,13 +2,14 @@
 
 import { Token, tokenName, getMetadata } from '@frontmcp/di';
 import {
+  AppEntry,
   EntryLineage,
   EntryOwnerRef,
   ResourceEntry,
   ResourceRecord,
   ResourceTemplateRecord,
-  ResourceRegistryInterface,
   ResourceType,
+  ScopeEntry,
 } from '../common';
 import { ResourceChangeEvent, ResourceEmitter } from './resource.events';
 import ProviderRegistry from '../provider/provider.registry';
@@ -23,8 +24,6 @@ import {
 } from './resource.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ResourceInstance } from './resource.instance';
-import { Scope } from '../scope';
-import { AppEntry } from '../common';
 import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } from './resource.types';
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourcesListFlow from './flows/resources-list.flow';
@@ -34,14 +33,11 @@ import UnsubscribeResourceFlow from './flows/unsubscribe-resource.flow';
 import type { ServerCapabilities } from '@frontmcp/protocol';
 import { NameDisambiguationError, EntryValidationError } from '../errors';
 
-export default class ResourceRegistry
-  extends RegistryAbstract<
-    ResourceInstance, // instances map holds ResourceInstance
-    ResourceRecord | ResourceTemplateRecord,
-    ResourceType[]
-  >
-  implements ResourceRegistryInterface
-{
+export default class ResourceRegistry extends RegistryAbstract<
+  ResourceInstance, // instances map holds ResourceInstance
+  ResourceRecord | ResourceTemplateRecord,
+  ResourceType[]
+> {
   /** Who owns this registry (used for provenance). */
   owner: EntryOwnerRef;
 
@@ -197,7 +193,7 @@ export default class ResourceRegistry
    * Remote apps expose resources via proxy entries that forward execution to the remote server.
    * This also subscribes to updates from the remote app's registry for lazy-loaded resources.
    */
-  private adoptResourcesFromRemoteApp(app: AppEntry, scope: Scope): void {
+  private adoptResourcesFromRemoteApp(app: AppEntry, scope: ScopeEntry): void {
     const remoteRegistry = app.resources as ResourceRegistry;
 
     // Helper to adopt/re-adopt resources from the remote app

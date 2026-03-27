@@ -290,8 +290,20 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
    * Get the elicitation store for distributed elicitation support.
    * Uses Redis in distributed mode, in-memory for single-node.
    */
-  protected get elicitStore(): ElicitationStore {
+  protected get elicitStore(): ElicitationStore | undefined {
     return this.scope.elicitationStore;
+  }
+
+  /**
+   * Get the elicitation store, throwing if not initialized.
+   * Use in contexts where elicitation is required (sendElicitRequest, cancelPendingElicit).
+   */
+  protected requireElicitStore(): ElicitationStore {
+    const store = this.elicitStore;
+    if (!store) {
+      throw new Error('Elicitation store not initialized');
+    }
+    return store;
   }
 
   /**
@@ -315,9 +327,12 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       // Publish cancel to store for distributed mode (non-atomic, intentional)
       // In distributed mode, another node may have already processed this elicitation
       const sessionId = this.key.sessionId;
-      const pending = await this.elicitStore.getPending(sessionId);
-      if (pending) {
-        await this.elicitStore.publishResult(pending.elicitId, sessionId, { status: 'cancel' });
+      const store = this.elicitStore;
+      if (store) {
+        const pending = await store.getPending(sessionId);
+        if (pending) {
+          await store.publishResult(pending.elicitId, sessionId, { status: 'cancel' });
+        }
       }
 
       this.pendingElicit = undefined;

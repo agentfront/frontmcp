@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/skill-validator.ts
 
-import { ToolRegistryInterface } from '../common/interfaces/internal';
+import type ToolRegistry from '../tool/tool.registry';
 
 /**
  * Result of validating tool availability for a skill.
@@ -34,9 +34,9 @@ export interface ToolValidationResult {
  * in the current scope. It categorizes tools as available, missing, or hidden.
  */
 export class SkillToolValidator {
-  private readonly toolRegistry: ToolRegistryInterface;
+  private readonly toolRegistry: ToolRegistry;
 
-  constructor(toolRegistry: ToolRegistryInterface) {
+  constructor(toolRegistry: ToolRegistry) {
     this.toolRegistry = toolRegistry;
   }
 

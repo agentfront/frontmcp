@@ -4,9 +4,7 @@
  */
 
 import { PluginMetadata } from '../../common/metadata';
-import { PluginInterface } from '../../common/interfaces';
 import { createProviderMetadata } from './provider.fixtures';
-import { createToolMetadata } from './tool.fixtures';
 
 /**
  * Creates a simple plugin metadata object
@@ -61,7 +59,7 @@ export function createPluginWithNestedPlugins(): PluginMetadata {
 /**
  * Mock plugin class for testing
  */
-export class MockPluginClass implements PluginInterface {
+export class MockPluginClass {
   static readonly metadata: PluginMetadata = {
     name: 'MockPlugin',
     description: 'A mock plugin',
