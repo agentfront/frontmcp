@@ -12,6 +12,7 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { RequestSchema } from '@frontmcp/protocol';
+import { TransportServiceNotAvailableError } from '../../errors';
 
 export const plan = {
   pre: ['parseInput', 'router'],
@@ -96,7 +97,7 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   async handleRequest() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scope.logger.child('HandleStatelessHttpFlow');
     const { request, response } = this.rawInput;

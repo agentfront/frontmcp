@@ -9,9 +9,8 @@ export type ProviderFactoryType<Provide, Tokens extends readonly (ClassToken | T
 > &
   ProviderMetadata;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ProviderType<
-  Provide = any,
+  Provide = unknown,
   Tokens extends readonly (ClassToken | Token)[] = readonly (ClassToken | Token)[],
 > = Type<Provide> | ProviderClassType<Provide> | ProviderValueType<Provide> | ProviderFactoryType<Provide, Tokens>;
 

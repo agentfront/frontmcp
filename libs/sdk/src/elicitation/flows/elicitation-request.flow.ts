@@ -10,7 +10,7 @@
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
-import { InvalidInputError } from '../../errors';
+import { InvalidInputError, ElicitationStoreNotInitializedError } from '../../errors';
 import type { ElicitMode } from '../elicitation.types';
 import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
@@ -164,7 +164,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
     const { elicitId, sessionId, message, mode, expiresAt, requestedSchema } = this.state.required;
     const store = this.scope.elicitationStore;
     if (!store) {
-      throw new Error('Elicitation store not initialized');
+      throw new ElicitationStoreNotInitializedError();
     }
 
     const pendingRecord: PendingElicitRecord = {

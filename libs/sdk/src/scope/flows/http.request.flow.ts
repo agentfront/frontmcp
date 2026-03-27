@@ -526,12 +526,13 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
       if (authorization?.token) {
         const transportService = this.scope.transportService;
-        if (!transportService) return;
-        for (const protocol of ['streamable-http', 'sse'] as const) {
-          try {
-            await transportService.destroyTransporter(protocol, authorization.token, sessionId);
-          } catch {
-            // Transport may already be evicted or not found — non-critical
+        if (transportService) {
+          for (const protocol of ['streamable-http', 'sse'] as const) {
+            try {
+              await transportService.destroyTransporter(protocol, authorization.token, sessionId);
+            } catch {
+              // Transport may already be evicted or not found — non-critical
+            }
           }
         }
       }

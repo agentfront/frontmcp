@@ -11,7 +11,7 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../com
 import { z } from 'zod';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
-import { InvalidInputError } from '../../errors';
+import { InvalidInputError, ElicitationStoreNotInitializedError } from '../../errors';
 import { validateElicitationContent } from '../helpers';
 
 const inputSchema = z.object({
@@ -111,7 +111,7 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     const { sessionId } = this.state.required;
     const store = this.scope.elicitationStore;
     if (!store) {
-      throw new Error('Elicitation store not initialized');
+      throw new ElicitationStoreNotInitializedError();
     }
 
     const pendingRecord = await store.getPending(sessionId);

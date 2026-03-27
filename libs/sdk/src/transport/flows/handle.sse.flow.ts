@@ -14,6 +14,7 @@ import {
   validateMcpSessionHeader,
 } from '../../common';
 import { z } from 'zod';
+import { TransportServiceNotAvailableError } from '../../errors';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 
@@ -173,7 +174,7 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
   async onInitialize() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
 
     const { request, response } = this.rawInput;
@@ -202,7 +203,7 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
   async onMessage() {
     const transportService = this.scope.transportService;
     if (!transportService) {
-      throw new Error('Transport service not available');
+      throw new TransportServiceNotAvailableError();
     }
     const logger = this.scopeLogger.child('handle:legacy-sse:onMessage');
 
