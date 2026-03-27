@@ -146,7 +146,8 @@ import { z } from 'zod';
 })
 export class GetWeatherTool extends ToolContext {
   async execute(input: { city: string }) {
-    const data = await this.fetch(`https://api.weather.example.com/v1?city=${input.city}`);
+    const city = encodeURIComponent(input.city);
+    const data = await this.fetch(`https://api.weather.example.com/v1?city=${city}`);
     const json = await data.json();
     return { temperature: json.temp, condition: json.condition, humidity: json.humidity };
   }

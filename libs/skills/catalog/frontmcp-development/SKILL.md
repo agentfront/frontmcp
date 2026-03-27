@@ -62,6 +62,8 @@ Entry point for building MCP server components. This skill helps you find the ri
 6. **`create-agent`** — Build autonomous AI loops (advanced)
 7. **`create-job`** / **`create-workflow`** — Background processing (advanced)
 8. **`create-skill`** / **`create-skill-with-tools`** — Author your own skills (meta)
+9. **`official-adapters`** — Integrate external APIs via OpenAPI specs
+10. **`official-plugins`** — Add caching, session memory, feature flags, and more
 
 ## Cross-Cutting Patterns
 
