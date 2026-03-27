@@ -180,13 +180,13 @@ class IntegrationHub {}
 
 ## Troubleshooting
 
-| Problem                            | Cause                                                  | Solution                                                                                |
-| ---------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| No tools generated from spec       | Spec URL returns non-OpenAPI content or is unreachable | Verify URL returns valid OpenAPI 3.x JSON; check network access                         |
-| Authentication errors on API calls | Wrong auth type or missing credentials                 | Match `auth.type` to the API's security scheme; verify env vars are set                 |
-| Duplicate tool name error          | Two adapters registered with the same `name`           | Give each adapter a unique `name` (e.g., `'github'`, `'jira'`)                          |
-| Stale tools after API update       | Spec polling not configured                            | Add `polling: { intervalMs: 300000 }` to refresh every 5 minutes                        |
-| TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`: `import { OpenApiAdapter } from '@frontmcp/adapters'` |
+| Problem                            | Cause                                                  | Solution                                                                                                                                                                        |
+| ---------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No tools generated from spec       | Spec URL returns non-OpenAPI content or is unreachable | Verify URL returns valid OpenAPI 3.x JSON; check network access                                                                                                                 |
+| Authentication errors on API calls | Wrong auth config or missing credentials               | Configure `staticAuth` for fixed credentials, `securityResolver`/`authProviderMapper` for dynamic auth, or `additionalHeaders` for header-based tokens; verify env vars are set |
+| Duplicate tool name error          | Two adapters registered with the same `name`           | Give each adapter a unique `name` (e.g., `'github'`, `'jira'`)                                                                                                                  |
+| Stale tools after API update       | Spec polling not configured                            | Add `polling: { intervalMs: 300000 }` to refresh every 5 minutes                                                                                                                |
+| TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`: `import { OpenApiAdapter } from '@frontmcp/adapters'`                                                                                         |
 
 ## Reference
 

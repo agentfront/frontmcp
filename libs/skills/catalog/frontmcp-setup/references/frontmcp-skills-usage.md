@@ -225,13 +225,13 @@ frontmcp skills list --category guides       # End-to-end examples and best prac
 
 ## Common Patterns
 
-| Pattern                     | Correct                                                                   | Incorrect                                       | Why                                                                               |
-| --------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------- |
-| Installing a skill          | `frontmcp skills install frontmcp-development --provider claude`          | `cp node_modules/.../SKILL.md .claude/skills/`  | The CLI handles directory creation, naming, and reference files automatically     |
-| Searching skills            | `frontmcp skills search "oauth authentication"`                           | `frontmcp skills list \| grep oauth`            | Search uses weighted text matching (description 3x, tags 2x) for better relevance |
-| Choosing delivery mode      | Install 2-4 core skills statically; search the rest on demand             | Install every skill statically into the project | Static skills consume tokens on every agent invocation; keep the set small        |
-| Updating an installed skill | `frontmcp skills install frontmcp-development --provider claude` (re-run) | Manually editing the installed SKILL.md file    | Re-installing overwrites with the latest catalog version and preserves structure  |
-| Filtering by category       | `frontmcp skills list --category deployment`                              | `frontmcp skills search "deployment"`           | `--category` uses the manifest taxonomy; search is for free-text queries          |
+| Pattern                     | Correct                                                                   | Incorrect                                       | Why                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Installing a skill          | `frontmcp skills install frontmcp-development --provider claude`          | `cp node_modules/.../SKILL.md .claude/skills/`  | The CLI handles directory creation, naming, and reference files automatically                          |
+| Searching skills            | `frontmcp skills search "oauth authentication"`                           | `frontmcp skills list \| grep oauth`            | Search uses weighted text matching (description 3x, tags 2x) for better relevance                      |
+| Choosing delivery mode      | Install 2-4 core skills statically; search the rest on demand             | Install every skill statically into the project | Static skills consume tokens on every agent invocation; keep the set small                             |
+| Updating an installed skill | `frontmcp skills install frontmcp-development --provider claude` (re-run) | Manually editing the installed SKILL.md file    | Re-installing overwrites with the catalog bundled in the installed CLI version and preserves structure |
+| Filtering by category       | `frontmcp skills list --category deployment`                              | `frontmcp skills search "deployment"`           | `--category` uses the manifest taxonomy; search is for free-text queries                               |
 
 ## Verification Checklist
 

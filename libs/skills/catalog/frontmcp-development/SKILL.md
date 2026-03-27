@@ -49,6 +49,7 @@ Entry point for building MCP server components. This skill helps you find the ri
 | Write instruction-only AI guidance (no code execution)   | `create-skill`            | Skill entries with markdown instructions from files, strings, or URLs                |
 | Write AI guidance that also orchestrates tools           | `create-skill-with-tools` | Skill entries that combine instructions with registered tools                        |
 | Look up any decorator signature or option                | `decorators-guide`        | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more  |
+| Integrate an external API via OpenAPI spec               | `official-adapters`       | OpenApiAdapter with auth, polling, inline specs, and multiple API composition        |
 | Use official plugins (caching, remember, feature flags)  | `official-plugins`        | Built-in plugins for caching, session memory, approval, feature flags, and dashboard |
 
 ## Recommended Reading Order

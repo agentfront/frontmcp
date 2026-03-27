@@ -18,7 +18,7 @@ examples:
 
 # FrontMCP End-to-End Guides
 
-Complete build walkthroughs and best practices for FrontMCP MCP servers. Each example starts from an empty directory and ends with a deployed, tested server. Every pattern references the specific skill that teaches it.
+Complete build walkthroughs and best practices for FrontMCP servers. Each example starts from an empty directory and ends with a deployed, tested server. Every pattern references the specific skill that teaches it.
 
 ## When to Use This Skill
 
