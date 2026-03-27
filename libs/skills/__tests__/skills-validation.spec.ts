@@ -10,7 +10,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-// Use relative path to SDK parser since it's not re-exported from @frontmcp/sdk barrel
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from '../../sdk/src/skill/skill-md-parser';
 import type { SkillManifest, SkillCatalogEntry } from '../src/manifest';
 import { VALID_TARGETS, VALID_CATEGORIES, VALID_BUNDLES } from '../src/manifest';
