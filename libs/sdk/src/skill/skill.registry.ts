@@ -1,7 +1,7 @@
 // file: libs/sdk/src/skill/skill.registry.ts
 
 import { Token, tokenName } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef, SkillEntry, SkillType, SkillToolValidationMode } from '../common';
+import { EntryLineage, EntryOwnerRef, ScopeEntry, SkillEntry, SkillType, SkillToolValidationMode } from '../common';
 import { SkillContent } from '../common/interfaces';
 import { SkillChangeEvent, SkillEmitter } from './skill.events';
 import { SkillInstance, createSkillInstance } from './skill.instance';
@@ -9,7 +9,6 @@ import { normalizeSkill, skillDiscoveryDeps } from './skill.utils';
 import { SkillRecord } from '../common/records';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { Scope } from '../scope';
 import {
   SkillStorageProvider,
   SkillSearchOptions,
@@ -221,7 +220,7 @@ export default class SkillRegistry
   private toolValidator?: SkillToolValidator;
 
   /** The scope this registry operates in */
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
 
   /** Registry-level options for validation behavior */
   private readonly options: SkillRegistryOptions;

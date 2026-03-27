@@ -23,7 +23,6 @@ import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 import { randomUUID } from '@frontmcp/utils';
 import { SessionVerificationFailedError } from '../../errors';
-import type { Scope } from '../scope.instance';
 
 const plan = {
   pre: [
@@ -158,7 +157,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
   @Stage('acquireQuota')
   async acquireQuota() {
-    const manager = (this.scope as Scope).rateLimitManager;
+    const manager = this.scope.rateLimitManager;
     if (!manager?.config?.global) return;
 
     const context = this.tryGetContext();
@@ -526,12 +525,14 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       // session persists, allowing recreation on other nodes in distributed mode.
       const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
       if (authorization?.token) {
-        const transportService = (this.scope as Scope).transportService;
-        for (const protocol of ['streamable-http', 'sse'] as const) {
-          try {
-            await transportService.destroyTransporter(protocol, authorization.token, sessionId);
-          } catch {
-            // Transport may already be evicted or not found — non-critical
+        const transportService = this.scope.transportService;
+        if (transportService) {
+          for (const protocol of ['streamable-http', 'sse'] as const) {
+            try {
+              await transportService.destroyTransporter(protocol, authorization.token, sessionId);
+            } catch {
+              // Transport may already be evicted or not found — non-critical
+            }
           }
         }
       }

@@ -9,7 +9,8 @@
  * - /skills API - JSON responses
  */
 
-import type { SkillContent, SkillEntry, ToolRegistryInterface, ToolEntry } from '../common';
+import type { SkillContent, SkillEntry, ToolEntry } from '../common';
+import type ToolRegistry from '../tool/tool.registry';
 import type { SkillVisibility, SkillResources } from '../common/metadata/skill.metadata';
 import type { SkillRegistryInterface as SkillRegistryInterfaceType } from './skill.registry';
 
@@ -91,7 +92,7 @@ export function formatSkillsForLlmCompact(skills: SkillEntry[]): string {
  */
 export async function formatSkillsForLlmFull(
   registry: SkillRegistryInterfaceType,
-  toolRegistry: ToolRegistryInterface,
+  toolRegistry: ToolRegistry,
   visibility: SkillVisibility = 'both',
 ): Promise<string> {
   const skills = registry.getSkills(false); // Don't include hidden
@@ -128,7 +129,7 @@ export function formatSkillForLLMWithSchemas(
   skill: SkillContent,
   availableTools: string[],
   missingTools: string[],
-  toolRegistry: ToolRegistryInterface,
+  toolRegistry: ToolRegistry,
 ): string {
   const parts: string[] = [];
 

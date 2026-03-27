@@ -11,8 +11,7 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../com
 import { z } from 'zod';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
 import type { PendingElicitRecord } from '../store';
-import type { Scope } from '../../scope';
-import { InvalidInputError } from '../../errors';
+import { InvalidInputError, ElicitationStoreNotInitializedError } from '../../errors';
 import { validateElicitationContent } from '../helpers';
 
 const inputSchema = z.object({
@@ -110,9 +109,12 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     this.logger.verbose('lookupPending:start');
 
     const { sessionId } = this.state.required;
-    const scope = this.scope as Scope;
+    const store = this.scope.elicitationStore;
+    if (!store) {
+      throw new ElicitationStoreNotInitializedError();
+    }
 
-    const pendingRecord = await scope.elicitationStore.getPending(sessionId);
+    const pendingRecord = await store.getPending(sessionId);
     this.state.set('pendingRecord', pendingRecord ?? undefined);
 
     if (!pendingRecord) {
@@ -191,16 +193,16 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     const { pendingRecord, elicitResult } = this.state;
     // sessionId is set in parseInput and is required by stateSchema
     const { sessionId } = this.state.required;
-    const scope = this.scope as Scope;
+    const store = this.scope.elicitationStore;
 
-    if (!pendingRecord || !elicitResult) {
+    if (!pendingRecord || !elicitResult || !store) {
       this.state.set('handled', false);
       this.logger.verbose('publishResult:skip (no pending or no result)');
       return;
     }
 
     try {
-      await scope.elicitationStore.publishResult(pendingRecord.elicitId, sessionId, elicitResult);
+      await store.publishResult(pendingRecord.elicitId, sessionId, elicitResult);
       this.state.set('handled', true);
       this.logger.verbose('publishResult:done', {
         elicitId: pendingRecord.elicitId,

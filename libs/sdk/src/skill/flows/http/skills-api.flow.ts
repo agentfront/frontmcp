@@ -18,8 +18,8 @@ import {
   FlowHooksOf,
   normalizeEntryPrefix,
   normalizeScopeBase,
-  ToolRegistryInterface,
 } from '../../../common';
+import type ToolRegistry from '../../../tool/tool.registry';
 import { z } from 'zod';
 import { skillToApiResponse, formatSkillForLLMWithSchemas } from '../../skill-http.utils';
 import { formatSkillForLLM } from '../../skill.utils';
@@ -258,7 +258,7 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
   private async handleGetSkill(
     skillId: string,
     skillRegistry: SkillRegistryInterface,
-    toolRegistry: ToolRegistryInterface | null,
+    toolRegistry: ToolRegistry | null,
   ) {
     const loadResult = await skillRegistry.loadSkill(skillId);
 
