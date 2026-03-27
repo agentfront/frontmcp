@@ -37,7 +37,7 @@ Complete build walkthroughs and best practices for FrontMCP servers. Each exampl
 ### Skip When
 
 - You need to learn one specific component type (use the specific skill, e.g., `create-tool`)
-- You need to find the right skill for a task (use domain routers: `frontmcp-development`, `frontmcp-deployment`, etc.)
+- Looking for the right skill for a task (use domain routers: `frontmcp-development`, `frontmcp-deployment`, etc.)
 - You need CLI/install instructions for the skills system (see `frontmcp-skills-usage`)
 
 > **Decision:** Use this skill when you want to see how everything fits together. Use individual skills when you need focused instruction.
@@ -322,7 +322,7 @@ export default class KnowledgeBaseServer {}
   },
   llm: {
     provider: 'anthropic',
-    model: 'claude-sonnet-4-5-20250514',
+    model: 'claude-sonnet-4-5',
     apiKey: { env: 'ANTHROPIC_API_KEY' },
     maxTokens: 4096,
   }, // provider and model are client-configurable
