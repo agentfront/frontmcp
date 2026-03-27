@@ -286,7 +286,7 @@ frontmcp dev
 
 Look for log lines like:
 
-```
+```text
 [SessionStoreFactory] Creating Redis session store
 [RedisStorageAdapter] Connected to Redis at localhost:6379
 ```

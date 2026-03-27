@@ -271,7 +271,7 @@ A multi-app knowledge base with AI-powered search, document ingestion, and an au
 
 ### Architecture
 
-```
+```text
 knowledge-base/
 ├── src/
 │   ├── main.ts                          # @FrontMcp composing 3 apps

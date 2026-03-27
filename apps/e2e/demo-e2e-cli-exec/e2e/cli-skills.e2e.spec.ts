@@ -78,11 +78,10 @@ describe('CLI Skills Commands', () => {
     it('should respect --category filter', () => {
       const { stdout, exitCode } = runFrontmcpCli(['skills', 'search', 'configure', '--category', 'config']);
       expect(exitCode).toBe(0);
-      // Results should only be from config category
-      if (stdout.includes('result(s)')) {
-        expect(stdout).toContain('[config]');
-        expect(stdout).not.toContain('[setup]');
-      }
+      // Ensure results were returned before asserting category
+      expect(stdout).toContain('result(s)');
+      expect(stdout).toContain('[config]');
+      expect(stdout).not.toContain('[setup]');
     });
 
     it('should show no-results message for nonsense query', () => {
@@ -146,7 +145,7 @@ describe('CLI Skills Commands', () => {
       expect(output.toLowerCase()).toContain('not found');
     });
 
-    it('should install to provider default subdirectory', () => {
+    it('should install to directory specified by --dir', () => {
       const baseDir = path.join(tmpDir, 'project');
       fs.mkdirSync(baseDir, { recursive: true });
 

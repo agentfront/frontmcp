@@ -156,7 +156,7 @@ throttle: {
   enabled: true,
   storage: {
     type: 'redis',
-    redis: { provider: 'redis', host: 'redis.internal' },
+    redis: { config: { host: 'redis.internal', port: 6379 } },
   },
   global: { maxRequests: 1000, windowMs: 60000 },
 }

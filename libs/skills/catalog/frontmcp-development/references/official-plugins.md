@@ -687,7 +687,7 @@ class ProductionServer {}
 
 - [ ] `this.remember` / `this.approval` / `this.featureFlags` resolves in tool context
 - [ ] Cache plugin returns cached results on repeated identical calls
-- [ ] Feature-flagged tools are hidden from `tools/list` when flag is off
+- [ ] Feature-flagged tools are hidden from `list_tools` when flag is off
 - [ ] Dashboard is accessible at configured `basePath` (default: `/dashboard`)
 - [ ] Approval plugin blocks unapproved tools and grants approval correctly
 

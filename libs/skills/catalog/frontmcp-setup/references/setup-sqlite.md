@@ -166,7 +166,7 @@ WAL (Write-Ahead Logging) mode is enabled by default (`walMode: true`) and is st
 
 WAL mode creates two additional files alongside the database:
 
-```
+```text
 sessions.sqlite       # main database
 sessions.sqlite-wal   # write-ahead log
 sessions.sqlite-shm   # shared memory index
@@ -235,7 +235,7 @@ frontmcp dev
 
 Check the logs for SQLite initialization:
 
-```
+```text
 [SessionStoreFactory] Creating SQLite session store
 ```
 

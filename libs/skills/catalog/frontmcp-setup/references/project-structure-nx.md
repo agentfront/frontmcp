@@ -126,7 +126,7 @@ You can have multiple servers composing different combinations of apps (e.g., a 
 
 ## Nx Generators
 
-The `@frontmcp/nx` package provides generators for all entity types:
+The `@frontmcp/nx` package provides generators for common entity types:
 
 ```bash
 # Generate a new app
@@ -140,6 +140,8 @@ nx g @frontmcp/nx:provider database --project=crm
 nx g @frontmcp/nx:plugin logging --project=crm
 nx g @frontmcp/nx:agent research --project=crm
 nx g @frontmcp/nx:job cleanup --project=crm
+nx g @frontmcp/nx:skill my-skill --project=crm
+nx g @frontmcp/nx:skill-dir my-skill-dir --project=crm
 
 # Generate a new server
 nx g @frontmcp/nx:server gateway
@@ -186,7 +188,7 @@ These files are regenerated when you run generators or modify your workspace str
 
 Nx enforces a clear dependency hierarchy:
 
-```
+```text
 servers/ --> apps/ --> libs/
 ```
 

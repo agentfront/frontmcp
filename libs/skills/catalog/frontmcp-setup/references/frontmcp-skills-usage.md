@@ -161,15 +161,15 @@ This works because `frontmcp skills show` outputs the full SKILL.md content to s
 
 ## Comparison: Static vs Dynamic
 
-| Aspect            | Static Install                        | Dynamic CLI Search                           |
-| ----------------- | ------------------------------------- | -------------------------------------------- |
-| **Setup**         | `frontmcp skills install <name>` once | No setup — just use `frontmcp skills search` |
-| **Availability**  | Always loaded by AI agent             | On-demand, requires CLI invocation           |
-| **Context usage** | Skills in system prompt (uses tokens) | Only loaded when searched (saves tokens)     |
-| **Updates**       | Re-install to update                  | Always uses latest catalog                   |
-| **Offline**       | Works offline after install           | Needs catalog available                      |
-| **Best for**      | Core skills you use daily             | Occasional reference, exploration            |
-| **Token cost**    | Higher (all installed skills loaded)  | Lower (only searched skills loaded)          |
+| Aspect            | Static Install                        | Dynamic CLI Search                              |
+| ----------------- | ------------------------------------- | ----------------------------------------------- |
+| **Setup**         | `frontmcp skills install <name>` once | No setup — just use `frontmcp skills search`    |
+| **Availability**  | Always loaded by AI agent             | On-demand, requires CLI invocation              |
+| **Context usage** | Skills in system prompt (uses tokens) | Only loaded when searched (saves tokens)        |
+| **Updates**       | Re-install to update                  | Uses catalog bundled with the installed package |
+| **Offline**       | Works offline after install           | Needs catalog available                         |
+| **Best for**      | Core skills you use daily             | Occasional reference, exploration               |
+| **Token cost**    | Higher (all installed skills loaded)  | Lower (only searched skills loaded)             |
 
 ### Recommended Approach
 

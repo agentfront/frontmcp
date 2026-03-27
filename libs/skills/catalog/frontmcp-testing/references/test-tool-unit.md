@@ -1,6 +1,7 @@
 # Unit Testing a Tool
 
 ```typescript
+import { z } from 'zod';
 import { ToolContext } from '@frontmcp/sdk';
 import { AddTool } from '../tools/add.tool';
 

@@ -50,37 +50,43 @@ Each OpenAPI operation becomes an MCP tool named `petstore:operationId`.
 ### With Authentication
 
 ```typescript
-// API Key auth
+// API Key via static auth
 OpenApiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
-  auth: {
-    type: 'apiKey',
-    headerName: 'X-API-Key',
+  baseUrl: 'https://api.example.com',
+  staticAuth: {
     apiKey: process.env.API_KEY!,
   },
 });
 
-// Bearer token auth
+// API Key via additional headers
 OpenApiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
-  auth: {
-    type: 'bearer',
-    token: process.env.API_TOKEN!,
+  baseUrl: 'https://api.example.com',
+  additionalHeaders: {
+    'X-API-Key': process.env.API_KEY!,
   },
 });
 
-// OAuth auth
+// Bearer token via static auth
 OpenApiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
-  auth: {
-    type: 'oauth',
-    tokenUrl: 'https://auth.example.com/token',
-    clientId: process.env.CLIENT_ID!,
-    clientSecret: process.env.CLIENT_SECRET!,
-    scopes: ['read', 'write'],
+  baseUrl: 'https://api.example.com',
+  staticAuth: {
+    jwt: process.env.API_TOKEN!,
+  },
+});
+
+// Dynamic auth per tool using securityResolver
+OpenApiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  securityResolver: (tool, ctx) => {
+    return { jwt: ctx.authInfo?.token };
   },
 });
 ```
@@ -142,13 +148,13 @@ class IntegrationHub {}
 
 ## Common Patterns
 
-| Pattern              | Correct                                                                      | Incorrect                                                       | Why                                                                              |
-| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Adapter registration | `OpenApiAdapter.init({ name: 'petstore', url: '...' })` in `adapters` array  | Placing adapter in `plugins` array                              | Adapters go in `adapters`, not `plugins`; they serve different purposes          |
-| Tool naming          | Tools auto-named as `petstore:operationId` using adapter `name` as namespace | Expecting flat names like `listPets`                            | Adapter name is prepended to prevent collisions across multiple adapters         |
-| Auth configuration   | `auth: { type: 'bearer', token: process.env.API_TOKEN! }`                    | Hardcoding secrets: `auth: { type: 'bearer', token: 'sk-xxx' }` | Always use environment variables for secrets; never commit tokens                |
-| Spec source          | Use `url` for hosted specs or `spec` for inline definitions                  | Using both `url` and `spec` simultaneously                      | Only one source should be provided; `spec` takes precedence and `url` is ignored |
-| Multiple APIs        | Register separate `OpenApiAdapter.init()` calls with unique `name` values    | Using the same `name` for different adapters                    | Duplicate names cause tool naming collisions                                     |
+| Pattern              | Correct                                                                      | Incorrect                                           | Why                                                                              |
+| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Adapter registration | `OpenApiAdapter.init({ name: 'petstore', url: '...' })` in `adapters` array  | Placing adapter in `plugins` array                  | Adapters go in `adapters`, not `plugins`; they serve different purposes          |
+| Tool naming          | Tools auto-named as `petstore:operationId` using adapter `name` as namespace | Expecting flat names like `listPets`                | Adapter name is prepended to prevent collisions across multiple adapters         |
+| Auth configuration   | `staticAuth: { jwt: process.env.API_TOKEN! }` or `additionalHeaders`         | Hardcoding secrets: `staticAuth: { jwt: 'sk-xxx' }` | Always use environment variables for secrets; never commit tokens                |
+| Spec source          | Use `url` for hosted specs or `spec` for inline definitions                  | Using both `url` and `spec` simultaneously          | Only one source should be provided; `spec` takes precedence and `url` is ignored |
+| Multiple APIs        | Register separate `OpenApiAdapter.init()` calls with unique `name` values    | Using the same `name` for different adapters        | Duplicate names cause tool naming collisions                                     |
 
 ## Verification Checklist
 
