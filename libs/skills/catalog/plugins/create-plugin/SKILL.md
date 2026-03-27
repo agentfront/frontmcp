@@ -49,6 +49,28 @@ metadata:
 
 This skill covers building custom plugins for FrontMCP and using all 6 official plugins. Plugins are modular units that extend server behavior through providers, context extensions, lifecycle hooks, and contributed tools/resources/prompts.
 
+## When to Use This Skill
+
+### Must Use
+
+- Adding cross-cutting behavior (logging, caching, auth) that applies across multiple tools
+- Extending `ExecutionContextBase` with new properties accessible via `this.propertyName` in tools
+- Contributing injectable providers that tools or other plugins depend on
+
+### Recommended
+
+- Building a configurable module with runtime options using the `DynamicPlugin` pattern
+- Extending the `@Tool` decorator metadata with custom fields (e.g., audit, approval)
+- Composing multiple related providers, hooks, and tools into a single installable unit
+
+### Skip When
+
+- You only need lifecycle hooks without providers or context extensions (see `create-plugin-hooks`)
+- You want to use an existing official plugin (see `official-plugins`)
+- You need to generate tools from an external API spec (see `create-adapter`)
+
+> **Decision:** Use this skill when you need a reusable module that bundles providers, context extensions, or contributed entries and registers them via `@Plugin`.
+
 ## Plugin Decorator Signature
 
 ```typescript
@@ -318,19 +340,49 @@ class DeleteUserTool extends ToolContext {
 
 For official plugin installation, configuration, and examples, see the **official-plugins** skill. FrontMCP provides 6 official plugins: CodeCall, Remember, Approval, Cache, Feature Flags, and Dashboard. Install individually or via `@frontmcp/plugins` (meta-package).
 
-## Common Mistakes
+## Common Patterns
 
-- **Module-level side effects for context extension** -- do not call `installExtension()` at the top level of a module. This causes circular dependencies. The SDK handles installation via `contextExtensions` metadata.
-- **Forgetting the type augmentation** -- without `declare module '@frontmcp/sdk'`, TypeScript will not recognize `this.auditLog` in tools.
-- **Using `any` types in providers** -- use `unknown` for generic defaults.
-- **Scope confusion** -- `scope: 'server'` makes hooks fire for all apps in a gateway. Default to `scope: 'app'`.
-- **Direct prototype modification** -- use the `contextExtensions` metadata array instead of directly modifying `ExecutionContextBase.prototype`.
+| Pattern                        | Correct                                                                                        | Incorrect                                                             | Why                                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Context extension registration | `contextExtensions: [{ property: 'auditLog', token: AuditLoggerToken }]` in metadata           | `Object.defineProperty(ExecutionContextBase.prototype, ...)` manually | SDK handles runtime installation; manual modification causes ordering issues |
+| Type augmentation              | `declare module '@frontmcp/sdk' { interface ExecutionContextBase { ... } }` in a separate file | Skipping the augmentation and casting `this` in tools                 | Without augmentation, TypeScript cannot type-check `this.auditLog`           |
+| Provider types                 | `Token<AuditLogger> = Symbol('AuditLogger')` with typed token                                  | `provide: Symbol('AuditLogger')` without type annotation              | Typed tokens enable compile-time DI resolution checking                      |
+| Plugin scope                   | `scope: 'app'` (default) for app-scoped behavior                                               | `scope: 'server'` when hooks should only apply to one app             | Server scope fires hooks for all apps in a gateway; default to app           |
+| Dynamic options                | Extend `DynamicPlugin<TOptions, TInput>` with `static dynamicProviders()`                      | Constructing providers in the constructor body                        | `dynamicProviders` runs before instantiation, enabling proper DI wiring      |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `@Plugin` decorator has `name` and `description`
+- [ ] Providers are listed in `providers` array with typed tokens
+- [ ] Exported providers are listed in `exports` array
+- [ ] Context extensions have `property`, `token`, and `errorMessage` fields
+
+### Type Safety
+
+- [ ] Module augmentation file exists with `declare module '@frontmcp/sdk'` block
+- [ ] Augmented properties are `readonly` on `ExecutionContextBase`
+- [ ] Augmentation file is imported (side-effect import) in the plugin module
+
+### Runtime
+
+- [ ] Plugin is registered in `plugins` array of `@FrontMcp` or `@App`
+- [ ] `this.propertyName` resolves correctly in tool contexts
+- [ ] Missing plugin produces a clear error message (from `errorMessage`)
+- [ ] Dynamic plugin options are validated in `dynamicProviders()`
+
+## Troubleshooting
+
+| Problem                                           | Cause                                            | Solution                                                                        |
+| ------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `this.auditLog` has type `any` or is unrecognized | Module augmentation file not imported            | Add side-effect import: `import './audit-log.context-extension'` in plugin file |
+| Circular dependency error at startup              | Calling `installExtension()` at module top level | Remove manual installation; use `contextExtensions` metadata array instead      |
+| Provider not found in tool context                | Provider not listed in plugin `exports`          | Add the provider to both `providers` and `exports` arrays                       |
+| Hooks fire for unrelated apps in gateway          | Plugin `scope` set to `'server'`                 | Change to `scope: 'app'` (default) unless server-wide behavior is intended      |
+| `DynamicPlugin.init()` options ignored            | Overriding constructor without calling `super()` | Ensure constructor calls `super()` and merges defaults properly                 |
 
 ## Reference
 
-- Plugin system docs: [docs.agentfront.dev/frontmcp/plugins/creating-plugins](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)
-- `@Plugin` decorator: import from `@frontmcp/sdk` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/sdk/src/common/decorators/plugin.decorator.ts)
-- `DynamicPlugin` base class: import from `@frontmcp/sdk` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/sdk/src/common/dynamic/dynamic.plugin.ts)
-- `PluginMetadata` interface (contextExtensions): import from `@frontmcp/sdk` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/sdk/src/common/metadata/plugin.metadata.ts)
-- Official plugins: `@frontmcp/plugin-cache`, `@frontmcp/plugin-codecall`, `@frontmcp/plugin-remember`, `@frontmcp/plugin-approval`, `@frontmcp/plugin-feature-flags`, `@frontmcp/plugin-dashboard`
-- Meta-package: `@frontmcp/plugins` (re-exports cache, codecall, dashboard, remember)
+- [Plugin System Documentation](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)
+- Related skills: `create-plugin-hooks`, `official-plugins`, `create-adapter`, `create-provider`

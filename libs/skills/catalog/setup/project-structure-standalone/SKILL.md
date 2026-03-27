@@ -1,6 +1,6 @@
 ---
 name: project-structure-standalone
-description: Best practices for organizing a standalone FrontMCP project -- file layout, naming conventions, and folder hierarchy. Use when scaffolding with frontmcp create or organizing an existing standalone project.
+description: "Best practices for organizing a standalone FrontMCP project \u2014 file layout, naming conventions, and folder hierarchy. Use when scaffolding with frontmcp create or organizing an existing standalone project."
 tags: [project, structure, standalone, organization, best-practices]
 priority: 8
 visibility: both
@@ -10,6 +10,28 @@ metadata:
 ---
 
 # Standalone Project Structure
+
+## When to Use This Skill
+
+### Must Use
+
+- Scaffolding a new FrontMCP project with `frontmcp create` and need to understand the generated layout
+- Organizing tools, resources, prompts, and providers in a standalone (non-Nx) project
+- Setting up the `main.ts` entry point with the `@FrontMcp` server default export
+
+### Recommended
+
+- Adopting consistent `<name>.<type>.ts` file naming conventions across the project
+- Restructuring an existing standalone project to follow FrontMCP best practices
+- Organizing a growing project into feature folders with grouped domain entities
+
+### Skip When
+
+- You are working in an Nx monorepo with multiple apps and shared libraries (see `project-structure-nx`)
+- You need to compose multiple apps into a single server (see `multi-app-composition`)
+- You are creating a specific entity (tool, resource, etc.) and need its decorator API (see `create-tool`, `create-resource`)
+
+> **Decision:** Use this skill when scaffolding or organizing a standalone FrontMCP project and you need the canonical file layout, naming conventions, and development workflow.
 
 When you run `frontmcp create`, the CLI scaffolds a standalone project with the following layout:
 
@@ -151,3 +173,50 @@ skills/
 ```
 
 Skills inside `src/skills/` are `@Skill` classes that are part of your application code.
+
+## Common Patterns
+
+| Pattern            | Correct                                                   | Incorrect                                           | Why                                                                                   |
+| ------------------ | --------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| File naming        | `fetch-weather.tool.ts` (kebab-case with type suffix)     | `FetchWeather.ts` or `fetchWeatherTool.ts`          | The `<name>.<type>.ts` convention enables tooling, generators, and consistent imports |
+| Entry point        | `main.ts` with `export default MyServer`                  | Named export or no default export in `main.ts`      | FrontMCP loads the default export from the entry point at startup                     |
+| One class per file | Each tool, resource, or provider in its own file          | Multiple tool classes in a single file              | Keeps files focused, simplifies imports, and aligns with generator output             |
+| Feature folders    | Group related entities under `src/billing/`, `src/users/` | Flat structure with dozens of files in `src/tools/` | Feature folders scale better and make domain boundaries visible                       |
+| Test files         | `fetch-weather.tool.spec.ts` (`.spec.ts` extension)       | `fetch-weather.tool.test.ts` (`.test.ts` extension) | FrontMCP convention requires `.spec.ts`; generators and CI expect this pattern        |
+
+## Verification Checklist
+
+### Project Structure
+
+- [ ] `src/main.ts` exists and default-exports the `@FrontMcp` server class
+- [ ] At least one `@App` class exists (e.g., `src/my-app.app.ts`)
+- [ ] Entity files follow the `<name>.<type>.ts` naming convention
+- [ ] Test files use the `.spec.ts` extension
+
+### Development Workflow
+
+- [ ] `frontmcp dev` starts the development server with file watching
+- [ ] `frontmcp build --target node` produces a valid production build
+- [ ] Unit tests pass with `jest`
+- [ ] E2E tests (if any) are in the `e2e/` directory with `*.e2e.spec.ts` naming
+
+### Organization
+
+- [ ] Each entity type has its own directory (`tools/`, `resources/`, etc.) or feature folder
+- [ ] Catalog skills (from `--skills` flag) are in the top-level `skills/` directory
+- [ ] Application `@Skill` classes are in `src/skills/`
+
+## Troubleshooting
+
+| Problem                        | Cause                                                         | Solution                                                                 |
+| ------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `frontmcp dev` fails to start  | `main.ts` does not default-export the `@FrontMcp` class       | Add `export default MyServer` to `main.ts`                               |
+| Tool not discovered at runtime | Tool class not added to the `tools` array in `@App`           | Register the tool in the `@App` decorator's `tools` array                |
+| Tests not found by Jest        | Test file uses `.test.ts` instead of `.spec.ts`               | Rename to `.spec.ts` to match the FrontMCP test file convention          |
+| Build target error             | Invalid `--target` flag value                                 | Use `node`, `bun`, or `cloudflare-workers` as the target value           |
+| Catalog skills not loaded      | Skills placed in `src/skills/` instead of top-level `skills/` | Move catalog `SKILL.md` directories to the top-level `skills/` directory |
+
+## Reference
+
+- [Quickstart Documentation](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)
+- Related skills: `project-structure-nx`, `multi-app-composition`, `setup-project`, `create-tool`

@@ -27,9 +27,29 @@ metadata:
 
 Agents are autonomous AI entities that use an LLM to reason, plan, and invoke inner tools to accomplish goals. In FrontMCP, agents are TypeScript classes that extend `AgentContext`, decorated with `@Agent`, and registered on a `@FrontMcp` server or inside an `@App`.
 
-## When to Use @Agent vs @Tool
+## When to Use This Skill
 
-Use `@Agent` when the task requires autonomous reasoning, multi-step planning, or LLM-driven decision making. An agent receives a goal, decides which tools to call, interprets results, and iterates until the goal is met. Use `@Tool` when you need a direct, deterministic function that executes a single action without LLM involvement.
+### Must Use
+
+- Building an autonomous AI entity that uses LLM reasoning to decide which tools to call
+- Orchestrating multi-step workflows where the agent plans, acts, and iterates toward a goal
+- Creating multi-agent swarms with handoff between specialized agents
+
+### Recommended
+
+- Performing complex tasks that require chaining multiple inner tools with LLM-driven decisions
+- Implementing structured multi-pass review (security pass, quality pass, synthesis)
+- Composing nested sub-agents with different LLM configs for specialized subtasks
+
+### Skip When
+
+- You need a direct, deterministic function that executes a single action (see `create-tool`)
+- You are building a reusable conversation template without autonomous execution (see `create-prompt`)
+- You only need to expose readable data at a URI (see `create-resource`)
+
+> **Decision:** Use this skill when the task requires autonomous LLM-driven reasoning, tool invocation, and iterative planning -- not a single deterministic action.
+
+### @Agent vs @Tool Quick Comparison
 
 | Aspect          | @Agent                          | @Tool                        |
 | --------------- | ------------------------------- | ---------------------------- |
@@ -561,3 +581,46 @@ Agents can include resources and prompts that are available within the agent's s
 })
 class DocsAgent extends AgentContext {}
 ```
+
+## Common Patterns
+
+| Pattern                 | Correct                                                                       | Incorrect                                                      | Why                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| LLM config              | `llm: { adapter: 'anthropic', model: '...', apiKey: { env: 'KEY' } }`         | `llm: { adapter: 'anthropic', apiKey: 'sk-hardcoded' }`        | Environment variable references prevent leaking secrets in code                 |
+| Inner tools vs exported | `tools: [...]` for agent-private; `exports: { tools: [...] }` for MCP-visible | Putting all tools in `tools` and expecting clients to see them | Inner tools are private to the agent; only exported tools appear in MCP listing |
+| Custom execute          | Override `execute()` for multi-pass orchestration                             | Putting all logic in system instructions                       | Custom `execute()` gives structured control over completion calls and stages    |
+| Sub-agents              | Use `agents: [SubAgent]` for composition                                      | Calling another agent's `execute()` directly                   | The `agents` array enables proper lifecycle, scope isolation, and handoff       |
+| Swarm handoff           | Use `swarm.handoff` with `agent` name and `condition`                         | Manually routing between agents in `execute()`                 | Swarm config enables declarative, LLM-driven handoff between agents             |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Agent class extends `AgentContext` and has `@Agent` decorator with `name`, `description`, and `llm`
+- [ ] `inputSchema` is defined with Zod raw shape for input validation
+- [ ] Inner tools in `tools` array are valid `@Tool` classes
+- [ ] Agent is registered in `agents` array of `@App` or `@FrontMcp`
+- [ ] API key uses `{ env: 'VAR_NAME' }` pattern, not hardcoded strings
+
+### Runtime
+
+- [ ] Agent appears in MCP tool listing (agents surface as callable tools)
+- [ ] LLM adapter connects successfully to the configured provider
+- [ ] Inner tools are invoked correctly during the agent loop
+- [ ] `this.completion()` and `this.streamCompletion()` return valid responses
+- [ ] Swarm handoff transfers control to the correct specialist agent
+
+## Troubleshooting
+
+| Problem                             | Cause                                                 | Solution                                                                          |
+| ----------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Agent not appearing in tool listing | Not registered in `agents` array                      | Add agent class to `@App` or `@FrontMcp` `agents` array                           |
+| LLM authentication error            | API key not set or incorrect env variable             | Verify the environment variable name in `apiKey: { env: '...' }` is set           |
+| Inner tools not being called        | Tools not listed in `tools` array of `@Agent`         | Add tool classes to the `tools` field in the `@Agent` decorator                   |
+| Agent times out                     | No timeout or rate limit configured                   | Add `timeout: { executeMs: 120_000 }` and `rateLimit` to `@Agent` options         |
+| Swarm handoff fails                 | Target agent name does not match any registered agent | Ensure `handoff.agent` matches the `name` of a registered agent in the same scope |
+
+## Reference
+
+- [Agents Documentation](https://docs.agentfront.dev/frontmcp/servers/agents)
+- Related skills: `create-tool`, `create-provider`, `create-prompt`, `create-resource`

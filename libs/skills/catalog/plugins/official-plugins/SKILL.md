@@ -13,6 +13,28 @@ metadata:
 
 FrontMCP ships 6 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, and visual monitoring. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, dashboard, and remember).
 
+## When to Use This Skill
+
+### Must Use
+
+- Installing and configuring any official FrontMCP plugin (CodeCall, Remember, Approval, Cache, Feature Flags, Dashboard)
+- Adding session memory, tool caching, or authorization workflows to an existing server
+- Integrating feature flag services (LaunchDarkly, Split.io, Unleash) to gate tools at runtime
+
+### Recommended
+
+- Setting up the Dashboard plugin for visual monitoring of server structure in development
+- Configuring CodeCall for semantic tool discovery when the server has many tools
+- Combining multiple official plugins in a production deployment
+
+### Skip When
+
+- You need to build a custom plugin with your own providers and context extensions (see `create-plugin`)
+- You only need lifecycle hooks without installing an official plugin (see `create-plugin-hooks`)
+- You need to generate tools from an OpenAPI spec (see `official-adapters`)
+
+> **Decision:** Use this skill when you need to install, configure, or customize one or more of the 6 official FrontMCP plugins.
+
 All plugins follow the `DynamicPlugin` pattern and are registered via `@FrontMcp({ plugins: [...] })`.
 
 ```typescript
@@ -654,14 +676,49 @@ All official plugins use the static `init()` pattern inherited from `DynamicPlug
 class ProductionServer {}
 ```
 
+## Common Patterns
+
+| Pattern                  | Correct                                                                          | Incorrect                                                                       | Why                                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Plugin registration      | `plugins: [RememberPlugin.init({ type: 'memory' })]`                             | `plugins: [new RememberPlugin({ type: 'memory' })]`                             | Official plugins use `DynamicPlugin.init()` static method; direct instantiation bypasses provider wiring |
+| Remember storage in prod | `RememberPlugin.init({ type: 'redis', config: { host: '...' } })`                | `RememberPlugin.init({ type: 'memory' })` in production                         | Memory storage loses data on restart; use Redis or Vercel KV for persistence                             |
+| Cache TTL units          | `defaultTTL: 3600` (seconds)                                                     | `defaultTTL: 3600000` (milliseconds)                                            | Cache TTL is in seconds, not milliseconds; 3600000 = 41 days                                             |
+| Feature flag gating      | `@Tool({ featureFlag: 'my-flag' })` on the tool decorator                        | Checking `this.featureFlags.isEnabled()` inside `execute()` and returning early | Decorator-level gating hides the tool from `list_tools`; manual check still exposes it                   |
+| Dashboard in production  | `DashboardPlugin.init({ enabled: true, auth: { enabled: true, token: '...' } })` | `DashboardPlugin.init({})` without auth in production                           | Dashboard auto-disables in production; if enabled, always set auth token                                 |
+
+## Verification Checklist
+
+### Installation
+
+- [ ] Plugin package is installed (`@frontmcp/plugin-codecall`, `@frontmcp/plugin-remember`, etc.)
+- [ ] Plugin is registered via `.init()` in the `plugins` array of `@FrontMcp`
+- [ ] Required configuration options are provided (storage type, API keys, endpoints)
+
+### Runtime
+
+- [ ] `this.remember` / `this.approval` / `this.featureFlags` resolves in tool context
+- [ ] Cache plugin returns cached results on repeated identical calls
+- [ ] Feature-flagged tools are hidden from `tools/list` when flag is off
+- [ ] Dashboard is accessible at configured `basePath` (default: `/dashboard`)
+- [ ] Approval plugin blocks unapproved tools and grants approval correctly
+
+### Production
+
+- [ ] Redis or external storage is configured for Remember and Cache plugins
+- [ ] Dashboard authentication is enabled with a secret token
+- [ ] Feature flag adapter connects to external service (not `'static'`)
+
+## Troubleshooting
+
+| Problem                           | Cause                                                                            | Solution                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `this.remember` is undefined      | RememberPlugin not registered or missing `.init()`                               | Add `RememberPlugin.init({ type: 'memory' })` to `plugins` array                   |
+| Cache not working for a tool      | Tool name does not match any `toolPatterns` glob and `cache` metadata is not set | Add `cache: true` to `@Tool` decorator or add matching pattern to `toolPatterns`   |
+| Feature flag always returns false | Using `'static'` adapter with flag not in the `flags` map                        | Add the flag key to `flags: { 'my-flag': true }` or check adapter connection       |
+| Dashboard returns 404             | Plugin auto-disabled in production (`NODE_ENV=production`)                       | Set `enabled: true` explicitly in `DashboardPlugin.init()` options                 |
+| Approval webhook times out        | Callback URL not reachable from the external approval service                    | Verify `callbackPath` is publicly accessible and matches the webhook configuration |
+
 ## Reference
 
-- Plugins docs: [docs.agentfront.dev/frontmcp/plugins/overview](https://docs.agentfront.dev/frontmcp/plugins/overview)
-- `DynamicPlugin` base class: import from `@frontmcp/sdk`
-- CodeCall: `@frontmcp/plugin-codecall` — [source](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-codecall) | [docs](https://docs.agentfront.dev/frontmcp/plugins/codecall/overview)
-- Remember: `@frontmcp/plugin-remember` — [source](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-remember) | [docs](https://docs.agentfront.dev/frontmcp/plugins/remember-plugin)
-- Approval: `@frontmcp/plugin-approval` — [source](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-approval)
-- Cache: `@frontmcp/plugin-cache` — [source](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-cache) | [docs](https://docs.agentfront.dev/frontmcp/plugins/cache-plugin)
-- Feature Flags: `@frontmcp/plugin-feature-flags` — [source](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-feature-flags) | [docs](https://docs.agentfront.dev/frontmcp/plugins/feature-flags-plugin)
-- Dashboard: `@frontmcp/plugin-dashboard` — [source](https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-dashboard)
-- Meta-package: `@frontmcp/plugins` (re-exports cache, codecall, dashboard, remember)
+- [Plugins Overview Documentation](https://docs.agentfront.dev/frontmcp/plugins/overview)
+- Related skills: `create-plugin`, `create-plugin-hooks`, `create-tool`

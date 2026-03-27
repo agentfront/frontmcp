@@ -1,9 +1,10 @@
 ---
 name: skill-name
-description: Short description of what this skill does
-tags: [category, keyword]
+description: Primary action sentence. Use when [scenario 1], [scenario 2], or [scenario 3].
+tags: [category, keyword1, keyword2]
 tools:
-  - tool_name
+  - name: tool_name
+    purpose: What this tool does in this skill
 parameters:
   - name: param_name
     description: What this parameter controls
@@ -12,18 +13,40 @@ parameters:
 examples:
   - scenario: When to use this skill
     expected-outcome: What the user should see after completion
-compatibility: Node.js 22+
+priority: 7
+visibility: both
 license: Apache-2.0
+metadata:
+  docs: https://docs.agentfront.dev/frontmcp/...
 ---
 
-# Skill Name
+# Skill Title
 
-Brief description of the skill's purpose and when to use it.
+One-paragraph overview of what this skill accomplishes and its role in the FrontMCP ecosystem.
+
+## When to Use This Skill
+
+### Must Use
+
+- Scenario where this is the only correct skill to apply
+- Another mandatory scenario
+
+### Recommended
+
+- Scenario where this skill helps but alternatives exist
+- Helpful but optional scenario
+
+### Skip When
+
+- Scenario where another skill is the better choice (see `other-skill-name`)
+- Situation where this skill does not apply
+
+> **Decision:** One-liner summarizing when to pick this skill over alternatives.
 
 ## Prerequisites
 
-- List any prerequisites
-- Tools or packages needed
+- Required packages or tools
+- Prior skills that should be completed first (see `prerequisite-skill`)
 
 ## Steps
 
@@ -39,11 +62,33 @@ Describe the first step with code examples:
 
 Continue with subsequent steps.
 
-### Step 3: Verification
+## Common Patterns
 
-How to verify the skill completed successfully.
+<!-- Include this section only for skills with clear right/wrong usage patterns -->
 
-## Notes
+| Pattern         | Correct                  | Incorrect      | Why                                  |
+| --------------- | ------------------------ | -------------- | ------------------------------------ |
+| Decorator usage | `@Tool({ name: '...' })` | `@Tool('...')` | Decorator requires an options object |
 
-- Any important caveats or tips
-- Links to related documentation
+## Verification Checklist
+
+### Configuration
+
+- [ ] Config item verified
+- [ ] Dependencies installed
+
+### Runtime
+
+- [ ] Feature works as expected
+- [ ] Error cases handled
+
+## Troubleshooting
+
+| Problem              | Cause          | Solution      |
+| -------------------- | -------------- | ------------- |
+| Common error message | Why it happens | How to fix it |
+
+## Reference
+
+- [Documentation](https://docs.agentfront.dev/frontmcp/...)
+- Related skills: `related-skill-a`, `related-skill-b`

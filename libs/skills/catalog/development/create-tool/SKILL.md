@@ -26,9 +26,27 @@ metadata:
 
 Tools are the primary way to expose executable actions to AI clients in the MCP protocol. In FrontMCP, tools are TypeScript classes that extend `ToolContext`, decorated with `@Tool`, and registered on a `@FrontMcp` server or inside an `@App`.
 
-## When to Use @Tool
+## When to Use This Skill
 
-Use `@Tool` when you need to expose an action that an AI client can invoke. Tools accept validated input, perform work (database queries, API calls, computations), and return structured results. Every tool goes through Zod-based input validation before `execute()` runs.
+### Must Use
+
+- Building a new executable action that AI clients can invoke via MCP
+- Defining typed input schemas with Zod validation for tool parameters
+- Adding output schema validation to prevent data leaks from tool responses
+
+### Recommended
+
+- Adding rate limiting, concurrency control, or timeouts to existing tools
+- Integrating dependency injection into tool execution
+- Converting raw function handlers into class-based `ToolContext` patterns
+
+### Skip When
+
+- Exposing read-only data that does not require execution logic (see `create-resource`)
+- Building conversational templates or system prompts (see `create-prompt`)
+- Orchestrating multi-tool workflows with conditional logic (see `create-agent`)
+
+> **Decision:** Use this skill when you need an AI-callable action that accepts validated input, performs work, and returns structured output.
 
 ## Class-Based Pattern
 
@@ -416,3 +434,45 @@ class ExpensiveOperationTool extends ToolContext {
   }
 }
 ```
+
+## Common Patterns
+
+| Pattern        | Correct                                         | Incorrect                                     | Why                                                           |
+| -------------- | ----------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
+| Input schema   | `inputSchema: { name: z.string() }` (raw shape) | `inputSchema: z.object({ name: z.string() })` | Framework wraps in `z.object()` internally                    |
+| Output schema  | Always define `outputSchema`                    | Omit `outputSchema`                           | Prevents data leaks and enables CodeCall chaining             |
+| DI resolution  | `this.get(TOKEN)` with proper error handling    | `this.tryGet(TOKEN)!` with non-null assertion | `get` throws a clear error; non-null assertions mask failures |
+| Error handling | `this.fail(new ResourceNotFoundError(...))`     | `throw new Error(...)`                        | `this.fail` triggers the error flow with MCP error codes      |
+| Tool naming    | `snake_case` names: `get_weather`               | `camelCase` or `PascalCase`: `getWeather`     | MCP protocol convention for tool names                        |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Tool class extends `ToolContext` and implements `execute()`
+- [ ] `@Tool` decorator has `name`, `description`, and `inputSchema`
+- [ ] `outputSchema` is defined to validate and restrict output fields
+- [ ] Tool is registered in `tools` array of `@App` or `@FrontMcp`
+
+### Runtime
+
+- [ ] Tool appears in `tools/list` MCP response
+- [ ] Valid input returns expected output
+- [ ] Invalid input returns Zod validation error (not a crash)
+- [ ] `this.fail()` triggers proper MCP error response
+- [ ] DI dependencies resolve correctly via `this.get()`
+
+## Troubleshooting
+
+| Problem                                          | Cause                                       | Solution                                                                     |
+| ------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------- |
+| Tool not appearing in `tools/list`               | Not registered in `tools` array             | Add tool class to `@App` or `@FrontMcp` `tools` array                        |
+| Zod validation error on valid input              | Using `z.object()` wrapper in `inputSchema` | Use raw shape: `{ field: z.string() }` not `z.object({ field: z.string() })` |
+| `this.get(TOKEN)` throws DependencyNotFoundError | Provider not registered in scope            | Register provider in `providers` array of `@App` or `@FrontMcp`              |
+| Output contains unexpected fields                | No `outputSchema` defined                   | Add `outputSchema` to strip unvalidated fields from response                 |
+| Tool times out                                   | No timeout configured for long operation    | Add `timeout: { executeMs: 30_000 }` to `@Tool` options                      |
+
+## Reference
+
+- [Tools Documentation](https://docs.agentfront.dev/frontmcp/servers/tools)
+- Related skills: `create-resource`, `create-prompt`, `configure-throttle`, `create-agent`

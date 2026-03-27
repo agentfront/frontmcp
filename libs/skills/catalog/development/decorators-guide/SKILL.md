@@ -35,6 +35,30 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 
 ---
 
+## When to Use This Skill
+
+### Must Use
+
+- You are building a new FrontMCP server and need to choose the correct decorator for each component
+- You are reviewing or debugging decorator configuration and need to verify field names, types, or nesting hierarchy
+- You are onboarding to the FrontMCP codebase and need a single reference for the full decorator architecture
+
+### Recommended
+
+- You are adding a new capability (tool, resource, prompt, agent, skill) to an existing server and want to confirm the correct decorator signature
+- You are designing a plugin or adapter and need to understand how it integrates with the decorator hierarchy
+- You are refactoring an app's module structure and need to verify which decorators belong in `@App` vs `@FrontMcp`
+
+### Skip When
+
+- You only need to write business logic inside an existing tool or resource (see `tool-creation` skill)
+- You are configuring authentication or session management without changing decorators (see `auth-setup` skill)
+- You are working on CI/CD, deployment, or infrastructure that does not involve decorator choices
+
+> **Decision:** Use this skill whenever you need to look up, choose, or validate a FrontMCP decorator -- skip it when the decorator is already chosen and you are only implementing internal logic.
+
+---
+
 ## 1. @FrontMcp
 
 **Purpose:** Declares the root MCP server and its global configuration.
@@ -596,3 +620,78 @@ class AuditHooks {
 | `@Job`                      | `JobContext`      | `@App.jobs`      | Background task          |
 | `@Workflow`                 | -                 | `@App.workflows` | Multi-step orchestration |
 | `@Will/@Did/@Stage/@Around` | -                 | Entry class      | Lifecycle hooks          |
+
+---
+
+## Common Patterns
+
+| Pattern                     | Correct                                                                       | Incorrect                                                                    | Why                                                                                                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Grouping tools into modules | Place tools inside `@App({ tools: [...] })`                                   | Register tools directly in `@FrontMcp({ tools: [...] })` for large servers   | Apps provide logical grouping, scoped providers, and isolation; standalone tools in `@FrontMcp` are only appropriate for small servers or global utilities |
+| Exposing data to the LLM    | Use `@Resource` for fixed URIs, `@ResourceTemplate` for parameterized URIs    | Using `@Tool` to return static data that never changes                       | Resources are the MCP-standard way to expose readable data; tools are for actions with side effects or dynamic computation                                 |
+| Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                      | Adding logging/caching logic directly inside every tool's `execute()` method | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
+| Background processing       | Use `@Job` with a cron schedule for recurring work                            | Using `setTimeout` or manual polling inside a tool                           | Jobs integrate with the scheduler, support persistence, and are visible in server diagnostics                                                              |
+| Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                 | Chaining multiple tool calls manually from the LLM                           | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
+| Injecting services          | Use `@Provider` with `useFactory`/`useClass` and access via `this.get(Token)` | Importing singletons directly or using global state                          | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
+
+---
+
+## Verification Checklist
+
+### Structure
+
+- [ ] Server has exactly one `@FrontMcp` decorated class
+- [ ] Every `@App` is listed in the `@FrontMcp({ apps: [...] })` array
+- [ ] Each tool, resource, prompt, agent, and skill is registered in an `@App` (or in `@FrontMcp` for standalone use)
+
+### Decorator Fields
+
+- [ ] Every `@Tool` has `name`, `description`, and `inputSchema` defined
+- [ ] Every `@Resource` has `name` and `uri` with a valid scheme (e.g., `config://`, `file://`)
+- [ ] Every `@ResourceTemplate` has `uriTemplate` with `{param}` placeholders matching the `read()` params argument
+- [ ] Every `@Prompt` has `name` and at least one argument when it accepts input
+- [ ] Every `@Agent` has `name`, `description`, and `llm` configuration
+
+### Inheritance
+
+- [ ] Tool classes extend `ToolContext` and implement `execute()`
+- [ ] Prompt classes extend `PromptContext` and implement `execute()`
+- [ ] Resource classes extend `ResourceContext` and implement `read()`
+- [ ] Agent classes extend `AgentContext` and implement `execute()`
+- [ ] Job classes extend `JobContext` and implement `execute()`
+
+### Hooks
+
+- [ ] Hook flow strings match valid flows (e.g., `tools:call-tool`, `resources:read-resource`)
+- [ ] `@Around` hooks call `await next()` to continue the chain (unless intentionally short-circuiting)
+- [ ] Hooks do not mutate `rawInput` -- use `ctx.state.set()` for flow state
+
+### DI and Plugins
+
+- [ ] All `@Provider` entries specify exactly one of `useClass`, `useValue`, or `useFactory`
+- [ ] Plugins are registered in `@App({ plugins: [...] })` or `@FrontMcp({ plugins: [...] })`
+- [ ] Context extensions installed by plugins match the module augmentation declarations
+
+---
+
+## Troubleshooting
+
+| Problem                                            | Cause                                                                                                 | Solution                                                                                                                            |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Tool does not appear in `tools/list` MCP response  | Tool class is not registered in any `@App({ tools: [...] })` or `@FrontMcp({ tools: [...] })`         | Add the tool class to the `tools` array of the appropriate `@App` or `@FrontMcp` decorator                                          |
+| `this.get(Token)` throws `DependencyNotFoundError` | The provider for that token is not registered or is registered in a different app scope               | Add a `@Provider` for the token in the same `@App` or in `@FrontMcp({ providers: [...] })` for global access                        |
+| Resource returns 404 / `ResourceNotFoundError`     | The `uri` in `@Resource` does not match the requested URI, or `uriTemplate` parameters are misaligned | Verify the URI string exactly matches what the client requests; for templates, confirm `{param}` names match                        |
+| Hook never fires                                   | The `flow` string in `@Will`/`@Did`/`@Around`/`@Stage` does not match any registered flow             | Check the flow string against valid flows (e.g., `tools:call-tool`, `resources:read-resource`, `resources:list-resources`)          |
+| Plugin context extension is `undefined` at runtime | The plugin's `installContextExtension` function was not called, or module augmentation is missing     | Ensure the plugin is registered and its context extension function runs at startup; verify the `declare module` augmentation exists |
+| Agent `execute()` returns empty result             | LLM configuration is missing or invalid (wrong model name, missing API key)                           | Verify `llm.model` and `llm.provider` in `@Agent`, and ensure the provider API key is set in environment variables                  |
+
+---
+
+## Reference
+
+- **Official docs:** [FrontMCP Decorators Overview](https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview)
+- **Related skills:**
+  - `tool-creation` -- step-by-step guide for building tools with `@Tool` and `ToolContext`
+  - `resource-patterns` -- patterns for `@Resource` and `@ResourceTemplate` usage
+  - `plugin-development` -- creating plugins with `@Plugin`, providers, and context extensions
+  - `auth-setup` -- authentication and session configuration (not decorator-focused)

@@ -59,18 +59,27 @@ metadata:
 
 # Configure Redis for Session Storage and Distributed State
 
-## When to use this skill
+## When to Use This Skill
 
-Use this skill when your FrontMCP server needs persistent session storage, distributed state, or pub/sub for resource subscriptions. Redis is required when any of the following apply:
+### Must Use
 
-- The server uses Streamable HTTP transport (sessions must survive reconnects)
-- Multiple server instances run behind a load balancer
-- Resource subscriptions with `subscribe: true` are enabled
-- Auth sessions need to persist across restarts
-- Elicitation state must be shared across instances
-- Deploying to serverless (Vercel, Lambda, Cloudflare) where no local filesystem exists
+- The server uses Streamable HTTP transport and sessions must survive reconnects
+- Multiple server instances run behind a load balancer and need shared state (sessions, rate limits)
+- Deploying to serverless (Vercel, Lambda, Cloudflare) where no local filesystem or in-process storage exists
 
-For single-instance stdio-only servers or local development, SQLite or in-memory stores may be sufficient. See the `setup-sqlite` skill for that use case.
+### Recommended
+
+- Resource subscriptions with `subscribe: true` are enabled and need pub/sub
+- Auth sessions or elicitation state must persist across server restarts
+- Distributed rate limiting is configured in the throttle guard
+
+### Skip When
+
+- Running a single-instance stdio-only server for local development -- use `setup-sqlite` or in-memory stores
+- Only need to configure session TTL and key prefix on an already-provisioned Redis -- use `configure-session`
+- Deploying a read-only MCP server with no sessions, subscriptions, or stateful tools
+
+> **Decision:** Use this skill to provision and connect Redis (Docker, existing instance, or Vercel KV); use `configure-session` to tune session-specific options after Redis is available.
 
 ## Step 1 -- Provision Redis
 
@@ -361,25 +370,48 @@ redis-cli -h localhost -p 6379 keys "mcp:*"
 
 You should see session keys like `mcp:session:<session-id>`.
 
-## Troubleshooting
+## Common Patterns
 
-| Symptom                             | Likely Cause                               | Fix                                                                      |
-| ----------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
-| `ECONNREFUSED 127.0.0.1:6379`       | Redis is not running                       | Start Docker container or check the Redis service                        |
-| `NOAUTH Authentication required`    | Password is set on Redis but not in config | Add `password` to the `redis` config or set `REDIS_PASSWORD`             |
-| `ERR max number of clients reached` | Too many connections                       | Set `maxRetriesPerRequest` or use connection pooling                     |
-| Vercel KV `401 Unauthorized`        | Missing or wrong KV tokens                 | Check `KV_REST_API_URL` and `KV_REST_API_TOKEN` in Vercel dashboard      |
-| Sessions lost after restart         | Redis persistence disabled                 | Use `--appendonly yes` in Redis config or managed Redis with persistence |
-| Pub/sub not working with Vercel KV  | Vercel KV does not support pub/sub         | Add a separate `pubsub` config pointing to a real Redis instance         |
+| Pattern                | Correct                                                                                    | Incorrect                                               | Why                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Redis provider field   | `redis: { provider: 'redis', host: '...', port: 6379 }`                                    | `redis: { host: '...', port: 6379 }` without `provider` | The legacy format without `provider` still works via auto-transform, but explicit `provider: 'redis'` is clearer and required for type checking |
+| Environment variables  | `host: process.env['REDIS_HOST'] ?? 'localhost'`                                           | Hardcoding `host: 'redis.internal'` in source           | Hardcoded values break across environments (dev, staging, prod); always read from env with a sensible fallback                                  |
+| Vercel KV credentials  | Let Vercel auto-inject `KV_REST_API_URL` and `KV_REST_API_TOKEN`                           | Manually setting KV tokens in the `redis` config object | Auto-injection is safer and ensures tokens rotate correctly; manual values risk stale or committed secrets                                      |
+| Docker persistence     | `command: redis-server --appendonly yes` in docker-compose                                 | Running Redis without `--appendonly` in development     | Without AOF persistence, data is lost on container restart; `--appendonly yes` preserves data across restarts                                   |
+| Pub/sub with Vercel KV | Separate `pubsub: { provider: 'redis', ... }` alongside `redis: { provider: 'vercel-kv' }` | Expecting Vercel KV to handle pub/sub                   | Vercel KV does not support pub/sub; a real Redis instance is required for resource subscriptions                                                |
 
 ## Verification Checklist
 
-Before reporting completion, verify:
+### Provisioning
 
-1. Redis is reachable (`redis-cli ping` returns `PONG`, or Vercel KV dashboard shows the store is active)
-2. The `redis` block is present in the `@FrontMcp` decorator config with a valid `provider` field
-3. The `provider` value is either `'redis'` or `'vercel-kv'` (not a custom string)
-4. Environment variables are set in `.env` and `.env` is gitignored
-5. The server starts without Redis connection errors
-6. For Vercel KV: `provider: 'vercel-kv'` is set and KV environment variables are present
-7. For pub/sub: a separate `pubsub` config pointing to real Redis is provided when using Vercel KV for sessions
+- [ ] Redis is reachable (`redis-cli ping` returns `PONG`, or Vercel KV dashboard shows the store is active)
+- [ ] Docker container is running and healthy (`docker compose ps` shows `healthy` status)
+- [ ] For existing instances: host, port, password, and TLS settings are correct
+
+### Configuration
+
+- [ ] The `redis` block is present in the `@FrontMcp` decorator with a valid `provider` field (`'redis'` or `'vercel-kv'`)
+- [ ] Environment variables (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`) are set in `.env`
+- [ ] `.env` file is listed in `.gitignore` -- credentials are never committed
+- [ ] For Vercel KV: `provider: 'vercel-kv'` is set and KV environment variables are present
+
+### Runtime
+
+- [ ] The server starts without Redis connection errors in the logs
+- [ ] `redis-cli keys "mcp:*"` shows keys after at least one MCP request through HTTP transport
+- [ ] For pub/sub: a separate `pubsub` config pointing to real Redis is provided when using Vercel KV for sessions
+
+## Troubleshooting
+
+| Problem                               | Cause                                               | Solution                                                                                                      |
+| ------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `ECONNREFUSED 127.0.0.1:6379`         | Redis is not running or Docker container is stopped | Start the container with `docker compose up -d redis` or check the Redis service status                       |
+| `NOAUTH Authentication required`      | Password is set on Redis but not provided in config | Add `password` to the `redis` config or set `REDIS_PASSWORD` environment variable                             |
+| `ERR max number of clients reached`   | Too many open connections from the application      | Set `maxRetriesPerRequest` or use connection pooling; check for connection leaks                              |
+| Vercel KV `401 Unauthorized`          | Missing or invalid KV tokens in the environment     | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
+| Sessions lost after container restart | Redis running without append-only persistence       | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
+
+## Reference
+
+- [Redis Setup Docs](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)
+- Related skills: `configure-session`, `setup-project`, `setup-sqlite`, `configure-transport`

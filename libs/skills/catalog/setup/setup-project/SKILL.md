@@ -47,9 +47,27 @@ metadata:
 
 # Scaffold and Configure a New FrontMCP Project
 
-## When to use this skill
+## When to Use This Skill
 
-Use this skill when you need to create a new FrontMCP MCP server from scratch. This covers both the CLI scaffolding approach (preferred) and manual setup for existing codebases or Nx monorepos. Follow every step in order. Do not skip steps or assume defaults that are not listed here.
+### Must Use
+
+- Creating a brand-new FrontMCP MCP server project from scratch
+- Setting up the `@FrontMcp` root decorator and `@App` structure for the first time
+- Choosing and configuring a deployment target (Node, Vercel, Lambda, Cloudflare)
+
+### Recommended
+
+- Adding FrontMCP to an existing TypeScript codebase that has no MCP server yet
+- Scaffolding a new app inside an Nx monorepo with `@frontmcp/nx` generators
+- Setting up the dev-loop (`frontmcp dev`, build, env vars) for a fresh project
+
+### Skip When
+
+- The project already has a working `@FrontMcp`-decorated server -- use `create-tool`, `create-resource`, or `create-prompt` to add entries
+- You only need to add Redis or SQLite storage to an existing server -- use `setup-redis` or `setup-sqlite`
+- You need to configure deployment for an already-scaffolded project -- use `deploy-to-vercel`, `deploy-to-lambda`, or `deploy-to-cloudflare`
+
+> **Decision:** Use this skill when no FrontMCP server exists yet and you need to scaffold the project structure, dependencies, and entry point from scratch.
 
 ## Step 1 -- Use the CLI Scaffolder (Preferred)
 
@@ -479,15 +497,44 @@ If manually configuring, add a `project.json`:
 
 Run with: `nx serve <projectName>`.
 
+## Common Patterns
+
+| Pattern                   | Correct                                                                      | Incorrect                                       | Why                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Server class export       | `export default class Server {}` with `@FrontMcp` decorator                  | Named export or no decorator                    | The SDK bootstrap expects a default-exported class decorated with `@FrontMcp`               |
+| Decorator prerequisites   | `experimentalDecorators: true` and `emitDecoratorMetadata: true` in tsconfig | Omitting either flag                            | FrontMCP decorators (`@FrontMcp`, `@App`, `@Tool`) rely on both TypeScript compiler options |
+| Reflect metadata import   | `import 'reflect-metadata'` at the top of `src/main.ts`                      | Importing it in individual tool/resource files  | The polyfill must load once before any decorator runs; the entry point is the correct place |
+| Deployment target storage | External Redis/Vercel KV for serverless targets (Vercel, Lambda, Cloudflare) | In-memory or SQLite storage on serverless       | Serverless functions are stateless; persistent storage requires an external provider        |
+| Environment secrets       | `.env` file excluded via `.gitignore`, values read with `process.env`        | Hardcoded secrets in source or committed `.env` | Secrets must never be committed to version control                                          |
+
 ## Verification Checklist
 
-Before reporting completion, verify all of the following:
+### Configuration
 
-1. `tsconfig.json` has `experimentalDecorators: true` and `emitDecoratorMetadata: true`
-2. `@frontmcp/sdk` is listed in dependencies
-3. `zod` is listed in dependencies (required for input schemas)
-4. `reflect-metadata` is listed in dependencies and imported at the top of `src/main.ts`
-5. `src/main.ts` exists with a `@FrontMcp` decorated class as the default export
-6. At least one `@App` class is registered in the `apps` array
-7. The dev command (`frontmcp dev` or `yarn dev`) starts without errors
-8. `.env` file exists and is listed in `.gitignore`
+- [ ] `tsconfig.json` has `experimentalDecorators: true` and `emitDecoratorMetadata: true`
+- [ ] `@frontmcp/sdk`, `zod`, and `reflect-metadata` are listed in `package.json` dependencies
+- [ ] `package.json` scripts include `dev`, `build`, and `start` commands
+- [ ] Deployment target in `@FrontMcp` metadata matches the intended runtime
+
+### Runtime
+
+- [ ] `src/main.ts` exists with a `@FrontMcp`-decorated default export
+- [ ] `import 'reflect-metadata'` is the first import in `src/main.ts`
+- [ ] At least one `@App` class is registered in the `apps` array
+- [ ] `frontmcp dev` starts without errors and responds to MCP `initialize` requests
+- [ ] `.env` file exists locally and is listed in `.gitignore`
+
+## Troubleshooting
+
+| Problem                                               | Cause                                                                                  | Solution                                                                                                        |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `TypeError: Reflect.getMetadata is not a function`    | `reflect-metadata` is not imported before decorators execute                           | Add `import 'reflect-metadata'` as the first line in `src/main.ts`                                              |
+| Decorators are silently ignored (no tools registered) | `experimentalDecorators` or `emitDecoratorMetadata` is `false` or missing in tsconfig  | Set both to `true` in `compilerOptions` and restart the TypeScript compiler                                     |
+| `frontmcp dev` exits with "No apps registered"        | The `apps` array in `@FrontMcp` metadata is empty or the `@App` class was not imported | Import your `@App` class and add it to the `apps` array                                                         |
+| Build fails with "Cannot find module '@frontmcp/sdk'" | Dependencies were not installed after scaffolding                                      | Run `yarn install` (or `npm install` / `pnpm install`) in the project root                                      |
+| Vercel deploy returns 500 on `/mcp` endpoint          | Transport not set to `streamable-http` or storage not configured for Vercel KV         | Set `transport: { protocol: 'streamable-http' }` and `redis: { provider: 'vercel-kv' }` in `@FrontMcp` metadata |
+
+## Reference
+
+- [Getting Started Quickstart](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)
+- Related skills: `setup-redis`, `setup-sqlite`, `nx-workflow`, `deploy-to-vercel`, `deploy-to-node`, `create-tool`

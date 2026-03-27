@@ -26,9 +26,27 @@ metadata:
 
 Prompts define reusable AI interaction patterns in the MCP protocol. They produce structured message sequences that clients use to guide LLM conversations. In FrontMCP, prompts are classes extending `PromptContext`, decorated with `@Prompt`, that return `GetPromptResult` objects.
 
-## When to Use @Prompt
+## When to Use This Skill
 
-Use `@Prompt` when you need to expose a reusable conversation template that an AI client can invoke with arguments. Prompts are ideal for code review patterns, debugging sessions, RAG queries, report generation, translation workflows, and any scenario where you want a standardized message structure.
+### Must Use
+
+- Building a reusable conversation template that AI clients invoke with arguments
+- Defining structured multi-turn message sequences (user/assistant patterns)
+- Creating domain-specific prompt patterns (code review, debugging, RAG queries)
+
+### Recommended
+
+- Standardizing message formats across multiple tools or agents
+- Embedding MCP resource content into prompt messages for context
+- Generating dynamic prompts that perform async lookups (knowledge base, APIs)
+
+### Skip When
+
+- You need an executable action that performs work and returns results (see `create-tool`)
+- You need to expose read-only data at a URI (see `create-resource`)
+- The task requires autonomous multi-step reasoning with inner tools (see `create-agent`)
+
+> **Decision:** Use this skill when you need a reusable, parameterized conversation template that produces structured `GetPromptResult` messages.
 
 ## Class-Based Pattern
 
@@ -398,3 +416,45 @@ nx generate @frontmcp/nx:prompt
 ```
 
 This creates the prompt file, spec file, and updates barrel exports.
+
+## Common Patterns
+
+| Pattern             | Correct                                                           | Incorrect                                           | Why                                                                   |
+| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Return type         | `execute()` returns `Promise<GetPromptResult>`                    | Returning a plain string or array of strings        | MCP protocol requires `{ messages: [...] }` structure                 |
+| Argument validation | Mark arguments as `required: true` in `arguments` array           | Manually checking `args.field` inside `execute()`   | Framework validates required arguments before `execute()` runs        |
+| Multi-turn priming  | Use `assistant` role messages to prime expected response patterns | Putting all instructions in a single `user` message | Alternating roles guides the LLM toward structured output             |
+| Resource embedding  | Use `type: 'resource'` content with a resource URI                | Inlining resource data as raw text in the prompt    | Resource references let clients resolve content dynamically           |
+| Error handling      | Use `this.fail(err)` for validation failures in execute           | `throw new Error(...)` directly                     | `this.fail` triggers the error flow with proper MCP error propagation |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Prompt class extends `PromptContext` and implements `execute(args)`
+- [ ] `@Prompt` decorator has `name` and `arguments` array with correct `required` flags
+- [ ] Prompt is registered in `prompts` array of `@App` or `@FrontMcp`
+- [ ] All required arguments have `required: true`
+
+### Runtime
+
+- [ ] Prompt appears in `prompts/list` MCP response
+- [ ] Calling prompt with valid arguments returns well-formed `GetPromptResult`
+- [ ] Missing required arguments trigger `MissingPromptArgumentError`
+- [ ] Multi-turn messages have correct `user`/`assistant` role alternation
+- [ ] DI dependencies resolve correctly via `this.get()`
+
+## Troubleshooting
+
+| Problem                                           | Cause                                               | Solution                                                                                  |
+| ------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Prompt not appearing in `prompts/list`            | Not registered in `prompts` array                   | Add prompt class to `@App` or `@FrontMcp` `prompts` array                                 |
+| `MissingPromptArgumentError` on optional argument | Argument marked `required: true` incorrectly        | Set `required: false` for optional arguments in the `arguments` array                     |
+| LLM ignores priming messages                      | Only using `user` role messages                     | Add `assistant` role messages to prime the conversation pattern                           |
+| Type error on `execute()` return                  | Returning plain string instead of `GetPromptResult` | Wrap return in `{ messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }` |
+| `this.get(TOKEN)` throws DependencyNotFoundError  | Provider not registered in scope                    | Register provider in `providers` array of `@App` or `@FrontMcp`                           |
+
+## Reference
+
+- [Prompts Documentation](https://docs.agentfront.dev/frontmcp/servers/prompts)
+- Related skills: `create-tool`, `create-resource`, `create-agent`, `create-provider`

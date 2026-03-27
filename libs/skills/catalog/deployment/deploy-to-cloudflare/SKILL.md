@@ -50,6 +50,28 @@ This skill guides you through deploying a FrontMCP server to Cloudflare Workers.
 Cloudflare Workers support is **experimental**. The Express-to-Workers adapter has limitations with streaming, certain middleware, and some response methods. For production Cloudflare deployments, consider using Hono or native Workers APIs.
 </Warning>
 
+## When to Use This Skill
+
+### Must Use
+
+- Deploying a FrontMCP server to Cloudflare Workers
+- Configuring `wrangler.toml` for a FrontMCP project targeting Cloudflare
+- Setting up Workers KV, D1, or Durable Objects storage for an MCP server on Cloudflare
+
+### Recommended
+
+- Evaluating serverless edge deployment options for low-latency MCP endpoints
+- Migrating an existing Node.js MCP server to a Cloudflare Workers environment
+- Adding a custom domain to a Cloudflare-hosted MCP server
+
+### Skip When
+
+- Deploying to a traditional Node.js server or Docker container -- use `build-for-cli` or `--target node`
+- Building a browser-based MCP client -- use `build-for-browser`
+- Embedding MCP tools in an existing app without HTTP -- use `build-for-sdk`
+
+> **Decision:** Choose this skill when your deployment target is Cloudflare Workers; otherwise pick the skill that matches your runtime.
+
 ## Prerequisites
 
 - A Cloudflare account (https://dash.cloudflare.com)
@@ -186,7 +208,50 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 
 ## Troubleshooting
 
-- **Worker exceeds size limit**: Minimize dependencies. Run `frontmcp build --target cloudflare --analyze` and remove unused packages.
-- **Module format errors**: Ensure `wrangler.toml` does not set `type = "module"`. FrontMCP Cloudflare builds use CommonJS.
-- **KV binding errors**: Verify the KV namespace is created and the binding name in `wrangler.toml` matches your code.
-- **Timeout errors**: Check CPU time limits for your Cloudflare plan. Optimize or offload heavy computation.
+| Problem                       | Cause                                          | Solution                                                                      |
+| ----------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| Worker exceeds size limit     | Too many bundled dependencies                  | Run `frontmcp build --target cloudflare --analyze` and remove unused packages |
+| Module format errors          | `wrangler.toml` sets `type = "module"`         | Remove the `type` field; FrontMCP Cloudflare builds use CommonJS              |
+| KV binding errors             | Namespace not created or binding name mismatch | Run `wrangler kv:namespace create` and copy the `id` into `wrangler.toml`     |
+| Timeout errors                | CPU time exceeds plan limit                    | Upgrade plan or offload heavy computation to Durable Objects                  |
+| CORS failures on MCP endpoint | Missing CORS headers in Worker response        | Add CORS middleware or headers in your FrontMCP server configuration          |
+
+## Common Patterns
+
+| Pattern            | Correct                                     | Incorrect                         | Why                                                |
+| ------------------ | ------------------------------------------- | --------------------------------- | -------------------------------------------------- |
+| Module format      | CommonJS (`main = "dist/index.js"`)         | ESM (`type = "module"`)           | FrontMCP Cloudflare builds emit CommonJS           |
+| Storage binding    | `[[kv_namespaces]]` with matching `binding` | Hardcoded KV namespace ID in code | Bindings are injected at runtime by Workers        |
+| Compatibility date | Set to a recent, tested date                | Omitting `compatibility_date`     | Workers behavior changes across compat dates       |
+| Build command      | `frontmcp build --target cloudflare`        | `frontmcp build` (no target)      | Default target is Node.js, not Workers             |
+| Secrets            | `wrangler secret put MY_SECRET`             | Storing secrets in `[vars]`       | `[vars]` are visible in plaintext in the dashboard |
+
+## Verification Checklist
+
+**Build**
+
+- [ ] `frontmcp build --target cloudflare` completes without errors
+- [ ] Bundle size is within Cloudflare plan limits (free: 1 MB compressed)
+
+**Configuration**
+
+- [ ] `wrangler.toml` has correct `name`, `main`, and `compatibility_date`
+- [ ] KV namespace IDs match between dashboard and `wrangler.toml`
+- [ ] Secrets are stored via `wrangler secret put`, not in `[vars]`
+
+**Deployment**
+
+- [ ] `wrangler dev` serves the MCP endpoint locally
+- [ ] `wrangler deploy` succeeds without errors
+- [ ] Health endpoint responds with 200
+
+**Runtime**
+
+- [ ] `tools/list` JSON-RPC call returns expected tools
+- [ ] SSE streaming works end-to-end (if using SSE transport)
+- [ ] Custom domain resolves correctly (if configured)
+
+## Reference
+
+- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/serverless>
+- **Related skills:** `build-for-cli`, `build-for-browser`, `build-for-sdk`

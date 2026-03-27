@@ -44,23 +44,27 @@ metadata:
 
 # Configure SQLite for Local and Single-Instance Deployments
 
-## When to use this skill
+## When to Use This Skill
 
-Use this skill when your FrontMCP server runs as a single instance and does not need distributed storage. SQLite is the right choice for:
+### Must Use
 
-- CLI tools and local-only MCP servers
-- Single-instance daemons communicating over stdio or unix socket
+- Your FrontMCP server runs as a single instance with local persistent storage (CLI tools, unix-socket daemons)
+- You need session or key-value storage for local development without running external services
+- Your deployment target is a single-process Node.js server on a machine with a local filesystem
+
+### Recommended
+
+- You are building a CLI tool or local-only MCP server that will never be horizontally scaled
 - Local development when running a Redis container is unnecessary overhead
-- Projects that will never run multiple instances behind a load balancer
+- Projects that store session data, credentials, or counters on a single host
 
-Do NOT use SQLite when:
+### Skip When
 
-- Deploying to serverless (Vercel, Lambda, Cloudflare) -- there is no persistent local filesystem
-- Running multiple server instances (SQLite does not support distributed access)
-- You need pub/sub for resource subscriptions (use Redis instead)
-- Horizontal scaling is required now or in the near future
+- Deploying to serverless (Vercel, Lambda, Cloudflare) where there is no persistent local filesystem -- use `setup-redis` instead
+- Running multiple server instances behind a load balancer -- use `setup-redis` instead
+- You need pub/sub for resource subscriptions or real-time event distribution -- use `setup-redis` instead
 
-For multi-instance or serverless deployments, use the `setup-redis` skill instead.
+> **Decision:** Use SQLite for single-instance local storage; switch to `setup-redis` for multi-instance or serverless deployments.
 
 ## Step 1 -- Install the Native Dependency
 
@@ -334,26 +338,54 @@ The change in `src/main.ts`:
 })
 ```
 
-## Troubleshooting
+## Common Patterns
 
-| Symptom                               | Likely Cause                               | Fix                                                                        |
-| ------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------- |
-| `Cannot find module 'better-sqlite3'` | Native module not installed                | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                     |
-| `Could not locate the bindings file`  | Native compilation failed                  | Ensure build tools are installed, delete `node_modules` and reinstall      |
-| `SQLITE_BUSY` errors                  | Multiple processes accessing the same file | Use WAL mode or ensure only one process writes to the database             |
-| `SQLITE_READONLY`                     | File permissions                           | Check write permissions on the database file and its parent directory      |
-| Database file on NFS with WAL errors  | WAL requires local filesystem              | Move the database to a local disk or disable WAL mode                      |
-| Encrypted data unreadable             | Wrong or missing encryption secret         | The secret must be identical across restarts; if lost, delete the database |
+| Pattern                        | Correct                                            | Incorrect                                  | Why                                                                                                           |
+| ------------------------------ | -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Database path                  | `path: '~/.frontmcp/data/sessions.sqlite'`         | `path: './sessions.sqlite'`                | Tilde-prefixed or absolute paths are stable across working directories; relative paths break when CWD changes |
+| Encryption secret source       | `secret: process.env['SQLITE_ENCRYPTION_SECRET']!` | `secret: 'hardcoded-secret-value'`         | Secrets must come from environment variables, never committed to source code                                  |
+| WAL mode default               | `walMode: true` (or omit, defaults to `true`)      | `walMode: false` without a specific reason | WAL provides better read concurrency with no downside on local filesystems                                    |
+| Native dependency installation | `yarn add @frontmcp/storage-sqlite better-sqlite3` | `yarn add better-sqlite3` alone            | Both packages are required; the storage package wraps the native bindings with FrontMCP session store logic   |
+| TTL cleanup interval           | `ttlCleanupIntervalMs: 60000` (default)            | `ttlCleanupIntervalMs: 500`                | Overly aggressive cleanup wastes CPU; the default 60s is appropriate for most workloads                       |
 
 ## Verification Checklist
 
-Before reporting completion, verify:
+### Dependencies
 
-1. `@frontmcp/storage-sqlite` and `better-sqlite3` are in `dependencies`
-2. `@types/better-sqlite3` is in `devDependencies`
-3. `node -e "require('better-sqlite3')"` runs without errors
-4. The `sqlite` block is present in the `@FrontMcp` decorator config with a valid `path` string
-5. The database path parent directory exists and is writable
-6. Environment variables are in `.env` and `.env` is gitignored
-7. The server starts without SQLite errors (`frontmcp dev`)
-8. If encryption is enabled: `SQLITE_ENCRYPTION_SECRET` is set and is at least 32 characters
+- [ ] `@frontmcp/storage-sqlite` and `better-sqlite3` are in `dependencies`
+- [ ] `@types/better-sqlite3` is in `devDependencies`
+- [ ] `node -e "require('better-sqlite3')"` runs without errors
+
+### Configuration
+
+- [ ] The `sqlite` block is present in the `@FrontMcp` decorator config with a valid `path` string
+- [ ] The database path parent directory exists and is writable
+- [ ] WAL mode is enabled (default) unless there is a specific filesystem limitation
+
+### Environment and Security
+
+- [ ] Environment variables are in `.env` and `.env` is gitignored
+- [ ] If encryption is enabled: `SQLITE_ENCRYPTION_SECRET` is set and is at least 32 characters
+- [ ] No secrets are hardcoded in source files
+
+### Runtime
+
+- [ ] The server starts without SQLite errors (`frontmcp dev`)
+- [ ] The database file is created at the configured path
+- [ ] If WAL mode is enabled: `.sqlite-wal` and `.sqlite-shm` files appear alongside the database
+
+## Troubleshooting
+
+| Problem                                 | Cause                                                           | Solution                                                                                                                  |
+| --------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot find module 'better-sqlite3'`   | Native module not installed                                     | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                                                                    |
+| `Could not locate the bindings file`    | Native compilation failed                                       | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall    |
+| `SQLITE_BUSY` errors                    | Multiple processes accessing the same database file             | Enable WAL mode (`walMode: true`) or ensure only one process writes to the database                                       |
+| `SQLITE_READONLY`                       | Insufficient file permissions                                   | Check write permissions on the database file and its parent directory                                                     |
+| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk or set `walMode: false`                                                                 |
+| Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated |
+
+## Reference
+
+- **Docs:** [SQLite Setup Guide](https://docs.agentfront.dev/frontmcp/deployment/sqlite-setup)
+- **Related skills:** `setup-redis`, `setup-project`, `nx-workflow`

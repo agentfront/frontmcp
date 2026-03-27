@@ -23,9 +23,27 @@ metadata:
 
 Skills are knowledge and workflow guides that help LLMs accomplish multi-step tasks using available MCP tools. Unlike tools (which execute actions directly) or agents (which run autonomous LLM loops), skills provide structured instructions, tool references, and context that the AI client uses to orchestrate tool calls on its own.
 
-## When to Use @Skill
+## When to Use This Skill
 
-Use `@Skill` when you want to teach an AI client HOW to accomplish a complex task by combining multiple tools in sequence. A skill does not execute anything itself -- it provides the instructions, tool references, and examples that guide the AI through a workflow.
+### Must Use
+
+- Teaching an AI client how to accomplish a complex task by combining multiple tools in a defined sequence
+- Building directory-based skills with `SKILL.md`, scripts, references, and assets loaded via `skillDir()`
+- Defining tool-orchestration instructions with explicit tool references, parameters, and examples
+
+### Recommended
+
+- Creating reusable workflow guides that can be discovered via HTTP (`/llm.txt`, `/skills`) or MCP protocol
+- Wrapping existing tools into a higher-level procedure with step-by-step instructions and validation modes
+- Providing AI clients with structured playbooks for incident response, deployment, or data-processing flows
+
+### Skip When
+
+- You need a single executable action with direct input/output (see `create-tool`)
+- You need an autonomous LLM loop that reasons across multiple steps on its own (see `create-agent`)
+- You are building a conversational template or system prompt without tool references (see `create-prompt`)
+
+> **Decision:** Use this skill when you need to guide an AI client through a multi-tool workflow using structured instructions and tool references, without executing anything directly.
 
 | Aspect     | @Skill                   | @Tool                | @Agent               |
 | ---------- | ------------------------ | -------------------- | -------------------- |
@@ -577,3 +595,51 @@ class AuditApp {}
 })
 class AuditServer {}
 ```
+
+## Common Patterns
+
+| Pattern            | Correct                                                                               | Incorrect                                                      | Why                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Tool references    | `tools: [BuildTool, 'run_tests', { name: 'deploy', purpose: '...', required: true }]` | `tools: [{ class: BuildTool }]` (object with `class` key)      | The `tools` array accepts class refs, strings, or `{ name, purpose, required }` objects only |
+| Tool validation    | `toolValidation: 'strict'` for production skills                                      | Omitting `toolValidation` for critical workflows               | Default is `'warn'`; production skills should fail fast on missing tools with `'strict'`     |
+| Instruction source | `instructions: { file: './skills/deploy.md' }` for long content                       | Inlining hundreds of lines in the decorator string             | File-based instructions keep decorator metadata readable and instructions maintainable       |
+| Skill visibility   | `visibility: 'both'` (default) for public skills                                      | Setting `visibility: 'mcp'` when HTTP discovery is also needed | Skills with `'mcp'` visibility are hidden from `/llm.txt` and `/skills` HTTP endpoints       |
+| Parameter types    | `parameters: [{ name: 'env', type: 'string', required: true }]`                       | `parameters: { env: 'string' }` (plain object shape)           | Parameters must be an array of `{ name, description, type, required?, default? }` objects    |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `@Skill` decorator has `name` and `description`
+- [ ] `instructions` are provided via inline string, `{ file }`, or `{ url }`
+- [ ] All tool references in `tools` array resolve to registered tools (when `toolValidation: 'strict'`)
+- [ ] Skill is registered in `skills` array of `@App` or `@FrontMcp`
+
+### Runtime
+
+- [ ] Skill appears in MCP skill listing (`skills/list`) when `visibility` includes `'mcp'`
+- [ ] Skill appears at `/llm.txt` and `/skills` HTTP endpoints when `visibility` includes `'http'`
+- [ ] `build()` returns complete `SkillContent` with instructions and tool references
+- [ ] `getToolRefs()` returns the correct list of resolved tool references
+- [ ] Hidden skills (`hideFromDiscovery: true`) are invocable but not listed in discovery
+
+### Directory-Based Skills
+
+- [ ] `SKILL.md` file exists at the root of the skill directory with valid YAML frontmatter
+- [ ] `skillDir()` correctly loads instructions, scripts, references, and assets
+- [ ] Frontmatter `tools` entries match registered tool names
+
+## Troubleshooting
+
+| Problem                                      | Cause                                                       | Solution                                                                               |
+| -------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Skill not appearing in `/llm.txt`            | `visibility` is set to `'mcp'`                              | Change to `'both'` or `'http'` to include HTTP discovery                               |
+| `toolValidation: 'strict'` throws at startup | A referenced tool is not registered in the scope            | Register all referenced tools in the `tools` array of `@App` or `@FrontMcp`            |
+| `skillDir()` fails to load                   | `SKILL.md` file missing or frontmatter is invalid YAML      | Ensure the directory contains a `SKILL.md` with valid `---` delimited YAML frontmatter |
+| Instructions are empty at runtime            | `{ file: './path.md' }` path is relative to wrong directory | Use a path relative to the skill file's location, not the project root                 |
+| Parameters not visible to AI client          | `parameters` defined as a plain object instead of an array  | Use array format: `[{ name, description, type, required }]`                            |
+
+## Reference
+
+- [Skills Documentation](https://docs.agentfront.dev/frontmcp/servers/skills)
+- Related skills: `create-skill`, `create-tool`, `create-agent`, `create-prompt`

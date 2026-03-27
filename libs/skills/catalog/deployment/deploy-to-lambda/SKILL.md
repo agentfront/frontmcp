@@ -55,6 +55,28 @@ metadata:
 
 This skill walks you through deploying a FrontMCP server to AWS Lambda with API Gateway using SAM or CDK.
 
+## When to Use This Skill
+
+### Must Use
+
+- Deploying a FrontMCP server to AWS Lambda behind API Gateway
+- Setting up a SAM or CDK stack for a serverless MCP endpoint on AWS
+- Integrating with AWS-native services like ElastiCache, Secrets Manager, or CloudWatch
+
+### Recommended
+
+- Your organization standardizes on AWS and you need IAM-based access control
+- You want provisioned concurrency for predictable latency on critical MCP endpoints
+- Deploying across multiple AWS regions with infrastructure-as-code (SAM or CDK)
+
+### Skip When
+
+- Deploying to Vercel or you prefer a simpler serverless DX -- use `deploy-to-vercel` instead
+- You need a long-lived process with WebSockets or persistent connections -- use `deploy-to-node` instead
+- You do not use AWS and want to avoid managing IAM roles, VPCs, and CloudFormation stacks
+
+> **Decision:** Choose this skill when you need serverless deployment within the AWS ecosystem; choose a different target when you want simpler ops or a non-AWS platform.
+
 ## Prerequisites
 
 - AWS account with appropriate IAM permissions
@@ -296,9 +318,53 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 | 512 MB  | ~500ms             | ~700ms           |
 | 1024 MB | ~350ms             | ~500ms           |
 
+## Common Patterns
+
+| Pattern            | Correct                                                        | Incorrect                               | Why                                                                                                |
+| ------------------ | -------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Build command      | `frontmcp build --target lambda`                               | `tsc` or generic bundler                | The Lambda target produces a single optimized handler with tree-shaking for cold-start performance |
+| Architecture       | `arm64` (Graviton)                                             | `x86_64`                                | ARM64 functions initialize faster and cost less per ms of compute                                  |
+| Handler path       | `dist/lambda.handler` in SAM template                          | `index.handler` or `src/lambda.handler` | The FrontMCP build outputs to `dist/`; mismatched paths cause 502 errors                           |
+| Secrets management | SSM Parameter Store or Secrets Manager (`{{resolve:ssm:...}}`) | Plaintext env vars in `template.yaml`   | SSM/Secrets Manager encrypts values at rest and supports rotation                                  |
+| Redis connectivity | Lambda in same VPC as ElastiCache with security groups         | Public Redis endpoint from Lambda       | VPC peering ensures low latency and keeps traffic off the public internet                          |
+
+## Verification Checklist
+
+**Build**
+
+- [ ] `frontmcp build --target lambda` completes without errors
+- [ ] `dist/lambda.handler` exists and exports a `handler` function
+
+**SAM / CDK**
+
+- [ ] `sam build` succeeds without errors
+- [ ] `sam deploy --guided` creates the CloudFormation stack
+- [ ] Stack outputs include the API Gateway endpoint URL
+
+**Runtime**
+
+- [ ] `curl https://<api-id>.execute-api.<region>.amazonaws.com/health` returns `{"status":"ok"}`
+- [ ] CloudWatch Logs show successful invocations without errors
+- [ ] `NODE_ENV` is set to `production` in the function configuration
+
+**Production Readiness**
+
+- [ ] Sensitive values use SSM Parameter Store or Secrets Manager
+- [ ] Log retention is configured (e.g., 14 days)
+- [ ] If using Redis, Lambda is in the same VPC as ElastiCache with correct security groups
+- [ ] Provisioned concurrency is enabled for latency-sensitive endpoints (if applicable)
+
 ## Troubleshooting
 
-- **Timeout errors**: Increase `Timeout` in the SAM template. Check if the function is waiting on an unreachable resource.
-- **502 Bad Gateway**: Check CloudWatch logs. Common causes: handler path mismatch, missing environment variables, unhandled exceptions.
-- **Cold starts too slow**: Increase memory allocation, use ARM64, or enable provisioned concurrency.
-- **Redis from Lambda**: Place the Lambda function in the same VPC as your ElastiCache cluster with appropriate security groups.
+| Problem                              | Cause                                                           | Solution                                                                                                  |
+| ------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Timeout errors                       | Function timeout too low or waiting on unreachable resource     | Increase `Timeout` in the SAM template; verify network connectivity to dependencies                       |
+| 502 Bad Gateway                      | Handler path mismatch, missing env vars, or unhandled exception | Check CloudWatch Logs; confirm `Handler` matches `dist/lambda.handler`                                    |
+| Cold starts too slow                 | Low memory, x86 architecture, or large bundle                   | Increase memory to 512+ MB, use `arm64`, or enable provisioned concurrency                                |
+| Redis connection refused from Lambda | Lambda not in the same VPC as ElastiCache                       | Place the Lambda in the ElastiCache VPC with appropriate security group rules                             |
+| `sam deploy` fails with IAM error    | Insufficient permissions for CloudFormation stack creation      | Ensure the deploying IAM user/role has `cloudformation:*`, `lambda:*`, `apigateway:*`, and `iam:PassRole` |
+
+## Reference
+
+- **Docs:** https://docs.agentfront.dev/frontmcp/deployment/serverless
+- **Related skills:** `deploy-to-node`, `deploy-to-vercel`

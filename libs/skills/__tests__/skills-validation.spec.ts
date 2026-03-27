@@ -254,5 +254,63 @@ describe('skills catalog validation', () => {
       }
       expect(mismatches).toEqual([]);
     });
+
+    it('manifest descriptions should match SKILL.md frontmatter descriptions', () => {
+      const mismatches: string[] = [];
+      for (const entry of manifest.skills) {
+        const content = fs.readFileSync(path.join(CATALOG_DIR, entry.path, 'SKILL.md'), 'utf-8');
+        const { frontmatter } = parseSkillMdFrontmatter(content);
+        const mdDesc = frontmatter['description'] as string | undefined;
+        if (mdDesc && mdDesc !== entry.description) {
+          mismatches.push(`${entry.name}: manifest description differs from SKILL.md frontmatter`);
+        }
+      }
+      expect(mismatches).toEqual([]);
+    });
+  });
+
+  describe('new-format migration tracking', () => {
+    const NEW_FORMAT_SECTIONS = [{ heading: '## When to Use This Skill', required: '### Must Use' }];
+
+    function getSkillBody(dir: string): string {
+      return fs.readFileSync(path.join(CATALOG_DIR, dir, 'SKILL.md'), 'utf-8');
+    }
+
+    it('should track migration progress across the catalog', () => {
+      let migrated = 0;
+      const total = skillDirs.length;
+      for (const dir of skillDirs) {
+        const content = getSkillBody(dir);
+        const hasNewWhenToUse = content.includes('## When to Use This Skill') && content.includes('### Must Use');
+        if (hasNewWhenToUse) {
+          migrated++;
+        }
+      }
+      // Log migration progress for visibility
+
+      console.log(`[migration] ${migrated}/${total} skills migrated to new format`);
+      // This will pass regardless -- it's a progress tracker, not a gate
+      expect(migrated).toBeGreaterThanOrEqual(0);
+    });
+
+    it.each(
+      (() => {
+        const dirs = findAllSkillDirs();
+        return dirs.map((d) => [d]);
+      })(),
+    )('"%s" migrated skills should have all required new-format sections', (dir) => {
+      const content = getSkillBody(dir);
+      const isMigrated = content.includes('## When to Use This Skill') && content.includes('### Must Use');
+      if (!isMigrated) {
+        // Skip validation for unmigrated skills
+        return;
+      }
+
+      // Migrated skills must have the full new structure
+      expect(content).toContain('### Must Use');
+      expect(content).toContain('### Recommended');
+      expect(content).toContain('### Skip When');
+      expect(content).toContain('## Verification Checklist');
+    });
   });
 });

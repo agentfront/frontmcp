@@ -23,14 +23,27 @@ metadata:
 
 Providers are singleton services — database pools, API clients, config objects — that tools, resources, prompts, and agents can access via `this.get(token)`.
 
-## When to Use
+## When to Use This Skill
 
-Create a provider when:
+### Must Use
 
-- Multiple tools need the same database connection pool
-- You have API clients that should be shared (not recreated per request)
-- Configuration values should be centralized and type-safe
-- You need lifecycle management (initialize on startup, cleanup on shutdown)
+- Multiple tools, resources, or agents need a shared database connection pool
+- API clients or external service connections must be singleton (not recreated per request)
+- You need lifecycle management with `onInit()` at startup and `onDestroy()` at shutdown
+
+### Recommended
+
+- Centralizing configuration values as a type-safe injectable object
+- Sharing a cache layer (Map, Redis) across all execution contexts
+- Providing environment-specific settings (API URLs, feature flags) via DI
+
+### Skip When
+
+- The service is only used by a single tool and has no lifecycle (inline it in the tool)
+- You need to build an executable action for AI clients (see `create-tool`)
+- You need autonomous LLM-driven orchestration (see `create-agent`)
+
+> **Decision:** Use this skill when you need a shared, singleton service with lifecycle management that tools, resources, and agents access via `this.get(token)`.
 
 ## Step 1: Define a Token
 
@@ -231,3 +244,46 @@ frontmcp dev
 # Call a tool that uses the provider
 # If provider fails to init, you'll see an error at startup
 ```
+
+## Common Patterns
+
+| Pattern            | Correct                                                                | Incorrect                                     | Why                                                                               |
+| ------------------ | ---------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------- |
+| Token definition   | `const DB: Token<DbService> = Symbol('DbService')` (typed Symbol)      | `const DB = 'database'` (string literal)      | Typed `Token<T>` enables compile-time type checking on `this.get()`               |
+| DI resolution      | `this.get(TOKEN)` with error handling                                  | `this.tryGet(TOKEN)!` with non-null assertion | `get` throws a clear `DependencyNotFoundError`; non-null assertions hide failures |
+| Lifecycle          | Use `onInit()` for async setup, `onDestroy()` for cleanup              | Initializing connections in the constructor   | Constructor runs synchronously; `onInit()` supports async operations              |
+| Registration scope | Register at `@App` level for app-scoped, `@FrontMcp` for server-scoped | Registering same provider in multiple apps    | Server-scoped providers are shared; duplicating causes multiple instances         |
+| Config provider    | `readonly` properties from `process.env`                               | Mutable properties that change at runtime     | Providers are singletons; mutable state can cause race conditions                 |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Provider class has `@Provider` decorator with `name`
+- [ ] Token is defined with `Token<T>` using a `Symbol` and typed interface
+- [ ] Provider is registered in `providers` array of `@App` or `@FrontMcp`
+- [ ] `onInit()` handles async setup (DB connections, API clients)
+- [ ] `onDestroy()` cleans up resources (close connections, flush buffers)
+
+### Runtime
+
+- [ ] Server starts without provider initialization errors
+- [ ] `this.get(TOKEN)` resolves the provider in tools, resources, and agents
+- [ ] Provider is a singleton (same instance across all contexts)
+- [ ] Server shutdown calls `onDestroy()` and cleans up resources
+- [ ] Missing provider throws `DependencyNotFoundError` with a clear message
+
+## Troubleshooting
+
+| Problem                              | Cause                                               | Solution                                                               |
+| ------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------- |
+| `DependencyNotFoundError` at runtime | Provider not registered in scope                    | Add provider to `providers` array in `@App` or `@FrontMcp`             |
+| Provider `onInit()` fails at startup | Missing environment variable or unreachable service | Check environment variables and service connectivity before starting   |
+| Multiple instances of same provider  | Registered in multiple apps instead of server level | Move to `@FrontMcp` `providers` for shared, server-scoped access       |
+| Type mismatch on `this.get(TOKEN)`   | Token typed with wrong interface                    | Ensure `Token<T>` generic matches the provider's implemented interface |
+| Provider not destroyed on shutdown   | Missing `onDestroy()` method                        | Implement `onDestroy()` to close connections and release resources     |
+
+## Reference
+
+- [Providers Documentation](https://docs.agentfront.dev/frontmcp/extensibility/providers)
+- Related skills: `create-tool`, `create-resource`, `create-agent`, `create-prompt`

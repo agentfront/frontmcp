@@ -25,15 +25,27 @@ metadata:
 
 Protect your FrontMCP server with rate limiting, concurrency control, execution timeouts, and IP filtering — at both server and per-tool levels.
 
-## When to Use
+## When to Use This Skill
 
-Configure throttle when:
+### Must Use
 
-- Protecting against abuse or DDoS
-- Limiting expensive tool executions
-- Enforcing per-session or per-IP request quotas
-- Blocking or allowing specific IP ranges
-- Setting execution timeouts for long-running tools
+- Deploying a server to production where abuse protection and rate limiting are required
+- Exposing expensive or destructive tools that need concurrency caps and execution timeouts
+- Restricting access by IP address with allow/deny lists for compliance or security
+
+### Recommended
+
+- Enforcing per-session or per-IP request quotas to ensure fair resource distribution
+- Adding global concurrency limits to prevent server overload under burst traffic
+- Configuring distributed rate limiting across multiple server instances with Redis
+
+### Skip When
+
+- Running a local development server with stdio transport only -- throttle adds unnecessary overhead
+- Only need CORS or port configuration without rate limiting -- use `configure-http`
+- Need authentication or session management rather than rate limiting -- use `configure-session` or `configure-auth`
+
+> **Decision:** Use this skill when your server needs protection against abuse, rate limiting, concurrency control, IP filtering, or execution timeouts at either the server or per-tool level.
 
 ## Server-Level Throttle (GuardConfig)
 
@@ -187,3 +199,54 @@ for i in $(seq 1 101); do
 done
 # Should see 429 responses after limit is exceeded
 ```
+
+## Common Patterns
+
+| Pattern                   | Correct                                                                                     | Incorrect                                                            | Why                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Per-tool override         | Set `rateLimit` on the `@Tool` decorator to override server defaults                        | Duplicating the full server-level `throttle` config inside each tool | Per-tool config merges with server defaults; only specify the fields you want to override                                          |
+| Partition strategy        | Use `partitionBy: 'session'` for per-user fairness on shared tools                          | Using `partitionBy: 'global'` for all limits                         | Global partitioning means one abusive client can exhaust the quota for everyone                                                    |
+| Distributed rate limiting | Configure `storage: { type: 'redis' }` in the throttle block for multi-instance deployments | Relying on in-memory counters with multiple server instances         | In-memory counters are per-process; each instance tracks limits independently, allowing N times the intended rate                  |
+| IP filter ordering        | Set `defaultAction: 'deny'` with an explicit `allowList` for strict environments            | Setting `defaultAction: 'allow'` with only a `denyList`              | A deny-by-default posture is safer; new unknown IPs are blocked until explicitly allowed                                           |
+| Concurrency queue timeout | Set `queueTimeoutMs` on concurrency config to queue excess requests briefly                 | Setting `queueTimeoutMs: 0` on expensive tools                       | Zero timeout immediately rejects excess requests instead of briefly queuing them, causing unnecessary failures during short bursts |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `throttle.enabled` is set to `true` in the `@FrontMcp` decorator
+- [ ] `global.maxRequests` and `global.windowMs` are set to reasonable production values
+- [ ] `defaultTimeout.executeMs` is configured to prevent runaway tool executions
+- [ ] IP filter `defaultAction` matches your security posture (`allow` for open, `deny` for restricted)
+
+### Per-Tool
+
+- [ ] Expensive or destructive tools have explicit `rateLimit` and `concurrency` overrides
+- [ ] `partitionBy` is set to `'session'` or `'ip'` for tools that need per-client fairness
+- [ ] `queueTimeoutMs` is set on concurrency-limited tools to handle brief bursts
+
+### Distributed
+
+- [ ] Redis storage is configured in the throttle block for multi-instance deployments
+- [ ] Redis connection is verified before deploying (see `setup-redis`)
+
+### Runtime
+
+- [ ] Sending requests beyond the rate limit returns HTTP 429
+- [ ] Blocked IPs receive HTTP 403
+- [ ] Tool executions that exceed `executeMs` are terminated and return a timeout error
+
+## Troubleshooting
+
+| Problem                                         | Cause                                                                    | Solution                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Rate limits not enforced across instances       | In-memory storage used with multiple server replicas                     | Configure `storage: { type: 'redis' }` in the throttle block to share counters  |
+| All requests rejected with 403                  | `ipFilter.defaultAction` set to `'deny'` without any `allowList` entries | Add the allowed IP ranges to `allowList` or change `defaultAction` to `'allow'` |
+| Tools timing out unexpectedly                   | `defaultTimeout.executeMs` too low for the tool's normal execution time  | Increase the global default or set a per-tool `timeout.executeMs` override      |
+| `X-Forwarded-For` header ignored                | `ipFilter.trustProxy` not enabled or `trustedProxyDepth` too low         | Set `trustProxy: true` and adjust `trustedProxyDepth` to match your proxy chain |
+| Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window   | The window is fixed; all counters reset at the end of each `windowMs` interval  |
+
+## Reference
+
+- [Guard Configuration Docs](https://docs.agentfront.dev/frontmcp/servers/guard)
+- Related skills: `configure-http`, `configure-transport`, `setup-redis`, `configure-auth`

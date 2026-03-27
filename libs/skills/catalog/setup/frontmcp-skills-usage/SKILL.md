@@ -13,6 +13,28 @@ metadata:
 
 FrontMCP ships with a catalog of development skills that teach AI agents (Claude Code, Codex) how to build FrontMCP servers. You can deliver these skills **statically** (copy to disk) or **dynamically** (search on demand via CLI).
 
+## When to Use This Skill
+
+### Must Use
+
+- Setting up a new FrontMCP project and need to discover which skills to install for your workflow
+- Configuring AI-assisted development (Claude Code or Codex) with FrontMCP skill files for the first time
+- Deciding between static skill installation and dynamic on-demand search for your team
+
+### Recommended
+
+- Exploring the FrontMCP skill catalog to find skills for a specific topic (auth, deployment, plugins, etc.)
+- Onboarding a new team member who needs to understand how FrontMCP skills are delivered and consumed
+- Optimizing token usage by switching from fully-static to a hybrid static/dynamic skill strategy
+
+### Skip When
+
+- You already know which specific skill you need and want to learn its content (use that skill directly, e.g., `create-tool` or `configure-auth`)
+- You are scaffolding a brand-new FrontMCP project from scratch (use `setup-project` instead)
+- You need to create a custom skill for your own organization (use `create-skill` instead)
+
+> **Decision:** Use this skill when you need to understand the skills system itself -- how to browse, install, manage, and deliver FrontMCP skills to AI agents.
+
 ## Quick Start
 
 ```bash
@@ -198,3 +220,44 @@ frontmcp skills list --category plugins      # Official and custom plugins
 frontmcp skills list --category adapters     # OpenAPI and custom adapters
 frontmcp skills list --category testing      # Testing with Jest and @frontmcp/testing
 ```
+
+## Common Patterns
+
+| Pattern                     | Correct                                                          | Incorrect                                       | Why                                                                               |
+| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| Installing a skill          | `frontmcp skills install create-tool --provider claude`          | `cp node_modules/.../SKILL.md .claude/skills/`  | The CLI handles directory creation, naming, and reference files automatically     |
+| Searching skills            | `frontmcp skills search "oauth authentication"`                  | `frontmcp skills list \| grep oauth`            | Search uses weighted text matching (description 3x, tags 2x) for better relevance |
+| Choosing delivery mode      | Install 5-10 core skills statically; search the rest on demand   | Install every skill statically into the project | Static skills consume tokens on every agent invocation; keep the set small        |
+| Updating an installed skill | `frontmcp skills install create-tool --provider claude` (re-run) | Manually editing the installed SKILL.md file    | Re-installing overwrites with the latest catalog version and preserves structure  |
+| Filtering by category       | `frontmcp skills list --category deployment`                     | `frontmcp skills search "deployment"`           | `--category` uses the manifest taxonomy; search is for free-text queries          |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] FrontMCP CLI is installed and available on PATH (`frontmcp --version`)
+- [ ] Target provider directory exists or will be created (`.claude/skills/` or `.codex/skills/`)
+- [ ] Desired skills are listed in `frontmcp skills list` output
+- [ ] Bundle preset matches project needs (`minimal`, `recommended`, or `full`)
+
+### Runtime
+
+- [ ] Installed skills appear in the correct provider directory after `frontmcp skills install`
+- [ ] `frontmcp skills show <name>` outputs the full SKILL.md content to stdout
+- [ ] `frontmcp skills search <query>` returns relevant results ranked by relevance
+- [ ] AI agent (Claude Code or Codex) loads installed skills in its system prompt context
+
+## Troubleshooting
+
+| Problem                                               | Cause                                                               | Solution                                                                                                  |
+| ----------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `frontmcp skills search` returns no results           | Query terms do not match any skill name, description, or tags       | Broaden the query, try synonyms, or use `frontmcp skills list` to browse all available skills             |
+| Installed skill not picked up by Claude Code          | Skill was installed to wrong directory or provider flag was omitted | Re-install with `--provider claude` and verify the file exists at `.claude/skills/<name>/SKILL.md`        |
+| `frontmcp skills install` fails with permission error | Target directory is read-only or owned by a different user          | Check directory permissions; use `--dir` flag to specify an alternative writable path                     |
+| Skill content is outdated after a CLI upgrade         | Static installs are point-in-time snapshots of the catalog          | Re-run `frontmcp skills install <name> --provider claude` to fetch the latest version                     |
+| Too many tokens consumed by agent context             | All skills installed statically, inflating the system prompt        | Uninstall rarely-used skills and switch to dynamic search (`frontmcp skills search`) for occasional needs |
+
+## Reference
+
+- **Docs:** <https://docs.agentfront.dev/frontmcp/servers/skills>
+- **Related skills:** `setup-project`, `create-tool`, `create-resource`, `create-skill`, `decorators-guide`

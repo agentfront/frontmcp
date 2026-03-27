@@ -13,6 +13,28 @@ metadata:
 
 Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Every flow (tool calls, resource reads, prompt gets, etc.) is composed of **stages**, and hooks let you run logic before, after, around, or instead of any stage.
 
+## When to Use This Skill
+
+### Must Use
+
+- Adding before/after logic to tool execution (logging, metrics, input enrichment)
+- Implementing authorization checks that intercept flows before they reach the tool
+- Wrapping stage execution with caching, retry, or timing logic via `@Around`
+
+### Recommended
+
+- Replacing a built-in stage entirely with custom logic using `@Stage`
+- Adding hooks directly on a `@Tool` class for tool-specific pre/post processing
+- Filtering hook execution by tool name or context properties using `filter` predicates
+
+### Skip When
+
+- You need providers, context extensions, or contributed tools (see `create-plugin`)
+- You want to use an existing official plugin that already provides hooks (see `official-plugins`)
+- You are building a simple tool with no cross-cutting concerns (see `create-tool`)
+
+> **Decision:** Use this skill when you need to intercept or wrap flow stages with `@Will`, `@Did`, `@Around`, or `@Stage` decorators.
+
 ## Hook Decorator Types
 
 FrontMCP provides four hook decorators obtained via `FlowHooksOf(flowName)`:
@@ -280,3 +302,44 @@ parseInput → findTool → checkToolAuthorization → createToolCallContext
 ```
 
 Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
+
+## Common Patterns
+
+| Pattern               | Correct                                                               | Incorrect                                                              | Why                                                                                |
+| --------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Hook decorator source | `const { Will, Did } = ToolHook;` or `FlowHooksOf('tools:call-tool')` | Importing `Will` directly from `@frontmcp/sdk`                         | Decorators must be bound to a specific flow via `FlowHooksOf` or pre-built exports |
+| Hook priority         | `@Will('execute', { priority: 100 })` for early hooks                 | Relying on array order without priority                                | Multiple hooks on the same stage need explicit priority; higher runs first         |
+| Around next()         | `const result = await next(); return result;`                         | Forgetting to call `next()` in `@Around`                               | Omitting `next()` silently skips the wrapped stage and all downstream hooks        |
+| Filter predicate      | `filter: (ctx) => ctx.toolName !== 'health_check'`                    | Checking tool name inside the hook body and returning early            | Filters skip the hook cleanly; returning early may leave state inconsistent        |
+| Tool-level hooks      | `@Will('execute')` on a `@Tool` class (scoped to that tool)           | `@Will('execute')` on a `@Plugin` class expecting tool-scoped behavior | Plugin hooks fire for all tools; tool-level hooks fire only for that tool          |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Hook decorator is obtained from `FlowHooksOf(flowName)` or a pre-built export (e.g., `ToolHook`)
+- [ ] Stage name matches an actual stage in the targeted flow (e.g., `execute`, `validateInput`)
+- [ ] Plugin with hooks is registered in `plugins` array of `@App` or `@FrontMcp`
+
+### Runtime
+
+- [ ] `@Will` hook fires before the targeted stage
+- [ ] `@Did` hook fires after the targeted stage completes
+- [ ] `@Around` hook calls `next()` and the wrapped stage executes
+- [ ] `@Stage` replacement returns a valid response for the flow
+- [ ] Hook `filter` correctly skips invocations for excluded tools
+
+## Troubleshooting
+
+| Problem                                       | Cause                                            | Solution                                                                          |
+| --------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Hook never fires                              | Plugin not registered in `plugins` array         | Add plugin class to `@App` or `@FrontMcp` `plugins` array                         |
+| Hook fires for wrong flow                     | Used wrong flow name in `FlowHooksOf`            | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)            |
+| `@Around` skips the stage entirely            | `next()` not called inside the around handler    | Always `await next()` to execute the wrapped stage                                |
+| Multiple hooks execute in wrong order         | Priorities not set or conflicting                | Set explicit `priority` values; higher numbers execute first                      |
+| `@Stage` replacement causes downstream errors | Return value shape does not match stage contract | Ensure the return matches what the next stage expects (e.g., MCP response format) |
+
+## Reference
+
+- [Plugin Hooks Documentation](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)
+- Related skills: `create-plugin`, `official-plugins`, `create-tool`

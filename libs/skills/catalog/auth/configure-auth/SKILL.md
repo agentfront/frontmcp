@@ -51,6 +51,28 @@ metadata:
 
 This skill covers setting up authentication in a FrontMCP server. FrontMCP supports four auth modes, each suited to different deployment scenarios. All authentication logic lives in the `@frontmcp/auth` library.
 
+## When to Use This Skill
+
+### Must Use
+
+- Adding authentication to a new FrontMCP server for the first time
+- Switching between auth modes (e.g., moving from `public` to `remote` for production)
+- Configuring the credential vault to access downstream APIs on behalf of authenticated users
+
+### Recommended
+
+- Setting up multi-app auth where different `@App` instances need different security postures
+- Configuring OAuth local dev flow for development against `remote` or `transparent` modes
+- Adding audience validation or session TTL tuning to an existing auth setup
+
+### Skip When
+
+- You need to add scopes or guard individual tools/resources -- use `configure-scopes` instead
+- You need to manage session storage backends (Redis, Vercel KV) -- use `configure-session-store` instead
+- You are building a plugin that extends auth context -- use `create-plugin` instead
+
+> **Decision:** Use this skill whenever you need to choose, configure, or change the authentication mode on a FrontMCP server.
+
 ## Auth Modes Overview
 
 | Mode          | Use Case                                   | Token Issuer        |
@@ -236,15 +258,49 @@ The `authProviders` accessor (from `@frontmcp/auth`) provides:
 - `has(provider)` -- check if a provider is configured.
 - `refresh(provider)` -- force refresh the credential.
 
-## Common Mistakes
+## Common Patterns
 
-- **Using memory session store in production** -- sessions are lost on restart. Use Redis or Vercel KV.
-- **Hardcoding secrets** -- use environment variables for `clientId`, vault secrets, and Redis passwords.
-- **Missing audience validation** -- always set the audience field. Without it, tokens from any audience would be accepted.
+| Pattern                     | Correct                                                                        | Incorrect                                                       | Why                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Session store in production | Use Redis or Vercel KV session store                                           | Use default in-memory session store                             | Sessions are lost on restart; in-memory does not survive process recycling    |
+| Secret management           | Load `clientId`, vault secrets, and Redis passwords from environment variables | Hardcode secrets in source code                                 | Hardcoded secrets leak into version control and are difficult to rotate       |
+| Audience validation         | Always set `expectedAudience` in transparent/remote mode                       | Omit the audience field                                         | Without audience validation, tokens issued for any audience would be accepted |
+| Auth mode for development   | Use `public` mode or local OAuth mock for dev environments                     | Use `remote` mode pointing at production IdP during development | Avoids accidental production token usage and simplifies local iteration       |
+| Vault encryption secret     | Generate a strong random secret and store in env var `VAULT_SECRET`            | Use a short or predictable string for vault encryption          | Weak secrets compromise all stored downstream credentials                     |
+
+## Verification Checklist
+
+**Configuration**
+
+- [ ] Auth mode is set to the correct value for the deployment target (`public`, `transparent`, `local`, or `remote`)
+- [ ] `provider` URL is set when using `transparent` or `remote` mode
+- [ ] `clientId` is configured when using `remote` mode
+- [ ] `expectedAudience` is set when using `transparent` mode
+
+**Security**
+
+- [ ] No secrets are hardcoded in source files -- all loaded from environment variables
+- [ ] Vault encryption secret is a strong random value
+- [ ] Production deployments use Redis or Vercel KV for session storage, not in-memory
+
+**Runtime**
+
+- [ ] Server starts without auth-related errors in the console
+- [ ] Tokens are validated correctly (test with a valid and an invalid token)
+- [ ] Downstream credential vault returns tokens for configured providers
+- [ ] Multi-app configurations route requests to the correct auth mode per app
+
+## Troubleshooting
+
+| Problem                                 | Cause                                                                        | Solution                                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `JWKS fetch failed` error on startup    | The `provider` URL is unreachable or does not serve `/.well-known/jwks.json` | Verify the provider URL is correct and accessible from the server; check network/firewall rules   |
+| Tokens rejected with `invalid audience` | The `expectedAudience` value does not match the `aud` claim in the token     | Align the `expectedAudience` config with the audience value your identity provider sets in tokens |
+| Sessions lost after server restart      | Using the default in-memory session store in production                      | Switch to Redis or Vercel KV session store via `configure-session-store` skill                    |
+| `VAULT_SECRET is not defined` error     | The vault encryption secret environment variable is missing                  | Set `VAULT_SECRET` in your environment or `.env` file before starting the server                  |
+| OAuth redirect fails in local dev       | `remote` mode requires HTTPS and reachable callback URLs                     | Set `NODE_ENV=development` to relax HTTPS requirements, or use a local OAuth mock server          |
 
 ## Reference
 
-- Auth docs: [docs.agentfront.dev/frontmcp/authentication/overview](https://docs.agentfront.dev/frontmcp/authentication/overview)
-- Auth package: `@frontmcp/auth` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/auth)
-- Auth options interface: import `AuthOptionsInput` from `@frontmcp/auth` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/auth/src/options)
-- Credential vault: import from `@frontmcp/auth` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/auth/src/vault)
+- Docs: [Authentication Overview](https://docs.agentfront.dev/frontmcp/authentication/overview)
+- Related skills: `configure-scopes`, `configure-session-store`, `create-plugin`

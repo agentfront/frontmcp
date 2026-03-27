@@ -13,6 +13,28 @@ metadata:
 
 Adapters convert external definitions (OpenAPI specs, Lambda functions, etc.) into MCP tools, resources, and prompts automatically.
 
+## When to Use This Skill
+
+### Must Use
+
+- Converting an OpenAPI/Swagger specification into MCP tools automatically
+- Integrating a REST API that provides a public OpenAPI spec (Petstore, GitHub, Jira, Slack)
+- Setting up authentication (API key, bearer token, OAuth) for an adapter-generated API integration
+
+### Recommended
+
+- Registering multiple external APIs as namespaced tool sets in a single server
+- Enabling spec polling to auto-refresh tool definitions when the upstream API changes
+- Providing an inline OpenAPI spec for APIs without a hosted spec URL
+
+### Skip When
+
+- The external API has no OpenAPI spec and uses a custom protocol (see `create-adapter`)
+- You need cross-cutting behavior like caching or logging (see `create-plugin` or `official-plugins`)
+- You are building tools manually without an external spec (see `create-tool`)
+
+> **Decision:** Use this skill when you have an OpenAPI/Swagger spec and want to automatically generate MCP tools from it using `OpenApiAdapter`.
+
 ## OpenAPI Adapter
 
 The primary official adapter. Converts OpenAPI/Swagger specifications into MCP tools — one tool per operation.
@@ -129,8 +151,49 @@ class IntegrationHub {}
 | Examples    | OpenAPI → MCP tools                  | Caching, auth, logging              |
 | When to use | Integrating APIs                     | Adding middleware                   |
 
+## Common Patterns
+
+| Pattern              | Correct                                                                         | Incorrect                                                       | Why                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Adapter registration | `OpenApiAdapter.init({ name: 'petstore', specUrl: '...' })` in `adapters` array | Placing adapter in `plugins` array                              | Adapters go in `adapters`, not `plugins`; they serve different purposes              |
+| Tool naming          | Tools auto-named as `petstore:operationId` using adapter `name` as namespace    | Expecting flat names like `listPets`                            | Adapter name is prepended to prevent collisions across multiple adapters             |
+| Auth configuration   | `auth: { type: 'bearer', token: process.env.API_TOKEN! }`                       | Hardcoding secrets: `auth: { type: 'bearer', token: 'sk-xxx' }` | Always use environment variables for secrets; never commit tokens                    |
+| Spec source          | Use `specUrl` for hosted specs or `spec` for inline definitions                 | Using both `specUrl` and `spec` simultaneously                  | Only one source should be provided; `spec` takes precedence and `specUrl` is ignored |
+| Multiple APIs        | Register separate `OpenApiAdapter.init()` calls with unique `name` values       | Using the same `name` for different adapters                    | Duplicate names cause tool naming collisions                                         |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `@frontmcp/adapters` package is installed
+- [ ] `OpenApiAdapter.init()` is in the `adapters` array of `@App`
+- [ ] Adapter has a unique `name` for tool namespacing
+- [ ] `specUrl` points to a valid, reachable OpenAPI JSON/YAML endpoint (or `spec` is inline)
+
+### Runtime
+
+- [ ] Generated tools appear in `tools/list` with `<name>:<operationId>` naming
+- [ ] Auth headers are sent correctly on API calls
+- [ ] Spec polling refreshes tool definitions at the configured interval
+- [ ] Invalid spec URL produces a clear startup error
+
+### Production
+
+- [ ] API tokens and secrets are loaded from environment variables
+- [ ] Polling interval is appropriate for the API's update frequency
+- [ ] Multiple adapter registrations use distinct names
+
+## Troubleshooting
+
+| Problem                            | Cause                                                  | Solution                                                                                |
+| ---------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| No tools generated from spec       | Spec URL returns non-OpenAPI content or is unreachable | Verify URL returns valid OpenAPI 3.x JSON; check network access                         |
+| Authentication errors on API calls | Wrong auth type or missing credentials                 | Match `auth.type` to the API's security scheme; verify env vars are set                 |
+| Duplicate tool name error          | Two adapters registered with the same `name`           | Give each adapter a unique `name` (e.g., `'github'`, `'jira'`)                          |
+| Stale tools after API update       | Spec polling not configured                            | Add `polling: { intervalMs: 300000 }` to refresh every 5 minutes                        |
+| TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`: `import { OpenApiAdapter } from '@frontmcp/adapters'` |
+
 ## Reference
 
-- Adapter docs: [docs.agentfront.dev/frontmcp/adapters/overview](https://docs.agentfront.dev/frontmcp/adapters/overview)
-- OpenAPI adapter: [`@frontmcp/adapters`](https://docs.agentfront.dev/frontmcp/adapters/openapi-adapter)
-- Spec polling: [docs.agentfront.dev/frontmcp/adapters/openapi-polling](https://docs.agentfront.dev/frontmcp/adapters/openapi-polling)
+- [Adapter Overview Documentation](https://docs.agentfront.dev/frontmcp/adapters/overview)
+- Related skills: `create-adapter`, `create-plugin`, `create-tool`

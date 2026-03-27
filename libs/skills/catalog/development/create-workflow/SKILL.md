@@ -13,16 +13,27 @@ metadata:
 
 Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management.
 
-## When to Use @Workflow
+## When to Use This Skill
 
-Use `@Workflow` when you need to orchestrate multiple jobs in a defined order with dependencies between them. Examples include:
+### Must Use
 
-- CI/CD pipelines (build, test, deploy)
-- Data processing pipelines (extract, transform, load, verify)
-- Approval workflows (submit, review, approve, execute)
-- Multi-stage provisioning (create resources, configure, validate, notify)
+- Orchestrating multiple jobs in a defined order with explicit step dependencies (e.g., build then test then deploy)
+- Building execution pipelines that require conditional branching, parallel fan-out, or diamond dependency patterns
+- Defining webhook- or event-triggered multi-step automation that the framework manages end to end
 
-If you only need a single background task, use a `@Job` instead. If you need real-time sequential tool calls guided by an AI, use a `@Skill`.
+### Recommended
+
+- CI/CD pipelines, data-processing ETL flows, or approval chains that combine three or more jobs
+- Multi-stage provisioning sequences where steps need `continueOnError` or per-step retry policies
+- Replacing hand-rolled orchestration code with a declarative DAG of job steps
+
+### Skip When
+
+- You only need a single background task with no inter-step dependencies (see `create-job`)
+- You need real-time, AI-guided sequential tool calls rather than pre-declared steps (see `create-skill-with-tools`)
+- You are building a conversational prompt template with no execution logic (see `create-prompt`)
+
+> **Decision:** Use this skill when you need a declarative, multi-step pipeline of jobs with dependency ordering, conditions, and managed error propagation.
 
 ## Class-Based Pattern
 
@@ -707,3 +718,45 @@ class CiApp {}
 })
 class CiServer {}
 ```
+
+## Common Patterns
+
+| Pattern           | Correct                                                            | Incorrect                                                          | Why                                                                             |
+| ----------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Step dependencies | `dependsOn: ['build', 'test']` (array of step IDs)                 | `dependsOn: 'build'` (plain string)                                | `dependsOn` expects a `string[]`, not a single string                           |
+| Dynamic input     | `input: (steps) => ({ artifact: steps.get('build').outputs.url })` | `input: { artifact: buildResult.url }` (captured closure variable) | Static objects cannot reference previous step outputs; use the callback form    |
+| Conditional steps | `condition: (steps) => steps.get('test').state === 'completed'`    | `condition: (steps) => steps.get('test').outputs` (truthy check)   | Always check `.state` explicitly; outputs can be truthy even on partial failure |
+| Job registration  | Register all referenced jobs in the `jobs` array of `@App`         | Declare `jobName` in steps without registering the job class       | Steps reference jobs by name; unregistered jobs cause runtime lookup failures   |
+| Workflow trigger  | Set `trigger: 'webhook'` and provide `webhook: { path, secret }`   | Set `trigger: 'webhook'` without a `webhook` config object         | Webhook trigger requires the `webhook` configuration block for path and secret  |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `@Workflow` decorator has `name` and at least one step in `steps`
+- [ ] Every `jobName` in steps matches a registered `@Job` name
+- [ ] `dependsOn` arrays reference valid step `id` values within the same workflow
+- [ ] No circular dependencies exist in the step DAG
+
+### Runtime
+
+- [ ] Workflow appears in the server's workflow registry after startup
+- [ ] Steps with no dependencies execute in parallel (up to `maxConcurrency`)
+- [ ] Conditional steps are correctly skipped or executed based on prior step results
+- [ ] `continueOnError: true` steps allow downstream steps to proceed on failure
+- [ ] Webhook-triggered workflows respond to incoming HTTP requests
+
+## Troubleshooting
+
+| Problem                                             | Cause                                                          | Solution                                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Step never executes                                 | `dependsOn` references a step ID that does not exist           | Verify all `dependsOn` entries match actual step `id` values in the workflow                       |
+| Workflow fails at startup with "job not found"      | `jobName` references an unregistered job                       | Add the job class to the `jobs` array in `@App` before registering the workflow                    |
+| Dynamic `input` callback receives undefined outputs | Dependent step was skipped or failed without `continueOnError` | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs |
+| Webhook trigger does not fire                       | Missing or mismatched `webhook.secret`                         | Ensure `webhook.secret` matches the sender's HMAC secret and `webhook.path` is correct             |
+| Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms        | Increase `timeout` at the workflow level or add per-step `timeout` overrides                       |
+
+## Reference
+
+- [Workflows Documentation](https://docs.agentfront.dev/frontmcp/servers/workflows)
+- Related skills: `create-job`, `create-skill-with-tools`, `create-tool`, `multi-app-composition`

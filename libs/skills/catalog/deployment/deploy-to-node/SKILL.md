@@ -35,6 +35,28 @@ metadata:
 
 This skill walks you through deploying a FrontMCP server as a standalone Node.js application, optionally containerized with Docker for production use.
 
+## When to Use This Skill
+
+### Must Use
+
+- Deploying a FrontMCP server to a VPS, dedicated server, or bare-metal infrastructure
+- Running a long-lived Node.js process that needs full control over the runtime environment
+- Containerizing a FrontMCP server with Docker or Docker Compose for self-hosted production
+
+### Recommended
+
+- Using PM2 or systemd to manage a FrontMCP process with automatic restarts
+- Deploying behind NGINX or another reverse proxy for TLS termination and load balancing
+- Running in environments where serverless cold starts are unacceptable
+
+### Skip When
+
+- Deploying to Vercel -- use `deploy-to-vercel` instead
+- Deploying to AWS Lambda -- use `deploy-to-lambda` instead
+- You need zero-ops serverless scaling and do not require persistent connections or long-running processes
+
+> **Decision:** Choose this skill when you need a persistent Node.js process with full infrastructure control; choose a serverless skill when you want managed scaling.
+
 ## Prerequisites
 
 - Node.js 22 or later
@@ -221,9 +243,48 @@ services:
           cpus: '0.5'
 ```
 
+## Common Patterns
+
+| Pattern                   | Correct                              | Incorrect                                        | Why                                                                 |
+| ------------------------- | ------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------- |
+| Build command             | `frontmcp build --target node`       | `tsc && node dist/main.js`                       | The FrontMCP build bundles deps and produces an optimized output    |
+| Docker base image         | `node:22-alpine` (multi-stage)       | `node:22` (single stage with dev deps)           | Multi-stage keeps the production image small and secure             |
+| Process manager           | PM2 with `-i max` cluster mode       | Running `node dist/main.js` directly via `nohup` | PM2 handles restarts, logging, and multi-core clustering            |
+| Redis hostname in Compose | Service name `redis`                 | `localhost` or `127.0.0.1`                       | Containers communicate via Docker's internal DNS, not localhost     |
+| Environment config        | `.env` file or orchestrator env vars | Hardcoded values in source code                  | Keeps secrets out of the codebase and allows per-environment config |
+
+## Verification Checklist
+
+**Build**
+
+- [ ] `frontmcp build --target node` completes without errors
+- [ ] `dist/main.js` exists and is runnable with `node dist/main.js`
+
+**Docker**
+
+- [ ] `docker compose up -d` starts all services without errors
+- [ ] `docker compose ps` shows all containers as healthy
+- [ ] `curl http://localhost:3000/health` returns `{"status":"ok"}`
+
+**Production Readiness**
+
+- [ ] `NODE_ENV` is set to `production`
+- [ ] Redis is reachable and `REDIS_URL` is configured
+- [ ] Resource limits (memory, CPU) are defined in Compose or the orchestrator
+- [ ] NGINX or another reverse proxy handles TLS termination
+- [ ] Logs are collected and rotated (Docker log driver or PM2 log rotation)
+
 ## Troubleshooting
 
-- **Port already in use**: Change the `PORT` environment variable or stop the conflicting process.
-- **Redis connection refused**: Verify Redis is running and `REDIS_URL` is correct. In Docker Compose, use the service name (`redis`) as the hostname.
-- **Health check failing**: Increase `start_period` in the health check configuration to give the server more startup time.
-- **Out of memory**: Increase the memory limit in Docker or use `NODE_OPTIONS="--max-old-space-size=1024" node dist/main.js`.
+| Problem                      | Cause                                        | Solution                                                                                    |
+| ---------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Port already in use          | Another process is bound to the same port    | Change the `PORT` environment variable or stop the conflicting process with `lsof -i :3000` |
+| Redis connection refused     | Redis is not running or `REDIS_URL` is wrong | Verify Redis is running; in Docker Compose use the service name (`redis`) as the hostname   |
+| Health check failing         | Server has not finished starting             | Increase `start_period` in the Docker health check to give the server more startup time     |
+| Out of memory (OOM kill)     | Container memory limit is too low            | Increase the memory limit in Docker or set `NODE_OPTIONS="--max-old-space-size=1024"`       |
+| PM2 not restarting on reboot | Startup hook was not saved                   | Run `pm2 save && pm2 startup` to persist the process list across reboots                    |
+
+## Reference
+
+- **Docs:** https://docs.agentfront.dev/frontmcp/deployment/production-build
+- **Related skills:** `deploy-to-vercel`, `deploy-to-lambda`

@@ -30,9 +30,27 @@ metadata:
 
 Resources expose data to AI clients through URI-based access following the MCP protocol. FrontMCP supports two kinds: **static resources** with fixed URIs (`@Resource`) and **resource templates** with parameterized URI patterns (`@ResourceTemplate`).
 
-## When to Use @Resource vs @ResourceTemplate
+## When to Use This Skill
 
-Use `@Resource` when the data lives at a single, known URI (e.g., `config://app/settings`, `status://server`). Use `@ResourceTemplate` when you need a family of related resources identified by parameters in the URI (e.g., `users://{userId}/profile`, `repo://{owner}/{repo}/files/{path}`).
+### Must Use
+
+- Exposing data to AI clients through URI-based access following the MCP protocol
+- Serving dynamic or static content that clients read on demand (config, status, files)
+- Creating parameterized URI patterns for families of related data (user profiles, repo files)
+
+### Recommended
+
+- Providing binary assets (images, PDFs) to AI clients via base64 blob encoding
+- Centralizing read-only data sources that multiple tools or prompts reference
+- Replacing ad-hoc tool responses with structured, cacheable resource URIs
+
+### Skip When
+
+- The client needs to perform an action, not read data (see `create-tool`)
+- You are building a reusable conversation template (see `create-prompt`)
+- The data requires autonomous multi-step reasoning to produce (see `create-agent`)
+
+> **Decision:** Use this skill when you need to expose readable data at a URI -- choose `@Resource` for a fixed URI or `@ResourceTemplate` for parameterized URI patterns.
 
 ## Static Resources with @Resource
 
@@ -435,3 +453,45 @@ nx generate @frontmcp/nx:resource
 ```
 
 This creates the resource file, spec file, and updates barrel exports.
+
+## Common Patterns
+
+| Pattern                | Correct                                                                  | Incorrect                                                               | Why                                                                              |
+| ---------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| URI scheme             | `uri: 'config://app/settings'` (valid scheme)                            | `uri: 'app-settings'` (no scheme)                                       | URIs are validated per RFC 3986; scheme-less URIs are rejected at registration   |
+| Resource vs template   | `@Resource` for fixed URIs, `@ResourceTemplate` for `{param}` URIs       | Using `@Resource` with `{param}` placeholders                           | Framework selects matching strategy based on decorator type                      |
+| Return shape           | Return full `ReadResourceResult` or let FrontMCP normalize plain objects | Manually wrapping every return in `{ contents: [...] }` when not needed | FrontMCP auto-wraps strings, objects, and arrays into valid `ReadResourceResult` |
+| Template params typing | `ResourceContext<{ userId: string }>` with typed `params`                | `ResourceContext` with untyped `params: Record<string, string>`         | Generic parameter enables compile-time checking of URI parameters                |
+| Binary content         | Use `blob` field with base64 encoding for binary data                    | Returning raw `Buffer` in `text` field                                  | MCP protocol expects base64 in `blob`; `text` is for string content only         |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Resource class extends `ResourceContext` and implements `execute(uri, params)`
+- [ ] `@Resource` has `name` and `uri` with a valid scheme, or `@ResourceTemplate` has `name` and `uriTemplate`
+- [ ] Resource is registered in `resources` array of `@App` or `@FrontMcp`
+- [ ] `mimeType` is set when the content type is not plain text
+
+### Runtime
+
+- [ ] Resource appears in `resources/list` MCP response
+- [ ] Reading the resource URI returns the expected `ReadResourceResult`
+- [ ] Template parameters are extracted correctly from the URI
+- [ ] Binary resources return valid base64 in the `blob` field
+- [ ] DI dependencies resolve correctly via `this.get()`
+
+## Troubleshooting
+
+| Problem                                          | Cause                                            | Solution                                                                           |
+| ------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Resource not appearing in `resources/list`       | Not registered in `resources` array              | Add resource class to `@App` or `@FrontMcp` `resources` array                      |
+| URI validation error at startup                  | Missing or invalid URI scheme                    | Ensure URI has a scheme like `config://`, `https://`, or `custom://`               |
+| Template parameters are empty                    | Using `@Resource` instead of `@ResourceTemplate` | Switch to `@ResourceTemplate` with `uriTemplate` containing `{param}` placeholders |
+| Binary content is garbled                        | Returning raw buffer in `text` field             | Use `blob: buffer.toString('base64')` instead of `text` for binary data            |
+| `this.get(TOKEN)` throws DependencyNotFoundError | Provider not registered in scope                 | Register provider in `providers` array of `@App` or `@FrontMcp`                    |
+
+## Reference
+
+- [Resources Documentation](https://docs.agentfront.dev/frontmcp/servers/resources)
+- Related skills: `create-tool`, `create-prompt`, `create-provider`, `create-agent`

@@ -23,13 +23,27 @@ metadata:
 
 Build your FrontMCP server as a distributable CLI binary using Node.js Single Executable Applications (SEA) or as a bundled JS file.
 
-## When to Use
+## When to Use This Skill
 
-Use `--target cli` when you want to distribute your MCP server as:
+### Must Use
 
-- A standalone executable that end users run without installing Node.js
-- A CLI tool installable via package managers
-- A self-contained binary for deployment without dependencies
+- Distributing your MCP server as a standalone executable that runs without Node.js
+- Creating a CLI tool installable via package managers (Homebrew, apt, etc.)
+- Producing a self-contained binary for air-gapped or dependency-free deployment
+
+### Recommended
+
+- Shipping an MCP-powered developer tool to end users who may not have Node.js
+- Building platform-specific binaries for CI/CD artifact pipelines
+- Creating a single-file JS bundle for lightweight Node.js execution
+
+### Skip When
+
+- Deploying to a server environment with Node.js available -- use `--target node`
+- Embedding tools in an existing Node.js application -- use `build-for-sdk`
+- Targeting browser environments -- use `build-for-browser`
+
+> **Decision:** Choose this skill when your goal is a distributable binary or bundled JS file; use other build targets for server or library deployments.
 
 ## Build Commands
 
@@ -98,3 +112,48 @@ frontmcp build --target cli
 # Or test JS bundle
 node dist/my-server.cjs.js
 ```
+
+## Common Patterns
+
+| Pattern               | Correct                                             | Incorrect                        | Why                                                         |
+| --------------------- | --------------------------------------------------- | -------------------------------- | ----------------------------------------------------------- |
+| Node.js version       | Node.js 22+ for SEA builds                          | Node.js 18 or 20                 | SEA support requires Node.js 22+                            |
+| Entry file            | Export or instantiate a `@FrontMcp` decorated class | Export a plain function          | The build expects a FrontMcp entry point                    |
+| Transport for CLI     | `socketPath` or stdin/stdout                        | TCP port binding                 | CLI tools run locally; ports may conflict                   |
+| Cross-platform binary | Build on each target OS separately                  | Build on macOS and ship to Linux | SEA binaries are platform-specific                          |
+| JS-only bundle        | `frontmcp build --target cli --js`                  | `frontmcp build --target node`   | `--target node` assumes server deployment with node_modules |
+
+## Verification Checklist
+
+**Build**
+
+- [ ] `frontmcp build --target cli` completes without errors
+- [ ] Output directory contains the expected binary or `.cjs.js` file
+- [ ] Binary file size is reasonable (no unexpected bloat)
+
+**Runtime**
+
+- [ ] Binary runs without Node.js installed on a clean machine
+- [ ] `--help` flag prints usage information
+- [ ] JS bundle runs correctly with `node dist/my-server.cjs.js`
+
+**Distribution**
+
+- [ ] Binary is tested on the target platform (macOS, Linux, Windows)
+- [ ] Exit codes are correct (0 for success, non-zero for errors)
+- [ ] No hard-coded absolute paths in the bundled output
+
+## Troubleshooting
+
+| Problem                      | Cause                                       | Solution                                                    |
+| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
+| SEA build fails              | Node.js version below 22                    | Upgrade to Node.js 22+                                      |
+| Binary crashes on startup    | Missing `@FrontMcp` decorated entry         | Ensure entry file exports or instantiates a decorated class |
+| Binary too large             | All dependencies bundled including dev deps | Review dependencies; use `--analyze` to inspect bundle      |
+| Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                               |
+| Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds              |
+
+## Reference
+
+- **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/production-build>
+- **Related skills:** `build-for-sdk`, `build-for-browser`, `deploy-to-cloudflare`

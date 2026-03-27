@@ -13,22 +13,27 @@ metadata:
 
 Compose multiple `@App` classes into a single `@FrontMcp` server. Each app contributes its own tools, resources, prompts, skills, and plugins. Apps can be local classes, npm packages loaded at runtime, or remote MCP servers proxied through your gateway.
 
-## When to Use Multi-App
+## When to Use This Skill
 
-**Single app** is sufficient when your server has one logical domain (e.g., a calculator, a file manager). Define one `@App` class with all tools and resources:
+### Must Use
 
-```typescript
-@App({ name: 'Calculator', tools: [AddTool, SubtractTool] })
-class CalcApp {}
+- Composing multiple `@App` classes with separate domains into a single `@FrontMcp` server
+- Aggregating external MCP servers via `app.remote()` or npm packages via `app.esm()` into a unified gateway
+- Configuring per-app authentication modes (e.g., one app public, another requiring OAuth)
 
-@FrontMcp({
-  info: { name: 'my-server', version: '1.0.0' },
-  apps: [CalcApp],
-})
-export default class Server {}
-```
+### Recommended
 
-**Multi-app** is needed when you have multiple domains, separate auth requirements, external MCP servers to aggregate, or npm packages to compose at runtime. The `apps` array in `@FrontMcp` accepts any combination of local classes, ESM packages, and remote servers.
+- Setting up shared tools, resources, or plugins that span all apps in the server
+- Isolating apps with `standalone: true` or `standalone: 'includeInParent'` for scoped auth or session separation
+- Namespacing tools from multiple apps or remote servers to prevent naming collisions
+
+### Skip When
+
+- Your server has a single logical domain with one `@App` class (see `project-structure-standalone`)
+- You are scaffolding an Nx monorepo workspace and need generator commands (see `project-structure-nx`)
+- You need to create individual tools, resources, or prompts rather than compose apps (see `create-tool`)
+
+> **Decision:** Use this skill when you need to compose two or more apps -- local, ESM, or remote -- into a single FrontMCP server with shared or scoped capabilities.
 
 ## Local Apps
 
@@ -356,3 +361,51 @@ class AdminApp {}
 })
 export default class Server {}
 ```
+
+## Common Patterns
+
+| Pattern              | Correct                                                                         | Incorrect                                                                     | Why                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Shared tools         | `@FrontMcp({ tools: [HealthCheckTool] })` (server-level)                        | Duplicating the tool class in every `@App` `tools` array                      | Server-level tools are automatically shared across all apps without duplication                   |
+| App namespacing      | `@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })`                 | Omitting `id` when multiple apps have tools with the same name                | The `id` field controls the namespace prefix (`billing:charge_card`); without it collisions occur |
+| Remote auth          | `remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: token } }` | Passing the token directly as a string to `remoteAuth`                        | `remoteAuth` expects a structured object with `mode` and `credentials` fields                     |
+| Standalone isolation | `standalone: true` for fully isolated apps                                      | `standalone: true` when you still want tools visible in the parent server     | Use `standalone: 'includeInParent'` to get scope isolation with parent visibility                 |
+| Per-app auth         | `auth: { mode: 'remote', idpProviderUrl: '...' }` on `@App`                     | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes     |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `@FrontMcp` `apps` array includes all local, ESM, and remote apps
+- [ ] Each `@App` has a unique `id` (or unique `name` if `id` is omitted)
+- [ ] `namespace` is set on ESM and remote apps to prevent tool name collisions
+- [ ] Server-level `tools`, `plugins`, and `providers` are declared for shared capabilities
+
+### Runtime
+
+- [ ] All app tools appear in `tools/list` with correct namespace prefixes
+- [ ] Shared tools appear without a namespace prefix
+- [ ] `standalone: true` apps are isolated and do not appear in parent tool listing
+- [ ] `standalone: 'includeInParent'` apps have isolated scope but visible tools
+- [ ] Per-app auth modes are enforced independently per app
+
+### Remote Apps
+
+- [ ] `app.remote()` URL is reachable and returns valid MCP capabilities
+- [ ] `remoteAuth` credentials are correct and not expired
+- [ ] `fallbackToSSE` is enabled if the remote server does not support Streamable HTTP
+
+## Troubleshooting
+
+| Problem                                  | Cause                                                       | Solution                                                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Tool name collision between apps         | Multiple apps register tools with the same name and no `id` | Set unique `id` on each `@App` or use `namespace` on ESM/remote apps                                     |
+| Remote app tools not appearing           | Remote server is unreachable or returns empty capabilities  | Verify the URL, check `transportOptions.timeout`, and ensure `remoteAuth` is correct                     |
+| Shared plugin not applied to an app      | Plugin declared on `@App` instead of `@FrontMcp`            | Move the plugin to the `@FrontMcp` `plugins` array for server-wide application                           |
+| `standalone: true` app tools not visible | Standalone apps are fully isolated by design                | Use `standalone: 'includeInParent'` to expose tools in the parent server while keeping scope isolation   |
+| Per-app auth not working                 | App does not declare its own `auth` field                   | Add `auth` configuration directly on the `@App` decorator; omitted `auth` inherits server-level defaults |
+
+## Reference
+
+- [Multi-App Composition Documentation](https://docs.agentfront.dev/frontmcp/features/multi-app-composition)
+- Related skills: `project-structure-standalone`, `project-structure-nx`, `configure-auth`, `create-tool`

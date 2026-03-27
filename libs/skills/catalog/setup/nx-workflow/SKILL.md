@@ -13,9 +13,27 @@ metadata:
 
 Use the `@frontmcp/nx` plugin to scaffold, build, test, and deploy FrontMCP projects in an Nx monorepo. The plugin provides generators for every FrontMCP primitive (tools, resources, prompts, skills, agents, plugins, adapters, providers, flows, jobs, workflows) and deployment shells for multiple targets.
 
-## When to Use Nx
+## When to Use This Skill
 
-Use the Nx workflow when your project has multiple apps, shared libraries, or needs fine-grained build caching and affected-only testing. For simple single-server projects, the standalone `frontmcp create` approach is sufficient.
+### Must Use
+
+- Your project contains multiple apps or shared libraries in a monorepo structure
+- You need fine-grained build caching and affected-only testing in CI
+- You are scaffolding a new FrontMCP workspace with multiple deployment targets
+
+### Recommended
+
+- You want generator-based scaffolding for every FrontMCP primitive (tools, resources, prompts, skills, etc.)
+- You need to visualize and manage complex dependency graphs across projects
+- Your team benefits from parallelized builds and consistent project structure
+
+### Skip When
+
+- Your project is a single standalone MCP server with no shared libraries -- use `frontmcp create` instead
+- You are adding FrontMCP to an existing non-Nx build system (Turborepo, Lerna) -- use `setup-project` instead
+- You only need to configure storage or auth without workspace scaffolding -- use `setup-sqlite` or `setup-redis` instead
+
+> **Decision:** Use this skill when managing a multi-project FrontMCP monorepo; skip it for single-server projects.
 
 ## Step 1 -- Initialize the Workspace
 
@@ -355,3 +373,53 @@ Complete list of all `@frontmcp/nx` generators from `generators.json`:
 | `job`           | `nx g @frontmcp/nx:job <name> --project=<app>`           | Generate a @Job class                                                |
 | `workflow`      | `nx g @frontmcp/nx:workflow <name> --project=<app>`      | Generate a @Workflow class                                           |
 | `auth-provider` | `nx g @frontmcp/nx:auth-provider <name> --project=<app>` | Generate an @AuthProvider class                                      |
+
+## Common Patterns
+
+| Pattern                    | Correct                                                 | Incorrect                              | Why                                                                                       |
+| -------------------------- | ------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Primitive generator target | `nx g @frontmcp/nx:tool my-tool --project=my-app`       | `nx g @frontmcp/nx:tool my-tool`       | All primitive generators require `--project` to specify which app receives the file       |
+| Test file naming           | `my-tool.tool.spec.ts`                                  | `my-tool.tool.test.ts`                 | FrontMCP enforces `.spec.ts` extension; `.test.ts` files are not picked up by Jest config |
+| Affected-only CI testing   | `nx affected -t test`                                   | `nx run-many -t test`                  | `affected` only runs tests for changed projects, saving CI time and compute               |
+| Server composition         | `nx g @frontmcp/nx:server my-server --apps=app-a,app-b` | Manually importing apps in `main.ts`   | The server generator wires app composition and deployment config automatically            |
+| Build before deploy        | `nx build my-server` (builds server + all deps)         | Building each lib and app individually | Nx resolves the dependency graph and builds in the correct order with caching             |
+
+## Verification Checklist
+
+### Workspace Setup
+
+- [ ] `@frontmcp/nx` is listed in `devDependencies`
+- [ ] `nx.json` exists at workspace root with valid configuration
+- [ ] `apps/`, `libs/`, and `servers/` directories exist
+
+### Generation
+
+- [ ] Generated files are placed in the correct directory (`apps/<app>/src/<type>/`)
+- [ ] Barrel exports (`index.ts`) are updated after each generator run
+- [ ] `.spec.ts` test file is created alongside each generated class
+
+### Build and Test
+
+- [ ] `nx build <server>` completes without TypeScript errors or warnings
+- [ ] `nx test <app>` passes with 95%+ coverage
+- [ ] `nx affected -t test` correctly identifies changed projects
+
+### Development Workflow
+
+- [ ] `nx serve <server>` or `nx dev <server>` starts the server successfully
+- [ ] `nx graph` renders the project dependency graph in the browser
+
+## Troubleshooting
+
+| Problem                                        | Cause                                                       | Solution                                                                                             |
+| ---------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Cannot find module '@frontmcp/nx'`            | Plugin not installed                                        | Run `yarn add -D @frontmcp/nx` and ensure it appears in `devDependencies`                            |
+| Generator creates files in the wrong directory | Missing or incorrect `--project` flag                       | Always pass `--project=<app-name>` for primitive generators; verify the app exists in `apps/`        |
+| `nx affected` runs nothing despite changes     | Base branch not configured or no dependency link            | Check `nx.json` for `defaultBase` setting; verify the changed file belongs to a project in the graph |
+| Build fails with circular dependency error     | Library A imports from Library B and vice versa             | Use `nx graph` to visualize the cycle; extract shared code into a new library                        |
+| Cache not working (full rebuild every time)    | Missing or misconfigured `cacheableOperations` in `nx.json` | Ensure `build`, `test`, and `lint` are listed in `targetDefaults` with `cache: true`                 |
+
+## Reference
+
+- **Docs:** [Nx Plugin Overview](https://docs.agentfront.dev/frontmcp/nx-plugin/overview)
+- **Related skills:** `setup-project`, `setup-sqlite`, `setup-redis`

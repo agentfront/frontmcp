@@ -13,17 +13,27 @@ metadata:
 
 Skills are knowledge and workflow packages that teach AI clients how to accomplish tasks. Unlike tools (which execute actions) or agents (which run autonomous LLM loops), a skill provides structured instructions that the AI follows on its own. An instruction-only skill contains no tool references -- it is purely a guide.
 
-## When to Use Instruction-Only Skills
+## When to Use This Skill
 
-Use instruction-only skills when the goal is to transfer knowledge, enforce conventions, or define a workflow that the AI should follow using its own reasoning. Examples include:
+### Must Use
 
-- Coding style guides and conventions
-- Architecture decision records
-- Onboarding checklists
-- Deployment runbooks without automated steps
-- Review criteria and quality gates
+- You need to package knowledge, conventions, or workflow steps as a reusable skill that AI clients can follow
+- You are creating a SKILL.md catalog entry or a class/function-based skill with no tool dependencies
+- You want to enforce coding standards, onboarding steps, or review criteria through structured AI guidance
 
-If the skill needs to reference specific MCP tools, see the `create-skill-with-tools` skill instead.
+### Recommended
+
+- You are building a deployment runbook, architecture decision record, or quality gate checklist
+- You want to share workflow templates across teams via MCP or HTTP discovery endpoints
+- You need parameterized instructions that callers can customize per invocation
+
+### Skip When
+
+- The skill must invoke MCP tools during execution -- use `create-skill-with-tools` instead
+- You need an autonomous agent loop rather than static instructions -- use an agent pattern instead
+- The content is a one-off prompt with no reuse value -- a plain prompt template is simpler
+
+> **Decision:** Pick this skill when you need a reusable, instruction-only knowledge package that guides AI through a workflow without requiring tool calls.
 
 ## Class-Based Pattern
 
@@ -524,3 +534,55 @@ class OnboardingApp {}
 })
 class DevServer {}
 ```
+
+## Common Patterns
+
+| Pattern                             | Correct                                                | Incorrect                                                | Why                                                                                  |
+| ----------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Instruction source for short guides | `instructions: 'Use PascalCase for classes...'`        | Loading a one-paragraph guide from a separate file       | Inline strings keep short skills self-contained and easier to review                 |
+| Instruction source for long content | `instructions: { file: './docs/guide.md' }`            | Pasting 200+ lines as a template literal                 | File references keep the class readable and the content editable in Markdown tooling |
+| Skill naming                        | `name: 'api-design-guide'` (kebab-case)                | `name: 'ApiDesignGuide'` or `name: 'api design guide'`   | The `name` field must be kebab-case to match registry lookup and URL conventions     |
+| Visibility for internal runbooks    | `visibility: 'mcp'`                                    | `visibility: 'both'` for sensitive content               | Internal procedures should not be exposed on public HTTP endpoints like `/llm.txt`   |
+| Function builder for simple skills  | `const s = skill({ name, description, instructions })` | Creating a class with an empty body just to use `@Skill` | The function builder avoids boilerplate when no custom `build()` override is needed  |
+
+## Verification Checklist
+
+### Structure
+
+- [ ] Skill has a unique kebab-case `name`
+- [ ] `description` is a single sentence explaining what the skill teaches
+- [ ] `instructions` field is set (inline string, file reference, or URL reference)
+- [ ] No tool references appear in the instructions (instruction-only skill)
+
+### Metadata
+
+- [ ] `tags` array includes relevant categorization keywords
+- [ ] `visibility` is set appropriately (`'mcp'`, `'http'`, or `'both'`)
+- [ ] `parameters` have `name`, `description`, and `type` defined if present
+- [ ] `examples` include `scenario` and `expectedOutcome` if present
+
+### Registration
+
+- [ ] Skill class or function is added to the `skills` array in `@App` or `@FrontMcp`
+- [ ] Barrel export (`index.ts`) is updated if the skill is part of a publishable library
+- [ ] Test file (`*.spec.ts`) exists and covers metadata and build output
+
+### Discovery
+
+- [ ] Skill appears in `GET /skills` or MCP tool listing based on visibility setting
+- [ ] `hideFromDiscovery` is only set to `true` when the skill must be invoked by name only
+
+## Troubleshooting
+
+| Problem                                          | Cause                                                                   | Fix                                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Skill does not appear in `/llm.txt` or `/skills` | `visibility` is set to `'mcp'` or `hideFromDiscovery` is `true`         | Set `visibility: 'both'` and `hideFromDiscovery: false`                                |
+| `loadInstructions()` returns empty string        | File reference path is wrong or the file is empty                       | Verify the path is relative to the skill file location and the target file has content |
+| `build()` throws "instructions required"         | The `instructions` field is missing or `undefined` in `@Skill` metadata | Provide an inline string, `{ file: '...' }`, or `{ url: '...' }`                       |
+| Skill parameters are ignored by the AI           | Parameters are declared but not referenced in the instruction text      | Mention each parameter by name in the instructions so the AI knows how to apply them   |
+| Directory-based skill missing bundled files      | Subdirectories are not named `scripts/`, `references/`, or `assets/`    | Use the exact conventional directory names; other names are not auto-bundled           |
+
+## Reference
+
+- **Docs:** <https://docs.agentfront.dev/frontmcp/servers/skills>
+- **Related skills:** `create-skill-with-tools` (skills that reference MCP tools), `scaffold-project` (project scaffolding workflows)

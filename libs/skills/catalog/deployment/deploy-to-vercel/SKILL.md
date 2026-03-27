@@ -40,6 +40,28 @@ metadata:
 
 This skill guides you through deploying a FrontMCP server to Vercel serverless functions with Vercel KV for persistent storage.
 
+## When to Use This Skill
+
+### Must Use
+
+- Deploying a FrontMCP server to Vercel serverless functions
+- Configuring Vercel KV as the persistence layer for sessions and skill cache
+- Setting up a serverless MCP endpoint with automatic TLS and global CDN
+
+### Recommended
+
+- You already use Vercel for your frontend and want a unified deployment pipeline
+- You need zero-ops scaling without managing Docker containers or servers
+- Deploying preview environments per pull request for MCP server testing
+
+### Skip When
+
+- You need persistent connections, WebSockets, or long-running processes -- use `deploy-to-node` instead
+- Deploying to AWS infrastructure or need AWS-specific services -- use `deploy-to-lambda` instead
+- Your MCP operations routinely exceed the Vercel function timeout for your plan
+
+> **Decision:** Choose this skill when you want serverless deployment on Vercel with minimal infrastructure management; choose a different target when you need persistent processes or AWS-native services.
+
 ## Prerequisites
 
 - A Vercel account (https://vercel.com)
@@ -188,9 +210,53 @@ Long-running MCP operations should complete within these limits or use streaming
 
 Serverless functions are stateless between invocations. All persistent state must go through Vercel KV. FrontMCP handles this automatically when `{ provider: 'vercel-kv' }` is configured.
 
+## Common Patterns
+
+| Pattern               | Correct                                    | Incorrect                            | Why                                                                             |
+| --------------------- | ------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------- |
+| Build command         | `frontmcp build --target vercel`           | `tsc` or generic `npm run build`     | The Vercel target produces optimized bundles and the `api/` directory structure |
+| KV provider config    | `{ provider: 'vercel-kv' }`                | `{ provider: 'redis', host: '...' }` | Vercel KV uses its own REST API; a raw Redis provider will not connect          |
+| Rewrite rule          | `"source": "/(.*)"` to `/api/frontmcp`     | No rewrite or per-route entries      | A single catch-all rewrite lets FrontMCP's internal router handle all paths     |
+| Environment variables | Link KV store in dashboard (auto-injected) | Hardcode `KV_REST_API_URL` in source | Linked stores inject vars automatically and rotate tokens safely                |
+| Function memory       | 1024 MB for faster cold starts             | 128 MB default                       | CPU scales with memory on Vercel; higher memory reduces initialization time     |
+
+## Verification Checklist
+
+**Build**
+
+- [ ] `frontmcp build --target vercel` completes without errors
+- [ ] `api/frontmcp.ts` (or `.js`) exists in the build output
+
+**Deployment**
+
+- [ ] `vercel` creates a preview deployment without errors
+- [ ] `vercel --prod` deploys to the production domain
+- [ ] `curl https://your-project.vercel.app/health` returns `{"status":"ok"}`
+
+**Storage and Configuration**
+
+- [ ] Vercel KV store is created and linked to the project
+- [ ] `KV_REST_API_URL` and `KV_REST_API_TOKEN` are present in environment variables
+- [ ] `NODE_ENV` is set to `production`
+- [ ] `vercel.json` has correct rewrite, function config, and region settings
+
+**Production Readiness**
+
+- [ ] Custom domain is configured with DNS pointing to Vercel
+- [ ] TLS certificate is provisioned (automatic on Vercel)
+- [ ] `maxDuration` in `vercel.json` matches your Vercel plan limits
+
 ## Troubleshooting
 
-- **Function timeout**: Increase `maxDuration` in `vercel.json` or optimize the operation. Check your Vercel plan limits.
-- **KV connection errors**: Verify the KV store is linked and environment variables are set. Re-link the store in the dashboard if needed.
-- **404 on API routes**: Confirm the rewrite rule in `vercel.json` routes traffic to `/api/frontmcp`.
-- **Bundle too large**: Run `frontmcp build --target vercel --analyze` to inspect the bundle.
+| Problem              | Cause                                         | Solution                                                                                       |
+| -------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Function timeout     | Operation exceeds `maxDuration` or plan limit | Increase `maxDuration` in `vercel.json`; check plan limits (Hobby: 10s, Pro: 60s)              |
+| KV connection errors | KV store not linked or env vars missing       | Re-link the KV store in the Vercel dashboard; verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` |
+| 404 on API routes    | Rewrite rule missing or misconfigured         | Confirm `vercel.json` has `"source": "/(.*)"` rewriting to `/api/frontmcp`                     |
+| Bundle too large     | Unnecessary dependencies included             | Run `frontmcp build --target vercel --analyze` and remove unused packages                      |
+| Cold starts too slow | Low function memory or large bundle           | Increase memory to 1024 MB; audit dependencies; consider Vercel Fluid Compute                  |
+
+## Reference
+
+- **Docs:** https://docs.agentfront.dev/frontmcp/deployment/serverless
+- **Related skills:** `deploy-to-node`, `deploy-to-lambda`

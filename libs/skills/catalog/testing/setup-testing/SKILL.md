@@ -48,6 +48,28 @@ metadata:
 
 This skill covers testing FrontMCP applications at three levels: unit tests for individual tools/resources/prompts, E2E tests exercising the full MCP protocol, and manual testing with `frontmcp dev`.
 
+## When to Use This Skill
+
+### Must Use
+
+- Writing the first unit test for a new tool, resource, or prompt class
+- Setting up Jest configuration and coverage thresholds for a FrontMCP library
+- Creating E2E tests that exercise the full MCP protocol via `McpTestClient`
+
+### Recommended
+
+- Adding coverage enforcement to CI for an existing library that lacks thresholds
+- Writing authenticated E2E tests with `TestTokenFactory` and `MockOAuthServer`
+- Migrating existing `.test.ts` files to the required `.spec.ts` naming convention
+
+### Skip When
+
+- Building a new tool class from scratch (see `create-tool`)
+- Creating resources or prompts before you have anything to test (see `create-resource`, `create-prompt`)
+- Debugging deployment issues unrelated to test configuration (see `deploy-to-node`, `deploy-to-vercel`)
+
+> **Decision:** Use this skill when you need to configure, write, or run Jest tests for FrontMCP tools, resources, or prompts.
+
 ## Testing Standards
 
 FrontMCP requires:
@@ -514,26 +536,61 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 | Playwright browser tests | UI tests with Playwright                          | `.pw.spec.ts`   |
 | Constructor validation   | Unit test verifying throws on invalid input       | `.spec.ts`      |
 
-## Common Mistakes
+## Common Patterns
 
-- **Using `.test.ts` file extension** -- all test files must use `.spec.ts`. The Nx and Jest configurations expect this convention.
-- **Testing implementation details** -- test inputs and outputs, not internal method calls. Tools should be tested through their `execute` interface.
-- **Skipping constructor validation tests** -- always test that constructors throw on invalid input.
-- **Skipping error `instanceof` checks** -- verify that thrown errors are instances of the correct error class, not just that an error was thrown.
-- **Using test ID prefixes** -- do not use prefixes like "PT-001" in test names. Use descriptive names like "should return formatted output for valid input".
-- **Falling below 95% coverage** -- the CI pipeline enforces coverage thresholds. Run `nx test <lib> --coverage` locally before pushing.
-- **Using `any` in test mocks** -- use `unknown` or properly typed mocks. Follow the strict TypeScript guidelines.
+| Pattern          | Correct                                                  | Incorrect                                        | Why                                                                            |
+| ---------------- | -------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Test file naming | `my-tool.spec.ts`, `my-tool.e2e.spec.ts`                 | `my-tool.test.ts`, `my-tool.test.tsx`            | Nx and Jest configs only recognize `.spec.ts` convention                       |
+| Test description | `'should return formatted output for valid input'`       | `'PT-001: test formatted output'`                | Descriptive names; no ID prefixes                                              |
+| Mock types       | `const ctx = { scope: { get: jest.fn() } } as unknown`   | `const ctx: any = { scope: { get: jest.fn() } }` | Strict TypeScript; avoid `any` in mocks                                        |
+| Error assertion  | `expect(err).toBeInstanceOf(ResourceNotFoundError)`      | `expect(() => ...).toThrow()`                    | Verify the exact error class and MCP error code, not just that something threw |
+| Constructor test | Always test `new MyService({})` throws on invalid config | Skip constructor validation                      | Catches misconfiguration early; required for 95% branch coverage               |
+| E2E test imports | `import { test, expect } from '@frontmcp/testing'`       | `import { expect } from '@jest/globals'`         | `@frontmcp/testing` provides MCP-specific matchers like `toContainTool()`      |
+| Coverage check   | `nx test my-lib --coverage` before push                  | Push without coverage check                      | CI enforces 95% thresholds; catch failures locally first                       |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Jest config exists with `coverageThreshold` set to 95% for all metrics
+- [ ] `tsconfig.spec.json` exists and extends the base tsconfig
+- [ ] `@frontmcp/testing` is installed as a dev dependency for E2E tests
+- [ ] Test files use `.spec.ts` (unit), `.e2e.spec.ts` (E2E), or `.perf.spec.ts` (perf) extension
+
+### Unit Tests
+
+- [ ] Each tool's `execute()` method is tested with valid and invalid inputs
+- [ ] Each resource's `read()` method is tested and output matches `ReadResourceResult` shape
+- [ ] Each prompt's `execute()` method is tested and output matches `GetPromptResult` shape
+- [ ] Constructor validation tests verify throws on invalid config
+- [ ] Error classes are verified with `instanceof` checks and `mcpErrorCode` assertions
+
+### E2E Tests
+
+- [ ] Fixture-based tests use `test.use({ server, port })` for server lifecycle
+- [ ] Tools appear in `tools/list` response via `toContainTool()` matcher
+- [ ] Tool calls return expected results via `toBeSuccessful()` matcher
+- [ ] Authenticated tests use `TestTokenFactory` and verify rejection without token
+
+### CI Integration
+
+- [ ] `nx test <lib> --coverage` passes locally with 95%+ on all metrics
+- [ ] Unused imports are cleaned via `node scripts/fix-unused-imports.mjs`
+- [ ] No TypeScript warnings in test files
+
+## Troubleshooting
+
+| Problem                                      | Cause                                                   | Solution                                                                                              |
+| -------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Jest cannot find test files                  | Files use `.test.ts` instead of `.spec.ts`              | Rename to `.spec.ts`; Nx test runner only picks up `.spec.ts` by default                              |
+| Coverage below 95% threshold                 | Untested branches or constructor paths                  | Run `nx test <lib> --coverage` and check the HTML report for uncovered lines                          |
+| E2E test times out on `TestServer.start()`   | Server entrypoint fails to start or wrong port          | Verify `server` path and `port` in `test.use()`; check server logs for startup errors                 |
+| `toContainTool` matcher not found            | Using `expect` from Jest instead of `@frontmcp/testing` | Import `expect` from `@frontmcp/testing` to get MCP-specific matchers                                 |
+| `McpTestClient.create()` connection refused  | Test server not running or wrong `baseUrl`              | Ensure `TestServer.start()` completes before creating client; verify port matches                     |
+| Istanbul shows 0% coverage for async methods | TypeScript compilation source-map mismatch              | Known issue with `ts-jest` and certain async patterns; check `tsconfig.spec.json` source-map settings |
+| Auth E2E test returns 401 unexpectedly       | Token not set or expired                                | Call `mcp.setAuthToken(token)` before the tool call; use `auth.createToken()` with valid claims       |
 
 ## Reference
 
-- Testing package: [`@frontmcp/testing`](https://docs.agentfront.dev/frontmcp/testing/overview)
-- Test client: `McpTestClient` — import from `@frontmcp/testing`
-- Test client builder: `McpTestClient.builder()` — fluent API for test setup
-- MCP matchers: `toContainTool()`, `toBeSuccessful()` — import from `@frontmcp/testing`
-- Test fixtures: `createTestFixture()` — import from `@frontmcp/testing`
-- Test server: `TestServer` — import from `@frontmcp/testing`
-- Performance testing: `perfTest()`, `MetricsCollector` — import from `@frontmcp/testing`
-- Auth testing: `TestTokenFactory`, `MockOAuthServer` — import from `@frontmcp/testing`
-- Interceptors: `TestInterceptor` — import from `@frontmcp/testing`
-- HTTP mocking: `HttpMock` — import from `@frontmcp/testing`
-- [Source code on GitHub](https://github.com/agentfront/frontmcp/tree/main/libs/testing)
+- [Testing Documentation](https://docs.agentfront.dev/frontmcp/testing/overview)
+- Related skills: `create-tool`, `create-resource`, `create-prompt`, `setup-project`, `nx-workflow`

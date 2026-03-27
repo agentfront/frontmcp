@@ -52,6 +52,28 @@ metadata:
 
 This skill covers setting up session storage in FrontMCP. Sessions track authenticated user state, token storage, and request context across MCP interactions.
 
+## When to Use This Skill
+
+### Must Use
+
+- Deploying to production where sessions must survive process restarts (Redis or Vercel KV required)
+- Running multiple server instances behind a load balancer that need shared session state
+- Using Streamable HTTP transport where sessions must persist across reconnects
+
+### Recommended
+
+- Configuring session TTL to match your workload pattern (interactive, agent, CI/CD)
+- Namespacing session keys with a unique `keyPrefix` when sharing a Redis instance across multiple servers
+- Setting up Vercel KV for serverless deployments on the Vercel platform
+
+### Skip When
+
+- Running a single-instance local development server -- the default in-memory store is sufficient
+- Using stdio transport only where session persistence is not needed
+- Need to provision Redis itself rather than configure sessions -- use `setup-redis` first, then return here
+
+> **Decision:** Use this skill to choose and configure a session storage provider (memory, Redis, or Vercel KV) and tune TTL and key prefix settings; use `setup-redis` if Redis is not yet provisioned.
+
 ## Storage Providers
 
 | Provider    | Use Case            | Persistence | Package Required |
@@ -186,16 +208,48 @@ const pubsubStore = createPubsubStore({
 });
 ```
 
-## Common Mistakes
+## Common Patterns
 
-- **Constructing stores directly** -- always use factory functions (`createSessionStore`). Direct construction bypasses lazy-loading and key prefix normalization.
-- **Using memory store in production** -- sessions vanish on restart. Clients must re-authenticate and in-flight workflows are lost.
-- **Missing `await` for Vercel KV** -- the `createSessionStore` factory is async when the provider is `vercel-kv`. Forgetting to await causes the store to be used before its connection is ready.
-- **Sharing key prefixes** -- if two servers share a Redis instance with the same prefix, their sessions collide. Always use a unique prefix per server.
+| Pattern                | Correct                                                                                      | Incorrect                                                                     | Why                                                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Store construction     | Use `createSessionStore()` factory function                                                  | `new RedisSessionStore(client)` direct construction                           | The factory handles lazy-loading, key prefix normalization, and provider detection automatically               |
+| Vercel KV creation     | `const store = await createSessionStore({ provider: 'vercel-kv' })`                          | `const store = createSessionStore({ provider: 'vercel-kv' })` without `await` | The factory is async for Vercel KV; forgetting `await` uses the store before its connection is ready           |
+| Key prefix per server  | `keyPrefix: 'billing-mcp:session:'` unique per server                                        | Same `keyPrefix` across multiple servers sharing one Redis instance           | Shared prefixes cause session key collisions; one server may read or overwrite another's sessions              |
+| Production storage     | `redis: { provider: 'redis', host: '...' }` or `redis: { provider: 'vercel-kv' }`            | Omitting redis config in production (falls back to memory)                    | Memory sessions vanish on restart; all connected clients must re-authenticate and in-flight workflows are lost |
+| Pub/sub with Vercel KV | Separate `pubsub` config pointing to real Redis alongside `redis: { provider: 'vercel-kv' }` | Expecting Vercel KV to handle pub/sub                                         | Vercel KV does not support pub/sub operations; a real Redis instance is required for resource subscriptions    |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] `redis` block is present in the `@FrontMcp` decorator with a valid `provider` field (`'redis'` or `'vercel-kv'`)
+- [ ] `keyPrefix` is unique per server when sharing a Redis instance
+- [ ] `defaultTtlMs` matches the workload pattern (1 hour for interactive, 24 hours for agents, 10 minutes for CI/CD)
+
+### Vercel KV
+
+- [ ] `provider: 'vercel-kv'` is set in the `redis` config
+- [ ] `KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables are present (auto-injected on Vercel)
+- [ ] A separate `pubsub` config pointing to real Redis is provided if resource subscriptions are used
+
+### Runtime
+
+- [ ] Server starts without Redis connection errors in the logs
+- [ ] `redis-cli keys "mcp:session:*"` shows session keys after an MCP request (for Redis provider)
+- [ ] Sessions persist across server restarts (for Redis/Vercel KV providers)
+- [ ] Sessions expire after the configured TTL
+
+## Troubleshooting
+
+| Problem                                | Cause                                                          | Solution                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Sessions lost after server restart     | Using the default in-memory store in production                | Configure `redis: { provider: 'redis' }` or `redis: { provider: 'vercel-kv' }` for persistence |
+| `ECONNREFUSED` on startup              | Redis is not running or host/port is incorrect                 | Start the Redis container (`docker compose up -d redis`) or verify connection details          |
+| Vercel KV `401 Unauthorized`           | Missing or invalid KV tokens                                   | Check `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy           |
+| Session key collisions between servers | Multiple servers share the same Redis instance and `keyPrefix` | Set a unique `keyPrefix` per server (e.g., `billing-mcp:session:`, `api-mcp:session:`)         |
+| Pub/sub not working with Vercel KV     | Vercel KV does not support pub/sub operations                  | Add a separate `pubsub` config pointing to a real Redis instance                               |
 
 ## Reference
 
-- Session docs: [docs.agentfront.dev/frontmcp/deployment/redis-setup](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)
-- Session store factory: `createSessionStore()` — import from `@frontmcp/sdk`
-- Redis session store: import from `@frontmcp/auth` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/auth/src/session)
-- Vercel KV session store: import from `@frontmcp/auth` — [source](https://github.com/agentfront/frontmcp/tree/main/libs/auth/src/session)
+- [Session Storage Docs](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)
+- Related skills: `setup-redis`, `configure-auth`, `configure-transport`, `configure-elicitation`

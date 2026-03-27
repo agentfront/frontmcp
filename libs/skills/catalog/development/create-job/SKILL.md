@@ -13,17 +13,27 @@ metadata:
 
 Jobs are long-running background tasks with built-in retry policies, progress tracking, and permission controls. Unlike tools (which execute synchronously within a request), jobs run asynchronously and persist their state across retries and restarts.
 
-## When to Use @Job
+## When to Use This Skill
 
-Use `@Job` when you need to run work that may take longer than a request cycle, needs retry guarantees, or should track progress over time. Examples include:
+### Must Use
 
-- Data processing and ETL pipelines
-- File imports and exports
-- Report generation
-- Scheduled maintenance tasks
-- External API synchronization
+- Running work that takes longer than a request cycle (ETL pipelines, large imports)
+- Tasks that need automatic retry with exponential backoff on failure
+- Background operations that must track and report progress over time
 
-If the work completes in under a few seconds and does not need retry or progress tracking, use a `@Tool` instead.
+### Recommended
+
+- Scheduled maintenance tasks or periodic data synchronization
+- Operations requiring permission controls (role-based, scope-based access)
+- Work that must persist state across retries and server restarts
+
+### Skip When
+
+- The work completes in a few seconds and needs no retry or progress tracking (see `create-tool`)
+- You need to expose read-only data at a URI (see `create-resource`)
+- The task requires autonomous LLM reasoning rather than a deterministic pipeline (see `create-agent`)
+
+> **Decision:** Use this skill when you need a long-running background task with retry policies, progress tracking, or permission controls.
 
 ## Class-Based Pattern
 
@@ -564,3 +574,46 @@ class DataApp {}
 })
 class DataServer {}
 ```
+
+## Common Patterns
+
+| Pattern           | Correct                                                            | Incorrect                                        | Why                                                                            |
+| ----------------- | ------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Progress tracking | `this.progress(50, 100, 'Processing batch 5')`                     | Not reporting progress                           | Progress is persisted and queryable; essential for long-running visibility     |
+| Retry config      | `retry: { maxAttempts: 3, backoffMs: 2000, backoffMultiplier: 2 }` | Implementing retry logic manually in `execute()` | Framework handles retry with exponential backoff and attempt tracking          |
+| Attempt awareness | Check `this.attempt` for retry-specific logic                      | Ignoring attempt number                          | `this.attempt` is 1-based; use it to log retry context or adjust behavior      |
+| Job logging       | `this.log('message')` for persistent, queryable logs               | Using `console.log()`                            | `this.log()` persists with job state; `console.log` is ephemeral               |
+| Permissions       | Use `permissions: { roles: [...], scopes: [...] }` declaratively   | Checking roles manually inside `execute()`       | Declarative permissions are enforced before execution and are self-documenting |
+
+## Verification Checklist
+
+### Configuration
+
+- [ ] Job class extends `JobContext` and implements `execute(input)`
+- [ ] `@Job` decorator has `name`, `inputSchema`, and `outputSchema`
+- [ ] `retry` policy is configured if the job may fail transiently
+- [ ] `timeout` is set appropriately for the expected execution duration
+- [ ] Job is registered in `jobs` array of `@App`
+
+### Runtime
+
+- [ ] `jobs.enabled: true` is set in `@FrontMcp` configuration with a store
+- [ ] Job executes and returns output matching `outputSchema`
+- [ ] Progress is reported and queryable during execution
+- [ ] Retry fires with correct backoff delays on transient failures
+- [ ] Permissions block unauthorized users before execution starts
+
+## Troubleshooting
+
+| Problem                    | Cause                                           | Solution                                                                     |
+| -------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| Job not activated          | `jobs.enabled` not set to `true` in `@FrontMcp` | Add `jobs: { enabled: true, store: { ... } }` to `@FrontMcp` config          |
+| Job fails without retrying | No `retry` policy configured                    | Add `retry: { maxAttempts: 3, backoffMs: 2000 }` to `@Job` options           |
+| Progress not visible       | Not calling `this.progress()` during execution  | Add `this.progress(pct, total, message)` calls at each stage                 |
+| Job times out unexpectedly | Default 5-minute timeout too short              | Set `timeout` in `@Job` to a higher value (e.g., `600000` for 10 minutes)    |
+| Permission denied error    | User lacks required roles or scopes             | Verify user has one of the `roles` and all `scopes` defined in `permissions` |
+
+## Reference
+
+- [Jobs Documentation](https://docs.agentfront.dev/frontmcp/servers/jobs)
+- Related skills: `create-tool`, `create-provider`, `create-agent`, `create-workflow`
