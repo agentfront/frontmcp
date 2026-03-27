@@ -1,19 +1,11 @@
 import { type Tree, formatFiles, generateFiles, names as nxNames, type GeneratorCallback } from '@nx/devkit';
 import * as fs from 'fs';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import type { ServerGeneratorSchema } from './schema.js';
 import { normalizeOptions } from './lib/index.js';
 
 export async function serverGenerator(tree: Tree, schema: ServerGeneratorSchema): Promise<GeneratorCallback | void> {
   return serverGeneratorInternal(tree, schema);
-}
-
-interface SkillManifestEntry {
-  name: string;
-  path: string;
-  targets: string[];
-  hasResources: boolean;
-  bundle?: string[];
 }
 
 async function serverGeneratorInternal(tree: Tree, schema: ServerGeneratorSchema): Promise<GeneratorCallback | void> {
@@ -45,26 +37,39 @@ async function serverGeneratorInternal(tree: Tree, schema: ServerGeneratorSchema
 }
 
 function scaffoldCatalogSkills(tree: Tree, projectRoot: string, target: string, bundle: string): void {
-  const catalogDir = resolve(__dirname, '..', '..', '..', '..', 'skills', 'catalog');
-  const manifestPath = join(catalogDir, 'skills-manifest.json');
-
-  if (!fs.existsSync(manifestPath)) return;
-
-  let manifest: { version: number; skills: SkillManifestEntry[] };
+  // Load skills catalog via @frontmcp/skills package at runtime
+  let skills: {
+    loadManifest: () => {
+      skills: Array<{ name: string; path: string; targets: string[]; hasResources: boolean; bundle?: string[] }>;
+    };
+    resolveSkillPath: (entry: { path: string }) => string;
+    getSkillsByTarget: (
+      s: Array<{ targets: string[] }>,
+      t: string,
+    ) => Array<{ name: string; path: string; targets: string[]; hasResources: boolean; bundle?: string[] }>;
+    getSkillsByBundle: (
+      s: Array<{ bundle?: string[] }>,
+      b: string,
+    ) => Array<{ name: string; path: string; targets: string[]; hasResources: boolean; bundle?: string[] }>;
+  };
   try {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+    skills = require('@frontmcp/skills');
   } catch {
     return;
   }
 
-  const matchingSkills = manifest.skills.filter((s) => {
-    const targetMatch = s.targets.includes('all') || s.targets.includes(target);
-    const bundleMatch = s.bundle?.includes(bundle);
-    return targetMatch && bundleMatch;
-  });
+  let manifest;
+  try {
+    manifest = skills.loadManifest();
+  } catch {
+    return;
+  }
+
+  const targetFiltered = skills.getSkillsByTarget(manifest.skills, target);
+  const matchingSkills = skills.getSkillsByBundle(targetFiltered, bundle);
 
   for (const skill of matchingSkills) {
-    const sourceDir = join(catalogDir, skill.path);
+    const sourceDir = skills.resolveSkillPath(skill);
     const destDir = join(projectRoot, 'skills', skill.name);
     copyDirToTree(tree, sourceDir, destDir);
   }
@@ -79,7 +84,7 @@ function copyDirToTree(tree: Tree, sourceDir: string, destDir: string): void {
     if (entry.isDirectory()) {
       copyDirToTree(tree, srcPath, destPath);
     } else {
-      const content = fs.readFileSync(srcPath, 'utf-8');
+      const content = fs.readFileSync(srcPath);
       tree.write(destPath, content);
     }
   }

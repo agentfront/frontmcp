@@ -1,6 +1,6 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { c } from '../../core/colors';
+import { fileExists, readFile } from '@frontmcp/utils';
 import { loadCatalog, getCatalogDir } from './catalog';
 
 export async function showSkill(name: string): Promise<void> {
@@ -17,12 +17,12 @@ export async function showSkill(name: string): Promise<void> {
   const skillDir = path.join(catalogDir, entry.path);
   const skillMd = path.join(skillDir, 'SKILL.md');
 
-  if (!fs.existsSync(skillMd)) {
+  if (!(await fileExists(skillMd))) {
     console.error(c('red', `SKILL.md not found at ${skillMd}`));
     process.exit(1);
   }
 
-  const content = fs.readFileSync(skillMd, 'utf-8');
+  const content = await readFile(skillMd);
 
   console.log(c('bold', `\n  ${entry.name}`));
   console.log(c('gray', `  Category: ${entry.category}`));

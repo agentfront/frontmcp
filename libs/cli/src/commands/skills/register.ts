@@ -13,7 +13,7 @@ export function registerSkillsCommands(program: Command): void {
     .action(async (query: string, options: { limit?: string; tag?: string; category?: string }) => {
       const { searchSkills } = await import('./search.js');
       await searchSkills(query, {
-        limit: Number(options.limit ?? 10),
+        limit: Math.max(1, Number(options.limit) || 10),
         tag: options.tag,
         category: options.category,
       });
@@ -37,9 +37,16 @@ export function registerSkillsCommands(program: Command): void {
     .option('-p, --provider <provider>', 'Target provider: claude, codex (default: claude)', 'claude')
     .option('-d, --dir <directory>', 'Custom install directory (overrides provider default)')
     .action(async (name: string, options: { provider?: string; dir?: string }) => {
+      const validProviders = ['claude', 'codex'] as const;
+      type Provider = (typeof validProviders)[number];
+      const raw = options.provider;
+      if (raw && !validProviders.includes(raw as Provider)) {
+        console.error(`Invalid provider "${raw}". Valid providers: ${validProviders.join(', ')}`);
+        process.exit(1);
+      }
       const { installSkill } = await import('./install.js');
       await installSkill(name, {
-        provider: options.provider as 'claude' | 'codex' | undefined,
+        provider: raw as Provider | undefined,
         dir: options.dir,
       });
     });

@@ -1,8 +1,19 @@
 import * as path from 'path';
-import * as fs from 'fs';
 import { createRequire } from 'module';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, isDirEmpty, writeFile, writeJSON, readJSON, runCmd, stat } from '@frontmcp/utils';
+import {
+  ensureDir,
+  fileExists,
+  isDirEmpty,
+  writeFile,
+  writeJSON,
+  readFile,
+  readJSON,
+  runCmd,
+  stat,
+  cp,
+  copyFile,
+} from '@frontmcp/utils';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
 import { clack } from '../../shared/prompts';
@@ -1454,13 +1465,13 @@ async function scaffoldSkills(targetDir: string, options: CreateOptions): Promis
 
     // Try bundled catalog first, then fallback to @frontmcp/skills package
     let manifestContent: string;
-    if (fs.existsSync(manifestPath)) {
-      manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+    if (await fileExists(manifestPath)) {
+      manifestContent = await readFile(manifestPath);
     } else {
       try {
         const require_ = createRequire(__filename);
         const pkgManifest = require_.resolve('@frontmcp/skills/catalog/skills-manifest.json');
-        manifestContent = fs.readFileSync(pkgManifest, 'utf-8');
+        manifestContent = await readFile(pkgManifest);
       } catch {
         // Skills catalog not available — skip silently
         return;
@@ -1491,14 +1502,14 @@ async function scaffoldSkills(targetDir: string, options: CreateOptions): Promis
     // Resolve source skill directory
     let sourceDir: string | undefined;
     const bundledSource = path.resolve(__dirname, '..', '..', '..', '..', 'skills', 'catalog', skill.path);
-    if (fs.existsSync(path.join(bundledSource, 'SKILL.md'))) {
+    if (await fileExists(path.join(bundledSource, 'SKILL.md'))) {
       sourceDir = bundledSource;
     } else {
       try {
         const require_ = createRequire(__filename);
         const pkgCatalog = path.dirname(require_.resolve('@frontmcp/skills/catalog/skills-manifest.json'));
         const pkgSource = path.join(pkgCatalog, skill.path);
-        if (fs.existsSync(path.join(pkgSource, 'SKILL.md'))) {
+        if (await fileExists(path.join(pkgSource, 'SKILL.md'))) {
           sourceDir = pkgSource;
         }
       } catch {
@@ -1508,15 +1519,18 @@ async function scaffoldSkills(targetDir: string, options: CreateOptions): Promis
 
     if (!sourceDir) continue;
 
-    // Copy SKILL.md
-    await copySkillFile(sourceDir, skillTargetDir, 'SKILL.md');
+    // Copy SKILL.md (binary-safe)
+    const skillMdSrc = path.join(sourceDir, 'SKILL.md');
+    if (await fileExists(skillMdSrc)) {
+      await copyFile(skillMdSrc, path.join(skillTargetDir, 'SKILL.md'));
+    }
 
-    // Copy resource directories if present
+    // Copy resource directories if present (binary-safe recursive copy)
     if (skill.hasResources) {
       for (const resDir of ['scripts', 'references', 'assets']) {
         const srcRes = path.join(sourceDir, resDir);
-        if (fs.existsSync(srcRes)) {
-          await copyDirRecursive(srcRes, path.join(skillTargetDir, resDir));
+        if (await fileExists(srcRes)) {
+          await cp(srcRes, path.join(skillTargetDir, resDir), { recursive: true });
         }
       }
     }
@@ -1525,31 +1539,6 @@ async function scaffoldSkills(targetDir: string, options: CreateOptions): Promis
   }
 
   console.log(c('gray', `  ${matchingSkills.length} skills added (bundle: ${bundle})`));
-}
-
-async function copySkillFile(sourceDir: string, targetDir: string, filename: string): Promise<void> {
-  const src = path.join(sourceDir, filename);
-  const dest = path.join(targetDir, filename);
-  if (fs.existsSync(src)) {
-    await ensureDir(path.dirname(dest));
-    const content = fs.readFileSync(src, 'utf-8');
-    await writeFile(dest, content);
-  }
-}
-
-async function copyDirRecursive(src: string, dest: string): Promise<void> {
-  await ensureDir(dest);
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirRecursive(srcPath, destPath);
-    } else {
-      const content = fs.readFileSync(srcPath, 'utf-8');
-      await writeFile(destPath, content);
-    }
-  }
 }
 
 async function scaffoldDeploymentFiles(targetDir: string, options: CreateOptions): Promise<void> {

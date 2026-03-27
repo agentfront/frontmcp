@@ -1,7 +1,6 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { c } from '../../core/colors';
-import { ensureDir, writeFile } from '@frontmcp/utils';
+import { ensureDir, fileExists, cp } from '@frontmcp/utils';
 import { loadCatalog, getCatalogDir } from './catalog';
 
 const PROVIDER_DIRS: Record<string, string> = {
@@ -29,14 +28,14 @@ export async function installSkill(
   const catalogDir = getCatalogDir();
   const sourceDir = path.join(catalogDir, entry.path);
 
-  if (!fs.existsSync(path.join(sourceDir, 'SKILL.md'))) {
+  if (!(await fileExists(path.join(sourceDir, 'SKILL.md')))) {
     console.error(c('red', `Source SKILL.md not found at ${sourceDir}`));
     process.exit(1);
   }
 
-  // Copy skill directory
+  // Copy skill directory (binary-safe recursive copy)
   await ensureDir(targetDir);
-  await copyDirRecursive(sourceDir, targetDir);
+  await cp(sourceDir, targetDir, { recursive: true });
 
   console.log(
     `${c('green', '✓')} Installed skill ${c('bold', name)} to ${c('cyan', path.relative(process.cwd(), targetDir))}`,
@@ -48,19 +47,4 @@ export async function installSkill(
 
   console.log(c('gray', `  Provider: ${provider}`));
   console.log(c('gray', `  Path: ${targetDir}`));
-}
-
-async function copyDirRecursive(src: string, dest: string): Promise<void> {
-  await ensureDir(dest);
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirRecursive(srcPath, destPath);
-    } else {
-      const content = fs.readFileSync(srcPath, 'utf-8');
-      await writeFile(destPath, content);
-    }
-  }
 }

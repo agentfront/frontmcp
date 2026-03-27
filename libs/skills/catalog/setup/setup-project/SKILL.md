@@ -430,7 +430,7 @@ nx g @frontmcp/nx:skill my-skill     # Add a skill
 nx g @frontmcp/nx:agent my-agent     # Add an agent
 nx g @frontmcp/nx:provider my-prov   # Add a provider
 nx g @frontmcp/nx:server my-server   # Add a deployment shell
-nx dev demo                          # Start dev server
+nx dev <serverName>                  # Start dev server
 ```
 
 ### 7b. Adding FrontMCP to an existing Nx workspace
