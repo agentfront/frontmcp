@@ -12,7 +12,6 @@ import {
   ResourceReadError,
 } from '../../errors';
 import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
-import { Scope } from '../../scope';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
@@ -169,19 +168,21 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (isUIResourceUri(uri)) {
       this.logger.info(`findResource: detected UI resource URI "${uri}"`);
 
-      // Get the ToolUIRegistry from the scope
-      const scope = this.scope as Scope;
-
       // Get platform type: first check sessionIdPayload (detected from user-agent),
       // then fall back to notification service (detected from MCP clientInfo)
       const { sessionId, authInfo } = this.state;
       const platformType =
         authInfo?.sessionIdPayload?.platformType ??
-        (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined);
+        (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined);
 
       this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);
 
-      const uiResult = handleUIResourceRead(uri, scope.toolUI, platformType);
+      if (!this.scope.toolUI) {
+        this.logger.verbose('findResource: toolUI not available, skipping UI resource handling');
+        throw new ResourceNotFoundError(uri);
+      }
+
+      const uiResult = handleUIResourceRead(uri, this.scope.toolUI, platformType);
 
       if (uiResult.handled) {
         if (uiResult.error) {

@@ -1,8 +1,6 @@
 import { Type, Token, ValueType, ClassType, FactoryType, ClassToken } from '@frontmcp/di';
 import { ProviderMetadata } from '../metadata';
 
-export interface ProviderInterface {}
-
 export type ProviderClassType<Provide> = ClassType<Provide> & ProviderMetadata;
 export type ProviderValueType<Provide> = ValueType<Provide> & ProviderMetadata;
 export type ProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> = FactoryType<
@@ -12,7 +10,7 @@ export type ProviderFactoryType<Provide, Tokens extends readonly (ClassToken | T
   ProviderMetadata;
 
 export type ProviderType<
-  Provide extends ProviderInterface = any,
+  Provide = unknown,
   Tokens extends readonly (ClassToken | Token)[] = readonly (ClassToken | Token)[],
 > = Type<Provide> | ProviderClassType<Provide> | ProviderValueType<Provide> | ProviderFactoryType<Provide, Tokens>;
 

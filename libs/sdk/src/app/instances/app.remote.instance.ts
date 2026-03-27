@@ -11,12 +11,9 @@ import {
   AppEntry,
   AppRecord,
   PluginRegistryInterface,
-  PromptRegistryInterface,
   ProviderRegistryInterface,
   RemoteAppMetadata,
   RemoteAuthConfig,
-  ResourceRegistryInterface,
-  ToolRegistryInterface,
   EntryOwnerRef,
   PluginEntry,
   AdapterEntry,
@@ -296,15 +293,15 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     return this._plugins;
   }
 
-  override get tools(): ToolRegistryInterface {
+  override get tools(): ToolRegistry {
     return this._tools;
   }
 
-  override get resources(): ResourceRegistryInterface {
+  override get resources(): ResourceRegistry {
     return this._resources;
   }
 
-  override get prompts(): PromptRegistryInterface {
+  override get prompts(): PromptRegistry {
     return this._prompts;
   }
 

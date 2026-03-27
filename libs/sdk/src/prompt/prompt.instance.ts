@@ -15,7 +15,7 @@ import {
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { buildParsedPromptResult } from './prompt.utils';
 import { GetPromptResult } from '@frontmcp/protocol';
@@ -23,7 +23,7 @@ import { MissingPromptArgumentError, InvalidRegistryKindError } from '../errors'
 
 export class PromptInstance extends PromptEntry {
   private readonly _providers: ProviderRegistry;
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
 
   constructor(record: PromptRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
@@ -33,7 +33,7 @@ export class PromptInstance extends PromptEntry {
     this.name = record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this._providers.getActiveScope();
-    this.hooks = this.scope.providers.getHooksRegistry();
+    this.hooks = this.scope.hooks;
 
     this.ready = this.initialize();
   }

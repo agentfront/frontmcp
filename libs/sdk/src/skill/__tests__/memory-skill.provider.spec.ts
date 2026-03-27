@@ -7,7 +7,7 @@
 import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import { SkillToolValidator } from '../skill-validator';
 import { SkillContent } from '../../common/interfaces';
-import { ToolRegistryInterface } from '../../common/interfaces/internal';
+import type ToolRegistry from '../../tool/tool.registry';
 import { ToolEntry } from '../../common';
 
 // Helper to create test skills
@@ -23,7 +23,7 @@ const createTestSkill = (
 });
 
 // Mock tool registry
-const createMockToolRegistry = (tools: string[]): ToolRegistryInterface =>
+const createMockToolRegistry = (tools: string[]): ToolRegistry =>
   ({
     getTools: () =>
       tools.map(
@@ -41,7 +41,7 @@ const createMockToolRegistry = (tools: string[]): ToolRegistryInterface =>
     getCapabilities: jest.fn(),
     getInlineTools: jest.fn(),
     owner: { kind: 'scope', id: 'test', ref: {} },
-  }) as unknown as ToolRegistryInterface;
+  }) as unknown as ToolRegistry;
 
 describe('MemorySkillProvider', () => {
   let provider: MemorySkillProvider;

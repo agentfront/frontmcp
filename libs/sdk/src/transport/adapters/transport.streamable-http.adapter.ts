@@ -166,6 +166,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     // Cancel any previous pending elicit (only one per session)
     await this.cancelPendingElicit();
 
+    const store = this.requireElicitStore();
     const sessionId = this.key.sessionId;
 
     // Run ElicitationRequestFlow for preparation (with hook support)
@@ -197,7 +198,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
       this.logger.error('[StreamableHttpAdapter] sendElicitRequest: transport.send() failed', error);
       // Clean up pending record to avoid stale state
       try {
-        await this.elicitStore.deletePending(sessionId);
+        await store.deletePending(sessionId);
         this.logger.verbose('[StreamableHttpAdapter] sendElicitRequest: cleaned up pending record after send failure');
       } catch (cleanupError) {
         this.logger.warn('[StreamableHttpAdapter] sendElicitRequest: failed to clean up pending record', cleanupError);
@@ -237,13 +238,13 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
         settled = true;
         this.pendingElicit = undefined;
         await unsubscribe?.();
-        await this.elicitStore.deletePending(sessionId);
+        await store.deletePending(sessionId);
         reject(new ElicitationTimeoutError(elicitId, ttl));
       }, ttl);
 
       // Subscribe to results via the store (for distributed mode)
       // Pass sessionId for encrypted stores to enable decryption
-      this.elicitStore
+      store
         .subscribeResult<S extends ZodType<infer O> ? O : unknown>(
           elicitId,
           (result) => {
@@ -261,7 +262,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
           clearTimeout(timeoutHandle);
           this.pendingElicit = undefined;
           await unsubscribe?.();
-          await this.elicitStore.deletePending(sessionId);
+          await store.deletePending(sessionId);
           reject(err);
         });
 

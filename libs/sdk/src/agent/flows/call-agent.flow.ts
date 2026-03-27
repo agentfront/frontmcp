@@ -13,7 +13,6 @@ import {
   AgentExecutionError,
   RateLimitError,
 } from '../../errors';
-import { Scope } from '../../scope';
 import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
 
 // ============================================================================
@@ -134,14 +133,12 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     // Find the agent early to get its owner ID for hook filtering
     const { name: toolName } = params;
-    const scope = this.scope as Scope;
-
     // Agent ID is the tool name (agents use standard tool names)
     const agentId = toolName;
 
     let agent: AgentEntry | undefined;
-    if (scope.agents) {
-      agent = scope.agents.findById(agentId) ?? scope.agents.findByName(agentId);
+    if (this.scope.agents) {
+      agent = this.scope.agents.findById(agentId) ?? this.scope.agents.findByName(agentId);
     }
 
     // Store agent owner ID in state for hook filtering
@@ -170,8 +167,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   async findAgent() {
     this.logger.verbose('findAgent:start');
 
-    const scope = this.scope as Scope;
-    const agents = scope.agents;
+    const agents = this.scope.agents;
 
     if (!agents) {
       this.logger.warn('findAgent: no agent registry available');
@@ -317,7 +313,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   async acquireQuota() {
     this.logger.verbose('acquireQuota:start');
 
-    const manager = (this.scope as Scope).rateLimitManager;
+    const manager = this.scope.rateLimitManager;
     if (!manager) {
       this.state.agentContext?.mark('acquireQuota');
       this.logger.verbose('acquireQuota:done (no rate limit manager)');
@@ -357,7 +353,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   async acquireSemaphore() {
     this.logger.verbose('acquireSemaphore:start');
 
-    const manager = (this.scope as Scope).rateLimitManager;
+    const manager = this.scope.rateLimitManager;
     if (!manager) {
       this.state.agentContext?.mark('acquireSemaphore');
       this.logger.verbose('acquireSemaphore:done (no rate limit manager)');
@@ -434,7 +430,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     const timeoutMs =
       agent.metadata.timeout?.executeMs ??
       agent.metadata.execution?.timeout ??
-      (this.scope as Scope).rateLimitManager?.config?.defaultTimeout?.executeMs;
+      this.scope.rateLimitManager?.config?.defaultTimeout?.executeMs;
 
     try {
       const doExecute = async () => {

@@ -8,7 +8,6 @@ import {
   FrontMcpLogger,
   AuthProviderType,
   AuthProviderEntry,
-  AuthRegistryInterface,
   AuthProviderRecord,
   AuthProviderKind,
   EntryOwnerRef,
@@ -39,10 +38,7 @@ const DEFAULT_AUTH_OPTIONS: AuthOptionsInput = {
   mode: 'public',
 };
 
-export class AuthRegistry
-  extends RegistryAbstract<AuthProviderEntry, AuthProviderRecord, AuthProviderType[]>
-  implements AuthRegistryInterface
-{
+export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProviderRecord, AuthProviderType[]> {
   private readonly primary?: FrontMcpAuth;
   private readonly parsedOptions: AuthOptions;
   private readonly logger: FrontMcpLogger;

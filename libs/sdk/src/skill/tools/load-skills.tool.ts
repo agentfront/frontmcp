@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Tool, ToolContext } from '../../common';
 import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
-import type { ToolRegistryInterface } from '../../common';
+import type ToolRegistry from '../../tool/tool.registry';
 
 /**
  * Input schema for loadSkills tool.
@@ -143,7 +143,7 @@ export class LoadSkillsTool extends ToolContext<typeof inputSchema, typeof outpu
     let allToolsAvailable = true;
 
     // Get tool registry for schemas
-    const toolRegistry: ToolRegistryInterface | undefined = this.scope.tools;
+    const toolRegistry: ToolRegistry | undefined = this.scope.tools;
 
     for (const skillId of input.skillIds) {
       const result = await skillRegistry.loadSkill(skillId);

@@ -13,7 +13,6 @@ import {
   hasAsyncWith,
 } from '@frontmcp/di';
 import {
-  ProviderInterface,
   ProviderType,
   ProviderRegistryInterface,
   ScopeEntry,
@@ -38,7 +37,6 @@ import {
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
-import HookRegistry from '../hooks/hook.registry';
 import { validateSessionId } from '../context/frontmcp-context';
 import { type DistributedEnabled, shouldCacheProviders } from '../common/types/options/transport';
 
@@ -575,7 +573,7 @@ export default class ProviderRegistry
   }
 
   getHooksRegistry() {
-    return this.getRegistries('HookRegistry')[0] as HookRegistry;
+    return this.getRegistries('HookRegistry')[0];
   }
 
   // noinspection JSUnusedGlobalSymbols
@@ -648,7 +646,7 @@ export default class ProviderRegistry
   mergeFromRegistry(
     providedBy: ProviderRegistry,
     exported: {
-      token: Token<ProviderInterface>;
+      token: Token<unknown>;
       def: ProviderRecord;
       /** Instance may be undefined for CONTEXT-scoped providers (built per-request) */
       instance: ProviderEntry | undefined;
@@ -669,7 +667,7 @@ export default class ProviderRegistry
   /**
    * Used by plugins to get the exported provider definitions.
    */
-  getProviderInfo(token: Token<ProviderInterface>) {
+  getProviderInfo(token: Token<unknown>) {
     const def = this.defs.get(token);
     const instance = this.instances.get(token);
     if (!def || !instance)
@@ -733,7 +731,7 @@ export default class ProviderRegistry
     return parent.getWithParents(token);
   }
 
-  getActiveScope(): Scope {
+  getActiveScope(): ScopeEntry {
     return this.getWithParents(Scope);
   }
 

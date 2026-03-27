@@ -1,15 +1,7 @@
 // file: libs/sdk/src/prompt/prompt.registry.ts
 
 import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import {
-  EntryLineage,
-  EntryOwnerRef,
-  PromptEntry,
-  PromptRecord,
-  PromptRegistryInterface,
-  PromptType,
-  AppEntry,
-} from '../common';
+import { AppEntry, EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptType, ScopeEntry } from '../common';
 import { PromptChangeEvent, PromptEmitter } from './prompt.events';
 import ProviderRegistry from '../provider/provider.registry';
 import { ensureMaxLen, sepFor } from '@frontmcp/utils';
@@ -22,7 +14,6 @@ import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from '
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 import { ServerCapabilities } from '@frontmcp/protocol';
-import { Scope } from '../scope';
 import {
   NameDisambiguationError,
   EntryValidationError,
@@ -33,14 +24,11 @@ import {
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
 
-export default class PromptRegistry
-  extends RegistryAbstract<
-    PromptInstance, // instances map holds PromptInstance
-    PromptRecord,
-    PromptType[]
-  >
-  implements PromptRegistryInterface
-{
+export default class PromptRegistry extends RegistryAbstract<
+  PromptInstance, // instances map holds PromptInstance
+  PromptRecord,
+  PromptType[]
+> {
   /** Who owns this registry (used for provenance). */
   owner: EntryOwnerRef;
 
@@ -190,7 +178,7 @@ export default class PromptRegistry
    * Remote apps expose prompts via proxy entries that forward execution to the remote server.
    * This also subscribes to updates from the remote app's registry for lazy-loaded prompts.
    */
-  private adoptPromptsFromRemoteApp(app: AppEntry, scope: Scope): void {
+  private adoptPromptsFromRemoteApp(app: AppEntry, scope: ScopeEntry): void {
     const remoteRegistry = app.prompts as PromptRegistry;
 
     // Helper to adopt/re-adopt prompts from the remote app
