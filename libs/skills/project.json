@@ -1,0 +1,56 @@
+{
+  "name": "skills",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/skills/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/skills/jest.config.ts"
+      }
+    },
+    "build-tsc": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/skills/dist",
+        "main": "libs/skills/src/index.ts",
+        "tsConfig": "libs/skills/tsconfig.lib.json",
+        "assets": [
+          "README.md",
+          "LICENSE",
+          {
+            "glob": "**/*",
+            "input": "libs/skills/catalog",
+            "output": "catalog"
+          }
+        ]
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-tsc"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/skills/dist/package.json"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/skills/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

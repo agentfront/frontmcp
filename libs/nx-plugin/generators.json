@@ -40,6 +40,11 @@
       "schema": "./src/generators/skill/schema.json",
       "description": "Generate a @Skill class"
     },
+    "skill-dir": {
+      "factory": "./src/generators/skill-dir/skill-dir",
+      "schema": "./src/generators/skill-dir/schema.json",
+      "description": "Generate a SKILL.md-based skill directory"
+    },
     "agent": {
       "factory": "./src/generators/agent/agent",
       "schema": "./src/generators/agent/schema.json",

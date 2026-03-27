@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "FrontMcpSkillDir",
+  "title": "FrontMCP Skill Directory Generator",
+  "description": "Generate a SKILL.md-based skill directory",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The skill name (kebab-case)",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name would you like for the skill?",
+      "x-priority": "important"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project to add the skill to",
+      "x-prompt": "Which project should the skill be added to?",
+      "x-priority": "important"
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of what the skill does",
+      "x-prompt": "What does this skill do?",
+      "x-priority": "important"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Custom directory relative to the project root (default: skills)"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags for categorization"
+    },
+    "withReferences": {
+      "type": "boolean",
+      "description": "Include a references/ directory",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Skip formatting files",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}
