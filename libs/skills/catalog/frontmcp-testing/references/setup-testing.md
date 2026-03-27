@@ -41,7 +41,7 @@ FrontMCP requires:
 
 Place test files next to the source file or in a `__tests__` directory:
 
-```
+```text
 src/
   tools/
     my-tool.ts

@@ -123,7 +123,7 @@ frontmcp skills install frontmcp-development --provider codex
 
 **Directory structure after install:**
 
-```
+```text
 my-project/
 ├── .claude/
 │   └── skills/

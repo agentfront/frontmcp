@@ -244,13 +244,13 @@ describe('Weather Server E2E', () => {
   let server: TestServer;
 
   beforeAll(async () => {
-    server = await TestServer.create(Server);
-    client = await server.connect();
+    server = await TestServer.start({ command: 'npx tsx src/main.ts' });
+    client = await McpTestClient.create({ baseUrl: server.info.baseUrl }).buildAndConnect();
   });
 
   afterAll(async () => {
-    await client.close();
-    await server.dispose();
+    await client.disconnect();
+    await server.stop();
   });
 
   it('should list tools including get_weather', async () => {

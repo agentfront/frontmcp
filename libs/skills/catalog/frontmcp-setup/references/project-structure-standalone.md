@@ -24,7 +24,7 @@
 
 When you run `frontmcp create`, the CLI scaffolds a standalone project with the following layout:
 
-```
+```text
 my-project/
 ├── src/
 │   ├── main.ts              # @FrontMcp server entry (default export)
@@ -132,7 +132,7 @@ jest --config e2e/jest.config.ts
 
 For larger standalone projects, group related entities into feature folders:
 
-```
+```text
 src/
 ├── main.ts
 ├── my-app.app.ts
@@ -154,7 +154,7 @@ Feature folders work well when your project has multiple related tools and resou
 
 The top-level `skills/` directory (outside `src/`) holds catalog skills added via the `--skills` flag during `frontmcp create`. Each skill is a folder containing a `SKILL.md` file:
 
-```
+```text
 skills/
 ├── create-tool/
 │   └── SKILL.md
@@ -203,7 +203,7 @@ Skills inside `src/skills/` are `@Skill` classes that are part of your applicati
 | `frontmcp dev` fails to start  | `main.ts` does not default-export the `@FrontMcp` class       | Add `export default MyServer` to `main.ts`                               |
 | Tool not discovered at runtime | Tool class not added to the `tools` array in `@App`           | Register the tool in the `@App` decorator's `tools` array                |
 | Tests not found by Jest        | Test file uses `.test.ts` instead of `.spec.ts`               | Rename to `.spec.ts` to match the FrontMCP test file convention          |
-| Build target error             | Invalid `--target` flag value                                 | Use `node`, `bun`, or `cloudflare-workers` as the target value           |
+| Build target error             | Invalid `--target` flag value                                 | Use `node`, `vercel`, `lambda`, or `cloudflare` as the target value      |
 | Catalog skills not loaded      | Skills placed in `src/skills/` instead of top-level `skills/` | Move catalog `SKILL.md` directories to the top-level `skills/` directory |
 
 ## Reference

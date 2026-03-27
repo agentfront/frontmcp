@@ -35,6 +35,18 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 
 > **Decision:** Use this skill when you need to CREATE or ORGANIZE a project. Use other routers when you need to build, configure, deploy, or test.
 
+## Prerequisites
+
+- Node.js 22+ and npm/yarn installed
+- `frontmcp` CLI available globally (`npm install -g frontmcp`)
+
+## Steps
+
+1. Use the Scenario Routing Table below to find the right setup guide for your task
+2. Scaffold your project with `frontmcp create` (standalone) or `frontmcp create --nx` (monorepo)
+3. Configure storage and project structure per the relevant reference files
+4. Follow the Recommended Reading Order for a complete setup walkthrough
+
 ## Scenario Routing Table
 
 | Scenario                                      | Reference                                    | Description                                                            |
@@ -101,13 +113,13 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 
 ## Troubleshooting
 
-| Problem                  | Cause                               | Solution                                                              |
-| ------------------------ | ----------------------------------- | --------------------------------------------------------------------- |
-| `frontmcp create` fails  | Missing Node.js 22+ or npm/yarn     | Install Node.js 22+ and ensure npm/yarn is available                  |
-| Server fails to start    | `main.ts` missing default export    | Add `export default MyServerClass` to `main.ts`                       |
-| Redis connection refused | Redis not running or wrong URL      | Start Redis (`docker compose up redis`) or fix `REDIS_URL` env var    |
-| Nx generator not found   | `@frontmcp/nx-plugin` not installed | Run `npm install -D @frontmcp/nx-plugin`                              |
-| Skills not loading       | Skills placed in wrong directory    | Catalog skills go in top-level `skills/`, app skills in `src/skills/` |
+| Problem                  | Cause                            | Solution                                                              |
+| ------------------------ | -------------------------------- | --------------------------------------------------------------------- |
+| `frontmcp create` fails  | Missing Node.js 22+ or npm/yarn  | Install Node.js 22+ and ensure npm/yarn is available                  |
+| Server fails to start    | `main.ts` missing default export | Add `export default MyServerClass` to `main.ts`                       |
+| Redis connection refused | Redis not running or wrong URL   | Start Redis (`docker compose up redis`) or fix `REDIS_URL` env var    |
+| Nx generator not found   | `@frontmcp/nx` not installed     | Run `npm install -D @frontmcp/nx`                                     |
+| Skills not loading       | Skills placed in wrong directory | Catalog skills go in top-level `skills/`, app skills in `src/skills/` |
 
 ## Reference
 

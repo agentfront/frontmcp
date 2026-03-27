@@ -212,7 +212,7 @@ class RemoteWorkflowSkill extends SkillContext {}
 
 Use `skillDir()` to load a skill from a directory structure. The directory is expected to contain a `SKILL.md` file with frontmatter and instructions, plus optional subdirectories for scripts, references, and assets.
 
-```
+```text
 skills/
   deploy-service/
     SKILL.md           # Instructions with YAML frontmatter

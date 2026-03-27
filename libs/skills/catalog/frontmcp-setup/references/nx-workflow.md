@@ -259,7 +259,7 @@ nx run-many -t build,test,lint
 
 After scaffolding, the workspace follows this directory layout:
 
-```
+```text
 my-project/
   apps/
     my-app/

@@ -4,7 +4,7 @@
 
 FrontMCP uses a hierarchical decorator system. The nesting order is:
 
-```
+```text
 @FrontMcp          (server root)
   +-- @App         (application module)
        +-- @Tool           (MCP tool)

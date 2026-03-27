@@ -473,14 +473,15 @@ describe('Task Manager E2E', () => {
   let server: TestServer;
 
   beforeAll(async () => {
-    server = await TestServer.create(Server);
-    const token = TestTokenFactory.create({ sub: 'user-e2e', scope: 'tasks' });
-    client = await server.connect({ auth: { bearer: token } });
+    server = await TestServer.start({ command: 'npx tsx src/main.ts' });
+    const tokenFactory = new TestTokenFactory();
+    const token = await tokenFactory.createTestToken({ sub: 'user-e2e', scopes: ['tasks'] });
+    client = await McpTestClient.create({ baseUrl: server.info.baseUrl }).withToken(token).buildAndConnect();
   });
 
   afterAll(async () => {
-    await client.close();
-    await server.dispose();
+    await client.disconnect();
+    await server.stop();
   });
 
   it('should list all CRUD tools', async () => {

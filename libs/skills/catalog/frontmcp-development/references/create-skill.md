@@ -216,7 +216,7 @@ Use `skillDir()` to load a skill from a directory containing a `SKILL.md` file w
 
 ### Directory Structure
 
-```
+```text
 skills/
   coding-standards/
     SKILL.md           # Instructions with YAML frontmatter

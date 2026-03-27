@@ -6,7 +6,7 @@ Curated skills catalog for FrontMCP projects. Skills are SKILL.md-based instruct
 
 The catalog uses a **router skill model** — 6 domain-scoped router skills, each containing a SKILL.md with a routing table and a `references/` directory with detailed reference files.
 
-```
+```text
 catalog/
 ├── skills-manifest.json       # Machine-readable index of all skills
 ├── frontmcp-setup/            # Project setup, scaffolding, Nx, storage backends

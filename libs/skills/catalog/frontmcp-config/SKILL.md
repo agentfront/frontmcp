@@ -35,6 +35,18 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 
 > **Decision:** Use this skill when you need to figure out WHAT to configure. Use the specific skill when you already know.
 
+## Prerequisites
+
+- A FrontMCP project scaffolded with `frontmcp create` (see `frontmcp-setup`)
+- Node.js 22+ and npm/yarn installed
+
+## Steps
+
+1. Identify the configuration area you need using the Scenario Routing Table below
+2. Navigate to the specific configuration skill (e.g., `configure-transport`, `configure-auth`) for detailed instructions
+3. Apply the configuration in your `@FrontMcp` or `@App` decorator
+4. Verify using the Verification Checklist at the end of this skill
+
 ## Scenario Routing Table
 
 | Scenario                                                   | Skill                   | Description                                                   |
@@ -52,7 +64,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 
 FrontMCP configuration cascades through three layers:
 
-```
+```text
 Server (@FrontMcp)     ← Global defaults
   └── App (@App)       ← App-level overrides
        └── Tool (@Tool) ← Per-tool overrides

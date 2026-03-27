@@ -50,7 +50,7 @@ frontmcp build --target cloudflare
 
 This produces:
 
-```
+```text
 dist/
   main.js      # Your compiled server (CommonJS)
   index.js     # Cloudflare handler wrapper

@@ -125,9 +125,10 @@ export class VectorStoreProvider implements VectorStore {
     await this.client.delete({ filter: { documentId } });
   }
 
-  private async createVectorClient(apiKey: string): Promise<{ upsert: Function; query: Function; delete: Function }> {
-    // Replace with your vector DB SDK initialization
-    throw new Error('Implement with your vector DB provider');
+  private async createVectorClient(_apiKey: string): Promise<{ upsert: Function; query: Function; delete: Function }> {
+    // Stub: replace with your vector DB SDK (e.g., Pinecone, Weaviate, Qdrant)
+    // This placeholder focuses on the FrontMCP patterns, not the vector DB integration.
+    throw new Error('Implement with your vector DB provider (e.g., Pinecone, Weaviate, Qdrant)');
   }
 }
 ```
@@ -367,7 +368,7 @@ import { ResearcherAgent } from './agents/researcher.agent';
 @App({
   name: 'Research',
   description: 'AI-powered research agent for knowledge synthesis',
-  tools: [ResearcherAgent],
+  agents: [ResearcherAgent],
 })
 export class ResearchApp {}
 ```

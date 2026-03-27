@@ -35,6 +35,19 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 
 > **Decision:** Use this skill when you need to figure out WHERE to deploy. Use the specific skill when you already know.
 
+## Prerequisites
+
+- A working FrontMCP server with at least one `@App` and one `@Tool` (see `frontmcp-development`)
+- Server configuration completed (see `frontmcp-config`)
+- Tests passing locally (see `frontmcp-testing`)
+
+## Steps
+
+1. Review the Scenario Routing Table and Target Comparison below to choose a deployment target
+2. Run `frontmcp build --target <target>` to produce the build output
+3. Follow the specific deployment skill (e.g., `deploy-to-node`, `deploy-to-vercel`) for platform instructions
+4. Verify with the Post-Deployment checklist at the end of this skill
+
 ## Scenario Routing Table
 
 | Scenario                                          | Skill                  | Description                                                             |

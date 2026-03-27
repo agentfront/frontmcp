@@ -441,7 +441,7 @@ A tool is cached if it matches any pattern OR has `cache: true` (or a cache obje
 
 Send the bypass header to skip caching for a specific request:
 
-```
+```text
 x-frontmcp-disable-cache: true
 ```
 

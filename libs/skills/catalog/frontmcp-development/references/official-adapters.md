@@ -38,7 +38,7 @@ import { OpenApiAdapter } from '@frontmcp/adapters';
   adapters: [
     OpenApiAdapter.init({
       name: 'petstore',
-      specUrl: 'https://petstore3.swagger.io/api/v3/openapi.json',
+      url: 'https://petstore3.swagger.io/api/v3/openapi.json',
     }),
   ],
 })
@@ -53,7 +53,7 @@ Each OpenAPI operation becomes an MCP tool named `petstore:operationId`.
 // API Key auth
 OpenApiAdapter.init({
   name: 'my-api',
-  specUrl: 'https://api.example.com/openapi.json',
+  url: 'https://api.example.com/openapi.json',
   auth: {
     type: 'apiKey',
     headerName: 'X-API-Key',
@@ -64,7 +64,7 @@ OpenApiAdapter.init({
 // Bearer token auth
 OpenApiAdapter.init({
   name: 'my-api',
-  specUrl: 'https://api.example.com/openapi.json',
+  url: 'https://api.example.com/openapi.json',
   auth: {
     type: 'bearer',
     token: process.env.API_TOKEN!,
@@ -74,7 +74,7 @@ OpenApiAdapter.init({
 // OAuth auth
 OpenApiAdapter.init({
   name: 'my-api',
-  specUrl: 'https://api.example.com/openapi.json',
+  url: 'https://api.example.com/openapi.json',
   auth: {
     type: 'oauth',
     tokenUrl: 'https://auth.example.com/token',
@@ -92,7 +92,7 @@ Automatically refresh the OpenAPI spec at intervals:
 ```typescript
 OpenApiAdapter.init({
   name: 'evolving-api',
-  specUrl: 'https://api.example.com/openapi.json',
+  url: 'https://api.example.com/openapi.json',
   polling: {
     intervalMs: 300000, // Re-fetch every 5 minutes
   },
@@ -122,9 +122,9 @@ Register adapters from different APIs in the same app:
 @App({
   name: 'IntegrationHub',
   adapters: [
-    OpenApiAdapter.init({ name: 'github', specUrl: 'https://api.github.com/openapi.json' }),
-    OpenApiAdapter.init({ name: 'jira', specUrl: 'https://jira.example.com/openapi.json' }),
-    OpenApiAdapter.init({ name: 'slack', specUrl: 'https://slack.com/openapi.json' }),
+    OpenApiAdapter.init({ name: 'github', url: 'https://api.github.com/openapi.json' }),
+    OpenApiAdapter.init({ name: 'jira', url: 'https://jira.example.com/openapi.json' }),
+    OpenApiAdapter.init({ name: 'slack', url: 'https://slack.com/openapi.json' }),
   ],
 })
 class IntegrationHub {}
@@ -142,13 +142,13 @@ class IntegrationHub {}
 
 ## Common Patterns
 
-| Pattern              | Correct                                                                         | Incorrect                                                       | Why                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Adapter registration | `OpenApiAdapter.init({ name: 'petstore', specUrl: '...' })` in `adapters` array | Placing adapter in `plugins` array                              | Adapters go in `adapters`, not `plugins`; they serve different purposes              |
-| Tool naming          | Tools auto-named as `petstore:operationId` using adapter `name` as namespace    | Expecting flat names like `listPets`                            | Adapter name is prepended to prevent collisions across multiple adapters             |
-| Auth configuration   | `auth: { type: 'bearer', token: process.env.API_TOKEN! }`                       | Hardcoding secrets: `auth: { type: 'bearer', token: 'sk-xxx' }` | Always use environment variables for secrets; never commit tokens                    |
-| Spec source          | Use `specUrl` for hosted specs or `spec` for inline definitions                 | Using both `specUrl` and `spec` simultaneously                  | Only one source should be provided; `spec` takes precedence and `specUrl` is ignored |
-| Multiple APIs        | Register separate `OpenApiAdapter.init()` calls with unique `name` values       | Using the same `name` for different adapters                    | Duplicate names cause tool naming collisions                                         |
+| Pattern              | Correct                                                                      | Incorrect                                                       | Why                                                                              |
+| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Adapter registration | `OpenApiAdapter.init({ name: 'petstore', url: '...' })` in `adapters` array  | Placing adapter in `plugins` array                              | Adapters go in `adapters`, not `plugins`; they serve different purposes          |
+| Tool naming          | Tools auto-named as `petstore:operationId` using adapter `name` as namespace | Expecting flat names like `listPets`                            | Adapter name is prepended to prevent collisions across multiple adapters         |
+| Auth configuration   | `auth: { type: 'bearer', token: process.env.API_TOKEN! }`                    | Hardcoding secrets: `auth: { type: 'bearer', token: 'sk-xxx' }` | Always use environment variables for secrets; never commit tokens                |
+| Spec source          | Use `url` for hosted specs or `spec` for inline definitions                  | Using both `url` and `spec` simultaneously                      | Only one source should be provided; `spec` takes precedence and `url` is ignored |
+| Multiple APIs        | Register separate `OpenApiAdapter.init()` calls with unique `name` values    | Using the same `name` for different adapters                    | Duplicate names cause tool naming collisions                                     |
 
 ## Verification Checklist
 
@@ -157,7 +157,7 @@ class IntegrationHub {}
 - [ ] `@frontmcp/adapters` package is installed
 - [ ] `OpenApiAdapter.init()` is in the `adapters` array of `@App`
 - [ ] Adapter has a unique `name` for tool namespacing
-- [ ] `specUrl` points to a valid, reachable OpenAPI JSON/YAML endpoint (or `spec` is inline)
+- [ ] `url` points to a valid, reachable OpenAPI JSON/YAML endpoint (or `spec` is inline)
 
 ### Runtime
 

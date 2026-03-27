@@ -42,6 +42,19 @@ Complete build walkthroughs and best practices for FrontMCP MCP servers. Each ex
 
 > **Decision:** Use this skill when you want to see how everything fits together. Use individual skills when you need focused instruction.
 
+## Prerequisites
+
+- Node.js 22+ and npm/yarn installed
+- Familiarity with TypeScript and decorators
+- `frontmcp` CLI available globally (`npm install -g frontmcp`)
+
+## Steps
+
+1. Choose an example that matches your project's complexity level (Beginner, Intermediate, Advanced)
+2. Work through the Planning Checklist to define your project's scope
+3. Follow the example code and architecture, referencing individual skills for deeper guidance
+4. Verify your implementation using the Verification Checklist at the end of this skill
+
 ## Planning Checklist
 
 Before writing any code, answer these questions:
@@ -83,7 +96,7 @@ A simple MCP server that exposes a weather lookup tool and a resource for suppor
 
 ### Architecture
 
-```
+```text
 weather-api/
 ├── src/
 │   ├── main.ts              # @FrontMcp server (deploy-to-node)
@@ -170,7 +183,7 @@ An authenticated task management server with CRUD tools, Redis storage, and OAut
 
 ### Architecture
 
-```
+```text
 task-manager/
 ├── src/
 │   ├── main.ts                    # @FrontMcp with auth: { mode: 'remote' }
