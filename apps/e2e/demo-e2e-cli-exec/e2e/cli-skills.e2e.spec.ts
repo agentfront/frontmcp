@@ -21,33 +21,32 @@ describe('CLI Skills Commands', () => {
 
     it('should include known skill names', () => {
       const { stdout } = runFrontmcpCli(['skills', 'list']);
-      expect(stdout).toContain('setup-project');
-      expect(stdout).toContain('deploy-to-vercel');
-      expect(stdout).toContain('create-tool');
+      expect(stdout).toContain('frontmcp-setup');
+      expect(stdout).toContain('frontmcp-deployment');
+      expect(stdout).toContain('frontmcp-development');
     });
 
     it('should filter by category', () => {
       const { stdout, exitCode } = runFrontmcpCli(['skills', 'list', '--category', 'setup']);
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('setup-project');
-      expect(stdout).toContain('setup-redis');
+      expect(stdout).toContain('frontmcp-setup');
       // Should NOT include deployment skills
-      expect(stdout).not.toContain('deploy-to-vercel');
-      expect(stdout).not.toContain('deploy-to-node');
+      expect(stdout).not.toContain('frontmcp-deployment');
+      expect(stdout).not.toContain('frontmcp-development');
     });
 
     it('should filter by tag', () => {
       const { stdout, exitCode } = runFrontmcpCli(['skills', 'list', '--tag', 'redis']);
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('setup-redis');
+      expect(stdout).toContain('frontmcp-setup');
     });
 
     it('should filter by bundle', () => {
       const { stdout, exitCode } = runFrontmcpCli(['skills', 'list', '--bundle', 'minimal']);
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('setup-project');
+      expect(stdout).toContain('frontmcp-setup');
       // Skills not in minimal bundle should be excluded
-      expect(stdout).not.toContain('create-plugin');
+      expect(stdout).not.toContain('frontmcp-guides');
     });
   });
 
@@ -57,15 +56,15 @@ describe('CLI Skills Commands', () => {
     it('should return results for a keyword query', () => {
       const { stdout, exitCode } = runFrontmcpCli(['skills', 'search', 'redis']);
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('setup-redis');
+      expect(stdout).toContain('frontmcp-config');
       expect(stdout).toContain('result(s)');
     });
 
     it('should return results for a multi-word query', () => {
       const { stdout, exitCode } = runFrontmcpCli(['skills', 'search', 'deploy serverless']);
       expect(exitCode).toBe(0);
-      // Should match at least one deployment skill
-      expect(stdout).toMatch(/deploy-to-(vercel|lambda|cloudflare|node)/);
+      // Should match the deployment router
+      expect(stdout).toContain('frontmcp-deployment');
     });
 
     it('should respect --limit option', () => {
@@ -77,12 +76,12 @@ describe('CLI Skills Commands', () => {
     });
 
     it('should respect --category filter', () => {
-      const { stdout, exitCode } = runFrontmcpCli(['skills', 'search', 'configure', '--category', 'auth']);
+      const { stdout, exitCode } = runFrontmcpCli(['skills', 'search', 'configure', '--category', 'config']);
       expect(exitCode).toBe(0);
-      // Results should only be from auth category
+      // Results should only be from config category
       if (stdout.includes('result(s)')) {
-        expect(stdout).toContain('[auth]');
-        expect(stdout).not.toContain('[config]');
+        expect(stdout).toContain('[config]');
+        expect(stdout).not.toContain('[setup]');
       }
     });
 
@@ -107,28 +106,28 @@ describe('CLI Skills Commands', () => {
     });
 
     it('should install a skill to a custom directory', () => {
-      const { stdout, exitCode } = runFrontmcpCli(['skills', 'install', 'setup-project', '--dir', tmpDir]);
+      const { stdout, exitCode } = runFrontmcpCli(['skills', 'install', 'frontmcp-setup', '--dir', tmpDir]);
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Installed');
-      expect(stdout).toContain('setup-project');
+      expect(stdout).toContain('frontmcp-setup');
 
       // Verify SKILL.md was copied
-      const skillMd = path.join(tmpDir, 'setup-project', 'SKILL.md');
+      const skillMd = path.join(tmpDir, 'frontmcp-setup', 'SKILL.md');
       expect(fs.existsSync(skillMd)).toBe(true);
 
       // Verify content is non-empty
       const content = fs.readFileSync(skillMd, 'utf-8');
       expect(content.length).toBeGreaterThan(100);
-      expect(content).toContain('setup-project');
+      expect(content).toContain('frontmcp-setup');
     });
 
     it('should install a skill that has resources', () => {
-      const { stdout, exitCode } = runFrontmcpCli(['skills', 'install', 'deploy-to-node', '--dir', tmpDir]);
+      const { stdout, exitCode } = runFrontmcpCli(['skills', 'install', 'frontmcp-deployment', '--dir', tmpDir]);
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Installed');
 
-      // deploy-to-node has hasResources: true — verify references/ was copied
-      const skillDir = path.join(tmpDir, 'deploy-to-node');
+      // frontmcp-deployment has hasResources: true — verify references/ was copied
+      const skillDir = path.join(tmpDir, 'frontmcp-deployment');
       expect(fs.existsSync(path.join(skillDir, 'SKILL.md'))).toBe(true);
       const refDir = path.join(skillDir, 'references');
       expect(fs.existsSync(refDir)).toBe(true);
@@ -154,7 +153,7 @@ describe('CLI Skills Commands', () => {
       const { exitCode } = runFrontmcpCli([
         'skills',
         'install',
-        'setup-project',
+        'frontmcp-setup',
         '--provider',
         'claude',
         '--dir',
@@ -163,7 +162,7 @@ describe('CLI Skills Commands', () => {
       expect(exitCode).toBe(0);
 
       // Should exist under the base dir
-      const skillMd = path.join(baseDir, 'setup-project', 'SKILL.md');
+      const skillMd = path.join(baseDir, 'frontmcp-setup', 'SKILL.md');
       expect(fs.existsSync(skillMd)).toBe(true);
     });
   });
