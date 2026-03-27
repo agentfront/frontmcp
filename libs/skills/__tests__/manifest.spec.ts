@@ -19,11 +19,9 @@ describe('manifest constants', () => {
     expect(VALID_CATEGORIES).toContain('deployment');
     expect(VALID_CATEGORIES).toContain('development');
     expect(VALID_CATEGORIES).toContain('config');
-    expect(VALID_CATEGORIES).toContain('auth');
-    expect(VALID_CATEGORIES).toContain('plugins');
-    expect(VALID_CATEGORIES).toContain('adapters');
     expect(VALID_CATEGORIES).toContain('testing');
-    expect(VALID_CATEGORIES).toHaveLength(8);
+    expect(VALID_CATEGORIES).toContain('guides');
+    expect(VALID_CATEGORIES).toHaveLength(6);
   });
 
   it('should export valid bundles', () => {

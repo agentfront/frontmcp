@@ -4,27 +4,29 @@ Curated skills catalog for FrontMCP projects. Skills are SKILL.md-based instruct
 
 ## Structure
 
+The catalog uses a **router skill model** — 6 domain-scoped router skills, each containing a SKILL.md with a routing table and a `references/` directory with detailed reference files.
+
 ```
 catalog/
-├── skills-manifest.json    # Machine-readable index of all skills
-├── setup/                  # Project setup and configuration
-├── deployment/             # Target-specific deployment guides
-├── development/            # MCP tool/resource/prompt creation
-├── auth/                   # Authentication and session management
-├── plugins/                # Plugin development
-└── testing/                # Testing setup
+├── skills-manifest.json       # Machine-readable index of all skills
+├── frontmcp-setup/            # Project setup, scaffolding, Nx, storage backends
+├── frontmcp-development/      # Tools, resources, prompts, agents, providers, jobs, workflows, skills
+├── frontmcp-deployment/       # Deploy to Node, Vercel, Lambda, Cloudflare; build for CLI, browser, SDK
+├── frontmcp-testing/          # Testing with Jest and @frontmcp/testing
+├── frontmcp-config/           # Transport, HTTP, throttle, elicitation, auth, sessions, storage
+└── frontmcp-guides/           # End-to-end examples and best practices
 ```
 
-## Skill Directory Format
-
-Each skill is a directory containing a `SKILL.md` file with YAML frontmatter and optional resource directories:
+Each router skill directory follows this format:
 
 ```
-skill-name/
-├── SKILL.md          # Required: frontmatter + instructions
-├── scripts/          # Optional: automation scripts
-├── references/       # Optional: reference files (Dockerfile, config examples)
-└── assets/           # Optional: images, diagrams
+frontmcp-development/
+├── SKILL.md          # Required: frontmatter + routing table + instructions
+└── references/       # Reference files with detailed per-topic guides
+    ├── create-tool.md
+    ├── create-resource.md
+    ├── create-agent.md
+    └── ...
 ```
 
 ## SKILL.md Frontmatter
@@ -60,29 +62,27 @@ Step-by-step markdown instructions here...
 
 ## Adding a New Skill
 
-1. Create a directory under the appropriate category in `catalog/`
-2. Add a `SKILL.md` file using the template at `catalog/TEMPLATE.md`
-3. Add an entry to `catalog/skills-manifest.json`
+> **Important:** The canonical catalog model is 6 router skills with reference markdown. Do not create new top-level skill directories — add new content as reference files within the appropriate router skill.
+
+1. Identify which router skill your content belongs to (setup, development, deployment, testing, config, or guides)
+2. Create a new `.md` reference file in that router's `references/` directory
+3. Add a routing entry in the router's `SKILL.md` routing table
 4. Run `nx test skills` to validate
 
 ## Manifest Entry
 
-Each skill must have a corresponding entry in `skills-manifest.json`:
+Each router skill has a corresponding entry in `skills-manifest.json`:
 
 ```json
 {
-  "name": "my-skill",
+  "name": "frontmcp-development",
   "category": "development",
-  "description": "What the skill does",
-  "path": "development/my-skill",
+  "description": "Domain router for building MCP components",
+  "path": "frontmcp-development",
   "targets": ["all"],
-  "hasResources": false,
-  "tags": ["development"],
-  "bundle": ["recommended"],
-  "install": {
-    "destinations": ["project-local"],
-    "mergeStrategy": "skip-existing"
-  }
+  "hasResources": true,
+  "tags": ["router", "development", "tools", "resources"],
+  "bundle": ["recommended", "minimal", "full"]
 }
 ```
 

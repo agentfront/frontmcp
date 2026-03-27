@@ -14,15 +14,7 @@ export type SkillTarget = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'all';
 /**
  * Skill categories for organizing the catalog.
  */
-export type SkillCategory =
-  | 'setup'
-  | 'deployment'
-  | 'development'
-  | 'config'
-  | 'auth'
-  | 'plugins'
-  | 'adapters'
-  | 'testing';
+export type SkillCategory = 'setup' | 'deployment' | 'development' | 'config' | 'testing' | 'guides';
 
 /**
  * Bundle membership for curated scaffold presets.
@@ -76,8 +68,8 @@ export interface SkillCatalogEntry {
   tags: string[];
   /** Bundle membership for scaffold presets */
   bundle?: SkillBundle[];
-  /** Install configuration for future distribution */
-  install: SkillInstallConfig;
+  /** Install configuration for future distribution (optional — not yet used by CLI) */
+  install?: SkillInstallConfig;
 }
 
 /**
@@ -99,10 +91,8 @@ export const VALID_CATEGORIES: readonly SkillCategory[] = [
   'deployment',
   'development',
   'config',
-  'auth',
-  'plugins',
-  'adapters',
   'testing',
+  'guides',
 ];
 
 /** Valid bundles for manifest validation */

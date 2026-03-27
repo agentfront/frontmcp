@@ -24,21 +24,27 @@ function loadManifestSync(): SkillManifest {
 
 function findAllSkillDirs(): string[] {
   const dirs: string[] = [];
-  const categories = fs.readdirSync(CATALOG_DIR).filter((f) => {
+  const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
     const full = path.join(CATALOG_DIR, f);
     return fs.statSync(full).isDirectory() && f !== 'node_modules';
   });
 
-  for (const cat of categories) {
-    const catDir = path.join(CATALOG_DIR, cat);
-    const skills = fs.readdirSync(catDir).filter((f) => {
-      const full = path.join(catDir, f);
+  for (const entry of entries) {
+    const entryDir = path.join(CATALOG_DIR, entry);
+    // Skills can be directly in the catalog root (flat structure)
+    if (fs.existsSync(path.join(entryDir, 'SKILL.md'))) {
+      dirs.push(entry);
+      continue;
+    }
+    // Or nested inside a category directory (legacy structure)
+    const skills = fs.readdirSync(entryDir).filter((f) => {
+      const full = path.join(entryDir, f);
       return fs.statSync(full).isDirectory();
     });
     for (const skill of skills) {
-      const skillDir = path.join(catDir, skill);
+      const skillDir = path.join(entryDir, skill);
       if (fs.existsSync(path.join(skillDir, 'SKILL.md'))) {
-        dirs.push(`${cat}/${skill}`);
+        dirs.push(`${entry}/${skill}`);
       }
     }
   }
@@ -139,10 +145,11 @@ describe('skills catalog validation', () => {
         const m = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as SkillManifest;
         return m.skills.map((s) => [s.name, s] as [string, SkillCatalogEntry]);
       })(),
-    )('"%s" should have valid install config', (_, entry) => {
-      expect(entry.install).toBeDefined();
-      expect(entry.install.destinations.length).toBeGreaterThan(0);
-      expect(['overwrite', 'skip-existing']).toContain(entry.install.mergeStrategy);
+    )('"%s" should have valid install config if present', (_, entry) => {
+      if (entry.install) {
+        expect(entry.install.destinations.length).toBeGreaterThan(0);
+        expect(['overwrite', 'skip-existing']).toContain(entry.install.mergeStrategy);
+      }
     });
   });
 
@@ -185,7 +192,7 @@ describe('skills catalog validation', () => {
       const allNames = new Set(manifest.skills.map((s) => s.name));
       const broken: string[] = [];
       for (const entry of manifest.skills) {
-        if (entry.install.dependencies) {
+        if (entry.install?.dependencies) {
           for (const dep of entry.install.dependencies) {
             if (!allNames.has(dep)) {
               broken.push(`${entry.name} depends on "${dep}" which does not exist in manifest`);
@@ -269,9 +276,104 @@ describe('skills catalog validation', () => {
     });
   });
 
-  describe('new-format migration tracking', () => {
-    const NEW_FORMAT_SECTIONS = [{ heading: '## When to Use This Skill', required: '### Must Use' }];
+  describe('semantic content validation', () => {
+    /**
+     * Collects all .md files under references/ for all catalog skills.
+     */
+    function getAllReferenceFiles(): { skill: string; file: string; fullPath: string }[] {
+      const results: { skill: string; file: string; fullPath: string }[] = [];
+      const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
+        const full = path.join(CATALOG_DIR, f);
+        return fs.statSync(full).isDirectory() && f !== 'node_modules';
+      });
+      for (const entry of entries) {
+        const refsDir = path.join(CATALOG_DIR, entry, 'references');
+        if (fs.existsSync(refsDir)) {
+          const files = fs.readdirSync(refsDir).filter((f) => f.endsWith('.md'));
+          for (const file of files) {
+            results.push({ skill: entry, file, fullPath: path.join(refsDir, file) });
+          }
+        }
+        // Also include the SKILL.md itself
+        const skillMd = path.join(CATALOG_DIR, entry, 'SKILL.md');
+        if (fs.existsSync(skillMd)) {
+          results.push({ skill: entry, file: 'SKILL.md', fullPath: skillMd });
+        }
+      }
+      return results;
+    }
 
+    it('should not use invalid LLM "adapter" field in code examples', () => {
+      const violations: string[] = [];
+      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Match adapter: 'anthropic' or adapter: 'openai' in code blocks
+        const adapterMatches = content.match(/adapter:\s*['"](?:anthropic|openai)['"]/g);
+        if (adapterMatches) {
+          violations.push(`${skill}/${file}: found ${adapterMatches.length}x "adapter:" — should be "provider:"`);
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('should not use auth string shorthand in decorator context', () => {
+      const violations: string[] = [];
+      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Match auth: 'remote', auth: 'public', auth: 'transparent' as standalone config values
+        const authShorthand = content.match(/auth:\s*['"](?:remote|public|transparent)['"]/g);
+        if (authShorthand) {
+          violations.push(`${skill}/${file}: found auth string shorthand — should be auth: { mode: '...' }`);
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('should not use "streamable-http" as a transport preset in SDK context', () => {
+      const violations: string[] = [];
+      const validPresets = ['modern', 'legacy', 'stateless-api', 'full'];
+      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Match protocol: 'streamable-http' or transport: 'streamable-http'
+        const matches = content.match(/(?:protocol|transport):\s*['"]streamable-http['"]/g);
+        if (matches) {
+          violations.push(
+            `${skill}/${file}: found "streamable-http" preset — valid presets are: ${validPresets.join(', ')}`,
+          );
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('should not use bare @App() without metadata', () => {
+      const violations: string[] = [];
+      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Match @App() with empty parens (no arguments)
+        const bareApp = content.match(/@App\(\s*\)/g);
+        if (bareApp) {
+          violations.push(`${skill}/${file}: found bare @App() — must include { name: '...' }`);
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('should not use "session:" as a top-level @FrontMcp field', () => {
+      const violations: string[] = [];
+      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Look for session: { ... } in decorator blocks (preceded by @FrontMcp)
+        // Simple heuristic: find session: { store in code blocks
+        const sessionStore = content.match(/session:\s*\{\s*\n?\s*store:/g);
+        if (sessionStore) {
+          violations.push(`${skill}/${file}: found top-level "session:" field — use "redis:" at top level instead`);
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+  });
+
+  describe('new-format migration tracking', () => {
     function getSkillBody(dir: string): string {
       return fs.readFileSync(path.join(CATALOG_DIR, dir, 'SKILL.md'), 'utf-8');
     }
