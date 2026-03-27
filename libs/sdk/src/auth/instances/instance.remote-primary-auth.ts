@@ -6,7 +6,6 @@ import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import SessionVerifyFlow from '../flows/session.verify.flow';
-import { Scope } from '../../scope';
 
 export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
   override ready: Promise<void>;
@@ -49,7 +48,7 @@ export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
     return Promise.resolve();
   }
 
-  private async registerAuthFlows(scope: Scope) {
+  private async registerAuthFlows(scope: ScopeEntry) {
     await scope.registryFlows(
       WellKnownPrmFlow /** /.well-known/oauth-protected-resource */,
       WellKnownAsFlow /** /.well-known/oauth-authorization-server */,

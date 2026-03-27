@@ -4,10 +4,10 @@
 
 import 'reflect-metadata';
 import PluginRegistry, { PluginScopeInfo } from '../plugin.registry';
-import { PluginInterface, FlowCtxOf } from '../../common/interfaces';
+import { FlowCtxOf } from '../../common/interfaces';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
 import { FlowHooksOf } from '../../common/decorators/hook.decorator';
-import { createClassProvider, createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
+import { createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 import { createProviderRegistryWithScope, createMockScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { InvalidPluginScopeError } from '../../errors';
 import { Scope } from '../../scope';
@@ -22,7 +22,7 @@ describe('PluginRegistry', () => {
         name: 'TestPlugin',
         description: 'A test plugin',
       })
-      class TestPlugin implements PluginInterface {
+      class TestPlugin {
         constructor() {}
       }
 
@@ -41,13 +41,13 @@ describe('PluginRegistry', () => {
         name: 'PluginA',
         description: 'First plugin',
       })
-      class PluginA implements PluginInterface {}
+      class PluginA {}
 
       @FrontMcpPlugin({
         name: 'PluginB',
         description: 'Second plugin',
       })
-      class PluginB implements PluginInterface {}
+      class PluginB {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -63,7 +63,7 @@ describe('PluginRegistry', () => {
     it('should register a plugin using useClass', async () => {
       const PLUGIN_TOKEN = Symbol('PLUGIN_TOKEN');
 
-      class TestPluginImpl implements PluginInterface {
+      class TestPluginImpl {
         constructor() {}
       }
 
@@ -145,7 +145,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin that provides services',
         providers: [],
       })
-      class PluginWithProviders implements PluginInterface {
+      class PluginWithProviders {
         get: any;
 
         getService() {
@@ -174,7 +174,7 @@ describe('PluginRegistry', () => {
         providers: [],
         exports: [],
       })
-      class PluginWithExports implements PluginInterface {}
+      class PluginWithExports {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -193,7 +193,7 @@ describe('PluginRegistry', () => {
         name: 'DependentPlugin',
         description: 'Plugin with dependencies',
       })
-      class DependentPlugin implements PluginInterface {
+      class DependentPlugin {
         constructor() {}
       }
 
@@ -213,7 +213,7 @@ describe('PluginRegistry', () => {
         name: 'SimplePlugin',
         description: 'Plugin without dependencies',
       })
-      class SimplePlugin implements PluginInterface {
+      class SimplePlugin {
         constructor() {}
       }
 
@@ -264,14 +264,14 @@ describe('PluginRegistry', () => {
         name: 'NestedPlugin',
         description: 'A nested plugin',
       })
-      class NestedPlugin implements PluginInterface {}
+      class NestedPlugin {}
 
       @FrontMcpPlugin({
         name: 'ParentPlugin',
         description: 'Parent plugin with nested plugins',
         plugins: [NestedPlugin],
       })
-      class ParentPlugin implements PluginInterface {}
+      class ParentPlugin {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -291,7 +291,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin that provides tools',
         tools: [],
       })
-      class PluginWithTools implements PluginInterface {}
+      class PluginWithTools {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -309,7 +309,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin that provides resources',
         resources: [],
       })
-      class PluginWithResources implements PluginInterface {}
+      class PluginWithResources {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -327,7 +327,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin that provides prompts',
         prompts: [],
       })
-      class PluginWithPrompts implements PluginInterface {}
+      class PluginWithPrompts {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -345,7 +345,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin that provides adapters',
         adapters: [],
       })
-      class PluginWithAdapters implements PluginInterface {}
+      class PluginWithAdapters {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -451,7 +451,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin that uses get method',
         providers: [],
       })
-      class PluginWithGet implements PluginInterface {
+      class PluginWithGet {
         get: any;
       }
 
@@ -471,7 +471,7 @@ describe('PluginRegistry', () => {
     it('should handle plugins with dynamic providers', async () => {
       const DYNAMIC_TOKEN = Symbol('DYNAMIC');
 
-      class DynamicPlugin implements PluginInterface {
+      class DynamicPlugin {
         get: any;
       }
 
@@ -500,7 +500,7 @@ describe('PluginRegistry', () => {
         name: 'DefaultScopePlugin',
         description: 'Plugin without explicit scope',
       })
-      class DefaultScopePlugin implements PluginInterface {}
+      class DefaultScopePlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -525,7 +525,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin with app scope',
         scope: 'app',
       })
-      class AppScopePlugin implements PluginInterface {}
+      class AppScopePlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -550,7 +550,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin with server scope',
         scope: 'server',
       })
-      class ServerScopePlugin implements PluginInterface {}
+      class ServerScopePlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -576,7 +576,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin with server scope',
         scope: 'server',
       })
-      class ServerScopePlugin implements PluginInterface {}
+      class ServerScopePlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -600,7 +600,7 @@ describe('PluginRegistry', () => {
         description: 'Plugin with app scope',
         scope: 'app',
       })
-      class AppScopePlugin implements PluginInterface {}
+      class AppScopePlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -625,14 +625,14 @@ describe('PluginRegistry', () => {
         description: 'App scope plugin',
         scope: 'app',
       })
-      class AppPlugin implements PluginInterface {}
+      class AppPlugin {}
 
       @FrontMcpPlugin({
         name: 'ServerPlugin',
         description: 'Server scope plugin',
         scope: 'server',
       })
-      class ServerPlugin implements PluginInterface {}
+      class ServerPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -658,7 +658,7 @@ describe('PluginRegistry', () => {
         name: 'LegacyPlugin',
         description: 'Plugin without scopeInfo',
       })
-      class LegacyPlugin implements PluginInterface {}
+      class LegacyPlugin {}
 
       const providers = await createProviderRegistryWithScope();
 
@@ -674,7 +674,7 @@ describe('PluginRegistry', () => {
     it('should validate server scope plugin with object-based registration', async () => {
       const PLUGIN_TOKEN = Symbol('SERVER_PLUGIN');
 
-      class ServerPlugin implements PluginInterface {
+      class ServerPlugin {
         get: any;
       }
 
@@ -711,7 +711,7 @@ describe('PluginRegistry', () => {
         name: 'DecoratedServerPlugin',
         scope: 'app', // Decorator says app
       })
-      class DecoratedServerPlugin implements PluginInterface {}
+      class DecoratedServerPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -747,7 +747,7 @@ describe('PluginRegistry', () => {
         name: 'DecoratedAppPlugin',
         scope: 'app',
       })
-      class DecoratedAppPlugin implements PluginInterface {}
+      class DecoratedAppPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -785,13 +785,13 @@ describe('PluginRegistry', () => {
         name: 'NestedServerPlugin',
         scope: 'server',
       })
-      class NestedServerPlugin implements PluginInterface {}
+      class NestedServerPlugin {}
 
       @FrontMcpPlugin({
         name: 'ParentPlugin',
         plugins: [NestedServerPlugin],
       })
-      class ParentPlugin implements PluginInterface {}
+      class ParentPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -814,13 +814,13 @@ describe('PluginRegistry', () => {
         name: 'NestedAppPlugin',
         scope: 'app',
       })
-      class NestedAppPlugin implements PluginInterface {}
+      class NestedAppPlugin {}
 
       @FrontMcpPlugin({
         name: 'ParentPlugin',
         plugins: [NestedAppPlugin],
       })
-      class ParentPlugin implements PluginInterface {}
+      class ParentPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -843,13 +843,13 @@ describe('PluginRegistry', () => {
         name: 'NestedServerPlugin',
         scope: 'server',
       })
-      class NestedServerPlugin implements PluginInterface {}
+      class NestedServerPlugin {}
 
       @FrontMcpPlugin({
         name: 'ParentPlugin',
         plugins: [NestedServerPlugin],
       })
-      class ParentPlugin implements PluginInterface {}
+      class ParentPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -873,19 +873,19 @@ describe('PluginRegistry', () => {
         name: 'DeeplyNestedServerPlugin',
         scope: 'server',
       })
-      class DeeplyNestedServerPlugin implements PluginInterface {}
+      class DeeplyNestedServerPlugin {}
 
       @FrontMcpPlugin({
         name: 'MiddlePlugin',
         plugins: [DeeplyNestedServerPlugin],
       })
-      class MiddlePlugin implements PluginInterface {}
+      class MiddlePlugin {}
 
       @FrontMcpPlugin({
         name: 'TopPlugin',
         plugins: [MiddlePlugin],
       })
-      class TopPlugin implements PluginInterface {}
+      class TopPlugin {}
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -910,7 +910,7 @@ describe('PluginRegistry', () => {
         name: 'AppScopePluginWithHooks',
         scope: 'app',
       })
-      class AppScopePluginWithHooks implements PluginInterface {
+      class AppScopePluginWithHooks {
         @ToolHook.Will('execute')
         async beforeExecute(_ctx: FlowCtxOf<'tools:call-tool'>) {
           // App-scoped hook
@@ -940,7 +940,7 @@ describe('PluginRegistry', () => {
         name: 'ServerScopePluginWithHooks',
         scope: 'server',
       })
-      class ServerScopePluginWithHooks implements PluginInterface {
+      class ServerScopePluginWithHooks {
         @ToolHook.Will('execute')
         async beforeExecute(_ctx: FlowCtxOf<'tools:call-tool'>) {
           // Server-scoped hook
@@ -970,7 +970,7 @@ describe('PluginRegistry', () => {
         name: 'ServerScopePluginNoParent',
         scope: 'server',
       })
-      class ServerScopePluginNoParent implements PluginInterface {
+      class ServerScopePluginNoParent {
         @ToolHook.Will('execute')
         async beforeExecute(_ctx: FlowCtxOf<'tools:call-tool'>) {
           // Server-scoped hook with no parent
@@ -1006,7 +1006,7 @@ describe('PluginRegistry', () => {
         name: 'DecoratorAppPlugin',
         scope: 'app',
       })
-      class DecoratorAppPlugin implements PluginInterface {
+      class DecoratorAppPlugin {
         get: any;
       }
 
@@ -1045,7 +1045,7 @@ describe('PluginRegistry', () => {
         name: 'DecoratorAppPlugin',
         scope: 'app',
       })
-      class DecoratorAppPlugin implements PluginInterface {
+      class DecoratorAppPlugin {
         get: any;
       }
 
@@ -1082,7 +1082,7 @@ describe('PluginRegistry', () => {
       const PLUGIN_TOKEN = Symbol('PLUGIN');
 
       // No @FrontMcpPlugin decorator
-      class PlainPlugin implements PluginInterface {
+      class PlainPlugin {
         get: any;
       }
 

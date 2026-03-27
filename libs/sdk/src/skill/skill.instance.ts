@@ -4,7 +4,7 @@ import { EntryOwnerRef, SkillEntry, SkillKind, SkillRecord, SkillToolRef, normal
 import { SkillContent } from '../common/interfaces';
 import { SkillVisibility } from '../common/metadata/skill.metadata';
 import ProviderRegistry from '../provider/provider.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import { loadInstructions, buildSkillContent } from './skill.utils';
 
 /**
@@ -33,7 +33,7 @@ export class SkillInstance extends SkillEntry {
   private readonly providersRef: ProviderRegistry;
 
   /** The scope this skill operates in */
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
 
   /** Cached instructions (loaded lazily) */
   private cachedInstructions?: string;

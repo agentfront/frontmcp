@@ -14,7 +14,7 @@ import {
   validateMcpSessionHeader,
 } from '../../common';
 import { z } from 'zod';
-import { Scope } from '../../scope';
+import { TransportServiceNotAvailableError } from '../../errors';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 
@@ -145,7 +145,7 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
 
       session = createSessionId('legacy-sse', token, {
         userAgent: request.headers?.['user-agent'] as string | undefined,
-        platformDetectionConfig: (this.scope as Scope).metadata.transport?.platformDetection,
+        platformDetectionConfig: this.scope.metadata.transport?.platformDetection,
         skillsOnlyMode,
       });
     }
@@ -156,10 +156,9 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
   @Stage('router')
   async router() {
     const { request } = this.rawInput;
-    const scope = this.scope as Scope;
     const requestPath = normalizeEntryPrefix(request.path);
-    const prefix = normalizeEntryPrefix(scope.entryPath);
-    const scopePath = normalizeScopeBase(scope.routeBase);
+    const prefix = normalizeEntryPrefix(this.scope.entryPath);
+    const scopePath = normalizeScopeBase(this.scope.routeBase);
     const basePath = `${prefix}${scopePath}`;
 
     if (requestPath === `${basePath}/sse`) {
@@ -173,7 +172,10 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'initialize',
   })
   async onInitialize() {
-    const transportService = (this.scope as Scope).transportService;
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new TransportServiceNotAvailableError();
+    }
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
@@ -199,7 +201,10 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     filter: ({ state: { requestType } }) => requestType === 'message',
   })
   async onMessage() {
-    const transportService = (this.scope as Scope).transportService;
+    const transportService = this.scope.transportService;
+    if (!transportService) {
+      throw new TransportServiceNotAvailableError();
+    }
     const logger = this.scopeLogger.child('handle:legacy-sse:onMessage');
 
     const { request, response } = this.rawInput;

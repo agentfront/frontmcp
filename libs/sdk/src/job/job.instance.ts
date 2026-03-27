@@ -6,7 +6,7 @@ import { ToolInputOf, ToolOutputOf } from '../common/decorators';
 import ProviderRegistry from '../provider/provider.registry';
 import { z } from 'zod';
 import HookRegistry from '../hooks/hook.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
 import { InvalidRegistryKindError, DynamicJobDirectExecutionError } from '../errors';
@@ -21,7 +21,7 @@ export class JobInstance<
   Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends JobEntry<InSchema, OutSchema, In, Out> {
   private readonly _providers: ProviderRegistry;
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
 
   constructor(record: JobRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
@@ -31,7 +31,7 @@ export class JobInstance<
     this.name = record.metadata.id || record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this._providers.getActiveScope();
-    this.hooks = this.scope.providers.getHooksRegistry();
+    this.hooks = this.scope.hooks;
 
     // inputSchema is always a ZodRawShape
     this.inputSchema = (record.metadata.inputSchema ?? {}) as InSchema;

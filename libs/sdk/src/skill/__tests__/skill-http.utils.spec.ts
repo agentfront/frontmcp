@@ -62,7 +62,7 @@ function createMockSkillContent(overrides: Partial<SkillContent> = {}): SkillCon
   };
 }
 
-// Mock ToolRegistryInterface for testing
+// Mock ToolRegistry for testing
 function createMockToolRegistry(
   tools: Array<{
     name: string;

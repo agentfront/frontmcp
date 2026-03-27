@@ -18,7 +18,7 @@ import {
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { matchUriTemplate, parseUriTemplate } from '@frontmcp/utils';
 import { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
@@ -30,7 +30,7 @@ export class ResourceInstance<
   Out = unknown,
 > extends ResourceEntry<Params, Out> {
   private readonly providers: ProviderRegistry;
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
 
   /** Parsed URI template info for template resources */
@@ -43,7 +43,7 @@ export class ResourceInstance<
     this.name = record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this.providers.getActiveScope();
-    this.hooks = this.scope.providers.getHooksRegistry();
+    this.hooks = this.scope.hooks;
 
     // Determine if this is a template resource
     this.isTemplate = 'uriTemplate' in record.metadata;

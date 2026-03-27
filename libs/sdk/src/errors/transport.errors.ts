@@ -72,3 +72,12 @@ export class UnsupportedContentTypeError extends PublicMcpError {
     this.contentType = contentType;
   }
 }
+
+/**
+ * Thrown when the transport service is required but not available on the scope.
+ */
+export class TransportServiceNotAvailableError extends InternalMcpError {
+  constructor() {
+    super('Transport service not available', 'TRANSPORT_SERVICE_NOT_AVAILABLE');
+  }
+}

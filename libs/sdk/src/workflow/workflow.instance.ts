@@ -3,7 +3,7 @@ import { WorkflowEntry } from '../common/entries/workflow.entry';
 import { WorkflowMetadata } from '../common/metadata/workflow.metadata';
 import { WorkflowRecord } from '../common/records/workflow.record';
 import ProviderRegistry from '../provider/provider.registry';
-import { Scope } from '../scope';
+import { ScopeEntry } from '../common';
 import HookRegistry from '../hooks/hook.registry';
 
 /**
@@ -11,7 +11,7 @@ import HookRegistry from '../hooks/hook.registry';
  */
 export class WorkflowInstance extends WorkflowEntry {
   private readonly _providers: ProviderRegistry;
-  readonly scope: Scope;
+  readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
 
   constructor(record: WorkflowRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
@@ -21,7 +21,7 @@ export class WorkflowInstance extends WorkflowEntry {
     this.name = record.metadata.id || record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this._providers.getActiveScope();
-    this.hooks = this.scope.providers.getHooksRegistry();
+    this.hooks = this.scope.hooks;
 
     this.ready = this.initialize();
   }
