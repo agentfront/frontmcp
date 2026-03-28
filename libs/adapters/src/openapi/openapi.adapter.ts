@@ -155,21 +155,22 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       transformedTools = transformedTools.map((tool) => this.applyToolTransforms(tool));
     }
 
-    // 2b. Detect name collisions after normalization + tool transforms
-    //     (toolTransforms.perTool can rename tools, so check final names)
+    // 2b. Detect name collisions after tool transforms
     const nameMap = new Map<string, string[]>();
     for (const tool of transformedTools) {
+      const meta = tool.metadata as unknown as Record<string, string>;
+      const source = `${meta['method']?.toUpperCase() ?? '?'} ${meta['path'] ?? '?'}`;
       const existing = nameMap.get(tool.name);
       if (existing) {
-        existing.push(tool.name);
+        existing.push(source);
       } else {
-        nameMap.set(tool.name, [tool.name]);
+        nameMap.set(tool.name, [source]);
       }
     }
-    for (const [name, occurrences] of nameMap) {
-      if (occurrences.length > 1) {
+    for (const [name, sources] of nameMap) {
+      if (sources.length > 1) {
         throw new Error(
-          `Tool name collision: "${name}" appears ${occurrences.length} times after transforms. ` +
+          `Tool name collision: "${name}" produced by ${sources.length} operations: ${sources.join(', ')}. ` +
             `Rename conflicting operations in your OpenAPI spec or use toolTransforms.perTool to assign unique names.`,
         );
       }
@@ -272,8 +273,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   }
 
   /**
-   * Look up a value in a perTool map, falling back to the tool's original (pre-normalization) name.
-   * This ensures perTool configs keyed with mixed-case names still match after normalization.
+   * Look up a value in a perTool map by tool name, using own-property check.
    * @private
    */
   private resolvePerTool<T>(perTool: Record<string, T> | undefined, tool: McpOpenAPITool): T | undefined {
