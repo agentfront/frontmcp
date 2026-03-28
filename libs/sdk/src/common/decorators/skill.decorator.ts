@@ -129,12 +129,47 @@ function frontMcpSkill(providedMetadata: SkillMetadata): SkillValueRecord {
   // Create a unique symbol for this skill
   const skillToken = Symbol(`skill:${parsedMetadata.name}`);
 
+  // Capture caller directory for resolving relative instruction file paths.
+  // Without this, `instructions: { file: './relative.md' }` resolves from cwd instead of the skill file's directory.
+  const callerDir = resolveCallerDir();
+
   return {
     kind: SkillKind.VALUE,
     provide: skillToken,
     // Cast to SkillMetadata - Zod's output type has internal type markers that don't match exactly
     metadata: parsedMetadata as SkillMetadata,
+    callerDir,
   };
+}
+
+/**
+ * Walk the call stack to find the first file outside this module.
+ * Returns the directory of that file, or undefined if it cannot be determined.
+ */
+function resolveCallerDir(): string | undefined {
+  const err = new Error();
+  const stack = err.stack;
+  if (!stack) return undefined;
+
+  const lines = stack.split('\n');
+  // Skip: "Error", this function, frontMcpSkill — start from index 3
+  for (let i = 3; i < lines.length; i++) {
+    const line = lines[i];
+    // Match both "at func (file:line:col)" and "at file:line:col" formats
+    const match = line.match(/\(([^)]+):\d+:\d+\)/) || line.match(/at\s+([^\s:]+):\d+:\d+/);
+    if (match) {
+      const file = match[1];
+      // Skip node_modules and this decorator file
+      if (file.includes('node_modules') || file.includes('skill.decorator')) {
+        continue;
+      }
+      const lastSlash = file.lastIndexOf('/');
+      if (lastSlash > 0) {
+        return file.substring(0, lastSlash);
+      }
+    }
+  }
+  return undefined;
 }
 
 // ═══════════════════════════════════════════════════════════════════

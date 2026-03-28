@@ -233,7 +233,7 @@ Comprehensive audit skill for preparing FrontMCP servers for production deployme
 | No health check           | Can't detect unhealthy instances             | Implement `/health` endpoint                |
 | Unbounded caching         | Memory grows forever                         | Set TTL on all caches                       |
 
-## Verification
+## Verification Checklist
 
 After completing this audit:
 

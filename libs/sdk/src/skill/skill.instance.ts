@@ -105,6 +105,10 @@ export class SkillInstance extends SkillEntry {
       const filePath = this.record.filePath;
       const lastSlash = filePath.lastIndexOf('/');
       basePath = lastSlash > 0 ? filePath.substring(0, lastSlash) : undefined;
+    } else if (this.record.kind === SkillKind.VALUE && this.record.callerDir) {
+      // For inline skills created via skill(), use the caller's directory
+      // so that relative paths like './docs/my-skill.md' resolve correctly
+      basePath = this.record.callerDir;
     }
 
     // Load instructions from source

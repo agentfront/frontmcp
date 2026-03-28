@@ -14,7 +14,7 @@ export type SkillTarget = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'all';
 /**
  * Skill categories for organizing the catalog.
  */
-export type SkillCategory = 'setup' | 'deployment' | 'development' | 'config' | 'testing' | 'guides';
+export type SkillCategory = 'setup' | 'deployment' | 'development' | 'config' | 'testing' | 'guides' | 'production';
 
 /**
  * Bundle membership for curated scaffold presets.
@@ -93,6 +93,7 @@ export const VALID_CATEGORIES: readonly SkillCategory[] = [
   'config',
   'testing',
   'guides',
+  'production',
 ];
 
 /** Valid bundles for manifest validation */
