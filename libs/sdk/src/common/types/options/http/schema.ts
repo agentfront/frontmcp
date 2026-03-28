@@ -28,7 +28,10 @@ const corsOptionsSchema = z.object({
  * HTTP options Zod schema.
  */
 export const httpOptionsSchema = z.object({
-  port: z.number().optional().default(3001),
+  port: z
+    .number()
+    .optional()
+    .default(Number(process.env['PORT']) || 3000),
   entryPath: z.string().default(''),
   // Using z.any() because hostFactory accepts FrontMcpServer | ((config) => FrontMcpServer)
   // which Zod cannot validate at runtime - type safety is enforced via TypeScript interface

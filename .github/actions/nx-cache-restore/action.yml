@@ -38,7 +38,7 @@ runs:
 
     - name: Restore Nx cache
       id: restore
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: |
           .nx/cache

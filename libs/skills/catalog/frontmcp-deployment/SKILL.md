@@ -1,7 +1,10 @@
 ---
 name: frontmcp-deployment
-description: "Domain router for shipping MCP servers \u2014 deploy to Node, Vercel, Lambda, Cloudflare, or build for CLI, browser, and SDK. Use when choosing a deployment target or build format."
+description: 'Use when you need to deploy, build for production, containerize, or ship a FrontMCP server. Covers Vercel, Lambda, Cloudflare, Docker, edge runtime, serverless, bundle for CLI, and Node targets. Triggers: deploy, build for production, dockerize, serverless, go live.'
 tags: [router, deployment, node, vercel, lambda, cloudflare, cli, browser, sdk, guide]
+category: deployment
+targets: [all]
+bundle: [recommended, minimal, full]
 priority: 10
 visibility: both
 license: Apache-2.0

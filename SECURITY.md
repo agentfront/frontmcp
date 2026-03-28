@@ -39,7 +39,7 @@ When reporting a vulnerability, please include:
 
 **Policy**: Only the latest minor version receives security updates. We recommend always using the latest version.
 
-**Runtime**: Node.js 22+ (LTS) is required.
+**Runtime**: Node.js 24+ (LTS) is required.
 
 ## Security Features
 

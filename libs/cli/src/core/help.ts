@@ -4,6 +4,7 @@ import { c } from './colors';
 /** Group labels in display order, mapped to the command names they contain. */
 const GROUPS: [label: string, commands: string[]][] = [
   ['Development', ['dev', 'build', 'test', 'init', 'doctor', 'inspector', 'create', 'socket']],
+  ['Skills', ['skills']],
   ['Process Manager', ['start', 'stop', 'restart', 'status', 'list', 'logs', 'service']],
   ['Package Manager', ['install', 'uninstall', 'configure']],
 ];
@@ -80,6 +81,10 @@ ${c('bold', 'Examples')}
   frontmcp stop my-app
   frontmcp logs my-app --follow
   frontmcp service install my-app
+  frontmcp skills list
+  frontmcp skills search "openapi adapter"
+  frontmcp skills install frontmcp-development -p claude
+  frontmcp skills install --all -p claude
   frontmcp install @company/my-mcp --registry https://npm.company.com
   frontmcp install ./my-local-app
   frontmcp install github:user/repo

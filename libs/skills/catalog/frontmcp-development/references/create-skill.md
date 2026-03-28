@@ -110,16 +110,26 @@ class GitCommitGuideSkill extends SkillContext {}
 
 ### File Reference
 
-Load instructions from a Markdown file. The path is relative to the skill file location.
+Load instructions from a Markdown file. The path is resolved relative to the file that defines the skill (for both `@Skill` class decorators and `skill()` function calls).
 
 ```typescript
+// Class-based: path resolves relative to this file's directory
 @Skill({
   name: 'architecture-guide',
   description: 'System architecture overview and patterns',
   instructions: { file: './docs/architecture.md' },
 })
 class ArchitectureGuideSkill extends SkillContext {}
+
+// Function-based: same behavior — path resolves relative to this file's directory
+export default skill({
+  name: 'architecture-guide',
+  description: 'System architecture overview and patterns',
+  instructions: { file: './docs/architecture.md' },
+});
 ```
+
+> **Directory structure example:** If this file is at `src/skills/arch.skill.ts`, the instruction file should be at `src/skills/docs/architecture.md`.
 
 ### URL Reference
 
@@ -209,6 +219,19 @@ const CodeReviewChecklist = skill({
 ```
 
 Register it the same way as a class skill: `skills: [CodeReviewChecklist]`.
+
+The function builder also supports file-based instructions. Relative paths resolve from the file that calls `skill()`:
+
+```typescript
+// src/skills/deploy-guide.skill.ts
+import { skill } from '@frontmcp/sdk';
+
+export default skill({
+  name: 'deploy-guide',
+  description: 'Step-by-step deployment checklist',
+  instructions: { file: './docs/deploy-guide.md' }, // resolves to src/skills/docs/deploy-guide.md
+});
+```
 
 ## Directory-Based Skills with skillDir()
 
@@ -447,7 +470,7 @@ import { Skill, SkillContext, FrontMcp, App, skill, skillDir } from '@frontmcp/s
 
 ## Step 1: Environment Setup
 1. Clone the repository
-2. Install Node.js 22+ and Yarn
+2. Install Node.js 24+ and Yarn
 3. Run \`yarn install\` to install dependencies
 4. Copy \`.env.example\` to \`.env\` and fill in values
 

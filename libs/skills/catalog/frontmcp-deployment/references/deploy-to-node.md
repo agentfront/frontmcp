@@ -26,7 +26,7 @@ This skill walks you through deploying a FrontMCP server as a standalone Node.js
 
 ## Prerequisites
 
-- Node.js 22 or later
+- Node.js 24 or later
 - Docker and Docker Compose (recommended for production)
 - A FrontMCP project ready to build
 
@@ -44,7 +44,7 @@ Create a multi-stage `Dockerfile` in your project root:
 
 ```dockerfile
 # Stage 1: Build
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
@@ -52,7 +52,7 @@ COPY . .
 RUN npx frontmcp build --target node
 
 # Stage 2: Production
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/dist ./dist
@@ -215,7 +215,7 @@ services:
 | Pattern                   | Correct                              | Incorrect                                        | Why                                                                 |
 | ------------------------- | ------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------- |
 | Build command             | `frontmcp build --target node`       | `tsc && node dist/main.js`                       | The FrontMCP build bundles deps and produces an optimized output    |
-| Docker base image         | `node:22-alpine` (multi-stage)       | `node:22` (single stage with dev deps)           | Multi-stage keeps the production image small and secure             |
+| Docker base image         | `node:24-alpine` (multi-stage)       | `node:24` (single stage with dev deps)           | Multi-stage keeps the production image small and secure             |
 | Process manager           | PM2 with `-i max` cluster mode       | Running `node dist/main.js` directly via `nohup` | PM2 handles restarts, logging, and multi-core clustering            |
 | Redis hostname in Compose | Service name `redis`                 | `localhost` or `127.0.0.1`                       | Containers communicate via Docker's internal DNS, not localhost     |
 | Environment config        | `.env` file or orchestrator env vars | Hardcoded values in source code                  | Keeps secrets out of the codebase and allows per-environment config |

@@ -294,6 +294,14 @@ const codeCallPluginOptionsObjectSchema = z.object({
   mode: codeCallModeSchema,
 
   /**
+   * App IDs that CodeCall manages. When set, `codecall_only` mode only hides tools
+   * from these apps — tools from other apps remain visible in list_tools.
+   * When unset (default), all tools in the server are affected.
+   * @example ['ecommerce'] — only hide ecommerce app tools, keep calc tools visible
+   */
+  appIds: z.array(z.string()).optional(),
+
+  /**
    * Default number of tools to return in search results
    * @default 8
    */
