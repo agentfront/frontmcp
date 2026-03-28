@@ -145,18 +145,6 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     // Apply all transforms to tools
     let transformedTools = openapiTools;
 
-    // 0. Normalize tool names to consistent lowercase
-    //    e.g., "get_products_By_id" -> "get_products_by_id"
-    //    Preserve originalToolName so perTool lookups can fallback to pre-normalization keys.
-    transformedTools = transformedTools.map((tool) => {
-      const normalizedName = tool.name.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
-      return {
-        ...tool,
-        name: normalizedName,
-        metadata: { ...tool.metadata, originalToolName: tool.name !== normalizedName ? tool.name : undefined },
-      };
-    });
-
     // 1. Apply description mode (generates description from summary/description)
     if (this.options.descriptionMode && this.options.descriptionMode !== 'summaryOnly') {
       transformedTools = transformedTools.map((tool) => this.applyDescriptionMode(tool));
@@ -181,7 +169,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     for (const [name, occurrences] of nameMap) {
       if (occurrences.length > 1) {
         throw new Error(
-          `Tool name collision: "${name}" appears ${occurrences.length} times after normalization and transforms. ` +
+          `Tool name collision: "${name}" appears ${occurrences.length} times after transforms. ` +
             `Rename conflicting operations in your OpenAPI spec or use toolTransforms.perTool to assign unique names.`,
         );
       }
@@ -290,14 +278,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
    */
   private resolvePerTool<T>(perTool: Record<string, T> | undefined, tool: McpOpenAPITool): T | undefined {
     if (!perTool) return undefined;
-    const hasOwn = (obj: Record<string, T>, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
-    // Try normalized name first
-    if (hasOwn(perTool, tool.name)) return perTool[tool.name];
-    // Fallback to original name (before lowercase normalization)
-    const originalName = (tool.metadata as unknown as Record<string, unknown>)?.['originalToolName'] as
-      | string
-      | undefined;
-    if (originalName && hasOwn(perTool, originalName)) return perTool[originalName];
+    if (Object.prototype.hasOwnProperty.call(perTool, tool.name)) return perTool[tool.name];
     return undefined;
   }
 
