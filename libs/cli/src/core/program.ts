@@ -11,7 +11,10 @@ import { customizeHelp } from './help';
 export function createProgram(): Command {
   const program = new Command();
 
-  program.name('frontmcp').description('FrontMCP command line interface').version(getSelfVersion(), '-V, --version');
+  program
+    .name('frontmcp')
+    .description('Build, test, and deploy MCP servers with FrontMCP')
+    .version(getSelfVersion(), '-V, --version');
 
   registerDevCommands(program);
   registerBuildCommands(program);
