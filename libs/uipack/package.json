@@ -54,7 +54,7 @@
     "./esm": null
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "zod": "^4.0.0"

@@ -1,6 +1,6 @@
 # ---- Build Stage ----
 
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN yarn frontmcp build --target node
 
 # ---- Production Stage ----
 
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 
 WORKDIR /app
 

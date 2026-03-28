@@ -44,7 +44,7 @@ Complete build walkthroughs and best practices for FrontMCP servers. Each exampl
 
 ## Prerequisites
 
-- Node.js 22+ and npm/yarn installed
+- Node.js 24+ and npm/yarn installed
 - Familiarity with TypeScript and decorators
 - `frontmcp` CLI available globally (`npm install -g frontmcp`)
 

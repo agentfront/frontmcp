@@ -642,7 +642,7 @@ Description: ${projectName} - FrontMCP Lambda Function
 Globals:
   Function:
     Timeout: 30
-    Runtime: nodejs22.x
+    Runtime: nodejs24.x
     MemorySize: 256
 
 Resources:

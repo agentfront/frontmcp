@@ -39,7 +39,7 @@ export default class Server {}
 
 ## Installation
 
-**Node.js 22+** required (24 recommended).
+**Node.js 24+** required.
 
 ```bash
 # New project (recommended)

@@ -113,7 +113,7 @@
     }
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "@frontmcp/utils": "1.0.0-beta.9",

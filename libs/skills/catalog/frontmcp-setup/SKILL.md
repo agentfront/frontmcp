@@ -37,7 +37,7 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 
 ## Prerequisites
 
-- Node.js 22+ and npm/yarn installed
+- Node.js 24+ and npm/yarn installed
 - `frontmcp` CLI available globally (`npm install -g frontmcp`)
 
 ## Steps
@@ -115,7 +115,7 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 
 | Problem                  | Cause                            | Solution                                                              |
 | ------------------------ | -------------------------------- | --------------------------------------------------------------------- |
-| `frontmcp create` fails  | Missing Node.js 22+ or npm/yarn  | Install Node.js 22+ and ensure npm/yarn is available                  |
+| `frontmcp create` fails  | Missing Node.js 24+ or npm/yarn  | Install Node.js 24+ and ensure npm/yarn is available                  |
 | Server fails to start    | `main.ts` missing default export | Add `export default MyServerClass` to `main.ts`                       |
 | Redis connection refused | Redis not running or wrong URL   | Start Redis (`docker compose up redis`) or fix `REDIS_URL` env var    |
 | Nx generator not found   | `@frontmcp/nx` not installed     | Run `npm install -D @frontmcp/nx`                                     |

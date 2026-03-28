@@ -38,7 +38,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 ## Prerequisites
 
 - A FrontMCP project scaffolded with `frontmcp create` (see `frontmcp-setup`)
-- Node.js 22+ and npm/yarn installed
+- Node.js 24+ and npm/yarn installed
 
 ## Steps
 

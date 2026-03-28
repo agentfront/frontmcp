@@ -447,7 +447,7 @@ import { Skill, SkillContext, FrontMcp, App, skill, skillDir } from '@frontmcp/s
 
 ## Step 1: Environment Setup
 1. Clone the repository
-2. Install Node.js 22+ and Yarn
+2. Install Node.js 24+ and Yarn
 3. Run \`yarn install\` to install dependencies
 4. Copy \`.env.example\` to \`.env\` and fill in values
 

@@ -23,7 +23,7 @@ runs:
         echo "key=${{ inputs.cache-prefix }}-${REF_KEY}-${LOCK_HASH}" >> $GITHUB_OUTPUT
 
     - name: Save Nx cache
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: |
           .nx/cache
