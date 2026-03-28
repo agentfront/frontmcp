@@ -164,10 +164,11 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('e2e/server.e2e.spec.ts'))).toBe(true);
     });
 
-    it('should create tsconfig.e2e.json for E2E test typing', async () => {
+    it('should create CLAUDE.md and AGENTS.md for AI coding assistants', async () => {
       await runCreate('my-app', { yes: true });
 
-      expect(consoleLogs.some((log) => log.includes('tsconfig.e2e.json'))).toBe(true);
+      expect(consoleLogs.some((log) => log.includes('CLAUDE.md'))).toBe(true);
+      expect(consoleLogs.some((log) => log.includes('AGENTS.md'))).toBe(true);
     });
 
     it('should create package.json', async () => {
@@ -581,27 +582,27 @@ describe('runCreate', () => {
     });
 
     describe('package.json engines per package manager', () => {
-      it('should set node>=22 and npm>=10 for npm', async () => {
+      it('should set node>=24 and npm>=10 for npm', async () => {
         await runCreate('npm-engines', { yes: true, pm: 'npm' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'npm-engines', 'package.json'), 'utf8'));
-        expect(pkgJson.engines.node).toBe('>=22');
+        expect(pkgJson.engines.node).toBe('>=24');
         expect(pkgJson.engines.npm).toBe('>=10');
       });
 
-      it('should set only node>=22 for yarn (no npm engine)', async () => {
+      it('should set only node>=24 for yarn (no npm engine)', async () => {
         await runCreate('yarn-engines', { yes: true, pm: 'yarn' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'yarn-engines', 'package.json'), 'utf8'));
-        expect(pkgJson.engines.node).toBe('>=22');
+        expect(pkgJson.engines.node).toBe('>=24');
         expect(pkgJson.engines.npm).toBeUndefined();
       });
 
-      it('should set only node>=22 for pnpm (no npm engine)', async () => {
+      it('should set only node>=24 for pnpm (no npm engine)', async () => {
         await runCreate('pnpm-engines', { yes: true, pm: 'pnpm' });
 
         const pkgJson = JSON.parse(readFileSync(path.join(tempDir, 'pnpm-engines', 'package.json'), 'utf8'));
-        expect(pkgJson.engines.node).toBe('>=22');
+        expect(pkgJson.engines.node).toBe('>=24');
         expect(pkgJson.engines.npm).toBeUndefined();
       });
     });

@@ -131,10 +131,14 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
   /**
    * Determine if a tool should be visible in list_tools based on mode.
    *
+   * When `appIds` is configured, `codecall_only` mode only hides tools from
+   * those specific apps — tools from other apps remain visible.
+   *
    * @param tool - The tool entry to check
    * @param mode - The current CodeCall mode
    * @returns true if tool should be visible
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ToolEntry generics vary across call sites
   private shouldShowInListTools(tool: ToolEntry<any, any, any, any>, mode: CodeCallMode): boolean {
     // CodeCall meta-tools are ALWAYS visible
     if (this.isCodeCallTool(tool)) {
@@ -145,10 +149,20 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     const codecallMeta = this.getCodeCallMetadata(tool);
 
     switch (mode) {
-      case 'codecall_only':
+      case 'codecall_only': {
+        // If appIds is configured, only hide tools from those specific apps
+        const managedAppIds = this.options.appIds;
+        if (managedAppIds && managedAppIds.length > 0) {
+          const toolOwnerAppId = tool.owner?.kind === 'app' ? tool.owner.id : undefined;
+          // Tools from non-managed apps remain visible
+          if (!toolOwnerAppId || !managedAppIds.includes(toolOwnerAppId)) {
+            return true;
+          }
+        }
         // In codecall_only mode, only CodeCall meta-tools and tools with
         // explicit visibleInListTools=true are shown
         return codecallMeta?.visibleInListTools === true;
+      }
 
       case 'codecall_opt_in':
         // In opt_in mode, all tools are shown (they opt-in to CodeCall execution via metadata)
@@ -173,6 +187,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
    * Check if a tool is a CodeCall meta-tool.
    * CodeCall meta-tools always remain visible.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private isCodeCallTool(tool: ToolEntry<any, any, any, any>): boolean {
     const name = tool.name || tool.fullName;
     return name.startsWith('codecall:');
@@ -181,7 +196,8 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
   /**
    * Extract CodeCall-specific metadata from a tool.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getCodeCallMetadata(tool: ToolEntry<any, any, any, any>): CodeCallToolMetadata | undefined {
-    return (tool.metadata as any)?.codecall as CodeCallToolMetadata | undefined;
+    return (tool.metadata as unknown as Record<string, unknown>)?.['codecall'] as CodeCallToolMetadata | undefined;
   }
 }

@@ -52,7 +52,7 @@ frontmcp build --target cli --js               # JS bundle only (no SEA)
 
 ## Requirements
 
-- **Node.js 22+** required for SEA support
+- **Node.js 24+** required for SEA support
 - The entry file must export or instantiate a `@FrontMcp` decorated class
 - SEA binaries are platform-specific (build on macOS for macOS, Linux for Linux)
 
@@ -96,7 +96,7 @@ node dist/my-server.cjs.js
 
 | Pattern               | Correct                                             | Incorrect                        | Why                                                         |
 | --------------------- | --------------------------------------------------- | -------------------------------- | ----------------------------------------------------------- |
-| Node.js version       | Node.js 22+ for SEA builds                          | Node.js 18 or 20                 | SEA support requires Node.js 22+                            |
+| Node.js version       | Node.js 24+ for SEA builds                          | Node.js 18 or 20                 | SEA support requires Node.js 24+                            |
 | Entry file            | Export or instantiate a `@FrontMcp` decorated class | Export a plain function          | The build expects a FrontMcp entry point                    |
 | Transport for CLI     | `socketPath` or stdin/stdout                        | TCP port binding                 | CLI tools run locally; ports may conflict                   |
 | Cross-platform binary | Build on each target OS separately                  | Build on macOS and ship to Linux | SEA binaries are platform-specific                          |
@@ -126,7 +126,7 @@ node dist/my-server.cjs.js
 
 | Problem                      | Cause                                       | Solution                                                    |
 | ---------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| SEA build fails              | Node.js version below 22                    | Upgrade to Node.js 22+                                      |
+| SEA build fails              | Node.js version below 24                    | Upgrade to Node.js 24+                                      |
 | Binary crashes on startup    | Missing `@FrontMcp` decorated entry         | Ensure entry file exports or instantiates a decorated class |
 | Binary too large             | All dependencies bundled including dev deps | Review dependencies and remove unused packages from bundle  |
 | Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                               |

@@ -1,18 +1,20 @@
 # Official FrontMCP Plugins
 
-FrontMCP ships 6 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, and visual monitoring. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, dashboard, and remember).
+FrontMCP ships 6 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, and visual monitoring. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
+
+> **Note:** The Dashboard plugin (`@frontmcp/plugin-dashboard`) is currently in **beta** and may not work correctly in all environments. It is not recommended for production use at this time.
 
 ## When to Use This Skill
 
 ### Must Use
 
-- Installing and configuring any official FrontMCP plugin (CodeCall, Remember, Approval, Cache, Feature Flags, Dashboard)
+- Installing and configuring any official FrontMCP plugin (CodeCall, Remember, Approval, Cache, Feature Flags)
 - Adding session memory, tool caching, or authorization workflows to an existing server
 - Integrating feature flag services (LaunchDarkly, Split.io, Unleash) to gate tools at runtime
 
 ### Recommended
 
-- Setting up the Dashboard plugin for visual monitoring of server structure in development
+- Exploring the Dashboard plugin for visual monitoring (beta — not recommended for production)
 - Configuring CodeCall for semantic tool discovery when the server has many tools
 - Combining multiple official plugins in a production deployment
 
@@ -22,7 +24,7 @@ FrontMCP ships 6 official plugins that extend server behavior with cross-cutting
 - You only need lifecycle hooks without installing an official plugin (see `create-plugin-hooks`)
 - You need to generate tools from an OpenAPI spec (see `official-adapters`)
 
-> **Decision:** Use this skill when you need to install, configure, or customize one or more of the 6 official FrontMCP plugins.
+> **Decision:** Use this skill when you need to install, configure, or customize one or more of the 5 stable official FrontMCP plugins. The Dashboard plugin is in beta — see its section below for details.
 
 All plugins follow the `DynamicPlugin` pattern and are registered via `@FrontMcp({ plugins: [...] })`.
 
@@ -33,7 +35,7 @@ import RememberPlugin from '@frontmcp/plugin-remember';
 import { ApprovalPlugin } from '@frontmcp/plugin-approval';
 import CachePlugin from '@frontmcp/plugin-cache';
 import FeatureFlagPlugin from '@frontmcp/plugin-feature-flags';
-import DashboardPlugin from '@frontmcp/plugin-dashboard';
+// import DashboardPlugin from '@frontmcp/plugin-dashboard'; // Beta — not recommended for production
 
 @App({ name: 'MyApp' })
 class MyApp {}
@@ -47,7 +49,7 @@ class MyApp {}
     ApprovalPlugin.init({ mode: 'recheck' }),
     CachePlugin.init({ type: 'memory', defaultTTL: 86400 }),
     FeatureFlagPlugin.init({ adapter: 'static', flags: { 'new-tool': true } }),
-    DashboardPlugin.init({ enabled: true }),
+    // DashboardPlugin.init({ enabled: true }), // Beta — see Dashboard section below
   ],
   tools: [
     /* your tools */
@@ -90,9 +92,24 @@ class MyServer {}
 
 ### Modes
 
-- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search`. Best when the server has a large number of tools and you want the AI to search-then-execute.
+- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search`. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
 - `codecall_opt_in` -- Shows all tools in `list_tools` normally. Tools opt-in to CodeCall execution via metadata. Useful when only some tools benefit from orchestrated execution.
 - `metadata_driven` -- Per-tool `metadata.codecall` controls visibility and CodeCall availability independently. Most granular control.
+
+### Multi-App Scoping
+
+Use `appIds` to scope CodeCall to specific apps in a multi-app server:
+
+```typescript
+// Only hide ecommerce tools — calc tools remain visible in list_tools
+CodeCallPlugin.init({
+  mode: 'codecall_only',
+  appIds: ['ecommerce'],
+  vm: { preset: 'secure' },
+});
+```
+
+Without `appIds`, `codecall_only` mode hides ALL tools in the server. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable.
 
 ### VM Presets
 
@@ -107,9 +124,9 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 
 CodeCall contributes 4 tools to your server:
 
-- `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Returns ranked tool names, descriptions, and relevance scores.
-- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Use after search to understand tool interfaces before execution.
-- `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. The script can call multiple tools, branch on results, and compose outputs.
+- `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Input: `{ queries: string[] }` (array of atomic action phrases, max 10). Decompose complex requests into simple actions (e.g., "delete users and send email" becomes `queries: ["delete user", "send email"]`). Returns ranked tool names, descriptions, and relevance scores.
+- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Input: `{ toolNames: string[] }` (tool names from search results). Use after search to understand tool interfaces before execution. If `notFound` array is non-empty in the response, re-search with corrected queries.
+- `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. Input: `{ script: string }` (AgentScript code). Use `callTool(name, args)` to invoke tools within scripts. The script can call multiple tools, branch on results, and compose outputs.
 - `codecall:invoke` -- Direct single-tool invocation (available when `directCalls` is enabled). Bypasses the VM for simple one-shot calls.
 
 ### Per-Tool CodeCall Metadata
@@ -580,7 +597,9 @@ The plugin hooks into listing and execution flows for tools, resources, prompts,
 
 ---
 
-## 6. Dashboard Plugin (`@frontmcp/plugin-dashboard`)
+## 6. Dashboard Plugin (`@frontmcp/plugin-dashboard`) — BETA
+
+> **Warning:** The Dashboard plugin is currently in **beta** and may not work correctly. It is not recommended for production use. Expect breaking changes and missing features.
 
 Visual monitoring web UI for your FrontMCP server. View server structure (tools, resources, prompts, apps, plugins) as an interactive graph.
 
@@ -656,7 +675,7 @@ All official plugins use the static `init()` pattern inherited from `DynamicPlug
     ApprovalPlugin.init({ mode: 'recheck' }),
     CachePlugin.init({ type: 'redis', config: { host: 'redis.internal' }, defaultTTL: 86400 }),
     FeatureFlagPlugin.init({ adapter: 'launchdarkly', config: { sdkKey: 'sdk-xxx' } }),
-    DashboardPlugin.init({ enabled: true, auth: { enabled: true, token: process.env.DASH_TOKEN } }),
+    // DashboardPlugin.init({ enabled: true, auth: { ... } }), // Beta — not recommended for production
   ],
   tools: [
     /* ... */
@@ -667,13 +686,13 @@ class ProductionServer {}
 
 ## Common Patterns
 
-| Pattern                  | Correct                                                                          | Incorrect                                                                       | Why                                                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Plugin registration      | `plugins: [RememberPlugin.init({ type: 'memory' })]`                             | `plugins: [new RememberPlugin({ type: 'memory' })]`                             | Official plugins use `DynamicPlugin.init()` static method; direct instantiation bypasses provider wiring |
-| Remember storage in prod | `RememberPlugin.init({ type: 'redis', config: { host: '...' } })`                | `RememberPlugin.init({ type: 'memory' })` in production                         | Memory storage loses data on restart; use Redis or Vercel KV for persistence                             |
-| Cache TTL units          | `defaultTTL: 3600` (seconds)                                                     | `defaultTTL: 3600000` (milliseconds)                                            | Cache TTL is in seconds, not milliseconds; 3600000 = 41 days                                             |
-| Feature flag gating      | `@Tool({ featureFlag: 'my-flag' })` on the tool decorator                        | Checking `this.featureFlags.isEnabled()` inside `execute()` and returning early | Decorator-level gating hides the tool from `list_tools`; manual check still exposes it                   |
-| Dashboard in production  | `DashboardPlugin.init({ enabled: true, auth: { enabled: true, token: '...' } })` | `DashboardPlugin.init({})` without auth in production                           | Dashboard auto-disables in production; if enabled, always set auth token                                 |
+| Pattern                  | Correct                                                            | Incorrect                                                                       | Why                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Plugin registration      | `plugins: [RememberPlugin.init({ type: 'memory' })]`               | `plugins: [new RememberPlugin({ type: 'memory' })]`                             | Official plugins use `DynamicPlugin.init()` static method; direct instantiation bypasses provider wiring |
+| Remember storage in prod | `RememberPlugin.init({ type: 'redis', config: { host: '...' } })`  | `RememberPlugin.init({ type: 'memory' })` in production                         | Memory storage loses data on restart; use Redis or Vercel KV for persistence                             |
+| Cache TTL units          | `defaultTTL: 3600` (seconds)                                       | `defaultTTL: 3600000` (milliseconds)                                            | Cache TTL is in seconds, not milliseconds; 3600000 = 41 days                                             |
+| Feature flag gating      | `@Tool({ featureFlag: 'my-flag' })` on the tool decorator          | Checking `this.featureFlags.isEnabled()` inside `execute()` and returning early | Decorator-level gating hides the tool from `list_tools`; manual check still exposes it                   |
+| Dashboard (beta)         | Avoid in production — plugin is in beta and may not work correctly | `DashboardPlugin.init({})` in production                                        | Dashboard plugin is unstable; use only for local development experimentation                             |
 
 ## Verification Checklist
 
@@ -688,24 +707,24 @@ class ProductionServer {}
 - [ ] `this.remember` / `this.approval` / `this.featureFlags` resolves in tool context
 - [ ] Cache plugin returns cached results on repeated identical calls
 - [ ] Feature-flagged tools are hidden from `list_tools` when flag is off
-- [ ] Dashboard is accessible at configured `basePath` (default: `/dashboard`)
+- [ ] Dashboard is accessible at configured `basePath` (default: `/dashboard`) — beta, may not work
 - [ ] Approval plugin blocks unapproved tools and grants approval correctly
 
 ### Production
 
 - [ ] Redis or external storage is configured for Remember and Cache plugins
-- [ ] Dashboard authentication is enabled with a secret token
+- [ ] Dashboard authentication is enabled with a secret token (if using beta Dashboard plugin)
 - [ ] Feature flag adapter connects to external service (not `'static'`)
 
 ## Troubleshooting
 
-| Problem                           | Cause                                                                            | Solution                                                                           |
-| --------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `this.remember` is undefined      | RememberPlugin not registered or missing `.init()`                               | Add `RememberPlugin.init({ type: 'memory' })` to `plugins` array                   |
-| Cache not working for a tool      | Tool name does not match any `toolPatterns` glob and `cache` metadata is not set | Add `cache: true` to `@Tool` decorator or add matching pattern to `toolPatterns`   |
-| Feature flag always returns false | Using `'static'` adapter with flag not in the `flags` map                        | Add the flag key to `flags: { 'my-flag': true }` or check adapter connection       |
-| Dashboard returns 404             | Plugin auto-disabled in production (`NODE_ENV=production`)                       | Set `enabled: true` explicitly in `DashboardPlugin.init()` options                 |
-| Approval webhook times out        | Callback URL not reachable from the external approval service                    | Verify `callbackPath` is publicly accessible and matches the webhook configuration |
+| Problem                           | Cause                                                                            | Solution                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `this.remember` is undefined      | RememberPlugin not registered or missing `.init()`                               | Add `RememberPlugin.init({ type: 'memory' })` to `plugins` array                     |
+| Cache not working for a tool      | Tool name does not match any `toolPatterns` glob and `cache` metadata is not set | Add `cache: true` to `@Tool` decorator or add matching pattern to `toolPatterns`     |
+| Feature flag always returns false | Using `'static'` adapter with flag not in the `flags` map                        | Add the flag key to `flags: { 'my-flag': true }` or check adapter connection         |
+| Dashboard returns 404             | Plugin is in beta and auto-disabled in production (`NODE_ENV=production`)        | Dashboard is unstable — avoid in production. For dev: set `enabled: true` explicitly |
+| Approval webhook times out        | Callback URL not reachable from the external approval service                    | Verify `callbackPath` is publicly accessible and matches the webhook configuration   |
 
 ## Reference
 

@@ -303,6 +303,33 @@ describe('PluginRegistry', () => {
       expect(plugins[0]).toBeInstanceOf(PluginWithTools);
     });
 
+    it('should expose tool registries via getToolRegistries()', async () => {
+      @FrontMcpPlugin({
+        name: 'PluginExposingTools',
+        description: 'Plugin with tools for getToolRegistries test',
+        tools: [],
+      })
+      class PluginExposingTools {}
+
+      const providers = await createProviderRegistryWithScope();
+
+      const registry = new PluginRegistry(providers, [PluginExposingTools]);
+      await registry.ready;
+
+      const toolRegistries = registry.getToolRegistries();
+      expect(toolRegistries).toHaveLength(1);
+    });
+
+    it('should return empty array from getToolRegistries() when no plugins', async () => {
+      const providers = await createProviderRegistryWithScope();
+
+      const registry = new PluginRegistry(providers, []);
+      await registry.ready;
+
+      const toolRegistries = registry.getToolRegistries();
+      expect(toolRegistries).toHaveLength(0);
+    });
+
     it('should register plugin with resources', async () => {
       @FrontMcpPlugin({
         name: 'PluginWithResources',

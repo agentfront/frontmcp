@@ -170,7 +170,7 @@ export default async function handler(req, res) {
 
     // Create function config (.vc-config.json)
     const vcConfig = {
-      runtime: 'nodejs22.x',
+      runtime: 'nodejs24.x',
       handler: bundleOutput,
       launcherType: 'Nodejs',
     };

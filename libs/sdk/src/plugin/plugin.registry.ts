@@ -99,6 +99,14 @@ export default class PluginRegistry
     return [...this.defs.values()].map((rec) => rec.metadata.name);
   }
 
+  /**
+   * Returns all ToolRegistries created by plugins in this registry.
+   * Used for propagating server-level plugin tools to the scope.
+   */
+  getToolRegistries(): ToolRegistry[] {
+    return [...this.pTools.values()];
+  }
+
   protected override buildMap(list: PluginType[]): RegistryBuildMapResult<PluginRecord> {
     const tokens = new Set<Token>();
     const defs = new Map<Token, PluginRecord>();
@@ -117,14 +125,16 @@ export default class PluginRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDependencyNotRegisteredError('Plugin', tokenName(token), 'self');
       const deps = pluginDiscoveryDeps(rec);
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
           throw new RegistryDependencyNotRegisteredError('Plugin', tokenName(token), tokenName(d));
         }
-        this.graph.get(token)!.add(d);
+        const edges = this.graph.get(token);
+        if (edges) edges.add(d);
       }
     }
   }
@@ -132,8 +142,9 @@ export default class PluginRegistry
   protected async initialize() {
     this.logger?.verbose(`PluginRegistry: initializing ${this.tokens.size} plugin(s)`);
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
-      const deps = this.graph.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) continue;
+      const deps = this.graph.get(token) ?? new Set<Token>();
 
       const providers = new ProviderRegistry(rec.metadata.providers ?? [], this.providers);
       await providers.ready;
@@ -190,6 +201,7 @@ export default class PluginRegistry
       const depsInstances = await Promise.all(depsTokens.map((t) => this.providers.resolveBootstrapDep(t)));
 
       let pluginInstance: PluginEntry;
+      /* eslint-disable @typescript-eslint/no-explicit-any -- plugin instantiation uses type-erased class/factory references */
       if (rec.kind === PluginKind.CLASS) {
         const klass = rec.useClass as any;
         pluginInstance = new klass(...depsInstances);
@@ -197,12 +209,13 @@ export default class PluginRegistry
         const klass = rec.provide as any;
         pluginInstance = new (klass as Ctor<any>)(...depsInstances);
       } else if (rec.kind === PluginKind.FACTORY) {
-        const deps = [...rec.inject()];
-        const args: any[] = [];
-        for (const d of deps) args.push(await this.providers.resolveBootstrapDep(d));
+        const factoryDeps = [...rec.inject()];
+        const args: unknown[] = [];
+        for (const d of factoryDeps) args.push(await this.providers.resolveBootstrapDep(d));
         pluginInstance = rec.useFactory(...args);
       } else if (rec.kind === PluginKind.VALUE) {
         pluginInstance = (rec as any).useValue;
+        /* eslint-enable @typescript-eslint/no-explicit-any */
       } else {
         throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);
       }
@@ -251,6 +264,7 @@ export default class PluginRegistry
         // Register hooks to the determined target scope
         await targetHookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bind() returns a generic function signature
       pluginInstance.get = providers.get.bind(providers) as any;
 
       // Install context extensions declared by the plugin

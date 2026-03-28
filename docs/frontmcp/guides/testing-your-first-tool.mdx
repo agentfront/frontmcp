@@ -43,29 +43,16 @@ yarn add -D @frontmcp/testing
 
 ---
 
-## Step 2: Configure Jest
+## Step 2: Configure Testing
 
-Create a Jest configuration file for E2E tests:
-
-```typescript title="jest.e2e.config.ts"
-import type { Config } from 'jest';
-
-const config: Config = {
-  displayName: 'e2e',
-  preset: '@frontmcp/testing/jest-preset',
-  testMatch: ['**/*.e2e.ts'],
-  testTimeout: 30000,
-};
-
-export default config;
-```
+The `frontmcp test` command auto-generates the correct Jest/SWC config. No manual `jest.e2e.config.ts` needed.
 
 Add a script to your `package.json`:
 
 ```json title="package.json"
 {
   "scripts": {
-    "test:e2e": "jest --config jest.e2e.config.ts"
+    "test:e2e": "frontmcp test"
   }
 }
 ```
@@ -74,9 +61,9 @@ Add a script to your `package.json`:
 
 ## Step 3: Write Your First Test
 
-Create a test file next to your server entry point:
+Create a test file in the `e2e/` directory using the `.e2e.spec.ts` extension (not `.e2e.ts`). The `frontmcp test` command discovers tests matching `e2e/**/*.e2e.spec.ts`:
 
-```typescript title="src/main.e2e.ts"
+```typescript title="e2e/server.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 // Configure the test to use your server
@@ -256,16 +243,17 @@ Recommended file structure:
 ```
 src/
 ├── main.ts                    # Server entry
-├── main.e2e.ts               # Server-level tests
 └── apps/
     └── calculator/
-        ├── index.ts           # App definition
-        └── calculator.e2e.ts  # App-specific tests
+        └── index.ts           # App definition
+e2e/
+├── server.e2e.spec.ts         # Server-level tests
+└── calculator.e2e.spec.ts     # App-specific tests
 ```
 
 Use `test.describe()` to group related tests:
 
-```typescript title="calculator.e2e.ts"
+```typescript title="e2e/calculator.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 test.use({
@@ -313,7 +301,7 @@ test.describe('Calculator App', () => {
 
 Here's a complete test file:
 
-```typescript title="src/main.e2e.ts"
+```typescript title="e2e/server.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 test.use({

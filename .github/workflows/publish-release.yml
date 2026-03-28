@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -196,7 +196,7 @@ jobs:
           npx nx run-many -t test --projects='demo-e2e-*' --parallel=3
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dist-packages
           path: |
@@ -235,7 +235,7 @@ jobs:
 
     steps:
       - name: Checkout (for .nvmrc)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           sparse-checkout: |
             .nvmrc
@@ -246,7 +246,7 @@ jobs:
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: dist-packages
 
@@ -299,7 +299,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -506,7 +506,7 @@ jobs:
       - name: Trigger docs sync
         if: ${{ needs.prepare.outputs.is_prerelease != 'true' }}
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
           VERSION_MINOR: ${{ needs.prepare.outputs.release_line }}

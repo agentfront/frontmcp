@@ -32,24 +32,35 @@ export function registerSkillsCommands(program: Command): void {
 
   skills
     .command('install')
-    .description('Install a skill to a provider directory (.claude/skills or .codex/skills)')
-    .argument('<name>', 'Skill name to install')
+    .description('Install skill(s) to a provider directory (.claude/skills or .codex/skills)')
+    .argument('[name]', 'Skill name to install (optional with --all, --tag, or --category)')
     .option('-p, --provider <provider>', 'Target provider: claude, codex (default: claude)', 'claude')
     .option('-d, --dir <directory>', 'Custom install directory (overrides provider default)')
-    .action(async (name: string, options: { provider?: string; dir?: string }) => {
-      const validProviders = ['claude', 'codex'] as const;
-      type Provider = (typeof validProviders)[number];
-      const raw = options.provider;
-      if (raw && !validProviders.includes(raw as Provider)) {
-        console.error(`Invalid provider "${raw}". Valid providers: ${validProviders.join(', ')}`);
-        process.exit(1);
-      }
-      const { installSkill } = await import('./install.js');
-      await installSkill(name, {
-        provider: raw as Provider | undefined,
-        dir: options.dir,
-      });
-    });
+    .option('-a, --all', 'Install all skills from the catalog')
+    .option('-t, --tag <tag>', 'Install all skills matching a tag')
+    .option('-c, --category <category>', 'Install all skills in a category')
+    .action(
+      async (
+        name: string | undefined,
+        options: { provider?: string; dir?: string; all?: boolean; tag?: string; category?: string },
+      ) => {
+        const validProviders = ['claude', 'codex'] as const;
+        type Provider = (typeof validProviders)[number];
+        const raw = options.provider;
+        if (raw && !validProviders.includes(raw as Provider)) {
+          console.error(`Invalid provider "${raw}". Valid providers: ${validProviders.join(', ')}`);
+          process.exit(1);
+        }
+        const { installSkill } = await import('./install.js');
+        await installSkill(name, {
+          provider: raw as Provider | undefined,
+          dir: options.dir,
+          all: options.all,
+          tag: options.tag,
+          category: options.category,
+        });
+      },
+    );
 
   skills
     .command('show')

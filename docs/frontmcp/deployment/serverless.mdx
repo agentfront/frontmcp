@@ -96,7 +96,7 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/frontmcp/deploy
      config.json          # Routes all requests to index function
      functions/
        index.func/
-         .vc-config.json  # Node.js 22 runtime config
+         .vc-config.json  # Node.js 24 runtime config
          handler.cjs      # Bundled handler
    ```
 
@@ -187,7 +187,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: dist/index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Timeout: 30
       MemorySize: 256
       Events:
@@ -205,7 +205,7 @@ service: frontmcp-server
 
 provider:
   name: aws
-  runtime: nodejs20.x
+  runtime: nodejs24.x
   stage: ${opt:stage, 'dev'}
 
 functions:

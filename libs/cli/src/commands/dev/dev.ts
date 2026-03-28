@@ -75,19 +75,34 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
     }
   };
 
-  process.on('SIGINT', () => {
+  process.once('SIGINT', () => {
     cleanup(false);
     // Force-kill after 2s if children haven't exited
     clearForceKillTimer();
     forceKillTimer = setTimeout(() => {
       killQuiet(checker, 'SIGKILL');
       killQuiet(app, 'SIGKILL');
-      process.exit(1);
+      process.exit(0);
     }, 2000);
     forceKillTimer.unref();
+    // Exit cleanly once both children have closed
+    const tryExit = () => {
+      if (appClosed && checkerClosed) {
+        clearForceKillTimer();
+        process.exit(0);
+      }
+    };
+    app.once('close', () => {
+      markClosed('app');
+      tryExit();
+    });
+    checker.once('close', () => {
+      markClosed('checker');
+      tryExit();
+    });
   });
 
-  process.on('SIGTERM', () => {
+  process.once('SIGTERM', () => {
     cleanup();
     process.exit(0);
   });

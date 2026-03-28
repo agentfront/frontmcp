@@ -59,6 +59,9 @@ export default [
     files: [
       '**/*.test.ts',
       '**/*.spec.ts',
+      '**/*.e2e.ts',
+      '**/*.e2e.spec.ts',
+      '**/e2e/**/*.ts',
       '**/__tests__/**/*.ts',
       '**/__test-utils__/**/*.ts',
       '**/fixtures/**/*.ts',

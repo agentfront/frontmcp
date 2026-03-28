@@ -51,7 +51,7 @@ examples: # Optional: usage examples
     expected-outcome: What happens
 priority: 5 # Optional: search ranking weight
 visibility: both # Optional: mcp | http | both
-compatibility: Node.js 18+ # Optional: environment requirements
+compatibility: Node.js 24+ # Optional: environment requirements
 license: MIT # Optional: license
 allowed-tools: Read Edit # Optional: pre-approved tools
 ---
