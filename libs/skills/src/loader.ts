@@ -18,7 +18,6 @@ import type { SkillCatalogEntry, SkillManifest } from './manifest';
 export function loadManifest(catalogDir?: string): SkillManifest {
   const dir = catalogDir ?? path.resolve(__dirname, '..', 'catalog');
   const manifestPath = path.join(dir, 'skills-manifest.json');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require(manifestPath) as SkillManifest;
 }
 

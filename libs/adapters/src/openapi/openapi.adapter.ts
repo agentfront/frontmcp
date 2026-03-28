@@ -155,6 +155,27 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       transformedTools = transformedTools.map((tool) => this.applyToolTransforms(tool));
     }
 
+    // 2b. Detect name collisions after tool transforms
+    const nameMap = new Map<string, string[]>();
+    for (const tool of transformedTools) {
+      const meta = tool.metadata as unknown as Record<string, string>;
+      const source = `${meta['method']?.toUpperCase() ?? '?'} ${meta['path'] ?? '?'}`;
+      const existing = nameMap.get(tool.name);
+      if (existing) {
+        existing.push(source);
+      } else {
+        nameMap.set(tool.name, [source]);
+      }
+    }
+    for (const [name, sources] of nameMap) {
+      if (sources.length > 1) {
+        throw new Error(
+          `Tool name collision: "${name}" produced by ${sources.length} operations: ${sources.join(', ')}. ` +
+            `Rename conflicting operations in your OpenAPI spec or use toolTransforms.perTool to assign unique names.`,
+        );
+      }
+    }
+
     // 3. Apply input transforms (hide inputs, inject values at runtime)
     if (this.options.inputTransforms) {
       transformedTools = transformedTools.map((tool) => this.applyInputTransforms(tool));
@@ -252,6 +273,16 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   }
 
   /**
+   * Look up a value in a perTool map by tool name, using own-property check.
+   * @private
+   */
+  private resolvePerTool<T>(perTool: Record<string, T> | undefined, tool: McpOpenAPITool): T | undefined {
+    if (!perTool) return undefined;
+    if (Object.prototype.hasOwnProperty.call(perTool, tool.name)) return perTool[tool.name];
+    return undefined;
+  }
+
+  /**
    * Collect tool transforms for a specific tool
    * @private
    */
@@ -275,8 +306,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Apply per-tool transforms (override global)
-    if (opts.perTool?.[tool.name]) {
-      const perTool = opts.perTool[tool.name];
+    const perToolMatch = this.resolvePerTool(opts.perTool, tool);
+    if (perToolMatch) {
+      const perTool = perToolMatch;
       if (perTool.name) result.name = perTool.name;
       if (perTool.description) result.description = perTool.description;
       if (perTool.hideFromDiscovery !== undefined) result.hideFromDiscovery = perTool.hideFromDiscovery;
@@ -372,8 +404,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Add per-tool transforms
-    if (opts.perTool?.[tool.name]) {
-      transforms.push(...opts.perTool[tool.name]);
+    const perToolInputTransforms = this.resolvePerTool(opts.perTool, tool);
+    if (perToolInputTransforms) {
+      transforms.push(...perToolInputTransforms);
     }
 
     // 3. Add generator-produced transforms
@@ -567,8 +600,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       if (generated) return generated;
     }
 
-    if (opts.perTool?.[tool.name]) {
-      return opts.perTool[tool.name];
+    const perToolInputSchema = this.resolvePerTool(opts.perTool, tool);
+    if (perToolInputSchema) {
+      return perToolInputSchema;
     }
 
     return opts.global;
@@ -590,8 +624,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       if (generated) return generated;
     }
 
-    if (opts.perTool?.[tool.name]) {
-      return opts.perTool[tool.name];
+    const perToolOutputSchema = this.resolvePerTool(opts.perTool, tool);
+    if (perToolOutputSchema) {
+      return perToolOutputSchema;
     }
 
     return opts.global;
@@ -722,8 +757,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Apply per-tool transform (override)
-    if (opts.perTool?.[tool.name]) {
-      result = { ...result, ...opts.perTool[tool.name] };
+    const perToolPre = this.resolvePerTool(opts.perTool, tool);
+    if (perToolPre) {
+      result = { ...result, ...perToolPre };
     }
 
     // 3. Apply generator transform (override)
@@ -756,14 +792,14 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Apply per-tool transform (override)
-    if (opts.perTool?.[tool.name]) {
-      const perTool = opts.perTool[tool.name];
+    const perToolPost = this.resolvePerTool(opts.perTool, tool);
+    if (perToolPost) {
       result = result
         ? {
-            transform: perTool.transform,
-            filter: perTool.filter ?? result.filter,
+            transform: perToolPost.transform,
+            filter: perToolPost.filter ?? result.filter,
           }
-        : perTool;
+        : perToolPost;
     }
 
     // 3. Apply generator transform (override)

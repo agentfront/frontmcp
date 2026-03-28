@@ -20,6 +20,24 @@
  * ```
  */
 
+import {
+  describe as _describe,
+  beforeAll as _beforeAll,
+  beforeEach as _beforeEach,
+  afterEach as _afterEach,
+  afterAll as _afterAll,
+  it as _it,
+} from '@jest/globals';
+
+// Re-export with compatible types (Jest globals may differ in type signatures
+// between @jest/globals and the global declarations used by our TestWithFixtures)
+const describe = _describe as unknown as jest.Describe;
+const beforeAll = _beforeAll as unknown as jest.Lifecycle;
+const beforeEach = _beforeEach as unknown as jest.Lifecycle;
+const afterEach = _afterEach as unknown as jest.Lifecycle;
+const afterAll = _afterAll as unknown as jest.Lifecycle;
+const it = _it as unknown as jest.It;
+
 import { McpTestClient } from '../client/mcp-test-client';
 import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 import { TestTokenFactory } from '../auth/token-factory';

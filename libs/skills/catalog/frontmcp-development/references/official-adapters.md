@@ -22,7 +22,7 @@ Adapters convert external definitions (OpenAPI specs, Lambda functions, etc.) in
 - You need cross-cutting behavior like caching or logging (see `create-plugin` or `official-plugins`)
 - You are building tools manually without an external spec (see `create-tool`)
 
-> **Decision:** Use this skill when you have an OpenAPI/Swagger spec and want to automatically generate MCP tools from it using `OpenApiAdapter`.
+> **Decision:** Use this skill when you have an OpenAPI/Swagger spec and want to automatically generate MCP tools from it using `OpenapiAdapter`.
 
 ## OpenAPI Adapter
 
@@ -31,12 +31,12 @@ The primary official adapter. Converts OpenAPI/Swagger specifications into MCP t
 ### Installation
 
 ```typescript
-import { OpenApiAdapter } from '@frontmcp/adapters';
+import { OpenapiAdapter } from '@frontmcp/adapters';
 
 @App({
   name: 'MyApp',
   adapters: [
-    OpenApiAdapter.init({
+    OpenapiAdapter.init({
       name: 'petstore',
       url: 'https://petstore3.swagger.io/api/v3/openapi.json',
     }),
@@ -51,7 +51,7 @@ Each OpenAPI operation becomes an MCP tool named `petstore:operationId`.
 
 ```typescript
 // API Key via static auth
-OpenApiAdapter.init({
+OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
@@ -61,7 +61,7 @@ OpenApiAdapter.init({
 });
 
 // API Key via additional headers
-OpenApiAdapter.init({
+OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
@@ -71,7 +71,7 @@ OpenApiAdapter.init({
 });
 
 // Bearer token via static auth
-OpenApiAdapter.init({
+OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
@@ -81,7 +81,7 @@ OpenApiAdapter.init({
 });
 
 // Dynamic auth per tool using securityResolver
-OpenApiAdapter.init({
+OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
@@ -96,7 +96,7 @@ OpenApiAdapter.init({
 Automatically refresh the OpenAPI spec at intervals:
 
 ```typescript
-OpenApiAdapter.init({
+OpenapiAdapter.init({
   name: 'evolving-api',
   url: 'https://api.example.com/openapi.json',
   polling: {
@@ -110,7 +110,7 @@ OpenApiAdapter.init({
 Provide the OpenAPI spec directly instead of fetching from URL:
 
 ```typescript
-OpenApiAdapter.init({
+OpenapiAdapter.init({
   name: 'my-api',
   spec: {
     openapi: '3.0.0',
@@ -128,9 +128,9 @@ Register adapters from different APIs in the same app:
 @App({
   name: 'IntegrationHub',
   adapters: [
-    OpenApiAdapter.init({ name: 'github', url: 'https://api.github.com/openapi.json' }),
-    OpenApiAdapter.init({ name: 'jira', url: 'https://jira.example.com/openapi.json' }),
-    OpenApiAdapter.init({ name: 'slack', url: 'https://slack.com/openapi.json' }),
+    OpenapiAdapter.init({ name: 'github', url: 'https://api.github.com/openapi.json' }),
+    OpenapiAdapter.init({ name: 'jira', url: 'https://jira.example.com/openapi.json' }),
+    OpenapiAdapter.init({ name: 'slack', url: 'https://slack.com/openapi.json' }),
   ],
 })
 class IntegrationHub {}
@@ -150,18 +150,18 @@ class IntegrationHub {}
 
 | Pattern              | Correct                                                                      | Incorrect                                           | Why                                                                              |
 | -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Adapter registration | `OpenApiAdapter.init({ name: 'petstore', url: '...' })` in `adapters` array  | Placing adapter in `plugins` array                  | Adapters go in `adapters`, not `plugins`; they serve different purposes          |
+| Adapter registration | `OpenapiAdapter.init({ name: 'petstore', url: '...' })` in `adapters` array  | Placing adapter in `plugins` array                  | Adapters go in `adapters`, not `plugins`; they serve different purposes          |
 | Tool naming          | Tools auto-named as `petstore:operationId` using adapter `name` as namespace | Expecting flat names like `listPets`                | Adapter name is prepended to prevent collisions across multiple adapters         |
 | Auth configuration   | `staticAuth: { jwt: process.env.API_TOKEN! }` or `additionalHeaders`         | Hardcoding secrets: `staticAuth: { jwt: 'sk-xxx' }` | Always use environment variables for secrets; never commit tokens                |
 | Spec source          | Use `url` for hosted specs or `spec` for inline definitions                  | Using both `url` and `spec` simultaneously          | Only one source should be provided; `spec` takes precedence and `url` is ignored |
-| Multiple APIs        | Register separate `OpenApiAdapter.init()` calls with unique `name` values    | Using the same `name` for different adapters        | Duplicate names cause tool naming collisions                                     |
+| Multiple APIs        | Register separate `OpenapiAdapter.init()` calls with unique `name` values    | Using the same `name` for different adapters        | Duplicate names cause tool naming collisions                                     |
 
 ## Verification Checklist
 
 ### Configuration
 
 - [ ] `@frontmcp/adapters` package is installed
-- [ ] `OpenApiAdapter.init()` is in the `adapters` array of `@App`
+- [ ] `OpenapiAdapter.init()` is in the `adapters` array of `@App`
 - [ ] Adapter has a unique `name` for tool namespacing
 - [ ] `url` points to a valid, reachable OpenAPI JSON/YAML endpoint (or `spec` is inline)
 
@@ -186,7 +186,7 @@ class IntegrationHub {}
 | Authentication errors on API calls | Wrong auth config or missing credentials               | Configure `staticAuth` for fixed credentials, `securityResolver`/`authProviderMapper` for dynamic auth, or `additionalHeaders` for header-based tokens; verify env vars are set |
 | Duplicate tool name error          | Two adapters registered with the same `name`           | Give each adapter a unique `name` (e.g., `'github'`, `'jira'`)                                                                                                                  |
 | Stale tools after API update       | Spec polling not configured                            | Add `polling: { intervalMs: 300000 }` to refresh every 5 minutes                                                                                                                |
-| TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`: `import { OpenApiAdapter } from '@frontmcp/adapters'`                                                                                         |
+| TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`: `import { OpenapiAdapter } from '@frontmcp/adapters'`                                                                                         |
 
 ## Reference
 

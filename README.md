@@ -39,14 +39,14 @@ export default class Server {}
 
 ## Installation
 
-**Node.js 22+** required (24 recommended).
+**Node.js 24+** required.
 
 ```bash
 # New project (recommended)
 npx frontmcp create my-app
 
 # Existing project
-npm i -D frontmcp @types/node@^22
+npm i -D frontmcp @types/node@^24
 npx frontmcp init
 ```
 

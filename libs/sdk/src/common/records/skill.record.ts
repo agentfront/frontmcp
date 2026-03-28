@@ -52,6 +52,8 @@ export type SkillValueRecord = {
   kind: SkillKind.VALUE;
   provide: symbol;
   metadata: SkillMetadata;
+  /** Directory of the file that called skill(). Used to resolve relative instruction file paths. */
+  callerDir?: string;
 };
 
 /**

@@ -29,7 +29,7 @@ This skill walks you through deploying a FrontMCP server to AWS Lambda with API 
 - AWS account with appropriate IAM permissions
 - AWS CLI configured: `aws configure`
 - SAM CLI installed: `brew install aws-sam-cli` (macOS) or see AWS docs
-- Node.js 22 or later
+- Node.js 24 or later
 - A FrontMCP project ready to build
 
 ## Step 1: Build for Lambda
@@ -52,7 +52,7 @@ Description: FrontMCP server on AWS Lambda
 Globals:
   Function:
     Timeout: 30
-    Runtime: nodejs22.x
+    Runtime: nodejs24.x
     MemorySize: 512
     Environment:
       Variables:
@@ -202,7 +202,7 @@ import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 
 const fn = new lambda.Function(this, 'FrontMcpHandler', {
-  runtime: lambda.Runtime.NODEJS_22_X,
+  runtime: lambda.Runtime.NODEJS_24_X,
   handler: 'handler.handler',
   code: lambda.Code.fromAsset('.'),
   memorySize: 512,

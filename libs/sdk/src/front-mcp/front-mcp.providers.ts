@@ -14,7 +14,7 @@ const frontMcpConfig = {
   }),
 };
 
-const DEFAULT_HTTP_OPTIONS = { port: 3000, entryPath: '/mcp' };
+const DEFAULT_HTTP_OPTIONS = { port: Number(process.env['PORT']) || 3000, entryPath: '/mcp' };
 
 const frontMcpServer = AsyncProvider({
   name: 'frontmcp:server',
