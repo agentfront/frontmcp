@@ -157,27 +157,6 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       };
     });
 
-    // Detect collisions after normalization
-    const nameMap = new Map<string, string[]>();
-    for (const tool of transformedTools) {
-      const origName = (tool.metadata as Record<string, unknown>)?.originalToolName as string | undefined;
-      const displayName = origName ?? tool.name;
-      const existing = nameMap.get(tool.name);
-      if (existing) {
-        existing.push(displayName);
-      } else {
-        nameMap.set(tool.name, [displayName]);
-      }
-    }
-    for (const [normalized, originals] of nameMap) {
-      if (originals.length > 1) {
-        throw new Error(
-          `Tool name collision after normalization: "${normalized}" produced by: ${originals.join(', ')}. ` +
-            `Rename conflicting operations in your OpenAPI spec or use toolTransforms.perTool to assign unique names.`,
-        );
-      }
-    }
-
     // 1. Apply description mode (generates description from summary/description)
     if (this.options.descriptionMode && this.options.descriptionMode !== 'summaryOnly') {
       transformedTools = transformedTools.map((tool) => this.applyDescriptionMode(tool));
@@ -186,6 +165,26 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     // 2. Apply tool transforms (annotations, name, description overrides, etc.)
     if (this.options.toolTransforms) {
       transformedTools = transformedTools.map((tool) => this.applyToolTransforms(tool));
+    }
+
+    // 2b. Detect name collisions after normalization + tool transforms
+    //     (toolTransforms.perTool can rename tools, so check final names)
+    const nameMap = new Map<string, string[]>();
+    for (const tool of transformedTools) {
+      const existing = nameMap.get(tool.name);
+      if (existing) {
+        existing.push(tool.name);
+      } else {
+        nameMap.set(tool.name, [tool.name]);
+      }
+    }
+    for (const [name, occurrences] of nameMap) {
+      if (occurrences.length > 1) {
+        throw new Error(
+          `Tool name collision: "${name}" appears ${occurrences.length} times after normalization and transforms. ` +
+            `Rename conflicting operations in your OpenAPI spec or use toolTransforms.perTool to assign unique names.`,
+        );
+      }
     }
 
     // 3. Apply input transforms (hide inputs, inject values at runtime)
@@ -291,11 +290,14 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
    */
   private resolvePerTool<T>(perTool: Record<string, T> | undefined, tool: McpOpenAPITool): T | undefined {
     if (!perTool) return undefined;
+    const hasOwn = (obj: Record<string, T>, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
     // Try normalized name first
-    if (perTool[tool.name]) return perTool[tool.name];
+    if (hasOwn(perTool, tool.name)) return perTool[tool.name];
     // Fallback to original name (before lowercase normalization)
-    const originalName = (tool.metadata as Record<string, unknown>)?.originalToolName as string | undefined;
-    if (originalName && perTool[originalName]) return perTool[originalName];
+    const originalName = (tool.metadata as unknown as Record<string, unknown>)?.['originalToolName'] as
+      | string
+      | undefined;
+    if (originalName && hasOwn(perTool, originalName)) return perTool[originalName];
     return undefined;
   }
 

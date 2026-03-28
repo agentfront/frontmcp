@@ -61,9 +61,9 @@ Add a script to your `package.json`:
 
 ## Step 3: Write Your First Test
 
-Create a test file using the `.e2e.spec.ts` extension (not `.e2e.ts`):
+Create a test file in the `e2e/` directory using the `.e2e.spec.ts` extension (not `.e2e.ts`). The `frontmcp test` command discovers tests matching `e2e/**/*.e2e.spec.ts`:
 
-```typescript title="src/main.e2e.spec.ts"
+```typescript title="e2e/server.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 // Configure the test to use your server
@@ -243,16 +243,17 @@ Recommended file structure:
 ```
 src/
 ├── main.ts                    # Server entry
-├── main.e2e.spec.ts           # Server-level tests
 └── apps/
     └── calculator/
-        ├── index.ts           # App definition
-        └── calculator.e2e.spec.ts  # App-specific tests
+        └── index.ts           # App definition
+e2e/
+├── server.e2e.spec.ts         # Server-level tests
+└── calculator.e2e.spec.ts     # App-specific tests
 ```
 
 Use `test.describe()` to group related tests:
 
-```typescript title="calculator.e2e.spec.ts"
+```typescript title="e2e/calculator.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 test.use({
@@ -300,7 +301,7 @@ test.describe('Calculator App', () => {
 
 Here's a complete test file:
 
-```typescript title="src/main.e2e.spec.ts"
+```typescript title="e2e/server.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 test.use({
