@@ -83,7 +83,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     userInstall: 'npm install',
     ghCache: 'npm',
     ghInstallCmd: 'npm ci',
-    engines: { node: '>=22', npm: '>=10' },
+    engines: { node: '>=24', npm: '>=10' },
   },
   yarn: {
     lockfileCopy: 'COPY package.json yarn.lock* ./',
@@ -93,7 +93,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     userInstall: 'yarn install',
     ghCache: 'yarn',
     ghInstallCmd: 'yarn install --frozen-lockfile',
-    engines: { node: '>=22' },
+    engines: { node: '>=24' },
   },
   pnpm: {
     lockfileCopy: 'COPY package.json pnpm-lock.yaml* ./',
@@ -103,7 +103,7 @@ const PM_CONFIG: Record<PackageManager, PmConfig> = {
     userInstall: 'pnpm install',
     ghCache: 'pnpm',
     ghInstallCmd: 'pnpm install --frozen-lockfile',
-    engines: { node: '>=22' },
+    engines: { node: '>=24' },
   },
 };
 

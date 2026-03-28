@@ -46,7 +46,7 @@ export default class Server {}
 npx frontmcp create my-app
 
 # Existing project
-npm i -D frontmcp @types/node@^22
+npm i -D frontmcp @types/node@^24
 npx frontmcp init
 ```
 

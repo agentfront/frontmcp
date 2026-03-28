@@ -202,7 +202,7 @@ import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 
 const fn = new lambda.Function(this, 'FrontMcpHandler', {
-  runtime: lambda.Runtime.NODEJS_22_X,
+  runtime: lambda.Runtime.NODEJS_24_X,
   handler: 'handler.handler',
   code: lambda.Code.fromAsset('.'),
   memorySize: 512,
