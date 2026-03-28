@@ -41,7 +41,7 @@ function parseFrontmatter(content) {
     if (colonIdx === -1) continue;
 
     const key = line.slice(0, colonIdx).trim();
-    let value = line.slice(colonIdx + 1).trim();
+    const value = line.slice(colonIdx + 1).trim();
 
     // Flow-style array: [a, b, c]
     if (value.startsWith('[') && value.endsWith(']')) {
