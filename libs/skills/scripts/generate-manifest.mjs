@@ -33,10 +33,11 @@ const VALID_BUNDLES = ['recommended', 'minimal', 'full'];
  * block sequences (- item), and nested key:value pairs.
  */
 function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const normalized = content.replace(/^\uFEFF/, '');
+  const match = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return null;
 
-  const lines = match[1].split('\n');
+  const lines = match[1].split(/\r?\n/);
   const result = {};
   let i = 0;
 
@@ -127,10 +128,12 @@ function parseFrontmatter(content) {
 /**
  * Coerce a value into a string array. Handles string, array, or undefined.
  */
-function toStringArray(val, fallback) {
-  if (!val) return fallback;
-  if (Array.isArray(val)) return val.map(String);
-  return [String(val)];
+function toStringArray(val, fallback, field, errors, dir) {
+  if (val == null || val === '') return fallback;
+  if (typeof val === 'string') return [val];
+  if (Array.isArray(val) && val.every((item) => typeof item === 'string')) return val;
+  errors.push(`${dir}/SKILL.md: ${field} must be a string or string[], got ${typeof val}`);
+  return null;
 }
 
 /**
@@ -172,15 +175,22 @@ for (const dir of skillDirs) {
   const content = fs.readFileSync(skillMdPath, 'utf-8');
   const fm = parseFrontmatter(content);
 
-  if (!fm || !fm.name) {
-    errors.push(`${dir}/SKILL.md: missing valid frontmatter or 'name' field`);
+  if (!fm || typeof fm.name !== 'string' || !fm.name) {
+    errors.push(`${dir}/SKILL.md: missing valid frontmatter or 'name' must be a non-empty string`);
+    continue;
+  }
+
+  if (fm.description != null && typeof fm.description !== 'string') {
+    errors.push(`${dir}/SKILL.md: description must be a string`);
     continue;
   }
 
   const category = fm.category || dir.replace('frontmcp-', '');
-  const targets = toStringArray(fm.targets, ['all']);
-  const tags = toStringArray(fm.tags, []);
-  const bundle = toStringArray(fm.bundle, ['full']);
+  const targets = toStringArray(fm.targets, ['all'], 'targets', errors, dir);
+  const tags = toStringArray(fm.tags, [], 'tags', errors, dir);
+  const bundle = toStringArray(fm.bundle, ['full'], 'bundle', errors, dir);
+
+  if (!targets || !tags || !bundle) continue;
 
   // Validate against allow-lists
   if (!VALID_CATEGORIES.includes(category)) {

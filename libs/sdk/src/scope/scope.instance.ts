@@ -267,7 +267,6 @@ export class Scope extends ScopeEntry {
     if (!this.cliMode) {
       const cdnOverrides = this.metadata.ui?.cdnOverrides;
       if (cdnOverrides && Object.keys(cdnOverrides).length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { createResolverWithOverrides } = require('@frontmcp/uipack/resolver');
         uiResolver = createResolverWithOverrides(cdnOverrides);
         this.logger.verbose('Created UI resolver with CDN overrides', { overrides: Object.keys(cdnOverrides) });
@@ -718,7 +717,7 @@ export class Scope extends ScopeEntry {
    * Register the sendElicitationResult system tool.
    * This tool is hidden by default and only shown to clients that don't support elicitation.
    */
-  private registerSendElicitationResultTool(scopeRef: EntryOwnerRef): void {
+  private registerSendElicitationResultTool(_scopeRef: EntryOwnerRef): void {
     try {
       const toolRecord = normalizeTool(SendElicitationResultTool);
       const systemToolEntry = new ToolInstance(toolRecord, this.scopeProviders, {
