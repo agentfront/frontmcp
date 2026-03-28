@@ -90,9 +90,24 @@ class MyServer {}
 
 ### Modes
 
-- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search`. Best when the server has a large number of tools and you want the AI to search-then-execute.
+- `codecall_only` -- Hides all tools from `list_tools` except CodeCall meta-tools. All other tools are discovered only via `codecall:search`. Best when the server has a large number of tools and you want the AI to search-then-execute. When `appIds` is set, only tools from those apps are hidden — tools from other apps remain visible.
 - `codecall_opt_in` -- Shows all tools in `list_tools` normally. Tools opt-in to CodeCall execution via metadata. Useful when only some tools benefit from orchestrated execution.
 - `metadata_driven` -- Per-tool `metadata.codecall` controls visibility and CodeCall availability independently. Most granular control.
+
+### Multi-App Scoping
+
+Use `appIds` to scope CodeCall to specific apps in a multi-app server:
+
+```typescript
+// Only hide ecommerce tools — calc tools remain visible in list_tools
+CodeCallPlugin.init({
+  mode: 'codecall_only',
+  appIds: ['ecommerce'],
+  vm: { preset: 'secure' },
+});
+```
+
+Without `appIds`, `codecall_only` mode hides ALL tools in the server. With `appIds`, only tools from the specified apps are hidden — tools from other apps remain directly callable.
 
 ### VM Presets
 
@@ -107,9 +122,9 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 
 CodeCall contributes 4 tools to your server:
 
-- `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Returns ranked tool names, descriptions, and relevance scores.
-- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Use after search to understand tool interfaces before execution.
-- `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. The script can call multiple tools, branch on results, and compose outputs.
+- `codecall:search` -- Semantic search over all registered tools using TF-IDF scoring with synonym expansion. Input: `{ queries: string[] }` (array of atomic action phrases, max 10). Decompose complex requests into simple actions (e.g., "delete users and send email" becomes `queries: ["delete user", "send email"]`). Returns ranked tool names, descriptions, and relevance scores.
+- `codecall:describe` -- Returns full input/output JSON schemas for one or more tools. Input: `{ toolNames: string[] }` (tool names from search results). Use after search to understand tool interfaces before execution. If `notFound` array is non-empty in the response, re-search with corrected queries.
+- `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. Input: `{ script: string }` (AgentScript code). Use `callTool(name, args)` to invoke tools within scripts. The script can call multiple tools, branch on results, and compose outputs.
 - `codecall:invoke` -- Direct single-tool invocation (available when `directCalls` is enabled). Bypasses the VM for simple one-shot calls.
 
 ### Per-Tool CodeCall Metadata

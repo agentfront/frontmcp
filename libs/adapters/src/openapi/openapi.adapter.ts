@@ -145,6 +145,13 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     // Apply all transforms to tools
     let transformedTools = openapiTools;
 
+    // 0. Normalize tool names to consistent lowercase snake_case
+    //    e.g., "get_products_By_id" -> "get_products_by_id"
+    transformedTools = transformedTools.map((tool) => ({
+      ...tool,
+      name: tool.name.replace(/[A-Z]/g, (ch) => ch.toLowerCase()),
+    }));
+
     // 1. Apply description mode (generates description from summary/description)
     if (this.options.descriptionMode && this.options.descriptionMode !== 'summaryOnly') {
       transformedTools = transformedTools.map((tool) => this.applyDescriptionMode(tool));

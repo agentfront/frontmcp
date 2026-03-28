@@ -164,10 +164,11 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('e2e/server.e2e.spec.ts'))).toBe(true);
     });
 
-    it('should create tsconfig.e2e.json for E2E test typing', async () => {
+    it('should create CLAUDE.md and AGENTS.md for AI coding assistants', async () => {
       await runCreate('my-app', { yes: true });
 
-      expect(consoleLogs.some((log) => log.includes('tsconfig.e2e.json'))).toBe(true);
+      expect(consoleLogs.some((log) => log.includes('CLAUDE.md'))).toBe(true);
+      expect(consoleLogs.some((log) => log.includes('AGENTS.md'))).toBe(true);
     });
 
     it('should create package.json', async () => {

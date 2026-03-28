@@ -60,6 +60,16 @@
       "hasResources": true,
       "tags": ["guides", "examples", "best-practices", "architecture", "walkthrough", "end-to-end"],
       "bundle": ["recommended", "full"]
+    },
+    {
+      "name": "frontmcp-production-readiness",
+      "category": "production",
+      "description": "Production readiness audit for FrontMCP servers \u2014 security hardening, performance optimization, reliability patterns, observability, and deployment best practices.",
+      "path": "frontmcp-production-readiness",
+      "targets": ["all"],
+      "hasResources": false,
+      "tags": ["production", "security", "performance", "reliability", "observability", "audit", "best-practices"],
+      "bundle": ["recommended", "full"]
     }
   ]
 }

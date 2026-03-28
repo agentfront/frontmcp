@@ -60,14 +60,17 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 
 ## Cross-Cutting Testing Patterns
 
-| Pattern            | Rule                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| File naming        | Always `.spec.ts` (not `.test.ts`); E2E uses `.e2e.spec.ts`                           |
-| Coverage threshold | 95%+ across statements, branches, functions, lines                                    |
-| Test descriptions  | Plain English, no prefixes like "PT-001"; describe behavior not implementation        |
-| Mocking            | Mock providers via DI token replacement, never mock the framework                     |
-| Error testing      | Assert `instanceof` specific error class AND MCP error code                           |
-| Async              | Always `await` async operations; use `expect(...).rejects.toThrow()` for async errors |
+| Pattern            | Rule                                                                                                                                                                                                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File naming        | Always `.spec.ts` (not `.test.ts`); E2E uses `.e2e.spec.ts`                                                                                                                                                                                                                                          |
+| File organization  | Split E2E tests by app/feature: `e2e/calc.e2e.spec.ts`, `e2e/ecommerce.e2e.spec.ts`. Never put all tests in a single `server.e2e.spec.ts`                                                                                                                                                            |
+| Test runner        | Use `frontmcp test` (not `jest --config ...`). It auto-generates the correct Jest/SWC config                                                                                                                                                                                                         |
+| Coverage threshold | 95%+ across statements, branches, functions, lines                                                                                                                                                                                                                                                   |
+| Test descriptions  | Plain English, no prefixes like "PT-001"; describe behavior not implementation                                                                                                                                                                                                                       |
+| Mocking            | Mock providers via DI token replacement, never mock the framework                                                                                                                                                                                                                                    |
+| httpMock scope     | `httpMock` intercepts HTTP in the **test process** only, NOT in the MCP server subprocess. Do not use httpMock to intercept server-to-API calls — those happen in the child process. Use httpMock for verifying client-to-server request shapes or mocking external APIs called from the test itself |
+| Error testing      | Assert `instanceof` specific error class AND MCP error code                                                                                                                                                                                                                                          |
+| Async              | Always `await` async operations; use `expect(...).rejects.toThrow()` for async errors                                                                                                                                                                                                                |
 
 ## Common Patterns
 

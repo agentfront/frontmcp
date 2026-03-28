@@ -99,6 +99,14 @@ export default class PluginRegistry
     return [...this.defs.values()].map((rec) => rec.metadata.name);
   }
 
+  /**
+   * Returns all ToolRegistries created by plugins in this registry.
+   * Used for propagating server-level plugin tools to the scope.
+   */
+  getToolRegistries(): ToolRegistry[] {
+    return [...this.pTools.values()];
+  }
+
   protected override buildMap(list: PluginType[]): RegistryBuildMapResult<PluginRecord> {
     const tokens = new Set<Token>();
     const defs = new Map<Token, PluginRecord>();

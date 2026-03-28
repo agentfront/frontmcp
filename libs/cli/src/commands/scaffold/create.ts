@@ -213,9 +213,7 @@ import { test, expect } from '@frontmcp/testing';
 /**
  * E2E tests for the MCP server.
  *
- * Run with:
- *   frontmcp test          # recommended
- *   npm run test:e2e       # alternative
+ * Run with: frontmcp test
  */
 test.describe('Server E2E', () => {
   test.use({
@@ -308,55 +306,119 @@ e2e
 LICENSE
 `;
 
-const TEMPLATE_JEST_E2E_CONFIG = `
-/* eslint-disable */
-export default {
-  displayName: 'e2e',
-  testEnvironment: 'node',
-  testMatch: ['<rootDir>/e2e/**/*.e2e.spec.ts'],
-  testTimeout: 60000,
-  setupFilesAfterEnv: ['@frontmcp/testing/setup'],
-  transform: {
-    '^.+\\\\.[tj]s$': [
-      '@swc/jest',
-      {
-        jsc: {
-          target: 'es2022',
-          parser: {
-            syntax: 'typescript',
-            decorators: true,
-            dynamicImport: true,
-          },
-          transform: {
-            decoratorMetadata: true,
-            legacyDecorator: true,
-          },
-          keepClassNames: true,
-          externalHelpers: true,
-          loose: true,
-        },
-        module: {
-          type: 'es6',
-        },
-        sourceMaps: true,
-        swcrc: false,
-      },
-    ],
-  },
-  moduleFileExtensions: ['ts', 'js', 'html'],
-  transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
-};
-`;
+// jest.e2e.config.ts and tsconfig.e2e.json removed — `frontmcp test` auto-generates the correct config
 
-const TEMPLATE_TSCONFIG_E2E = `
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": ["node", "jest"]
-  },
-  "include": ["e2e/**/*.ts", "jest.e2e.config.ts"]
-}
+function generateClaudeMd(projectName: string, pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# Skills and Tools
+Use frontmcp skills for code planning, generation, and testing.
+
+
+## Project Overview
+
+TypeScript MCP (Model Context Protocol) server built with the **FrontMCP** framework. Uses decorator-based architecture with \`@FrontMcp\`, \`@App\`, and \`@Tool\` decorators from \`@frontmcp/sdk\`. Requires Node >= 22.
+
+## Commands
+
+- \`${cfg.run} dev\` — start dev server with hot reload (uses \`frontmcp dev\`)
+- \`${cfg.run} build\` — production build (uses \`frontmcp build\`)
+- \`${cfg.run} test\` — run E2E tests (uses \`frontmcp test\`)
+- \`${cfg.run} inspect\` — launch MCP Inspector (interactive debugging)
+- \`${cfg.run} doctor\` — check project configuration
+
+**Important:** Always use the package.json scripts above. Never run \`npx tsx src/main.ts\` directly — use \`${cfg.run} dev\` instead.
+
+## Architecture
+
+**Entry point:** \`src/main.ts\` — defines the \`Server\` class with \`@FrontMcp\` decorator, registering apps.
+
+**App/Tool hierarchy:** Server → Apps → Tools. Each app groups related tools:
+- \`src/calc.app.ts\` — \`CalcApp\` registered with \`@App\`, contains tools
+- \`src/tools/add.tool.ts\` — \`AddTool\` extends \`ToolContext\`, uses Zod schemas for input/output validation
+
+**Key patterns:**
+- \`reflect-metadata\` must be imported at the entry point
+- Tools extend \`ToolContext\` and implement \`async execute(input)\`
+- Input/output schemas defined with Zod in the \`@Tool\` decorator
+- E2E tests use \`@frontmcp/testing\` with \`test.use({ server, port })\` fixture pattern
+
+## Testing
+
+Run tests with \`${cfg.run} test\` (which runs \`frontmcp test\` under the hood).
+
+- Test files go in \`e2e/\` directory with \`.e2e.spec.ts\` extension
+- Split tests by app/feature: \`e2e/calc.e2e.spec.ts\`, \`e2e/my-feature.e2e.spec.ts\`
+- Do NOT create a standalone \`jest.e2e.config.ts\` — \`frontmcp test\` auto-generates the correct Jest/SWC config
+
+## Docker
+
+Docker Compose config is in \`ci/docker-compose.yml\` (includes Redis). Redis-only: \`docker compose -f ci/docker-compose.yml up redis -d\`.
+
+## Environment
+
+See \`.env.example\` for required variables (PORT, NODE_ENV, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD).
 `;
+}
+
+function generateAgentsMd(projectName: string, pm: PackageManager): string {
+  const cfg = PM_CONFIG[pm];
+  return `# ${projectName} — Agent Guidelines
+
+## Project Type
+
+FrontMCP standalone app — TypeScript-first framework for building MCP (Model Context Protocol) servers.
+
+## Architecture
+
+- **Language**: TypeScript with strict mode enabled
+- **Build system**: FrontMCP CLI (\`frontmcp dev\`, \`frontmcp build\`, \`frontmcp test\`)
+- **Testing**: Jest via \`frontmcp test\` with 95%+ coverage requirement
+- **Package manager**: ${pm}
+
+## Commands
+
+- \`${cfg.run} dev\` — start dev server with hot reload
+- \`${cfg.run} build\` — production build
+- \`${cfg.run} test\` — run E2E tests
+- \`${cfg.run} inspect\` — launch MCP Inspector
+- \`${cfg.run} doctor\` — check project configuration
+
+Do NOT run \`npx tsx src/main.ts\` directly — always use \`${cfg.run} dev\`.
+
+## Key Decorators & Context Classes
+
+| Decorator | Context Class | Purpose |
+|-----------|---------------|---------|
+| \`@Tool\` | \`ToolContext\` | MCP tool with Zod input/output |
+| \`@Resource\` / \`@ResourceTemplate\` | \`ResourceContext\` | MCP resource |
+| \`@Prompt\` | \`PromptContext\` | MCP prompt returning \`GetPromptResult\` |
+| \`@Skill\` | \`SkillContext\` | Instruction-only AI skill |
+| \`@Provider\` | — | DI provider with Symbol token |
+| \`@App\` | — | Application grouping tools/resources/prompts |
+| \`@FrontMcp\` | — | Server entry point |
+
+## Constraints
+
+- No \`any\` types — use \`unknown\` for generic defaults
+- No raw \`node:crypto\` or \`fs\` — use \`@frontmcp/utils\`
+- No non-null assertions (\`!\`) — throw proper errors
+- Zod v4 for all schema validation
+- \`@frontmcp/testing\` for test harnesses
+- Test files use \`.spec.ts\` extension (not \`.test.ts\`); E2E uses \`.e2e.spec.ts\`
+- Split E2E tests by app/feature into separate files
+
+## Structure
+
+- \`src/main.ts\` — Server entry point with \`@FrontMcp\` decorator
+- \`src/*.app.ts\` — App definitions with \`@App\` decorator
+- \`src/tools/*.tool.ts\` — Tool implementations extending \`ToolContext\`
+- \`e2e/*.e2e.spec.ts\` — E2E tests using \`@frontmcp/testing\`
+`;
+}
 
 const TEMPLATE_ENV_EXAMPLE = `
 # Application
@@ -462,8 +524,7 @@ See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-se
 | \`npm run build\` | Build for production |
 | \`npm run inspect\` | Launch MCP Inspector |
 | \`npm run doctor\` | Check project configuration |
-| \`npm run test\` | Run unit tests |
-| \`npm run test:e2e\` | Run E2E tests |
+| \`npm run test\` | Run E2E tests |
 
 ## Project Structure
 
@@ -473,15 +534,13 @@ See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-se
 ├── docker-compose.yml # Docker services config
 ├── Dockerfile         # Container build config
 ├── e2e/               # E2E tests
-├── jest.e2e.config.ts # Jest E2E configuration
 ├── package.json       # Dependencies and scripts
 ├── src/
 │   ├── main.ts        # Server entry point
 │   ├── calc.app.ts    # Example app
 │   └── tools/
 │       └── add.tool.ts # Example tool
-├── tsconfig.json      # TypeScript config
-└── tsconfig.e2e.json  # TypeScript config for E2E tests
+└── tsconfig.json      # TypeScript config
 \`\`\`
 
 ## Learn More
@@ -760,7 +819,7 @@ ${generatePmSetupSteps(pm)}
         run: ${cfg.run} build
 
       - name: Run E2E tests
-        run: ${cfg.run} test:e2e
+        run: ${cfg.run} test
 `;
 }
 
@@ -1106,8 +1165,7 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 | \`${cfg.run} build\` | Build for production |
 | \`${cfg.run} inspect\` | Launch MCP Inspector |
 | \`${cfg.run} doctor\` | Check project configuration |
-| \`${cfg.run} test\` | Run unit tests |
-| \`${cfg.run} test:e2e\` | Run E2E tests |
+| \`${cfg.run} test\` | Run E2E tests |
 `;
 
   if (deploymentTarget === 'node') {
@@ -1167,15 +1225,13 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
   }
 
   readme += `├── e2e/               # E2E tests
-├── jest.e2e.config.ts # Jest E2E configuration
 ├── package.json       # Dependencies and scripts
 ├── src/
 │   ├── main.ts        # Server entry point
 │   ├── calc.app.ts    # Example app
 │   └── tools/
 │       └── add.tool.ts # Example tool
-├── tsconfig.json      # TypeScript config
-└── tsconfig.e2e.json  # TypeScript config for E2E tests
+└── tsconfig.json      # TypeScript config
 \`\`\`
 
 ## Scaling to a Monorepo
@@ -1683,10 +1739,8 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'calc.app.ts'), TEMPLATE_CALC_APP_TS);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'tools', 'add.tool.ts'), TEMPLATE_ADD_TOOL_TS);
 
-  // E2E scaffolding
+  // E2E scaffolding (jest config auto-generated by `frontmcp test`)
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.spec.ts'), TEMPLATE_E2E_TEST_TS);
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'jest.e2e.config.ts'), TEMPLATE_JEST_E2E_CONFIG);
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'tsconfig.e2e.json'), TEMPLATE_TSCONFIG_E2E);
 
   // Skills scaffolding
   await scaffoldSkills(targetDir, options);
@@ -1707,6 +1761,10 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
 
   // Dynamic README
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'README.md'), generateReadme(options));
+
+  // CLAUDE.md and AGENTS.md for AI coding assistants
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'CLAUDE.md'), generateClaudeMd(pkgName, packageManager));
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'AGENTS.md'), generateAgentsMd(pkgName, packageManager));
 
   // Initialize git repository
   try {
@@ -1737,7 +1795,7 @@ function printNextSteps(
   console.log(`  3) ${cfg.run} dev      `, c('gray', '# tsx watcher + async tsc type-check'));
   console.log(`  4) ${cfg.run} inspect  `, c('gray', '# launch MCP Inspector'));
   console.log(`  5) ${cfg.run} build    `, c('gray', '# compile with tsc via frontmcp build'));
-  console.log(`  6) ${cfg.run} test:e2e `, c('gray', '# run E2E tests'));
+  console.log(`  6) ${cfg.run} test     `, c('gray', '# run E2E tests'));
 
   if (deploymentTarget === 'node') {
     console.log('');
@@ -1796,7 +1854,6 @@ async function upsertPackageJsonWithTarget(
     inspect: 'frontmcp inspector',
     doctor: 'frontmcp doctor',
     test: 'frontmcp test',
-    'test:e2e': 'jest --config jest.e2e.config.ts --runInBand',
   };
 
   // Add target-specific scripts
@@ -1834,6 +1891,7 @@ async function upsertPackageJsonWithTarget(
     devDependencies: {
       '@frontmcp/testing': frontmcpLibRange,
       '@swc/core': '^1.11.29',
+      '@swc/helpers': '^0.5.20',
       '@swc/jest': '^0.2.37',
       jest: '^29.7.0',
       '@types/jest': '^29.5.14',

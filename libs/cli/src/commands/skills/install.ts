@@ -8,43 +8,74 @@ const PROVIDER_DIRS: Record<string, string> = {
   codex: '.codex/skills',
 };
 
-export async function installSkill(
-  name: string,
-  options: { provider?: 'claude' | 'codex'; dir?: string },
-): Promise<void> {
+export interface InstallOptions {
+  provider?: 'claude' | 'codex';
+  dir?: string;
+  all?: boolean;
+  tag?: string;
+  category?: string;
+}
+
+export async function installSkill(name: string | undefined, options: InstallOptions): Promise<void> {
   const manifest = loadCatalog();
-  const entry = manifest.skills.find((s) => s.name === name);
-
-  if (!entry) {
-    console.error(c('red', `Skill "${name}" not found in catalog.`));
-    console.log(c('gray', "Use 'frontmcp skills list' to see available skills."));
-    process.exit(1);
-  }
-
   const provider = options.provider ?? 'claude';
   const targetBase = options.dir ?? path.resolve(process.cwd(), PROVIDER_DIRS[provider] ?? PROVIDER_DIRS['claude']);
-  const targetDir = path.join(targetBase, name);
-
   const catalogDir = getCatalogDir();
-  const sourceDir = path.join(catalogDir, entry.path);
 
-  if (!(await fileExists(path.join(sourceDir, 'SKILL.md')))) {
-    console.error(c('red', `Source SKILL.md not found at ${sourceDir}`));
+  // Determine which skills to install
+  let skills = manifest.skills;
+
+  if (options.all) {
+    // Install all skills
+  } else if (options.tag) {
+    skills = skills.filter((s) => s.tags.includes(options.tag!));
+    if (skills.length === 0) {
+      console.error(c('red', `No skills found with tag "${options.tag}".`));
+      console.log(c('gray', "Use 'frontmcp skills list --tag <tag>' to see available tags."));
+      process.exit(1);
+    }
+  } else if (options.category) {
+    skills = skills.filter((s) => s.category === options.category);
+    if (skills.length === 0) {
+      console.error(c('red', `No skills found in category "${options.category}".`));
+      console.log(c('gray', "Use 'frontmcp skills list' to see available categories."));
+      process.exit(1);
+    }
+  } else if (name) {
+    // Single skill install
+    const entry = skills.find((s) => s.name === name);
+    if (!entry) {
+      console.error(c('red', `Skill "${name}" not found in catalog.`));
+      console.log(c('gray', "Use 'frontmcp skills list' to see available skills."));
+      process.exit(1);
+    }
+    skills = [entry];
+  } else {
+    console.error(c('red', 'Please specify a skill name, or use --all, --tag, or --category.'));
     process.exit(1);
   }
 
-  // Copy skill directory (binary-safe recursive copy)
-  await ensureDir(targetDir);
-  await cp(sourceDir, targetDir, { recursive: true });
+  // Install each skill
+  let installed = 0;
+  for (const entry of skills) {
+    const targetDir = path.join(targetBase, entry.name);
+    const sourceDir = path.join(catalogDir, entry.path);
 
-  console.log(
-    `${c('green', '✓')} Installed skill ${c('bold', name)} to ${c('cyan', path.relative(process.cwd(), targetDir))}`,
-  );
+    if (!(await fileExists(path.join(sourceDir, 'SKILL.md')))) {
+      console.error(c('yellow', `  Skipped ${entry.name}: source SKILL.md not found`));
+      continue;
+    }
 
-  if (entry.hasResources) {
-    console.log(c('gray', '  Includes: references/ directory'));
+    await ensureDir(targetDir);
+    await cp(sourceDir, targetDir, { recursive: true });
+    installed++;
+
+    console.log(
+      `${c('green', '✓')} Installed ${c('bold', entry.name)} to ${c('cyan', path.relative(process.cwd(), targetDir))}`,
+    );
   }
 
-  console.log(c('gray', `  Provider: ${provider}`));
-  console.log(c('gray', `  Path: ${targetDir}`));
+  if (skills.length > 1) {
+    console.log(`\n${c('green', '✓')} Installed ${installed}/${skills.length} skills (provider: ${provider})`);
+  }
 }

@@ -4,9 +4,9 @@ import { httpOptionsSchema } from '../http';
 
 describe('httpOptionsSchema', () => {
   describe('default values', () => {
-    it('should apply default port of 3001', () => {
+    it('should apply default port of 3000 (or PORT env var)', () => {
       const result = httpOptionsSchema.parse({});
-      expect(result.port).toBe(3001);
+      expect(result.port).toBe(Number(process.env['PORT']) || 3000);
     });
 
     it('should apply default entryPath of empty string', () => {

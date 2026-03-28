@@ -221,21 +221,26 @@ export class Scope extends ScopeEntry {
       this.scopePlugins = new PluginRegistry(this.scopeProviders, serverPlugins, scopeRef, serverPluginScopeInfo);
     }
 
+    // Server-level plugins must initialize BEFORE scope registries so their
+    // tool/resource/prompt registries are in scopeProviders and discoverable
+    // during adoption. Without this ordering, plugin tools are "orphaned".
+    if (this.scopePlugins) {
+      await this.scopePlugins.ready;
+    }
+
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
     this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef);
 
-    const batch2: Promise<void>[] = [
+    await Promise.all([
       this.scopeTools.ready,
       this.scopeResources.ready,
       this.scopePrompts.ready,
       this.scopeAgents.ready,
       this.scopeSkills.ready,
-    ];
-    if (this.scopePlugins) batch2.push(this.scopePlugins.ready);
-    await Promise.all(batch2);
+    ]);
 
     if (this.scopePlugins) {
       const pluginNames = this.scopePlugins.getPluginNames();

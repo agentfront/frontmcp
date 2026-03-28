@@ -263,6 +263,206 @@ describe('CodeCallPlugin', () => {
     });
   });
 
+  describe('multi-app scoping with appIds', () => {
+    let mockLogger: { verbose: jest.Mock; info: jest.Mock; warn: jest.Mock; error: jest.Mock; child: jest.Mock };
+
+    const createMockFlowCtx = (tools: Array<{ tool: Record<string, unknown> }>) => {
+      let resolvedTools = tools;
+      return {
+        state: {
+          resolvedTools,
+          set: (key: string, value: any) => {
+            if (key === 'resolvedTools') {
+              resolvedTools = value;
+            }
+          },
+        },
+        get resolvedToolsAfter() {
+          return resolvedTools;
+        },
+      } as any;
+    };
+
+    const createPluginWithLogger = (options: CodeCallPluginOptionsInput = {}) => {
+      const p = new CodeCallPlugin(options);
+      jest.spyOn(p, 'get').mockReturnValue({ child: () => mockLogger } as unknown as never);
+      return p;
+    };
+
+    beforeEach(() => {
+      mockLogger = {
+        verbose: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+    });
+
+    it('should accept appIds option', () => {
+      const plugin = new CodeCallPlugin({ appIds: ['ecommerce'] });
+      expect(plugin.options.appIds).toEqual(['ecommerce']);
+    });
+
+    it('without appIds: codecall_only hides ALL non-codecall tools (root-level = all apps)', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only' });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'add', owner: { kind: 'app', id: 'calc' } } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      expect(names).toEqual(['codecall:search']);
+    });
+
+    it('with appIds: only hides tools from managed apps, others remain visible', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only', appIds: ['ecommerce'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'codecall:execute' } },
+        { tool: { name: 'add', owner: { kind: 'app', id: 'calc' } } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+        { tool: { name: 'post_checkout', owner: { kind: 'app', id: 'ecommerce' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      // Calc app tools remain visible, ecommerce tools hidden, codecall meta-tools visible
+      expect(names).toContain('codecall:search');
+      expect(names).toContain('codecall:execute');
+      expect(names).toContain('add');
+      expect(names).not.toContain('get_products');
+      expect(names).not.toContain('post_checkout');
+    });
+
+    it('with appIds covering multiple apps: hides tools from all managed apps', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only', appIds: ['ecommerce', 'calc'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'add', owner: { kind: 'app', id: 'calc' } } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+        { tool: { name: 'list_users', owner: { kind: 'app', id: 'admin' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      // Only admin app tools and codecall meta-tools remain
+      expect(names).toEqual(['codecall:search', 'list_users']);
+    });
+
+    it('with appIds: tools without owner are not hidden', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only', appIds: ['ecommerce'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'orphan_tool' } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      // Orphan tool (no owner) stays visible
+      expect(names).toContain('codecall:search');
+      expect(names).toContain('orphan_tool');
+      expect(names).not.toContain('get_products');
+    });
+
+    it('with appIds: plugin-owned tools are not hidden by app scoping', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only', appIds: ['ecommerce'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'remember_this', owner: { kind: 'plugin', id: 'remember' } } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      // Plugin-owned tools remain visible (owner.kind !== 'app')
+      expect(names).toContain('codecall:search');
+      expect(names).toContain('remember_this');
+      expect(names).not.toContain('get_products');
+    });
+
+    it('with empty appIds array: behaves like no appIds (hides all)', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only', appIds: [] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'add', owner: { kind: 'app', id: 'calc' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      expect(names).toEqual(['codecall:search']);
+    });
+
+    it('appIds does not affect codecall_opt_in mode (all tools shown)', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_opt_in', appIds: ['ecommerce'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'add', owner: { kind: 'app', id: 'calc' } } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      expect(names).toHaveLength(3);
+    });
+
+    it('appIds does not affect metadata_driven mode', async () => {
+      const plugin = createPluginWithLogger({ mode: 'metadata_driven', appIds: ['ecommerce'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'add', owner: { kind: 'app', id: 'calc' } } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+        {
+          tool: {
+            name: 'hidden',
+            owner: { kind: 'app', id: 'ecommerce' },
+            metadata: { codecall: { visibleInListTools: false } },
+          },
+        },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      // metadata_driven respects metadata, not appIds
+      expect(names).toContain('add');
+      expect(names).toContain('get_products');
+      expect(names).not.toContain('hidden');
+    });
+
+    it('with appIds: managed app tools with visibleInListTools=true still shown', async () => {
+      const plugin = createPluginWithLogger({ mode: 'codecall_only', appIds: ['ecommerce'] });
+      const flowCtx = createMockFlowCtx([
+        { tool: { name: 'codecall:search' } },
+        { tool: { name: 'get_products', owner: { kind: 'app', id: 'ecommerce' } } },
+        {
+          tool: {
+            name: 'featured_products',
+            owner: { kind: 'app', id: 'ecommerce' },
+            metadata: { codecall: { visibleInListTools: true } },
+          },
+        },
+      ]);
+
+      await plugin.adjustListTools(flowCtx);
+
+      const names = flowCtx.resolvedToolsAfter.map((t: any) => t.tool.name);
+      // featured_products stays visible because visibleInListTools=true overrides appIds hiding
+      expect(names).toContain('codecall:search');
+      expect(names).toContain('featured_products');
+      expect(names).not.toContain('get_products');
+    });
+  });
+
   describe('private methods', () => {
     let plugin: CodeCallPlugin;
 
