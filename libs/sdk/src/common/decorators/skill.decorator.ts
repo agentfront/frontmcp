@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { extendedSkillMetadata, FrontMcpSkillTokens } from '../tokens';
 import { SkillMetadata, skillMetadataSchema } from '../metadata';
 import { SkillKind, SkillValueRecord } from '../records';
+import { dirname } from '@frontmcp/utils';
 
 /**
  * Class decorator that marks a class as a Skill and provides metadata.
@@ -152,8 +153,9 @@ function resolveCallerDir(): string | undefined {
   if (!stack) return undefined;
 
   const lines = stack.split('\n');
-  // Skip: "Error", this function, frontMcpSkill — start from index 3
-  for (let i = 3; i < lines.length; i++) {
+  // Start from index 1 (skip the "Error" header line).
+  // The existing filter for 'skill.decorator' handles skipping internal frames.
+  for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     // Match both "at func (file:line:col)" and "at file:line:col" formats
     const match = line.match(/\(([^)]+):\d+:\d+\)/) || line.match(/at\s+([^\s:]+):\d+:\d+/);
@@ -163,10 +165,7 @@ function resolveCallerDir(): string | undefined {
       if (file.includes('node_modules') || file.includes('skill.decorator')) {
         continue;
       }
-      const lastSlash = file.lastIndexOf('/');
-      if (lastSlash > 0) {
-        return file.substring(0, lastSlash);
-      }
+      return dirname(file);
     }
   }
   return undefined;

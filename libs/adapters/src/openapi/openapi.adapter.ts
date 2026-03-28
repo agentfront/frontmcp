@@ -145,12 +145,38 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     // Apply all transforms to tools
     let transformedTools = openapiTools;
 
-    // 0. Normalize tool names to consistent lowercase snake_case
+    // 0. Normalize tool names to consistent lowercase
     //    e.g., "get_products_By_id" -> "get_products_by_id"
-    transformedTools = transformedTools.map((tool) => ({
-      ...tool,
-      name: tool.name.replace(/[A-Z]/g, (ch) => ch.toLowerCase()),
-    }));
+    //    Preserve originalToolName so perTool lookups can fallback to pre-normalization keys.
+    transformedTools = transformedTools.map((tool) => {
+      const normalizedName = tool.name.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
+      return {
+        ...tool,
+        name: normalizedName,
+        metadata: { ...tool.metadata, originalToolName: tool.name !== normalizedName ? tool.name : undefined },
+      };
+    });
+
+    // Detect collisions after normalization
+    const nameMap = new Map<string, string[]>();
+    for (const tool of transformedTools) {
+      const origName = (tool.metadata as Record<string, unknown>)?.originalToolName as string | undefined;
+      const displayName = origName ?? tool.name;
+      const existing = nameMap.get(tool.name);
+      if (existing) {
+        existing.push(displayName);
+      } else {
+        nameMap.set(tool.name, [displayName]);
+      }
+    }
+    for (const [normalized, originals] of nameMap) {
+      if (originals.length > 1) {
+        throw new Error(
+          `Tool name collision after normalization: "${normalized}" produced by: ${originals.join(', ')}. ` +
+            `Rename conflicting operations in your OpenAPI spec or use toolTransforms.perTool to assign unique names.`,
+        );
+      }
+    }
 
     // 1. Apply description mode (generates description from summary/description)
     if (this.options.descriptionMode && this.options.descriptionMode !== 'summaryOnly') {
@@ -259,6 +285,21 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   }
 
   /**
+   * Look up a value in a perTool map, falling back to the tool's original (pre-normalization) name.
+   * This ensures perTool configs keyed with mixed-case names still match after normalization.
+   * @private
+   */
+  private resolvePerTool<T>(perTool: Record<string, T> | undefined, tool: McpOpenAPITool): T | undefined {
+    if (!perTool) return undefined;
+    // Try normalized name first
+    if (perTool[tool.name]) return perTool[tool.name];
+    // Fallback to original name (before lowercase normalization)
+    const originalName = (tool.metadata as Record<string, unknown>)?.originalToolName as string | undefined;
+    if (originalName && perTool[originalName]) return perTool[originalName];
+    return undefined;
+  }
+
+  /**
    * Collect tool transforms for a specific tool
    * @private
    */
@@ -282,8 +323,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Apply per-tool transforms (override global)
-    if (opts.perTool?.[tool.name]) {
-      const perTool = opts.perTool[tool.name];
+    const perToolMatch = this.resolvePerTool(opts.perTool, tool);
+    if (perToolMatch) {
+      const perTool = perToolMatch;
       if (perTool.name) result.name = perTool.name;
       if (perTool.description) result.description = perTool.description;
       if (perTool.hideFromDiscovery !== undefined) result.hideFromDiscovery = perTool.hideFromDiscovery;
@@ -379,8 +421,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Add per-tool transforms
-    if (opts.perTool?.[tool.name]) {
-      transforms.push(...opts.perTool[tool.name]);
+    const perToolInputTransforms = this.resolvePerTool(opts.perTool, tool);
+    if (perToolInputTransforms) {
+      transforms.push(...perToolInputTransforms);
     }
 
     // 3. Add generator-produced transforms
@@ -574,8 +617,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       if (generated) return generated;
     }
 
-    if (opts.perTool?.[tool.name]) {
-      return opts.perTool[tool.name];
+    const perToolInputSchema = this.resolvePerTool(opts.perTool, tool);
+    if (perToolInputSchema) {
+      return perToolInputSchema;
     }
 
     return opts.global;
@@ -597,8 +641,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       if (generated) return generated;
     }
 
-    if (opts.perTool?.[tool.name]) {
-      return opts.perTool[tool.name];
+    const perToolOutputSchema = this.resolvePerTool(opts.perTool, tool);
+    if (perToolOutputSchema) {
+      return perToolOutputSchema;
     }
 
     return opts.global;
@@ -729,8 +774,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Apply per-tool transform (override)
-    if (opts.perTool?.[tool.name]) {
-      result = { ...result, ...opts.perTool[tool.name] };
+    const perToolPre = this.resolvePerTool(opts.perTool, tool);
+    if (perToolPre) {
+      result = { ...result, ...perToolPre };
     }
 
     // 3. Apply generator transform (override)
@@ -763,14 +809,14 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     }
 
     // 2. Apply per-tool transform (override)
-    if (opts.perTool?.[tool.name]) {
-      const perTool = opts.perTool[tool.name];
+    const perToolPost = this.resolvePerTool(opts.perTool, tool);
+    if (perToolPost) {
       result = result
         ? {
-            transform: perTool.transform,
-            filter: perTool.filter ?? result.filter,
+            transform: perToolPost.transform,
+            filter: perToolPost.filter ?? result.filter,
           }
-        : perTool;
+        : perToolPost;
     }
 
     // 3. Apply generator transform (override)

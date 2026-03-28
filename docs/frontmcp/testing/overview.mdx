@@ -38,24 +38,13 @@ npm install -D @frontmcp/testing
 
 ### 1. Configure Jest
 
-Create or update your `jest.e2e.config.ts`:
-
-```ts title="jest.e2e.config.ts"
-import type { Config } from 'jest';
-
-const config: Config = {
-  displayName: 'e2e',
-  preset: '@frontmcp/testing/jest-preset',
-  testMatch: ['**/*.e2e.ts'],
-  testTimeout: 30000,
-};
-
-export default config;
-```
+The `frontmcp test` command auto-generates the correct Jest/SWC config. No manual `jest.e2e.config.ts` needed.
 
 ### 2. Write Your First Test
 
-```ts title="server.e2e.ts"
+Use the `.e2e.spec.ts` extension for E2E tests (not `.e2e.ts`):
+
+```ts title="server.e2e.spec.ts"
 import { test, expect } from '@frontmcp/testing';
 
 // Point to your FrontMCP server entry file
@@ -79,8 +68,8 @@ test('tool execution works', async ({ mcp }) => {
 ### 3. Run Tests
 
 ```bash
-# Using jest directly
-npx jest --config jest.e2e.config.ts
+# Recommended: auto-configures Jest/SWC
+frontmcp test
 
 # Using nx
 nx e2e my-app
@@ -143,7 +132,9 @@ expect(templates).toContainResourceTemplate('notes://note/{id}');
 
 ### HTTP Mocking
 
-Mock external HTTP calls made by your tools for offline testing:
+Mock external HTTP calls for offline testing.
+
+> **Important:** `httpMock` intercepts HTTP in the **test process** only, NOT in the MCP server subprocess. Do not use httpMock to intercept server-to-API calls — those happen in the child process. Use httpMock for verifying client-to-server request shapes or mocking external APIs called from the test itself.
 
 ```ts
 import { httpMock } from '@frontmcp/testing';
@@ -221,7 +212,7 @@ The repository ships scenario-focused Nx projects under `apps/e2e/**`. Each serv
 - `demo-e2e-openapi` – OpenAPI adapter smoke tests with built-in HTTP mocking examples.
 - `demo-e2e-cache` – Cache plugin playground for validating cache hits/misses plus execution tracking resources.
 
-```ts title="apps/e2e/demo-e2e-public/e2e/public-auth.e2e.test.ts"
+```ts title="apps/e2e/demo-e2e-public/e2e/public-auth.e2e.spec.ts"
 test.use({
   server: 'apps/e2e/demo-e2e-public/src/main.ts',
   publicMode: true,
@@ -236,7 +227,7 @@ test.describe('Public Auth Mode E2E', () => {
 ```
 
 <Tip>
-  Pair `apps/e2e/demo-e2e-openapi/e2e/openapi.e2e.test.ts` with `httpMock.interceptor()` to keep tests offline: stub Beeceptor endpoints, allow passthrough for the OpenAPI spec, then call `interceptor.restore()` in `finally`.
+  Pair `apps/e2e/demo-e2e-openapi/e2e/openapi.e2e.spec.ts` with `httpMock.interceptor()` to keep tests offline: stub Beeceptor endpoints, allow passthrough for the OpenAPI spec, then call `interceptor.restore()` in `finally`.
 </Tip>
 
 ---

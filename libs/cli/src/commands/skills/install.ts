@@ -22,15 +22,24 @@ export async function installSkill(name: string | undefined, options: InstallOpt
   const targetBase = options.dir ?? path.resolve(process.cwd(), PROVIDER_DIRS[provider] ?? PROVIDER_DIRS['claude']);
   const catalogDir = getCatalogDir();
 
+  // Validate that exactly one selector is supplied
+  const selectorCount = [options.all, options.tag, options.category, name].filter(Boolean).length;
+  if (selectorCount > 1) {
+    console.error(c('red', 'Options --all, --tag, --category, and <name> are mutually exclusive.'));
+    console.log(c('gray', 'Provide exactly one selector to choose which skills to install.'));
+    process.exit(1);
+  }
+
   // Determine which skills to install
   let skills = manifest.skills;
 
   if (options.all) {
     // Install all skills
   } else if (options.tag) {
-    skills = skills.filter((s) => s.tags.includes(options.tag!));
+    const tag = options.tag;
+    skills = skills.filter((s) => s.tags.includes(tag));
     if (skills.length === 0) {
-      console.error(c('red', `No skills found with tag "${options.tag}".`));
+      console.error(c('red', `No skills found with tag "${tag}".`));
       console.log(c('gray', "Use 'frontmcp skills list --tag <tag>' to see available tags."));
       process.exit(1);
     }
@@ -73,6 +82,11 @@ export async function installSkill(name: string | undefined, options: InstallOpt
     console.log(
       `${c('green', '✓')} Installed ${c('bold', entry.name)} to ${c('cyan', path.relative(process.cwd(), targetDir))}`,
     );
+  }
+
+  if (installed === 0) {
+    console.error(c('red', `No skills were installed (0/${skills.length} had valid SKILL.md files).`));
+    process.exit(1);
   }
 
   if (skills.length > 1) {

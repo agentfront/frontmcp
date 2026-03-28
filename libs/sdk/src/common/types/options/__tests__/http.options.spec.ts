@@ -4,9 +4,17 @@ import { httpOptionsSchema } from '../http';
 
 describe('httpOptionsSchema', () => {
   describe('default values', () => {
-    it('should apply default port of 3000 (or PORT env var)', () => {
-      const result = httpOptionsSchema.parse({});
-      expect(result.port).toBe(Number(process.env['PORT']) || 3000);
+    it('should apply default port of 3000 when PORT env var is not set', () => {
+      const originalPort = process.env['PORT'];
+      delete process.env['PORT'];
+      try {
+        const result = httpOptionsSchema.parse({});
+        expect(result.port).toBe(3000);
+      } finally {
+        if (originalPort !== undefined) {
+          process.env['PORT'] = originalPort;
+        }
+      }
     });
 
     it('should apply default entryPath of empty string', () => {
@@ -52,7 +60,7 @@ describe('httpOptionsSchema', () => {
         cb(null, true);
       };
       const result = httpOptionsSchema.parse({ cors: { origin: originFn } });
-      expect(typeof (result.cors as Record<string, unknown>).origin).toBe('function');
+      expect(typeof (result.cors as Record<string, unknown>)['origin']).toBe('function');
     });
 
     it('should accept cors with all fields', () => {
