@@ -1,7 +1,10 @@
 ---
 name: frontmcp-production-readiness
-description: 'Production readiness audit for FrontMCP servers — security hardening, performance optimization, reliability patterns, observability, and deployment best practices.'
+description: 'Pre-production audit and checklist for FrontMCP servers. Use before go-live to verify security hardening, performance checks, observability, monitoring, and health checks. Triggers: production ready, security audit, performance check, production checklist, hardening, go live.'
 tags: [production, security, performance, reliability, observability, audit, best-practices]
+category: production
+targets: [all]
+bundle: [recommended, full]
 priority: 10
 visibility: both
 license: Apache-2.0

@@ -2,49 +2,9 @@
   "version": 1,
   "skills": [
     {
-      "name": "frontmcp-setup",
-      "category": "setup",
-      "description": "Domain router for project setup and scaffolding \u2014 new projects, project structure, Nx workspaces, storage backends, multi-app composition, and the skills system. Use when starting or organizing a FrontMCP project.",
-      "path": "frontmcp-setup",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": ["router", "setup", "scaffold", "project", "nx", "redis", "sqlite", "structure", "guide"],
-      "bundle": ["recommended", "minimal", "full"]
-    },
-    {
-      "name": "frontmcp-development",
-      "category": "development",
-      "description": "Domain router for building MCP components \u2014 tools, resources, prompts, agents, providers, jobs, workflows, and skills. Use when starting any FrontMCP development task and need to find the right skill.",
-      "path": "frontmcp-development",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": ["router", "development", "tools", "resources", "prompts", "agents", "skills", "guide"],
-      "bundle": ["recommended", "minimal", "full"]
-    },
-    {
-      "name": "frontmcp-deployment",
-      "category": "deployment",
-      "description": "Domain router for shipping MCP servers \u2014 deploy to Node, Vercel, Lambda, Cloudflare, or build for CLI, browser, and SDK. Use when choosing a deployment target or build format.",
-      "path": "frontmcp-deployment",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": ["router", "deployment", "node", "vercel", "lambda", "cloudflare", "cli", "browser", "sdk", "guide"],
-      "bundle": ["recommended", "minimal", "full"]
-    },
-    {
-      "name": "frontmcp-testing",
-      "category": "testing",
-      "description": "Domain router for testing MCP servers \u2014 unit tests, E2E tests, coverage, and quality assurance. Use when starting any testing task for a FrontMCP application.",
-      "path": "frontmcp-testing",
-      "targets": ["all"],
-      "hasResources": true,
-      "tags": ["router", "testing", "jest", "e2e", "coverage", "quality", "guide"],
-      "bundle": ["recommended", "full"]
-    },
-    {
       "name": "frontmcp-config",
       "category": "config",
-      "description": "Domain router for configuring MCP servers \u2014 transport, HTTP, throttle, elicitation, auth, sessions, and storage. Use when configuring any aspect of a FrontMCP server.",
+      "description": "Use when you want to configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, add authentication, configure JWT, or set up OAuth. The skill for server CONFIGURATION.",
       "path": "frontmcp-config",
       "targets": ["all"],
       "hasResources": true,
@@ -52,9 +12,29 @@
       "bundle": ["recommended", "full"]
     },
     {
+      "name": "frontmcp-deployment",
+      "category": "deployment",
+      "description": "Use when you need to deploy, build for production, containerize, or ship a FrontMCP server. Covers Vercel, Lambda, Cloudflare, Docker, edge runtime, serverless, bundle for CLI, and Node targets. Triggers: deploy, build for production, dockerize, serverless, go live.",
+      "path": "frontmcp-deployment",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "deployment", "node", "vercel", "lambda", "cloudflare", "cli", "browser", "sdk", "guide"],
+      "bundle": ["recommended", "minimal", "full"]
+    },
+    {
+      "name": "frontmcp-development",
+      "category": "development",
+      "description": "Use when you want to create a tool, add a resource, build a prompt, write a provider, implement an adapter, add OpenAPI integration, create a plugin, agent, job, or workflow. The skill for BUILDING any FrontMCP component.",
+      "path": "frontmcp-development",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "development", "tools", "resources", "prompts", "agents", "skills", "guide"],
+      "bundle": ["recommended", "minimal", "full"]
+    },
+    {
       "name": "frontmcp-guides",
       "category": "guides",
-      "description": "End-to-end examples and best practices for building FrontMCP MCP servers. Use when starting a new project from scratch, learning architectural patterns, or following a complete build walkthrough.",
+      "description": "Tutorials, walkthroughs, and end-to-end examples for building FrontMCP servers. Use when you want a getting started guide, how to build a complete project, learn best practices, or follow a step-by-step example. Triggers: tutorial, walkthrough, how to build, getting started, learn FrontMCP.",
       "path": "frontmcp-guides",
       "targets": ["all"],
       "hasResources": true,
@@ -64,11 +44,31 @@
     {
       "name": "frontmcp-production-readiness",
       "category": "production",
-      "description": "Production readiness audit for FrontMCP servers \u2014 security hardening, performance optimization, reliability patterns, observability, and deployment best practices.",
+      "description": "Pre-production audit and checklist for FrontMCP servers. Use before go-live to verify security hardening, performance checks, observability, monitoring, and health checks. Triggers: production ready, security audit, performance check, production checklist, hardening, go live.",
       "path": "frontmcp-production-readiness",
       "targets": ["all"],
       "hasResources": false,
       "tags": ["production", "security", "performance", "reliability", "observability", "audit", "best-practices"],
+      "bundle": ["recommended", "full"]
+    },
+    {
+      "name": "frontmcp-setup",
+      "category": "setup",
+      "description": "Domain router for project setup, scaffolding, and organization. Use this skill whenever someone asks to create a new FrontMCP project, set up an Nx monorepo, configure Redis or SQLite storage, organize project structure, compose multiple apps into one server, or manage the skills system. Also triggers for questions like 'how do I start', 'project layout', 'folder structure', 'add redis', 'set up database', or 'create a new app'.",
+      "path": "frontmcp-setup",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "setup", "scaffold", "project", "nx", "redis", "sqlite", "structure", "guide"],
+      "bundle": ["recommended", "minimal", "full"]
+    },
+    {
+      "name": "frontmcp-testing",
+      "category": "testing",
+      "description": "Use when you want to write tests, run tests, add e2e tests, improve test coverage, test a tool, test a resource, or learn how to test any FrontMCP component. The skill for ALL testing needs.",
+      "path": "frontmcp-testing",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["router", "testing", "jest", "e2e", "coverage", "quality", "guide"],
       "bundle": ["recommended", "full"]
     }
   ]

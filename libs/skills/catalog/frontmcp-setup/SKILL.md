@@ -1,7 +1,10 @@
 ---
 name: frontmcp-setup
-description: "Domain router for project setup and scaffolding \u2014 new projects, project structure, Nx workspaces, storage backends, multi-app composition, and the skills system. Use when starting or organizing a FrontMCP project."
+description: "Domain router for project setup, scaffolding, and organization. Use this skill whenever someone asks to create a new FrontMCP project, set up an Nx monorepo, configure Redis or SQLite storage, organize project structure, compose multiple apps into one server, or manage the skills system. Also triggers for questions like 'how do I start', 'project layout', 'folder structure', 'add redis', 'set up database', or 'create a new app'."
 tags: [router, setup, scaffold, project, nx, redis, sqlite, structure, guide]
+category: setup
+targets: [all]
+bundle: [recommended, minimal, full]
 priority: 10
 visibility: both
 license: Apache-2.0
@@ -109,7 +112,7 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 
 - [ ] `frontmcp dev` starts successfully with file watching
 - [ ] `frontmcp build --target <target>` completes without errors
-- [ ] Tests pass with `jest` or `nx test`
+- [ ] Tests pass with `frontmcp test` or `nx test`
 
 ## Troubleshooting
 

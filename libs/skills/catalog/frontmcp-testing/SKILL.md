@@ -1,7 +1,10 @@
 ---
 name: frontmcp-testing
-description: "Domain router for testing MCP servers \u2014 unit tests, E2E tests, coverage, and quality assurance. Use when starting any testing task for a FrontMCP application."
+description: 'Use when you want to write tests, run tests, add e2e tests, improve test coverage, test a tool, test a resource, or learn how to test any FrontMCP component. The skill for ALL testing needs.'
 tags: [router, testing, jest, e2e, coverage, quality, guide]
+category: testing
+targets: [all]
+bundle: [recommended, full]
 priority: 10
 visibility: both
 license: Apache-2.0
@@ -113,7 +116,7 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 | Problem                            | Cause                                                   | Solution                                                                               |
 | ---------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Jest not finding test files        | Wrong file extension (`.test.ts` instead of `.spec.ts`) | Rename to `.spec.ts`; check `testMatch` in jest.config                                 |
-| Coverage below 95%                 | Untested error paths or conditional branches            | Run `jest --coverage` and inspect uncovered lines in the report                        |
+| Coverage below 95%                 | Untested error paths or conditional branches            | Run `frontmcp test --coverage` and inspect uncovered lines in the report               |
 | E2E test timeout                   | Server startup too slow or port conflict                | Increase Jest timeout; use random port allocation                                      |
 | DI resolution fails in tests       | Provider not registered in test scope                   | Register mock providers before creating the test context                               |
 | Istanbul shows 0% on async methods | TypeScript source-map mismatch with Istanbul            | Known issue with some TS compilation settings; verify coverage with actual test output |

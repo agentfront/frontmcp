@@ -12,8 +12,15 @@
         "jestConfig": "libs/skills/jest.config.ts"
       }
     },
+    "generate-manifest": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node libs/skills/scripts/generate-manifest.mjs"
+      }
+    },
     "build-tsc": {
       "executor": "@nx/js:tsc",
+      "dependsOn": ["generate-manifest"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/skills/dist",

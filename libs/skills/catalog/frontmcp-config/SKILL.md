@@ -1,7 +1,10 @@
 ---
 name: frontmcp-config
-description: "Domain router for configuring MCP servers \u2014 transport, HTTP, throttle, elicitation, auth, sessions, and storage. Use when configuring any aspect of a FrontMCP server."
+description: 'Use when you want to configure auth, set up CORS, add rate limiting, throttle requests, manage sessions, choose transport, set HTTP options, add authentication, configure JWT, or set up OAuth. The skill for server CONFIGURATION.'
 tags: [router, config, transport, http, auth, session, redis, sqlite, throttle, guide]
+category: config
+targets: [all]
+bundle: [recommended, full]
 priority: 10
 visibility: both
 license: Apache-2.0

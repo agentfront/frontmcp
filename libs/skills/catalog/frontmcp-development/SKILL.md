@@ -1,7 +1,10 @@
 ---
 name: frontmcp-development
-description: "Domain router for building MCP components \u2014 tools, resources, prompts, agents, providers, jobs, workflows, and skills. Use when starting any FrontMCP development task and need to find the right skill."
+description: 'Use when you want to create a tool, add a resource, build a prompt, write a provider, implement an adapter, add OpenAPI integration, create a plugin, agent, job, or workflow. The skill for BUILDING any FrontMCP component.'
 tags: [router, development, tools, resources, prompts, agents, skills, guide]
+category: development
+targets: [all]
+bundle: [recommended, minimal, full]
 priority: 10
 visibility: both
 license: Apache-2.0

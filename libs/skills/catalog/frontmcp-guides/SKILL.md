@@ -1,7 +1,10 @@
 ---
 name: frontmcp-guides
-description: 'End-to-end examples and best practices for building FrontMCP MCP servers. Use when starting a new project from scratch, learning architectural patterns, or following a complete build walkthrough.'
+description: 'Tutorials, walkthroughs, and end-to-end examples for building FrontMCP servers. Use when you want a getting started guide, how to build a complete project, learn best practices, or follow a step-by-step example. Triggers: tutorial, walkthrough, how to build, getting started, learn FrontMCP.'
 tags: [guides, examples, best-practices, architecture, walkthrough, end-to-end]
+category: guides
+targets: [all]
+bundle: [recommended, full]
 priority: 10
 visibility: both
 license: Apache-2.0
