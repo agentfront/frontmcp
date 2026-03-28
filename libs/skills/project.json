@@ -14,6 +14,8 @@
     },
     "generate-manifest": {
       "executor": "nx:run-commands",
+      "inputs": ["{projectRoot}/catalog/*/SKILL.md"],
+      "outputs": ["{projectRoot}/catalog/skills-manifest.json"],
       "options": {
         "command": "node libs/skills/scripts/generate-manifest.mjs"
       }
