@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/uipack",
-  "version": "1.0.0-beta.10",
+  "version": "1.0.0-beta.11",
   "description": "FrontMCP UIpack - HTML shell builder, pluggable import resolver, and NPM component loader for MCP UI (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
