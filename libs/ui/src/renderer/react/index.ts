@@ -184,7 +184,6 @@ function ReactJsxView({ source, className }: ReactJsxViewProps): React.ReactElem
         const argNames = Object.keys(modules);
         const argValues = argNames.map((n) => modules[n]);
 
-        // eslint-disable-next-line @typescript-eslint/no-implied-eval
         const factory = new Function(...argNames, code) as (...args: unknown[]) => React.ComponentType;
         const Comp = factory(...argValues);
 

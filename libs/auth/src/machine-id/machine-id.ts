@@ -32,7 +32,7 @@ function isDevPersistenceEnabled(): boolean {
 function resolveMachineIdPath(): string {
   if (isBrowser()) return DEFAULT_MACHINE_ID_PATH;
   // Lazy-load path to avoid browser bundling issues
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const path = require('path') as typeof import('path');
   const machineIdPath = getEnv('MACHINE_ID_PATH') ?? DEFAULT_MACHINE_ID_PATH;
   return path.isAbsolute(machineIdPath) ? machineIdPath : path.resolve(getCwd(), machineIdPath);
@@ -77,7 +77,7 @@ function saveMachineIdAsync(machineId: string): void {
   }
 
   const machineIdPath = resolveMachineIdPath();
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const path = require('path') as typeof import('path');
   const dir = path.dirname(machineIdPath);
 

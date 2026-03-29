@@ -10,7 +10,7 @@
  * TypeScript-only constructs at runtime (the .ts extension is for build-time only).
  */
 
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 
 /**
  * Generate the daemon-client JavaScript source code (CJS module).

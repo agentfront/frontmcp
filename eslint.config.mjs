@@ -5,7 +5,22 @@ export default [
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   {
-    ignores: ['**/dist', '**/*.d.ts', '**/*.d.ts.map', '**/fixture/libs', 'apps/e2e/**'],
+    ignores: [
+      '**/dist',
+      '**/*.d.ts',
+      '**/*.d.ts.map',
+      '**/fixture/libs',
+      'apps/e2e/**',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.e2e.spec.ts',
+      '**/*.perf.spec.ts',
+      '**/*.pw.spec.ts',
+      '**/__tests__/**',
+      '**/__test-utils__/**',
+    ],
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],

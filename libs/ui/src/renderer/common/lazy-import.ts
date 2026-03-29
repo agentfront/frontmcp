@@ -69,7 +69,6 @@ export interface LazyImport<T> {
  * Uses Function constructor so TypeScript doesn't try to resolve the module.
  */
 export function runtimeImport(specifier: string): Promise<Record<string, unknown>> {
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const dynamicImport = new Function('s', 'return import(s)') as (s: string) => Promise<Record<string, unknown>>;
   return dynamicImport(specifier);
 }

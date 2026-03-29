@@ -55,7 +55,7 @@ describe('customizeHelp', () => {
   it('should list all commands in help output', () => {
     const help = getHelpOutput();
     // Strip ANSI escape codes before line matching
-    // eslint-disable-next-line no-control-regex
+
     const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
     const helpLines = help.split(/\r?\n/).map((l) => stripAnsi(l).trim());
 
