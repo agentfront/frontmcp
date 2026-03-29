@@ -36,8 +36,12 @@ export function normalizePlugin(item: PluginType): PluginRecord {
       }
       // Merge inline metadata with decorator metadata (inline takes precedence)
       // This ensures scope and other fields from inline config override decorators
+      // Exclude 'providers' from inline metadata: dynamic providers are stored
+      // separately in rec.providers and must NOT override the decorator's
+      // metadata.providers (which lists the plugin's own registered providers).
       const decoratorMetadata = collectPluginMetadata(useClass as PluginType);
-      const mergedMetadata = { ...decoratorMetadata, ...metadata };
+      const { providers: _dynamicProviders, ...inlineMetadata } = metadata as Record<string, unknown>;
+      const mergedMetadata = { ...decoratorMetadata, ...inlineMetadata };
       return {
         kind: PluginKind.CLASS,
         provide,
@@ -65,8 +69,12 @@ export function normalizePlugin(item: PluginType): PluginRecord {
         throw new InvalidUseValueError('plugin', tokenName(provide));
       }
       // Merge inline metadata with decorator metadata (inline takes precedence)
+      // Exclude 'providers' from inline metadata: dynamic providers are stored
+      // separately in rec.providers and must NOT override the decorator's
+      // metadata.providers (which lists the plugin's own registered providers).
       const decoratorMetadata = collectPluginMetadata(useValue.constructor);
-      const mergedMetadata = { ...decoratorMetadata, ...metadata };
+      const { providers: _dynamicProviders, ...inlineMetadata } = metadata as Record<string, unknown>;
+      const mergedMetadata = { ...decoratorMetadata, ...inlineMetadata };
       return {
         kind: PluginKind.VALUE,
         provide,

@@ -22,7 +22,7 @@ import type { TransformOptions, BuildOptions } from 'esbuild';
  */
 export function transpileReactSource(source: string, filename?: string): string {
   // Lazy-require esbuild to avoid import errors in browser builds
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const esbuild = require('esbuild') as typeof import('esbuild');
 
   const loader: TransformOptions['loader'] = filename?.endsWith('.tsx') ? 'tsx' : 'jsx';
@@ -59,7 +59,6 @@ export function bundleFileSource(
   resolveDir: string,
   componentName: string,
 ): { code: string } {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const esbuild = require('esbuild') as typeof import('esbuild');
 
   const mountCode = `

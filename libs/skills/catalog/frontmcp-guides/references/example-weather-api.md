@@ -99,12 +99,9 @@ export class GetWeatherTool extends ToolContext {
   async execute(input: { city: string; units: 'celsius' | 'fahrenheit' }) {
     const url = `https://api.weather.example.com/v1/current?city=${encodeURIComponent(input.city)}&units=${input.units}`;
 
-    let response: Response;
-    try {
-      response = await this.fetch(url);
-    } catch (err) {
-      this.fail(new Error(`Weather API unreachable: ${String(err)}`));
-    }
+    // No try/catch needed — the framework's tool execution flow handles errors automatically.
+    // Use this.fail() only for business-logic errors (e.g., invalid response).
+    const response = await this.fetch(url);
 
     if (!response.ok) {
       this.fail(new Error(`Weather API error: ${response.status} ${response.statusText}`));

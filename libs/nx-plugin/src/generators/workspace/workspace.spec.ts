@@ -160,7 +160,6 @@ describe('workspace generator', () => {
     let execSyncMock: jest.SpyInstance;
 
     beforeEach(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cp = require('child_process');
       execSyncMock = jest.spyOn(cp, 'execSync').mockImplementation(() => Buffer.from(''));
     });
