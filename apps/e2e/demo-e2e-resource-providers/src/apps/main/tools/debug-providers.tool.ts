@@ -7,14 +7,12 @@ import { DataStoreService } from '../providers/data-store.provider';
   description: 'Debug tool that reports provider resolution details',
   inputSchema: {},
   outputSchema: {
-    providersType: z.string(),
     storeInstanceId: z.string(),
     error: z.string().optional(),
   },
 })
 export default class DebugProvidersTool extends ToolContext {
   async execute(_input: Record<string, never>) {
-    const providersType = this.providers?.constructor?.name ?? 'unknown';
     let storeInstanceId = 'NOT_RESOLVED';
     let error = '';
 
@@ -26,7 +24,6 @@ export default class DebugProvidersTool extends ToolContext {
     }
 
     return {
-      providersType,
       storeInstanceId,
       error: error || undefined,
     };

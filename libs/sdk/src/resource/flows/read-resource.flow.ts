@@ -13,6 +13,7 @@ import {
 } from '../../errors';
 import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { randomBytes } from '@frontmcp/utils';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
@@ -240,7 +241,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const sessionKey =
         this.state.sessionId ??
         ctx.authInfo?.sessionId ??
-        `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        `req-${Date.now()}-${Buffer.from(randomBytes(16)).toString('hex')}`;
       const resourceViews = await resource.providers.buildViews(sessionKey, new Map(this.deps));
 
       // Merge resource's context providers with flow's context deps

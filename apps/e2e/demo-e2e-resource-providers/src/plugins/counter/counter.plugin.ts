@@ -1,9 +1,4 @@
 import { Plugin, Provider, DynamicPlugin, ProviderScope } from '@frontmcp/sdk';
-import type { Token } from '@frontmcp/di';
-
-// ── DI Token ────────────────────────────────────────────────────────────────
-
-export const COUNTER_TOKEN: Token<CounterService> = Symbol('CounterService');
 
 // ── Provider ────────────────────────────────────────────────────────────────
 

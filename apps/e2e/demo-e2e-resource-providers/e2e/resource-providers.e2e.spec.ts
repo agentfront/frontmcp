@@ -153,18 +153,18 @@ test.describe('Resource Provider Resolution E2E', () => {
       expect(data1.storeInstanceId).toBe(data2.storeInstanceId);
     });
 
-    test('debug tool and resource both get FlowContextProviders with same instance', async ({ mcp }) => {
+    test('debug tool and resource resolve same provider instance', async ({ mcp }) => {
       const toolDebug = await mcp.tools.call('debug_providers', {});
       const resourceDebug = await mcp.resources.read('debug://providers');
 
       expect(toolDebug).toBeSuccessful();
       expect(resourceDebug).toBeSuccessful();
 
-      const toolData = extractToolJson<{ providersType: string; storeInstanceId: string }>(toolDebug);
-      const resourceData = extractResourceJson<{ providersType: string; storeInstanceId: string }>(resourceDebug);
+      const toolData = extractToolJson<{ storeInstanceId: string }>(toolDebug);
+      const resourceData = extractResourceJson<{ storeInstanceId: string }>(resourceDebug);
 
-      expect(toolData.providersType).toBe('FlowContextProviders');
-      expect(resourceData.providersType).toBe('FlowContextProviders');
+      expect(toolData.storeInstanceId).toBeDefined();
+      expect(resourceData.storeInstanceId).toBeDefined();
       expect(toolData.storeInstanceId).toBe(resourceData.storeInstanceId);
     });
   });

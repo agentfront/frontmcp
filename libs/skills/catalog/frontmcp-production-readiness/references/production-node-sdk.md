@@ -12,11 +12,11 @@ Checklist for publishing FrontMCP as an npm package used as a direct client SDK 
 ## API Surface
 
 - [ ] `create()` function is exported and documented
-- [ ] `connect()` returns a typed client with `listTools`, `callTool`, etc.
+- [ ] Server's `connect()` method returns a typed client with `listTools`, `callTool`, etc.
 - [ ] Client provides `close()` method to terminate the connection
-- [ ] Server `dispose()` and client `close()` properly clean up all resources (connections, timers, listeners)
+- [ ] Server `dispose()` and client `close()` must completely release all resources (connections, timers, listeners)
 - [ ] TypeScript declarations (`.d.ts`) are included in the published package
-- [ ] `package.json` has correct `main`, `module`, `types` fields
+- [ ] `package.json` has correct `main`, `module`, `types`, and `exports` fields (CJS + ESM entry points)
 
 ## Initialization & Lifecycle
 
@@ -28,7 +28,7 @@ Checklist for publishing FrontMCP as an npm package used as a direct client SDK 
 
 ## Memory & Cleanup
 
-- [ ] `dispose()` is called in the host app's shutdown handler
+- [ ] `client.close()` and `server.dispose()` are called in the host app's shutdown handler
 - [ ] No event listener leaks (all listeners are removed on dispose)
 - [ ] No dangling timers or intervals after dispose
 - [ ] Provider lifecycle `dispose()` is implemented for all resources

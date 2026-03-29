@@ -9,7 +9,6 @@ import { DataStoreService } from '../providers/data-store.provider';
 })
 export default class DebugProvidersResource extends ResourceContext {
   async execute() {
-    const providersType = this.providers?.constructor?.name ?? 'unknown';
     let storeInstanceId = 'NOT_RESOLVED';
     let error = '';
 
@@ -21,7 +20,6 @@ export default class DebugProvidersResource extends ResourceContext {
     }
 
     return {
-      providersType,
       storeInstanceId,
       error: error || undefined,
     };

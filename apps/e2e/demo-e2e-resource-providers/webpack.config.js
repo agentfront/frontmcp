@@ -21,7 +21,7 @@ module.exports = {
       externalDependencies: 'all',
       optimization: false,
       outputHashing: 'none',
-      generatePackageJson: false,
+      generatePackageJson: true,
       buildLibsFromSource: true,
     }),
   ],
