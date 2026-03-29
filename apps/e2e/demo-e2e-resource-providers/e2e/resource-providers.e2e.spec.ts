@@ -46,12 +46,14 @@ test.describe('Resource Provider Resolution E2E', () => {
       expect(tools).toContainTool('store_set');
       expect(tools).toContainTool('store_get');
       expect(tools).toContainTool('counter_increment');
+      expect(tools).toContainTool('debug_providers');
     });
 
     test('should list all resources', async ({ mcp }) => {
       const resources = await mcp.resources.list();
       expect(resources).toContainResource('store://contents');
       expect(resources).toContainResource('counter://status');
+      expect(resources).toContainResource('debug://providers');
     });
   });
 
