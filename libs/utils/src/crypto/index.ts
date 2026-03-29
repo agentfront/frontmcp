@@ -37,11 +37,10 @@ export function rsaVerify(
   signature: Buffer | Uint8Array,
 ): Promise<boolean> {
   if (isNode()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return Promise.resolve(require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean);
   }
   // Browser: use WebCrypto async API
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { rsaVerifyBrowser } = require('./browser');
   return rsaVerifyBrowser(jwtAlg, data, publicJwk, signature) as Promise<boolean>;
 }

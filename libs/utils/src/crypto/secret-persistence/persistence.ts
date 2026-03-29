@@ -18,7 +18,7 @@ import { getEnv, getCwd } from '#env';
 
 // Lazy-load path module to avoid pulling it into browser bundles.
 // All functions that use path are Node-only (filesystem operations).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 function getPath(): typeof import('path') {
   return require('path');
 }

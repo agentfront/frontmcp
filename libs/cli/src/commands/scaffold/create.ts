@@ -1401,7 +1401,12 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
   };
 }
 
-async function loadSkillEntriesForClaudeMd(): Promise<{ name: string; description: string }[]> {
+async function loadSkillEntriesForClaudeMd(
+  options: Pick<CreateOptions, 'deploymentTarget' | 'skillsBundle'>,
+): Promise<{ name: string; description: string }[]> {
+  const bundle = options.skillsBundle ?? 'recommended';
+  if (bundle === 'none') return [];
+
   try {
     const catalogDir = path.resolve(__dirname, '..', '..', '..', '..', 'skills', 'catalog');
     const manifestPath = path.join(catalogDir, 'skills-manifest.json');
@@ -1415,7 +1420,14 @@ async function loadSkillEntriesForClaudeMd(): Promise<{ name: string; descriptio
       manifestContent = await readFile(pkgManifest);
     }
     const manifest = JSON.parse(manifestContent) as SkillManifest;
-    return manifest.skills.map((s) => ({ name: s.name, description: s.description }));
+    const target = options.deploymentTarget;
+    return manifest.skills
+      .filter((s) => {
+        const targetMatch = s.targets.includes('all') || s.targets.includes(target);
+        const bundleMatch = s.bundle?.includes(bundle);
+        return targetMatch && bundleMatch;
+      })
+      .map((s) => ({ name: s.name, description: s.description }));
   } catch {
     return [];
   }
@@ -1674,7 +1686,7 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'README.md'), generateReadme(options));
 
   // CLAUDE.md and AGENTS.md for AI coding assistants
-  const skillEntries = await loadSkillEntriesForClaudeMd();
+  const skillEntries = await loadSkillEntriesForClaudeMd(options);
   await scaffoldFileIfMissing(
     targetDir,
     path.join(targetDir, 'CLAUDE.md'),

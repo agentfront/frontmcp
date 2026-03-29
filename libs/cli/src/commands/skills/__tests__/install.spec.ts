@@ -141,6 +141,25 @@ describe('ensureClaudeMdSkillsInstructions', () => {
     expect(content).toContain('User content here.');
   });
 
+  it('should migrate legacy "# Skills and Tools" when next heading is ## level', async () => {
+    mockFiles['/test/project/CLAUDE.md'] = [
+      '# Skills and Tools',
+      'Some old hardcoded content.',
+      '',
+      '## Other Heading',
+      'User content here.',
+    ].join('\n');
+
+    await ensureClaudeMdSkillsInstructions('/test/project');
+
+    const content = mockFiles['/test/project/CLAUDE.md'];
+    expect(content).toContain('<!-- frontmcp:skills-start v1.0.0-test -->');
+    expect(content).toContain('<!-- frontmcp:skills-end -->');
+    expect(content).not.toContain('Some old hardcoded content');
+    expect(content).toContain('## Other Heading');
+    expect(content).toContain('User content here.');
+  });
+
   it('should prepend block when CLAUDE.md exists without any skills section', async () => {
     mockFiles['/test/project/CLAUDE.md'] = ['# My Project', '', '## Commands', 'Run yarn dev.'].join('\n');
 

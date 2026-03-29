@@ -92,7 +92,7 @@ export async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<voi
     if (content.includes(SKILLS_BLOCK_START)) {
       // Replace existing marker-bounded block
       const startIdx = content.indexOf(SKILLS_BLOCK_START);
-      const endIdx = content.indexOf(SKILLS_BLOCK_END);
+      const endIdx = content.indexOf(SKILLS_BLOCK_END, startIdx);
       if (endIdx !== -1) {
         const before = content.slice(0, startIdx);
         const after = content.slice(endIdx + SKILLS_BLOCK_END.length);
@@ -108,8 +108,9 @@ export async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<voi
       const before = content.slice(0, legacyIdx);
       const afterLegacy = content.slice(legacyIdx + LEGACY_SKILLS_MARKER.length);
       // Find the next markdown heading (# at start of line) after the legacy header
-      const nextHeadingMatch = afterLegacy.match(/\n(?=# )/);
-      const after = nextHeadingMatch ? afterLegacy.slice(nextHeadingMatch.index!) : '';
+      const nextHeadingMatch = afterLegacy.match(/\n(?=#{1,6}\s)/);
+      const after =
+        nextHeadingMatch && nextHeadingMatch.index !== undefined ? afterLegacy.slice(nextHeadingMatch.index) : '';
       content = before + section + after;
     } else {
       // No existing skills section — prepend
