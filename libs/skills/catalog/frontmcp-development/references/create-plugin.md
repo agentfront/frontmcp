@@ -1,3 +1,8 @@
+---
+name: create-plugin
+description: Build plugins with providers, context extensions, lifecycle hooks, and contributed tools
+---
+
 # Create a FrontMCP Plugin
 
 This skill covers building custom plugins for FrontMCP and using all 6 official plugins. Plugins are modular units that extend server behavior through providers, context extensions, lifecycle hooks, and contributed tools/resources/prompts.
@@ -72,6 +77,47 @@ abstract class DynamicPlugin<TOptions extends object, TInput extends object = TO
 - `TInput` -- the input type users provide to `init()` (may have optional fields)
 - `init()` creates a provider entry for use in `plugins: [...]` arrays
 - `dynamicProviders()` returns providers computed from the input options
+
+## Quick Start: Minimal DynamicPlugin
+
+The simplest working plugin needs three files: a provider, the plugin class, and registration.
+
+```typescript
+// my-greeter.provider.ts
+import { Provider } from '@frontmcp/sdk';
+
+@Provider()
+export class GreeterService {
+  greet(name: string): string {
+    return `Hello, ${name}`;
+  }
+}
+```
+
+```typescript
+// my-greeter.plugin.ts
+import { Plugin, DynamicPlugin, ProviderType } from '@frontmcp/sdk';
+import { GreeterService } from './providers/my-greeter.provider';
+
+@Plugin({ name: 'greeter', exports: [GreeterService] })
+export default class GreeterPlugin extends DynamicPlugin<{ prefix: string }> {
+  static override dynamicProviders(opts: { prefix: string }): ProviderType[] {
+    return [{ provide: GreeterService, useFactory: () => new GreeterService() }];
+  }
+}
+```
+
+```typescript
+// server.ts
+import { FrontMcp } from '@frontmcp/sdk';
+import GreeterPlugin from './plugins/my-greeter.plugin';
+
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  plugins: [GreeterPlugin.init({ prefix: 'Hi' })],
+})
+class MyServer {}
+```
 
 ## Step 1: Create a Simple Plugin
 
@@ -260,11 +306,32 @@ Register with `init()`:
 class MyServer {}
 ```
 
-## Step 5: Extend Tool Metadata
+## Step 5: Extend Metadata and Execution Context
 
-Plugins can add fields to the `@Tool` decorator via global augmentation:
+FrontMCP provides two extension mechanisms for plugins: **metadata augmentation** (add fields to decorators) and **context extensions** (add properties to `this` in tools/resources/prompts).
+
+### All Extensible Metadata Interfaces
+
+Plugins can extend these `declare global` interfaces to add custom fields to any decorator:
+
+| Interface                                | Decorator                  | Example Field                |
+| ---------------------------------------- | -------------------------- | ---------------------------- |
+| `ExtendFrontMcpToolMetadata`             | `@Tool({...})`             | `audit: { enabled: true }`   |
+| `ExtendFrontMcpAgentMetadata`            | `@Agent({...})`            | Inherits from ToolMetadata   |
+| `ExtendFrontMcpResourceMetadata`         | `@Resource({...})`         | `cache: { ttl: 3600 }`       |
+| `ExtendFrontMcpResourceTemplateMetadata` | `@ResourceTemplate({...})` | `rateLimit: { max: 100 }`    |
+| `ExtendFrontMcpPromptMetadata`           | `@Prompt({...})`           | `category: 'onboarding'`     |
+| `ExtendFrontMcpJobMetadata`              | `@Job({...})`              | `priority: 'high'`           |
+| `ExtendFrontMcpWorkflowMetadata`         | `@Workflow({...})`         | `retryPolicy: 'exponential'` |
+| `ExtendFrontMcpSkillMetadata`            | `@Skill({...})`            | `complexity: 'advanced'`     |
+| `ExtendFrontMcpLoggerMetadata`           | Logger transports          | `destination: 'sentry'`      |
+
+### Metadata Extension Pattern
+
+Add custom fields to any decorator via `declare global`:
 
 ```typescript
+// my-plugin.types.ts
 declare global {
   interface ExtendFrontMcpToolMetadata {
     audit?: {
@@ -275,7 +342,7 @@ declare global {
 }
 ```
 
-Tools then use it:
+Tools then use the custom field directly in the decorator:
 
 ```typescript
 @Tool({
@@ -287,11 +354,105 @@ class DeleteUserTool extends ToolContext {
 }
 ```
 
+The same pattern works for any of the 9 interfaces above — replace `ExtendFrontMcpToolMetadata` with the target interface.
+
+### Context Extension Pattern
+
+Add properties like `this.myService` to execution contexts. This requires both TypeScript augmentation and runtime registration.
+
+**Part A: TypeScript type declaration** (in a separate `.context-extension.ts` file):
+
+```typescript
+// my-plugin.context-extension.ts
+import type { MyService } from './providers/my-service.provider';
+
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly myService: MyService;
+  }
+  // PromptContext has a separate prototype chain — augment it too
+  interface PromptContext {
+    readonly myService: MyService;
+  }
+}
+```
+
+**Part B: Runtime registration** (in the `@Plugin` metadata):
+
+```typescript
+@Plugin({
+  name: 'my-plugin',
+  providers: [MyServiceProvider],
+  contextExtensions: [
+    {
+      property: 'myService',
+      token: MyServiceToken,
+      errorMessage: 'MyPlugin is not installed. Add it to your app plugins.',
+    },
+  ],
+})
+export class MyPlugin extends DynamicPlugin<MyPluginOptions> {
+  /* ... */
+}
+```
+
+The SDK installs lazy getters on both `ExecutionContextBase.prototype` and `PromptContext.prototype` that resolve the DI token on first access.
+
+### ContextExtension Interface
+
+Each entry in the `contextExtensions` array has these fields:
+
+| Field          | Type             | Required | Description                                   |
+| -------------- | ---------------- | -------- | --------------------------------------------- |
+| `property`     | `string`         | Yes      | Property name accessible as `this.{property}` |
+| `token`        | `Token<unknown>` | Yes      | DI token to resolve when property is accessed |
+| `errorMessage` | `string`         | No       | Custom error when plugin is not installed     |
+
+### Side-Effect Import
+
+The TypeScript augmentation file must be imported somewhere in your plugin's barrel export so the type declarations take effect:
+
+```typescript
+// index.ts
+import './my-plugin.context-extension'; // side-effect import for type augmentation
+export { MyPlugin } from './my-plugin.plugin';
+export { MyServiceToken } from './my-plugin.symbols';
+```
+
 ---
 
 ## Official Plugins
 
 For official plugin installation, configuration, and examples, see the **official-plugins** skill. FrontMCP provides 6 official plugins: CodeCall, Remember, Approval, Cache, Feature Flags, and Dashboard. Install individually or via `@frontmcp/plugins` (meta-package).
+
+## Recommended Folder Structure
+
+```text
+plugins/
+  my-plugin/
+    index.ts                          # Barrel exports: plugin, tokens, types, side-effect import
+    my-plugin.plugin.ts               # Plugin class extending DynamicPlugin
+    my-plugin.types.ts                # Options Zod schema, TypeScript types, interfaces
+    my-plugin.symbols.ts              # DI tokens: export const MY_TOKEN: Token<T> = Symbol('...')
+    my-plugin.context-extension.ts    # Module augmentation (declare module '@frontmcp/sdk')
+    providers/
+      index.ts                        # Barrel for providers
+      my-service.provider.ts          # @Provider class with business logic
+      my-store-memory.provider.ts     # In-memory store implementation
+      my-store-redis.provider.ts      # Redis store implementation (optional)
+    tools/                            # Optional — only if plugin provides tools
+      index.ts
+      my-action.tool.ts               # @Tool class registered via @Plugin({ tools: [...] })
+    __tests__/
+      my-plugin.spec.ts               # Plugin tests
+```
+
+**Key files explained:**
+
+- `index.ts` — Must import the context extension file as a side effect: `import './my-plugin.context-extension'`
+- `symbols.ts` — All DI tokens in one place. Other files import from here, not from the plugin class
+- `context-extension.ts` — `declare module '@frontmcp/sdk' { interface ExecutionContextBase { readonly myProp: T } }`
+- `plugin.ts` — The `@Plugin()` decorated class. Lists `providers`, `exports`, `contextExtensions`, `tools`
 
 ## Common Patterns
 
@@ -316,7 +477,9 @@ For official plugin installation, configuration, and examples, see the **officia
 
 - [ ] Module augmentation file exists with `declare module '@frontmcp/sdk'` block
 - [ ] Augmented properties are `readonly` on `ExecutionContextBase`
-- [ ] Augmentation file is imported (side-effect import) in the plugin module
+- [ ] `PromptContext` is augmented alongside `ExecutionContextBase` for context extensions
+- [ ] `declare global` block exists for each metadata extension interface used
+- [ ] Augmentation file is imported (side-effect import) in the plugin barrel export
 
 ### Runtime
 
@@ -327,13 +490,15 @@ For official plugin installation, configuration, and examples, see the **officia
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                            | Solution                                                                        |
-| ------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `this.auditLog` has type `any` or is unrecognized | Module augmentation file not imported            | Add side-effect import: `import './audit-log.context-extension'` in plugin file |
-| Circular dependency error at startup              | Calling `installExtension()` at module top level | Remove manual installation; use `contextExtensions` metadata array instead      |
-| Provider not found in tool context                | Provider not listed in plugin `exports`          | Add the provider to both `providers` and `exports` arrays                       |
-| Hooks fire for unrelated apps in gateway          | Plugin `scope` set to `'server'`                 | Change to `scope: 'app'` (default) unless server-wide behavior is intended      |
-| `DynamicPlugin.init()` options ignored            | Overriding constructor without calling `super()` | Ensure constructor calls `super()` and merges defaults properly                 |
+| Problem                                              | Cause                                            | Solution                                                                                                                                                                                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `this.auditLog` has type `any` or is unrecognized    | Module augmentation file not imported            | Add side-effect import: `import './audit-log.context-extension'` in plugin file                                                                                                                                                            |
+| Circular dependency error at startup                 | Calling `installExtension()` at module top level | Remove manual installation; use `contextExtensions` metadata array instead                                                                                                                                                                 |
+| Provider not found in tool context                   | Provider not listed in plugin `exports`          | Add the provider to both `providers` and `exports` arrays                                                                                                                                                                                  |
+| Hooks fire for unrelated apps in gateway             | Plugin `scope` set to `'server'`                 | Change to `scope: 'app'` (default) unless server-wide behavior is intended                                                                                                                                                                 |
+| `DynamicPlugin.init()` options ignored               | Overriding constructor without calling `super()` | Ensure constructor calls `super()` and merges defaults properly                                                                                                                                                                            |
+| `ProviderNotRegisteredError` for context extension   | Token in `contextExtensions` not in `providers`  | Ensure the token used in `contextExtensions[].token` is registered in the plugin's `providers` array. Use `{ provide: MyToken, useClass: MyService }` or list the class directly. If using `dynamicProviders()`, return the provider there |
+| Provider works in tools but not in context extension | Using class reference instead of Symbol token    | Create a typed `Token<T> = Symbol('name')` in `symbols.ts`, use it in both `providers` and `contextExtensions`. Direct class references can fail if not constructable without dependencies                                                 |
 
 ## Reference
 

@@ -1,3 +1,8 @@
+---
+name: create-tool-annotations
+description: Reference for MCP tool annotation hints like readOnly, destructive, and idempotent
+---
+
 # Tool Annotations Reference
 
 Annotations provide hints to MCP clients about tool behavior:

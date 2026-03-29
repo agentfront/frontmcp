@@ -15,8 +15,8 @@ import {
   SkillInstructionSource,
   normalizeToolRef,
 } from '../common';
-import { SkillContent } from '../common/interfaces';
-import { readFile } from '@frontmcp/utils';
+import { SkillContent, SkillReferenceInfo } from '../common/interfaces';
+import { readFile, readdir, fileExists } from '@frontmcp/utils';
 import { InvalidSkillError, SkillInstructionFetchError, InvalidInstructionSourceError } from '../errors';
 import { stripFrontmatter } from './skill-md-parser';
 
@@ -164,14 +164,25 @@ export async function loadInstructions(source: SkillInstructionSource, basePath?
  *
  * @param metadata - The skill metadata
  * @param instructions - The resolved instructions string
+ * @param resolvedReferences - Optional resolved reference metadata from references/ directory
  * @returns The full skill content
  */
-export function buildSkillContent(metadata: SkillMetadata, instructions: string): SkillContent {
+export function buildSkillContent(
+  metadata: SkillMetadata,
+  instructions: string,
+  resolvedReferences?: SkillReferenceInfo[],
+): SkillContent {
+  // Append references routing table to instructions if references exist
+  let finalInstructions = instructions;
+  if (resolvedReferences && resolvedReferences.length > 0) {
+    finalInstructions += buildReferencesTable(resolvedReferences);
+  }
+
   return {
     id: metadata.id ?? metadata.name,
     name: metadata.name,
     description: metadata.description,
-    instructions,
+    instructions: finalInstructions,
     tools: normalizeToolRefs(metadata.tools),
     parameters: metadata.parameters,
     examples: metadata.examples,
@@ -180,7 +191,105 @@ export function buildSkillContent(metadata: SkillMetadata, instructions: string)
     specMetadata: metadata.specMetadata,
     allowedTools: metadata.allowedTools,
     resources: metadata.resources,
+    resolvedReferences,
   };
+}
+
+/**
+ * Build a markdown references routing table to append to skill instructions.
+ * Follows the same format as SKILL.md scenario routing tables.
+ */
+function buildReferencesTable(refs: SkillReferenceInfo[]): string {
+  const lines: string[] = ['', '', '## References', '', '| Reference | Description |', '| --------- | ----------- |'];
+
+  for (const ref of refs) {
+    lines.push(`| \`${ref.name}\` | ${ref.description} |`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Scan a references/ directory for .md files and extract metadata.
+ * Parses YAML frontmatter for name/description, falls back to heading/paragraph.
+ *
+ * @param refsDir - Absolute path to the references/ directory
+ * @returns Array of resolved reference info, or undefined if no references
+ */
+export async function resolveReferences(refsDir: string): Promise<SkillReferenceInfo[] | undefined> {
+  if (!(await fileExists(refsDir))) return undefined;
+
+  let files: string[];
+  try {
+    files = (await readdir(refsDir)).filter((f: string) => f.endsWith('.md')).sort();
+  } catch {
+    return undefined;
+  }
+
+  if (files.length === 0) return undefined;
+
+  const refs: SkillReferenceInfo[] = [];
+  for (const file of files) {
+    const content = await readFile(`${refsDir}/${file}`, 'utf-8');
+    const filenameWithoutExt = file.replace(/\.md$/, '');
+
+    let name = filenameWithoutExt;
+    let description = '';
+
+    // Try parsing frontmatter
+    const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (fmMatch) {
+      const fmLines = fmMatch[1].split(/\r?\n/);
+      for (const line of fmLines) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1) continue;
+        const key = line.slice(0, colonIdx).trim();
+        const val = line
+          .slice(colonIdx + 1)
+          .trim()
+          .replace(/^["']|["']$/g, '');
+        if (key === 'name' && val) name = val;
+        if (key === 'description' && val) description = val;
+      }
+    }
+
+    // Fallback: extract description from first paragraph
+    if (!description) {
+      const body = fmMatch ? content.substring(content.indexOf('---', 3) + 3).trim() : content.trim();
+      description = extractFirstParagraph(body);
+    }
+
+    refs.push({ name, description, filename: file });
+  }
+
+  return refs;
+}
+
+/**
+ * Extract the first non-empty paragraph after the heading from markdown content.
+ */
+function extractFirstParagraph(body: string): string {
+  const lines = body.split(/\r?\n/);
+  let foundHeading = false;
+  const paragraphLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!foundHeading && trimmed.startsWith('#')) {
+      foundHeading = true;
+      continue;
+    }
+    if (foundHeading) {
+      if (trimmed === '') {
+        if (paragraphLines.length > 0) break;
+        continue;
+      }
+      if (trimmed.startsWith('#') || trimmed.startsWith('|') || trimmed.startsWith('-')) break;
+      paragraphLines.push(trimmed);
+    }
+  }
+
+  return paragraphLines.join(' ').slice(0, 200) || '';
 }
 
 /**

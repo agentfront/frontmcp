@@ -9,7 +9,53 @@
       "targets": ["all"],
       "hasResources": true,
       "tags": ["router", "config", "transport", "http", "auth", "session", "redis", "sqlite", "throttle", "guide"],
-      "bundle": ["recommended", "full"]
+      "bundle": ["recommended", "full"],
+      "references": [
+        {
+          "name": "configure-auth-modes",
+          "description": "Detailed comparison of public, transparent, remote, and managed auth modes"
+        },
+        {
+          "name": "configure-auth",
+          "description": "Set up authentication modes, credential vault, and OAuth flows for FrontMCP servers"
+        },
+        {
+          "name": "configure-elicitation",
+          "description": "Configure interactive user input during tool execution for confirmations, choices, and forms"
+        },
+        {
+          "name": "configure-http",
+          "description": "Configure HTTP server port, CORS policy, unix sockets, and entry path prefix"
+        },
+        {
+          "name": "configure-session",
+          "description": "Set up session storage with Redis or Vercel KV for persistent user state across requests"
+        },
+        {
+          "name": "configure-throttle-guard-config",
+          "description": "Complete GuardConfig interface reference for rate limiting, concurrency, and IP filtering"
+        },
+        {
+          "name": "configure-throttle",
+          "description": "Protect servers with rate limiting, concurrency control, execution timeouts, and IP filtering"
+        },
+        {
+          "name": "configure-transport-protocol-presets",
+          "description": "Reference for legacy, modern, stateless, and minimal transport protocol presets"
+        },
+        {
+          "name": "configure-transport",
+          "description": "Configure client transport protocols including SSE, Streamable HTTP, and stateless API modes"
+        },
+        {
+          "name": "setup-redis",
+          "description": "Cross-reference to the full Redis configuration guide in frontmcp-setup"
+        },
+        {
+          "name": "setup-sqlite",
+          "description": "Cross-reference to the full SQLite configuration guide in frontmcp-setup"
+        }
+      ]
     },
     {
       "name": "frontmcp-deployment",
@@ -19,7 +65,45 @@
       "targets": ["all"],
       "hasResources": true,
       "tags": ["router", "deployment", "node", "vercel", "lambda", "cloudflare", "cli", "browser", "sdk", "guide"],
-      "bundle": ["recommended", "minimal", "full"]
+      "bundle": ["recommended", "minimal", "full"],
+      "references": [
+        {
+          "name": "build-for-browser",
+          "description": "Build a FrontMCP server or client for browser environments and frontend frameworks"
+        },
+        {
+          "name": "build-for-cli",
+          "description": "Build a FrontMCP server as a standalone CLI binary using Node.js SEA or bundled JS"
+        },
+        {
+          "name": "build-for-sdk",
+          "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs"
+        },
+        {
+          "name": "deploy-to-cloudflare",
+          "description": "Deploy a FrontMCP server to Cloudflare Workers with KV, D1, and Durable Objects"
+        },
+        {
+          "name": "deploy-to-lambda",
+          "description": "Deploy a FrontMCP server to AWS Lambda with API Gateway using SAM or CDK"
+        },
+        {
+          "name": "deploy-to-node-dockerfile",
+          "description": "Multi-stage Dockerfile for building and running a FrontMCP server in production"
+        },
+        {
+          "name": "deploy-to-node",
+          "description": "Deploy a FrontMCP server as a standalone Node.js app with Docker and process managers"
+        },
+        {
+          "name": "deploy-to-vercel-config",
+          "description": "Reference vercel.json configuration for deploying a FrontMCP server to Vercel"
+        },
+        {
+          "name": "deploy-to-vercel",
+          "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV storage"
+        }
+      ]
     },
     {
       "name": "frontmcp-development",
@@ -29,7 +113,97 @@
       "targets": ["all"],
       "hasResources": true,
       "tags": ["router", "development", "tools", "resources", "prompts", "agents", "skills", "guide"],
-      "bundle": ["recommended", "minimal", "full"]
+      "bundle": ["recommended", "minimal", "full"],
+      "references": [
+        {
+          "name": "create-adapter",
+          "description": "Build adapters that generate MCP tools and resources from external sources automatically"
+        },
+        {
+          "name": "create-agent-llm-config",
+          "description": "Reference for supported LLM provider configurations including Anthropic and OpenAI"
+        },
+        {
+          "name": "create-agent",
+          "description": "Create autonomous AI agents that use LLM reasoning to plan and invoke inner tools"
+        },
+        {
+          "name": "create-job",
+          "description": "Create long-running background jobs with retry policies, progress tracking, and permissions"
+        },
+        {
+          "name": "create-plugin-hooks",
+          "description": "Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators"
+        },
+        {
+          "name": "create-plugin",
+          "description": "Build plugins with providers, context extensions, lifecycle hooks, and contributed tools"
+        },
+        {
+          "name": "create-prompt",
+          "description": "Define reusable AI interaction patterns that produce structured message sequences"
+        },
+        {
+          "name": "create-provider",
+          "description": "Create singleton DI providers for database pools, API clients, and shared services"
+        },
+        {
+          "name": "create-resource",
+          "description": "Expose data to AI clients via URI-based static resources and parameterized templates"
+        },
+        {
+          "name": "create-skill-with-tools",
+          "description": "Create skills that combine structured instructions with MCP tool references for orchestration"
+        },
+        {
+          "name": "create-skill",
+          "description": "Create instruction-only skills that package knowledge and workflow guides for AI clients"
+        },
+        {
+          "name": "create-tool-annotations",
+          "description": "Reference for MCP tool annotation hints like readOnly, destructive, and idempotent"
+        },
+        {
+          "name": "create-tool-output-schema-types",
+          "description": "Reference for all supported outputSchema types including Zod shapes and JSON Schema"
+        },
+        {
+          "name": "create-tool",
+          "description": "Build MCP tools with Zod input/output validation and dependency injection"
+        },
+        {
+          "name": "create-workflow",
+          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers"
+        },
+        {
+          "name": "decorators-guide",
+          "description": "Complete reference for the hierarchical decorator system from @FrontMcp to @Tool"
+        },
+        {
+          "name": "official-adapters",
+          "description": "Convert OpenAPI specs and external definitions into MCP tools automatically"
+        },
+        {
+          "name": "official-plugins",
+          "description": "Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring"
+        }
+      ]
+    },
+    {
+      "name": "frontmcp-extensibility",
+      "category": "extensibility",
+      "description": "Extend FrontMCP servers with external npm packages and libraries. Covers VectoriaDB for semantic search, and patterns for integrating third-party services into providers and tools. Use when adding search, ML, database, or external API capabilities beyond the core SDK.",
+      "path": "frontmcp-extensibility",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["extensibility", "vectoriadb", "search", "integration", "npm", "provider", "external-services"],
+      "bundle": ["full"],
+      "references": [
+        {
+          "name": "vectoriadb",
+          "description": "Use VectoriaDB for in-memory vector search with ML-based or TF-IDF engines in FrontMCP servers"
+        }
+      ]
     },
     {
       "name": "frontmcp-guides",
@@ -39,7 +213,21 @@
       "targets": ["all"],
       "hasResources": true,
       "tags": ["guides", "examples", "best-practices", "architecture", "walkthrough", "end-to-end"],
-      "bundle": ["recommended", "full"]
+      "bundle": ["recommended", "full"],
+      "references": [
+        {
+          "name": "example-knowledge-base",
+          "description": "Multi-app knowledge base with vector storage, semantic search, AI research agent, and audit plugin"
+        },
+        {
+          "name": "example-task-manager",
+          "description": "Authenticated task management server with CRUD tools, Redis storage, OAuth, and Vercel deployment"
+        },
+        {
+          "name": "example-weather-api",
+          "description": "Beginner MCP server with a weather lookup tool, static resource, Zod schemas, and E2E tests"
+        }
+      ]
     },
     {
       "name": "frontmcp-production-readiness",
@@ -47,9 +235,47 @@
       "description": "Pre-production audit and checklist for FrontMCP servers. Use before go-live to verify security hardening, performance checks, observability, monitoring, and health checks. Triggers: production ready, security audit, performance check, production checklist, hardening, go live.",
       "path": "frontmcp-production-readiness",
       "targets": ["all"],
-      "hasResources": false,
+      "hasResources": true,
       "tags": ["production", "security", "performance", "reliability", "observability", "audit", "best-practices"],
-      "bundle": ["recommended", "full"]
+      "bundle": ["recommended", "full"],
+      "references": [
+        {
+          "name": "common-checklist",
+          "description": "Security, performance, reliability, and observability checks for all deployment targets"
+        },
+        {
+          "name": "production-browser",
+          "description": "Checklist for publishing FrontMCP as a browser-compatible SDK bundle"
+        },
+        {
+          "name": "production-cli-binary",
+          "description": "Checklist for publishing FrontMCP as a one-shot CLI binary with stdin/stdout transport"
+        },
+        {
+          "name": "production-cli-daemon",
+          "description": "Checklist for deploying FrontMCP as a long-running local daemon with socket transport"
+        },
+        {
+          "name": "production-cloudflare",
+          "description": "Checklist for deploying FrontMCP to Cloudflare Workers with KV and Durable Objects"
+        },
+        {
+          "name": "production-lambda",
+          "description": "Checklist for deploying FrontMCP to AWS Lambda with SAM, API Gateway, and DynamoDB"
+        },
+        {
+          "name": "production-node-sdk",
+          "description": "Checklist for publishing FrontMCP as an embedded npm package used as a direct client SDK"
+        },
+        {
+          "name": "production-node-server",
+          "description": "Checklist for deploying FrontMCP as a long-running Node.js server with Docker"
+        },
+        {
+          "name": "production-vercel",
+          "description": "Checklist for deploying FrontMCP to Vercel serverless or edge functions with Vercel KV"
+        }
+      ]
     },
     {
       "name": "frontmcp-setup",
@@ -59,7 +285,45 @@
       "targets": ["all"],
       "hasResources": true,
       "tags": ["router", "setup", "scaffold", "project", "nx", "redis", "sqlite", "structure", "guide"],
-      "bundle": ["recommended", "minimal", "full"]
+      "bundle": ["recommended", "minimal", "full"],
+      "references": [
+        {
+          "name": "frontmcp-skills-usage",
+          "description": "Search, install, and manage FrontMCP skill catalog for AI agents (Claude Code, Codex)"
+        },
+        {
+          "name": "multi-app-composition",
+          "description": "Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway"
+        },
+        {
+          "name": "nx-workflow",
+          "description": "Scaffold, build, test, and deploy FrontMCP projects using the @frontmcp/nx plugin in a monorepo"
+        },
+        {
+          "name": "project-structure-nx",
+          "description": "Canonical directory layout, generators, and dependency rules for FrontMCP Nx monorepos"
+        },
+        {
+          "name": "project-structure-standalone",
+          "description": "File layout, naming conventions, and dev workflow for standalone FrontMCP projects"
+        },
+        {
+          "name": "readme-guide",
+          "description": "Generate deployment-target-aware README.md files for FrontMCP MCP servers"
+        },
+        {
+          "name": "setup-project",
+          "description": "Scaffold a new FrontMCP project with CLI or manual setup, decorators, apps, and deployment config"
+        },
+        {
+          "name": "setup-redis",
+          "description": "Provision and configure Redis or Vercel KV for session storage and distributed state"
+        },
+        {
+          "name": "setup-sqlite",
+          "description": "Configure SQLite with WAL mode and optional encryption for local single-instance deployments"
+        }
+      ]
     },
     {
       "name": "frontmcp-testing",
@@ -69,7 +333,37 @@
       "targets": ["all"],
       "hasResources": true,
       "tags": ["router", "testing", "jest", "e2e", "coverage", "quality", "guide"],
-      "bundle": ["recommended", "full"]
+      "bundle": ["recommended", "full"],
+      "references": [
+        {
+          "name": "setup-testing",
+          "description": "Configure Jest, write unit and E2E tests, and enforce 95%+ coverage for FrontMCP applications"
+        },
+        {
+          "name": "test-auth",
+          "description": "Test authenticated MCP servers with TestTokenFactory, MockOAuthServer, and role-based access"
+        },
+        {
+          "name": "test-browser-build",
+          "description": "Validate browser build output for Node.js-free bundles and test with Playwright"
+        },
+        {
+          "name": "test-cli-binary",
+          "description": "Test CLI binary and SEA build for startup, health check, and JS bundle import"
+        },
+        {
+          "name": "test-direct-client",
+          "description": "In-memory testing with create() and connectOpenAI/connectClaude without HTTP overhead"
+        },
+        {
+          "name": "test-e2e-handler",
+          "description": "Full MCP protocol E2E tests over HTTP with McpTestClient and TestServer"
+        },
+        {
+          "name": "test-tool-unit",
+          "description": "Unit test a ToolContext execute method with mock context, inputs, and Zod schema validation"
+        }
+      ]
     }
   ]
 }

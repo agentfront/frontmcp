@@ -1,3 +1,8 @@
+---
+name: create-job
+description: Create long-running background jobs with retry policies, progress tracking, and permissions
+---
+
 # Creating Jobs
 
 Jobs are long-running background tasks with built-in retry policies, progress tracking, and permission controls. Unlike tools (which execute synchronously within a request), jobs run asynchronously and persist their state across retries and restarts.

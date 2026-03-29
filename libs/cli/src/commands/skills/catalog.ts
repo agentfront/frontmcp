@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { TFIDFVectoria } from 'vectoriadb';
+import type { SkillReferenceEntry } from '@frontmcp/skills';
 
 interface SkillEntry {
   name: string;
@@ -18,6 +19,7 @@ interface SkillEntry {
   hasResources: boolean;
   tags: string[];
   bundle?: string[];
+  references?: SkillReferenceEntry[];
 }
 
 interface SkillManifest {
@@ -194,7 +196,6 @@ export function loadCatalog(): SkillManifest {
 function resolveManifestPath(): string {
   // Primary: resolve directly from the @frontmcp/skills package
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require.resolve('@frontmcp/skills/catalog/skills-manifest.json');
   } catch {
     // Not resolvable via subpath — try via package root
@@ -202,7 +203,6 @@ function resolveManifestPath(): string {
 
   // Fallback: find the package root and navigate to catalog/
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pkgJsonPath = require.resolve('@frontmcp/skills/package.json');
     const pkgRoot = path.dirname(pkgJsonPath);
     const manifestPath = path.join(pkgRoot, 'catalog', 'skills-manifest.json');
@@ -285,6 +285,21 @@ function buildSearchableText(skill: SkillEntry): string {
 
   // Category (1x weight)
   parts.push(skill.category);
+
+  // Reference names and descriptions (1x weight each)
+  if (skill.references) {
+    for (const ref of skill.references) {
+      const refNameParts = ref.name.split(/[-_.\s]/).filter(Boolean);
+      parts.push(...refNameParts);
+      if (ref.description) {
+        const refTerms = ref.description
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((word) => word.length >= 4 && !STOP_WORDS.has(word));
+        parts.push(...refTerms);
+      }
+    }
+  }
 
   return parts.join(' ');
 }

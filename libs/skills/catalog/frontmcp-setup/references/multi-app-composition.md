@@ -1,3 +1,8 @@
+---
+name: multi-app-composition
+description: Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway
+---
+
 # Multi-App Composition
 
 Compose multiple `@App` classes into a single `@FrontMcp` server. Each app contributes its own tools, resources, prompts, skills, and plugins. Apps can be local classes, npm packages loaded at runtime, or remote MCP servers proxied through your gateway.

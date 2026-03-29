@@ -1,3 +1,8 @@
+---
+name: decorators-guide
+description: Complete reference for the hierarchical decorator system from @FrontMcp to @Tool
+---
+
 # FrontMCP Decorators - Complete Reference
 
 ## Architecture Overview
@@ -56,28 +61,34 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 
 **Key fields:**
 
-| Field           | Description                                                                     |
-| --------------- | ------------------------------------------------------------------------------- |
-| `info`          | Server name, version, and description                                           |
-| `apps`          | Array of `@App` classes to mount                                                |
-| `redis?`        | Redis connection options                                                        |
-| `plugins?`      | Global plugins                                                                  |
-| `providers?`    | Global DI providers                                                             |
-| `tools?`        | Standalone tools (outside apps)                                                 |
-| `resources?`    | Standalone resources                                                            |
-| `skills?`       | Standalone skills                                                               |
-| `skillsConfig?` | Skills feature configuration (enabled, cache, auth)                             |
-| `transport?`    | Transport preset ('modern', 'legacy', 'stateless-api', 'full') or config object |
-| `auth?`         | Authentication mode and OAuth configuration (AuthOptionsInput)                  |
-| `http?`         | HTTP server options (port, host, cors)                                          |
-| `logging?`      | Logging configuration                                                           |
-| `elicitation?`  | Elicitation store config                                                        |
-| `sqlite?`       | SQLite storage config                                                           |
-| `pubsub?`       | Pub/sub configuration                                                           |
-| `jobs?`         | Job scheduler config                                                            |
-| `throttle?`     | Rate limiting config                                                            |
-| `pagination?`   | Pagination defaults                                                             |
-| `ui?`           | UI configuration                                                                |
+| Field           | Description                                                                      |
+| --------------- | -------------------------------------------------------------------------------- |
+| `info`          | Server name, version, and description                                            |
+| `apps`          | Array of `@App` classes to mount                                                 |
+| `serve?`        | Auto-start HTTP server (default: `true`). Set `false` for programmatic usage     |
+| `splitByApp?`   | If `true`, each app gets its own scope and basePath. Default: `false`            |
+| `redis?`        | Redis / Vercel KV connection for sessions, transport persistence, auth tokens    |
+| `plugins?`      | Global plugins (instantiated per scope)                                          |
+| `providers?`    | Global DI providers available to all apps                                        |
+| `tools?`        | Standalone tools (outside apps, merged with app tools)                           |
+| `resources?`    | Standalone resources (merged with app resources)                                 |
+| `skills?`       | Standalone skills (merged with app skills)                                       |
+| `skillsConfig?` | Skills HTTP endpoints (`/llm.txt`, `/skills`) and MCP tool config                |
+| `transport?`    | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object |
+| `auth?`         | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`          |
+| `http?`         | HTTP server options (port, host, cors, socketPath)                               |
+| `logging?`      | Logging configuration (transports and levels)                                    |
+| `elicitation?`  | Enable interactive user input during tool execution                              |
+| `sqlite?`       | SQLite storage for local deployments (sessions, events)                          |
+| `pubsub?`       | Redis pub/sub for resource subscriptions (falls back to `redis` config)          |
+| `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                         |
+| `throttle?`     | Server-level guard config (see note below)                                       |
+| `pagination?`   | List operation pagination (`tools/list` endpoint)                                |
+| `ui?`           | UI rendering config (CDN overrides for widget imports)                           |
+| `extApps?`      | Widget-to-host MCP Apps communication (host capabilities, session validation)    |
+| `loader?`       | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps             |
+
+> **Throttle vs per-tool guards:** Server-level `throttle` is a `GuardConfig` object with `global`, `defaultRateLimit`, `defaultConcurrency`, `defaultTimeout` sub-fields that set server-wide defaults. Tool-level `rateLimit`, `concurrency`, `timeout` fields (on `@Tool`) override these defaults per tool.
 
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
@@ -103,21 +114,23 @@ class MyServer {}
 
 **Key fields:**
 
-| Field         | Description                                           |
-| ------------- | ----------------------------------------------------- |
-| `name`        | Application name                                      |
-| `tools?`      | Array of tool classes or function-built tools         |
-| `resources?`  | Array of resource classes or function-built resources |
-| `prompts?`    | Array of prompt classes or function-built prompts     |
-| `agents?`     | Array of agent classes                                |
-| `skills?`     | Array of skill definitions                            |
-| `plugins?`    | App-scoped plugins                                    |
-| `providers?`  | App-scoped DI providers                               |
-| `adapters?`   | External source adapters                              |
-| `auth?`       | Auth configuration                                    |
-| `standalone?` | Whether the app runs independently                    |
-| `jobs?`       | Job definitions                                       |
-| `workflows?`  | Workflow definitions                                  |
+| Field            | Description                                                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | Application name (unique within server)                                                                                            |
+| `description?`   | Human-readable description for docs and UIs                                                                                        |
+| `tools?`         | Array of tool classes or function-built tools                                                                                      |
+| `resources?`     | Array of resource classes or function-built resources                                                                              |
+| `prompts?`       | Array of prompt classes or function-built prompts                                                                                  |
+| `agents?`        | Array of agent classes (each exposed as `use-agent:<name>` tool)                                                                   |
+| `skills?`        | Array of skill definitions                                                                                                         |
+| `plugins?`       | App-scoped plugins                                                                                                                 |
+| `providers?`     | App-scoped DI providers                                                                                                            |
+| `authProviders?` | Named auth providers (e.g., GitHub, Google OAuth) separate from `auth`                                                             |
+| `adapters?`      | External source adapters (e.g., OpenAPI)                                                                                           |
+| `auth?`          | App-level auth config (overrides server default)                                                                                   |
+| `standalone?`    | `boolean \| 'includeInParent'` — `true`: isolated scope, excluded. `'includeInParent'`: isolated scope but tools exposed in parent |
+| `jobs?`          | Background job definitions                                                                                                         |
+| `workflows?`     | Multi-step workflow definitions                                                                                                    |
 
 ```typescript
 import { App } from '@frontmcp/sdk';
@@ -142,19 +155,21 @@ class AnalyticsApp {}
 
 **Key fields:**
 
-| Field                | Description                                                |
-| -------------------- | ---------------------------------------------------------- |
-| `name`               | Tool name (used in MCP protocol)                           |
-| `description`        | Human-readable description for the LLM                     |
-| `inputSchema`        | Zod raw shape defining input parameters                    |
-| `outputSchema?`      | Zod schema for output validation                           |
-| `annotations?`       | MCP tool annotations (readOnlyHint, destructiveHint, etc.) |
-| `tags?`              | Categorization tags                                        |
-| `hideFromDiscovery?` | Hide from tool listing                                     |
-| `concurrency?`       | Max concurrent executions                                  |
-| `rateLimit?`         | Rate limiting configuration                                |
-| `timeout?`           | Execution timeout in ms                                    |
-| `ui?`                | UI rendering hints                                         |
+| Field                | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `name`               | Tool name (used in MCP protocol, snake_case)                         |
+| `description`        | Human-readable description for the LLM                               |
+| `inputSchema`        | Zod raw shape defining input parameters                              |
+| `outputSchema?`      | Output type: Zod schema, `'string'`, `'image'`, `'audio'`, etc.      |
+| `annotations?`       | MCP tool annotations (`readOnlyHint`, `destructiveHint`, etc.)       |
+| `tags?`              | Categorization tags for filtering                                    |
+| `hideFromDiscovery?` | Hide from `tools/list` (still callable directly)                     |
+| `examples?`          | Usage examples: `[{ description, input, output? }]`                  |
+| `authProviders?`     | Per-tool auth providers: `['GitHub']` or `[{ name, scopes, alias }]` |
+| `rateLimit?`         | Rate limiting: `{ maxRequests, windowMs, partitionBy }`              |
+| `concurrency?`       | Concurrency control: `{ maxConcurrent }`                             |
+| `timeout?`           | Execution timeout: `{ executeMs }`                                   |
+| `ui?`                | UI widget configuration for tool rendering                           |
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
@@ -188,9 +203,11 @@ class SearchUsersTool extends ToolContext {
 
 | Field          | Description                                                         |
 | -------------- | ------------------------------------------------------------------- |
-| `name`         | Prompt name                                                         |
+| `name`         | Prompt name (used in MCP protocol)                                  |
+| `title?`       | Human-readable display title for UIs                                |
 | `description?` | What this prompt does                                               |
 | `arguments?`   | Array of argument definitions (`{ name, description?, required? }`) |
+| `icons?`       | Array of Icon objects for UI representation (per MCP spec)          |
 
 ```typescript
 import { Prompt, PromptContext } from '@frontmcp/sdk';
@@ -232,10 +249,12 @@ class CodeReviewPrompt extends PromptContext {
 
 | Field          | Description                                  |
 | -------------- | -------------------------------------------- |
-| `name`         | Resource name                                |
+| `name`         | Resource name (used in MCP protocol)         |
+| `title?`       | Human-readable display title for UIs         |
 | `uri`          | Fixed URI (e.g., `config://app/settings`)    |
 | `description?` | What this resource provides                  |
 | `mimeType?`    | Content MIME type (e.g., `application/json`) |
+| `icons?`       | Array of Icon objects for UI representation  |
 
 ```typescript
 import { Resource, ResourceContext } from '@frontmcp/sdk';
@@ -267,9 +286,11 @@ class AppConfigResource extends ResourceContext {
 | Field          | Description                                                     |
 | -------------- | --------------------------------------------------------------- |
 | `name`         | Resource template name                                          |
+| `title?`       | Human-readable display title for UIs                            |
 | `uriTemplate`  | URI template with parameters (e.g., `users://{userId}/profile`) |
 | `description?` | What this resource provides                                     |
 | `mimeType?`    | Content MIME type                                               |
+| `icons?`       | Array of Icon objects for UI representation                     |
 
 ```typescript
 import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
@@ -340,16 +361,24 @@ class ResearchAgent extends AgentContext {
 
 **Key fields:**
 
-| Field             | Description                                            |
-| ----------------- | ------------------------------------------------------ |
-| `name`            | Skill name                                             |
-| `description`     | What this skill enables                                |
-| `instructions`    | Detailed instructions the LLM should follow            |
-| `tools?`          | Tools bundled with this skill                          |
-| `parameters?`     | Configurable parameters                                |
-| `examples?`       | Usage examples                                         |
-| `visibility?`     | Where skill is visible: `'mcp'`, `'http'`, or `'both'` |
-| `toolValidation?` | Validation rules for tool usage                        |
+| Field                | Description                                                                    |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `name`               | Skill name (kebab-case, max 64 chars)                                          |
+| `description`        | What this skill enables (max 1024 chars, no HTML/XML)                          |
+| `instructions`       | Inline string, `{ file: '...' }`, or `{ url: '...' }`                          |
+| `tools?`             | Tool classes, names, or `{ tool/name, purpose?, required? }` refs              |
+| `parameters?`        | Input parameters: `[{ name, description?, type?, default? }]`                  |
+| `examples?`          | Usage examples: `[{ scenario, parameters?, expectedOutcome? }]`                |
+| `visibility?`        | Discovery scope: `'mcp'`, `'http'`, or `'both'` (default: `'both'`)            |
+| `toolValidation?`    | `'strict'` \| `'warn'` \| `'ignore'` for missing tool refs (default: `'warn'`) |
+| `priority?`          | Search ranking weight (higher = earlier). Default: `0`                         |
+| `hideFromDiscovery?` | Hide from search results; still loadable by ID                                 |
+| `tags?`              | Tags for categorization and search                                             |
+| `license?`           | License identifier (per Agent Skills spec, e.g., `'MIT'`)                      |
+| `compatibility?`     | Environment requirements (max 500 chars, e.g., `'Node.js 18+'`)                |
+| `specMetadata?`      | Arbitrary key-value map (Agent Skills spec `metadata` field)                   |
+| `allowedTools?`      | Space-delimited pre-approved tool names (Agent Skills spec)                    |
+| `resources?`         | Bundled dirs: `{ scripts?, references?, assets? }` (Agent Skills spec)         |
 
 ```typescript
 import { Skill } from '@frontmcp/sdk';
@@ -493,23 +522,35 @@ class ApprovalFlow {}
 
 **Key fields:**
 
-| Field         | Description                                               |
-| ------------- | --------------------------------------------------------- |
-| `name`        | Job name                                                  |
-| `description` | What the job does                                         |
-| `schedule?`   | Cron expression (e.g., `'0 */6 * * *'` for every 6 hours) |
+| Field                | Description                                                   |
+| -------------------- | ------------------------------------------------------------- |
+| `name`               | Job name                                                      |
+| `description`        | What the job does                                             |
+| `inputSchema`        | Zod schema for job input parameters                           |
+| `outputSchema`       | Zod schema for job output                                     |
+| `retry?`             | `{ maxAttempts, backoffMs, backoffMultiplier, maxBackoffMs }` |
+| `timeout?`           | Execution timeout in ms                                       |
+| `tags?`              | Categorization tags                                           |
+| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                    |
+| `hideFromDiscovery?` | Hide from job listing                                         |
+| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`   |
 
 ```typescript
 import { Job, JobContext } from '@frontmcp/sdk';
+import { z } from 'zod';
 
 @Job({
   name: 'sync_data',
   description: 'Synchronize data from external sources',
-  schedule: '0 */6 * * *',
+  inputSchema: z.object({ source: z.string().describe('Data source to sync') }),
+  outputSchema: z.object({ synced: z.number() }),
+  retry: { maxAttempts: 3, backoffMs: 1000, backoffMultiplier: 2, maxBackoffMs: 60_000 },
+  timeout: 300_000,
 })
 class SyncDataJob extends JobContext {
-  async execute() {
-    await this.get(SyncService).runFullSync();
+  async execute(input: { source: string }) {
+    const count = await this.get(SyncService).runFullSync(input.source);
+    return { synced: count };
   }
 }
 ```
@@ -524,11 +565,34 @@ class SyncDataJob extends JobContext {
 
 **Key fields:**
 
-| Field         | Description                         |
-| ------------- | ----------------------------------- |
-| `name`        | Workflow name                       |
-| `description` | What this workflow accomplishes     |
-| `steps`       | Array of step definitions (ordered) |
+| Field                | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `name`               | Workflow name                                                      |
+| `description`        | What this workflow accomplishes                                    |
+| `steps`              | Array of step definitions (see step fields below)                  |
+| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                             |
+| `webhook?`           | `{ path, secret, methods }` — required when trigger is `'webhook'` |
+| `timeout?`           | Overall workflow timeout in ms                                     |
+| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                     |
+| `tags?`              | Categorization tags                                                |
+| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                         |
+| `hideFromDiscovery?` | Hide from workflow listing                                         |
+| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`        |
+| `inputSchema?`       | Zod schema for workflow input parameters                           |
+| `outputSchema?`      | Zod schema for workflow output                                     |
+
+**Step fields:**
+
+| Step Field         | Description                                                     |
+| ------------------ | --------------------------------------------------------------- |
+| `id`               | Unique step identifier                                          |
+| `jobName`          | Name of the `@Job` to execute                                   |
+| `input?`           | Static object or `(steps) => object` function for dynamic input |
+| `dependsOn?`       | Array of step IDs that must complete first                      |
+| `condition?`       | `(steps) => boolean` — skip step if returns false               |
+| `continueOnError?` | Continue workflow if this step fails (default: `false`)         |
+| `timeout?`         | Per-step timeout in ms                                          |
+| `retry?`           | Per-step retry config (same shape as `@Job.retry`)              |
 
 ```typescript
 import { Workflow } from '@frontmcp/sdk';
@@ -536,10 +600,13 @@ import { Workflow } from '@frontmcp/sdk';
 @Workflow({
   name: 'deploy_pipeline',
   description: 'Full deployment pipeline',
+  trigger: 'webhook',
+  webhookConfig: { path: '/hooks/deploy', secret: process.env.WEBHOOK_SECRET!, methods: ['POST'] },
+  timeout: 600_000,
   steps: [
-    { name: 'build', job: BuildJob },
-    { name: 'test', job: TestJob },
-    { name: 'deploy', job: DeployJob },
+    { id: 'build', jobName: 'build_app', input: { env: 'production' } },
+    { id: 'test', jobName: 'run_tests', dependsOn: ['build'] },
+    { id: 'deploy', jobName: 'deploy_app', dependsOn: ['test'], condition: (steps) => steps.test.success },
   ],
 })
 class DeployPipeline {}

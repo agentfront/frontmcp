@@ -1,3 +1,8 @@
+---
+name: official-plugins
+description: Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring
+---
+
 # Official FrontMCP Plugins
 
 FrontMCP ships 6 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, and visual monitoring. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).

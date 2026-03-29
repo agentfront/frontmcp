@@ -174,20 +174,17 @@ export default class CompleteFlow extends FlowBase<typeof name> {
         const resourceMatch = this.scope.resources.findResourceForUri(uri);
 
         if (resourceMatch) {
-          // Check if the resource instance has a completer for this argument
-          // Completion support is optional - resources can implement getArgumentCompleter to provide suggestions
-          const instance = resourceMatch.instance as any; // ResourceInstance may have completer method
-          if (typeof instance.getArgumentCompleter === 'function') {
-            const completer = instance.getArgumentCompleter(argName);
-            if (completer) {
-              try {
-                const result = await completer(argValue);
-                values = result.values || [];
-                total = result.total;
-                hasMore = result.hasMore;
-              } catch (e) {
-                this.logger.warn(`complete: completer failed for resource "${uri}" argument "${argName}": ${e}`);
-              }
+          // Check if the resource has a completer for this argument
+          // Completion support is optional — resources override getArgumentCompleter to provide suggestions
+          const completer = resourceMatch.instance.getArgumentCompleter(argName);
+          if (completer) {
+            try {
+              const result = await completer(argValue);
+              values = result.values || [];
+              total = result.total;
+              hasMore = result.hasMore;
+            } catch (e) {
+              this.logger.warn(`complete: completer failed for resource "${uri}" argument "${argName}": ${e}`);
             }
           }
         } else {

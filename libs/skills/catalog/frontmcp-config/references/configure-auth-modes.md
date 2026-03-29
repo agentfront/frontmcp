@@ -1,3 +1,8 @@
+---
+name: configure-auth-modes
+description: Detailed comparison of public, transparent, remote, and managed auth modes
+---
+
 # Auth Modes Detailed Comparison
 
 ## Public Mode

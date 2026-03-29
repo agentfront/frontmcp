@@ -1,3 +1,8 @@
+---
+name: deploy-to-node
+description: Deploy a FrontMCP server as a standalone Node.js app with Docker and process managers
+---
+
 # Deploy a FrontMCP Server to Node.js
 
 This skill walks you through deploying a FrontMCP server as a standalone Node.js application, optionally containerized with Docker for production use.

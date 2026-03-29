@@ -1,3 +1,8 @@
+---
+name: create-tool
+description: Build MCP tools with Zod input/output validation and dependency injection
+---
+
 # Creating an MCP Tool
 
 Tools are the primary way to expose executable actions to AI clients in the MCP protocol. In FrontMCP, tools are TypeScript classes that extend `ToolContext`, decorated with `@Tool`, and registered on a `@FrontMcp` server or inside an `@App`.
@@ -67,7 +72,19 @@ class GreetUserTool extends ToolContext {
 - `this.output` -- the output (available after execute)
 - `this.metadata` -- tool metadata from the decorator
 - `this.scope` -- the current scope instance
-- `this.context` -- the execution context
+- `this.context` -- the execution context (see below)
+
+**`this.context` properties (FrontMcpContext):**
+
+| Property       | Type                | Description                         |
+| -------------- | ------------------- | ----------------------------------- |
+| `requestId`    | `string`            | Unique ID for this request          |
+| `sessionId`    | `string`            | Session identifier                  |
+| `scopeId`      | `string`            | Scope identifier                    |
+| `authInfo`     | `Partial<AuthInfo>` | Authentication info for the request |
+| `traceContext` | `TraceContext`      | Distributed tracing context         |
+| `timestamp`    | `number`            | Request timestamp                   |
+| `metadata`     | `RequestMetadata`   | Request headers, client IP, etc.    |
 
 ## Input Schema: Zod Raw Shapes
 
@@ -408,6 +425,102 @@ class ExpensiveOperationTool extends ToolContext {
   private async heavyComputation(data: string) {
     return data;
   }
+}
+```
+
+## Auth Providers
+
+Declare which auth providers a tool requires. Credentials are loaded before tool execution.
+
+```typescript
+// String shorthand — single provider
+@Tool({
+  name: 'create_issue',
+  description: 'Create a GitHub issue',
+  inputSchema: { title: z.string(), body: z.string() },
+  authProviders: ['github'],
+})
+class CreateIssueTool extends ToolContext {
+  /* ... */
+}
+
+// Full mapping — with scopes and required flag
+@Tool({
+  name: 'deploy_app',
+  description: 'Deploy to cloud',
+  inputSchema: { env: z.string() },
+  authProviders: [
+    { name: 'github', required: true, scopes: ['repo', 'workflow'] },
+    { name: 'aws', required: false, alias: 'cloud' },
+  ],
+})
+class DeployAppTool extends ToolContext {
+  /* ... */
+}
+```
+
+Auth provider mapping fields:
+
+- `name` — Provider name (must match a registered `@AuthProvider`)
+- `required?` — Whether credential is required (default: `true`)
+- `scopes?` — Required OAuth scopes
+- `alias?` — Alias for injection when using multiple providers
+
+## Elicitation (Interactive Input)
+
+Tools can request interactive input from users mid-execution using `this.elicit()`. Requires `elicitation` to be enabled at server level.
+
+```typescript
+@Tool({
+  name: 'confirm_delete',
+  description: 'Delete a resource after user confirmation',
+  inputSchema: { resourceId: z.string() },
+})
+class ConfirmDeleteTool extends ToolContext {
+  async execute(input: { resourceId: string }) {
+    const result = await this.elicit('Are you sure you want to delete this resource?', {
+      confirm: z.boolean().describe('Confirm deletion'),
+      reason: z.string().optional().describe('Reason for deletion'),
+    });
+
+    if (result.action === 'accept' && result.data.confirm) {
+      await this.get(ResourceService).delete(input.resourceId);
+      return 'Resource deleted';
+    }
+    return 'Deletion cancelled';
+  }
+}
+```
+
+> **Note:** Elicitation must be enabled at server level: `@FrontMcp({ elicitation: { enabled: true } })`. See `configure-elicitation` for full configuration options.
+
+## Tool Examples
+
+Provide usage examples for documentation and discovery:
+
+```typescript
+@Tool({
+  name: 'convert_currency',
+  description: 'Convert between currencies',
+  inputSchema: {
+    amount: z.number(),
+    from: z.string(),
+    to: z.string(),
+  },
+  examples: [
+    {
+      description: 'Convert USD to EUR',
+      input: { amount: 100, from: 'USD', to: 'EUR' },
+      output: { converted: 85.5, rate: 0.855 },
+    },
+    {
+      description: 'Convert with large amount',
+      input: { amount: 1_000_000, from: 'GBP', to: 'JPY' },
+    },
+  ],
+})
+class ConvertCurrencyTool extends ToolContext {
+  /* ... */
 }
 ```
 

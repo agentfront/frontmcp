@@ -1,3 +1,8 @@
+---
+name: setup-testing
+description: Configure Jest, write unit and E2E tests, and enforce 95%+ coverage for FrontMCP applications
+---
+
 # Set Up Testing for FrontMCP Applications
 
 This skill covers testing FrontMCP applications at three levels: unit tests for individual tools/resources/prompts, E2E tests exercising the full MCP protocol, and manual testing with `frontmcp dev`.

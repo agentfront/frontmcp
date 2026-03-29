@@ -1,3 +1,8 @@
+---
+name: create-resource
+description: Expose data to AI clients via URI-based static resources and parameterized templates
+---
+
 # Creating MCP Resources
 
 Resources expose data to AI clients through URI-based access following the MCP protocol. FrontMCP supports two kinds: **static resources** with fixed URIs (`@Resource`) and **resource templates** with parameterized URI patterns (`@ResourceTemplate`).
@@ -31,9 +36,11 @@ Resources expose data to AI clients through URI-based access following the MCP p
 The `@Resource` decorator accepts:
 
 - `name` (required) -- unique resource name
+- `title` (optional) -- human-readable display title for UIs (if omitted, `name` is used)
 - `uri` (required) -- static URI with a valid scheme per RFC 3986
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
+- `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
 
 ### Class-Based Pattern
 
@@ -138,9 +145,11 @@ Supported return shapes:
 The `@ResourceTemplate` decorator accepts:
 
 - `name` (required) -- unique resource template name
+- `title` (optional) -- human-readable display title for UIs (if omitted, `name` is used)
 - `uriTemplate` (required) -- URI pattern with `{paramName}` placeholders (RFC 6570 style)
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
+- `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
 
 ### Class-Based Pattern
 
@@ -426,6 +435,82 @@ nx generate @frontmcp/nx:resource
 
 This creates the resource file, spec file, and updates barrel exports.
 
+## Resource Argument Autocompletion
+
+Resource templates with parameterized URIs can provide autocompletion for their arguments. This is useful when template parameters represent dynamic values that can be searched or enumerated, such as user IDs, product names, or project slugs.
+
+### When to Use
+
+- Template parameters reference entities that exist in a database or external service (user IDs, product names, etc.)
+- Clients benefit from discovering valid parameter values without prior knowledge
+- The parameter space is searchable or enumerable given a partial input string
+
+### Types
+
+The autocompletion API uses two types from `@frontmcp/sdk`:
+
+```typescript
+interface ResourceCompletionResult {
+  values: string[];
+  total?: number;
+  hasMore?: boolean;
+}
+
+type ResourceArgumentCompleter = (partial: string) => Promise<ResourceCompletionResult> | ResourceCompletionResult;
+```
+
+- `values` -- the list of matching completions for the partial input
+- `total` -- optional total number of matches (useful when `values` is a truncated subset)
+- `hasMore` -- optional flag indicating additional matches exist beyond what was returned
+
+### How to Implement
+
+Override the `getArgumentCompleter(argName)` method in your `ResourceContext` subclass. Return a completer function for argument names you support, or `null` for unknown arguments.
+
+```typescript
+getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
+  if (argName === 'myParam') {
+    return async (partial) => {
+      // Search or filter based on partial input
+      const matches = await findMatches(partial);
+      return { values: matches, total: matches.length };
+    };
+  }
+  return null;
+}
+```
+
+### Complete Example
+
+A user profile template resource that autocompletes user IDs by searching a user service:
+
+```typescript
+@ResourceTemplate({
+  name: 'user-profile',
+  description: 'User profile by ID',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+})
+class UserProfileResource extends ResourceContext<{ userId: string }> {
+  async execute(uri: string, params: { userId: string }) {
+    const user = await this.get(UserService).findById(params.userId);
+    return { id: user.id, name: user.name, email: user.email };
+  }
+
+  getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
+    if (argName === 'userId') {
+      return async (partial) => {
+        const users = await this.get(UserService).search(partial);
+        return { values: users.map((u) => u.id), total: users.length };
+      };
+    }
+    return null;
+  }
+}
+```
+
+When a client requests completions for the `userId` parameter with a partial string like `"al"`, the completer queries the user service and returns matching IDs.
+
 ## Common Patterns
 
 | Pattern                | Correct                                                                  | Incorrect                                                               | Why                                                                              |
@@ -452,6 +537,11 @@ This creates the resource file, spec file, and updates barrel exports.
 - [ ] Template parameters are extracted correctly from the URI
 - [ ] Binary resources return valid base64 in the `blob` field
 - [ ] DI dependencies resolve correctly via `this.get()`
+
+### Autocompletion
+
+- [ ] Template resources with dynamic params implement `getArgumentCompleter()`
+- [ ] Completer returns `{ values, total?, hasMore? }` matching the partial input
 
 ## Troubleshooting
 

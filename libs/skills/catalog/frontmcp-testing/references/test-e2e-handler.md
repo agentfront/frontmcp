@@ -1,3 +1,8 @@
+---
+name: test-e2e-handler
+description: Full MCP protocol E2E tests over HTTP with McpTestClient and TestServer
+---
+
 # E2E Testing with McpTestClient (HTTP Handler)
 
 Tests the full MCP protocol over HTTP — validates tools, resources, prompts end-to-end.
