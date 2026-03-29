@@ -1,3 +1,8 @@
+---
+name: configure-throttle
+description: Protect servers with rate limiting, concurrency control, execution timeouts, and IP filtering
+---
+
 # Configuring Throttle, Rate Limits, and IP Filtering
 
 Protect your FrontMCP server with rate limiting, concurrency control, execution timeouts, and IP filtering — at both server and per-tool levels.

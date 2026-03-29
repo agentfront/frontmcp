@@ -13,6 +13,7 @@ import {
 } from '../../errors';
 import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { randomBytes } from '@frontmcp/utils';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
@@ -234,8 +235,24 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const { resource, input, params } = this.state.required;
 
     try {
-      // Create context-aware providers that include scoped providers from plugins
-      const contextProviders = new FlowContextProviders(this.scope.providers, this.deps);
+      // Build context-scoped providers from the resource's provider registry (app-level).
+      // This ensures CONTEXT-scoped providers registered at the app level are available,
+      // matching the same resolution chain that tools use.
+      const sessionKey =
+        this.state.sessionId ??
+        ctx.authInfo?.sessionId ??
+        `req-${Date.now()}-${Buffer.from(randomBytes(16)).toString('hex')}`;
+      const resourceViews = await resource.providers.buildViews(sessionKey, new Map(this.deps));
+
+      // Merge resource's context providers with flow's context deps
+      const mergedContextDeps = new Map(this.deps);
+      for (const [token, instance] of resourceViews.context) {
+        if (!mergedContextDeps.has(token)) {
+          mergedContextDeps.set(token, instance);
+        }
+      }
+
+      const contextProviders = new FlowContextProviders(resource.providers, mergedContextDeps);
       const context = resource.create(input.uri, params, { ...ctx, contextProviders });
       const resourceHooks = this.scope.hooks.getClsHooks(resource.record.provide).map((hook) => {
         hook.run = async () => {

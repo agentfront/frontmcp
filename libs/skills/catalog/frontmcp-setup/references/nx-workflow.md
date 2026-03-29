@@ -1,3 +1,8 @@
+---
+name: nx-workflow
+description: Scaffold, build, test, and deploy FrontMCP projects using the @frontmcp/nx plugin in a monorepo
+---
+
 # Nx Monorepo Workflow for FrontMCP
 
 Use the `@frontmcp/nx` plugin to scaffold, build, test, and deploy FrontMCP projects in an Nx monorepo. The plugin provides generators for every FrontMCP primitive (tools, resources, prompts, skills, agents, plugins, adapters, providers, flows, jobs, workflows) and deployment shells for multiple targets.

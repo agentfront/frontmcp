@@ -1,3 +1,8 @@
+---
+name: deploy-to-vercel-config
+description: Reference vercel.json configuration for deploying a FrontMCP server to Vercel
+---
+
 {
 "$schema": "https://openapi.vercel.sh/vercel.json",
 "framework": null,

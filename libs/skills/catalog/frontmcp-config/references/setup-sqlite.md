@@ -1,3 +1,8 @@
+---
+name: setup-sqlite
+description: Cross-reference to the full SQLite configuration guide in frontmcp-setup
+---
+
 # SQLite Setup Reference
 
 > This reference is maintained in `frontmcp-setup/references/setup-sqlite.md`.

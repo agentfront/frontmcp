@@ -1,3 +1,8 @@
+---
+name: build-for-browser
+description: Build a FrontMCP server or client for browser environments and frontend frameworks
+---
+
 # Building for Browser
 
 Build your FrontMCP server or client for browser environments.

@@ -10,4 +10,12 @@ export const COLORS = {
   gray: '\x1b[90m',
 } as const;
 
-export const c = (color: keyof typeof COLORS, s: string) => COLORS[color] + s + COLORS.reset;
+function colorsEnabled(): boolean {
+  if (process.env['NO_COLOR'] !== undefined) return false;
+  const fc = process.env['FORCE_COLOR'];
+  if (fc !== undefined) return fc !== '0' && fc.toLowerCase() !== 'false';
+  return process.stdout?.isTTY === true;
+}
+
+export const c = (color: keyof typeof COLORS, s: string): string =>
+  colorsEnabled() ? COLORS[color] + s + COLORS.reset : s;

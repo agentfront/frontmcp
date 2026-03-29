@@ -1,3 +1,8 @@
+---
+name: setup-project
+description: Scaffold a new FrontMCP project with CLI or manual setup, decorators, apps, and deployment config
+---
+
 # Scaffold and Configure a New FrontMCP Project
 
 ## When to Use This Skill

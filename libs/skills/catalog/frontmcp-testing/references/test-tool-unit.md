@@ -1,3 +1,8 @@
+---
+name: test-tool-unit
+description: Unit test a ToolContext execute method with mock context, inputs, and Zod schema validation
+---
+
 # Unit Testing a Tool
 
 ```typescript

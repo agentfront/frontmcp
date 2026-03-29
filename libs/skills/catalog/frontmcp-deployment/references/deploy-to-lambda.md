@@ -1,3 +1,8 @@
+---
+name: deploy-to-lambda
+description: Deploy a FrontMCP server to AWS Lambda with API Gateway using SAM or CDK
+---
+
 # Deploy a FrontMCP Server to AWS Lambda
 
 This skill walks you through deploying a FrontMCP server to AWS Lambda with API Gateway using SAM or CDK.

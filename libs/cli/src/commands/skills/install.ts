@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { c } from '../../core/colors';
-import { ensureDir, fileExists, cp } from '@frontmcp/utils';
+import { ensureDir, fileExists, cp, readFile, writeFile } from '@frontmcp/utils';
 import { loadCatalog, getCatalogDir } from './catalog';
 
 const PROVIDER_DIRS: Record<string, string> = {
@@ -8,12 +8,55 @@ const PROVIDER_DIRS: Record<string, string> = {
   codex: '.codex/skills',
 };
 
+/** The marker we look for in CLAUDE.md to know skills instructions are present. */
+const SKILLS_MARKER = '# Skills and Tools';
+
+/** Minimal CLAUDE.md content that instructs Claude to use installed skills. */
+const CLAUDE_MD_SKILLS_SECTION = `# Skills and Tools
+
+This project uses **FrontMCP skills** installed in \`.claude/skills/\`.
+Before writing code, search the installed skills for relevant guidance:
+
+- **Building components** (tools, resources, prompts, plugins, adapters) — check \`frontmcp-development\`
+- **Testing** — check \`frontmcp-testing\`
+- **Configuration** (auth, CORS, transport, sessions) — check \`frontmcp-config\`
+- **Deployment** (Docker, Vercel, Lambda, Cloudflare) — check \`frontmcp-deployment\`
+- **Production readiness** (security, performance, reliability) — check \`frontmcp-production-readiness\`
+
+When you need to implement something, **read the matching skill first** — it contains patterns, examples, verification checklists, and common mistakes to avoid.
+`;
+
 export interface InstallOptions {
   provider?: 'claude' | 'codex';
   dir?: string;
   all?: boolean;
   tag?: string;
   category?: string;
+}
+
+/**
+ * Ensure CLAUDE.md exists and contains skills usage instructions.
+ * If the file doesn't exist, creates it with the skills section.
+ * If it exists but lacks the skills marker, prepends the section.
+ */
+async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<void> {
+  const claudeMdPath = path.join(cwd, 'CLAUDE.md');
+
+  if (await fileExists(claudeMdPath)) {
+    const content = await readFile(claudeMdPath);
+    if (content.includes(SKILLS_MARKER)) {
+      // Already has skills instructions — nothing to do
+      return;
+    }
+    // Exists but missing skills section — prepend it
+    const updated = CLAUDE_MD_SKILLS_SECTION + '\n' + content;
+    await writeFile(claudeMdPath, updated);
+    console.log(`${c('green', '✓')} Updated ${c('cyan', 'CLAUDE.md')} with skills usage instructions`);
+  } else {
+    // Create new CLAUDE.md with skills section
+    await writeFile(claudeMdPath, CLAUDE_MD_SKILLS_SECTION);
+    console.log(`${c('green', '✓')} Created ${c('cyan', 'CLAUDE.md')} with skills usage instructions`);
+  }
 }
 
 export async function installSkill(name: string | undefined, options: InstallOptions): Promise<void> {
@@ -91,5 +134,10 @@ export async function installSkill(name: string | undefined, options: InstallOpt
 
   if (skills.length > 1) {
     console.log(`\n${c('green', '✓')} Installed ${installed}/${skills.length} skills (provider: ${provider})`);
+  }
+
+  // For Claude provider: ensure CLAUDE.md has skills usage instructions
+  if (provider === 'claude') {
+    await ensureClaudeMdSkillsInstructions(process.cwd());
   }
 }

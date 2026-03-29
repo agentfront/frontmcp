@@ -57,6 +57,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
       throw new ServerNotFoundError();
     }
     await server.start();
+
+    // Emit server-started lifecycle event to all scopes
+    for (const scope of this.getScopes()) {
+      await scope.emitServerStarted();
+    }
   }
 
   /**

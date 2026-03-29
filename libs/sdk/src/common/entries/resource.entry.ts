@@ -8,6 +8,8 @@ import { ReadResourceResult, Request, Notification } from '@frontmcp/protocol';
 import { RequestHandlerExtra } from '@frontmcp/protocol';
 import { AuthInfo } from '@frontmcp/protocol';
 import { ProviderRegistryInterface } from '../interfaces/internal';
+import type { ResourceArgumentCompleter } from '../interfaces/resource.interface';
+import ProviderRegistry from '../../provider/provider.registry';
 
 export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
@@ -58,6 +60,12 @@ export abstract class ResourceEntry<
   isTemplate: boolean;
 
   /**
+   * Get the provider registry for this resource.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  abstract get providers(): ProviderRegistry;
+
+  /**
    * Create a resource context (class or function wrapper).
    * @param uri The actual URI being read (for templates, this includes resolved params)
    * @param params Extracted URI template parameters (empty for static resources)
@@ -81,4 +89,13 @@ export abstract class ResourceEntry<
    * For templates: pattern match and extract parameters
    */
   abstract matchUri(uri: string): { matches: boolean; params: Params };
+
+  /**
+   * Get an argument completer for resource template autocompletion.
+   * Override in subclasses to provide suggestions for template parameters.
+   * Returns null by default (no completion available).
+   */
+  getArgumentCompleter(_argName: string): ResourceArgumentCompleter | null {
+    return null;
+  }
 }

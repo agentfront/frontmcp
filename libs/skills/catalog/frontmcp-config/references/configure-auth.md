@@ -1,3 +1,8 @@
+---
+name: configure-auth
+description: Set up authentication modes, credential vault, and OAuth flows for FrontMCP servers
+---
+
 # Configure Authentication for FrontMCP
 
 This skill covers setting up authentication in a FrontMCP server. FrontMCP supports four auth modes, each suited to different deployment scenarios. All authentication logic lives in the `@frontmcp/auth` library.

@@ -63,11 +63,13 @@ export function registerSkillsCommands(program: Command): void {
     );
 
   skills
-    .command('show')
-    .description('Show full details of a skill including instructions')
-    .argument('<name>', 'Skill name')
-    .action(async (name: string) => {
-      const { showSkill } = await import('./show.js');
-      await showSkill(name);
+    .command('read')
+    .description('Read a skill, its references, or any file in the skill directory')
+    .argument('<nameOrPath>', 'Skill name or skill:filepath (e.g., frontmcp-dev:references/create-tool.md)')
+    .argument('[reference]', 'Reference name to read (e.g., create-tool)')
+    .option('--refs', 'List all available references for the skill')
+    .action(async (name: string, reference: string | undefined, options: { refs?: boolean }) => {
+      const { readSkill } = await import('./read.js');
+      await readSkill(name, { reference, listRefs: options.refs });
     });
 }

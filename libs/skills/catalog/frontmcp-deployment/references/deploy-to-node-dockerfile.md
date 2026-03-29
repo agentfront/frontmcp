@@ -1,3 +1,8 @@
+---
+name: deploy-to-node-dockerfile
+description: Multi-stage Dockerfile for building and running a FrontMCP server in production
+---
+
 # ---- Build Stage ----
 
 FROM node:24-alpine AS builder

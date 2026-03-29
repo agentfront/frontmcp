@@ -53,15 +53,40 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 
 ## Scenario Routing Table
 
-| Scenario                                          | Skill                  | Description                                                             |
-| ------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
-| Long-running server on VPS, Docker, or bare metal | `deploy-to-node`       | Node.js with stdio or HTTP transport, PM2/Docker for process management |
-| Serverless with zero config and Vercel KV         | `deploy-to-vercel`     | Vercel Functions with Streamable HTTP, Vercel KV for storage            |
-| AWS serverless with API Gateway                   | `deploy-to-lambda`     | Lambda + API Gateway with Streamable HTTP, DynamoDB or ElastiCache      |
-| Edge computing with global distribution           | `deploy-to-cloudflare` | Cloudflare Workers with KV or Durable Objects for storage               |
-| Standalone executable binary for distribution     | `build-for-cli`        | Single-binary CLI with stdio transport, embedded storage                |
-| Run MCP in a web browser                          | `build-for-browser`    | Browser-compatible bundle with in-memory transport                      |
-| Embed MCP into an existing Node.js application    | `build-for-sdk`        | Library build for programmatic usage without standalone server          |
+| Scenario                                          | Skill                       | Description                                                             |
+| ------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
+| Long-running server on VPS, Docker, or bare metal | `deploy-to-node`            | Node.js with stdio or HTTP transport, PM2/Docker for process management |
+| Serverless with zero config and Vercel KV         | `deploy-to-vercel`          | Vercel Functions with Streamable HTTP, Vercel KV for storage            |
+| AWS serverless with API Gateway                   | `deploy-to-lambda`          | Lambda + API Gateway with Streamable HTTP, DynamoDB or ElastiCache      |
+| Edge computing with global distribution           | `deploy-to-cloudflare`      | Cloudflare Workers with KV or Durable Objects for storage               |
+| Standalone executable binary for distribution     | `build-for-cli`             | Single-binary CLI with stdio transport, embedded storage                |
+| Run MCP in a web browser                          | `build-for-browser`         | Browser-compatible bundle with in-memory transport                      |
+| Embed MCP into an existing Node.js application    | `build-for-sdk`             | Library build for programmatic usage without standalone server          |
+| Write a Dockerfile for Node.js deployment         | `deploy-to-node-dockerfile` | Dockerfile configuration for Node.js deployment                         |
+| Configure Vercel-specific settings (vercel.json)  | `deploy-to-vercel-config`   | Vercel-specific configuration (vercel.json)                             |
+
+### CLI Commands for Deployment and Operations
+
+Beyond `frontmcp build`, the CLI provides commands for the full deployment lifecycle:
+
+| Command                      | Description                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| `frontmcp build -t <target>` | Build for target: `node`, `vercel`, `lambda`, `cloudflare`, `cli`, `browser`, `sdk` |
+| `frontmcp build -t cli --js` | Build CLI as JS bundle (instead of native binary via SEA)                           |
+| `frontmcp start <name>`      | Start a named MCP server with supervisor (process management)                       |
+| `frontmcp stop <name>`       | Stop managed server (`-f` for force kill)                                           |
+| `frontmcp restart <name>`    | Restart managed server                                                              |
+| `frontmcp status [name]`     | Show process status (detail if name given, table if omitted)                        |
+| `frontmcp list`              | List all managed processes                                                          |
+| `frontmcp logs <name>`       | Tail log output (`-F` follow, `-n` lines)                                           |
+| `frontmcp socket <entry>`    | Start Unix socket daemon for local MCP server                                       |
+| `frontmcp service <action>`  | Install/uninstall systemd (Linux) or launchd (macOS) service                        |
+| `frontmcp install <source>`  | Install MCP app from npm, local path, or git                                        |
+| `frontmcp uninstall <name>`  | Remove installed MCP app                                                            |
+| `frontmcp configure <name>`  | Re-run setup questionnaire for installed app                                        |
+| `frontmcp doctor`            | Check Node.js/npm versions and tsconfig requirements                                |
+| `frontmcp inspector`         | Launch MCP Inspector for debugging                                                  |
+| `frontmcp init`              | Create or fix tsconfig.json for FrontMCP                                            |
 
 ## Target Comparison
 

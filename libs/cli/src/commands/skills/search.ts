@@ -23,6 +23,6 @@ export async function searchSkills(
     console.log('');
   }
 
-  console.log(c('gray', `  ${results.length} result(s). Use 'frontmcp skills show <name>' for full details.`));
+  console.log(c('gray', `  ${results.length} result(s). Use 'frontmcp skills read <name>' for full details.`));
   console.log(c('gray', `  Install: 'frontmcp skills install <name> --provider claude'\n`));
 }

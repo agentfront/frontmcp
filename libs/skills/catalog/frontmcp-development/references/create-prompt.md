@@ -1,3 +1,8 @@
+---
+name: create-prompt
+description: Define reusable AI interaction patterns that produce structured message sequences
+---
+
 # Creating MCP Prompts
 
 Prompts define reusable AI interaction patterns in the MCP protocol. They produce structured message sequences that clients use to guide LLM conversations. In FrontMCP, prompts are classes extending `PromptContext`, decorated with `@Prompt`, that return `GetPromptResult` objects.
@@ -64,8 +69,10 @@ class CodeReviewPrompt extends PromptContext {
 The `@Prompt` decorator accepts:
 
 - `name` (required) -- unique prompt name
+- `title` (optional) -- human-readable display title for UIs (if omitted, `name` is used)
 - `description` (optional) -- human-readable description
 - `arguments` (optional) -- array of `PromptArgument` objects
+- `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
 
 ### PromptArgument Structure
 

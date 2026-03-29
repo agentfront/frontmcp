@@ -1,3 +1,8 @@
+---
+name: create-tool-output-schema-types
+description: Reference for all supported outputSchema types including Zod shapes and JSON Schema
+---
+
 # Output Schema Types Reference
 
 All supported `outputSchema` types for `@Tool`:

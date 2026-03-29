@@ -2,6 +2,16 @@
 
 import { COLORS, c } from '../colors';
 
+const originalForceColor = process.env['FORCE_COLOR'];
+const originalNoColor = process.env['NO_COLOR'];
+
+function restoreColorEnv(): void {
+  if (originalForceColor === undefined) delete process.env['FORCE_COLOR'];
+  else process.env['FORCE_COLOR'] = originalForceColor;
+  if (originalNoColor === undefined) delete process.env['NO_COLOR'];
+  else process.env['NO_COLOR'] = originalNoColor;
+}
+
 describe('colors', () => {
   describe('COLORS', () => {
     it('should have reset code', () => {
@@ -42,6 +52,14 @@ describe('colors', () => {
   });
 
   describe('c', () => {
+    beforeEach(() => {
+      process.env['FORCE_COLOR'] = '1';
+    });
+
+    afterEach(() => {
+      restoreColorEnv();
+    });
+
     it('should wrap text with red color', () => {
       const result = c('red', 'error text');
       expect(result).toBe('\x1b[31merror text\x1b[0m');
@@ -85,6 +103,60 @@ describe('colors', () => {
     it('should handle empty string', () => {
       const result = c('red', '');
       expect(result).toBe('\x1b[31m\x1b[0m');
+    });
+  });
+
+  describe('NO_COLOR support', () => {
+    beforeEach(() => {
+      delete process.env['FORCE_COLOR'];
+      delete process.env['NO_COLOR'];
+    });
+
+    afterEach(() => {
+      restoreColorEnv();
+    });
+
+    it('should return plain text when NO_COLOR is set', () => {
+      process.env['NO_COLOR'] = '1';
+      const result = c('red', 'error text');
+      expect(result).toBe('error text');
+    });
+
+    it('should treat NO_COLOR empty string as set', () => {
+      process.env['NO_COLOR'] = '';
+      const result = c('red', 'error text');
+      expect(result).toBe('error text');
+    });
+
+    it('should respect FORCE_COLOR to enable colors', () => {
+      process.env['FORCE_COLOR'] = '1';
+      const result = c('red', 'error text');
+      expect(result).toBe('\x1b[31merror text\x1b[0m');
+    });
+
+    it('should disable colors when FORCE_COLOR is "0"', () => {
+      process.env['FORCE_COLOR'] = '0';
+      const result = c('red', 'error text');
+      expect(result).toBe('error text');
+    });
+
+    it('should disable colors when FORCE_COLOR is "false"', () => {
+      process.env['FORCE_COLOR'] = 'false';
+      const result = c('red', 'error text');
+      expect(result).toBe('error text');
+    });
+
+    it('should prioritize NO_COLOR over FORCE_COLOR', () => {
+      process.env['NO_COLOR'] = '1';
+      process.env['FORCE_COLOR'] = '1';
+      const result = c('red', 'error text');
+      expect(result).toBe('error text');
+    });
+
+    it('should return plain text when no TTY and no FORCE_COLOR', () => {
+      // In test environment, process.stdout.isTTY is undefined (not a TTY)
+      const result = c('bold', 'heading');
+      expect(result).toBe('heading');
     });
   });
 });
