@@ -1,3 +1,8 @@
+---
+name: create-plugin-hooks
+description: Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators
+---
+
 # Creating Plugins with Flow Lifecycle Hooks
 
 Plugins intercept and extend FrontMCP flows using lifecycle hook decorators. Every flow (tool calls, resource reads, prompt gets, etc.) is composed of **stages**, and hooks let you run logic before, after, around, or instead of any stage.
@@ -57,6 +62,42 @@ const { Stage, Will, Did, Around } = FlowHooksOf('tools:call-tool');
 | `prompts:list-prompts`     | Prompt listing           |
 | `http:request`             | HTTP request handling    |
 | `agents:call-agent`        | Agent invocation         |
+
+## Server Lifecycle Hooks
+
+In addition to flow-based hooks, plugins can register callbacks for server lifecycle events. These are not decorator-based — they use the `scope.onServerStarted()` API.
+
+### `onServerStarted()`
+
+Runs after the HTTP server is fully initialized and listening. Use for warming caches, starting background indexing, or logging readiness.
+
+```typescript
+import { Plugin, DynamicPlugin } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'cache-warmer',
+  description: 'Warms caches when the server starts',
+  providers: [CacheService],
+})
+class CacheWarmerPlugin extends DynamicPlugin<{}> {
+  constructor(scope: ScopeEntry) {
+    super();
+    // Register lifecycle callback
+    scope.onServerStarted(async () => {
+      const cache = this.get(CacheService);
+      await cache.warmAll();
+      console.log('Cache warmed successfully');
+    });
+  }
+}
+```
+
+**Signature:** `scope.onServerStarted(callback: () => void | Promise<void>): void`
+
+- Callbacks are stored and executed after `server.start()` completes
+- Supports both sync and async callbacks
+- Multiple callbacks are executed in registration order with `await`
+- Typically used in plugin constructors or provider `onInit()` methods
 
 ## Pre-Built Hook Type Exports
 

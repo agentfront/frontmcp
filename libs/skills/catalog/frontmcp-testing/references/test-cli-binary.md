@@ -1,3 +1,8 @@
+---
+name: test-cli-binary
+description: Test CLI binary and SEA build for startup, health check, and JS bundle import
+---
+
 # Testing CLI Binary / SEA Build
 
 After building with `frontmcp build --target cli`, test the binary:

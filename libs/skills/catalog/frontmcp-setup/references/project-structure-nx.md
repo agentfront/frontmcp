@@ -1,3 +1,8 @@
+---
+name: project-structure-nx
+description: Canonical directory layout, generators, and dependency rules for FrontMCP Nx monorepos
+---
+
 # Nx Monorepo Project Structure
 
 ## When to Use This Skill

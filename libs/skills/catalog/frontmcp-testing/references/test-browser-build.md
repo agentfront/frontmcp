@@ -1,3 +1,8 @@
+---
+name: test-browser-build
+description: Validate browser build output for Node.js-free bundles and test with Playwright
+---
+
 # Testing Browser Build
 
 After building with `frontmcp build --target browser`, validate the output:

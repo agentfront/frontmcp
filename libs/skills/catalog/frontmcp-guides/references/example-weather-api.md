@@ -1,3 +1,8 @@
+---
+name: example-weather-api
+description: Beginner MCP server with a weather lookup tool, static resource, Zod schemas, and E2E tests
+---
+
 # Example: Weather API (Beginner)
 
 > Skills used: setup-project, create-tool, create-resource, setup-testing, deploy-to-node

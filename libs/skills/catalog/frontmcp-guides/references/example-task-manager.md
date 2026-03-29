@@ -1,3 +1,8 @@
+---
+name: example-task-manager
+description: Authenticated task management server with CRUD tools, Redis storage, OAuth, and Vercel deployment
+---
+
 # Example: Task Manager (Intermediate)
 
 > Skills used: setup-project, create-tool, create-provider, configure-auth, configure-session, setup-redis, setup-testing, deploy-to-vercel

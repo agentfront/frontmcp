@@ -40,20 +40,25 @@ Entry point for building MCP server components. This skill helps you find the ri
 
 ## Scenario Routing Table
 
-| Scenario                                                 | Skill                     | Description                                                                                   |
-| -------------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
-| Expose an executable action that AI clients can call     | `create-tool`             | Class-based or function-style tools with Zod input/output validation                          |
-| Expose read-only data via a URI                          | `create-resource`         | Static resources or URI template resources for dynamic data                                   |
-| Create a reusable conversation template or system prompt | `create-prompt`           | Prompt entries with arguments and multi-turn message sequences                                |
-| Build an autonomous AI loop that orchestrates tools      | `create-agent`            | Agent entries with LLM config, inner tools, and swarm handoff                                 |
-| Register shared services or configuration via DI         | `create-provider`         | Dependency injection tokens, lifecycle hooks, factory providers                               |
-| Run a background task with progress and retries          | `create-job`              | Job entries with attempt tracking, retry config, and progress                                 |
-| Chain multiple jobs into a sequential pipeline           | `create-workflow`         | Workflow entries that compose jobs with data passing                                          |
-| Write instruction-only AI guidance (no code execution)   | `create-skill`            | Skill entries with markdown instructions from files, strings, or URLs                         |
-| Write AI guidance that also orchestrates tools           | `create-skill-with-tools` | Skill entries that combine instructions with registered tools                                 |
-| Look up any decorator signature or option                | `decorators-guide`        | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more           |
-| Integrate an external API via OpenAPI spec               | `official-adapters`       | OpenapiAdapter with auth, polling, inline specs, and multiple API composition                 |
-| Use official plugins (caching, remember, feature flags)  | `official-plugins`        | Built-in plugins for caching, session memory, approval, and feature flags (dashboard is beta) |
+| Scenario                                                 | Skill                             | Description                                                                                   |
+| -------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------- |
+| Expose an executable action that AI clients can call     | `create-tool`                     | Class-based or function-style tools with Zod input/output validation                          |
+| Expose read-only data via a URI                          | `create-resource`                 | Static resources or URI template resources for dynamic data                                   |
+| Create a reusable conversation template or system prompt | `create-prompt`                   | Prompt entries with arguments and multi-turn message sequences                                |
+| Build an autonomous AI loop that orchestrates tools      | `create-agent`                    | Agent entries with LLM config, inner tools, and swarm handoff                                 |
+| Register shared services or configuration via DI         | `create-provider`                 | Dependency injection tokens, lifecycle hooks, factory providers                               |
+| Run a background task with progress and retries          | `create-job`                      | Job entries with attempt tracking, retry config, and progress                                 |
+| Chain multiple jobs into a sequential pipeline           | `create-workflow`                 | Workflow entries that compose jobs with data passing                                          |
+| Write instruction-only AI guidance (no code execution)   | `create-skill`                    | Skill entries with markdown instructions from files, strings, or URLs                         |
+| Write AI guidance that also orchestrates tools           | `create-skill-with-tools`         | Skill entries that combine instructions with registered tools                                 |
+| Look up any decorator signature or option                | `decorators-guide`                | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more           |
+| Integrate an external API via OpenAPI spec               | `official-adapters`               | OpenapiAdapter with auth, polling, inline specs, and multiple API composition                 |
+| Use official plugins (caching, remember, feature flags)  | `official-plugins`                | Built-in plugins for caching, session memory, approval, and feature flags (dashboard is beta) |
+| Connect to an external data source via a custom adapter  | `create-adapter`                  | Create custom adapters for external data sources                                              |
+| Configure LLM settings for an agent component            | `create-agent-llm-config`         | Configure LLM settings for agent components                                                   |
+| Add will/did/around lifecycle hooks to a plugin          | `create-plugin-hooks`             | Add lifecycle hooks to plugins (will/did/around)                                              |
+| Annotate tools with client hints for AI clients          | `create-tool-annotations`         | Add MCP tool annotations for client hints                                                     |
+| Define typed output schemas for tool responses           | `create-tool-output-schema-types` | Define typed output schemas for tools                                                         |
 
 ## Recommended Reading Order
 

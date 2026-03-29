@@ -1,3 +1,8 @@
+---
+name: create-agent-llm-config
+description: Reference for supported LLM provider configurations including Anthropic and OpenAI
+---
+
 # Agent LLM Configuration Reference
 
 ## Supported Providers

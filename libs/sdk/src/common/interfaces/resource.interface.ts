@@ -15,6 +15,27 @@ export interface ResourceInterface<Params extends Record<string, string> = Recor
 }
 
 /**
+ * Result returned by a resource argument completer.
+ */
+export interface ResourceCompletionResult {
+  /** Completion suggestions matching the partial value */
+  values: string[];
+  /** Total number of matching values (for pagination) */
+  total?: number;
+  /** Whether more results exist beyond what was returned */
+  hasMore?: boolean;
+}
+
+/**
+ * Function that provides completion suggestions for a resource template argument.
+ * @param partial - The partial value typed so far
+ * @returns Completion suggestions
+ */
+export type ResourceArgumentCompleter = (
+  partial: string,
+) => Promise<ResourceCompletionResult> | ResourceCompletionResult;
+
+/**
  * Function-style resource type.
  * This represents resources created via resource() or resourceTemplate() builders.
  * The function returns a handler that will be invoked for the resource.
@@ -89,6 +110,30 @@ export abstract class ResourceContext<
   }
 
   abstract execute(uri: string, params: Params): Promise<Out>;
+
+  /**
+   * Override to provide autocompletion for resource template arguments.
+   * Called by the MCP `completion/complete` handler when a client requests
+   * suggestions for a template parameter.
+   *
+   * @param argName - The template parameter name (e.g., 'userId')
+   * @returns A completer function, or null if no completion is available for this argument
+   *
+   * @example
+   * ```typescript
+   * getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
+   *   if (argName === 'userId') {
+   *     return async (partial) => ({
+   *       values: await this.searchUsers(partial),
+   *     });
+   *   }
+   *   return null;
+   * }
+   * ```
+   */
+  getArgumentCompleter(_argName: string): ResourceArgumentCompleter | null {
+    return null;
+  }
 
   public get output(): Out | undefined {
     return this._output;

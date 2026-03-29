@@ -11,6 +11,18 @@ import { SkillRecord } from '../records';
 export type SkillType<T = unknown> = Type<T> | SkillRecord | string;
 
 /**
+ * Metadata for a resolved reference file within a skill's references/ directory.
+ */
+export interface SkillReferenceInfo {
+  /** Reference name (typically filename without .md) */
+  name: string;
+  /** Short description from frontmatter or first paragraph */
+  description: string;
+  /** Filename relative to the skill directory */
+  filename: string;
+}
+
+/**
  * Full content returned when loading a skill.
  * Contains all information needed for an LLM to execute the skill.
  */
@@ -79,6 +91,12 @@ export interface SkillContent {
    * Bundled resource directories (scripts/, references/, assets/).
    */
   resources?: SkillResources;
+
+  /**
+   * Resolved reference metadata from the skill's references/ directory.
+   * Each entry contains name, description, and filename for the reference.
+   */
+  resolvedReferences?: SkillReferenceInfo[];
 }
 
 /**

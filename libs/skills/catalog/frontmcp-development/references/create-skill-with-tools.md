@@ -1,3 +1,8 @@
+---
+name: create-skill-with-tools
+description: Create skills that combine structured instructions with MCP tool references for orchestration
+---
+
 # Creating a Skill with Tools
 
 Skills are knowledge and workflow guides that help LLMs accomplish multi-step tasks using available MCP tools. Unlike tools (which execute actions directly) or agents (which run autonomous LLM loops), skills provide structured instructions, tool references, and context that the AI client uses to orchestrate tool calls on its own.
@@ -341,6 +346,44 @@ Use `hideFromDiscovery: true` to register a skill that is not listed in discover
 class AdminMaintenanceSkill extends SkillContext {}
 ```
 
+## Agent Skills Spec Fields
+
+Skills support additional metadata fields from the Anthropic Agent Skills specification:
+
+```typescript
+@Skill({
+  name: 'deploy-to-prod',
+  description: 'Production deployment workflow',
+  instructions: { file: './deploy-prod.md' },
+  tools: [BuildTool, DeployTool, HealthCheckTool],
+  priority: 10, // Higher = earlier in search results
+  license: 'MIT', // License identifier
+  compatibility: 'Node.js 24+, Docker', // Environment requirements (max 500 chars)
+  allowedTools: 'Read Edit Bash(git status)', // Pre-approved tools (space-delimited)
+  specMetadata: {
+    // Arbitrary key-value metadata
+    author: 'platform-team',
+    version: '2.0.0',
+  },
+  resources: {
+    // Bundled resource directories
+    scripts: './scripts', // Helper scripts
+    references: './references', // Reference documents
+    assets: './assets', // Static assets
+  },
+})
+class DeployToProdSkill extends SkillContext {}
+```
+
+| Field           | Description                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `priority`      | Search ranking weight; higher = earlier (default: `0`)           |
+| `license`       | License identifier (e.g., `'MIT'`, `'Apache-2.0'`)               |
+| `compatibility` | Environment requirements (max 500 chars)                         |
+| `allowedTools`  | Space-delimited pre-approved tool names for the skill            |
+| `specMetadata`  | Arbitrary `Record<string, string>` map (Agent Skills `metadata`) |
+| `resources`     | Bundled dirs: `{ scripts?, references?, assets? }` paths         |
+
 ## Function-Style Builder
 
 For skills that do not need a class, use the `skill()` function builder:
@@ -575,15 +618,81 @@ class AuditApp {}
 class AuditServer {}
 ```
 
+## CodeCall Compatibility
+
+When the `CodeCallPlugin` is active in `codecall_only` mode, all tools registered on the server are hidden from `list_tools`. The AI client only sees the three CodeCall meta-tools (`codecall:search`, `codecall:describe`, `codecall:execute`). This means skill instructions that reference tool names directly (e.g., "Use the `build_project` tool") become misleading -- the AI cannot call those tools because they do not appear in the tool listing.
+
+### When This Matters
+
+This is only relevant when the server initializes CodeCall in `codecall_only` mode:
+
+```typescript
+CodeCallPlugin.init({ mode: 'codecall_only' });
+```
+
+With `codecall_opt_in` or `metadata_driven` modes, tools remain visible in `list_tools` alongside the CodeCall meta-tools. In those modes, standard tool-referencing instructions continue to work without changes.
+
+### Writing Dual-Mode Instructions
+
+Write skill instructions that work regardless of whether CodeCall is active. Instead of referencing tool names as direct calls, instruct the AI to use the search-describe-execute pattern:
+
+```markdown
+## Step 1: Find Available Tools
+
+Search for tools related to your task using codecall:search.
+Query: ["build project", "run tests", "deploy"]
+
+## Step 2: Describe Tool Interfaces
+
+Once you find matching tools, use codecall:describe to understand their input schemas.
+
+## Step 3: Execute
+
+Use codecall:execute with an AgentScript that calls the tools:
+const build = await callTool('build_project', { target: 'production' });
+const tests = await callTool('run_tests', { suite: 'e2e' });
+```
+
+### Supporting Both Direct and CodeCall Workflows
+
+If you want the skill to work with and without CodeCall, list the tool names in the `tools` array (so they are associated with the skill in metadata) AND include instructions for both direct calls and the CodeCall workflow. This way:
+
+- In standard mode, the AI sees the tools in `list_tools` and can call them directly using the tool names from the `tools` array.
+- In `codecall_only` mode, the AI follows the search-describe-execute instructions to discover and invoke the same tools through CodeCall.
+
+```typescript
+@Skill({
+  name: 'deploy-service',
+  description: 'Deploy a service through the pipeline',
+  instructions: `# Deploy Service
+
+## Finding the Tools
+If tools are not directly visible, search for them:
+Use codecall:search with query ["build project", "run tests", "deploy to environment"].
+Then use codecall:describe on each result to confirm the input schema.
+
+## Step 1: Build
+Call build_project with the service name and target environment.
+If using CodeCall: codecall:execute with callTool('build_project', { ... }).
+
+## Step 2: Test
+Call run_tests with the test suite name.
+If using CodeCall: codecall:execute with callTool('run_tests', { ... }).`,
+  tools: [BuildProjectTool, RunTestsTool, DeployToEnvTool],
+})
+class DeployServiceSkill extends SkillContext {}
+```
+
 ## Common Patterns
 
-| Pattern            | Correct                                                                               | Incorrect                                                      | Why                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Tool references    | `tools: [BuildTool, 'run_tests', { name: 'deploy', purpose: '...', required: true }]` | `tools: [{ class: BuildTool }]` (object with `class` key)      | The `tools` array accepts class refs, strings, or `{ name, purpose, required }` objects only |
-| Tool validation    | `toolValidation: 'strict'` for production skills                                      | Omitting `toolValidation` for critical workflows               | Default is `'warn'`; production skills should fail fast on missing tools with `'strict'`     |
-| Instruction source | `instructions: { file: './skills/deploy.md' }` for long content                       | Inlining hundreds of lines in the decorator string             | File-based instructions keep decorator metadata readable and instructions maintainable       |
-| Skill visibility   | `visibility: 'both'` (default) for public skills                                      | Setting `visibility: 'mcp'` when HTTP discovery is also needed | Skills with `'mcp'` visibility are hidden from `/llm.txt` and `/skills` HTTP endpoints       |
-| Parameter types    | `parameters: [{ name: 'env', type: 'string', required: true }]`                       | `parameters: { env: 'string' }` (plain object shape)           | Parameters must be an array of `{ name, description, type, required?, default? }` objects    |
+| Pattern                | Correct                                                                               | Incorrect                                                      | Why                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Tool references        | `tools: [BuildTool, 'run_tests', { name: 'deploy', purpose: '...', required: true }]` | `tools: [{ class: BuildTool }]` (object with `class` key)      | The `tools` array accepts class refs, strings, or `{ name, purpose, required }` objects only |
+| Tool validation        | `toolValidation: 'strict'` for production skills                                      | Omitting `toolValidation` for critical workflows               | Default is `'warn'`; production skills should fail fast on missing tools with `'strict'`     |
+| Instruction source     | `instructions: { file: './skills/deploy.md' }` for long content                       | Inlining hundreds of lines in the decorator string             | File-based instructions keep decorator metadata readable and instructions maintainable       |
+| Skill visibility       | `visibility: 'both'` (default) for public skills                                      | Setting `visibility: 'mcp'` when HTTP discovery is also needed | Skills with `'mcp'` visibility are hidden from `/llm.txt` and `/skills` HTTP endpoints       |
+| Parameter types        | `parameters: [{ name: 'env', type: 'string', required: true }]`                       | `parameters: { env: 'string' }` (plain object shape)           | Parameters must be an array of `{ name, description, type, required?, default? }` objects    |
+| CodeCall compatibility | List tools AND include codecall:search/execute instructions                           | Only listing tools by name                                     | When CodeCall hides tools, AI can't find them without search instructions                    |
 
 ## Verification Checklist
 

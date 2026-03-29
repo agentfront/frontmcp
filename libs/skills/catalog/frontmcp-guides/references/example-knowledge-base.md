@@ -1,3 +1,8 @@
+---
+name: example-knowledge-base
+description: Multi-app knowledge base with vector storage, semantic search, AI research agent, and audit plugin
+---
+
 # Example: Knowledge Base (Advanced)
 
 > Skills used: setup-project, multi-app-composition, create-tool, create-resource, create-provider, create-agent, create-plugin, configure-auth, deploy-to-vercel

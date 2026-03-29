@@ -29,9 +29,17 @@ export class ResourceInstance<
   Params extends Record<string, string> = Record<string, string>,
   Out = unknown,
 > extends ResourceEntry<Params, Out> {
-  private readonly providers: ProviderRegistry;
+  private readonly _providers: ProviderRegistry;
   readonly scope: ScopeEntry;
   readonly hooks: HookRegistry;
+
+  /**
+   * Get the provider registry for this resource.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  get providers(): ProviderRegistry {
+    return this._providers;
+  }
 
   /** Parsed URI template info for template resources */
   private templateInfo?: { pattern: RegExp; paramNames: string[] };
@@ -39,7 +47,7 @@ export class ResourceInstance<
   constructor(record: ResourceRecord | ResourceTemplateRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
-    this.providers = providers;
+    this._providers = providers;
     this.name = record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
     this.scope = this.providers.getActiveScope();
@@ -89,6 +97,29 @@ export class ResourceInstance<
 
   getMetadata(): ResourceMetadata | ResourceTemplateMetadata {
     return this.record.metadata;
+  }
+
+  /**
+   * Get an argument completer from the resource class prototype.
+   * Returns a completer function if the resource class overrides getArgumentCompleter,
+   * or null if no completer is available.
+   */
+  override getArgumentCompleter(
+    argName: string,
+  ):
+    | ((
+        partial: string,
+      ) =>
+        | Promise<{ values: string[]; total?: number; hasMore?: boolean }>
+        | { values: string[]; total?: number; hasMore?: boolean })
+    | null {
+    const cls = this.record.provide;
+    if (typeof cls === 'function' && cls.prototype && typeof cls.prototype.getArgumentCompleter === 'function') {
+      // Call the method on the prototype — it doesn't need instance state for static completions
+      // For dynamic completions that need DI, the method should be overridden at instance level
+      return cls.prototype.getArgumentCompleter.call(cls.prototype, argName);
+    }
+    return null;
   }
 
   /**

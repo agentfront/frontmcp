@@ -1,3 +1,8 @@
+---
+name: create-agent
+description: Create autonomous AI agents that use LLM reasoning to plan and invoke inner tools
+---
+
 # Creating an Autonomous Agent
 
 Agents are autonomous AI entities that use an LLM to reason, plan, and invoke inner tools to accomplish goals. In FrontMCP, agents are TypeScript classes that extend `AgentContext`, decorated with `@Agent`, and registered on a `@FrontMcp` server or inside an `@App`.

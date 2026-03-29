@@ -1,3 +1,8 @@
+---
+name: test-direct-client
+description: In-memory testing with create() and connectOpenAI/connectClaude without HTTP overhead
+---
+
 # Testing with Direct Client (No HTTP)
 
 Uses `connect()` or `create()` for in-memory testing without HTTP overhead.
