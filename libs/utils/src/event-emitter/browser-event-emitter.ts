@@ -5,7 +5,6 @@
  * emit, on, off, removeAllListeners, setMaxListeners, listenerCount.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 type Listener = Function;
 
 export class EventEmitter {

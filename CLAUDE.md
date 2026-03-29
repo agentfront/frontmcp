@@ -1,3 +1,16 @@
+# Skills and Tools
+
+This project uses **FrontMCP skills** installed in `.claude/skills/`.
+Before writing code, search the installed skills for relevant guidance:
+
+- **Building components** (tools, resources, prompts, plugins, adapters) — check `frontmcp-development`
+- **Testing** — check `frontmcp-testing`
+- **Configuration** (auth, CORS, transport, sessions) — check `frontmcp-config`
+- **Deployment** (Docker, Vercel, Lambda, Cloudflare) — check `frontmcp-deployment`
+- **Production readiness** (security, performance, reliability) — check `frontmcp-production-readiness`
+
+When you need to implement something, **read the matching skill first** — it contains patterns, examples, verification checklists, and common mistakes to avoid.
+
 # FrontMCP Monorepo - Development Guide
 
 ## Repository Structure

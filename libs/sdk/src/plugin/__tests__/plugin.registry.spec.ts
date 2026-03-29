@@ -6,6 +6,7 @@ import 'reflect-metadata';
 import PluginRegistry, { PluginScopeInfo } from '../plugin.registry';
 import { FlowCtxOf } from '../../common/interfaces';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
+import { FrontMcpProvider } from '../../common/decorators/provider.decorator';
 import { FlowHooksOf } from '../../common/decorators/hook.decorator';
 import { createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 import { createProviderRegistryWithScope, createMockScope } from '../../__test-utils__/fixtures/scope.fixtures';
@@ -518,6 +519,48 @@ describe('PluginRegistry', () => {
 
       expect(plugin).toBeInstanceOf(DynamicPlugin);
       expect(typeof plugin.get).toBe('function');
+    });
+
+    it('should not throw ProviderNotRegisteredError when decorator providers are used with DynamicPlugin.init pattern', async () => {
+      @FrontMcpProvider({ name: 'ExportedService' })
+      class ExportedService {
+        getValue() {
+          return 'test';
+        }
+      }
+
+      @FrontMcpPlugin({
+        name: 'PluginWithExportedProvider',
+        description: 'Plugin that declares providers and exports in decorator',
+        providers: [ExportedService],
+        exports: [ExportedService],
+      })
+      class PluginWithExportedProvider {
+        get: any;
+      }
+
+      const providers = await createProviderRegistryWithScope();
+
+      // Simulates what DynamicPlugin.init({}) returns:
+      // providers: [] is empty dynamic providers that must NOT clobber decorator providers
+      const registry = new PluginRegistry(providers, [
+        {
+          provide: PluginWithExportedProvider,
+          useValue: new PluginWithExportedProvider(),
+          providers: [],
+          name: 'PluginWithExportedProvider',
+        },
+      ]);
+
+      // This used to throw: ProviderNotRegisteredError: Provider "ExportedService" is not registered
+      await expect(registry.ready).resolves.not.toThrow();
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+
+      // Exported provider should be accessible from the parent providers registry
+      const exportedInstance = providers.get(ExportedService);
+      expect(exportedInstance).toBeInstanceOf(ExportedService);
     });
   });
 

@@ -309,21 +309,18 @@ export class UpdateTaskTool extends ToolContext {
       this.fail(new Error('Authentication required'));
     }
 
-    try {
-      const updated = await store.update(input.id, userId, {
-        ...(input.status && { status: input.status }),
-        ...(input.priority && { priority: input.priority }),
-      });
+    // No try/catch needed — the framework handles errors in the tool execution flow.
+    const updated = await store.update(input.id, userId, {
+      ...(input.status && { status: input.status }),
+      ...(input.priority && { priority: input.priority }),
+    });
 
-      return {
-        id: updated.id,
-        title: updated.title,
-        priority: updated.priority,
-        status: updated.status,
-      };
-    } catch (err) {
-      this.fail(new Error(`Failed to update task: ${String(err)}`));
-    }
+    return {
+      id: updated.id,
+      title: updated.title,
+      priority: updated.priority,
+      status: updated.status,
+    };
   }
 }
 ```
@@ -358,12 +355,9 @@ export class DeleteTaskTool extends ToolContext {
       this.fail(new Error('Authentication required'));
     }
 
-    try {
-      await store.delete(input.id, userId);
-      return { deleted: true, id: input.id };
-    } catch (err) {
-      this.fail(new Error(`Failed to delete task: ${String(err)}`));
-    }
+    // No try/catch needed — the framework handles errors in the tool execution flow.
+    await store.delete(input.id, userId);
+    return { deleted: true, id: input.id };
   }
 }
 ```

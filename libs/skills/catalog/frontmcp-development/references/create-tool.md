@@ -209,6 +209,26 @@ async execute(input: { data: string }) {
 
 ## Error Handling
 
+**Do NOT wrap `execute()` in try/catch.** The framework's tool execution flow automatically catches exceptions, formats error responses, and triggers error hooks. Only use `this.fail(err)` for **business-logic errors** (validation failures, not-found, permission denied). Let infrastructure errors (network, database) propagate naturally.
+
+```typescript
+// WRONG — never do this:
+async execute(input) {
+  try {
+    const result = await someOperation();
+    return result;
+  } catch (err) {
+    this.fail(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
+// CORRECT — let the framework handle errors:
+async execute(input) {
+  const result = await someOperation(); // errors propagate to framework
+  return result;
+}
+```
+
 Use `this.fail(err)` to abort execution and trigger the error flow. The method throws internally and never returns.
 
 ```typescript
