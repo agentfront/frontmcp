@@ -64,6 +64,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ secrets.DOCS_SYNC_TOKEN }}
 
       - name: Get Node version
         id: node-version
@@ -302,6 +303,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ secrets.DOCS_SYNC_TOKEN }}
 
       - name: Configure git
         run: |
