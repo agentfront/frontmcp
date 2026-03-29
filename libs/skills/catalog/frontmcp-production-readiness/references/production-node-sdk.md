@@ -46,7 +46,7 @@ Checklist for publishing FrontMCP as an npm package used as a direct client SDK 
 ## Testing
 
 - [ ] Unit tests cover tool execution via direct client
-- [ ] Integration tests verify `create()` → `connect()` → `callTool()` → `dispose()`
+- [ ] Integration tests verify `create()` → `connect()` → `callTool()` → `close()` → `dispose()`
 - [ ] No tests depend on a running HTTP server
 - [ ] Tests clean up (dispose) after each test case
 

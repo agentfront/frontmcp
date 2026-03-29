@@ -99,7 +99,7 @@ export class GreeterService {
 import { Plugin, DynamicPlugin, ProviderType } from '@frontmcp/sdk';
 import { GreeterService } from './providers/my-greeter.provider';
 
-@Plugin({ name: 'greeter', providers: [GreeterService], exports: [GreeterService] })
+@Plugin({ name: 'greeter', exports: [GreeterService] })
 export default class GreeterPlugin extends DynamicPlugin<{ prefix: string }> {
   static override dynamicProviders(opts: { prefix: string }): ProviderType[] {
     return [{ provide: GreeterService, useFactory: () => new GreeterService() }];

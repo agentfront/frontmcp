@@ -1,6 +1,7 @@
 export type {
   SkillCatalogEntry,
   SkillManifest,
+  SkillReferenceEntry,
   SkillTarget,
   SkillCategory,
   SkillBundle,

@@ -8,11 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { TFIDFVectoria } from 'vectoriadb';
-
-interface SkillReferenceEntry {
-  name: string;
-  description: string;
-}
+import type { SkillReferenceEntry } from '@frontmcp/skills';
 
 interface SkillEntry {
   name: string;
@@ -293,8 +289,8 @@ function buildSearchableText(skill: SkillEntry): string {
   // Reference names and descriptions (1x weight each)
   if (skill.references) {
     for (const ref of skill.references) {
-      const nameParts = ref.name.split(/[-_.\s]/).filter(Boolean);
-      parts.push(...nameParts);
+      const refNameParts = ref.name.split(/[-_.\s]/).filter(Boolean);
+      parts.push(...refNameParts);
       if (ref.description) {
         const refTerms = ref.description
           .toLowerCase()

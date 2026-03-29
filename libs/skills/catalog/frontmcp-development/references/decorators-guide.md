@@ -528,7 +528,6 @@ class ApprovalFlow {}
 | `description`        | What the job does                                             |
 | `inputSchema`        | Zod schema for job input parameters                           |
 | `outputSchema`       | Zod schema for job output                                     |
-| `schedule?`          | Cron expression (e.g., `'0 */6 * * *'` for every 6 hours)     |
 | `retry?`             | `{ maxAttempts, backoffMs, backoffMultiplier, maxBackoffMs }` |
 | `timeout?`           | Execution timeout in ms                                       |
 | `tags?`              | Categorization tags                                           |
@@ -543,9 +542,8 @@ import { z } from 'zod';
 @Job({
   name: 'sync_data',
   description: 'Synchronize data from external sources',
-  inputSchema: { source: z.string().describe('Data source to sync') },
-  outputSchema: { synced: z.number() },
-  schedule: '0 */6 * * *',
+  inputSchema: z.object({ source: z.string().describe('Data source to sync') }),
+  outputSchema: z.object({ synced: z.number() }),
   retry: { maxAttempts: 3, backoffMs: 1000, backoffMultiplier: 2, maxBackoffMs: 60_000 },
   timeout: 300_000,
 })
@@ -567,14 +565,21 @@ class SyncDataJob extends JobContext {
 
 **Key fields:**
 
-| Field            | Description                                                        |
-| ---------------- | ------------------------------------------------------------------ |
-| `name`           | Workflow name                                                      |
-| `description`    | What this workflow accomplishes                                    |
-| `steps`          | Array of step definitions (see step fields below)                  |
-| `trigger?`       | `'manual'` \| `'webhook'` \| `'event'`                             |
-| `webhookConfig?` | `{ path, secret, methods }` — required when trigger is `'webhook'` |
-| `timeout?`       | Overall workflow timeout in ms                                     |
+| Field                | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `name`               | Workflow name                                                      |
+| `description`        | What this workflow accomplishes                                    |
+| `steps`              | Array of step definitions (see step fields below)                  |
+| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                             |
+| `webhook?`           | `{ path, secret, methods }` — required when trigger is `'webhook'` |
+| `timeout?`           | Overall workflow timeout in ms                                     |
+| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                     |
+| `tags?`              | Categorization tags                                                |
+| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                         |
+| `hideFromDiscovery?` | Hide from workflow listing                                         |
+| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`        |
+| `inputSchema?`       | Zod schema for workflow input parameters                           |
+| `outputSchema?`      | Zod schema for workflow output                                     |
 
 **Step fields:**
 
