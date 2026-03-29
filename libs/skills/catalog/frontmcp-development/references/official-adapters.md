@@ -1,3 +1,8 @@
+---
+name: official-adapters
+description: Convert OpenAPI specs and external definitions into MCP tools automatically
+---
+
 # Official Adapters
 
 Adapters convert external definitions (OpenAPI specs, Lambda functions, etc.) into MCP tools, resources, and prompts automatically.

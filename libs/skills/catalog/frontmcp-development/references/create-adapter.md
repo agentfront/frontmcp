@@ -1,3 +1,8 @@
+---
+name: create-adapter
+description: Build adapters that generate MCP tools and resources from external sources automatically
+---
+
 # Creating Custom Adapters
 
 Build adapters that automatically generate MCP tools, resources, and prompts from external sources — databases, GraphQL schemas, proprietary APIs, or any definition format.

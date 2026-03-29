@@ -1,3 +1,8 @@
+---
+name: deploy-to-vercel
+description: Deploy a FrontMCP server to Vercel serverless functions with Vercel KV storage
+---
+
 # Deploy a FrontMCP Server to Vercel
 
 This skill guides you through deploying a FrontMCP server to Vercel serverless functions with Vercel KV for persistent storage.

@@ -52,16 +52,24 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 
 ## Scenario Routing Table
 
-| Scenario                                                   | Skill                   | Description                                                   |
-| ---------------------------------------------------------- | ----------------------- | ------------------------------------------------------------- |
-| Choose between SSE, Streamable HTTP, or stdio              | `configure-transport`   | Transport protocol selection with distributed session options |
-| Set up CORS, port, base path, or request limits            | `configure-http`        | HTTP server options for Streamable HTTP and SSE transports    |
-| Add rate limiting, concurrency, or IP filtering            | `configure-throttle`    | Server-level and per-tool throttle configuration              |
-| Enable tools to ask users for input                        | `configure-elicitation` | Elicitation schemas, stores, and multi-step flows             |
-| Set up authentication (public, transparent, local, remote) | `configure-auth`        | OAuth flows, credential vault, multi-app auth                 |
-| Configure session storage backends                         | `configure-session`     | Memory, Redis, Vercel KV, and custom session stores           |
-| Add Redis for production storage                           | `setup-redis`           | Docker Redis, Vercel KV, pub/sub for subscriptions            |
-| Add SQLite for local development                           | `setup-sqlite`          | SQLite with WAL mode, migration helpers                       |
+| Scenario                                                       | Skill                                  | Description                                                      |
+| -------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
+| Choose between SSE, Streamable HTTP, or stdio                  | `configure-transport`                  | Transport protocol selection with distributed session options    |
+| Set up CORS, port, base path, or request limits                | `configure-http`                       | HTTP server options for Streamable HTTP and SSE transports       |
+| Add rate limiting, concurrency, or IP filtering                | `configure-throttle`                   | Server-level and per-tool throttle configuration                 |
+| Enable tools to ask users for input                            | `configure-elicitation`                | Elicitation schemas, stores, and multi-step flows                |
+| Set up authentication (public, transparent, local, remote)     | `configure-auth`                       | OAuth flows, credential vault, multi-app auth                    |
+| Configure session storage backends                             | `configure-session`                    | Memory, Redis, Vercel KV, and custom session stores              |
+| Add Redis for production storage                               | `setup-redis`                          | Docker Redis, Vercel KV, pub/sub for subscriptions               |
+| Add SQLite for local development                               | `setup-sqlite`                         | SQLite with WAL mode, migration helpers                          |
+| Understand auth mode details (public/transparent/local/remote) | `configure-auth-modes`                 | Authentication mode details (public, transparent, local, remote) |
+| Fine-tune guard configuration for throttling                   | `configure-throttle-guard-config`      | Advanced guard configuration for throttling                      |
+| Use transport protocol presets                                 | `configure-transport-protocol-presets` | Transport protocol preset configurations                         |
+| Split apps into separate scopes (`splitByApp`)                 | `decorators-guide`                     | Per-app scope and basePath isolation on `@FrontMcp`              |
+| Enable widget-to-host communication (ext-apps)                 | `decorators-guide`                     | `extApps` host capabilities, session validation, widget comms    |
+| Enable background jobs and workflows                           | `decorators-guide`                     | `jobs: { enabled: true, store? }` on `@FrontMcp`                 |
+| Configure pagination for list operations                       | `decorators-guide`                     | `pagination` defaults for `tools/list` endpoint                  |
+| Configure npm/ESM package loader for remote apps               | `decorators-guide`                     | `loader` config for `App.esm()` / `App.remote()` resolution      |
 
 ## Configuration Layers
 
@@ -73,14 +81,19 @@ Server (@FrontMcp)     ← Global defaults
        └── Tool (@Tool) ← Per-tool overrides
 ```
 
-| Setting               | Server       | App | Tool           |
-| --------------------- | ------------ | --- | -------------- |
-| Transport             | Yes          | No  | No             |
-| HTTP (CORS, port)     | Yes          | No  | No             |
-| Throttle (rate limit) | Yes (global) | No  | Yes (per-tool) |
-| Auth mode             | Yes          | Yes | No             |
-| Session store         | Yes          | No  | No             |
-| Elicitation           | No           | No  | Yes (per-tool) |
+| Setting               | Server (`@FrontMcp`)             | App (`@App`)          | Tool (`@Tool`)                              |
+| --------------------- | -------------------------------- | --------------------- | ------------------------------------------- |
+| Transport             | Yes                              | No                    | No                                          |
+| HTTP (CORS, port)     | Yes                              | No                    | No                                          |
+| Throttle (rate limit) | Yes (`throttle` global defaults) | No                    | Yes (`rateLimit`, `concurrency`, `timeout`) |
+| Auth mode             | Yes                              | Yes (override)        | No                                          |
+| Auth providers        | No                               | Yes (`authProviders`) | Yes (`authProviders`)                       |
+| Session store         | Yes                              | No                    | No                                          |
+| Elicitation           | Yes (enable: `elicitation`)      | No                    | Yes (usage: `this.elicit()`)                |
+| ExtApps               | Yes                              | No                    | No                                          |
+| Jobs / Workflows      | Yes (`jobs: { enabled }`)        | No                    | No                                          |
+| Pagination            | Yes                              | No                    | No                                          |
+| SplitByApp            | Yes                              | No                    | No                                          |
 
 ## Cross-Cutting Patterns
 

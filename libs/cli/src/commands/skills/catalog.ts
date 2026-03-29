@@ -9,6 +9,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TFIDFVectoria } from 'vectoriadb';
 
+interface SkillReferenceEntry {
+  name: string;
+  description: string;
+}
+
 interface SkillEntry {
   name: string;
   category: string;
@@ -18,6 +23,7 @@ interface SkillEntry {
   hasResources: boolean;
   tags: string[];
   bundle?: string[];
+  references?: SkillReferenceEntry[];
 }
 
 interface SkillManifest {
@@ -285,6 +291,21 @@ function buildSearchableText(skill: SkillEntry): string {
 
   // Category (1x weight)
   parts.push(skill.category);
+
+  // Reference names and descriptions (1x weight each)
+  if (skill.references) {
+    for (const ref of skill.references) {
+      const nameParts = ref.name.split(/[-_.\s]/).filter(Boolean);
+      parts.push(...nameParts);
+      if (ref.description) {
+        const refTerms = ref.description
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((word) => word.length >= 4 && !STOP_WORDS.has(word));
+        parts.push(...refTerms);
+      }
+    }
+  }
 
   return parts.join(' ');
 }

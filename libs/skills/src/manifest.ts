@@ -14,7 +14,15 @@ export type SkillTarget = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'all';
 /**
  * Skill categories for organizing the catalog.
  */
-export type SkillCategory = 'setup' | 'deployment' | 'development' | 'config' | 'testing' | 'guides' | 'production';
+export type SkillCategory =
+  | 'setup'
+  | 'deployment'
+  | 'development'
+  | 'config'
+  | 'testing'
+  | 'guides'
+  | 'production'
+  | 'extensibility';
 
 /**
  * Bundle membership for curated scaffold presets.
@@ -44,6 +52,17 @@ export interface SkillInstallConfig {
 }
 
 /**
+ * Metadata for a single reference file within a skill's references/ directory.
+ * Extracted from YAML frontmatter or inferred from the markdown heading.
+ */
+export interface SkillReferenceEntry {
+  /** Reference name — matches filename without extension */
+  name: string;
+  /** Short description from frontmatter or first paragraph */
+  description: string;
+}
+
+/**
  * A single entry in the skills catalog manifest.
  *
  * This is the core contract connecting SKILL.md files to scaffolding,
@@ -62,6 +81,8 @@ export interface SkillCatalogEntry {
   targets: SkillTarget[];
   /** Whether the skill has scripts/, references/, or assets/ directories */
   hasResources: boolean;
+  /** Resolved reference metadata from references/ directory */
+  references?: SkillReferenceEntry[];
   /** Target-specific storage defaults (e.g., { node: 'redis-docker', vercel: 'vercel-kv' }) */
   storageDefault?: Record<string, string>;
   /** Tags for secondary filtering and search */
@@ -94,6 +115,7 @@ export const VALID_CATEGORIES: readonly SkillCategory[] = [
   'testing',
   'guides',
   'production',
+  'extensibility',
 ];
 
 /** Valid bundles for manifest validation */

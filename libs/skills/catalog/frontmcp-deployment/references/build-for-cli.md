@@ -1,3 +1,8 @@
+---
+name: build-for-cli
+description: Build a FrontMCP server as a standalone CLI binary using Node.js SEA or bundled JS
+---
+
 # Building a CLI Binary
 
 Build your FrontMCP server as a distributable CLI binary using Node.js Single Executable Applications (SEA) or as a bundled JS file.
@@ -90,6 +95,54 @@ frontmcp build --target cli
 
 # Or test JS bundle
 node dist/my-server.cjs.js
+```
+
+## Unix Socket Daemon Mode
+
+Run your MCP server as a local daemon accessible via Unix socket:
+
+```bash
+# Start daemon in foreground
+frontmcp socket ./src/main.ts -s ~/.frontmcp/sockets/my-app.sock
+
+# Start daemon in background
+frontmcp socket ./src/main.ts -b --db ~/.my-tool/data.db
+
+# Default socket path: ~/.frontmcp/sockets/{app-name}.sock
+```
+
+The daemon accepts JSON-RPC requests over HTTP via the Unix socket, making it ideal for local MCP clients (Claude Code, IDE extensions) that need persistent tool access without a TCP port.
+
+## Process Management
+
+Manage long-running MCP server processes with built-in supervisor commands:
+
+```bash
+# Start a named server (auto-restarts on crash)
+frontmcp start my-server -e ./src/main.ts --max-restarts 5
+
+# Monitor
+frontmcp status my-server    # Detailed status for one server
+frontmcp status              # Table of all managed servers
+frontmcp list                # List all managed processes
+frontmcp logs my-server -F   # Tail logs (follow mode)
+
+# Control
+frontmcp restart my-server
+frontmcp stop my-server      # Graceful shutdown (SIGTERM)
+frontmcp stop my-server -f   # Force kill (SIGKILL)
+```
+
+## System Service Installation
+
+Install your MCP server as a system service for automatic startup:
+
+```bash
+# Install as systemd service (Linux) or launchd service (macOS)
+frontmcp service install my-server
+
+# Uninstall service
+frontmcp service uninstall my-server
 ```
 
 ## Common Patterns

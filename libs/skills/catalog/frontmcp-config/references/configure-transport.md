@@ -1,3 +1,8 @@
+---
+name: configure-transport
+description: Configure client transport protocols including SSE, Streamable HTTP, and stateless API modes
+---
+
 # Configuring Transport
 
 Configure how clients connect to your FrontMCP server — SSE, Streamable HTTP, stateless API, or a combination.

@@ -11,7 +11,7 @@ export const COLORS = {
 } as const;
 
 function colorsEnabled(): boolean {
-  if (process.env['NO_COLOR']) return false;
+  if (process.env['NO_COLOR'] !== undefined) return false;
   const fc = process.env['FORCE_COLOR'];
   if (fc !== undefined) return fc !== '0' && fc.toLowerCase() !== 'false';
   return process.stdout?.isTTY === true;

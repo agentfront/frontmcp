@@ -1,3 +1,8 @@
+---
+name: deploy-to-cloudflare
+description: Deploy a FrontMCP server to Cloudflare Workers with KV, D1, and Durable Objects
+---
+
 # Deploy a FrontMCP Server to Cloudflare Workers
 
 This skill guides you through deploying a FrontMCP server to Cloudflare Workers.

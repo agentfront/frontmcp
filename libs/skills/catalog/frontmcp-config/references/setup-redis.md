@@ -1,3 +1,8 @@
+---
+name: setup-redis
+description: Cross-reference to the full Redis configuration guide in frontmcp-setup
+---
+
 # Redis Setup Reference
 
 > This reference is maintained in `frontmcp-setup/references/setup-redis.md`.

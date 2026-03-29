@@ -49,17 +49,26 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 | Write E2E protocol-level tests          | `setup-testing` (E2E Testing)      | Real MCP client/server, full protocol flow                |
 | Test authenticated endpoints            | `setup-testing` + `configure-auth` | E2E with OAuth tokens, session validation                 |
 | Test deployment builds                  | `setup-testing` + `deploy-to-*`    | Smoke tests against built output                          |
+| Test authenticated endpoints            | `test-auth`                        | Testing authenticated endpoints                           |
+| Test browser builds                     | `test-browser-build`               | Testing browser builds                                    |
+| Test CLI binary builds                  | `test-cli-binary`                  | Testing CLI binary builds                                 |
+| Test with the direct API client         | `test-direct-client`               | Testing with the direct API client                        |
+| Write E2E test handler patterns         | `test-e2e-handler`                 | E2E test handler patterns                                 |
+| Unit test individual tools              | `test-tool-unit`                   | Unit testing individual tools                             |
 
 ## Testing Strategy by Component Type
 
-| Component | Unit Test Focus                                          | E2E Test Focus                     | Key Assertions                                 |
-| --------- | -------------------------------------------------------- | ---------------------------------- | ---------------------------------------------- |
-| Tool      | Input validation, execute logic, error paths, DI mocking | `tools/call` via MCP client        | Output matches schema, errors return MCP codes |
-| Resource  | URI resolution, read content, template param handling    | `resources/read` via MCP client    | Content type correct, URI patterns resolve     |
-| Prompt    | Argument validation, message generation, multi-turn      | `prompts/get` via MCP client       | Messages match expected structure              |
-| Agent     | LLM config, tool selection, handoff logic                | Agent loop via MCP client          | Tools called in order, result synthesized      |
-| Provider  | Lifecycle hooks, factory output, singleton behavior      | Indirectly via tool/resource tests | Instance reuse, cleanup on scope disposal      |
-| Job       | Progress tracking, retry logic, attempt counting         | Job execution via test harness     | Progress events emitted, retries respected     |
+| Component | Unit Test Focus                                          | E2E Test Focus                     | Key Assertions                                                          |
+| --------- | -------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| Tool      | Input validation, execute logic, error paths, DI mocking | `tools/call` via MCP client        | Output matches schema, errors return MCP codes                          |
+| Resource  | URI resolution, read content, template param handling    | `resources/read` via MCP client    | Content type correct, URI patterns resolve                              |
+| Prompt    | Argument validation, message generation, multi-turn      | `prompts/get` via MCP client       | Messages match expected structure                                       |
+| Agent     | LLM config, tool selection, handoff logic                | Agent loop via MCP client          | Tools called in order, result synthesized                               |
+| Provider  | Lifecycle hooks, factory output, singleton behavior      | Indirectly via tool/resource tests | Instance reuse, cleanup on scope disposal                               |
+| Job       | Progress tracking, retry logic, attempt counting         | Job execution via test harness     | Progress events emitted, retries respected                              |
+| Workflow  | Step dependencies, conditions, input mapping functions   | Workflow run via test harness      | Steps execute in order, conditions evaluated, continueOnError respected |
+| Skill     | Instruction loading (inline/file/url), tool validation   | Skill discovery via MCP/HTTP       | Instructions resolve, tool refs validated per `toolValidation` mode     |
+| Plugin    | Context extensions, provider registration, hook firing   | Indirectly via tool tests          | Extensions available on `this`, hooks fire at correct stages            |
 
 ## Cross-Cutting Testing Patterns
 

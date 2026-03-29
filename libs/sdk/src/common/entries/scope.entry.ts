@@ -67,6 +67,31 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   abstract get elicitationStore(): ElicitationStore | undefined;
 
+  /**
+   * Lifecycle callbacks registered by plugins via onServerStarted().
+   * Called after the HTTP server starts listening.
+   */
+  private readonly _lifecycleCallbacks: Array<() => void | Promise<void>> = [];
+
+  /**
+   * Register a callback to run after the server has started.
+   * Plugins can use this for post-startup initialization (e.g., warming caches,
+   * starting background jobs, logging readiness).
+   */
+  onServerStarted(callback: () => void | Promise<void>): void {
+    this._lifecycleCallbacks.push(callback);
+  }
+
+  /**
+   * Emit the server-started lifecycle event. Called by FrontMcpInstance after server.start().
+   * @internal
+   */
+  async emitServerStarted(): Promise<void> {
+    for (const cb of this._lifecycleCallbacks) {
+      await cb();
+    }
+  }
+
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 
   abstract runFlow<Name extends FlowName>(

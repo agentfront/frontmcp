@@ -1,3 +1,8 @@
+---
+name: setup-redis
+description: Provision and configure Redis or Vercel KV for session storage and distributed state
+---
+
 # Configure Redis for Session Storage and Distributed State
 
 ## When to Use This Skill

@@ -109,6 +109,12 @@ describe('colors', () => {
       expect(result).toBe('error text');
     });
 
+    it('should treat NO_COLOR empty string as set', () => {
+      process.env['NO_COLOR'] = '';
+      const result = c('red', 'error text');
+      expect(result).toBe('error text');
+    });
+
     it('should respect FORCE_COLOR to enable colors', () => {
       process.env['FORCE_COLOR'] = '1';
       const result = c('red', 'error text');

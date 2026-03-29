@@ -23,7 +23,7 @@ const CATALOG_DIR = path.resolve(__dirname, '..', 'catalog');
 const MANIFEST_PATH = path.join(CATALOG_DIR, 'skills-manifest.json');
 
 // Allow-lists from libs/skills/src/manifest.ts
-const VALID_CATEGORIES = ['setup', 'deployment', 'development', 'config', 'testing', 'guides', 'production'];
+const VALID_CATEGORIES = ['setup', 'deployment', 'development', 'config', 'testing', 'guides', 'production', 'extensibility'];
 const VALID_TARGETS = ['node', 'vercel', 'lambda', 'cloudflare', 'all'];
 const VALID_BUNDLES = ['recommended', 'minimal', 'full'];
 
@@ -155,6 +155,70 @@ function hasResources(skillDir) {
   );
 }
 
+/**
+ * Extract the first non-empty paragraph after the heading from markdown content.
+ */
+function extractFirstParagraph(body) {
+  const lines = body.split(/\r?\n/);
+  let foundHeading = false;
+  const paragraphLines = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!foundHeading && trimmed.startsWith('#')) {
+      foundHeading = true;
+      continue;
+    }
+    if (foundHeading) {
+      if (trimmed === '') {
+        if (paragraphLines.length > 0) break;
+        continue;
+      }
+      if (trimmed.startsWith('#') || trimmed.startsWith('|') || trimmed.startsWith('-')) break;
+      paragraphLines.push(trimmed);
+    }
+  }
+
+  return paragraphLines.join(' ').slice(0, 200) || '';
+}
+
+/**
+ * Scan the references/ directory for .md files and extract metadata.
+ * Uses frontmatter if present, otherwise falls back to heading/paragraph parsing.
+ */
+function scanReferences(skillDir) {
+  const refsDir = path.join(skillDir, 'references');
+  if (!fs.existsSync(refsDir)) return undefined;
+
+  const files = fs.readdirSync(refsDir).filter((f) => f.endsWith('.md')).sort();
+  if (files.length === 0) return undefined;
+
+  return files.map((file) => {
+    const content = fs.readFileSync(path.join(refsDir, file), 'utf-8');
+    const fm = parseFrontmatter(content);
+    const filenameWithoutExt = file.replace(/\.md$/, '');
+
+    let name = filenameWithoutExt;
+    let description = '';
+
+    if (fm) {
+      if (typeof fm.name === 'string' && fm.name) name = fm.name;
+      if (typeof fm.description === 'string' && fm.description) description = fm.description;
+    }
+
+    // Fallback: extract description from first paragraph if not in frontmatter
+    if (!description) {
+      const bodyStart = content.indexOf('---', 3);
+      const body = bodyStart !== -1 && content.startsWith('---')
+        ? content.substring(bodyStart + 3).trim()
+        : content.trim();
+      description = extractFirstParagraph(body);
+    }
+
+    return { name, description };
+  });
+}
+
 // --- Main ---
 
 const checkMode = process.argv.includes('--check');
@@ -207,16 +271,25 @@ for (const dir of skillDirs) {
     errors.push(`${dir}/SKILL.md: invalid bundle [${badBundles.join(', ')}] (valid: ${VALID_BUNDLES.join(', ')})`);
   }
 
-  skills.push({
+  const skillDirPath = path.join(CATALOG_DIR, dir);
+  const refs = scanReferences(skillDirPath);
+
+  const entry = {
     name: fm.name,
     category,
     description: fm.description || '',
     path: dir,
     targets,
-    hasResources: hasResources(path.join(CATALOG_DIR, dir)),
+    hasResources: hasResources(skillDirPath),
     tags,
     bundle,
-  });
+  };
+
+  if (refs && refs.length > 0) {
+    entry.references = refs;
+  }
+
+  skills.push(entry);
 }
 
 if (errors.length > 0) {

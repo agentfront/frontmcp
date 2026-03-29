@@ -1,3 +1,8 @@
+---
+name: configure-session
+description: Set up session storage with Redis or Vercel KV for persistent user state across requests
+---
+
 # Configure Session Management
 
 This skill covers setting up session storage in FrontMCP. Sessions track authenticated user state, token storage, and request context across MCP interactions.

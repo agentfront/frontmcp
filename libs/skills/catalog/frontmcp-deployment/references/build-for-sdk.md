@@ -1,3 +1,8 @@
+---
+name: build-for-sdk
+description: Build a FrontMCP server as an embeddable library with create() and connect() APIs
+---
+
 # Building as an SDK Library
 
 Build your FrontMCP server as an embeddable library that runs without an HTTP server. Use `create()` for flat-config setup or `connect()` for platform-specific tool formatting (OpenAI, Claude, LangChain, Vercel AI).

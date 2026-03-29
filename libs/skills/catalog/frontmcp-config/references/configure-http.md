@@ -1,3 +1,8 @@
+---
+name: configure-http
+description: Configure HTTP server port, CORS policy, unix sockets, and entry path prefix
+---
+
 # Configuring HTTP Options
 
 Configure the HTTP server — port, CORS policy, unix sockets, and entry path prefix.

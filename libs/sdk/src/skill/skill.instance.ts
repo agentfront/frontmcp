@@ -1,11 +1,11 @@
 // file: libs/sdk/src/skill/skill.instance.ts
 
 import { EntryOwnerRef, SkillEntry, SkillKind, SkillRecord, SkillToolRef, normalizeToolRef } from '../common';
-import { SkillContent } from '../common/interfaces';
+import { SkillContent, SkillReferenceInfo } from '../common/interfaces';
 import { SkillVisibility } from '../common/metadata/skill.metadata';
 import ProviderRegistry from '../provider/provider.registry';
 import { ScopeEntry } from '../common';
-import { loadInstructions, buildSkillContent } from './skill.utils';
+import { loadInstructions, buildSkillContent, resolveReferences } from './skill.utils';
 
 /**
  * Extended SkillContent with additional metadata for caching.
@@ -120,13 +120,38 @@ export class SkillInstance extends SkillEntry {
    * Load the full skill content.
    * Results are cached after the first load.
    */
+  /**
+   * Resolve the base directory for this skill (for file/reference resolution).
+   */
+  private getBaseDir(): string | undefined {
+    if (this.record.kind === SkillKind.FILE) {
+      const filePath = this.record.filePath;
+      const lastSlash = filePath.lastIndexOf('/');
+      return lastSlash > 0 ? filePath.substring(0, lastSlash) : undefined;
+    }
+    if (this.record.kind === SkillKind.VALUE && this.record.callerDir) {
+      return this.record.callerDir;
+    }
+    return undefined;
+  }
+
   override async load(): Promise<SkillContent> {
     if (this.cachedContent !== undefined) {
       return this.cachedContent;
     }
 
     const instructions = await this.loadInstructions();
-    const baseContent = buildSkillContent(this.metadata, instructions);
+
+    // Resolve references from the references/ directory if it exists
+    const refsPath = this.metadata.resources?.references;
+    const baseDir = this.getBaseDir();
+    let resolvedRefs: SkillReferenceInfo[] | undefined;
+    if (refsPath && baseDir) {
+      const refsDir = refsPath.startsWith('/') ? refsPath : `${baseDir}/${refsPath}`;
+      resolvedRefs = await resolveReferences(refsDir);
+    }
+
+    const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs);
 
     // Add additional metadata that's useful for search but not in base SkillContent
     this.cachedContent = {

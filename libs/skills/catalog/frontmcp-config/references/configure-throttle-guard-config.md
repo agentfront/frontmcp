@@ -1,3 +1,8 @@
+---
+name: configure-throttle-guard-config
+description: Complete GuardConfig interface reference for rate limiting, concurrency, and IP filtering
+---
+
 # GuardConfig Full Reference
 
 ## Complete Configuration

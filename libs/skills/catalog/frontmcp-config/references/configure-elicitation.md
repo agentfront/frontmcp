@@ -1,3 +1,8 @@
+---
+name: configure-elicitation
+description: Configure interactive user input during tool execution for confirmations, choices, and forms
+---
+
 # Configuring Elicitation
 
 Elicitation allows tools to request interactive input from users mid-execution — confirmations, choices, or structured form data.

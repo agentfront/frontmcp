@@ -48,11 +48,18 @@ describe('customizeHelp', () => {
     expect(help).toContain('skills search');
     expect(help).toContain('skills list');
     expect(help).toContain('skills install');
-    expect(help).toContain('skills show');
+    expect(help).toContain('skills read');
   });
 
   it('should list all commands in help output', () => {
     const help = getHelpOutput();
+    // Strip ANSI escape codes before line matching
+
+    const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+    const helpLines = help.split(/\r?\n/).map((l) => stripAnsi(l).trim());
+
+    const hasCommandLine = (cmd: string) => helpLines.some((line) => line === cmd || line.startsWith(cmd + ' '));
+
     const expectedCommands = [
       'dev',
       'build',
@@ -75,11 +82,11 @@ describe('customizeHelp', () => {
       'skills search',
       'skills list',
       'skills install',
-      'skills show',
+      'skills read',
     ];
 
     for (const cmd of expectedCommands) {
-      expect(help).toContain(cmd);
+      expect(hasCommandLine(cmd)).toBe(true);
     }
   });
 

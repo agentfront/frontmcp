@@ -1,3 +1,8 @@
+---
+name: create-provider
+description: Create singleton DI providers for database pools, API clients, and shared services
+---
+
 # Creating Providers (Dependency Injection)
 
 Providers are singleton services — database pools, API clients, config objects — that tools, resources, prompts, and agents can access via `this.get(token)`.

@@ -61,9 +61,11 @@ export function customizeHelp(program: Command): void {
       const lines: string[] = [];
 
       // Adjust padWidth to account for skills subcommand terms (e.g. "skills search <query>")
-      const skillsCmd = cmd.commands.find((c) => c.name() === 'skills');
+      const allCommands = helper.visibleCommands(cmd);
+      const skillsCmd = allCommands.find((c) => c.name() === 'skills');
+      const skillsSubs = skillsCmd ? helper.visibleCommands(skillsCmd) : [];
       if (skillsCmd) {
-        for (const sub of skillsCmd.commands) {
+        for (const sub of skillsSubs) {
           const rawArgs = sub.registeredArguments
             .map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`))
             .join(' ');
@@ -81,7 +83,6 @@ export function customizeHelp(program: Command): void {
       lines.push(`  ${helper.commandUsage(cmd)}`, '');
 
       // Grouped commands
-      const allCommands = cmd.commands;
       for (const [label, names] of GROUPS) {
         const matching = names.map((n) => allCommands.find((c) => c.name() === n)).filter(Boolean) as Command[];
         if (matching.length === 0) continue;
@@ -94,10 +95,21 @@ export function customizeHelp(program: Command): void {
       }
 
       // Skills — show subcommands inline
-      if (skillsCmd && skillsCmd.commands.length > 0) {
+      if (skillsCmd && skillsSubs.length > 0) {
         lines.push(c('bold', 'Skills'));
-        for (const sub of skillsCmd.commands) {
+        for (const sub of skillsSubs) {
           lines.push(formatSkillsLine(sub, termWidth));
+        }
+        lines.push('');
+      }
+
+      // Other commands not in any group
+      const renderedNames = new Set([...GROUPS.flatMap(([, names]) => names), 'skills']);
+      const other = allCommands.filter((sc) => !renderedNames.has(sc.name()));
+      if (other.length > 0) {
+        lines.push(c('bold', 'Other'));
+        for (const sub of other) {
+          lines.push(formatCommandLine(sub, termWidth));
         }
         lines.push('');
       }

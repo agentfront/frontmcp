@@ -1,3 +1,8 @@
+---
+name: project-structure-standalone
+description: File layout, naming conventions, and dev workflow for standalone FrontMCP projects
+---
+
 # Standalone Project Structure
 
 ## When to Use This Skill

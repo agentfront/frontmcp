@@ -1,3 +1,8 @@
+---
+name: create-workflow
+description: Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers
+---
+
 # Creating Workflows
 
 Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management.

@@ -1,3 +1,8 @@
+---
+name: test-auth
+description: Test authenticated MCP servers with TestTokenFactory, MockOAuthServer, and role-based access
+---
+
 # Testing with Authentication
 
 ```typescript

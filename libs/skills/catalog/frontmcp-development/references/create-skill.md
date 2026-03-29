@@ -1,3 +1,8 @@
+---
+name: create-skill
+description: Create instruction-only skills that package knowledge and workflow guides for AI clients
+---
+
 # Creating Instruction-Only Skills
 
 Skills are knowledge and workflow packages that teach AI clients how to accomplish tasks. Unlike tools (which execute actions) or agents (which run autonomous LLM loops), a skill provides structured instructions that the AI follows on its own. An instruction-only skill contains no tool references -- it is purely a guide.
@@ -30,16 +35,23 @@ Create a class extending `SkillContext` and decorate it with `@Skill`. The decor
 
 ### SkillMetadata Fields
 
-| Field               | Type                                            | Required | Description                                                 |
-| ------------------- | ----------------------------------------------- | -------- | ----------------------------------------------------------- |
-| `name`              | `string`                                        | Yes      | Unique skill name in kebab-case                             |
-| `description`       | `string`                                        | Yes      | Short description of what the skill teaches                 |
-| `instructions`      | `string \| { file: string } \| { url: string }` | Yes      | The skill content -- see instruction sources below          |
-| `parameters`        | `SkillParameter[]`                              | No       | Customization parameters for the skill                      |
-| `examples`          | `SkillExample[]`                                | No       | Usage scenarios and expected outcomes                       |
-| `tags`              | `string[]`                                      | No       | Categorization tags for discovery                           |
-| `visibility`        | `'mcp' \| 'http' \| 'both'`                     | No       | Where the skill is discoverable (default: `'both'`)         |
-| `hideFromDiscovery` | `boolean`                                       | No       | Register but hide from listing endpoints (default: `false`) |
+| Field               | Type                                            | Required | Description                                                    |
+| ------------------- | ----------------------------------------------- | -------- | -------------------------------------------------------------- |
+| `name`              | `string`                                        | Yes      | Unique skill name in kebab-case (max 64 chars)                 |
+| `description`       | `string`                                        | Yes      | Short description (max 1024 chars, no HTML/XML)                |
+| `instructions`      | `string \| { file: string } \| { url: string }` | Yes      | The skill content -- see instruction sources below             |
+| `parameters`        | `SkillParameter[]`                              | No       | Customization parameters for the skill                         |
+| `examples`          | `SkillExample[]`                                | No       | Usage scenarios and expected outcomes                          |
+| `tags`              | `string[]`                                      | No       | Categorization tags for discovery                              |
+| `visibility`        | `'mcp' \| 'http' \| 'both'`                     | No       | Where the skill is discoverable (default: `'both'`)            |
+| `hideFromDiscovery` | `boolean`                                       | No       | Register but hide from listing endpoints (default: `false`)    |
+| `priority`          | `number`                                        | No       | Search ranking weight; higher = earlier (default: `0`)         |
+| `toolValidation`    | `'strict' \| 'warn' \| 'ignore'`                | No       | Behavior when referenced tools are missing (default: `'warn'`) |
+| `license`           | `string`                                        | No       | License identifier per Agent Skills spec (e.g., `'MIT'`)       |
+| `compatibility`     | `string`                                        | No       | Environment requirements (max 500 chars)                       |
+| `specMetadata`      | `Record<string, string>`                        | No       | Arbitrary key-value map (Agent Skills spec `metadata` field)   |
+| `allowedTools`      | `string`                                        | No       | Space-delimited pre-approved tool names (Agent Skills spec)    |
+| `resources`         | `SkillResources`                                | No       | Bundled dirs: `{ scripts?, references?, assets? }`             |
 
 ### Basic Example
 

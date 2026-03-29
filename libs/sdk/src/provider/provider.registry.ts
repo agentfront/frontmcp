@@ -669,12 +669,13 @@ export default class ProviderRegistry
    */
   getProviderInfo(token: Token<unknown>) {
     const def = this.defs.get(token);
-    const instance = this.instances.get(token);
-    if (!def || !instance)
+    if (!def)
       throw new ProviderNotRegisteredError(
         tokenName(token),
         'not a registered DEFAULT provider and not a constructable class',
       );
+    // Instance may be undefined for CONTEXT-scoped providers (built per-request, not at init)
+    const instance = this.instances.get(token);
     return {
       token,
       def,

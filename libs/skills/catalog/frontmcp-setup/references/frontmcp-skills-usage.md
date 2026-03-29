@@ -1,3 +1,8 @@
+---
+name: frontmcp-skills-usage
+description: Search, install, and manage FrontMCP skill catalog for AI agents (Claude Code, Codex)
+---
+
 # FrontMCP Skills — Search, Install, and Usage
 
 FrontMCP ships with a catalog of development skills that teach AI agents (Claude Code, Codex) how to build FrontMCP servers. You can deliver these skills **statically** (copy to disk) or **dynamically** (search on demand via CLI).
@@ -49,7 +54,7 @@ frontmcp skills list
 frontmcp skills list --category development
 
 # Show full skill content
-frontmcp skills show frontmcp-development
+frontmcp skills read frontmcp-development
 
 # Install a skill for Claude Code
 frontmcp skills install frontmcp-development --provider claude
@@ -81,13 +86,23 @@ frontmcp skills list --tag redis              # Skills tagged with redis
 frontmcp skills list --bundle recommended     # Recommended bundle
 ```
 
-### `frontmcp skills show <name>`
+### `frontmcp skills read <name> [reference]`
 
-Print the full SKILL.md content to stdout — useful for piping to AI context:
+Read a skill's main SKILL.md, a specific reference, or list available references:
 
 ```bash
-frontmcp skills show frontmcp-development    # Print development skill
-frontmcp skills show frontmcp-config         # Print config skill
+# Read main skill content
+frontmcp skills read frontmcp-development
+
+# List all references for a skill
+frontmcp skills read frontmcp-development --refs
+
+# Read a specific reference by name
+frontmcp skills read frontmcp-development create-tool
+
+# Read any file using colon syntax (works with non-.md files too)
+frontmcp skills read frontmcp-development:references/create-tool.md
+frontmcp skills read frontmcp-development:scripts/setup.sh
 ```
 
 ### `frontmcp skills install <name>`
@@ -154,10 +169,10 @@ Use the CLI to search and show skills on demand — no installation needed:
 frontmcp skills search "how to create a tool with zod"
 
 # Pipe skill content directly into context
-frontmcp skills show frontmcp-development
+frontmcp skills read frontmcp-development
 ```
 
-This works because `frontmcp skills show` outputs the full SKILL.md content to stdout.
+This works because `frontmcp skills read` outputs the full SKILL.md content to stdout.
 
 ## Comparison: Static vs Dynamic
 
@@ -184,7 +199,7 @@ frontmcp skills install frontmcp-config --provider claude
 # Everything else — search on demand
 frontmcp skills search "deploy to vercel"
 frontmcp skills search "rate limiting"
-frontmcp skills show frontmcp-deployment
+frontmcp skills read frontmcp-deployment
 ```
 
 ## Provider Directories
@@ -245,7 +260,7 @@ frontmcp skills list --category guides       # End-to-end examples and best prac
 ### Runtime
 
 - [ ] Installed skills appear in the correct provider directory after `frontmcp skills install`
-- [ ] `frontmcp skills show <name>` outputs the full SKILL.md content to stdout
+- [ ] `frontmcp skills read <name>` outputs the full SKILL.md content to stdout
 - [ ] `frontmcp skills search <query>` returns relevant results ranked by relevance
 - [ ] AI agent (Claude Code or Codex) loads installed skills in its system prompt context
 

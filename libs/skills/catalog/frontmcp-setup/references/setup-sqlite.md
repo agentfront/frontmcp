@@ -1,3 +1,8 @@
+---
+name: setup-sqlite
+description: Configure SQLite with WAL mode and optional encryption for local single-instance deployments
+---
+
 # Configure SQLite for Local and Single-Instance Deployments
 
 ## When to Use This Skill
