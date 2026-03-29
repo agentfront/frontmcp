@@ -65,7 +65,7 @@ export function registerSkillsCommands(program: Command): void {
   skills
     .command('read')
     .description('Read a skill, its references, or any file in the skill directory')
-    .argument('<name>', 'Skill name or skill:filepath (e.g., frontmcp-dev:references/create-tool.md)')
+    .argument('<nameOrPath>', 'Skill name or skill:filepath (e.g., frontmcp-dev:references/create-tool.md)')
     .argument('[reference]', 'Reference name to read (e.g., create-tool)')
     .option('--refs', 'List all available references for the skill')
     .action(async (name: string, reference: string | undefined, options: { refs?: boolean }) => {

@@ -13,14 +13,15 @@ Checklist for publishing FrontMCP as an npm package used as a direct client SDK 
 
 - [ ] `create()` function is exported and documented
 - [ ] `connect()` returns a typed client with `listTools`, `callTool`, etc.
-- [ ] `dispose()` properly cleans up all resources (connections, timers, listeners)
+- [ ] Client provides `close()` method to terminate the connection
+- [ ] Server `dispose()` and client `close()` properly clean up all resources (connections, timers, listeners)
 - [ ] TypeScript declarations (`.d.ts`) are included in the published package
 - [ ] `package.json` has correct `main`, `module`, `types` fields
 
 ## Initialization & Lifecycle
 
 - [ ] `create()` does not bind a port (SDK mode, not server mode)
-- [ ] `serve: false` is set in the FrontMcp config (or uses direct API)
+- [ ] `serve: false` is set in the FrontMCP config (or uses direct API)
 - [ ] Initialization is async and returns a promise
 - [ ] No side effects at import time (no top-level `await`, no global state)
 - [ ] Multiple instances can coexist without conflicts

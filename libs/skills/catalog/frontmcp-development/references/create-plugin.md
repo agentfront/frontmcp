@@ -427,7 +427,7 @@ For official plugin installation, configuration, and examples, see the **officia
 
 ## Recommended Folder Structure
 
-```
+```text
 plugins/
   my-plugin/
     index.ts                          # Barrel exports: plugin, tokens, types, side-effect import

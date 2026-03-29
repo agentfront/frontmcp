@@ -40,21 +40,20 @@ Entry point for testing FrontMCP applications. This skill helps you navigate tes
 
 ## Scenario Routing Table
 
-| Scenario                                | Skill / Section                    | Description                                               |
-| --------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
-| Set up Jest, coverage, and test harness | `setup-testing`                    | Full Jest config, test utilities, and coverage thresholds |
-| Write unit tests for a tool             | `setup-testing` (Unit Testing)     | Mock DI, validate input/output, test error paths          |
-| Write unit tests for a resource         | `setup-testing` (Unit Testing)     | Test URI resolution, template params, read results        |
-| Write unit tests for a prompt           | `setup-testing` (Unit Testing)     | Test argument handling, message generation                |
-| Write E2E protocol-level tests          | `setup-testing` (E2E Testing)      | Real MCP client/server, full protocol flow                |
-| Test authenticated endpoints            | `setup-testing` + `configure-auth` | E2E with OAuth tokens, session validation                 |
-| Test deployment builds                  | `setup-testing` + `deploy-to-*`    | Smoke tests against built output                          |
-| Test authenticated endpoints            | `test-auth`                        | Testing authenticated endpoints                           |
-| Test browser builds                     | `test-browser-build`               | Testing browser builds                                    |
-| Test CLI binary builds                  | `test-cli-binary`                  | Testing CLI binary builds                                 |
-| Test with the direct API client         | `test-direct-client`               | Testing with the direct API client                        |
-| Write E2E test handler patterns         | `test-e2e-handler`                 | E2E test handler patterns                                 |
-| Unit test individual tools              | `test-tool-unit`                   | Unit testing individual tools                             |
+| Scenario                                | Skill / Section                 | Description                                                  |
+| --------------------------------------- | ------------------------------- | ------------------------------------------------------------ |
+| Set up Jest, coverage, and test harness | `setup-testing`                 | Full Jest config, test utilities, and coverage thresholds    |
+| Write unit tests for a tool             | `setup-testing` (Unit Testing)  | Mock DI, validate input/output, test error paths             |
+| Write unit tests for a resource         | `setup-testing` (Unit Testing)  | Test URI resolution, template params, read results           |
+| Write unit tests for a prompt           | `setup-testing` (Unit Testing)  | Test argument handling, message generation                   |
+| Write E2E protocol-level tests          | `setup-testing` (E2E Testing)   | Real MCP client/server, full protocol flow                   |
+| Test authenticated endpoints            | `test-auth`                     | E2E with OAuth tokens, session validation, role-based access |
+| Test deployment builds                  | `setup-testing` + `deploy-to-*` | Smoke tests against built output                             |
+| Test browser builds                     | `test-browser-build`            | Testing browser builds                                       |
+| Test CLI binary builds                  | `test-cli-binary`               | Testing CLI binary builds                                    |
+| Test with the direct API client         | `test-direct-client`            | Testing with the direct API client                           |
+| Write E2E test handler patterns         | `test-e2e-handler`              | E2E test handler patterns                                    |
+| Unit test individual tools              | `test-tool-unit`                | Unit testing individual tools                                |
 
 ## Testing Strategy by Component Type
 

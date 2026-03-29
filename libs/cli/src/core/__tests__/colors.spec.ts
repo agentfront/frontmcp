@@ -2,6 +2,16 @@
 
 import { COLORS, c } from '../colors';
 
+const originalForceColor = process.env['FORCE_COLOR'];
+const originalNoColor = process.env['NO_COLOR'];
+
+function restoreColorEnv(): void {
+  if (originalForceColor === undefined) delete process.env['FORCE_COLOR'];
+  else process.env['FORCE_COLOR'] = originalForceColor;
+  if (originalNoColor === undefined) delete process.env['NO_COLOR'];
+  else process.env['NO_COLOR'] = originalNoColor;
+}
+
 describe('colors', () => {
   describe('COLORS', () => {
     it('should have reset code', () => {
@@ -47,8 +57,7 @@ describe('colors', () => {
     });
 
     afterEach(() => {
-      delete process.env['FORCE_COLOR'];
-      delete process.env['NO_COLOR'];
+      restoreColorEnv();
     });
 
     it('should wrap text with red color', () => {
@@ -98,9 +107,13 @@ describe('colors', () => {
   });
 
   describe('NO_COLOR support', () => {
-    afterEach(() => {
-      delete process.env['NO_COLOR'];
+    beforeEach(() => {
       delete process.env['FORCE_COLOR'];
+      delete process.env['NO_COLOR'];
+    });
+
+    afterEach(() => {
+      restoreColorEnv();
     });
 
     it('should return plain text when NO_COLOR is set', () => {

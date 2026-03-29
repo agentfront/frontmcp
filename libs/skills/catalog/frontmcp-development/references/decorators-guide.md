@@ -165,7 +165,7 @@ class AnalyticsApp {}
 | `tags?`              | Categorization tags for filtering                                    |
 | `hideFromDiscovery?` | Hide from `tools/list` (still callable directly)                     |
 | `examples?`          | Usage examples: `[{ description, input, output? }]`                  |
-| `authProviders?`     | Per-tool auth providers: `['github']` or `[{ name, scopes, alias }]` |
+| `authProviders?`     | Per-tool auth providers: `['GitHub']` or `[{ name, scopes, alias }]` |
 | `rateLimit?`         | Rate limiting: `{ maxRequests, windowMs, partitionBy }`              |
 | `concurrency?`       | Concurrency control: `{ maxConcurrent }`                             |
 | `timeout?`           | Execution timeout: `{ executeMs }`                                   |

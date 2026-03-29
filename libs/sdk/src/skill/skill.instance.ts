@@ -6,6 +6,7 @@ import { SkillVisibility } from '../common/metadata/skill.metadata';
 import ProviderRegistry from '../provider/provider.registry';
 import { ScopeEntry } from '../common';
 import { loadInstructions, buildSkillContent, resolveReferences } from './skill.utils';
+import { dirname, pathResolve } from '@frontmcp/utils';
 
 /**
  * Extended SkillContent with additional metadata for caching.
@@ -125,9 +126,7 @@ export class SkillInstance extends SkillEntry {
    */
   private getBaseDir(): string | undefined {
     if (this.record.kind === SkillKind.FILE) {
-      const filePath = this.record.filePath;
-      const lastSlash = filePath.lastIndexOf('/');
-      return lastSlash > 0 ? filePath.substring(0, lastSlash) : undefined;
+      return dirname(this.record.filePath) || undefined;
     }
     if (this.record.kind === SkillKind.VALUE && this.record.callerDir) {
       return this.record.callerDir;
@@ -144,11 +143,13 @@ export class SkillInstance extends SkillEntry {
 
     // Resolve references from the references/ directory if it exists
     const refsPath = this.metadata.resources?.references;
-    const baseDir = this.getBaseDir();
     let resolvedRefs: SkillReferenceInfo[] | undefined;
-    if (refsPath && baseDir) {
-      const refsDir = refsPath.startsWith('/') ? refsPath : `${baseDir}/${refsPath}`;
-      resolvedRefs = await resolveReferences(refsDir);
+    if (refsPath) {
+      const baseDir = this.getBaseDir();
+      const refsDir = refsPath.startsWith('/') ? refsPath : baseDir ? pathResolve(baseDir, refsPath) : undefined;
+      if (refsDir) {
+        resolvedRefs = await resolveReferences(refsDir);
+      }
     }
 
     const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs);

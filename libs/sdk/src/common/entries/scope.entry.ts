@@ -71,7 +71,7 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * Lifecycle callbacks registered by plugins via onServerStarted().
    * Called after the HTTP server starts listening.
    */
-  private readonly _lifecycleCallbacks: Array<() => void | Promise<void>> = [];
+  private readonly lifecycleCallbacks: Array<() => void | Promise<void>> = [];
 
   /**
    * Register a callback to run after the server has started.
@@ -79,7 +79,7 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * starting background jobs, logging readiness).
    */
   onServerStarted(callback: () => void | Promise<void>): void {
-    this._lifecycleCallbacks.push(callback);
+    this.lifecycleCallbacks.push(callback);
   }
 
   /**
@@ -87,7 +87,7 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * @internal
    */
   async emitServerStarted(): Promise<void> {
-    for (const cb of this._lifecycleCallbacks) {
+    for (const cb of this.lifecycleCallbacks) {
       await cb();
     }
   }

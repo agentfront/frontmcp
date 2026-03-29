@@ -237,7 +237,10 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       // Build context-scoped providers from the resource's provider registry (app-level).
       // This ensures CONTEXT-scoped providers registered at the app level are available,
       // matching the same resolution chain that tools use.
-      const sessionKey = ctx.authInfo?.sessionId ?? 'anonymous';
+      const sessionKey =
+        this.state.sessionId ??
+        ctx.authInfo?.sessionId ??
+        `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const resourceViews = await resource.providers.buildViews(sessionKey, new Map(this.deps));
 
       // Merge resource's context providers with flow's context deps

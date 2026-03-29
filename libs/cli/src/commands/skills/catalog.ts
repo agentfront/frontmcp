@@ -200,7 +200,6 @@ export function loadCatalog(): SkillManifest {
 function resolveManifestPath(): string {
   // Primary: resolve directly from the @frontmcp/skills package
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require.resolve('@frontmcp/skills/catalog/skills-manifest.json');
   } catch {
     // Not resolvable via subpath — try via package root
@@ -208,7 +207,6 @@ function resolveManifestPath(): string {
 
   // Fallback: find the package root and navigate to catalog/
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pkgJsonPath = require.resolve('@frontmcp/skills/package.json');
     const pkgRoot = path.dirname(pkgJsonPath);
     const manifestPath = path.join(pkgRoot, 'catalog', 'skills-manifest.json');
