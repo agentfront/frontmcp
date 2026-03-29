@@ -316,6 +316,8 @@ test('prompts return well-formed messages', async ({ mcp }) => {
 
 For more control, use `McpTestClient` and `TestServer` directly:
 
+> **Note:** `npx tsx src/main.ts` is correct **only inside E2E tests** (the test framework uses it internally via `resolveServerCommand`). For development and running the server outside of tests, always use `frontmcp dev` (or your package.json `dev` script). Never run `npx tsx src/main.ts` directly for development.
+
 ```typescript
 // advanced.e2e.spec.ts
 import { McpTestClient, TestServer } from '@frontmcp/testing';

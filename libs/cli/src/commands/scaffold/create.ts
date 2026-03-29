@@ -16,6 +16,7 @@ import {
 } from '@frontmcp/utils';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
+import { buildSkillsSection } from '../skills/install';
 import { clack } from '../../shared/prompts';
 // Inline skill manifest types to avoid build dependency on @frontmcp/skills source
 interface SkillCatalogEntry {
@@ -308,16 +309,19 @@ LICENSE
 
 // jest.e2e.config.ts and tsconfig.e2e.json removed — `frontmcp test` auto-generates the correct config
 
-function generateClaudeMd(projectName: string, pm: PackageManager): string {
+function generateClaudeMd(
+  projectName: string,
+  pm: PackageManager,
+  skillEntries: { name: string; description: string }[],
+): string {
   const cfg = PM_CONFIG[pm];
+  const version = getSelfVersion();
+  const skillsBlock = buildSkillsSection(version, skillEntries);
   return `# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# Skills and Tools
-Use frontmcp skills for code planning, generation, and testing.
-
-
+${skillsBlock}
 ## Project Overview
 
 TypeScript MCP (Model Context Protocol) server built with the **FrontMCP** framework. Uses decorator-based architecture with \`@FrontMcp\`, \`@App\`, and \`@Tool\` decorators from \`@frontmcp/sdk\`. Requires Node >= 22.
@@ -1397,6 +1401,26 @@ async function collectOptions(projectArg?: string, flags?: CreateFlags): Promise
   };
 }
 
+async function loadSkillEntriesForClaudeMd(): Promise<{ name: string; description: string }[]> {
+  try {
+    const catalogDir = path.resolve(__dirname, '..', '..', '..', '..', 'skills', 'catalog');
+    const manifestPath = path.join(catalogDir, 'skills-manifest.json');
+
+    let manifestContent: string;
+    if (await fileExists(manifestPath)) {
+      manifestContent = await readFile(manifestPath);
+    } else {
+      const require_ = createRequire(__filename);
+      const pkgManifest = require_.resolve('@frontmcp/skills/catalog/skills-manifest.json');
+      manifestContent = await readFile(pkgManifest);
+    }
+    const manifest = JSON.parse(manifestContent) as SkillManifest;
+    return manifest.skills.map((s) => ({ name: s.name, description: s.description }));
+  } catch {
+    return [];
+  }
+}
+
 async function scaffoldSkills(targetDir: string, options: CreateOptions): Promise<void> {
   const bundle = options.skillsBundle ?? 'recommended';
   if (bundle === 'none') return;
@@ -1650,7 +1674,12 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'README.md'), generateReadme(options));
 
   // CLAUDE.md and AGENTS.md for AI coding assistants
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'CLAUDE.md'), generateClaudeMd(pkgName, packageManager));
+  const skillEntries = await loadSkillEntriesForClaudeMd();
+  await scaffoldFileIfMissing(
+    targetDir,
+    path.join(targetDir, 'CLAUDE.md'),
+    generateClaudeMd(pkgName, packageManager, skillEntries),
+  );
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'AGENTS.md'), generateAgentsMd(pkgName, packageManager));
 
   // Initialize git repository
