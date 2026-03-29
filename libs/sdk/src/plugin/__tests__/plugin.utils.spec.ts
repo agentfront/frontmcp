@@ -5,6 +5,7 @@
 import 'reflect-metadata';
 import { normalizePlugin, collectPluginMetadata, pluginDiscoveryDeps } from '../plugin.utils';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
+import { FrontMcpProvider } from '../../common/decorators/provider.decorator';
 
 import { PluginKind } from '../../common/records';
 import { createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
@@ -285,6 +286,90 @@ describe('Plugin Utils', () => {
         expect(record.kind).toBe(PluginKind.VALUE);
         expect((record as any).providers).toBeDefined();
         expect((record as any).providers).toHaveLength(1);
+      });
+
+      it('should preserve decorator providers when inline providers is empty (DynamicPlugin.init regression)', () => {
+        @FrontMcpProvider({ name: 'DecoratorService' })
+        class DecoratorService {}
+
+        @FrontMcpPlugin({
+          name: 'PluginWithDecoratorProviders',
+          description: 'Plugin that declares providers in decorator',
+          providers: [DecoratorService],
+          exports: [DecoratorService],
+        })
+        class PluginWithDecoratorProviders {}
+
+        // Simulates what DynamicPlugin.init({}) returns
+        const plugin = {
+          provide: PluginWithDecoratorProviders,
+          useValue: new PluginWithDecoratorProviders(),
+          providers: [], // empty dynamic providers from init()
+        };
+
+        const record = normalizePlugin(plugin);
+
+        expect(record.kind).toBe(PluginKind.VALUE);
+        // Decorator providers must NOT be overwritten by empty inline providers
+        expect(record.metadata.providers).toEqual([DecoratorService]);
+        expect(record.metadata.exports).toEqual([DecoratorService]);
+        // Dynamic providers stored separately on rec.providers
+        expect((record as any).providers).toEqual([]);
+      });
+
+      it('should keep decorator providers separate from dynamic providers', () => {
+        @FrontMcpProvider({ name: 'StaticService' })
+        class StaticService {}
+
+        @FrontMcpProvider({ name: 'DynamicService' })
+        class DynamicService {}
+
+        @FrontMcpPlugin({
+          name: 'PluginWithStaticProviders',
+          description: 'Plugin with static providers in decorator',
+          providers: [StaticService],
+        })
+        class PluginWithStaticProviders {}
+
+        const plugin = {
+          provide: PluginWithStaticProviders,
+          useValue: new PluginWithStaticProviders(),
+          providers: [DynamicService], // dynamic providers from init()
+        };
+
+        const record = normalizePlugin(plugin);
+
+        // Decorator providers preserved in metadata
+        expect(record.metadata.providers).toEqual([StaticService]);
+        // Dynamic providers stored separately
+        expect((record as any).providers).toEqual([DynamicService]);
+      });
+
+      it('should still allow scope override while preserving decorator providers', () => {
+        @FrontMcpProvider({ name: 'SomeService' })
+        class SomeService {}
+
+        @FrontMcpPlugin({
+          name: 'ScopedPlugin',
+          description: 'Plugin with app scope in decorator',
+          providers: [SomeService],
+          scope: 'app',
+        })
+        class ScopedPlugin {}
+
+        const plugin = {
+          provide: ScopedPlugin,
+          useValue: new ScopedPlugin(),
+          providers: [],
+          scope: 'server', // inline scope override
+        };
+
+        const record = normalizePlugin(plugin);
+
+        // Scope override still works
+        expect(record.metadata.scope).toBe('server');
+        // Decorator providers NOT clobbered
+        expect(record.metadata.providers).toEqual([SomeService]);
       });
     });
 
