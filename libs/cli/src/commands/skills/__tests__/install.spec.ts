@@ -32,6 +32,12 @@ jest.mock('@frontmcp/utils', () => ({
   cp: jest.fn(),
 }));
 
+/** Helper: mark both catalog skills as installed under cwd */
+function mockInstalledSkills(cwd: string) {
+  mockFiles[`${cwd}/.claude/skills/skill-alpha/SKILL.md`] = '# skill-alpha';
+  mockFiles[`${cwd}/.claude/skills/skill-beta/SKILL.md`] = '# skill-beta';
+}
+
 beforeEach(() => {
   mockFiles = {};
   jest.clearAllMocks();
@@ -87,7 +93,9 @@ describe('buildSkillsSection', () => {
 });
 
 describe('ensureClaudeMdSkillsInstructions', () => {
-  it('should create new CLAUDE.md with skills section when file does not exist', async () => {
+  it('should create new CLAUDE.md with installed skills only', async () => {
+    mockInstalledSkills('/test/project');
+
     await ensureClaudeMdSkillsInstructions('/test/project');
 
     const content = mockFiles['/test/project/CLAUDE.md'];
@@ -98,7 +106,19 @@ describe('ensureClaudeMdSkillsInstructions', () => {
     expect(content).toContain('**skill-beta**');
   });
 
+  it('should only list installed skills, not full catalog', async () => {
+    // Only install skill-alpha, not skill-beta
+    mockFiles['/test/project/.claude/skills/skill-alpha/SKILL.md'] = '# skill-alpha';
+
+    await ensureClaudeMdSkillsInstructions('/test/project');
+
+    const content = mockFiles['/test/project/CLAUDE.md'];
+    expect(content).toContain('**skill-alpha**');
+    expect(content).not.toContain('**skill-beta**');
+  });
+
   it('should replace existing marker-bounded block on re-run', async () => {
+    mockInstalledSkills('/test/project');
     mockFiles['/test/project/CLAUDE.md'] = [
       '# My Project',
       '',
@@ -123,6 +143,7 @@ describe('ensureClaudeMdSkillsInstructions', () => {
   });
 
   it('should migrate legacy "# Skills and Tools" header to marker format', async () => {
+    mockInstalledSkills('/test/project');
     mockFiles['/test/project/CLAUDE.md'] = [
       '# Skills and Tools',
       'Some old hardcoded content.',
@@ -142,6 +163,7 @@ describe('ensureClaudeMdSkillsInstructions', () => {
   });
 
   it('should migrate legacy "# Skills and Tools" when next heading is ## level', async () => {
+    mockInstalledSkills('/test/project');
     mockFiles['/test/project/CLAUDE.md'] = [
       '# Skills and Tools',
       'Some old hardcoded content.',
@@ -161,6 +183,7 @@ describe('ensureClaudeMdSkillsInstructions', () => {
   });
 
   it('should prepend block when CLAUDE.md exists without any skills section', async () => {
+    mockInstalledSkills('/test/project');
     mockFiles['/test/project/CLAUDE.md'] = ['# My Project', '', '## Commands', 'Run yarn dev.'].join('\n');
 
     await ensureClaudeMdSkillsInstructions('/test/project');
@@ -174,6 +197,7 @@ describe('ensureClaudeMdSkillsInstructions', () => {
   });
 
   it('should not produce duplicate marker blocks', async () => {
+    mockInstalledSkills('/test/project');
     // Run twice
     await ensureClaudeMdSkillsInstructions('/test/project');
     await ensureClaudeMdSkillsInstructions('/test/project');
@@ -185,14 +209,13 @@ describe('ensureClaudeMdSkillsInstructions', () => {
     expect(endCount).toBe(1);
   });
 
-  it('should use skills from the manifest, not hardcoded', async () => {
+  it('should produce empty skills list when no skills are installed', async () => {
+    // No skills installed (no SKILL.md files in mockFiles)
     await ensureClaudeMdSkillsInstructions('/test/project');
 
     const content = mockFiles['/test/project/CLAUDE.md'];
-    // These come from the mocked manifest
-    expect(content).toContain('**skill-alpha**');
-    expect(content).toContain('**skill-beta**');
-    // Old hardcoded entries should NOT be present
-    expect(content).not.toContain('frontmcp-development');
+    expect(content).toContain('<!-- frontmcp:skills-start');
+    expect(content).not.toContain('**skill-alpha**');
+    expect(content).not.toContain('**skill-beta**');
   });
 });

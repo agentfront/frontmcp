@@ -83,7 +83,16 @@ export interface InstallOptions {
 export async function ensureClaudeMdSkillsInstructions(cwd: string): Promise<void> {
   const manifest = loadCatalog();
   const version = getSelfVersion();
-  const section = buildSkillsSection(version, manifest.skills);
+  // Only include skills that are actually installed (not the full catalog)
+  const installedSkills = (
+    await Promise.all(
+      manifest.skills.map(async (skill) => {
+        const skillMdPath = path.join(cwd, '.claude', 'skills', skill.name, 'SKILL.md');
+        return (await fileExists(skillMdPath)) ? { name: skill.name, description: skill.description } : undefined;
+      }),
+    )
+  ).filter((s): s is { name: string; description: string } => s !== undefined);
+  const section = buildSkillsSection(version, installedSkills);
   const claudeMdPath = path.join(cwd, 'CLAUDE.md');
 
   if (await fileExists(claudeMdPath)) {
