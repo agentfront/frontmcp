@@ -43,4 +43,8 @@ export class RemoteTransporter implements Transporter {
   resetForReinitialization(): void {
     // No-op for remote transporters - initialization state is managed on the remote node
   }
+
+  reregisterServer(): void {
+    // No-op for remote transporters - server registration is managed on the remote node
+  }
 }

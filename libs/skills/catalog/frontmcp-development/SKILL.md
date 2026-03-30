@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/servers/overview
+  docs: https://docs.agentfront.dev/frontmcp/fundamentals/overview
 ---
 
 # FrontMCP Development Router
@@ -122,5 +122,5 @@ Entry point for building MCP server components. This skill helps you find the ri
 
 ## Reference
 
-- [Server Overview](https://docs.agentfront.dev/frontmcp/servers/overview)
+- [FrontMCP Overview](https://docs.agentfront.dev/frontmcp/fundamentals/overview)
 - Related skills: `create-tool`, `create-resource`, `create-prompt`, `create-agent`, `create-provider`, `create-job`, `create-workflow`, `create-skill`, `create-skill-with-tools`, `decorators-guide`, `official-adapters`, `official-plugins`

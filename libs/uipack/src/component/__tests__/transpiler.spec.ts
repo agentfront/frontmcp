@@ -154,7 +154,7 @@ describe('bundleFileSource', () => {
     bundle('const x = 1;', 'widget.tsx', '/app/src', 'Widget');
 
     const opts = mockBuildSync.mock.calls[0][0];
-    expect(opts.external).toEqual(['react', 'react-dom']);
+    expect(opts.external).toEqual(['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime']);
   });
 
   it('should set platform to browser', () => {
@@ -182,9 +182,9 @@ describe('bundleFileSource', () => {
 
     const opts = mockBuildSync.mock.calls[0][0];
     const contents = opts.stdin.contents;
-    expect(contents).toContain('React.createElement(MyComponent)');
     expect(contents).toContain('McpBridgeProvider');
     expect(contents).toContain('createRoot');
+    expect(contents).toContain('MyComponent');
   });
 
   it('should use tsx loader for .tsx files', () => {

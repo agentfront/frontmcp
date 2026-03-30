@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/guides/overview
+  docs: https://docs.agentfront.dev/frontmcp/guides/your-first-tool
 examples:
   - scenario: Build a simple weather API MCP server from scratch
     expected-outcome: Working server with tools, resources, and tests deployed to Node
@@ -415,6 +415,6 @@ export class ResearcherAgent extends AgentContext {
 
 ## Reference
 
-- [Guides Documentation](https://docs.agentfront.dev/frontmcp/guides/overview)
+- [Your First Tool](https://docs.agentfront.dev/frontmcp/guides/your-first-tool)
 - Domain routers: `frontmcp-development`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-config`
 - Core skills: `setup-project`, `create-tool`, `create-resource`, `create-provider`, `create-agent`, `configure-auth`, `setup-testing`
