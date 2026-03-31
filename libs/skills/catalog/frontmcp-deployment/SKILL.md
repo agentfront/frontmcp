@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/deployment/overview
+  docs: https://docs.agentfront.dev/frontmcp/deployment/runtime-modes
 ---
 
 # FrontMCP Deployment Router
@@ -148,5 +148,5 @@ Beyond `frontmcp build`, the CLI provides commands for the full deployment lifec
 
 ## Reference
 
-- [Deployment Overview](https://docs.agentfront.dev/frontmcp/deployment/overview)
+- [Runtime Modes](https://docs.agentfront.dev/frontmcp/deployment/runtime-modes)
 - Related skills: `deploy-to-node`, `deploy-to-vercel`, `deploy-to-lambda`, `deploy-to-cloudflare`, `build-for-cli`, `build-for-browser`, `build-for-sdk`, `configure-transport`

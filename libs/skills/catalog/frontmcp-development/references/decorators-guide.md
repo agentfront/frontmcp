@@ -744,6 +744,16 @@ class AuditHooks {
 
 ---
 
+## Examples
+
+| Example                                                                                                        | Level        | Description                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent-skill-job-workflow`](../examples/decorators-guide/agent-skill-job-workflow.md)                         | Advanced     | Demonstrates the advanced decorator types: `@Agent` for autonomous AI agents, `@Skill` for knowledge packages, `@Job` for background tasks, and `@Workflow` for multi-step orchestration. |
+| [`basic-server-with-app-and-tools`](../examples/decorators-guide/basic-server-with-app-and-tools.md)           | Basic        | Demonstrates the minimal decorator hierarchy to create a working FrontMCP server with one app containing a tool and a resource.                                                           |
+| [`multi-app-with-plugins-and-providers`](../examples/decorators-guide/multi-app-with-plugins-and-providers.md) | Intermediate | Demonstrates a server with multiple `@App` modules, a `@Provider` for dependency injection, and a `@Plugin` for cross-cutting concerns.                                                   |
+
+> See all examples in [`examples/decorators-guide/`](../examples/decorators-guide/)
+
 ## Reference
 
 - **Official docs:** [FrontMCP Decorators Overview](https://docs.agentfront.dev/frontmcp/sdk-reference/decorators/overview)

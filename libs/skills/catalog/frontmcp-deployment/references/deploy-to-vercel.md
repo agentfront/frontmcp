@@ -223,6 +223,16 @@ Serverless functions are stateless between invocations. All persistent state mus
 | Bundle too large     | Unnecessary dependencies included             | Review dependencies and remove unused packages to reduce bundle size                           |
 | Cold starts too slow | Low function memory or large bundle           | Increase memory to 1024 MB; audit dependencies; consider Vercel Fluid Compute                  |
 
+## Examples
+
+| Example                                                                                | Level        | Description                                                                                     |
+| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
+| [`vercel-mcp-endpoint-test`](../examples/deploy-to-vercel/vercel-mcp-endpoint-test.md) | Advanced     | Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.  |
+| [`vercel-with-kv`](../examples/deploy-to-vercel/vercel-with-kv.md)                     | Basic        | Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence. |
+| [`vercel-with-skills-cache`](../examples/deploy-to-vercel/vercel-with-skills-cache.md) | Intermediate | Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.             |
+
+> See all examples in [`examples/deploy-to-vercel/`](../examples/deploy-to-vercel/)
+
 ## Reference
 
 - **Docs:** https://docs.agentfront.dev/frontmcp/deployment/serverless

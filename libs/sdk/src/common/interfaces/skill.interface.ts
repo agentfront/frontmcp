@@ -23,6 +23,22 @@ export interface SkillReferenceInfo {
 }
 
 /**
+ * Metadata for a resolved example file within a skill's examples/ directory.
+ */
+export interface SkillExampleInfo {
+  /** Example name (filename without .md) */
+  name: string;
+  /** Short description from frontmatter */
+  description: string;
+  /** Parent reference name (examples are grouped by reference) */
+  reference: string;
+  /** Complexity level */
+  level: string;
+  /** Filename relative to the examples directory */
+  filename: string;
+}
+
+/**
  * Full content returned when loading a skill.
  * Contains all information needed for an LLM to execute the skill.
  */
@@ -97,6 +113,12 @@ export interface SkillContent {
    * Each entry contains name, description, and filename for the reference.
    */
   resolvedReferences?: SkillReferenceInfo[];
+
+  /**
+   * Resolved example metadata from the skill's examples/ directory.
+   * Examples are grouped by reference and contain name, description, level, and filename.
+   */
+  resolvedExamples?: SkillExampleInfo[];
 }
 
 /**

@@ -193,6 +193,16 @@ class IntegrationHub {}
 | Stale tools after API update       | Spec polling not configured                            | Add `polling: { intervalMs: 300000 }` to refresh every 5 minutes                                                                                                                |
 | TypeScript error importing adapter | Wrong import path                                      | Import from `@frontmcp/adapters`: `import { OpenapiAdapter } from '@frontmcp/adapters'`                                                                                         |
 
+## Examples
+
+| Example                                                                                                     | Level        | Description                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`authenticated-adapter-with-polling`](../examples/official-adapters/authenticated-adapter-with-polling.md) | Intermediate | Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.                                           |
+| [`basic-openapi-adapter`](../examples/official-adapters/basic-openapi-adapter.md)                           | Basic        | Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.                              |
+| [`multi-api-hub-with-inline-spec`](../examples/official-adapters/multi-api-hub-with-inline-spec.md)         | Advanced     | Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL. |
+
+> See all examples in [`examples/official-adapters/`](../examples/official-adapters/)
+
 ## Reference
 
 - [Adapter Overview Documentation](https://docs.agentfront.dev/frontmcp/adapters/overview)

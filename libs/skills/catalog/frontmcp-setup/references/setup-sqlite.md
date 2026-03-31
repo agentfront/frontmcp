@@ -346,6 +346,16 @@ The change in `src/main.ts`:
 | WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk or set `walMode: false`                                                                 |
 | Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated |
 
+## Examples
+
+| Example                                                                            | Level        | Description                                                                                       |
+| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| [`basic-sqlite-setup`](../examples/setup-sqlite/basic-sqlite-setup.md)             | Basic        | Configure a FrontMCP server with SQLite for local session storage with WAL mode enabled.          |
+| [`encrypted-sqlite-storage`](../examples/setup-sqlite/encrypted-sqlite-storage.md) | Intermediate | Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLite.                |
+| [`unix-socket-daemon`](../examples/setup-sqlite/unix-socket-daemon.md)             | Advanced     | Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage. |
+
+> See all examples in [`examples/setup-sqlite/`](../examples/setup-sqlite/)
+
 ## Reference
 
 - **Docs:** [SQLite Setup Guide](https://docs.agentfront.dev/frontmcp/deployment/sqlite-setup)

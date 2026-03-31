@@ -51,3 +51,13 @@ Target-specific checklist for deploying FrontMCP to AWS Lambda.
 - [ ] Staging and production stages are separate
 - [ ] API Gateway stages are configured correctly
 - [ ] CloudWatch alarms are set for errors and throttling
+
+## Examples
+
+| Example                                                                                       | Level        | Description                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`cold-start-connection-reuse`](../examples/production-lambda/cold-start-connection-reuse.md) | Intermediate | Shows how to minimize Lambda cold starts with lazy initialization, tree-shaking, and the connection reuse pattern for external services.                                                 |
+| [`sam-template`](../examples/production-lambda/sam-template.md)                               | Basic        | Shows a complete SAM/CloudFormation template for deploying a FrontMCP server to AWS Lambda with API Gateway routing, DynamoDB for session storage, and proper environment configuration. |
+| [`scaling-and-monitoring`](../examples/production-lambda/scaling-and-monitoring.md)           | Advanced     | Shows how to configure concurrency limits, dead letter queues, provisioned concurrency, and CloudWatch alarms for a production Lambda deployment.                                        |
+
+> See all examples in [`examples/production-lambda/`](../examples/production-lambda/)

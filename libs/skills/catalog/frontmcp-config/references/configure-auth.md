@@ -237,6 +237,16 @@ The `authProviders` accessor (from `@frontmcp/auth`) provides:
 | `VAULT_SECRET is not defined` error     | The vault encryption secret environment variable is missing                  | Set `VAULT_SECRET` in your environment or `.env` file before starting the server                  |
 | OAuth redirect fails in local dev       | `remote` mode requires HTTPS and reachable callback URLs                     | Set `NODE_ENV=development` to relax HTTPS requirements, or use a local OAuth mock server          |
 
+## Examples
+
+| Example                                                                            | Level        | Description                                                                                                                                                |
+| ---------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`multi-app-auth`](../examples/configure-auth/multi-app-auth.md)                   | Advanced     | Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.       |
+| [`public-mode-setup`](../examples/configure-auth/public-mode-setup.md)             | Basic        | Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.                                                                        |
+| [`remote-oauth-with-vault`](../examples/configure-auth/remote-oauth-with-vault.md) | Intermediate | Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user. |
+
+> See all examples in [`examples/configure-auth/`](../examples/configure-auth/)
+
 ## Reference
 
 - Docs: [Authentication Overview](https://docs.agentfront.dev/frontmcp/authentication/overview)

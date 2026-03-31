@@ -267,6 +267,15 @@ frontmcp dev
 | Type mismatch on `this.get(TOKEN)`   | Token typed with wrong interface                    | Ensure `Token<T>` generic matches the provider's implemented interface |
 | Provider not destroyed on shutdown   | Missing `onDestroy()` method                        | Implement `onDestroy()` to close connections and release resources     |
 
+## Examples
+
+| Example                                                                               | Level        | Description                                                                                           |
+| ------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| [`basic-database-provider`](../examples/create-provider/basic-database-provider.md)   | Basic        | A provider that manages a database connection pool with `onInit()` and `onDestroy()` lifecycle hooks. |
+| [`config-and-api-providers`](../examples/create-provider/config-and-api-providers.md) | Intermediate | A configuration provider with readonly environment settings and an HTTP API client provider.          |
+
+> See all examples in [`examples/create-provider/`](../examples/create-provider/)
+
 ## Reference
 
 - [Providers Documentation](https://docs.agentfront.dev/frontmcp/extensibility/providers)

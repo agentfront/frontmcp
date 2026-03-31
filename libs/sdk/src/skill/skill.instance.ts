@@ -1,11 +1,11 @@
 // file: libs/sdk/src/skill/skill.instance.ts
 
 import { EntryOwnerRef, SkillEntry, SkillKind, SkillRecord, SkillToolRef, normalizeToolRef } from '../common';
-import { SkillContent, SkillReferenceInfo } from '../common/interfaces';
+import { SkillContent, SkillReferenceInfo, SkillExampleInfo } from '../common/interfaces';
 import { SkillVisibility } from '../common/metadata/skill.metadata';
 import ProviderRegistry from '../provider/provider.registry';
 import { ScopeEntry } from '../common';
-import { loadInstructions, buildSkillContent, resolveReferences } from './skill.utils';
+import { loadInstructions, buildSkillContent, resolveReferences, resolveExamples } from './skill.utils';
 import { dirname, pathResolve } from '@frontmcp/utils';
 
 /**
@@ -124,7 +124,7 @@ export class SkillInstance extends SkillEntry {
   /**
    * Resolve the base directory for this skill (for file/reference resolution).
    */
-  private getBaseDir(): string | undefined {
+  getBaseDir(): string | undefined {
     if (this.record.kind === SkillKind.FILE) {
       return dirname(this.record.filePath) || undefined;
     }
@@ -140,19 +140,33 @@ export class SkillInstance extends SkillEntry {
     }
 
     const instructions = await this.loadInstructions();
+    const baseDir = this.getBaseDir();
 
     // Resolve references from the references/ directory if it exists
     const refsPath = this.metadata.resources?.references;
     let resolvedRefs: SkillReferenceInfo[] | undefined;
     if (refsPath) {
-      const baseDir = this.getBaseDir();
       const refsDir = refsPath.startsWith('/') ? refsPath : baseDir ? pathResolve(baseDir, refsPath) : undefined;
       if (refsDir) {
         resolvedRefs = await resolveReferences(refsDir);
       }
     }
 
-    const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs);
+    // Resolve examples from the examples/ directory if it exists
+    const examplesPath = this.metadata.resources?.examples;
+    let resolvedExs: SkillExampleInfo[] | undefined;
+    if (examplesPath) {
+      const exDir = examplesPath.startsWith('/')
+        ? examplesPath
+        : baseDir
+          ? pathResolve(baseDir, examplesPath)
+          : undefined;
+      if (exDir) {
+        resolvedExs = await resolveExamples(exDir);
+      }
+    }
+
+    const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs, resolvedExs);
 
     // Add additional metadata that's useful for search but not in base SkillContent
     this.cachedContent = {

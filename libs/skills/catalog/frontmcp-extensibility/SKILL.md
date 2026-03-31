@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/extensibility/overview
+  docs: https://docs.agentfront.dev/frontmcp/extensibility/providers
 ---
 
 # FrontMCP Extensibility

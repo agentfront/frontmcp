@@ -220,6 +220,15 @@ Only update:
 - [ ] Development section includes `frontmcp dev`, `frontmcp test`, `frontmcp inspect`
 - [ ] License matches `package.json`
 
+## Examples
+
+| Example                                                                            | Level        | Description                                                                                            |
+| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------ |
+| [`node-server-readme`](../examples/readme-guide/node-server-readme.md)             | Basic        | Generate a README for a FrontMCP server deployed as a Docker/Node.js service with tools and resources. |
+| [`vercel-deployment-readme`](../examples/readme-guide/vercel-deployment-readme.md) | Intermediate | Generate a README for a FrontMCP server deployed to Vercel with Vercel KV storage.                     |
+
+> See all examples in [`examples/readme-guide/`](../examples/readme-guide/)
+
 ## Reference
 
 - Related skills: `frontmcp-deployment` (for target-specific deployment details)

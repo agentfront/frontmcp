@@ -59,3 +59,13 @@ When `outputSchema` is omitted, the tool returns unvalidated content. This:
 - Risks leaking internal fields to the client
 - Prevents CodeCall from inferring return types
 - Loses compile-time type checking on `Out` generic
+
+## Examples
+
+| Example                                                                                                     | Level        | Description                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`primitive-and-media-outputs`](../examples/create-tool-output-schema-types/primitive-and-media-outputs.md) | Intermediate | Demonstrates using primitive string literals and media types as `outputSchema` for tools that return plain text, images, or multi-content arrays.              |
+| [`zod-raw-shape-output`](../examples/create-tool-output-schema-types/zod-raw-shape-output.md)               | Basic        | Demonstrates the recommended approach of using a Zod raw shape as `outputSchema` for structured, validated JSON output.                                        |
+| [`zod-schema-advanced-output`](../examples/create-tool-output-schema-types/zod-schema-advanced-output.md)   | Advanced     | Demonstrates using full Zod schema objects (not raw shapes) as `outputSchema`, including `z.object()`, `z.array()`, `z.union()`, and `z.discriminatedUnion()`. |
+
+> See all examples in [`examples/create-tool-output-schema-types/`](../examples/create-tool-output-schema-types/)

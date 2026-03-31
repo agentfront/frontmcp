@@ -54,3 +54,13 @@ describe('Server E2E', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                                        | Level        | Description                                                                                                          |
+| ---------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| [`basic-e2e-test`](../examples/test-e2e-handler/basic-e2e-test.md)                             | Basic        | Set up a basic E2E test that starts a server, connects a client, and verifies tools are listed.                      |
+| [`manual-client-with-transport`](../examples/test-e2e-handler/manual-client-with-transport.md) | Advanced     | Use `McpTestClient.create()` with explicit transport settings for fine-grained control over E2E tests.               |
+| [`tool-call-and-error-e2e`](../examples/test-e2e-handler/tool-call-and-error-e2e.md)           | Intermediate | Test successful tool calls and verify that invalid inputs produce proper error responses over the full MCP protocol. |
+
+> See all examples in [`examples/test-e2e-handler/`](../examples/test-e2e-handler/)

@@ -63,3 +63,12 @@ description: Reference vercel.json configuration for deploying a FrontMCP server
 }
 ]
 }
+
+## Examples
+
+| Example                                                                                                             | Level        | Description                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------- |
+| [`minimal-vercel-config`](../examples/deploy-to-vercel-config/minimal-vercel-config.md)                             | Basic        | The minimum `vercel.json` needed to deploy a FrontMCP server to Vercel.                            |
+| [`vercel-config-with-security-headers`](../examples/deploy-to-vercel-config/vercel-config-with-security-headers.md) | Intermediate | A complete `vercel.json` with per-route security headers for health, MCP, and all other endpoints. |
+
+> See all examples in [`examples/deploy-to-vercel-config/`](../examples/deploy-to-vercel-config/)
