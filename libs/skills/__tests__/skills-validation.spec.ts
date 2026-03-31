@@ -710,7 +710,11 @@ describe('skills catalog validation', () => {
               mismatches.push(`${entry.name}/${ref.name}/${example.name}: reference table level differs from manifest`);
             }
             // Validate that the href resolves to the expected example file
-            if (row.href) {
+            if (!row.href) {
+              mismatches.push(
+                `${entry.name}/${ref.name}/${example.name}: missing href link in reference example table`,
+              );
+            } else {
               const expectedHref = `../examples/${ref.name}/${example.name}.md`;
               if (row.href !== expectedHref) {
                 mismatches.push(

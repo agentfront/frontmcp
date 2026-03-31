@@ -39,7 +39,7 @@ class MyApp {}
   info: { name: 'my-worker', version: '1.0.0' },
   apps: [MyApp],
   transport: {
-    type: 'sse',
+    protocol: 'legacy',
   },
 })
 class MyServer {}

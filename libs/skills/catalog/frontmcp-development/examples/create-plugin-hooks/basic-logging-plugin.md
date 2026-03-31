@@ -33,7 +33,7 @@ export class LoggingPlugin {
 
   @Did('execute')
   logAfter(ctx) {
-    console.log(`[LOG] Tool "${ctx.toolName}" completed in ${ctx.elapsed}ms`);
+    console.log(`[LOG] Tool "${ctx.toolName}" completed in ${ctx.elapsed()}ms`);
   }
 }
 ```

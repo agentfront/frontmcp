@@ -62,9 +62,13 @@ export async function readSkill(
   }
 
   // Mode 1b: List examples
-  if (options.listExamples || options.examplesForRef) {
+  const refFilter = options.examplesForRef?.trim();
+  if (options.listExamples || options.examplesForRef !== undefined) {
+    if (options.examplesForRef !== undefined && !refFilter) {
+      console.error(c('red', 'Reference name for --examples cannot be empty.'));
+      process.exit(1);
+    }
     const refs = entry.references ?? [];
-    const refFilter = options.examplesForRef;
 
     // Collect all examples, optionally filtered by reference
     const allExamples: Array<{ ref: string; name: string; level: string; description: string }> = [];
