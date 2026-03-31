@@ -69,11 +69,11 @@ import { McpBridgeProvider } from '@frontmcp/ui/react';
 var __root = document.getElementById('root');
 if (__root) {
   var __reactRoot = createRoot(__root);
-  function __hasData(v) { return v != null && typeof v === 'object' && Object.keys(v).length > 0; }
+  function __hasData(v) { return v !== undefined && v !== null; }
   function __render(output) {
     __reactRoot.render(
       __h(McpBridgeProvider, null,
-        __h(${componentName}, { output: output || null, input: window.__mcpToolInput, loading: !__hasData(output) })
+        __h(${componentName}, { output: output !== undefined && output !== null ? output : null, input: window.__mcpToolInput, loading: !__hasData(output) })
       )
     );
   }

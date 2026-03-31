@@ -12,18 +12,32 @@
  */
 import { test, expect } from '@frontmcp/testing';
 
+let nextRequestId = 1;
+
+interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id: number;
+  method: string;
+  params: Record<string, unknown>;
+}
+
+interface JsonRpcResponse {
+  result?: { completion?: { values: string[]; total?: number; hasMore?: boolean } };
+  error?: { code: number; message: string };
+}
+
 /**
  * Send a completion/complete request and extract the completion result.
  */
 async function requestCompletion(
-  mcp: { raw: { request: (msg: any) => Promise<any> } },
+  mcp: { raw: { request: (msg: JsonRpcRequest) => Promise<JsonRpcResponse> } },
   uri: string,
   argName: string,
   argValue: string,
 ): Promise<{ values: string[]; total?: number; hasMore?: boolean }> {
   const response = await mcp.raw.request({
     jsonrpc: '2.0' as const,
-    id: Date.now(),
+    id: nextRequestId++,
     method: 'completion/complete',
     params: {
       ref: { type: 'ref/resource', uri },

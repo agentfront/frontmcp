@@ -1,9 +1,18 @@
-export const Card = (props) => {
+export const Card = ({
+  title,
+  subtitle,
+  children,
+}: {
+  title?: string;
+  subtitle?: string;
+  elevation?: number;
+  children?: React.ReactNode;
+}) => {
   return (
     <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '16px', maxWidth: '400px' }}>
-      <h2>{props.title}</h2>
-      <h4 style={{ color: '#666' }}>{props.subtitle}</h4>
-      {props.children}
+      <h2>{title}</h2>
+      <h4 style={{ color: '#666' }}>{subtitle}</h4>
+      {children}
     </div>
   );
 };

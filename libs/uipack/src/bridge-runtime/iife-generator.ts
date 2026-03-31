@@ -460,9 +460,9 @@ var ExtAppsAdapter = {
         resolve: function(result) {
           self.hostCapabilities = result.hostCapabilities || {};
           self.capabilities = Object.assign({}, self.capabilities, {
-            canCallTools: Boolean(self.hostCapabilities.serverTools),
+            canCallTools: Boolean(self.hostCapabilities.serverTools || self.hostCapabilities.serverToolProxy),
             canSendMessages: true,
-            canOpenLinks: Boolean(self.hostCapabilities.openLinks),
+            canOpenLinks: Boolean(self.hostCapabilities.openLinks || self.hostCapabilities.openLink),
             supportsDisplayModes: true
           });
           if (result.hostContext) {

@@ -39,4 +39,28 @@ describe('buildDataInjectionScript', () => {
     const result = buildDataInjectionScript({ toolName: 'test' });
     expect(result).toMatch(/^<script>\n[\s\S]+\n<\/script>$/);
   });
+
+  it('should safely escape toolName containing script-breaking characters', () => {
+    const malicious = '</script><script>alert("xss")</script>';
+    const result = buildDataInjectionScript({ toolName: malicious });
+    // The raw </script> must not appear unescaped inside the script body
+    // (safeJsonForScript escapes </ to <\/ to prevent tag breakout)
+    const body = result.replace(/^<script>\n/, '').replace(/\n<\/script>$/, '');
+    expect(body).not.toContain('</script>');
+    // The value should be safely serialized
+    expect(result).toContain('window.__mcpToolName');
+    // The outer wrapper must have exactly one script open/close
+    expect(result.startsWith('<script>')).toBe(true);
+    expect(result.endsWith('</script>')).toBe(true);
+  });
+
+  it('should safely escape output containing script-breaking characters', () => {
+    const result = buildDataInjectionScript({
+      toolName: 'test',
+      output: { payload: '</script><img onerror=alert(1) src=x>' },
+    });
+    expect(result).not.toContain('</script><img');
+    const scriptCloseCount = (result.match(/<\/script>/g) || []).length;
+    expect(scriptCloseCount).toBe(1);
+  });
 });

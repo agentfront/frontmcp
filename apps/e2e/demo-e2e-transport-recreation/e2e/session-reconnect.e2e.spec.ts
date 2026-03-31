@@ -370,7 +370,7 @@ test.describe('Session Management E2E', () => {
     test('should return 404 for non-initialize with invalid session ID', async ({ server }) => {
       const { status } = await sendToolsList(server.info.baseUrl, 'invalid-session-id-does-not-exist');
       // Should fail — either 404 (terminated check) or 400 (session validation)
-      expect(status).toBeGreaterThanOrEqual(400);
+      expect([400, 404]).toContain(status);
     });
   });
 

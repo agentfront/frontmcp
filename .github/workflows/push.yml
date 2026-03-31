@@ -124,7 +124,7 @@ jobs:
             dist/
           retention-days: 1
 
-  # Discover E2E projects dynamically using Nx tags
+  # Discover E2E projects dynamically using Nx tags, chunked for API rate limits
   discover-e2e:
     name: "Discover E2E Projects"
     needs: setup
@@ -132,7 +132,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      matrix: ${{ steps.discover.outputs.projects }}
+      matrix: ${{ steps.discover.outputs.chunks }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -146,7 +146,7 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Discover E2E projects
+      - name: Discover E2E projects and create chunks
         id: discover
         run: |
           PROJECTS_JSON=$(npx nx show projects -p tag:type:e2e --json 2>/dev/null | jq -c '.' || echo "[]")
@@ -154,8 +154,15 @@ jobs:
             echo "::error::No E2E projects found with tag:type:e2e"
             exit 1
           fi
-          echo "Found $(echo $PROJECTS_JSON | jq 'length') E2E projects"
-          echo "projects=$PROJECTS_JSON" >> $GITHUB_OUTPUT
+          TOTAL=$(echo $PROJECTS_JSON | jq 'length')
+          echo "Found $TOTAL E2E projects"
+
+          # Chunk projects into groups of 4 to reduce API rate limit pressure
+          CHUNK_SIZE=4
+          CHUNKS=$(echo $PROJECTS_JSON | jq -c "[_nwise($CHUNK_SIZE)] | to_entries | map({index: .key, projects: .value})")
+          CHUNK_COUNT=$(echo $CHUNKS | jq 'length')
+          echo "Created $CHUNK_COUNT chunks of up to $CHUNK_SIZE projects each"
+          echo "chunks=$CHUNKS" >> $GITHUB_OUTPUT
 
   # Unit tests (depends on build)
   unit-tests:
@@ -209,16 +216,16 @@ jobs:
           retention-days: 1
           if-no-files-found: warn
 
-  # E2E tests - matrix strategy for parallelization
+  # E2E tests - chunked matrix strategy to reduce API rate limit pressure
   e2e-tests:
-    name: "E2E Tests (${{ matrix.project }})"
+    name: "E2E Tests (chunk ${{ matrix.chunk.index }})"
     needs: [setup, build, discover-e2e]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        project: ${{ fromJson(needs.discover-e2e.outputs.matrix) }}
+        chunk: ${{ fromJson(needs.discover-e2e.outputs.matrix) }}
     env:
       NX_DAEMON: "false"
       RUN_COVERAGE: ${{ github.ref == 'refs/heads/main' }}
@@ -248,35 +255,38 @@ jobs:
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v5
 
-      - name: Run E2E tests (${{ matrix.project }})
+      - name: Run E2E tests (chunk ${{ matrix.chunk.index }})
         id: test
         continue-on-error: true
         run: |
+          PROJECTS='${{ join(matrix.chunk.projects, ',') }}'
+          echo "Running E2E tests for: $PROJECTS"
           if [ "$RUN_COVERAGE" = "true" ]; then
-            npx nx run ${{ matrix.project }}:test --coverage
+            npx nx run-many -t test --projects="$PROJECTS" --coverage --parallel=1
           else
-            npx nx run ${{ matrix.project }}:test
+            npx nx run-many -t test --projects="$PROJECTS" --parallel=1
           fi
 
       - name: Reset Nx cache on failure
         if: steps.test.outcome == 'failure'
         run: npx nx reset
 
-      - name: Retry E2E tests (${{ matrix.project }})
+      - name: Retry E2E tests (chunk ${{ matrix.chunk.index }})
         if: steps.test.outcome == 'failure'
         run: |
+          PROJECTS='${{ join(matrix.chunk.projects, ',') }}'
           if [ "$RUN_COVERAGE" = "true" ]; then
-            npx nx run ${{ matrix.project }}:test --coverage
+            npx nx run-many -t test --projects="$PROJECTS" --coverage --parallel=1
           else
-            npx nx run ${{ matrix.project }}:test
+            npx nx run-many -t test --projects="$PROJECTS" --parallel=1
           fi
 
       - name: Upload E2E coverage artifacts
         if: env.RUN_COVERAGE == 'true' && always()
         uses: actions/upload-artifact@v6
         with:
-          name: e2e-coverage-${{ matrix.project }}
-          path: coverage/e2e/${{ matrix.project }}/
+          name: e2e-coverage-chunk-${{ matrix.chunk.index }}
+          path: coverage/e2e/
           retention-days: 1
           if-no-files-found: warn
 
@@ -310,7 +320,7 @@ jobs:
       - name: Download E2E coverage artifacts
         uses: actions/download-artifact@v5
         with:
-          pattern: e2e-coverage-*
+          pattern: e2e-coverage-chunk-*
           path: coverage/e2e/
           merge-multiple: true
 

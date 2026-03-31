@@ -37,7 +37,7 @@ export default function WeatherWidget(props: { output: WeatherOutput | null; loa
   return (
     <Card title={output.location} subtitle="Current Weather" elevation={2}>
       <div style={{ textAlign: 'center', padding: '24px 0' }}>
-        <button onClick={() => getWeather({ location: 'San Francisco' })}>Refresh Weather</button>
+        <button onClick={() => getWeather({ location: output.location })}>Refresh Weather</button>
         <div style={{ fontSize: '3.75rem', marginBottom: '8px' }}>{weatherIcon}</div>
         <div style={{ fontSize: '3rem', fontWeight: 300, marginBottom: '8px' }}>
           {output.temperature}
