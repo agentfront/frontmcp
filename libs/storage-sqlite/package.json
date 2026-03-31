@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/storage-sqlite",
-  "version": "1.0.0-beta.13",
+  "version": "1.0.0-beta.14",
   "description": "SQLite storage backend for FrontMCP - local session, elicitation, and event persistence without Redis",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -45,7 +45,7 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "1.0.0-beta.13",
+    "@frontmcp/utils": "1.0.0-beta.14",
     "better-sqlite3": "^12.6.2"
   },
   "peerDependencies": {

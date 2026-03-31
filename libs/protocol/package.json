@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/protocol",
-  "version": "1.0.0-beta.13",
+  "version": "1.0.0-beta.14",
   "description": "Centralized MCP protocol types, server, and client re-exports for FrontMCP",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
