@@ -114,7 +114,16 @@ function parseExamplesTableRows(content: string): Array<{ name: string; level: s
   let inTable = false;
 
   for (const line of lines) {
-    if (line.trim() === '| Example | Level | Description |') {
+    const normalizedCells = line
+      .split('|')
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (
+      normalizedCells.length === 3 &&
+      normalizedCells[0] === 'Example' &&
+      normalizedCells[1] === 'Level' &&
+      normalizedCells[2] === 'Description'
+    ) {
       inTable = true;
       continue;
     }
