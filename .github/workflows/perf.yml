@@ -13,33 +13,26 @@ concurrency:
 jobs:
   perf:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - demo-e2e-agents
-          - demo-e2e-cache
-          - demo-e2e-codecall
-          - demo-e2e-config
-          - demo-e2e-direct
-          - demo-e2e-elicitation
-          - demo-e2e-errors
-          - demo-e2e-hooks
-          - demo-e2e-multiapp
-          - demo-e2e-notifications
-          - demo-e2e-openapi
-          - demo-e2e-providers
-          - demo-e2e-public
-          - demo-e2e-redis
-          - demo-e2e-remember
-          - demo-e2e-remote
-          - demo-e2e-serverless
-          - demo-e2e-skills
-          - demo-e2e-standalone
-          - demo-e2e-transport-recreation
-          - demo-e2e-ui
+        chunk:
+          - index: 0
+            projects: "demo-e2e-agents,demo-e2e-cache,demo-e2e-codecall"
+          - index: 1
+            projects: "demo-e2e-config,demo-e2e-direct,demo-e2e-elicitation"
+          - index: 2
+            projects: "demo-e2e-errors,demo-e2e-hooks,demo-e2e-multiapp"
+          - index: 3
+            projects: "demo-e2e-notifications,demo-e2e-openapi,demo-e2e-providers"
+          - index: 4
+            projects: "demo-e2e-public,demo-e2e-redis,demo-e2e-remember"
+          - index: 5
+            projects: "demo-e2e-remote,demo-e2e-serverless,demo-e2e-skills"
+          - index: 6
+            projects: "demo-e2e-standalone,demo-e2e-transport-recreation,demo-e2e-ui"
 
     services:
       redis:
@@ -85,8 +78,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: Run performance tests (${{ matrix.project }})
-        run: yarn nx run ${{ matrix.project }}:test:perf
+      - name: Run performance tests (chunk ${{ matrix.chunk.index }})
+        run: |
+          FAILED=0
+          IFS=',' read -ra PROJECTS <<< "${{ matrix.chunk.projects }}"
+          for project in "${PROJECTS[@]}"; do
+            echo "::group::Running perf tests for $project"
+            if ! yarn nx run "$project":test:perf; then
+              echo "::error::Performance tests failed for $project"
+              FAILED=$((FAILED + 1))
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED project(s) had performance test failures"
+            exit 1
+          fi
         env:
           NODE_OPTIONS: "--expose-gc --max-old-space-size=4096"
           REDIS_HOST: localhost
@@ -95,7 +102,7 @@ jobs:
       - name: Upload performance report
         uses: actions/upload-artifact@v6
         with:
-          name: perf-report-${{ matrix.project }}
+          name: perf-report-chunk-${{ matrix.chunk.index }}
           path: perf-results/
           retention-days: 30
         if: always()
@@ -115,7 +122,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           path: perf-results
-          pattern: perf-report-*
+          pattern: perf-report-chunk-*
           merge-multiple: true
 
       - name: Write full report to workflow summary

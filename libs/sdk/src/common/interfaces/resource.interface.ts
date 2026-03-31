@@ -116,20 +116,32 @@ export abstract class ResourceContext<
    * Called by the MCP `completion/complete` handler when a client requests
    * suggestions for a template parameter.
    *
+   * There are two ways to provide completions (both have full DI access via `this.get()`):
+   *
+   * 1. **Convention-based (preferred):** Define a method named `${argName}Completer`.
+   *    The framework auto-discovers these methods.
+   *    ```typescript
+   *    async accountNameCompleter(partial: string): Promise<ResourceCompletionResult> {
+   *      const service = this.get(MyService);
+   *      const accounts = await service.listAccounts();
+   *      return { values: accounts.map(a => a.name).filter(n => n.startsWith(partial)) };
+   *    }
+   *    ```
+   *
+   * 2. **Override-based:** Override this method for dynamic dispatch.
+   *    ```typescript
+   *    getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
+   *      if (argName === 'userId') {
+   *        return async (partial) => ({
+   *          values: await this.get(UserService).search(partial),
+   *        });
+   *      }
+   *      return null;
+   *    }
+   *    ```
+   *
    * @param argName - The template parameter name (e.g., 'userId')
    * @returns A completer function, or null if no completion is available for this argument
-   *
-   * @example
-   * ```typescript
-   * getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
-   *   if (argName === 'userId') {
-   *     return async (partial) => ({
-   *       values: await this.searchUsers(partial),
-   *     });
-   *   }
-   *   return null;
-   * }
-   * ```
    */
   getArgumentCompleter(_argName: string): ResourceArgumentCompleter | null {
     return null;

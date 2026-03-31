@@ -227,29 +227,53 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { token } = authorization;
     const logger = this.scopeLogger.child('handle:streamable-http:parseInput');
 
-    // CRITICAL: The mcp-session-id header is the client's reference to their session.
-    // We MUST use this exact ID for transport registry lookup.
+    // Session resolution for initialize vs non-initialize requests:
     //
-    // Priority 1: Use mcp-session-id header if present (client's session ID for lookup)
-    //             This is the ID the client received from initialize and is referencing.
-    // Priority 2: Use session from authorization if header matches or is absent
-    // Priority 3: Create new session (first request - no header, no authorization.session)
-    const sessionResolution = resolveStreamableHttpSession({
-      rawHeader: request.headers?.['mcp-session-id'],
-      authorizationSession: authorization.session,
-      createSession: () => {
-        // No session - create new one (initialize request)
-        // Detect skills_only mode from query params
-        const query = request.query as Record<string, string | string[]> | undefined;
-        const skillsOnlyMode = detectSkillsOnlyMode(query);
+    // Initialize + valid signed mcp-session-id (authSig matches):
+    //   → Reuse that session ID (re-initialize under same ID)
+    // Initialize + no/invalid mcp-session-id:
+    //   → Create a new session with new ID
+    // Initialize + active session (transport exists):
+    //   → MCP SDK rejects with 400 "Server already initialized"
+    // Non-initialize:
+    //   → Standard resolution: header → auth session → error
+    const body = request.body as { method?: string } | undefined;
+    const isInitialize = body?.method === 'initialize';
 
-        return createSessionId('streamable-http', token, {
-          userAgent: request.headers?.['user-agent'] as string | undefined,
-          platformDetectionConfig: this.scope.metadata.transport?.platformDetection,
-          skillsOnlyMode,
-        });
-      },
-    });
+    const createSession = () => {
+      const query = request.query as Record<string, string | string[]> | undefined;
+      const skillsOnlyMode = detectSkillsOnlyMode(query);
+
+      return createSessionId('streamable-http', token, {
+        userAgent: request.headers?.['user-agent'] as string | undefined,
+        platformDetectionConfig: this.scope.metadata.transport?.platformDetection,
+        skillsOnlyMode,
+      });
+    };
+
+    let sessionResolution: ReturnType<typeof resolveStreamableHttpSession>;
+
+    if (isInitialize) {
+      // For initialize: reuse the session ID if the session verify flow resolved one.
+      // authorization.session.id is set when the client sends a valid mcp-session-id
+      // header that decrypts successfully (or is recognized in anonymous/public mode).
+      // The payload may be undefined (e.g., nodeId mismatch after restart, terminated
+      // session with cleared cache) — but the id is still the correct transport key.
+      if (authorization.session?.id) {
+        // Session ID resolved from header — reuse it for re-initialization
+        sessionResolution = { session: authorization.session, createdNew: false, responded404: false };
+      } else {
+        // No session header / invalid / unrecognized — create fresh
+        sessionResolution = { session: createSession(), createdNew: true, responded404: false };
+      }
+    } else {
+      // Non-initialize: standard session resolution
+      sessionResolution = resolveStreamableHttpSession({
+        rawHeader: request.headers?.['mcp-session-id'],
+        authorizationSession: authorization.session,
+        createSession,
+      });
+    }
 
     if (sessionResolution.responded404 || !sessionResolution.session) {
       logger.warn('parseInput: invalid mcp-session-id header');
@@ -318,24 +342,30 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     try {
       // Sync session to request auth context for ensureAuthInfo.
-      // After reconnect with a terminated session, http.request.flow clears
-      // authorization.session to allow fresh session creation in parseInput.
-      // We must set it back so the transport adapter's ensureAuthInfo gets
-      // the correct session ID instead of using a weak fallback.
+      // Ensures the transport adapter's ensureAuthInfo gets the correct
+      // session ID (particularly for fresh connections without a prior session).
       const authorization = request[ServerRequestTokens.auth] as Authorization;
       syncStreamableHttpAuthorizationSession(authorization, session);
 
       const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
 
-      // If the transport is already initialized, this is a retry of a successful
-      // initialize (e.g., client retried after its notifications/initialized with
-      // the old session ID was 404'd). Reset initialization state so the MCP SDK
-      // accepts the new initialize request instead of rejecting with 400.
-      if (transport.isInitialized) {
+      // If the transport is already initialized:
+      // - For re-initialization of a terminated session (reinitialize flag set by router):
+      //   The transport may still exist in the registry from before DELETE.
+      //   Reset it so the MCP SDK accepts the new initialize request.
+      // - For an active session the client didn't DELETE:
+      //   The MCP SDK rejects with 400 "Server already initialized".
+      const isReinitialize = !!request[ServerRequestTokens.reinitialize];
+      if (transport.isInitialized && isReinitialize) {
         logger.info('onInitialize: transport already initialized, resetting for re-initialization', {
           sessionId: session.id?.slice(0, 20),
         });
         transport.resetForReinitialization();
+        // Re-register the MCP server with NotificationService.
+        // terminateSession (from DELETE) called unregisterServer which removed the
+        // server from the map. Without re-registering, setClientCapabilities,
+        // setClientInfo, setLogLevel, and broadcast notifications would all fail.
+        transport.reregisterServer();
       }
 
       logger.info('onInitialize: transport created, calling initialize');

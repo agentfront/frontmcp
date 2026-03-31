@@ -298,21 +298,24 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           const sessionId = authorization.session.id;
           request[ServerRequestTokens.sessionId] = sessionId;
 
-          // Check if the session has been terminated (via DELETE)
-          // Per MCP spec, requests to terminated sessions should return 404
-          // EXCEPTION: initialize requests are allowed through to support reconnect.
-          // When a client sends DELETE followed by initialize with the old session ID
-          // (e.g. MCP Inspector), we create a fresh session instead of returning 404.
+          // Check if the session has been terminated (via DELETE).
+          // Per MCP spec §Session Management:
+          //   - Server MUST respond with 404 to requests containing a terminated session ID.
+          //   - Client MUST start a new session by sending InitializeRequest without session ID.
+          // EXCEPTION: initialize with a valid signed session ID re-initializes under the
+          // same session ID. The session is unmarked from terminated so subsequent requests
+          // (notifications/initialized, tools/list, etc.) work normally.
           if (this.scope.notifications.isSessionTerminated(sessionId)) {
             const body = request.body as { method?: string } | undefined;
             if (body?.method === 'initialize') {
               this.logger.info(
-                `[${this.requestId}] Initialize with terminated session ${sessionId.slice(0, 20)}... - allowing reconnect`,
+                `[${this.requestId}] Initialize with terminated session ${sessionId.slice(0, 20)}... - re-initializing`,
               );
-              // Clear session references so handle:streamable-http parseInput creates a new session
-              authorization.session = undefined;
-              delete request[ServerRequestTokens.sessionId];
-              delete request.headers['mcp-session-id'];
+              // Remove from terminated set — session is being re-initialized
+              this.scope.notifications.unmarkTerminated(sessionId);
+              // Signal to onInitialize that this is a re-initialization of a terminated session
+              request[ServerRequestTokens.reinitialize] = true;
+              // Keep session refs intact — parseInput will reuse the session ID
               // Fall through to decision-based routing (don't return 404)
             } else {
               this.logger.warn(`[${this.requestId}] Request to terminated session: ${sessionId.slice(0, 20)}...`);
@@ -508,21 +511,14 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
       this.logger.info(`[${this.requestId}] DELETE session: ${sessionId}`);
 
-      // Terminate the session - this unregisters the server AND adds to terminated set
-      // This prevents future requests with this session ID from being accepted
-      const wasRegistered = this.scope.notifications.terminateSession(sessionId);
-
-      if (!wasRegistered) {
-        // Session not found - per MCP spec, return 404
-        // Note: We still added it to terminated set to prevent future use
-        this.logger.warn(`[${this.requestId}] Session not found for DELETE: ${sessionId}`);
-        this.respond(httpRespond.notFound('Session not found'));
-        return;
-      }
+      // Terminate the session - this unregisters the server AND adds to terminated set.
+      // This prevents future non-initialize requests with this session ID from being accepted.
+      // After re-initialization, the server may not be in the notification service's map
+      // (resetForReinitialization doesn't re-register it), so wasRegistered can be false
+      // for a session that has a live transport. We always proceed with transport cleanup.
+      this.scope.notifications.terminateSession(sessionId);
 
       // Destroy the transport to free resources and clean up Redis.
-      // Without this, the transport stays in memory until evicted and the Redis
-      // session persists, allowing recreation on other nodes in distributed mode.
       const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
       if (authorization?.token) {
         const transportService = this.scope.transportService;

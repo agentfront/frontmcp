@@ -505,6 +505,14 @@ export class NotificationService {
   }
 
   /**
+   * Remove a session from the terminated set.
+   * Called when a terminated session is being re-initialized with the same session ID.
+   */
+  unmarkTerminated(sessionId: string): void {
+    this.terminatedSessions.delete(sessionId);
+  }
+
+  /**
    * Broadcast a notification to all registered servers.
    *
    * @param method - The MCP notification method
