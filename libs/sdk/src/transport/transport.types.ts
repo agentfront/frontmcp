@@ -76,6 +76,13 @@ export interface Transporter {
    * (e.g., after reconnect following session termination).
    */
   resetForReinitialization(): void;
+
+  /**
+   * Re-register the MCP server with the notification service after re-initialization.
+   * Called after resetForReinitialization() to restore the server mapping
+   * that was removed by terminateSession during DELETE.
+   */
+  reregisterServer(): void;
 }
 
 export interface TransportRegistryOptions {

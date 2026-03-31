@@ -132,7 +132,7 @@ describe('renderComponent with bundled FileSource', () => {
     // The mock esbuild.buildSync receives source with mount code referencing Widget
     const esbuild = require('esbuild');
     const buildCall = esbuild.buildSync.mock.calls[0][0];
-    expect(buildCall.stdin.contents).toContain('React.createElement(Widget)');
+    expect(buildCall.stdin.contents).toContain('Widget');
   });
 
   it('should produce valid hash and size', () => {

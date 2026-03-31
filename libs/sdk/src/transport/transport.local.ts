@@ -89,6 +89,10 @@ export class LocalTransporter implements Transporter {
     this.adapter.resetForReinitialization();
   }
 
+  reregisterServer(): void {
+    this.adapter.reregisterServer();
+  }
+
   async destroy(reason: string): Promise<void> {
     try {
       await this.adapter.destroy(reason);

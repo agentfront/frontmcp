@@ -29,6 +29,18 @@ describe('buildShell - default shell', () => {
     expect(result.html).toContain('__mcpToolName');
   });
 
+  it('should include __mcpAppsEnabled flag in data injection', () => {
+    const result = buildShell('<div>Hello</div>', baseConfig);
+    expect(result.html).toContain('window.__mcpAppsEnabled = true');
+  });
+
+  it('should place __mcpAppsEnabled before __mcpToolName', () => {
+    const result = buildShell('<div>Hello</div>', baseConfig);
+    const appsIdx = result.html.indexOf('__mcpAppsEnabled');
+    const toolIdx = result.html.indexOf('__mcpToolName');
+    expect(appsIdx).toBeLessThan(toolIdx);
+  });
+
   it('should include CSP meta tag', () => {
     const result = buildShell('<div>Hello</div>', baseConfig);
     expect(result.html).toContain('Content-Security-Policy');

@@ -281,7 +281,6 @@ export function useCallTool<TInput extends object = Record<string, unknown>, TOu
   const { bridge, ready } = useMcpBridgeContext();
   const { onSuccess, onError, resetOnToolChange = true } = options;
 
-  console.log('useCallTool', toolName, bridge);
   const [state, setState] = useState<ToolState<TOutput>>({
     data: null,
     loading: false,
