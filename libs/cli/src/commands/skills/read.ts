@@ -196,6 +196,9 @@ export async function readSkill(
   console.log(c('gray', `  Install: frontmcp skills install ${skillName} --provider claude`));
   if (entry.references && entry.references.length > 0) {
     console.log(c('gray', `  References: frontmcp skills read ${skillName} --refs`));
-    console.log(c('gray', `  Examples: frontmcp skills read ${skillName} --examples`));
+    const footerExampleCount = entry.references.reduce((sum, r) => sum + (r.examples?.length ?? 0), 0);
+    if (footerExampleCount > 0) {
+      console.log(c('gray', `  Examples: frontmcp skills read ${skillName} --examples`));
+    }
   }
 }

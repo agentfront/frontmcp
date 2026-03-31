@@ -61,7 +61,7 @@ import './audit-log.context-extension'; // Side-effect import for type augmentat
   name: 'audit-log',
   description: 'Logs tool executions for audit compliance',
   providers: [{ provide: AuditLoggerToken, useClass: AuditLogger }],
-  exports: [AuditLogger],
+  exports: [AuditLoggerToken],
   contextExtensions: [
     {
       property: 'auditLog',

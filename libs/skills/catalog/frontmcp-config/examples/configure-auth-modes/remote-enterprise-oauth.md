@@ -26,7 +26,7 @@ import { z } from 'zod';
   name: 'query_data',
   description: 'Query enterprise data warehouse',
   inputSchema: { sql: z.string() },
-  outputSchema: { rows: z.array(z.record(z.unknown())), rowCount: z.number() },
+  outputSchema: { rows: z.array(z.record(z.string(), z.unknown())), rowCount: z.number() },
 })
 class QueryDataTool extends ToolContext {
   async execute(input: { sql: string }) {

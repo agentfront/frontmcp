@@ -49,7 +49,7 @@ Shows the correct package.json configuration for publishing a FrontMCP SDK packa
 
   // Shared dependencies as peerDependencies
   "peerDependencies": {
-    "zod": "^3.23.0",
+    "zod": "^4.0.0",
   },
 
   "dependencies": {
@@ -61,7 +61,7 @@ Shows the correct package.json configuration for publishing a FrontMCP SDK packa
     "jest": "^29.0.0",
     "ts-jest": "^29.0.0",
     "typescript": "^5.4.0",
-    "zod": "^3.23.0",
+    "zod": "^4.0.0",
   },
 
   "scripts": {
