@@ -19,8 +19,8 @@ Shows how to handle stdin/stdout transport correctly, implement proper exit code
 ## Code
 
 ```typescript
-// src/cli.ts
 #!/usr/bin/env node
+// src/cli.ts
 
 // Handle flags early — before any heavy imports
 const args = process.argv.slice(2);
@@ -106,7 +106,11 @@ export class SafeFileTool extends ToolContext {
     const home = os.homedir();
     const tmp = os.tmpdir();
 
-    if (!resolved.startsWith(home) && !resolved.startsWith(tmp)) {
+    const relToHome = pathMod.relative(home, resolved);
+    const relToTmp = pathMod.relative(tmp, resolved);
+    const isInHome = !relToHome.startsWith('..') && !pathMod.isAbsolute(relToHome);
+    const isInTmp = !relToTmp.startsWith('..') && !pathMod.isAbsolute(relToTmp);
+    if (!isInHome && !isInTmp) {
       this.fail(new Error('Path must be within home directory or temp directory'));
     }
 

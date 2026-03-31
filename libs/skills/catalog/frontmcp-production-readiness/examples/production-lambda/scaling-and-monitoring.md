@@ -35,6 +35,7 @@ Resources:
       # Reserved concurrency prevents downstream overload
       ReservedConcurrentExecutions: 100
       # Provisioned concurrency for latency-sensitive endpoints
+      AutoPublishAlias: live
       ProvisionedConcurrencyConfig:
         ProvisionedConcurrentExecutions: 5
       # Dead letter queue for failed invocations

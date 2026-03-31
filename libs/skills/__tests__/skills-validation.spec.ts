@@ -108,13 +108,24 @@ function humanizeExampleLevel(level: string): string {
   return level.charAt(0).toUpperCase() + level.slice(1);
 }
 
-function parseExamplesTableRows(content: string): Array<{ name: string; level: string; description: string }> {
+function parseExamplesTableRows(
+  content: string,
+): Array<{ name: string; level: string; description: string; href?: string }> {
   const lines = content.split(/\r?\n/);
-  const rows: Array<{ name: string; level: string; description: string }> = [];
+  const rows: Array<{ name: string; level: string; description: string; href?: string }> = [];
   let inTable = false;
 
   for (const line of lines) {
-    if (line.trim() === '| Example | Level | Description |') {
+    const normalizedCells = line
+      .split('|')
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (
+      normalizedCells.length === 3 &&
+      normalizedCells[0] === 'Example' &&
+      normalizedCells[1] === 'Level' &&
+      normalizedCells[2] === 'Description'
+    ) {
       inTable = true;
       continue;
     }
@@ -129,11 +140,13 @@ function parseExamplesTableRows(content: string): Array<{ name: string; level: s
     const level = cells[2];
     const description = cells[3];
     const nameMatch = exampleCell.match(/\[`([^`]+)`\]/);
+    const hrefMatch = exampleCell.match(/\]\(([^)]+)\)/);
 
     rows.push({
       name: nameMatch ? nameMatch[1] : exampleCell,
       level,
       description,
+      href: hrefMatch ? hrefMatch[1] : undefined,
     });
   }
 
@@ -695,6 +708,26 @@ describe('skills catalog validation', () => {
             }
             if (row.level !== humanizeExampleLevel(example.level)) {
               mismatches.push(`${entry.name}/${ref.name}/${example.name}: reference table level differs from manifest`);
+            }
+            // Validate that the href resolves to the expected example file
+            if (!row.href) {
+              mismatches.push(
+                `${entry.name}/${ref.name}/${example.name}: missing href link in reference example table`,
+              );
+            } else {
+              const expectedHref = `../examples/${ref.name}/${example.name}.md`;
+              if (row.href !== expectedHref) {
+                mismatches.push(
+                  `${entry.name}/${ref.name}/${example.name}: href "${row.href}" does not match expected "${expectedHref}"`,
+                );
+              }
+              // Also verify the target file exists on disk
+              const resolvedPath = path.resolve(path.dirname(referencePath), row.href);
+              if (!fs.existsSync(resolvedPath)) {
+                mismatches.push(
+                  `${entry.name}/${ref.name}/${example.name}: href target "${row.href}" does not exist on disk`,
+                );
+              }
             }
           }
         }

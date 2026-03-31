@@ -28,15 +28,30 @@ async function main() {
       tool({
         name: 'calculate',
         description: 'Perform calculation',
-        inputSchema: { expression: z.string() },
+        inputSchema: {
+          a: z.number(),
+          b: z.number(),
+          operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+        },
         outputSchema: { result: z.number() },
-      })((input) => ({ result: eval(input.expression) })),
+      })((input) => {
+        switch (input.operation) {
+          case 'add':
+            return { result: input.a + input.b };
+          case 'subtract':
+            return { result: input.a - input.b };
+          case 'multiply':
+            return { result: input.a * input.b };
+          case 'divide':
+            return { result: input.a / input.b };
+        }
+      }),
     ],
     cacheKey: 'my-service', // Reuse same instance on repeated calls
   });
 
   // Call tools directly - no HTTP involved
-  const result = await server.callTool('calculate', { expression: '2 + 2' });
+  const result = await server.callTool('calculate', { a: 2, b: 2, operation: 'add' });
   console.log(result); // { result: 4 }
 
   // List available tools

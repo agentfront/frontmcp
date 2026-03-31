@@ -39,7 +39,7 @@ export class FrontMcpStack extends cdk.Stack {
         NODE_ENV: 'production',
         LOG_LEVEL: 'info',
         // Use SSM for secrets instead of plaintext
-        FRONTMCP_AUTH_SECRET: cdk.Fn.sub('{{resolve:ssm:/frontmcp/auth-secret}}'),
+        FRONTMCP_AUTH_SECRET: cdk.Fn.sub('{{resolve:ssm-secure:/frontmcp/auth-secret}}'),
       },
     });
 

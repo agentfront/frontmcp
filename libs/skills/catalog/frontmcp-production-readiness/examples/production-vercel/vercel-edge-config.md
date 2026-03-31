@@ -59,10 +59,11 @@ export default class VercelMcpServer {}
 
 ```typescript
 // api/mcp.ts — Vercel serverless function entry point
-import { createVercelHandler } from '@frontmcp/adapters/vercel';
 import Server from '../src/main';
 
-export default createVercelHandler(Server);
+// Export the server class directly — FrontMCP handles
+// the Vercel serverless function lifecycle automatically.
+export default Server;
 ```
 
 ## What This Demonstrates

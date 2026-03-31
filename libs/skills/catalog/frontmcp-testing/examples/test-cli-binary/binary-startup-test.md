@@ -37,18 +37,29 @@ describe('CLI Binary', () => {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Wait for server to start
-    await new Promise<void>((resolve) => {
+    // Wait for server to start and parse the actual port from stdout
+    const port = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Server did not start within 10s')), 10_000);
       child.stdout.on('data', (data: Buffer) => {
-        if (data.toString().includes('listening')) resolve();
+        const match = data.toString().match(/listening.*?:(\d+)/i);
+        if (match) {
+          clearTimeout(timeout);
+          resolve(match[1]);
+        }
+      });
+      child.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
       });
     });
 
-    // Test health endpoint
-    const res = await fetch('http://localhost:3001/health');
-    expect(res.ok).toBe(true);
-
-    child.kill();
+    try {
+      // Test health endpoint on the dynamically assigned port
+      const res = await fetch(`http://localhost:${port}/health`);
+      expect(res.ok).toBe(true);
+    } finally {
+      child.kill();
+    }
   });
 });
 ```

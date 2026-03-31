@@ -42,7 +42,7 @@ Shows how to configure a FrontMCP CLI binary with correct package.json `bin` fie
 
   "dependencies": {
     "@frontmcp/sdk": "^1.0.0",
-    "zod": "^3.23.0",
+    "zod": "^4.0.0",
   },
 
   "scripts": {
@@ -54,8 +54,8 @@ Shows how to configure a FrontMCP CLI binary with correct package.json `bin` fie
 ```
 
 ```typescript
-// src/cli.ts
 #!/usr/bin/env node
+// src/cli.ts
 import { FrontMcp } from '@frontmcp/sdk';
 import { MyApp } from './my.app';
 
