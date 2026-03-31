@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Generate skills-manifest.json from SKILL.md frontmatter files.
+ * Generate skills-manifest.json from SKILL.md, references/, and examples/ metadata.
  *
- * SKILL.md is the single source of truth for skill metadata.
- * This script reads all SKILL.md files in the catalog directory,
- * parses their YAML frontmatter, detects resource directories,
+ * SKILL.md remains the single source of truth for skill metadata.
+ * Example files under examples/<reference-name>/ are the single source of truth
+ * for per-example metadata nested under each reference entry.
+ *
+ * This script reads the catalog directory, parses frontmatter,
+ * detects resource directories, resolves reference/example metadata,
  * and writes the manifest JSON.
  *
  * Runs automatically as part of `nx build skills` (generate-manifest target).
@@ -32,6 +35,25 @@ const VALID_BUNDLES = ['recommended', 'minimal', 'full'];
  * Handles flow-style arrays, quoted strings, plain scalars,
  * block sequences (- item), and nested key:value pairs.
  */
+function normalizeScalar(value) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    const quote = trimmed[0];
+    if (quote === '"') {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      }
+    }
+    return trimmed.slice(1, -1).replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+  }
+  return trimmed;
+}
+
 function parseFrontmatter(content) {
   const normalized = content.replace(/^\uFEFF/, '');
   const match = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -76,10 +98,10 @@ function parseFrontmatter(content) {
       result[key] = value
         .slice(1, -1)
         .split(',')
-        .map((s) => s.trim().replace(/^["']|["']$/g, ''));
+        .map((s) => normalizeScalar(s));
     } else if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       // Quoted string
-      result[key] = value.slice(1, -1);
+      result[key] = normalizeScalar(value);
     } else if (value === '' || value === undefined) {
       // Empty value — lookahead for block sequence or nested object
       const items = [];
@@ -91,13 +113,13 @@ function parseFrontmatter(content) {
         const sub = lines[j].trim();
         if (sub.startsWith('- ')) {
           // Block sequence item
-          items.push(sub.slice(2).trim().replace(/^["']|["']$/g, ''));
+          items.push(normalizeScalar(sub.slice(2)));
           hasBlock = true;
         } else if (sub.includes(':')) {
           // Nested key:value
           const subColonIdx = sub.indexOf(':');
           const subKey = sub.slice(0, subColonIdx).trim();
-          const subVal = sub.slice(subColonIdx + 1).trim().replace(/^["']|["']$/g, '');
+          const subVal = normalizeScalar(sub.slice(subColonIdx + 1));
           nested[subKey] = subVal;
           hasBlock = true;
         }
@@ -182,11 +204,88 @@ function extractFirstParagraph(body) {
   return paragraphLines.join(' ').slice(0, 200) || '';
 }
 
+function stripFrontmatter(content) {
+  const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  return match ? content.slice(match[0].length).trim() : content.trim();
+}
+
+function toRequiredStringArray(val, field, errors, filePath) {
+  if (!Array.isArray(val)) {
+    errors.push(`${filePath}: ${field} must be a non-empty string[]`);
+    return [];
+  }
+  const values = val
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (values.length === 0 || values.length !== val.length) {
+    errors.push(`${filePath}: ${field} must be a non-empty string[]`);
+  }
+  return values;
+}
+
+function scanExamples(skillDir, skillName, referenceName, errors) {
+  const examplesDir = path.join(skillDir, 'examples', referenceName);
+  if (!fs.existsSync(examplesDir)) return [];
+
+  const files = fs.readdirSync(examplesDir).filter((f) => f.endsWith('.md')).sort();
+
+  return files.map((file) => {
+    const examplePath = path.join(examplesDir, file);
+    const content = fs.readFileSync(examplePath, 'utf-8');
+    const fm = parseFrontmatter(content);
+    const filenameWithoutExt = file.replace(/\.md$/, '');
+    const filePath = `${skillName}/examples/${referenceName}/${file}`;
+
+    if (!fm) {
+      errors.push(`${filePath}: missing frontmatter`);
+      return {
+        name: filenameWithoutExt,
+        description: extractFirstParagraph(stripFrontmatter(content)),
+        level: 'basic',
+        tags: [],
+        features: [],
+      };
+    }
+
+    const name = typeof fm.name === 'string' && fm.name ? fm.name : filenameWithoutExt;
+    const reference = typeof fm.reference === 'string' ? fm.reference : '';
+    const description =
+      typeof fm.description === 'string' && fm.description
+        ? fm.description
+        : extractFirstParagraph(stripFrontmatter(content));
+    const level = typeof fm.level === 'string' ? fm.level : '';
+    const tags = toRequiredStringArray(fm.tags, 'tags', errors, filePath);
+    const features = toRequiredStringArray(fm.features, 'features', errors, filePath);
+
+    if (name !== filenameWithoutExt) {
+      errors.push(`${filePath}: frontmatter "name" must match filename "${filenameWithoutExt}"`);
+    }
+    if (reference !== referenceName) {
+      errors.push(`${filePath}: frontmatter "reference" is "${reference}" but expected "${referenceName}"`);
+    }
+    if (!description) {
+      errors.push(`${filePath}: missing non-empty "description"`);
+    }
+    if (!['basic', 'intermediate', 'advanced'].includes(level)) {
+      errors.push(`${filePath}: invalid "level" value "${level}"`);
+    }
+
+    return {
+      name,
+      description,
+      level,
+      tags,
+      features,
+    };
+  });
+}
+
 /**
  * Scan the references/ directory for .md files and extract metadata.
  * Uses frontmatter if present, otherwise falls back to heading/paragraph parsing.
  */
-function scanReferences(skillDir) {
+function scanReferences(skillDir, skillName, errors) {
   const refsDir = path.join(skillDir, 'references');
   if (!fs.existsSync(refsDir)) return undefined;
 
@@ -208,14 +307,14 @@ function scanReferences(skillDir) {
 
     // Fallback: extract description from first paragraph if not in frontmatter
     if (!description) {
-      const bodyStart = content.indexOf('---', 3);
-      const body = bodyStart !== -1 && content.startsWith('---')
-        ? content.substring(bodyStart + 3).trim()
-        : content.trim();
-      description = extractFirstParagraph(body);
+      description = extractFirstParagraph(stripFrontmatter(content));
     }
 
-    return { name, description };
+    return {
+      name,
+      description,
+      examples: scanExamples(skillDir, skillName, name, errors),
+    };
   });
 }
 
@@ -272,7 +371,7 @@ for (const dir of skillDirs) {
   }
 
   const skillDirPath = path.join(CATALOG_DIR, dir);
-  const refs = scanReferences(skillDirPath);
+  const refs = scanReferences(skillDirPath, dir, errors);
 
   const entry = {
     name: fm.name,

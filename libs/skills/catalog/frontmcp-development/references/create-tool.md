@@ -581,6 +581,16 @@ class ConvertCurrencyTool extends ToolContext {
 | Output contains unexpected fields                | No `outputSchema` defined                   | Add `outputSchema` to strip unvalidated fields from response                 |
 | Tool times out                                   | No timeout configured for long operation    | Add `timeout: { executeMs: 30_000 }` to `@Tool` options                      |
 
+## Examples
+
+| Example                                                                                                   | Level        | Description                                                                                                    |
+| --------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| [`basic-class-tool`](../examples/create-tool/basic-class-tool.md)                                         | Basic        | A minimal tool using the class-based pattern with Zod input validation and output schema.                      |
+| [`tool-with-di-and-errors`](../examples/create-tool/tool-with-di-and-errors.md)                           | Intermediate | A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors.               |
+| [`tool-with-rate-limiting-and-progress`](../examples/create-tool/tool-with-rate-limiting-and-progress.md) | Advanced     | A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations. |
+
+> See all examples in [`examples/create-tool/`](../examples/create-tool/)
+
 ## Reference
 
 - [Tools Documentation](https://docs.agentfront.dev/frontmcp/servers/tools)

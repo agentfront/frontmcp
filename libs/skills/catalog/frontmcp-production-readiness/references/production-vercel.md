@@ -50,3 +50,13 @@ Target-specific checklist for deploying FrontMCP to Vercel serverless or edge fu
 - [ ] Environment variables are set in Vercel project settings
 - [ ] Preview deployments test the full MCP flow
 - [ ] Production deployment uses `npx vercel --prod`
+
+## Examples
+
+| Example                                                                                       | Level        | Description                                                                                                                                           |
+| --------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`cold-start-optimization`](../examples/production-vercel/cold-start-optimization.md)         | Intermediate | Shows how to minimize cold start time by lazy-loading dependencies, avoiding heavy initialization at module scope, and caching expensive operations.  |
+| [`stateless-serverless-design`](../examples/production-vercel/stateless-serverless-design.md) | Advanced     | Shows a fully stateless server design that works on Vercel edge runtime with no Node.js-only APIs, using `@frontmcp/utils` for cross-platform crypto. |
+| [`vercel-edge-config`](../examples/production-vercel/vercel-edge-config.md)                   | Basic        | Shows how to configure a FrontMCP server for Vercel deployment with Vercel KV for session storage and correct route configuration.                    |
+
+> See all examples in [`examples/production-vercel/`](../examples/production-vercel/)

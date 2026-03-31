@@ -212,6 +212,16 @@ curl -X POST https://frontmcp-worker.your-subdomain.workers.dev/mcp \
 - [ ] SSE streaming works end-to-end (if using SSE transport)
 - [ ] Custom domain resolves correctly (if configured)
 
+## Examples
+
+| Example                                                                                | Level        | Description                                                                                             |
+| -------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------- |
+| [`basic-worker-deploy`](../examples/deploy-to-cloudflare/basic-worker-deploy.md)       | Basic        | Deploy a FrontMCP server to Cloudflare Workers with a minimal configuration.                            |
+| [`worker-custom-domain`](../examples/deploy-to-cloudflare/worker-custom-domain.md)     | Advanced     | Scaffold a FrontMCP project targeting Cloudflare, configure a custom domain, and verify the deployment. |
+| [`worker-with-kv-storage`](../examples/deploy-to-cloudflare/worker-with-kv-storage.md) | Intermediate | Deploy a FrontMCP server to Cloudflare Workers with KV namespace for session and state storage.         |
+
+> See all examples in [`examples/deploy-to-cloudflare/`](../examples/deploy-to-cloudflare/)
+
 ## Reference
 
 - **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/serverless>

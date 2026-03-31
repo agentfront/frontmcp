@@ -59,3 +59,13 @@ Checklist for deploying FrontMCP as a long-running local MCP server managed by t
 - [ ] No network exposure (socket-only, not TCP)
 - [ ] Secrets stored in config file with `600` permissions
 - [ ] Config stored in `~/.config/<app>/` or XDG directories
+
+## Examples
+
+| Example                                                                                       | Level        | Description                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`daemon-socket-config`](../examples/production-cli-daemon/daemon-socket-config.md)           | Basic        | Shows how to configure a FrontMCP server as a long-running local daemon with Unix socket transport, process management, and SQLite storage.                                                   |
+| [`graceful-shutdown-cleanup`](../examples/production-cli-daemon/graceful-shutdown-cleanup.md) | Intermediate | Shows how to implement graceful shutdown for a daemon process, including completing in-flight requests, closing database connections, removing the socket file, and cleaning up the PID file. |
+| [`security-and-permissions`](../examples/production-cli-daemon/security-and-permissions.md)   | Advanced     | Shows how to secure a local daemon with restrictive socket permissions, XDG-compliant config storage, and file-based secret management.                                                       |
+
+> See all examples in [`examples/production-cli-daemon/`](../examples/production-cli-daemon/)

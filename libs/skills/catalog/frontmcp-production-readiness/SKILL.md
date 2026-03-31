@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/production/overview
+  docs: https://docs.agentfront.dev/frontmcp/deployment/production-build
 ---
 
 # FrontMCP Production Readiness Audit
@@ -94,5 +94,5 @@ After completing both common and target-specific checklists:
 
 ## Reference
 
-- [FrontMCP Production Guide](https://docs.agentfront.dev/frontmcp/production)
+- [Production Build](https://docs.agentfront.dev/frontmcp/deployment/production-build)
 - Related skills: `frontmcp-config`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-setup`

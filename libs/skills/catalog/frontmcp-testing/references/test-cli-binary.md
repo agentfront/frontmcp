@@ -51,3 +51,12 @@ describe('JS Bundle', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                         | Level        | Description                                                                                                        |
+| ------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [`binary-startup-test`](../examples/test-cli-binary/binary-startup-test.md)     | Basic        | Verify that a compiled CLI binary starts correctly and responds to health checks.                                  |
+| [`js-bundle-import-test`](../examples/test-cli-binary/js-bundle-import-test.md) | Intermediate | Verify that the compiled JS bundle can be imported and exports the expected modules after a `frontmcp build` step. |
+
+> See all examples in [`examples/test-cli-binary/`](../examples/test-cli-binary/)

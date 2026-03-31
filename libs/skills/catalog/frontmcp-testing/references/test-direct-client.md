@@ -65,3 +65,12 @@ describe('Direct Client Testing', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                                    | Level        | Description                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-create-test`](../examples/test-direct-client/basic-create-test.md)                 | Basic        | Test tools in-memory without any HTTP overhead using the `create()` function from `@frontmcp/sdk`.                            |
+| [`openai-claude-format-test`](../examples/test-direct-client/openai-claude-format-test.md) | Intermediate | Verify that tools are returned in the correct format for OpenAI and Claude clients using `connectOpenAI` and `connectClaude`. |
+
+> See all examples in [`examples/test-direct-client/`](../examples/test-direct-client/)

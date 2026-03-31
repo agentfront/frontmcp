@@ -600,6 +600,16 @@ class DocsAgent extends AgentContext {}
 | Agent times out                     | No timeout or rate limit configured                   | Add `timeout: { executeMs: 120_000 }` and `rateLimit` to `@Agent` options         |
 | Swarm handoff fails                 | Target agent name does not match any registered agent | Ensure `handoff.agent` matches the `name` of a registered agent in the same scope |
 
+## Examples
+
+| Example                                                                            | Level        | Description                                                                                       |
+| ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| [`basic-agent-with-tools`](../examples/create-agent/basic-agent-with-tools.md)     | Basic        | An autonomous agent that uses inner tools to review GitHub pull requests.                         |
+| [`custom-multi-pass-agent`](../examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`. |
+| [`nested-agents-with-swarm`](../examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized sub-agents and configuring swarm-based handoff between agents.              |
+
+> See all examples in [`examples/create-agent/`](../examples/create-agent/)
+
 ## Reference
 
 - [Agents Documentation](https://docs.agentfront.dev/frontmcp/servers/agents)

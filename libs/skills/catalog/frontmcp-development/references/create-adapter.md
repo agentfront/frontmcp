@@ -164,6 +164,15 @@ Creates a `DynamicAdapter` subclass in `src/adapters/my-adapter.adapter.ts`.
 | Duplicate tool name error                  | Multiple adapters produce tools with the same name          | Use unique `name` parameter in `init()` to namespace tools                       |
 | Adapter not found at runtime               | Registered in wrong `@App` or not in `adapters` array       | Ensure `.init()` result is in the `adapters` array of the correct `@App`         |
 
+## Examples
+
+| Example                                                                  | Level        | Description                                                                                                             |
+| ------------------------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| [`basic-api-adapter`](../examples/create-adapter/basic-api-adapter.md)   | Basic        | A minimal adapter that fetches operation definitions from an external API and generates MCP tools.                      |
+| [`namespaced-adapter`](../examples/create-adapter/namespaced-adapter.md) | Intermediate | An adapter that namespaces generated tools to avoid collisions and includes proper error handling for startup failures. |
+
+> See all examples in [`examples/create-adapter/`](../examples/create-adapter/)
+
 ## Reference
 
 - [Adapter Documentation](https://docs.agentfront.dev/frontmcp/adapters/overview)

@@ -13,47 +13,357 @@
       "references": [
         {
           "name": "configure-auth-modes",
-          "description": "Detailed comparison of public, transparent, remote, and managed auth modes"
+          "description": "Detailed comparison of public, transparent, remote, and managed auth modes",
+          "examples": [
+            {
+              "name": "local-self-signed-tokens",
+              "description": "Configure a server that signs its own JWT tokens with consent and incremental auth enabled.",
+              "level": "intermediate",
+              "tags": ["config", "auth", "redis", "local", "auth-modes", "modes"],
+              "features": [
+                "Using `mode: 'local'` so the server signs its own JWTs",
+                "Setting `local.issuer` and `local.audience` to control token claims",
+                "Enabling `consent` for explicit user authorization flow",
+                "Enabling `incrementalAuth` to request additional scopes progressively",
+                "Using Redis for token storage in production"
+              ]
+            },
+            {
+              "name": "remote-enterprise-oauth",
+              "description": "Delegate authentication to an external OAuth orchestrator with Redis-backed token storage.",
+              "level": "advanced",
+              "tags": ["config", "oauth", "auth", "redis", "remote", "auth-modes"],
+              "features": [
+                "Using `mode: 'remote'` to delegate to an external OAuth 2.1 authorization server",
+                "Loading `clientId` and `clientSecret` from environment variables (never hardcoded)",
+                "Configuring Redis-backed token storage for production persistence",
+                "Full OAuth flow: clients are redirected to the provider and return with an authorization code"
+              ]
+            },
+            {
+              "name": "transparent-jwt-validation",
+              "description": "Validate externally-issued JWTs without managing token lifecycle on the server.",
+              "level": "basic",
+              "tags": ["config", "auth", "transparent", "auth-modes", "modes", "jwt"],
+              "features": [
+                "Using `mode: 'transparent'` to validate tokens from an external identity provider",
+                "Setting `expectedAudience` to restrict which tokens are accepted",
+                "The server fetches JWKS from `{provider}/.well-known/jwks.json` automatically"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-auth",
-          "description": "Set up authentication modes, credential vault, and OAuth flows for FrontMCP servers"
+          "description": "Set up authentication modes, credential vault, and OAuth flows for FrontMCP servers",
+          "examples": [
+            {
+              "name": "multi-app-auth",
+              "description": "Configure a single FrontMCP server with multiple apps, each using a different auth mode -- public for open endpoints and remote for admin endpoints.",
+              "level": "advanced",
+              "tags": ["config", "auth", "security", "multi-app", "remote", "multi"],
+              "features": [
+                "Hosting multiple `@App` instances on a single FrontMCP server with different auth modes",
+                "Using `public` mode for open-access endpoints alongside `remote` mode for admin-only endpoints",
+                "Isolating tools per app so each security posture governs only its own tools"
+              ]
+            },
+            {
+              "name": "public-mode-setup",
+              "description": "Set up a FrontMCP server with public (unauthenticated) access and anonymous scopes.",
+              "level": "basic",
+              "tags": ["config", "auth", "session", "public", "mode", "setup"],
+              "features": [
+                "Configuring `mode: 'public'` for unauthenticated access",
+                "Setting `sessionTtl` to control anonymous session lifetime",
+                "Granting `anonymousScopes` so tools can check scope-based permissions even without auth"
+              ]
+            },
+            {
+              "name": "remote-oauth-with-vault",
+              "description": "Configure a FrontMCP server with remote OAuth 2.1 authentication and use the credential vault to call downstream APIs on behalf of the authenticated user.",
+              "level": "intermediate",
+              "tags": ["config", "oauth", "auth", "remote", "vault"],
+              "features": [
+                "Configuring `mode: 'remote'` for full OAuth 2.1 authorization flow",
+                "Loading `clientId` from environment variables instead of hardcoding",
+                "Using `this.authProviders.headers('github')` to get pre-formatted auth headers for downstream API calls"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-elicitation",
-          "description": "Configure interactive user input during tool execution for confirmations, choices, and forms"
+          "description": "Configure interactive user input during tool execution for confirmations, choices, and forms",
+          "examples": [
+            {
+              "name": "basic-confirmation-gate",
+              "description": "Request user confirmation before executing a destructive action.",
+              "level": "basic",
+              "tags": ["config", "elicitation", "confirmation", "gate"],
+              "features": [
+                "Enabling elicitation with `elicitation: { enabled: true }` in the `@FrontMcp` decorator",
+                "Using `this.elicit()` to pause tool execution and request user confirmation",
+                "Handling the case where the client does not support elicitation (`!confirmation`)",
+                "Using a boolean `requestedSchema` for simple yes/no confirmations"
+              ]
+            },
+            {
+              "name": "distributed-elicitation-redis",
+              "description": "Configure elicitation with Redis storage for multi-instance production deployments.",
+              "level": "intermediate",
+              "tags": ["config", "redis", "elicitation", "distributed"],
+              "features": [
+                "Configuring Redis-backed elicitation state for multi-instance deployments",
+                "Using a `requestedSchema` with both required and optional fields",
+                "Elicitation state is shared across server instances so the response can arrive at any replica",
+                "Loading Redis connection details from environment variables"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-http",
-          "description": "Configure HTTP server port, CORS policy, unix sockets, and entry path prefix"
+          "description": "Configure HTTP server port, CORS policy, unix sockets, and entry path prefix",
+          "examples": [
+            {
+              "name": "cors-restricted-origins",
+              "description": "Configure CORS to allow only specific frontend origins with credentials.",
+              "level": "basic",
+              "tags": ["config", "browser", "http", "cors", "restricted", "origins"],
+              "features": [
+                "Restricting CORS to explicit origins instead of the permissive default",
+                "Enabling `credentials: true` with specific origins (required -- browsers reject `*` with credentials)",
+                "Setting `maxAge` to reduce preflight request overhead",
+                "Reading port from an environment variable with a fallback"
+              ]
+            },
+            {
+              "name": "entry-path-reverse-proxy",
+              "description": "Mount the MCP server under a URL prefix for reverse proxy or multi-service setups.",
+              "level": "intermediate",
+              "tags": ["config", "nx", "http", "entry", "path", "reverse"],
+              "features": [
+                "Using `entryPath` to mount the server under a URL prefix (no trailing slash)",
+                "All MCP endpoints are prefixed: `/api/mcp/sse`, `/api/mcp/`, etc.",
+                "Using a dynamic CORS origin function to allow wildcard subdomains",
+                "Suitable for running behind nginx, Caddy, or other reverse proxies"
+              ]
+            },
+            {
+              "name": "unix-socket-local",
+              "description": "Bind the server to a unix socket instead of a TCP port for local-only communication.",
+              "level": "intermediate",
+              "tags": ["config", "unix-socket", "cli", "local", "http", "unix"],
+              "features": [
+                "Using `socketPath` to bind to a unix socket instead of a TCP port",
+                "When `socketPath` is set, the `port` field is ignored",
+                "Disabling CORS with `cors: false` since unix sockets are local-only",
+                "Suitable for CLI tools, daemons, and process manager integrations"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-session",
-          "description": "Set up session storage with Redis or Vercel KV for persistent user state across requests"
+          "description": "Set up session storage with Redis or Vercel KV for persistent user state across requests",
+          "examples": [
+            {
+              "name": "multi-server-key-prefix",
+              "description": "Use unique key prefixes when multiple FrontMCP servers share one Redis instance.",
+              "level": "intermediate",
+              "tags": ["config", "redis", "session", "multi", "key", "prefix"],
+              "features": [
+                "Using unique `keyPrefix` values per server to avoid session key collisions",
+                "Both servers share the same Redis instance but have isolated session namespaces",
+                "Tuning `defaultTtlMs` per server based on workload pattern",
+                "`billing-mcp:session:` vs `analytics-mcp:session:` prevents cross-contamination"
+              ]
+            },
+            {
+              "name": "redis-session-store",
+              "description": "Configure Redis-backed session storage for production deployments.",
+              "level": "basic",
+              "tags": ["config", "redis", "session", "store"],
+              "features": [
+                "Configuring Redis as the session storage provider for production persistence",
+                "Using `keyPrefix` to namespace session keys and prevent collisions with other servers",
+                "Setting `defaultTtlMs` to control session lifetime (1 hour for interactive use)",
+                "Loading Redis connection details from environment variables"
+              ]
+            },
+            {
+              "name": "vercel-kv-session",
+              "description": "Configure Vercel KV for session storage in serverless Vercel deployments.",
+              "level": "intermediate",
+              "tags": ["config", "vercel-kv", "vercel", "session", "transport", "serverless"],
+              "features": [
+                "Using `provider: 'vercel-kv'` for Vercel platform deployments",
+                "Vercel automatically injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables",
+                "Combining with `stateless-api` transport preset for serverless execution",
+                "No explicit host/port needed -- Vercel KV uses REST API under the hood"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-throttle-guard-config",
-          "description": "Complete GuardConfig interface reference for rate limiting, concurrency, and IP filtering"
+          "description": "Complete GuardConfig interface reference for rate limiting, concurrency, and IP filtering",
+          "examples": [
+            {
+              "name": "full-guard-config",
+              "description": "Complete GuardConfig using every available field for maximum protection.",
+              "level": "advanced",
+              "tags": ["config", "redis", "session", "throttle", "guard", "full"],
+              "features": [
+                "Every field in the `GuardConfig` interface used together",
+                "Priority order: IP filter -> global rate limit -> global concurrency -> per-tool limits",
+                "Redis `storage` for shared counters across instances",
+                "`keyPrefix` to namespace guard keys in shared Redis",
+                "Mixed `partitionBy` strategies: `'ip'` for global, `'session'` for per-tool",
+                "`queueTimeoutMs` to briefly queue excess requests instead of rejecting"
+              ]
+            },
+            {
+              "name": "minimal-guard-config",
+              "description": "Enable throttle with just a global rate limit and default timeout.",
+              "level": "basic",
+              "tags": ["config", "throttle", "guard", "minimal"],
+              "features": [
+                "The minimum fields needed to enable the guard: `enabled`, `global`, and `defaultTimeout`",
+                "`partitionBy: 'global'` shares one counter across all clients",
+                "`windowMs` defaults to 60000 (1 minute) if omitted",
+                "Other fields (`globalConcurrency`, `ipFilter`, `storage`) are optional"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-throttle",
-          "description": "Protect servers with rate limiting, concurrency control, execution timeouts, and IP filtering"
+          "description": "Protect servers with rate limiting, concurrency control, execution timeouts, and IP filtering",
+          "examples": [
+            {
+              "name": "distributed-redis-throttle",
+              "description": "Configure Redis-backed rate limiting for multi-instance deployments behind a load balancer.",
+              "level": "advanced",
+              "tags": ["config", "redis", "session", "throttle", "distributed"],
+              "features": [
+                "Configuring `storage: { type: 'redis' }` so rate limit counters are shared across instances",
+                "Using `keyPrefix` to namespace guard keys in a shared Redis instance",
+                "Combining `partitionBy: 'ip'` for global limits with `partitionBy: 'session'` per tool",
+                "In-memory counters are per-process and would allow N times the intended rate with N instances"
+              ]
+            },
+            {
+              "name": "per-tool-rate-limit",
+              "description": "Override server defaults with per-tool rate limits and concurrency caps.",
+              "level": "intermediate",
+              "tags": ["config", "session", "throttle", "per", "tool", "rate"],
+              "features": [
+                "Setting per-tool `rateLimit`, `concurrency`, and `timeout` on the `@Tool` decorator",
+                "Using `partitionBy: 'session'` for per-user fairness on expensive tools",
+                "Setting `queueTimeoutMs` to briefly queue excess requests instead of rejecting immediately",
+                "Tools without overrides (`QuickLookupTool`) inherit server defaults"
+              ]
+            },
+            {
+              "name": "server-level-rate-limit",
+              "description": "Configure global rate limits and IP filtering at the server level.",
+              "level": "basic",
+              "tags": ["config", "throttle", "level", "rate", "limit"],
+              "features": [
+                "Enabling throttle with `throttle: { enabled: true }`",
+                "Setting `global` rate limit shared across all clients",
+                "Configuring `globalConcurrency` to cap simultaneous executions",
+                "Setting `defaultTimeout` to prevent runaway tool executions",
+                "Using `ipFilter` with deny-by-default posture and an explicit allow list"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-transport-protocol-presets",
-          "description": "Reference for legacy, modern, stateless, and minimal transport protocol presets"
+          "description": "Reference for legacy, modern, stateless, and minimal transport protocol presets",
+          "examples": [
+            {
+              "name": "legacy-preset-nodejs",
+              "description": "Use the default legacy preset for maximum compatibility with all MCP clients.",
+              "level": "basic",
+              "tags": ["config", "anthropic", "session", "transport", "node", "protocol"],
+              "features": [
+                "The `'legacy'` preset is the default and can be omitted",
+                "Enables SSE, Streamable HTTP, and Legacy SSE for maximum client compatibility",
+                "`strictSession: true` requires `mcp-session-id` header for streamable HTTP",
+                "Best for single-instance Node.js deployments (Claude Desktop, etc.)"
+              ]
+            },
+            {
+              "name": "stateless-api-serverless",
+              "description": "Use the stateless-api preset for Vercel, Lambda, or Cloudflare Workers.",
+              "level": "intermediate",
+              "tags": ["config", "vercel", "lambda", "cloudflare", "session", "transport"],
+              "features": [
+                "The `'stateless-api'` preset disables SSE, streaming, and sessions entirely",
+                "Each request is standalone with no server-side state",
+                "Pair with `sessionMode: 'stateless'` for serverless execution",
+                "Required for Vercel, Lambda, Cloudflare Workers where persistent connections are not allowed"
+              ]
+            }
+          ]
         },
         {
           "name": "configure-transport",
-          "description": "Configure client transport protocols including SSE, Streamable HTTP, and stateless API modes"
+          "description": "Configure client transport protocols including SSE, Streamable HTTP, and stateless API modes",
+          "examples": [
+            {
+              "name": "custom-protocol-flags",
+              "description": "Override individual protocol flags instead of using a preset for fine-grained control.",
+              "level": "advanced",
+              "tags": ["config", "redis", "session", "transport", "custom", "protocol"],
+              "features": [
+                "Passing an object to `protocol` instead of a preset string for fine-grained control",
+                "Enabling SSE, streamable HTTP, and JSON-only modes simultaneously",
+                "Setting `strictSession: true` to require `mcp-session-id` header on streamable HTTP",
+                "Using `distributedMode: 'auto'` to auto-detect based on whether Redis is configured",
+                "Disabling `legacy` SSE while keeping modern SSE support"
+              ]
+            },
+            {
+              "name": "distributed-sessions-redis",
+              "description": "Configure transport with Redis persistence for multi-instance load-balanced deployments.",
+              "level": "intermediate",
+              "tags": ["config", "redis", "session", "transport", "distributed", "sessions"],
+              "features": [
+                "Using `distributedMode: true` for load-balanced multi-instance deployments",
+                "Redis `persistence` so sessions survive restarts and are shared across instances",
+                "Setting `defaultTtlMs` to prevent sessions from accumulating indefinitely",
+                "Redis-backed `eventStore` for SSE resumability across instances",
+                "Using the `'modern'` preset (drops legacy SSE but keeps streamable HTTP)"
+              ]
+            },
+            {
+              "name": "stateless-serverless",
+              "description": "Configure stateless transport for Vercel, Lambda, or Cloudflare deployments.",
+              "level": "basic",
+              "tags": ["config", "vercel", "lambda", "cloudflare", "session", "transport"],
+              "features": [
+                "Using `sessionMode: 'stateless'` to disable session management",
+                "Using the `'stateless-api'` preset: no SSE, no streaming, pure request/response",
+                "Each request is standalone with no server-side state between invocations",
+                "Required for serverless targets (Vercel, Lambda, Cloudflare Workers)"
+              ]
+            }
+          ]
         },
         {
           "name": "setup-redis",
-          "description": "Cross-reference to the full Redis configuration guide in frontmcp-setup"
+          "description": "Cross-reference to the full Redis configuration guide in frontmcp-setup",
+          "examples": []
         },
         {
           "name": "setup-sqlite",
-          "description": "Cross-reference to the full SQLite configuration guide in frontmcp-setup"
+          "description": "Cross-reference to the full SQLite configuration guide in frontmcp-setup",
+          "examples": []
         }
       ]
     },
@@ -69,39 +379,318 @@
       "references": [
         {
           "name": "build-for-browser",
-          "description": "Build a FrontMCP server or client for browser environments and frontend frameworks"
+          "description": "Build a FrontMCP server or client for browser environments and frontend frameworks",
+          "examples": [
+            {
+              "name": "browser-build-with-custom-entry",
+              "description": "Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports.",
+              "level": "intermediate",
+              "tags": ["deployment", "browser", "node", "custom", "entry"],
+              "features": [
+                "Creating a separate browser entry point (`src/client.ts`) that avoids importing Node.js-only modules like `fs` or `node:crypto`",
+                "Using the `-e` and `-o` flags to customize the entry file and output directory"
+              ]
+            },
+            {
+              "name": "browser-crypto-and-storage",
+              "description": "Use `@frontmcp/utils` crypto functions (WebCrypto API) and in-memory storage in browser environments.",
+              "level": "advanced",
+              "tags": ["deployment", "browser", "database", "remote", "node", "crypto"],
+              "features": [
+                "Using `@frontmcp/utils` for PKCE and hashing in the browser (backed by WebCrypto, not `node:crypto`)",
+                "Avoiding filesystem and native database storage in browser builds by relying on a remote server for persistence"
+              ]
+            },
+            {
+              "name": "react-provider-setup",
+              "description": "Connect a React application to a remote FrontMCP server using `@frontmcp/react`.",
+              "level": "basic",
+              "tags": ["deployment", "react", "browser", "remote", "provider", "setup"],
+              "features": [
+                "Wrapping your React app with `FrontMcpProvider` and pointing it at a remote server URL",
+                "Using the `useTools` hook to list and invoke MCP tools from a React component"
+              ]
+            }
+          ]
         },
         {
           "name": "build-for-cli",
-          "description": "Build a FrontMCP server as a standalone CLI binary using Node.js SEA or bundled JS"
+          "description": "Build a FrontMCP server as a standalone CLI binary using Node.js SEA or bundled JS",
+          "examples": [
+            {
+              "name": "cli-binary-build",
+              "description": "Build a FrontMCP server as a standalone binary using Node.js Single Executable Applications (SEA).",
+              "level": "basic",
+              "tags": ["deployment", "cli", "local", "node", "binary"],
+              "features": [
+                "Building a FrontMCP server as a self-contained binary with `--target cli`",
+                "Using `socketPath` for local communication instead of a TCP port",
+                "The `--js` flag to produce a bundled JS file without the native binary wrapper"
+              ]
+            },
+            {
+              "name": "unix-socket-daemon",
+              "description": "Run a FrontMCP server as a local daemon accessible via Unix socket for IDE extensions and local MCP clients.",
+              "level": "intermediate",
+              "tags": ["deployment", "unix-socket", "cli", "transport", "local", "unix"],
+              "features": [
+                "Configuring a FrontMCP server for Unix socket transport instead of TCP",
+                "Running the server as a background daemon with process management (`frontmcp start/stop/status`)",
+                "Installing the daemon as a system service for automatic startup on reboot"
+              ]
+            }
+          ]
         },
         {
           "name": "build-for-sdk",
-          "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs"
+          "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs",
+          "examples": [
+            {
+              "name": "connect-openai",
+              "description": "Use `connectOpenAI()` to get tools formatted for OpenAI's function-calling API.",
+              "level": "intermediate",
+              "tags": ["deployment", "sdk", "openai", "session", "connect"],
+              "features": [
+                "Setting `serve: false` to prevent the HTTP server from starting in library mode",
+                "Using `connectOpenAI()` to get tools in OpenAI function-calling format automatically",
+                "Passing session information via `ConnectOptions` for user context"
+              ]
+            },
+            {
+              "name": "create-flat-config",
+              "description": "Spin up an in-memory FrontMCP server from a flat config object using `create()`.",
+              "level": "basic",
+              "tags": ["deployment", "sdk", "cache", "flat", "config"],
+              "features": [
+                "Using `create()` to spin up a server without decorators or classes",
+                "Calling tools directly via `server.callTool()` with zero network overhead",
+                "Using `cacheKey` to reuse the same server instance across multiple calls"
+              ]
+            },
+            {
+              "name": "multi-platform-connect",
+              "description": "Connect the same FrontMCP server to multiple LLM platforms using platform-specific `connect*()` functions.",
+              "level": "advanced",
+              "tags": ["deployment", "sdk", "multi", "platform", "connect"],
+              "features": [
+                "Connecting a single FrontMCP server to four different LLM platforms with automatic schema translation",
+                "Each `connect*()` function returns tools in the platform's native format",
+                "All clients share the same `DirectClient` API (`listTools`, `callTool`, `close`)"
+              ]
+            }
+          ]
         },
         {
           "name": "deploy-to-cloudflare",
-          "description": "Deploy a FrontMCP server to Cloudflare Workers with KV, D1, and Durable Objects"
+          "description": "Deploy a FrontMCP server to Cloudflare Workers with KV, D1, and Durable Objects",
+          "examples": [
+            {
+              "name": "basic-worker-deploy",
+              "description": "Deploy a FrontMCP server to Cloudflare Workers with a minimal configuration.",
+              "level": "basic",
+              "tags": ["deployment", "cloudflare", "transport", "local", "worker"],
+              "features": [
+                "A minimal FrontMCP server configured for Cloudflare Workers with SSE transport",
+                "The `wrangler.toml` configuration with `main` pointing to the build output",
+                "Using `wrangler dev` for local testing before deploying with `wrangler deploy`"
+              ]
+            },
+            {
+              "name": "worker-custom-domain",
+              "description": "Scaffold a FrontMCP project targeting Cloudflare, configure a custom domain, and verify the deployment.",
+              "level": "advanced",
+              "tags": ["deployment", "json-rpc", "cloudflare", "worker", "custom", "domain"],
+              "features": [
+                "Using `frontmcp create --target cloudflare` to scaffold a project with `wrangler.toml` and deploy scripts",
+                "Adding a custom domain with `wrangler domains add` for production-ready URLs",
+                "End-to-end verification of both the health check and MCP JSON-RPC endpoint"
+              ]
+            },
+            {
+              "name": "worker-with-kv-storage",
+              "description": "Deploy a FrontMCP server to Cloudflare Workers with KV namespace for session and state storage.",
+              "level": "intermediate",
+              "tags": ["deployment", "cloudflare", "cli", "session", "worker", "kv"],
+              "features": [
+                "Binding a KV namespace in `wrangler.toml` with `[[kv_namespaces]]`",
+                "Using `wrangler secret put` for sensitive values instead of `[vars]` (which are visible in plaintext)",
+                "Creating the KV namespace via CLI and copying the ID into the configuration"
+              ]
+            }
+          ]
         },
         {
           "name": "deploy-to-lambda",
-          "description": "Deploy a FrontMCP server to AWS Lambda with API Gateway using SAM or CDK"
+          "description": "Deploy a FrontMCP server to AWS Lambda with API Gateway using SAM or CDK",
+          "examples": [
+            {
+              "name": "cdk-deployment",
+              "description": "Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management.",
+              "level": "advanced",
+              "tags": ["deployment", "lambda", "performance", "cdk"],
+              "features": [
+                "Using AWS CDK instead of SAM for infrastructure-as-code deployment",
+                "Provisioned concurrency via a Lambda alias to eliminate cold starts on critical endpoints",
+                "Referencing secrets from SSM Parameter Store with `{{resolve:ssm:...}}` instead of hardcoding"
+              ]
+            },
+            {
+              "name": "lambda-handler-with-cors",
+              "description": "Create a custom Lambda handler with an explicit API Gateway definition for CORS support.",
+              "level": "intermediate",
+              "tags": ["deployment", "lambda", "handler", "cors"],
+              "features": [
+                "Creating a custom Lambda handler with `createLambdaHandler()` from `@frontmcp/adapters/lambda`",
+                "Defining an explicit HTTP API resource with CORS configuration for cross-origin requests",
+                "Linking the function events to the explicit API via `ApiId: !Ref`"
+              ]
+            },
+            {
+              "name": "sam-template-basic",
+              "description": "Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.",
+              "level": "basic",
+              "tags": ["deployment", "lambda", "performance", "sam", "template"],
+              "features": [
+                "A minimal SAM template with ARM64 architecture for faster cold starts and lower cost",
+                "The `/{proxy+}` catch-all route that forwards all requests to FrontMCP's internal router",
+                "CloudWatch log group with 14-day retention"
+              ]
+            }
+          ]
         },
         {
           "name": "deploy-to-node-dockerfile",
-          "description": "Multi-stage Dockerfile for building and running a FrontMCP server in production"
+          "description": "Multi-stage Dockerfile for building and running a FrontMCP server in production",
+          "examples": [
+            {
+              "name": "basic-multistage-dockerfile",
+              "description": "A minimal multi-stage Dockerfile for building and running a FrontMCP server in production.",
+              "level": "basic",
+              "tags": ["deployment", "dockerfile", "docker", "node", "multistage"],
+              "features": [
+                "Two-stage build: the first stage installs all dependencies and builds; the second copies only production artifacts",
+                "Using `yarn install --production` in the production stage to exclude dev dependencies",
+                "A health check that verifies the server is responding"
+              ]
+            },
+            {
+              "name": "secure-nonroot-dockerfile",
+              "description": "A production Dockerfile with a non-root user, proper ownership, and security hardening.",
+              "level": "advanced",
+              "tags": ["deployment", "dockerfile", "docker", "security", "node", "secure"],
+              "features": [
+                "Creating a dedicated non-root user (`frontmcp`) and switching to it with `USER`",
+                "Setting file ownership before switching users so the process can read its own files",
+                "Combining the Dockerfile with runtime resource limits (`--memory`, `--cpus`)"
+              ]
+            }
+          ]
         },
         {
           "name": "deploy-to-node",
-          "description": "Deploy a FrontMCP server as a standalone Node.js app with Docker and process managers"
+          "description": "Deploy a FrontMCP server as a standalone Node.js app with Docker and process managers",
+          "examples": [
+            {
+              "name": "docker-compose-with-redis",
+              "description": "Deploy a FrontMCP server with Redis using Docker Compose for production.",
+              "level": "basic",
+              "tags": ["deployment", "docker-compose", "redis", "dockerfile", "docker", "session"],
+              "features": [
+                "Multi-stage Dockerfile that keeps the production image small and secure",
+                "Docker Compose configuration with Redis for session storage",
+                "Health checks on both the FrontMCP server and Redis, with `depends_on` ensuring Redis starts first"
+              ]
+            },
+            {
+              "name": "pm2-with-nginx",
+              "description": "Deploy a FrontMCP server on bare metal using PM2 for process management and NGINX for TLS termination.",
+              "level": "intermediate",
+              "tags": ["deployment", "nx", "node", "pm2", "nginx"],
+              "features": [
+                "Using PM2 with `-i max` for multi-core clustering and automatic restarts",
+                "Configuring NGINX as a reverse proxy for TLS termination in front of the FrontMCP server",
+                "Setting environment variables via `.env` for production configuration"
+              ]
+            },
+            {
+              "name": "resource-limits",
+              "description": "Configure resource limits, health checks, and environment variables for a production FrontMCP deployment.",
+              "level": "advanced",
+              "tags": ["deployment", "docker-compose", "docker", "node", "resource", "limits"],
+              "features": [
+                "Setting CPU and memory limits/reservations in Docker Compose to prevent OOM kills",
+                "Using `NODE_OPTIONS=--max-old-space-size` to align the V8 heap limit with the container memory",
+                "Configuring health checks with appropriate `start_period` to allow the server time to initialize"
+              ]
+            }
+          ]
         },
         {
           "name": "deploy-to-vercel-config",
-          "description": "Reference vercel.json configuration for deploying a FrontMCP server to Vercel"
+          "description": "Reference vercel.json configuration for deploying a FrontMCP server to Vercel",
+          "examples": [
+            {
+              "name": "minimal-vercel-config",
+              "description": "The minimum `vercel.json` needed to deploy a FrontMCP server to Vercel.",
+              "level": "basic",
+              "tags": ["deployment", "vercel", "serverless", "config", "minimal"],
+              "features": [
+                "The catch-all rewrite (`/(.*) -> /api/frontmcp`) routes all requests to the single FrontMCP handler",
+                "Setting `buildCommand` and `outputDirectory` so Vercel uses the FrontMCP build pipeline",
+                "Configuring function memory (512 MB) and max duration (30s) for the serverless function"
+              ]
+            },
+            {
+              "name": "vercel-config-with-security-headers",
+              "description": "A complete `vercel.json` with per-route security headers for health, MCP, and all other endpoints.",
+              "level": "intermediate",
+              "tags": ["deployment", "vercel", "cache", "security", "config", "headers"],
+              "features": [
+                "Per-route header configuration: `/health` and `/mcp` get `Cache-Control: no-store` to prevent caching",
+                "Global security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) applied to all routes",
+                "Setting `framework: null` to tell Vercel this is not a framework project"
+              ]
+            }
+          ]
         },
         {
           "name": "deploy-to-vercel",
-          "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV storage"
+          "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV storage",
+          "examples": [
+            {
+              "name": "vercel-mcp-endpoint-test",
+              "description": "Verify a Vercel-deployed FrontMCP server by testing health, tool listing, and tool invocation.",
+              "level": "advanced",
+              "tags": ["deployment", "json-rpc", "vercel", "mcp", "endpoint"],
+              "features": [
+                "Testing the health endpoint and MCP JSON-RPC API of a deployed Vercel function",
+                "Using preview deployments to validate changes before promoting to production",
+                "Setting `maxDuration` according to your Vercel plan (Hobby: 10s, Pro: 60s, Enterprise: 900s)"
+              ]
+            },
+            {
+              "name": "vercel-with-kv",
+              "description": "Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for session persistence.",
+              "level": "basic",
+              "tags": ["deployment", "vercel-kv", "vercel", "session", "performance", "serverless"],
+              "features": [
+                "Configuring `{ provider: 'vercel-kv' }` for automatic Vercel KV session storage",
+                "The `vercel.json` catch-all rewrite that routes all requests to the single FrontMCP handler",
+                "Setting function memory to 1024 MB for faster cold starts"
+              ]
+            },
+            {
+              "name": "vercel-with-skills-cache",
+              "description": "Deploy a FrontMCP server to Vercel with skills enabled and KV-backed skill caching.",
+              "level": "intermediate",
+              "tags": ["deployment", "vercel-kv", "vercel", "cache", "security", "skills"],
+              "features": [
+                "Enabling skills cache backed by Vercel KV with a 60-second TTL",
+                "Setting environment variables via `vercel env add` instead of hardcoding in source",
+                "Adding security headers (`X-Content-Type-Options`, `X-Frame-Options`) in `vercel.json`"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -117,75 +706,739 @@
       "references": [
         {
           "name": "create-adapter",
-          "description": "Build adapters that generate MCP tools and resources from external sources automatically"
+          "description": "Build adapters that generate MCP tools and resources from external sources automatically",
+          "examples": [
+            {
+              "name": "basic-api-adapter",
+              "description": "A minimal adapter that fetches operation definitions from an external API and generates MCP tools.",
+              "level": "basic",
+              "tags": ["development", "adapter", "api"],
+              "features": [
+                "Extending `DynamicAdapter<TOptions>` with a typed options interface",
+                "Declaring `__options_brand` for proper TypeScript inference on `init()`",
+                "Implementing `fetch()` to return `FrontMcpAdapterResponse` with tools, resources, and prompts",
+                "Registering the adapter via the static `init()` method in the `adapters` array"
+              ]
+            },
+            {
+              "name": "namespaced-adapter",
+              "description": "An adapter that namespaces generated tools to avoid collisions and includes proper error handling for startup failures.",
+              "level": "intermediate",
+              "tags": ["development", "adapter", "namespaced"],
+              "features": [
+                "Namespacing tools with `name: 'adapter-name:operation-name'` to prevent collisions",
+                "Throwing descriptive errors in `fetch()` so misconfigurations surface at startup",
+                "Registering multiple instances of the same adapter class with different configurations",
+                "Validating the external response shape before generating tool definitions"
+              ]
+            }
+          ]
         },
         {
           "name": "create-agent-llm-config",
-          "description": "Reference for supported LLM provider configurations including Anthropic and OpenAI"
+          "description": "Reference for supported LLM provider configurations including Anthropic and OpenAI",
+          "examples": [
+            {
+              "name": "anthropic-config",
+              "description": "Configuring an agent with the Anthropic provider and common model options.",
+              "level": "basic",
+              "tags": ["development", "anthropic", "llm", "agent", "config"],
+              "features": [
+                "Setting `provider: 'anthropic'` with a supported model (`claude-sonnet-4-20250514` or `claude-opus-4-20250514`)",
+                "Using `{ env: 'ANTHROPIC_API_KEY' }` to read the API key from an environment variable",
+                "Setting `maxTokens` at the LLM config level and overriding per-call via `this.completion()` options",
+                "Passing `temperature` as a per-call option for controlling response creativity"
+              ]
+            },
+            {
+              "name": "openai-config",
+              "description": "Configuring an agent with the OpenAI provider and different model options.",
+              "level": "basic",
+              "tags": ["development", "openai", "llm", "agent", "config"],
+              "features": [
+                "Setting `provider: 'openai'` with `gpt-4o` for general purpose or `gpt-4o-mini` for cost-effective tasks",
+                "The API key pattern `{ env: 'OPENAI_API_KEY' }` works the same across all providers",
+                "Combining LLM config with inner tools -- the agent uses OpenAI to reason about tool invocations",
+                "Choosing the right model for the task: `gpt-4o` for complex workflows, `gpt-4o-mini` for fast classification"
+              ]
+            }
+          ]
         },
         {
           "name": "create-agent",
-          "description": "Create autonomous AI agents that use LLM reasoning to plan and invoke inner tools"
+          "description": "Create autonomous AI agents that use LLM reasoning to plan and invoke inner tools",
+          "examples": [
+            {
+              "name": "basic-agent-with-tools",
+              "description": "An autonomous agent that uses inner tools to review GitHub pull requests.",
+              "level": "basic",
+              "tags": ["development", "anthropic", "agent", "tools"],
+              "features": [
+                "Creating an agent with `@Agent` decorator, `llm` config, and `inputSchema`",
+                "Defining inner tools in the `tools` array that the agent can invoke during its reasoning loop",
+                "Using `{ env: 'ANTHROPIC_API_KEY' }` for safe API key configuration",
+                "Inner tools are private to the agent and not exposed to external MCP clients",
+                "The default `execute()` runs the full agent loop without needing an override"
+              ]
+            },
+            {
+              "name": "custom-multi-pass-agent",
+              "description": "An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`.",
+              "level": "intermediate",
+              "tags": ["development", "security", "agent", "custom", "multi", "pass"],
+              "features": [
+                "Overriding `execute()` for custom multi-pass orchestration instead of the default agent loop",
+                "Using `this.completion()` to make individual LLM calls with full control over prompts",
+                "Using `this.mark(stage)` to track execution stages (security-pass, quality-pass, synthesis)",
+                "Defining `outputSchema` with Zod to validate and type-check the structured return value"
+              ]
+            },
+            {
+              "name": "nested-agents-with-swarm",
+              "description": "Composing specialized sub-agents and configuring swarm-based handoff between agents.",
+              "level": "advanced",
+              "tags": ["development", "agent", "nested", "agents", "swarm"],
+              "features": [
+                "Configuring `swarm` with `role: 'coordinator'` for the triage agent and `role: 'specialist'` for domain agents",
+                "Defining `handoff` rules with `agent` name and `condition` for declarative LLM-driven routing",
+                "Specialist agents can hand back to the triage agent when a request falls outside their scope",
+                "Each agent has its own `llm` config, `tools`, and `systemInstructions` for specialization"
+              ]
+            }
+          ]
         },
         {
           "name": "create-job",
-          "description": "Create long-running background jobs with retry policies, progress tracking, and permissions"
+          "description": "Create long-running background jobs with retry policies, progress tracking, and permissions",
+          "examples": [
+            {
+              "name": "basic-report-job",
+              "description": "A minimal job that generates a report with progress tracking and structured output.",
+              "level": "basic",
+              "tags": ["development", "job", "report"],
+              "features": [
+                "Defining a job with `@Job` decorator including `inputSchema`, `outputSchema`, and `timeout`",
+                "Reporting progress at each stage using `this.progress(pct, total, message)`",
+                "Using `this.log()` for persistent, queryable log entries"
+              ]
+            },
+            {
+              "name": "job-with-permissions",
+              "description": "A data export job with declarative permission controls, plus a function-style job for simple tasks.",
+              "level": "advanced",
+              "tags": ["development", "redis", "job", "permissions"],
+              "features": [
+                "Declarative `permissions` with `actions`, `roles`, `scopes`, and a custom `predicate`",
+                "Using `tags` and `labels` for categorization and filtering",
+                "The `job()` function builder for simple jobs that need no class",
+                "Full server registration with `jobs.enabled: true` and a Redis store"
+              ]
+            },
+            {
+              "name": "job-with-retry",
+              "description": "A job that syncs data from an external API with automatic retry, exponential backoff, and batch progress tracking.",
+              "level": "intermediate",
+              "tags": ["development", "job", "retry"],
+              "features": [
+                "Configuring `retry` with `maxAttempts`, `backoffMs`, `backoffMultiplier`, and `maxBackoffMs`",
+                "Using `this.attempt` to log retry context (1-based attempt counter)",
+                "Using `this.fail()` to abort execution and trigger the retry flow",
+                "Combining batch processing with `this.progress()` for granular tracking"
+              ]
+            }
+          ]
         },
         {
           "name": "create-plugin-hooks",
-          "description": "Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators"
+          "description": "Intercept and extend FrontMCP flows using before, after, around, and stage hook decorators",
+          "examples": [
+            {
+              "name": "basic-logging-plugin",
+              "description": "Demonstrates a plugin that logs tool execution using `@Will` and `@Did` hook decorators from the pre-built `ToolHook` export.",
+              "level": "basic",
+              "tags": ["development", "plugin-hooks", "plugin", "hooks", "logging"],
+              "features": [
+                "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly",
+                "Destructuring `Will` and `Did` decorators from the hook object",
+                "Setting `priority: 100` on `@Will` to ensure the logging hook runs early",
+                "Registering a plugin in the `plugins` array of `@App`"
+              ]
+            },
+            {
+              "name": "caching-with-around",
+              "description": "Demonstrates wrapping tool execution with an `@Around` hook to implement result caching with TTL-based expiry.",
+              "level": "intermediate",
+              "tags": ["development", "cache", "plugin-hooks", "plugin", "hooks", "caching"],
+              "features": [
+                "Using `@Around` to wrap the `execute` stage with before-and-after logic",
+                "Calling `await next()` to invoke the original stage and capture its result",
+                "Short-circuiting execution by returning cached data without calling `next()`",
+                "Building a cache key from `ctx.toolName` and `ctx.input`"
+              ]
+            },
+            {
+              "name": "tool-level-hooks-and-stage-replacement",
+              "description": "Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and using `@Stage` in a plugin to replace a flow stage entirely with a filtered mock.",
+              "level": "advanced",
+              "tags": ["development", "plugin-hooks", "plugin", "hooks", "tool", "level"],
+              "features": [
+                "Placing `@Will('execute')` and `@Did('execute')` directly on a `@Tool` class so hooks fire only for that tool",
+                "Using `this.fail()` in a `@Will` hook to abort execution when preconditions are not met",
+                "Using `this.mark()` to record lifecycle checkpoints during hook execution",
+                "Using `@Stage` with a `filter` predicate to replace the `execute` stage only for a specific tool name",
+                "The difference between tool-level hooks (scoped to one tool) and plugin-level hooks (fire for all tools)"
+              ]
+            }
+          ]
         },
         {
           "name": "create-plugin",
-          "description": "Build plugins with providers, context extensions, lifecycle hooks, and contributed tools"
+          "description": "Build plugins with providers, context extensions, lifecycle hooks, and contributed tools",
+          "examples": [
+            {
+              "name": "basic-plugin-with-provider",
+              "description": "A minimal plugin that contributes an injectable service via the `providers` and `exports` arrays.",
+              "level": "basic",
+              "tags": ["development", "plugin", "provider"],
+              "features": [
+                "Creating a plugin with `@Plugin` decorator that bundles a `@Provider` class",
+                "Listing providers in both `providers` (for DI registration) and `exports` (for external access)",
+                "Registering a plugin in the `plugins` array of `@FrontMcp`"
+              ]
+            },
+            {
+              "name": "configurable-dynamic-plugin",
+              "description": "A plugin that accepts runtime configuration via `DynamicPlugin` and extends decorator metadata with custom fields.",
+              "level": "advanced",
+              "tags": ["development", "plugin", "configurable", "dynamic"],
+              "features": [
+                "Extending `DynamicPlugin<TOptions, TInput>` for runtime-configurable plugins",
+                "Implementing `static dynamicProviders()` to create providers from the input options",
+                "Using `TInput` with optional fields and applying defaults in the constructor",
+                "Extending decorator metadata via `declare global { interface ExtendFrontMcpToolMetadata }`",
+                "Augmenting both `ExecutionContextBase` and `PromptContext` for full context extension coverage",
+                "Registering the plugin with `MyPlugin.init({ ... })` in the `plugins` array"
+              ]
+            },
+            {
+              "name": "plugin-with-context-extension",
+              "description": "A plugin that adds a `this.auditLog` property to all execution contexts using context extensions and module augmentation.",
+              "level": "intermediate",
+              "tags": ["development", "sdk", "plugin", "context", "extension"],
+              "features": [
+                "Defining a typed DI token with `Token<T> = Symbol('...')` in a dedicated symbols file",
+                "Module augmentation via `declare module '@frontmcp/sdk'` to add `readonly auditLog` to `ExecutionContextBase`",
+                "Registering `contextExtensions` in `@Plugin` metadata with `property`, `token`, and `errorMessage`",
+                "Side-effect import of the context extension file in both the plugin and the barrel export",
+                "Accessing the extended property (`this.auditLog`) in tool execution contexts"
+              ]
+            }
+          ]
         },
         {
           "name": "create-prompt",
-          "description": "Define reusable AI interaction patterns that produce structured message sequences"
+          "description": "Define reusable AI interaction patterns that produce structured message sequences",
+          "examples": [
+            {
+              "name": "basic-prompt",
+              "description": "A simple prompt that generates a structured code review message from user-provided arguments.",
+              "level": "basic",
+              "tags": ["development", "prompt", "create-prompt"],
+              "features": [
+                "Extending `PromptContext` and implementing `execute(args)` returning `GetPromptResult`",
+                "Declaring prompt `arguments` with `required: true` for mandatory parameters",
+                "Framework validates required arguments before `execute()` runs",
+                "Registering the prompt in the `prompts` array of `@App`"
+              ]
+            },
+            {
+              "name": "dynamic-rag-prompt",
+              "description": "A prompt that queries a knowledge base via DI to build context-aware messages at runtime.",
+              "level": "advanced",
+              "tags": ["development", "prompt", "dynamic", "rag"],
+              "features": [
+                "Performing async operations (knowledge base search) inside `execute()` to generate context-aware prompts",
+                "Resolving a DI provider via `this.get(KNOWLEDGE_BASE)` for service access",
+                "Using `this.mark(stage)` for execution stage tracking in complex prompt generation",
+                "Building dynamic message content from external data sources at runtime"
+              ]
+            },
+            {
+              "name": "multi-turn-debug-session",
+              "description": "A prompt that uses alternating user/assistant messages to guide a structured debugging conversation.",
+              "level": "intermediate",
+              "tags": ["development", "session", "prompt", "multi", "turn", "debug"],
+              "features": [
+                "Using `assistant` role messages to prime expected response patterns and guide LLM behavior",
+                "Alternating `user` and `assistant` roles to create a structured multi-turn conversation",
+                "Optional arguments that conditionally add content to the prompt",
+                "The assistant message establishes a systematic debugging approach the LLM will follow"
+              ]
+            }
+          ]
         },
         {
           "name": "create-provider",
-          "description": "Create singleton DI providers for database pools, API clients, and shared services"
+          "description": "Create singleton DI providers for database pools, API clients, and shared services",
+          "examples": [
+            {
+              "name": "basic-database-provider",
+              "description": "A provider that manages a database connection pool with `onInit()` and `onDestroy()` lifecycle hooks.",
+              "level": "basic",
+              "tags": ["development", "database", "provider"],
+              "features": [
+                "Defining a typed token with `Token<T>` using a `Symbol` for DI identification",
+                "Using `@Provider` decorator with `onInit()` for async startup and `onDestroy()` for cleanup",
+                "Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety",
+                "Registering the provider in the `providers` array so tools can resolve it"
+              ]
+            },
+            {
+              "name": "config-and-api-providers",
+              "description": "A configuration provider with readonly environment settings and an HTTP API client provider.",
+              "level": "intermediate",
+              "tags": ["development", "provider", "config", "api", "providers"],
+              "features": [
+                "A configuration provider using `readonly` properties from environment variables (no lifecycle needed)",
+                "An API client provider using `onInit()` for async setup of credentials",
+                "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
+                "Separating token definitions from provider implementations for clean dependency boundaries"
+              ]
+            }
+          ]
         },
         {
           "name": "create-resource",
-          "description": "Expose data to AI clients via URI-based static resources and parameterized templates"
+          "description": "Expose data to AI clients via URI-based static resources and parameterized templates",
+          "examples": [
+            {
+              "name": "basic-static-resource",
+              "description": "A static resource that exposes application configuration at a fixed URI.",
+              "level": "basic",
+              "tags": ["development", "resource", "static"],
+              "features": [
+                "Using `@Resource` with a fixed URI that follows RFC 3986 (has a valid scheme)",
+                "Returning a `ReadResourceResult` with `contents` array containing `uri`, `mimeType`, and `text`",
+                "Setting `mimeType` to indicate the content type of the resource",
+                "Registering the resource in the `resources` array of `@App`"
+              ]
+            },
+            {
+              "name": "binary-and-multi-content",
+              "description": "A resource serving binary blob data and a resource returning multiple content items.",
+              "level": "advanced",
+              "tags": ["development", "cli", "resource", "binary", "multi", "content"],
+              "features": [
+                "Returning binary data as base64-encoded `blob` (not `text`) for images and other binary assets",
+                "Using `@frontmcp/utils` for file system operations (`readFileBuffer`) instead of `fs` directly",
+                "Returning multiple content items from a single resource using fragment URIs (`#metrics`, `#charts`)",
+                "Each content item has its own `uri`, `mimeType`, and `text` or `blob` field"
+              ]
+            },
+            {
+              "name": "parameterized-template",
+              "description": "A resource template with typed URI parameters and argument autocompletion.",
+              "level": "intermediate",
+              "tags": ["development", "resource", "parameterized", "template"],
+              "features": [
+                "Using `@ResourceTemplate` with `uriTemplate` containing `{param}` placeholders",
+                "Typing the `ResourceContext` generic parameter for compile-time parameter checking",
+                "Implementing a convention-based completer (`userIdCompleter`) for argument autocompletion",
+                "Accessing DI providers via `this.get()` in both `execute()` and completer methods"
+              ]
+            }
+          ]
         },
         {
           "name": "create-skill-with-tools",
-          "description": "Create skills that combine structured instructions with MCP tool references for orchestration"
+          "description": "Create skills that combine structured instructions with MCP tool references for orchestration",
+          "examples": [
+            {
+              "name": "basic-tool-orchestration",
+              "description": "A skill that guides an AI client through a deploy workflow using referenced MCP tools.",
+              "level": "basic",
+              "tags": ["development", "skill", "tools", "tool", "orchestration"],
+              "features": [
+                "Referencing tools by class (`BuildProjectTool`) and by string name (`'health_check'`)",
+                "Mixing class references and string names in a single `tools` array",
+                "Writing step-by-step instructions that guide the AI to use specific tools",
+                "The `skill()` function builder for tool-referencing skills that need no class"
+              ]
+            },
+            {
+              "name": "directory-skill-with-tools",
+              "description": "A directory-based skill loaded with `skillDir()`, plus a class-based skill using Agent Skills spec metadata fields.",
+              "level": "advanced",
+              "tags": ["development", "skill", "tools", "directory"],
+              "features": [
+                "Loading a directory-based skill with `skillDir()` including SKILL.md frontmatter with tool entries",
+                "Mixing all three tool reference styles in one `tools` array: class, string, and object",
+                "Agent Skills spec fields: `priority`, `license`, `compatibility`, `allowedTools`, `specMetadata`",
+                "Bundled resource directories: `scripts`, `references`, `assets`",
+                "File-based instructions with `{ file: './docs/codebase-audit.md' }`"
+              ]
+            },
+            {
+              "name": "incident-response-skill",
+              "description": "A skill that uses object-style tool references with purpose descriptions and required flags, plus strict validation.",
+              "level": "intermediate",
+              "tags": ["development", "skill", "tools", "incident", "response"],
+              "features": [
+                "Object-style tool references with `name`, `purpose`, and `required` fields",
+                "Using `toolValidation: 'strict'` to fail at startup if any referenced tool is missing",
+                "Combining tool references with `parameters` and `examples` for full skill metadata",
+                "Setting `visibility: 'mcp'` to restrict discovery to MCP protocol only",
+                "Registering both skills and their referenced tools in the same `@App`"
+              ]
+            }
+          ]
         },
         {
           "name": "create-skill",
-          "description": "Create instruction-only skills that package knowledge and workflow guides for AI clients"
+          "description": "Create instruction-only skills that package knowledge and workflow guides for AI clients",
+          "examples": [
+            {
+              "name": "basic-inline-skill",
+              "description": "A minimal instruction-only skill with inline content and the function builder alternative.",
+              "level": "basic",
+              "tags": ["development", "skill", "inline"],
+              "features": [
+                "Creating a class-based instruction-only skill with `@Skill` and `SkillContext`",
+                "Using inline string instructions for short, self-contained guides",
+                "The `skill()` function builder as a lighter alternative when no `build()` override is needed",
+                "Setting `visibility` to control where the skill is discoverable"
+              ]
+            },
+            {
+              "name": "directory-based-skill",
+              "description": "A skill loaded from a directory structure with SKILL.md frontmatter, plus file-based and URL-based instruction sources.",
+              "level": "advanced",
+              "tags": ["development", "remote", "skill", "directory", "based"],
+              "features": [
+                "Loading a skill from a directory with `skillDir()` including SKILL.md frontmatter and bundled resources",
+                "The SKILL.md YAML frontmatter format for metadata (name, description, tags, parameters, examples)",
+                "File-based instructions with `{ file: './path.md' }` resolved relative to the skill file",
+                "URL-based instructions with `{ url: '...' }` fetched at build time",
+                "ESM loading with `Skill.esm()` and remote loading with `Skill.remote()`"
+              ]
+            },
+            {
+              "name": "parameterized-skill",
+              "description": "A skill with customizable parameters, usage examples for AI guidance, and controlled visibility.",
+              "level": "intermediate",
+              "tags": ["development", "skill", "parameterized"],
+              "features": [
+                "Defining `parameters` to let callers customize skill behavior at invocation time",
+                "Providing `examples` with `scenario` and `expectedOutcome` to guide AI application",
+                "Using `tags` for skill categorization and filtering",
+                "Controlling discovery with `visibility: 'mcp'` (MCP-only) vs `visibility: 'both'` (default)",
+                "Using `hideFromDiscovery: true` to register a skill that is invocable by name but not listed"
+              ]
+            }
+          ]
         },
         {
           "name": "create-tool-annotations",
-          "description": "Reference for MCP tool annotation hints like readOnly, destructive, and idempotent"
+          "description": "Reference for MCP tool annotation hints like readOnly, destructive, and idempotent",
+          "examples": [
+            {
+              "name": "destructive-delete-tool",
+              "description": "Demonstrates annotating a tool that deletes data, enabling MCP clients to warn users before execution.",
+              "level": "intermediate",
+              "tags": ["development", "elicitation", "tool", "annotations", "destructive", "delete"],
+              "features": [
+                "Setting `destructiveHint: true` on the delete tool so MCP clients can trigger confirmation warnings",
+                "Setting `idempotentHint: true` on the delete tool because deleting the same user twice produces the same outcome",
+                "Setting `openWorldHint: true` on the email tool because it interacts with an external SMTP service",
+                "Setting `idempotentHint: false` on the email tool because each call sends a new email",
+                "How different annotation combinations express different behavioral contracts"
+              ]
+            },
+            {
+              "name": "readonly-query-tool",
+              "description": "Demonstrates annotating a tool that only reads data, signaling to MCP clients that it has no side effects and is safe to retry.",
+              "level": "basic",
+              "tags": ["development", "database", "local", "tool", "annotations", "readonly"],
+              "features": [
+                "Setting `readOnlyHint: true` to indicate the tool performs no mutations",
+                "Setting `destructiveHint: false` to tell clients no data will be deleted or overwritten",
+                "Setting `idempotentHint: true` because repeated calls with the same input produce the same result",
+                "Setting `openWorldHint: false` because the tool only accesses local database data",
+                "Using `title` to provide a human-friendly display name for MCP client UIs"
+              ]
+            }
+          ]
         },
         {
           "name": "create-tool-output-schema-types",
-          "description": "Reference for all supported outputSchema types including Zod shapes and JSON Schema"
+          "description": "Reference for all supported outputSchema types including Zod shapes and JSON Schema",
+          "examples": [
+            {
+              "name": "primitive-and-media-outputs",
+              "description": "Demonstrates using primitive string literals and media types as `outputSchema` for tools that return plain text, images, or multi-content arrays.",
+              "level": "intermediate",
+              "tags": ["development", "output-schema", "tool", "output", "schema", "types"],
+              "features": [
+                "Using `'string'` literal to return plain text output",
+                "Using `'image'` literal to return base64 image data",
+                "Using `['string', 'image']` array to return multi-content (text plus image) in a single response",
+                "Other available primitives: `'number'`, `'boolean'`, `'date'`",
+                "Other available media types: `'audio'`, `'resource'`, `'resource_link'`"
+              ]
+            },
+            {
+              "name": "zod-raw-shape-output",
+              "description": "Demonstrates the recommended approach of using a Zod raw shape as `outputSchema` for structured, validated JSON output.",
+              "level": "basic",
+              "tags": ["development", "codecall", "output-schema", "tool", "output", "schema"],
+              "features": [
+                "Using a Zod raw shape (plain object with Zod types) as `outputSchema` for structured output",
+                "The output is validated at runtime against the schema before being returned to the client",
+                "This is the recommended pattern for CodeCall compatibility and data leak prevention",
+                "The `execute()` return type is automatically inferred from the output schema"
+              ]
+            },
+            {
+              "name": "zod-schema-advanced-output",
+              "description": "Demonstrates using full Zod schema objects (not raw shapes) as `outputSchema`, including `z.object()`, `z.array()`, `z.union()`, and `z.discriminatedUnion()`.",
+              "level": "advanced",
+              "tags": ["development", "output-schema", "tool", "output", "schema", "types"],
+              "features": [
+                "Using `z.object()` for structured output with nested arrays and nullable fields",
+                "Using `z.discriminatedUnion()` to return different output shapes based on a discriminant field",
+                "Full Zod schemas provide the same validation as raw shapes but support more complex types",
+                "Output is validated at runtime -- mismatched return values trigger validation errors"
+              ]
+            }
+          ]
         },
         {
           "name": "create-tool",
-          "description": "Build MCP tools with Zod input/output validation and dependency injection"
+          "description": "Build MCP tools with Zod input/output validation and dependency injection",
+          "examples": [
+            {
+              "name": "basic-class-tool",
+              "description": "A minimal tool using the class-based pattern with Zod input validation and output schema.",
+              "level": "basic",
+              "tags": ["development", "tool", "class"],
+              "features": [
+                "Extending `ToolContext` and implementing the `execute()` method",
+                "Using a Zod raw shape for `inputSchema` (not wrapped in `z.object()`)",
+                "Defining `outputSchema` to validate and restrict output fields",
+                "Registering the tool in an `@App` via the `tools` array"
+              ]
+            },
+            {
+              "name": "tool-with-di-and-errors",
+              "description": "A tool that resolves a database service via DI and uses `this.fail()` for business-logic errors.",
+              "level": "intermediate",
+              "tags": ["development", "database", "tool", "di", "errors"],
+              "features": [
+                "Defining a typed DI token with `Token<T>` and resolving it via `this.get()`",
+                "Using `this.fail()` with `ResourceNotFoundError` for MCP-compliant error responses",
+                "Letting infrastructure errors (database failures) propagate naturally to the framework",
+                "Registering both the provider and tool in the same `@App`"
+              ]
+            },
+            {
+              "name": "tool-with-rate-limiting-and-progress",
+              "description": "A batch processing tool that uses rate limiting, concurrency control, progress notifications, and annotations.",
+              "level": "advanced",
+              "tags": ["development", "throttle", "tool", "rate", "limiting", "progress"],
+              "features": [
+                "Configuring `rateLimit`, `concurrency`, and `timeout` for throttling protection",
+                "Sending progress updates to the client with `this.respondProgress(value, total)`",
+                "Using `this.mark(stage)` for execution stage tracking and debugging",
+                "Sending log-level notifications with `this.notify(message, level)`",
+                "Setting tool `annotations` to communicate behavioral hints to clients"
+              ]
+            }
+          ]
         },
         {
           "name": "create-workflow",
-          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers"
+          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers",
+          "examples": [
+            {
+              "name": "basic-deploy-pipeline",
+              "description": "A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.",
+              "level": "basic",
+              "tags": ["development", "workflow", "pipeline"],
+              "features": [
+                "Defining a workflow with `@Workflow` decorator and sequential `steps`",
+                "Using `dependsOn` to establish step execution order",
+                "Passing dynamic input from a previous step using the callback form `(steps) => ({...})`",
+                "Registering both jobs and workflows in `@App` with jobs enabled"
+              ]
+            },
+            {
+              "name": "parallel-validation-pipeline",
+              "description": "A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.",
+              "level": "intermediate",
+              "tags": ["development", "workflow", "parallel", "validation", "pipeline"],
+              "features": [
+                "Running steps in parallel by omitting `dependsOn` (no mutual dependencies)",
+                "Using `maxConcurrency` to limit how many steps run at the same time",
+                "Conditional steps with `condition` that check `.state` of previous steps",
+                "Fan-out/fan-in pattern: parallel validation steps converge into a merge step",
+                "Branching: separate success and failure notification paths"
+              ]
+            },
+            {
+              "name": "webhook-triggered-workflow",
+              "description": "A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
+              "level": "advanced",
+              "tags": ["development", "workflow", "webhook", "triggered"],
+              "features": [
+                "Webhook trigger with `trigger: 'webhook'` and `webhook: { path, secret, methods }`",
+                "Using `continueOnError: true` to allow the workflow to proceed past non-critical step failures",
+                "Conditional branching: separate success and failure notification steps based on prior step state",
+                "Workflow-level `permissions` for access control",
+                "The `workflow()` function builder as a lighter alternative to the class pattern"
+              ]
+            }
+          ]
         },
         {
           "name": "decorators-guide",
-          "description": "Complete reference for the hierarchical decorator system from @FrontMcp to @Tool"
+          "description": "Complete reference for the hierarchical decorator system from @FrontMcp to @Tool",
+          "examples": [
+            {
+              "name": "agent-skill-job-workflow",
+              "description": "Demonstrates the advanced decorator types: `@Agent` for autonomous AI agents, `@Skill` for knowledge packages, `@Job` for background tasks, and `@Workflow` for multi-step orchestration.",
+              "level": "advanced",
+              "tags": ["development", "decorators", "agent", "skill", "job", "workflow"],
+              "features": [
+                "`@Agent` with LLM config, input schema, and delegated tools for autonomous task execution",
+                "`@Skill` with inline instructions and tool references for reusable knowledge packages",
+                "`@Job` with retry policy, timeout, and typed input/output for background processing",
+                "`@Workflow` with ordered steps, `dependsOn` for sequencing, and `condition` for conditional execution",
+                "Enabling jobs and skills at the server level via `jobs: { enabled: true }` and `skillsConfig: { enabled: true }`",
+                "All advanced decorators registered in a single `@App` module"
+              ]
+            },
+            {
+              "name": "basic-server-with-app-and-tools",
+              "description": "Demonstrates the minimal decorator hierarchy to create a working FrontMCP server with one app containing a tool and a resource.",
+              "level": "basic",
+              "tags": ["development", "decorators", "app", "tools"],
+              "features": [
+                "The `@FrontMcp` -> `@App` -> `@Tool`/`@Resource`/`@Prompt` nesting hierarchy",
+                "Tool classes extend `ToolContext` and implement `execute()`",
+                "Resource classes extend `ResourceContext` and implement `read()`",
+                "Prompt classes extend `PromptContext` and implement `execute()`",
+                "Apps group related tools, resources, and prompts into logical modules"
+              ]
+            },
+            {
+              "name": "multi-app-with-plugins-and-providers",
+              "description": "Demonstrates a server with multiple `@App` modules, a `@Provider` for dependency injection, and a `@Plugin` for cross-cutting concerns.",
+              "level": "intermediate",
+              "tags": ["development", "database", "multi-app", "decorators", "multi", "app"],
+              "features": [
+                "Organizing a server into multiple `@App` modules (`analytics` and `admin`)",
+                "Using `@Provider` with `useFactory` to register a database client for dependency injection",
+                "Accessing injected dependencies via `this.get(DatabaseToken)` in tools and resources",
+                "Using `@ResourceTemplate` with URI parameters (`{dashboardId}`) for dynamic resources",
+                "Registering a `@Plugin` at the server level so it applies across all apps",
+                "Global plugins go in `@FrontMcp({ plugins })`, app-scoped providers go in `@App({ providers })`"
+              ]
+            }
+          ]
         },
         {
           "name": "official-adapters",
-          "description": "Convert OpenAPI specs and external definitions into MCP tools automatically"
+          "description": "Convert OpenAPI specs and external definitions into MCP tools automatically",
+          "examples": [
+            {
+              "name": "authenticated-adapter-with-polling",
+              "description": "Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.",
+              "level": "intermediate",
+              "tags": ["development", "auth", "openapi", "security", "adapters", "authenticated"],
+              "features": [
+                "Three authentication methods: `staticAuth.apiKey`, `staticAuth.jwt`, and dynamic `securityResolver`",
+                "Using `securityResolver` for per-request dynamic authentication based on the calling context",
+                "Enabling `polling` to automatically refresh tool definitions when the upstream spec changes",
+                "Loading secrets from environment variables instead of hardcoding them",
+                "Each adapter has a unique `name` to avoid tool naming collisions"
+              ]
+            },
+            {
+              "name": "basic-openapi-adapter",
+              "description": "Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.",
+              "level": "basic",
+              "tags": ["development", "openapi", "adapters", "adapter"],
+              "features": [
+                "Using `OpenapiAdapter.init()` with just `name` and `url` to auto-generate MCP tools",
+                "Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`",
+                "The adapter is registered in the `adapters` array of `@App`, not in `plugins`",
+                "The `name` field serves as the namespace prefix to prevent tool name collisions"
+              ]
+            },
+            {
+              "name": "multi-api-hub-with-inline-spec",
+              "description": "Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL.",
+              "level": "advanced",
+              "tags": ["development", "openapi", "remote", "adapters", "multi", "api"],
+              "features": [
+                "Registering multiple adapters in a single `@App` with unique names for tool namespacing",
+                "Using `additionalHeaders` for header-based authentication (GitHub token)",
+                "Providing an inline `spec` object instead of a remote `url` for APIs without hosted specs",
+                "Each adapter's tools are namespaced: `github:*`, `jira:*`, `internal:*`",
+                "Only one of `url` or `spec` should be provided per adapter; `spec` takes precedence"
+              ]
+            }
+          ]
         },
         {
           "name": "official-plugins",
-          "description": "Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring"
+          "description": "Guide to the 6 official plugins for discovery, memory, auth, caching, flags, and monitoring",
+          "examples": [
+            {
+              "name": "cache-and-feature-flags",
+              "description": "Demonstrates combining the Cache plugin for tool result caching with the Feature Flags plugin for gating tools behind flags.",
+              "level": "intermediate",
+              "tags": ["development", "feature-flags", "cache", "plugins", "feature", "flags"],
+              "features": [
+                "Combining `CachePlugin` and `FeatureFlagPlugin` in the same server",
+                "Using `toolPatterns` glob patterns to cache groups of tools without per-tool configuration",
+                "Per-tool `cache` metadata with custom `ttl` (seconds) and `slideWindow` for TTL refresh on hits",
+                "Using `cache: true` for simple default-TTL caching",
+                "Gating a tool with `featureFlag: 'beta-search'` -- the tool is hidden from `list_tools` when the flag is off",
+                "Accessing `this.featureFlags.isEnabled()` inside a tool for runtime flag checks"
+              ]
+            },
+            {
+              "name": "production-multi-plugin-setup",
+              "description": "Demonstrates a production-ready server configuration combining CodeCall, Remember, Approval, Cache, and Feature Flags plugins with Redis storage and external flag services.",
+              "level": "advanced",
+              "tags": ["development", "feature-flags", "redis", "keyword-search", "cache", "approval"],
+              "features": [
+                "Configuring all 5 stable official plugins together in a production server",
+                "CodeCall in `codecall_only` mode with TF-IDF search and synonym expansion for semantic tool discovery",
+                "Remember plugin with Redis storage, encryption enabled, and LLM-accessible memory tools",
+                "Approval plugin in `webhook` mode with external PKCE-secured approval flow and audit logging",
+                "Cache plugin with Redis storage and 24-hour default TTL",
+                "Feature Flags with LaunchDarkly integration for external flag management",
+                "Per-tool `approval` metadata with risk level and scope configuration",
+                "Per-tool `featureFlag` with a `defaultValue` fallback if flag evaluation fails",
+                "Using `this.approval.isApproved()` and `this.remember.set()` together in a single tool"
+              ]
+            },
+            {
+              "name": "remember-plugin-session-memory",
+              "description": "Demonstrates installing the Remember plugin and using `this.remember` in tools to store and retrieve session memory.",
+              "level": "basic",
+              "tags": ["development", "session", "plugins", "remember", "plugin", "memory"],
+              "features": [
+                "Installing `RememberPlugin` with `type: 'memory'` for development",
+                "Enabling `tools: { enabled: true }` to expose LLM-callable memory tools (`remember_this`, `recall`, etc.)",
+                "Using `this.remember.set()` with default `session` scope and explicit `user` scope",
+                "Using `this.remember.get()` with a `defaultValue` fallback",
+                "Using `this.remember.knows()` to check key existence without retrieving the value"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -201,7 +1454,50 @@
       "references": [
         {
           "name": "vectoriadb",
-          "description": "Use VectoriaDB for in-memory vector search with ML-based or TF-IDF engines in FrontMCP servers"
+          "description": "Use VectoriaDB for in-memory vector search with ML-based or TF-IDF engines in FrontMCP servers",
+          "examples": [
+            {
+              "name": "product-catalog-search",
+              "description": "Shows advanced VectoriaDB usage with typed document metadata, batch operations, filtered search by multiple criteria, and batch indexing of a product catalog.",
+              "level": "advanced",
+              "tags": ["extensibility", "vectoriadb", "product", "catalog", "search"],
+              "features": [
+                "Typed document metadata with `ProductDoc extends DocumentMetadata`",
+                "Batch operations with `db.addMany()` for efficient catalog indexing",
+                "Multi-criteria filtered search combining category, price, and stock status",
+                "`maxDocuments` option for DoS protection on large datasets",
+                "`FileStorageAdapter` for persisting the entire product index to disk",
+                "Semantic matching: \"something to block office noise\" finds \"noise-canceling headphones\""
+              ]
+            },
+            {
+              "name": "semantic-search-with-persistence",
+              "description": "Shows how to use `VectoriaDB` for semantic search with transformer models, filtered search, and `FileStorageAdapter` for persistence across restarts.",
+              "level": "intermediate",
+              "tags": ["extensibility", "vectoriadb", "semantic-search", "semantic", "search", "persistence"],
+              "features": [
+                "Using `VectoriaDB` with transformer models for true semantic search",
+                "Configuring HNSW index (`useHNSW: true`) for fast O(log n) search on large datasets",
+                "Filtered search with a callback: `filter: (m) => m.category === category`",
+                "`FileStorageAdapter` for persisting vectors to disk (restored without re-embedding)",
+                "Async initialization with `await db.initialize()` (downloads model on first run)",
+                "Update-or-add pattern with `db.has(id)` check"
+              ]
+            },
+            {
+              "name": "tfidf-keyword-search",
+              "description": "Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, with field weights and index building.",
+              "level": "basic",
+              "tags": ["extensibility", "vectoriadb", "keyword-search", "tfidf", "keyword", "search"],
+              "features": [
+                "Using `TFIDFVectoria` for zero-dependency keyword search (no model downloads)",
+                "Configuring field weights to control scoring influence",
+                "Calling `buildIndex()` after adding documents (required for TFIDFVectoria)",
+                "Wrapping the search engine in a FrontMCP provider with `ProviderScope.GLOBAL`",
+                "Injecting the provider into tools via `this.get(FAQSearch)`"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -217,15 +1513,138 @@
       "references": [
         {
           "name": "example-knowledge-base",
-          "description": "Multi-app knowledge base with vector storage, semantic search, AI research agent, and audit plugin"
+          "description": "Multi-app knowledge base with vector storage, semantic search, AI research agent, and audit plugin",
+          "examples": [
+            {
+              "name": "agent-and-plugin",
+              "description": "Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.",
+              "level": "advanced",
+              "tags": ["guides", "knowledge-base", "knowledge", "base", "agent", "plugin"],
+              "features": [
+                "Agent with `@Agent` decorator, LLM config, inner tools, and system instructions",
+                "Using `this.run(prompt, { maxIterations })` to execute the LLM tool-use loop",
+                "Configurable behavior via input schema (`depth: 'shallow' | 'deep'`)",
+                "Plugin hooks: `onToolExecuteBefore`, `onToolExecuteAfter`, `onToolExecuteError`",
+                "Using `ctx.state.set/get()` for flow state instead of mutating `rawInput`",
+                "Non-blocking audit logging (`.catch()` prevents audit failures from breaking tools)"
+              ]
+            },
+            {
+              "name": "multi-app-composition",
+              "description": "Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration.",
+              "level": "basic",
+              "tags": ["guides", "multi-app", "knowledge-base", "knowledge", "base", "multi"],
+              "features": [
+                "Composing three apps into one server: Ingestion (tools + providers), Search (tools + resources), Research (agents)",
+                "Sharing providers across apps (VectorStoreProvider used by both Ingestion and Search)",
+                "Registering plugins at the server level (AuditLogPlugin applies to all tools)",
+                "Registering agents in a dedicated app for AI-powered features"
+              ]
+            },
+            {
+              "name": "vector-search-and-resources",
+              "description": "Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.",
+              "level": "intermediate",
+              "tags": ["guides", "openai", "semantic-search", "knowledge-base", "knowledge", "base"],
+              "features": [
+                "Semantic search tool that generates query embeddings via `this.fetch()` to OpenAI",
+                "Using `this.mark()` for execution phase tracing",
+                "Resource template with `uriTemplate: 'kb://documents/{documentId}'` for parameterized URIs",
+                "Typed params via `ResourceContext<{ documentId: string }>` for type-safe URI parameters",
+                "Returning `ReadResourceResult` with proper MCP protocol structure"
+              ]
+            }
+          ]
         },
         {
           "name": "example-task-manager",
-          "description": "Authenticated task management server with CRUD tools, Redis storage, OAuth, and Vercel deployment"
+          "description": "Authenticated task management server with CRUD tools, Redis storage, OAuth, and Vercel deployment",
+          "examples": [
+            {
+              "name": "auth-and-crud-tools",
+              "description": "Shows how to create CRUD tools with authentication, using `this.context.session` for user isolation and `this.get()` for dependency injection.",
+              "level": "basic",
+              "tags": ["guides", "auth", "session", "task-manager", "task", "manager"],
+              "features": [
+                "Using `this.context.session?.userId` for per-user data isolation",
+                "Using `this.get(TASK_STORE)` for dependency injection of providers",
+                "Enforcing authentication with `this.fail()` when no session exists",
+                "Optional input fields with `.optional()` for filtering",
+                "`outputSchema` with nested `z.array(z.object(...))` for structured responses"
+              ]
+            },
+            {
+              "name": "authenticated-e2e-tests",
+              "description": "Shows how to write E2E tests with authentication using `TestTokenFactory`, and unit tests for tools that require session context.",
+              "level": "advanced",
+              "tags": ["guides", "auth", "session", "e2e", "unit-test", "task-manager"],
+              "features": [
+                "Using `TestTokenFactory` to create JWT tokens for authenticated E2E tests",
+                "Chaining `.withToken(token).buildAndConnect()` for authenticated clients",
+                "Unit testing with mocked DI tokens via `this.get()` mock",
+                "Mocking session context (`context: { session: { userId } }`) for auth-dependent tools",
+                "Testing the unauthenticated error path (no session)"
+              ]
+            },
+            {
+              "name": "redis-provider-with-di",
+              "description": "Shows how to create a Redis-backed provider with a DI token, lifecycle hooks (`onInit`/`onDestroy`), and how tools inject it.",
+              "level": "intermediate",
+              "tags": ["guides", "redis", "node", "task-manager", "task", "manager"],
+              "features": [
+                "Defining an interface and DI token (`Symbol('TaskStore')`) for the provider",
+                "Using `@Provider({ token: TASK_STORE })` to register the provider for DI",
+                "Lifecycle hooks: `onInit()` for connection setup, `onDestroy()` for cleanup",
+                "Lazy-loading `ioredis` via dynamic `import()` in `onInit()`",
+                "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
+                "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
+              ]
+            }
+          ]
         },
         {
           "name": "example-weather-api",
-          "description": "Beginner MCP server with a weather lookup tool, static resource, Zod schemas, and E2E tests"
+          "description": "Beginner MCP server with a weather lookup tool, static resource, Zod schemas, and E2E tests",
+          "examples": [
+            {
+              "name": "server-and-app-setup",
+              "description": "Shows the server entry point, app registration, and static resource for a beginner FrontMCP weather API server.",
+              "level": "basic",
+              "tags": ["guides", "weather", "api", "app", "setup"],
+              "features": [
+                "Server entry point with `@FrontMcp` decorator and `info` configuration",
+                "App registration with `@App` grouping tools and resources together",
+                "Static resource that returns JSON data via `read()`",
+                "Clean separation between server, app, tools, and resources"
+              ]
+            },
+            {
+              "name": "unit-and-e2e-tests",
+              "description": "Shows how to write unit tests for tools by mocking context methods, and E2E tests using `McpTestClient` and `TestServer`.",
+              "level": "intermediate",
+              "tags": ["guides", "e2e", "unit-test", "weather", "api", "unit"],
+              "features": [
+                "Unit testing tools by mocking `this.fetch()`, `this.fail()`, and other context methods",
+                "Using `Object.assign(tool, ctx)` to inject mock context into the tool instance",
+                "E2E testing with `TestServer.start()` and `McpTestClient.create()`",
+                "Using `toContainTool()` custom matcher for asserting tool presence",
+                "Proper cleanup with `client.disconnect()` and `server.stop()` in `afterAll`"
+              ]
+            },
+            {
+              "name": "weather-tool-with-schemas",
+              "description": "Shows how to create a tool with Zod input and output schemas, use `this.fetch()` for HTTP calls, and handle errors with `this.fail()`.",
+              "level": "basic",
+              "tags": ["guides", "weather", "api", "tool", "schemas"],
+              "features": [
+                "Defining Zod `inputSchema` with validation (`.min(1)`, `.enum()`, `.default()`)",
+                "Defining `outputSchema` to prevent data leaks and ensure type safety",
+                "Using `this.fetch()` for HTTP calls within tools",
+                "Using `this.fail()` for business-logic error handling",
+                "Using `.describe()` on schema fields for LLM-friendly tool descriptions"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -241,39 +1660,383 @@
       "references": [
         {
           "name": "common-checklist",
-          "description": "Security, performance, reliability, and observability checks for all deployment targets"
+          "description": "Security, performance, reliability, and observability checks for all deployment targets",
+          "examples": [
+            {
+              "name": "caching-and-performance",
+              "description": "Shows how to configure caching with TTL, optimize responses, and manage memory with proper provider lifecycle cleanup.",
+              "level": "advanced",
+              "tags": ["production", "redis", "cache", "session", "performance", "checklist"],
+              "features": [
+                "Configuring per-tool cache TTL instead of a single global value",
+                "Using Redis-backed cache for multi-instance consistency",
+                "Setting session TTL to prevent unbounded storage growth",
+                "Implementing `onDestroy()` in providers for proper connection cleanup",
+                "Using connection pool limits and timeouts to prevent resource exhaustion"
+              ]
+            },
+            {
+              "name": "observability-setup",
+              "description": "Shows how to configure structured logging, error handling with MCP error codes, and monitoring integration for production.",
+              "level": "intermediate",
+              "tags": ["production", "observability", "checklist", "setup"],
+              "features": [
+                "Using `this.mark()` to annotate execution phases for tracing",
+                "Using `this.fail()` for business-logic errors without exposing internals",
+                "Setting timeouts on all external calls via `AbortSignal.timeout()`",
+                "Implementing health check providers that verify downstream dependencies"
+              ]
+            },
+            {
+              "name": "security-hardening",
+              "description": "Shows how to configure authentication, CORS, input validation, and rate limiting for a production FrontMCP server.",
+              "level": "basic",
+              "tags": ["production", "redis", "session", "security", "throttle", "checklist"],
+              "features": [
+                "Restricting CORS origins to known domains instead of using `'*'`",
+                "Configuring rate limiting via the `throttle` option",
+                "Using Redis for session storage in multi-instance deployments",
+                "Defining both `inputSchema` and `outputSchema` on tools to prevent data leaks"
+              ]
+            }
+          ]
         },
         {
           "name": "production-browser",
-          "description": "Checklist for publishing FrontMCP as a browser-compatible SDK bundle"
+          "description": "Checklist for publishing FrontMCP as a browser-compatible SDK bundle",
+          "examples": [
+            {
+              "name": "browser-bundle-config",
+              "description": "Shows how to configure package.json for browser-compatible SDK distribution with ESM/CJS/UMD entry points, TypeScript declarations, and CDN support.",
+              "level": "basic",
+              "tags": ["production", "browser", "sdk", "node", "bundle", "config"],
+              "features": [
+                "Correct `main`, `module`, `browser`, `types`, and `exports` fields for browser distribution",
+                "Using the `browser` field to point bundlers to the browser-specific build",
+                "Browser-safe imports with no Node.js-only APIs",
+                "CDN-friendly distribution that works via `<script type=\"module\">`"
+              ]
+            },
+            {
+              "name": "cross-platform-crypto",
+              "description": "Shows how to use `@frontmcp/utils` for cross-platform crypto operations that work in both browser and Node.js, and how to avoid Node.js-only APIs.",
+              "level": "intermediate",
+              "tags": ["production", "browser", "node", "cross", "platform", "crypto"],
+              "features": [
+                "Using `@frontmcp/utils` for crypto instead of `node:crypto` (wraps Web Crypto API)",
+                "Using Fetch API for HTTP calls instead of Node.js `http`/`https`",
+                "Using `crypto.randomUUID()` from the Web Crypto API in browser code",
+                "WebSocket connection with automatic reconnection for streaming",
+                "No Node.js-only APIs (`fs`, `path`, `child_process`, `net`)"
+              ]
+            },
+            {
+              "name": "security-and-performance",
+              "description": "Shows how to ensure no secrets are bundled in browser code, configure CSP headers on the server, optimize bundle size, and avoid blocking the main thread.",
+              "level": "advanced",
+              "tags": ["production", "auth", "browser", "security", "performance"],
+              "features": [
+                "No secrets (API keys, tokens) in the browser bundle -- using server-side proxy",
+                "CORS configured on the server to accept specific browser origins",
+                "Code splitting with dynamic `import()` for large optional features",
+                "Yielding to the event loop during large data processing to avoid blocking the main thread",
+                "Auth tokens obtained from the auth flow, never hardcoded"
+              ]
+            }
+          ]
         },
         {
           "name": "production-cli-binary",
-          "description": "Checklist for publishing FrontMCP as a one-shot CLI binary with stdin/stdout transport"
+          "description": "Checklist for publishing FrontMCP as a one-shot CLI binary with stdin/stdout transport",
+          "examples": [
+            {
+              "name": "binary-build-config",
+              "description": "Shows how to configure a FrontMCP CLI binary with correct package.json `bin` field, shebang, stdio transport, and npm distribution settings.",
+              "level": "basic",
+              "tags": ["production", "cli", "transport", "node", "binary", "config"],
+              "features": [
+                "Correct `bin` field in package.json pointing to the built output",
+                "Shebang line (`#!/usr/bin/env node`) for direct execution",
+                "Handling `--version` and `--help` flags before server initialization",
+                "Using stderr for logging (stdout is the MCP channel)",
+                "`files` field excluding source, tests, and config from the published package"
+              ]
+            },
+            {
+              "name": "stdio-transport-error-handling",
+              "description": "Shows how to handle stdin/stdout transport correctly, implement proper exit codes, and handle edge cases like EOF and broken pipes.",
+              "level": "intermediate",
+              "tags": ["production", "json-rpc", "cli", "transport", "binary", "stdio"],
+              "features": [
+                "Exit code conventions: 0 (success), 1 (user error), 2 (internal error)",
+                "Using stderr for all logging since stdout is the MCP JSON-RPC channel",
+                "Handling EOF on stdin and broken pipe on stdout gracefully",
+                "Showing helpful error messages for unknown flags instead of stack traces",
+                "Validating file paths to prevent writes to unexpected locations"
+              ]
+            }
+          ]
         },
         {
           "name": "production-cli-daemon",
-          "description": "Checklist for deploying FrontMCP as a long-running local daemon with socket transport"
+          "description": "Checklist for deploying FrontMCP as a long-running local daemon with socket transport",
+          "examples": [
+            {
+              "name": "daemon-socket-config",
+              "description": "Shows how to configure a FrontMCP server as a long-running local daemon with Unix socket transport, process management, and SQLite storage.",
+              "level": "basic",
+              "tags": ["production", "unix-socket", "sqlite", "cli", "transport", "performance"],
+              "features": [
+                "Configuring Unix socket transport for local-only communication",
+                "Using SQLite with WAL mode for concurrent read/write performance",
+                "Storing data in user-specific config directory (`~/.config/`)",
+                "Process management with `frontmcp start/stop/restart/status/logs`",
+                "System service registration for auto-start on boot"
+              ]
+            },
+            {
+              "name": "graceful-shutdown-cleanup",
+              "description": "Shows how to implement graceful shutdown for a daemon process, including completing in-flight requests, closing database connections, removing the socket file, and cleaning up the PID file.",
+              "level": "intermediate",
+              "tags": ["production", "unix-socket", "cli", "database", "daemon", "graceful"],
+              "features": [
+                "SIGTERM handler that completes in-flight requests before exiting",
+                "Removing the Unix socket file to prevent stale `.sock` files on restart",
+                "Cleaning up the PID file on shutdown",
+                "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
+                "Implementing `onDestroy()` to close database connections"
+              ]
+            },
+            {
+              "name": "security-and-permissions",
+              "description": "Shows how to secure a local daemon with restrictive socket permissions, XDG-compliant config storage, and file-based secret management.",
+              "level": "advanced",
+              "tags": ["production", "cli", "transport", "security", "local", "node"],
+              "features": [
+                "XDG Base Directory compliance for config and data storage",
+                "Restrictive file permissions: config at `700`, secrets at `600`",
+                "Verifying secret file permissions before reading (fail if insecure)",
+                "Socket-only transport with no TCP network exposure",
+                "Using `@frontmcp/utils` for file operations instead of `node:fs`"
+              ]
+            }
+          ]
         },
         {
           "name": "production-cloudflare",
-          "description": "Checklist for deploying FrontMCP to Cloudflare Workers with KV and Durable Objects"
+          "description": "Checklist for deploying FrontMCP to Cloudflare Workers with KV and Durable Objects",
+          "examples": [
+            {
+              "name": "durable-objects-state",
+              "description": "Shows how to use Cloudflare Durable Objects for stateful coordination alongside the stateless Workers runtime, with KV for cache and R2 for blob storage.",
+              "level": "advanced",
+              "tags": ["production", "cloudflare", "cache", "throttle", "durable", "objects"],
+              "features": [
+                "Using Durable Objects for stateful coordination (rate limiting) in an ephemeral Workers runtime",
+                "Using R2 for blob/file storage since Workers have no filesystem",
+                "Combining KV (cache), R2 (files), and Durable Objects (state) in one deployment",
+                "Wrangler configuration with all three binding types"
+              ]
+            },
+            {
+              "name": "workers-runtime-constraints",
+              "description": "Shows how to write tools that are compatible with the Cloudflare Workers runtime: no Node.js APIs, no eval, only async I/O, and using Web APIs.",
+              "level": "intermediate",
+              "tags": ["production", "cloudflare", "node", "workers", "runtime", "constraints"],
+              "features": [
+                "Using `@frontmcp/utils` for crypto instead of `node:crypto` (Workers use V8 isolates, not Node)",
+                "All I/O is async (no synchronous blocking operations allowed in Workers)",
+                "No `eval()` or dynamic `Function()` (prohibited in Workers)",
+                "No filesystem access (Workers have no filesystem)",
+                "Using Fetch API via `this.fetch()` instead of Node.js `http`/`https`"
+              ]
+            },
+            {
+              "name": "wrangler-config",
+              "description": "Shows how to configure `wrangler.toml` with correct routes, KV bindings for session storage, and secret management for a FrontMCP Cloudflare Worker.",
+              "level": "basic",
+              "tags": ["production", "cloudflare", "cache", "session", "wrangler", "config"],
+              "features": [
+                "Complete `wrangler.toml` with KV bindings for sessions and cache",
+                "Separate staging/production environment configs",
+                "Cloudflare Worker entry point via `createCloudflareHandler`",
+                "Secrets managed via `wrangler secret put` (not in config files)"
+              ]
+            }
+          ]
         },
         {
           "name": "production-lambda",
-          "description": "Checklist for deploying FrontMCP to AWS Lambda with SAM, API Gateway, and DynamoDB"
+          "description": "Checklist for deploying FrontMCP to AWS Lambda with SAM, API Gateway, and DynamoDB",
+          "examples": [
+            {
+              "name": "cold-start-connection-reuse",
+              "description": "Shows how to minimize Lambda cold starts with lazy initialization, tree-shaking, and the connection reuse pattern for external services.",
+              "level": "intermediate",
+              "tags": ["production", "lambda", "performance", "cold", "start", "connection"],
+              "features": [
+                "Connection reuse pattern: caching connections in module scope across warm invocations",
+                "Lazy-loading heavy dependencies (`pg`) via dynamic `import()` to reduce cold start",
+                "Not closing connections in `onDestroy()` for Lambda (they survive freeze/thaw)",
+                "Keeping module scope lightweight with no heavy initialization"
+              ]
+            },
+            {
+              "name": "sam-template",
+              "description": "Shows a complete SAM/CloudFormation template for deploying a FrontMCP server to AWS Lambda with API Gateway routing, DynamoDB for session storage, and proper environment configuration.",
+              "level": "basic",
+              "tags": ["production", "lambda", "session", "sam", "template"],
+              "features": [
+                "Complete SAM template with API Gateway, Lambda function, and DynamoDB table",
+                "DynamoDB for session storage with TTL-based automatic cleanup",
+                "Lambda handler entry point via `createLambdaHandler`",
+                "Pay-per-request billing for cost-effective scaling",
+                "IAM policies scoped to the specific DynamoDB table"
+              ]
+            },
+            {
+              "name": "scaling-and-monitoring",
+              "description": "Shows how to configure concurrency limits, dead letter queues, provisioned concurrency, and CloudWatch alarms for a production Lambda deployment.",
+              "level": "advanced",
+              "tags": ["production", "lambda", "performance", "scaling", "monitoring"],
+              "features": [
+                "Reserved concurrency to prevent downstream service overload",
+                "Provisioned concurrency for latency-sensitive endpoints (reduces cold starts)",
+                "Dead letter queue (DLQ) for capturing failed invocations",
+                "CloudWatch alarms for error rate and throttling detection",
+                "Loading secrets from AWS SSM Parameter Store instead of environment variables"
+              ]
+            }
+          ]
         },
         {
           "name": "production-node-sdk",
-          "description": "Checklist for publishing FrontMCP as an embedded npm package used as a direct client SDK"
+          "description": "Checklist for publishing FrontMCP as an embedded npm package used as a direct client SDK",
+          "examples": [
+            {
+              "name": "basic-sdk-lifecycle",
+              "description": "Shows the complete lifecycle of a FrontMCP SDK package used as an embedded client: initialization, tool invocation, and proper cleanup.",
+              "level": "basic",
+              "tags": ["production", "sdk", "node", "lifecycle"],
+              "features": [
+                "Exporting a `create()` function as the public API surface",
+                "No port binding in SDK mode (embedded, not standalone server)",
+                "The full lifecycle: `create()` -> `connect()` -> `callTool()` -> `close()` -> `dispose()`",
+                "Proper cleanup to prevent memory and connection leaks"
+              ]
+            },
+            {
+              "name": "multi-instance-cleanup",
+              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to implement proper cleanup to prevent memory leaks from event listeners, timers, and provider resources.",
+              "level": "advanced",
+              "tags": ["production", "sdk", "node", "multi", "instance", "cleanup"],
+              "features": [
+                "Implementing `onDestroy()` in providers to clean up timers and listeners",
+                "Ensuring multiple instances coexist without sharing global state",
+                "Testing that dispose removes all event listeners (no leaks)",
+                "Verifying one instance still works after another is disposed"
+              ]
+            },
+            {
+              "name": "package-json-config",
+              "description": "Shows the correct package.json configuration for publishing a FrontMCP SDK package with CJS + ESM entry points, peer dependencies, and proper file inclusions.",
+              "level": "intermediate",
+              "tags": ["production", "sdk", "readme", "node", "package", "json"],
+              "features": [
+                "Correct `main`, `module`, `types`, and `exports` fields for CJS + ESM",
+                "Using `files` to include only `dist/`, `README.md`, and `LICENSE` in the published package",
+                "Declaring `zod` as a `peerDependency` for shared packages",
+                "The `prepublishOnly` script ensuring build and tests pass before publishing",
+                "Integration test verifying the full lifecycle with proper cleanup"
+              ]
+            }
+          ]
         },
         {
           "name": "production-node-server",
-          "description": "Checklist for deploying FrontMCP as a long-running Node.js server with Docker"
+          "description": "Checklist for deploying FrontMCP as a long-running Node.js server with Docker",
+          "examples": [
+            {
+              "name": "docker-multi-stage",
+              "description": "Shows a production-ready Dockerfile with multi-stage build, non-root user, and container health check for a FrontMCP Node.js server.",
+              "level": "basic",
+              "tags": ["production", "dockerfile", "docker", "security", "node", "multi"],
+              "features": [
+                "Multi-stage Docker build separating build dependencies from runtime",
+                "Using `node:24-slim` as a minimal base image",
+                "Running as non-root user (`USER node`) for security",
+                "Container health check for orchestrator-aware restarts",
+                "Resource limits (memory, CPU) in docker-compose"
+              ]
+            },
+            {
+              "name": "graceful-shutdown",
+              "description": "Shows how to implement graceful shutdown with SIGTERM handling, in-flight request draining, and health check status transitions.",
+              "level": "intermediate",
+              "tags": ["production", "redis", "database", "node", "graceful", "shutdown"],
+              "features": [
+                "Handling SIGTERM for graceful shutdown in containerized environments",
+                "Draining in-flight requests before exiting with a timeout safety net",
+                "Disposing all resources (Redis, database) via `server.dispose()`",
+                "Returning unhealthy during shutdown so load balancers redirect traffic"
+              ]
+            },
+            {
+              "name": "redis-session-scaling",
+              "description": "Shows how to configure Redis-backed session storage, connection pooling, and stateless server design for horizontal scaling behind a load balancer.",
+              "level": "advanced",
+              "tags": ["production", "redis", "session", "node", "scaling"],
+              "features": [
+                "Configuring Redis for session storage so all instances share state",
+                "Using key prefixes to namespace Redis keys and avoid collisions",
+                "Setting session TTL to prevent unbounded storage growth",
+                "Configuring Redis-backed job store for multi-instance job processing",
+                "Validating required environment variables at startup (fail fast)"
+              ]
+            }
+          ]
         },
         {
           "name": "production-vercel",
-          "description": "Checklist for deploying FrontMCP to Vercel serverless or edge functions with Vercel KV"
+          "description": "Checklist for deploying FrontMCP to Vercel serverless or edge functions with Vercel KV",
+          "examples": [
+            {
+              "name": "cold-start-optimization",
+              "description": "Shows how to minimize cold start time by lazy-loading dependencies, avoiding heavy initialization at module scope, and caching expensive operations.",
+              "level": "intermediate",
+              "tags": ["production", "vercel", "openapi", "performance", "cold", "start"],
+              "features": [
+                "Lazy-loading heavy dependencies via dynamic `import()` in `onInit()` instead of module scope",
+                "Caching expensive fetches (e.g., OpenAPI specs) across warm invocations",
+                "Keeping the module scope lightweight with no side effects",
+                "No `top-level await`, no global state, no network calls at import time"
+              ]
+            },
+            {
+              "name": "stateless-serverless-design",
+              "description": "Shows a fully stateless server design that works on Vercel edge runtime with no Node.js-only APIs, using `@frontmcp/utils` for cross-platform crypto.",
+              "level": "advanced",
+              "tags": ["production", "vercel", "serverless", "node", "stateless", "design"],
+              "features": [
+                "Using `@frontmcp/utils` (`sha256Hex`, `randomUUID`) instead of `node:crypto` for edge compatibility",
+                "Fully stateless design with no in-memory state between invocations",
+                "Using `this.fetch()` instead of Node.js `http`/`https` modules",
+                "No file system access (serverless is ephemeral)"
+              ]
+            },
+            {
+              "name": "vercel-edge-config",
+              "description": "Shows how to configure a FrontMCP server for Vercel deployment with Vercel KV for session storage and correct route configuration.",
+              "level": "basic",
+              "tags": ["production", "vercel-kv", "vercel", "session", "serverless", "edge"],
+              "features": [
+                "Correct `vercel.json` with function routes, memory limits, and max duration",
+                "Using Vercel KV (`provider: 'vercel-kv'`) for session storage instead of in-memory",
+                "Setting CORS origins dynamically using `VERCEL_URL`",
+                "Serverless function entry point via `createVercelHandler`"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -289,39 +2052,360 @@
       "references": [
         {
           "name": "frontmcp-skills-usage",
-          "description": "Search, install, and manage FrontMCP skill catalog for AI agents (Claude Code, Codex)"
+          "description": "Search, install, and manage FrontMCP skill catalog for AI agents (Claude Code, Codex)",
+          "examples": [
+            {
+              "name": "bundle-presets-scaffolding",
+              "description": "Use `--skills` flag during project creation to install a skill bundle preset.",
+              "level": "intermediate",
+              "tags": ["setup", "skills", "usage", "bundle", "presets", "scaffolding"],
+              "features": [
+                "`--skills` flag accepts `recommended`, `minimal`, `full`, or `none` presets",
+                "Static installs are snapshots; re-run `install` to update to the latest catalog version",
+                "Hybrid approach: install core skills statically, search the rest on demand",
+                "Fewer static installs reduce token usage in AI agent context"
+              ]
+            },
+            {
+              "name": "install-and-search-skills",
+              "description": "Install skills statically for Claude Code and use dynamic CLI search for on-demand discovery.",
+              "level": "basic",
+              "tags": ["setup", "cli", "anthropic", "skills", "usage", "install"],
+              "features": [
+                "`frontmcp skills list` and `search` for discovering available skills",
+                "`frontmcp skills read` for viewing skill content and references on demand",
+                "`frontmcp skills install --provider claude` for static installation to `.claude/skills/`",
+                "Installed skills are auto-loaded by Claude Code in its system prompt context"
+              ]
+            }
+          ]
         },
         {
           "name": "multi-app-composition",
-          "description": "Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway"
+          "description": "Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway",
+          "examples": [
+            {
+              "name": "local-apps-with-shared-tools",
+              "description": "Compose multiple local `@App` classes into a server with shared tools available to all apps.",
+              "level": "basic",
+              "tags": ["setup", "multi-app", "local", "multi", "app", "composition"],
+              "features": [
+                "Multiple `@App` classes with unique `id` fields for tool namespacing (`billing:charge`, `inventory:check_stock`)",
+                "Server-level `tools` array for shared tools available to all apps without namespace prefix",
+                "Each app is self-contained with its own tools array",
+                "The `id` field on `@App` controls the namespace prefix for tool names"
+              ]
+            },
+            {
+              "name": "per-app-auth-and-isolation",
+              "description": "Configure mixed authentication modes and scope isolation for different apps in a single server.",
+              "level": "advanced",
+              "tags": ["setup", "oauth", "auth", "multi-app", "remote", "multi"],
+              "features": [
+                "Per-app `auth` overrides the server-level auth (public vs remote OAuth per app)",
+                "`standalone: true` fully isolates the Admin app (not visible in parent tool listing)",
+                "`standalone: 'includeInParent'` gives Analytics its own scope but keeps tools visible",
+                "Per-app `plugins` (BillingAuditPlugin) are scoped to that app only",
+                "Server-level `plugins` (TracingPlugin, PiiRedactionPlugin) apply to all apps"
+              ]
+            },
+            {
+              "name": "remote-and-esm-apps",
+              "description": "Compose local, ESM (npm package), and remote (external MCP server) apps into a single gateway.",
+              "level": "intermediate",
+              "tags": ["setup", "oauth", "auth", "transport", "multi-app", "remote"],
+              "features": [
+                "`app.esm()` loads an `@App` class from an npm package with namespace and auto-update",
+                "`app.remote()` proxies tools from external MCP servers with configurable auth modes",
+                "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), and `'oauth'`",
+                "`namespace` prevents tool name collisions between apps (`crm:tool_name`, `slack:tool_name`)",
+                "`transportOptions` configure timeout, retries, and SSE fallback for remote connections"
+              ]
+            }
+          ]
         },
         {
           "name": "nx-workflow",
-          "description": "Scaffold, build, test, and deploy FrontMCP projects using the @frontmcp/nx plugin in a monorepo"
+          "description": "Scaffold, build, test, and deploy FrontMCP projects using the @frontmcp/nx plugin in a monorepo",
+          "examples": [
+            {
+              "name": "build-test-affected",
+              "description": "Use Nx commands for efficient building, testing, and CI with affected-only execution.",
+              "level": "intermediate",
+              "tags": ["setup", "nx", "workflow", "affected"],
+              "features": [
+                "`nx build <server>` resolves the dependency graph and builds with caching",
+                "`nx affected -t test` only runs tests for changed projects, saving CI time",
+                "`nx run-many -t build,test,lint` parallelizes multiple targets across all projects",
+                "`nx graph` visualizes project dependencies to detect circular imports"
+              ]
+            },
+            {
+              "name": "multi-server-deployment",
+              "description": "Generate multiple servers in an Nx workspace, each composing different apps for different deployment targets.",
+              "level": "advanced",
+              "tags": ["setup", "vercel", "nx", "node", "workflow", "multi"],
+              "features": [
+                "Multiple servers composing different combinations of apps from the same workspace",
+                "Each server has its own deployment target (`node` vs `vercel`) and storage configuration",
+                "Apps are reusable across servers via Nx path aliases",
+                "`nx build <server>` builds the server and all its app and lib dependencies"
+              ]
+            },
+            {
+              "name": "scaffold-and-generate",
+              "description": "Initialize an Nx workspace and use generators to scaffold an app with tools, resources, and a server.",
+              "level": "basic",
+              "tags": ["setup", "nx", "workflow", "scaffold", "generate"],
+              "features": [
+                "`@frontmcp/nx:workspace` initializes the Nx monorepo structure with `apps/`, `libs/`, `servers/`",
+                "All primitive generators require `--project=<app-name>` to target the correct app",
+                "Each generator creates an implementation file, a `.spec.ts` test file, and updates barrel exports",
+                "`@frontmcp/nx:server` with `--apps` and `--deploymentTarget` creates the deployment entry point"
+              ]
+            }
+          ]
         },
         {
           "name": "project-structure-nx",
-          "description": "Canonical directory layout, generators, and dependency rules for FrontMCP Nx monorepos"
+          "description": "Canonical directory layout, generators, and dependency rules for FrontMCP Nx monorepos",
+          "examples": [
+            {
+              "name": "nx-generator-scaffolding",
+              "description": "Use `@frontmcp/nx` generators to scaffold tools, resources, and providers within an app, with automatic barrel export updates.",
+              "level": "basic",
+              "tags": ["setup", "nx", "structure", "generator", "scaffolding"],
+              "features": [
+                "All primitive generators require `--project=<app-name>` to target the correct app",
+                "Each generator creates the implementation file and a `.spec.ts` test file",
+                "Barrel exports (`index.ts`) are updated automatically after each generator run",
+                "Files follow the `<name>.<type>.ts` naming convention"
+              ]
+            },
+            {
+              "name": "nx-workspace-with-apps",
+              "description": "Scaffold an Nx monorepo with two apps and a server that composes them into a single gateway.",
+              "level": "basic",
+              "tags": ["setup", "nx", "structure", "workspace", "apps"],
+              "features": [
+                "`apps/` directory holding self-contained `@App` classes with their tools and resources",
+                "`servers/` directory holding `@FrontMcp` entry points that compose apps",
+                "Nx path aliases (`@my-workspace/billing`) for clean imports across the monorepo",
+                "Apps are independently testable and do not import from each other"
+              ]
+            },
+            {
+              "name": "shared-library-usage",
+              "description": "Create a shared library in an Nx monorepo and use it from multiple apps to avoid cross-app imports.",
+              "level": "intermediate",
+              "tags": ["setup", "nx", "database", "structure", "shared", "library"],
+              "features": [
+                "Shared libraries live in `libs/` with barrel `index.ts` exports",
+                "Both apps import `DatabaseProvider` from the shared library, not from each other",
+                "Nx dependency graph: `servers/ --> apps/ --> libs/` (apps never import other apps)",
+                "Path aliases configured in `tsconfig.base.json` keep imports clean (`@my-workspace/shared-utils`)"
+              ]
+            }
+          ]
         },
         {
           "name": "project-structure-standalone",
-          "description": "File layout, naming conventions, and dev workflow for standalone FrontMCP projects"
+          "description": "File layout, naming conventions, and dev workflow for standalone FrontMCP projects",
+          "examples": [
+            {
+              "name": "dev-workflow-commands",
+              "description": "Run the standard development workflow for a standalone FrontMCP project: dev server, build, and tests.",
+              "level": "basic",
+              "tags": ["setup", "e2e", "structure", "standalone", "dev", "workflow"],
+              "features": [
+                "`frontmcp dev` for hot-reloading development server",
+                "`frontmcp build --target <target>` for production builds targeting different runtimes",
+                "Test files use `.spec.ts` extension (not `.test.ts`) per FrontMCP convention",
+                "E2E tests live in the `e2e/` directory with `*.e2e.spec.ts` naming"
+              ]
+            },
+            {
+              "name": "feature-folder-organization",
+              "description": "Organize a growing standalone project into domain-specific feature folders instead of flat type-based directories.",
+              "level": "intermediate",
+              "tags": ["setup", "structure", "standalone", "feature", "folder", "organization"],
+              "features": [
+                "Feature folders (`src/billing/`) grouping related tools, resources, and providers by domain",
+                "Each entity still follows the `<name>.<type>.ts` naming convention inside its feature folder",
+                "One class per file across tools, resources, and providers",
+                "Feature folders scale better than flat `src/tools/` directories for larger projects"
+              ]
+            },
+            {
+              "name": "minimal-standalone-layout",
+              "description": "Set up the canonical file structure for a standalone FrontMCP project with one app, one tool, and the required entry point.",
+              "level": "basic",
+              "tags": ["setup", "structure", "standalone", "minimal", "layout"],
+              "features": [
+                "`<name>.<type>.ts` file naming convention (`fetch-weather.tool.ts`, `my-app.app.ts`)",
+                "`main.ts` with a default-exported `@FrontMcp` server class",
+                "One class per file pattern",
+                "`@App` grouping tools and registered in the server `apps` array"
+              ]
+            }
+          ]
         },
         {
           "name": "readme-guide",
-          "description": "Generate deployment-target-aware README.md files for FrontMCP MCP servers"
+          "description": "Generate deployment-target-aware README.md files for FrontMCP MCP servers",
+          "examples": [
+            {
+              "name": "node-server-readme",
+              "description": "Generate a README for a FrontMCP server deployed as a Docker/Node.js service with tools and resources.",
+              "level": "basic",
+              "tags": ["setup", "docker", "readme", "node"],
+              "features": [
+                "Standard README sections: Features, Quick Start, Tools table, Resources table, Environment Variables",
+                "Docker-specific deployment section with build and run commands",
+                "Development commands using `frontmcp dev`, `frontmcp test`, `frontmcp inspect`",
+                "Tool and resource tables generated from source code decorators"
+              ]
+            },
+            {
+              "name": "vercel-deployment-readme",
+              "description": "Generate a README for a FrontMCP server deployed to Vercel with Vercel KV storage.",
+              "level": "intermediate",
+              "tags": ["setup", "vercel-kv", "vercel", "readme", "deployment"],
+              "features": [
+                "Vercel-specific deployment instructions with `frontmcp build --target vercel` and `vercel deploy`",
+                "Vercel KV environment variables (`KV_REST_API_URL`, `KV_REST_API_TOKEN`) noted as auto-injected",
+                "`vercel.json` configuration reference for route setup",
+                "Consistent README structure adapted to the Vercel deployment target"
+              ]
+            }
+          ]
         },
         {
           "name": "setup-project",
-          "description": "Scaffold a new FrontMCP project with CLI or manual setup, decorators, apps, and deployment config"
+          "description": "Scaffold a new FrontMCP project with CLI or manual setup, decorators, apps, and deployment config",
+          "examples": [
+            {
+              "name": "basic-node-server",
+              "description": "Scaffold a minimal FrontMCP server with one app and one tool, running on Node.js with HTTP transport.",
+              "level": "basic",
+              "tags": ["setup", "transport", "node"],
+              "features": [
+                "Minimal `@FrontMcp` server with `info` and `apps` fields",
+                "`@App` decorator grouping a single tool",
+                "`@Tool` decorator with Zod input/output schemas extending `ToolContext`",
+                "Required tsconfig flags: `experimentalDecorators` and `emitDecoratorMetadata`",
+                "`reflect-metadata` imported as the first line of the entry point"
+              ]
+            },
+            {
+              "name": "cli-scaffold-with-flags",
+              "description": "Use the `frontmcp create` CLI to scaffold a complete project non-interactively with explicit flags for deployment target, Redis, and package manager.",
+              "level": "basic",
+              "tags": ["setup", "redis", "cli", "nx", "scaffold", "flags"],
+              "features": [
+                "Non-interactive scaffolding with `--yes` to accept all defaults",
+                "Explicit `--target`, `--redis`, `--pm`, `--skills`, and `--cicd` flags",
+                "Nx monorepo scaffolding with `--nx`",
+                "Verifying the server responds to MCP `initialize` requests after startup"
+              ]
+            },
+            {
+              "name": "vercel-serverless-server",
+              "description": "Configure a FrontMCP server for Vercel deployment with Vercel KV storage and modern transport protocol.",
+              "level": "intermediate",
+              "tags": ["setup", "vercel-kv", "redis", "vercel", "session", "transport"],
+              "features": [
+                "`transport: { protocol: 'modern' }` for streamable HTTP with strict sessions on Vercel",
+                "`redis: { provider: 'vercel-kv' }` for managed Redis-compatible storage without external provisioning",
+                "Building with `frontmcp build --target vercel` for serverless output",
+                "Vercel KV credentials are auto-injected via environment variables"
+              ]
+            }
+          ]
         },
         {
           "name": "setup-redis",
-          "description": "Provision and configure Redis or Vercel KV for session storage and distributed state"
+          "description": "Provision and configure Redis or Vercel KV for session storage and distributed state",
+          "examples": [
+            {
+              "name": "docker-redis-local-dev",
+              "description": "Provision Redis with Docker Compose and connect a FrontMCP server for local session storage.",
+              "level": "basic",
+              "tags": ["setup", "docker-compose", "redis", "docker", "session", "local"],
+              "features": [
+                "Docker Compose with Redis 7 Alpine, AOF persistence, and health checks",
+                "`redis` config in `@FrontMcp` with `provider: 'redis'` and environment variable fallbacks",
+                "`--appendonly yes` preserves data across container restarts",
+                "`keyPrefix: 'mcp:'` namespaces all session keys"
+              ]
+            },
+            {
+              "name": "hybrid-vercel-kv-with-pubsub",
+              "description": "Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions.",
+              "level": "advanced",
+              "tags": ["setup", "vercel-kv", "redis", "vercel", "session", "hybrid"],
+              "features": [
+                "Vercel KV handles sessions (`redis` config) while a real Redis handles pub/sub (`pubsub` config)",
+                "Vercel KV does not support pub/sub operations, so a separate Redis instance is required",
+                "Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications",
+                "The `pubsub` field accepts `provider: 'redis'` only (no Vercel KV support)"
+              ]
+            },
+            {
+              "name": "vercel-kv-serverless",
+              "description": "Configure a FrontMCP server with Vercel KV as the session store for serverless deployment.",
+              "level": "intermediate",
+              "tags": ["setup", "vercel-kv", "redis", "vercel", "session", "transport"],
+              "features": [
+                "`provider: 'vercel-kv'` for managed Redis-compatible storage on Vercel",
+                "`transport: { protocol: 'modern' }` required for Streamable HTTP on serverless",
+                "Vercel auto-injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` in production",
+                "Explicit `url` and `token` fields for local testing outside Vercel"
+              ]
+            }
+          ]
         },
         {
           "name": "setup-sqlite",
-          "description": "Configure SQLite with WAL mode and optional encryption for local single-instance deployments"
+          "description": "Configure SQLite with WAL mode and optional encryption for local single-instance deployments",
+          "examples": [
+            {
+              "name": "basic-sqlite-setup",
+              "description": "Configure a FrontMCP server with SQLite for local session storage with WAL mode enabled.",
+              "level": "basic",
+              "tags": ["setup", "sqlite", "session", "database", "local"],
+              "features": [
+                "`@frontmcp/storage-sqlite` and `better-sqlite3` as required dependencies",
+                "`sqlite` config in `@FrontMcp` with `path` and `walMode`",
+                "WAL mode creates three files (`.sqlite`, `.sqlite-wal`, `.sqlite-shm`)",
+                "Tilde-prefixed paths for stable storage across working directories"
+              ]
+            },
+            {
+              "name": "encrypted-sqlite-storage",
+              "description": "Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLite.",
+              "level": "intermediate",
+              "tags": ["setup", "sqlite", "session", "database", "encrypted", "storage"],
+              "features": [
+                "`encryption.secret` enables AES-256-GCM encryption with HKDF-SHA256 key derivation",
+                "The secret must be at least 32 characters and sourced from environment variables",
+                "The same secret must be used across server restarts to decrypt existing data",
+                "Never hardcode the encryption secret in source code"
+              ]
+            },
+            {
+              "name": "unix-socket-daemon",
+              "description": "Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage.",
+              "level": "advanced",
+              "tags": ["setup", "unix-socket", "sqlite", "session", "transport", "database"],
+              "features": [
+                "`http.unixSocket` for unix socket transport instead of TCP port",
+                "`transport: { protocol: 'modern' }` for Streamable HTTP with strict sessions",
+                "`ttlCleanupIntervalMs: 15000` for more aggressive cleanup on high-throughput daemons",
+                "Absolute path for the database file in system-level storage (`/var/lib/`)"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -337,31 +2421,263 @@
       "references": [
         {
           "name": "setup-testing",
-          "description": "Configure Jest, write unit and E2E tests, and enforce 95%+ coverage for FrontMCP applications"
+          "description": "Configure Jest, write unit and E2E tests, and enforce 95%+ coverage for FrontMCP applications",
+          "examples": [
+            {
+              "name": "fixture-based-e2e-test",
+              "description": "Write E2E tests using the fixture API from `@frontmcp/testing` that manages server lifecycle automatically and uses MCP-specific custom matchers.",
+              "level": "advanced",
+              "tags": ["testing", "jest", "e2e", "setup", "fixture", "based"],
+              "features": [
+                "Using `test.use()` to configure server path and port for automatic lifecycle management",
+                "Importing `test` and `expect` from `@frontmcp/testing` (not from Jest) to access MCP-specific matchers",
+                "Custom matchers: `toContainTool()`, `toBeSuccessful()`, `toHaveTextContent()` for MCP assertions",
+                "Testing all three MCP primitives (tools, resources, prompts) in a single E2E suite"
+              ]
+            },
+            {
+              "name": "jest-config-with-coverage",
+              "description": "Set up a Jest configuration file that enforces 95%+ coverage across all metrics for a FrontMCP library.",
+              "level": "basic",
+              "tags": ["testing", "jest", "setup", "config", "coverage"],
+              "features": [
+                "How to configure Jest with `ts-jest` for TypeScript test files",
+                "Setting 95%+ coverage thresholds required by FrontMCP standards",
+                "Proper `tsconfig.spec.json` that extends the base config and includes `.spec.ts` files"
+              ]
+            },
+            {
+              "name": "unit-test-tool-resource-prompt",
+              "description": "Write unit tests for the three core MCP primitives, verifying that outputs match the expected MCP response shapes.",
+              "level": "intermediate",
+              "tags": ["testing", "jest", "unit-test", "setup", "unit", "tool"],
+              "features": [
+                "Testing tool `execute()` with a mock context object assigned via `Object.assign`",
+                "Verifying resource `read()` output matches the MCP `ReadResourceResult` shape",
+                "Verifying prompt `execute()` output matches the MCP `GetPromptResult` shape",
+                "Using Jest matchers like `expect.stringContaining` and `expect.objectContaining` for flexible assertions"
+              ]
+            }
+          ]
         },
         {
           "name": "test-auth",
-          "description": "Test authenticated MCP servers with TestTokenFactory, MockOAuthServer, and role-based access"
+          "description": "Test authenticated MCP servers with TestTokenFactory, MockOAuthServer, and role-based access",
+          "examples": [
+            {
+              "name": "oauth-flow-test",
+              "description": "Use `MockOAuthServer` to simulate an OAuth identity provider and test the authorization code flow.",
+              "level": "advanced",
+              "tags": ["testing", "oauth", "auth", "flow"],
+              "features": [
+                "Setting up `MockOAuthServer` with a mock issuer URL and port",
+                "Starting an OAuth flow with `startFlow()` specifying client ID, redirect URI, and scopes",
+                "Verifying the authorization URL contains an authorization code",
+                "Testing concurrent OAuth flows with different client configurations",
+                "Proper cleanup with `mockOAuth.close()` in `afterAll`"
+              ]
+            },
+            {
+              "name": "role-based-access-test",
+              "description": "Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints.",
+              "level": "intermediate",
+              "tags": ["testing", "auth", "role", "based", "access"],
+              "features": [
+                "Creating tokens with different `roles` arrays to simulate admin and user access",
+                "Testing that admin-only tools accept admin tokens and reject user tokens",
+                "Verifying that user-level tools remain accessible to users with the correct role",
+                "Each test creates and closes its own client for proper isolation"
+              ]
+            },
+            {
+              "name": "token-factory-test",
+              "description": "Use `TestTokenFactory` to create tokens and verify authenticated and unauthenticated requests.",
+              "level": "basic",
+              "tags": ["testing", "auth", "token", "factory"],
+              "features": [
+                "Creating a `TestTokenFactory` with issuer and audience configuration",
+                "Generating test tokens with specific subjects and scopes via `createToken()`",
+                "Passing tokens to `server.connect({ authToken })` for authenticated client connections",
+                "Verifying that unauthenticated requests are rejected with `isError`"
+              ]
+            }
+          ]
         },
         {
           "name": "test-browser-build",
-          "description": "Validate browser build output for Node.js-free bundles and test with Playwright"
+          "description": "Validate browser build output for Node.js-free bundles and test with Playwright",
+          "examples": [
+            {
+              "name": "browser-bundle-validation",
+              "description": "Verify that the browser build produces a valid bundle without Node.js-only module references.",
+              "level": "basic",
+              "tags": ["testing", "browser", "node", "bundle", "validation"],
+              "features": [
+                "Checking that the browser build output directory contains `.js` files",
+                "Scanning the bundle for Node.js-only `require()` calls that would break in browsers",
+                "Using dynamic `import()` to verify the bundle is loadable",
+                "Targeting the `dist/browser/` directory where `frontmcp build --target browser` places output"
+              ]
+            },
+            {
+              "name": "playwright-browser-test",
+              "description": "Use Playwright to test a browser-based MCP client that loads and calls tools from an MCP server.",
+              "level": "advanced",
+              "tags": ["testing", "browser", "playwright", "e2e"],
+              "features": [
+                "Using Playwright's `test` and `expect` from `@playwright/test` for browser E2E testing",
+                "Waiting for DOM elements with `waitForSelector` before asserting tool list counts",
+                "Filling form inputs and clicking buttons to simulate tool calls in the browser",
+                "Asserting tool results via `textContent` on result elements",
+                "Using the `.pw.spec.ts` file suffix required by FrontMCP naming conventions"
+              ]
+            }
+          ]
         },
         {
           "name": "test-cli-binary",
-          "description": "Test CLI binary and SEA build for startup, health check, and JS bundle import"
+          "description": "Test CLI binary and SEA build for startup, health check, and JS bundle import",
+          "examples": [
+            {
+              "name": "binary-startup-test",
+              "description": "Verify that a compiled CLI binary starts correctly and responds to health checks.",
+              "level": "basic",
+              "tags": ["testing", "cli", "binary", "startup"],
+              "features": [
+                "Using `execSync` to test that `--help` flag exits with code 0 and prints usage info",
+                "Spawning the binary as a child process with `PORT=0` for dynamic port assignment",
+                "Waiting for the \"listening\" log message before sending requests",
+                "Testing the `/health` endpoint for server readiness",
+                "Cleaning up the child process with `child.kill()`"
+              ]
+            },
+            {
+              "name": "js-bundle-import-test",
+              "description": "Verify that the compiled JS bundle can be imported and exports the expected modules after a `frontmcp build` step.",
+              "level": "intermediate",
+              "tags": ["testing", "cli", "binary", "js", "bundle", "import"],
+              "features": [
+                "Using dynamic `import()` to test that the built JS bundle is importable",
+                "Verifying the bundle has a default export (server class or factory)",
+                "Testing CommonJS `require()` compatibility to ensure the bundle works in CJS environments",
+                "Pointing to the `dist/` output directory where `frontmcp build` places artifacts"
+              ]
+            }
+          ]
         },
         {
           "name": "test-direct-client",
-          "description": "In-memory testing with create() and connectOpenAI/connectClaude without HTTP overhead"
+          "description": "In-memory testing with create() and connectOpenAI/connectClaude without HTTP overhead",
+          "examples": [
+            {
+              "name": "basic-create-test",
+              "description": "Test tools in-memory without any HTTP overhead using the `create()` function from `@frontmcp/sdk`.",
+              "level": "basic",
+              "tags": ["testing", "sdk", "transport", "direct-client", "direct", "client"],
+              "features": [
+                "Using `create()` to spin up an in-memory server with no HTTP transport",
+                "Defining tools inline with the functional `tool()` API and Zod schemas",
+                "Calling tools directly via `server.callTool()` and checking text content",
+                "Proper cleanup with `server.dispose()` in each test"
+              ]
+            },
+            {
+              "name": "openai-claude-format-test",
+              "description": "Verify that tools are returned in the correct format for OpenAI and Claude clients using `connectOpenAI` and `connectClaude`.",
+              "level": "intermediate",
+              "tags": ["testing", "openai", "anthropic", "direct-client", "direct", "client"],
+              "features": [
+                "Using `connectOpenAI()` with `serve: false` to get an in-memory client without starting an HTTP server",
+                "Verifying OpenAI tool format: `{ type: 'function', function: { name, parameters } }`",
+                "Using dynamic import for `connectClaude` to test Claude tool format: `{ name, description, input_schema }`",
+                "Proper cleanup with `client.close()` after each test"
+              ]
+            }
+          ]
         },
         {
           "name": "test-e2e-handler",
-          "description": "Full MCP protocol E2E tests over HTTP with McpTestClient and TestServer"
+          "description": "Full MCP protocol E2E tests over HTTP with McpTestClient and TestServer",
+          "examples": [
+            {
+              "name": "basic-e2e-test",
+              "description": "Set up a basic E2E test that starts a server, connects a client, and verifies tools are listed.",
+              "level": "basic",
+              "tags": ["testing", "e2e", "handler"],
+              "features": [
+                "Using `TestServer.create()` to start a server from its module export",
+                "Connecting a client via `server.connect()` for automatic base URL wiring",
+                "Proper lifecycle management with `beforeAll` / `afterAll` for setup and teardown",
+                "Using the `toContainTool` custom matcher from `@frontmcp/testing`"
+              ]
+            },
+            {
+              "name": "manual-client-with-transport",
+              "description": "Use `McpTestClient.create()` with explicit transport settings for fine-grained control over E2E tests.",
+              "level": "advanced",
+              "tags": ["testing", "session", "transport", "e2e", "handler", "manual"],
+              "features": [
+                "Using `TestServer.start()` with an explicit command and port for process-based server startup",
+                "Building a client with `McpTestClient.create().withTransport('modern').buildAndConnect()` for streamable HTTP + strict sessions",
+                "Using `server.info.baseUrl` to wire the client to the correct address",
+                "Separate `disconnect()` / `stop()` calls for client and server teardown",
+                "The `toBeError()` and `toHaveTextContent()` custom matchers"
+              ]
+            },
+            {
+              "name": "tool-call-and-error-e2e",
+              "description": "Test successful tool calls and verify that invalid inputs produce proper error responses over the full MCP protocol.",
+              "level": "intermediate",
+              "tags": ["testing", "e2e", "handler", "tool", "call", "error"],
+              "features": [
+                "Calling tools via `client.callTool()` and asserting success with `toBeSuccessful()`",
+                "Verifying text content in tool results with `result.content[0].text`",
+                "Checking `result.isError` for invalid input and nonexistent tool calls",
+                "Testing edge cases like zero values and missing optional parameters"
+              ]
+            }
+          ]
         },
         {
           "name": "test-tool-unit",
-          "description": "Unit test a ToolContext execute method with mock context, inputs, and Zod schema validation"
+          "description": "Unit test a ToolContext execute method with mock context, inputs, and Zod schema validation",
+          "examples": [
+            {
+              "name": "basic-tool-test",
+              "description": "Test a simple tool's `execute()` method with mock context and verify the output.",
+              "level": "basic",
+              "tags": ["testing", "tool", "unit"],
+              "features": [
+                "Creating a mock `ToolContext` with all required methods (`get`, `tryGet`, `fail`, `mark`, `notify`, `respondProgress`)",
+                "Assigning the mock context to the tool instance via `Object.assign`",
+                "Testing multiple input scenarios including edge cases (negatives, zero)"
+              ]
+            },
+            {
+              "name": "schema-validation-test",
+              "description": "Validate that a tool's Zod input schema rejects invalid data before `execute()` is called.",
+              "level": "intermediate",
+              "tags": ["testing", "tool", "unit", "schema", "validation"],
+              "features": [
+                "Testing the Zod input schema separately from the `execute()` method",
+                "Using `safeParse()` to check validation results without throwing",
+                "Covering rejection of wrong types, missing fields, and empty input",
+                "Combining schema validation with execution to test the full flow"
+              ]
+            },
+            {
+              "name": "tool-error-handling-test",
+              "description": "Test that a tool throws the correct MCP error classes with proper error codes and JSON-RPC error shapes.",
+              "level": "advanced",
+              "tags": ["testing", "json-rpc", "tool", "unit", "error", "handling"],
+              "features": [
+                "Verifying specific error classes with `toBeInstanceOf` instead of just checking that something threw",
+                "Asserting MCP error codes from `MCP_ERROR_CODES` constants",
+                "Validating the JSON-RPC error shape returned by `toJsonRpcError()`",
+                "Testing both success and failure paths in the same suite"
+              ]
+            }
+          ]
         }
       ]
     }

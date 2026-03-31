@@ -465,24 +465,11 @@ type ResourceArgumentCompleter = (partial: string) => Promise<ResourceCompletion
 
 ### How to Implement
 
-Override the `getArgumentCompleter(argName)` method in your `ResourceContext` subclass. Return a completer function for argument names you support, or `null` for unknown arguments.
+There are two approaches, both with full DI access via `this.get()`:
 
-```typescript
-getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
-  if (argName === 'myParam') {
-    return async (partial) => {
-      // Search or filter based on partial input
-      const matches = await findMatches(partial);
-      return { values: matches, total: matches.length };
-    };
-  }
-  return null;
-}
-```
+#### Convention-Based (Preferred)
 
-### Complete Example
-
-A user profile template resource that autocompletes user IDs by searching a user service:
+Define a method named `${argName}Completer` on your `ResourceContext` subclass. The framework discovers it automatically -- no override needed.
 
 ```typescript
 @ResourceTemplate({
@@ -497,14 +484,53 @@ class UserProfileResource extends ResourceContext<{ userId: string }> {
     return { id: user.id, name: user.name, email: user.email };
   }
 
-  getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
-    if (argName === 'userId') {
-      return async (partial) => {
-        const users = await this.get(UserService).search(partial);
-        return { values: users.map((u) => u.id), total: users.length };
-      };
-    }
-    return null;
+  async userIdCompleter(partial: string): Promise<ResourceCompletionResult> {
+    const users = await this.get(UserService).search(partial);
+    return { values: users.map((u) => u.id), total: users.length };
+  }
+}
+```
+
+The naming convention is `${argName}Completer` -- for a URI parameter `{accountName}`, define `accountNameCompleter(partial)`.
+
+#### Override-Based
+
+Override the `getArgumentCompleter(argName)` method for dynamic dispatch across multiple parameters. Return a completer function for argument names you support, or `null` for unknown arguments.
+
+```typescript
+getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
+  if (argName === 'userId') {
+    return async (partial) => {
+      const users = await this.get(UserService).search(partial);
+      return { values: users.map((u) => u.id), total: users.length };
+    };
+  }
+  return null;
+}
+```
+
+Convention-based completers take priority when both are present on the same class.
+
+### Complete Example
+
+A user profile template resource that autocompletes user IDs using the convention-based approach:
+
+```typescript
+@ResourceTemplate({
+  name: 'user-profile',
+  description: 'User profile by ID',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+})
+class UserProfileResource extends ResourceContext<{ userId: string }> {
+  async execute(uri: string, params: { userId: string }) {
+    const user = await this.get(UserService).findById(params.userId);
+    return { id: user.id, name: user.name, email: user.email };
+  }
+
+  async userIdCompleter(partial: string): Promise<ResourceCompletionResult> {
+    const users = await this.get(UserService).search(partial);
+    return { values: users.map((u) => u.id), total: users.length };
   }
 }
 ```
@@ -540,8 +566,9 @@ When a client requests completions for the `userId` parameter with a partial str
 
 ### Autocompletion
 
-- [ ] Template resources with dynamic params implement `getArgumentCompleter()`
+- [ ] Template resources with dynamic params define `${argName}Completer` methods or override `getArgumentCompleter()`
 - [ ] Completer returns `{ values, total?, hasMore? }` matching the partial input
+- [ ] Completers use `this.get()` for DI (both convention and override patterns support full DI)
 
 ## Troubleshooting
 
@@ -552,6 +579,16 @@ When a client requests completions for the `userId` parameter with a partial str
 | Template parameters are empty                    | Using `@Resource` instead of `@ResourceTemplate` | Switch to `@ResourceTemplate` with `uriTemplate` containing `{param}` placeholders |
 | Binary content is garbled                        | Returning raw buffer in `text` field             | Use `blob: buffer.toString('base64')` instead of `text` for binary data            |
 | `this.get(TOKEN)` throws DependencyNotFoundError | Provider not registered in scope                 | Register provider in `providers` array of `@App` or `@FrontMcp`                    |
+
+## Examples
+
+| Example                                                                               | Level        | Description                                                                          |
+| ------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------ |
+| [`basic-static-resource`](../examples/create-resource/basic-static-resource.md)       | Basic        | A static resource that exposes application configuration at a fixed URI.             |
+| [`binary-and-multi-content`](../examples/create-resource/binary-and-multi-content.md) | Advanced     | A resource serving binary blob data and a resource returning multiple content items. |
+| [`parameterized-template`](../examples/create-resource/parameterized-template.md)     | Intermediate | A resource template with typed URI parameters and argument autocompletion.           |
+
+> See all examples in [`examples/create-resource/`](../examples/create-resource/)
 
 ## Reference
 

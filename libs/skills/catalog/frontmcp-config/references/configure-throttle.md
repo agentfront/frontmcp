@@ -228,6 +228,16 @@ done
 | `X-Forwarded-For` header ignored                | `ipFilter.trustProxy` not enabled or `trustedProxyDepth` too low         | Set `trustProxy: true` and adjust `trustedProxyDepth` to match your proxy chain |
 | Rate limit resets not aligned with expectations | `windowMs` misunderstood as a sliding window when it is a fixed window   | The window is fixed; all counters reset at the end of each `windowMs` interval  |
 
+## Examples
+
+| Example                                                                                      | Level        | Description                                                                                 |
+| -------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| [`distributed-redis-throttle`](../examples/configure-throttle/distributed-redis-throttle.md) | Advanced     | Configure Redis-backed rate limiting for multi-instance deployments behind a load balancer. |
+| [`per-tool-rate-limit`](../examples/configure-throttle/per-tool-rate-limit.md)               | Intermediate | Override server defaults with per-tool rate limits and concurrency caps.                    |
+| [`server-level-rate-limit`](../examples/configure-throttle/server-level-rate-limit.md)       | Basic        | Configure global rate limits and IP filtering at the server level.                          |
+
+> See all examples in [`examples/configure-throttle/`](../examples/configure-throttle/)
+
 ## Reference
 
 - [Guard Configuration Docs](https://docs.agentfront.dev/frontmcp/servers/guard)

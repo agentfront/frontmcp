@@ -9,7 +9,7 @@ priority: 10
 visibility: both
 license: Apache-2.0
 metadata:
-  docs: https://docs.agentfront.dev/frontmcp/configuration/overview
+  docs: https://docs.agentfront.dev/frontmcp/fundamentals/overview
 ---
 
 # FrontMCP Configuration Router
@@ -152,5 +152,5 @@ Server (@FrontMcp)     ← Global defaults
 
 ## Reference
 
-- [Configuration Overview](https://docs.agentfront.dev/frontmcp/configuration/overview)
+- [FrontMCP Overview](https://docs.agentfront.dev/frontmcp/fundamentals/overview)
 - Related skills: `configure-transport`, `configure-http`, `configure-throttle`, `configure-elicitation`, `configure-auth`, `configure-session`, `setup-redis`, `setup-sqlite`

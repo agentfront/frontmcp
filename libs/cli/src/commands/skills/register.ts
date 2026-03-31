@@ -68,8 +68,16 @@ export function registerSkillsCommands(program: Command): void {
     .argument('<nameOrPath>', 'Skill name or skill:filepath (e.g., frontmcp-dev:references/create-tool.md)')
     .argument('[reference]', 'Reference name to read (e.g., create-tool)')
     .option('--refs', 'List all available references for the skill')
-    .action(async (name: string, reference: string | undefined, options: { refs?: boolean }) => {
-      const { readSkill } = await import('./read.js');
-      await readSkill(name, { reference, listRefs: options.refs });
-    });
+    .option('--examples [reference]', 'List examples for the skill, optionally filtered by reference name')
+    .action(
+      async (name: string, reference: string | undefined, options: { refs?: boolean; examples?: boolean | string }) => {
+        const { readSkill } = await import('./read.js');
+        await readSkill(name, {
+          reference,
+          listRefs: options.refs,
+          listExamples: options.examples === true ? true : undefined,
+          examplesForRef: typeof options.examples === 'string' ? options.examples : undefined,
+        });
+      },
+    );
 }

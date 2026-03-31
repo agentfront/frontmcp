@@ -91,3 +91,13 @@ describe('OAuth Flow', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                     | Level        | Description                                                                                               |
+| --------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| [`oauth-flow-test`](../examples/test-auth/oauth-flow-test.md)               | Advanced     | Use `MockOAuthServer` to simulate an OAuth identity provider and test the authorization code flow.        |
+| [`role-based-access-test`](../examples/test-auth/role-based-access-test.md) | Intermediate | Verify that tools enforce role-based access by testing admin and user tokens against protected endpoints. |
+| [`token-factory-test`](../examples/test-auth/token-factory-test.md)         | Basic        | Use `TestTokenFactory` to create tokens and verify authenticated and unauthenticated requests.            |
+
+> See all examples in [`examples/test-auth/`](../examples/test-auth/)

@@ -639,3 +639,13 @@ describe('AuditLogPlugin', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                                            | Level        | Description                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent-and-plugin`](../examples/example-knowledge-base/agent-and-plugin.md)                       | Advanced     | Shows an autonomous research agent with inner tools and configurable depth, and a plugin that hooks into tool execution for audit logging.    |
+| [`multi-app-composition`](../examples/example-knowledge-base/multi-app-composition.md)             | Basic        | Shows how to compose multiple apps (Ingestion, Search, Research) into a single server with shared providers, plugins, and agent registration. |
+| [`vector-search-and-resources`](../examples/example-knowledge-base/vector-search-and-resources.md) | Intermediate | Shows a semantic search tool with embedding generation and a resource template for retrieving documents by ID using URI parameters.           |
+
+> See all examples in [`examples/example-knowledge-base/`](../examples/example-knowledge-base/)

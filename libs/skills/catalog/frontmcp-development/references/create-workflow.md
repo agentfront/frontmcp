@@ -750,6 +750,16 @@ class CiServer {}
 | Webhook trigger does not fire                       | Missing or mismatched `webhook.secret`                         | Ensure `webhook.secret` matches the sender's HMAC secret and `webhook.path` is correct             |
 | Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms        | Increase `timeout` at the workflow level or add per-step `timeout` overrides                       |
 
+## Examples
+
+| Example                                                                                       | Level        | Description                                                                                                                       |
+| --------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-deploy-pipeline`](../examples/create-workflow/basic-deploy-pipeline.md)               | Basic        | A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.                             |
+| [`parallel-validation-pipeline`](../examples/create-workflow/parallel-validation-pipeline.md) | Intermediate | A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.                |
+| [`webhook-triggered-workflow`](../examples/create-workflow/webhook-triggered-workflow.md)     | Advanced     | A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder. |
+
+> See all examples in [`examples/create-workflow/`](../examples/create-workflow/)
+
 ## Reference
 
 - [Workflows Documentation](https://docs.agentfront.dev/frontmcp/servers/workflows)

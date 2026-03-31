@@ -492,6 +492,16 @@ Run with: `nx serve <projectName>`.
 | Build fails with "Cannot find module '@frontmcp/sdk'" | Dependencies were not installed after scaffolding                                      | Run `yarn install` (or `npm install` / `pnpm install`) in the project root                             |
 | Vercel deploy returns 500 on `/mcp` endpoint          | Transport not set to `modern` or storage not configured for Vercel KV                  | Set `transport: { protocol: 'modern' }` and `redis: { provider: 'vercel-kv' }` in `@FrontMcp` metadata |
 
+## Examples
+
+| Example                                                                             | Level        | Description                                                                                                                                           |
+| ----------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-node-server`](../examples/setup-project/basic-node-server.md)               | Basic        | Scaffold a minimal FrontMCP server with one app and one tool, running on Node.js with HTTP transport.                                                 |
+| [`cli-scaffold-with-flags`](../examples/setup-project/cli-scaffold-with-flags.md)   | Basic        | Use the `frontmcp create` CLI to scaffold a complete project non-interactively with explicit flags for deployment target, Redis, and package manager. |
+| [`vercel-serverless-server`](../examples/setup-project/vercel-serverless-server.md) | Intermediate | Configure a FrontMCP server for Vercel deployment with Vercel KV storage and modern transport protocol.                                               |
+
+> See all examples in [`examples/setup-project/`](../examples/setup-project/)
+
 ## Reference
 
 - [Getting Started Quickstart](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)

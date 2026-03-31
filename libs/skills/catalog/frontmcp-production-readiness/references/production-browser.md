@@ -44,3 +44,13 @@ Target-specific checklist for publishing FrontMCP as a browser-compatible SDK.
 - [ ] Code splitting is used for large optional features
 - [ ] No synchronous operations that block the main thread
 - [ ] WebSocket/SSE connections handle reconnection gracefully
+
+## Examples
+
+| Example                                                                                  | Level        | Description                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`browser-bundle-config`](../examples/production-browser/browser-bundle-config.md)       | Basic        | Shows how to configure package.json for browser-compatible SDK distribution with ESM/CJS/UMD entry points, TypeScript declarations, and CDN support.       |
+| [`cross-platform-crypto`](../examples/production-browser/cross-platform-crypto.md)       | Intermediate | Shows how to use `@frontmcp/utils` for cross-platform crypto operations that work in both browser and Node.js, and how to avoid Node.js-only APIs.         |
+| [`security-and-performance`](../examples/production-browser/security-and-performance.md) | Advanced     | Shows how to ensure no secrets are bundled in browser code, configure CSP headers on the server, optimize bundle size, and avoid blocking the main thread. |
+
+> See all examples in [`examples/production-browser/`](../examples/production-browser/)
