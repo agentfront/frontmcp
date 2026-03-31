@@ -24,6 +24,7 @@ export function buildDataInjectionScript(options: {
   const { toolName, input, output, structuredContent } = options;
 
   const lines = [
+    `window.__mcpAppsEnabled = true;`,
     `window.__mcpToolName = ${safeJsonForScript(toolName)};`,
     `window.__mcpToolInput = ${safeJsonForScript(input ?? null)};`,
     `window.__mcpToolOutput = ${safeJsonForScript(output ?? null)};`,

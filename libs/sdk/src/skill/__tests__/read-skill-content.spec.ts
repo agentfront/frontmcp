@@ -8,7 +8,7 @@
 import 'reflect-metadata';
 import { SkillInstance, createSkillInstance } from '../skill.instance';
 import { SkillKind, SkillRecord, SkillMetadata, EntryOwnerRef } from '../../common';
-import type { SkillContent, SkillReferenceInfo, SkillExampleInfo } from '../../common/interfaces';
+import type { SkillReferenceInfo, SkillExampleInfo } from '../../common/interfaces';
 import ProviderRegistry from '../../provider/provider.registry';
 import { Scope } from '../../scope';
 

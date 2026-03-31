@@ -116,6 +116,23 @@ export function generateBridgeIIFE(options: IIFEGeneratorOptions = {}): string {
   // Expose global
   parts.push('window.FrontMcpBridge = bridge;');
 
+  // Inject loading indicator into #root while esm.sh modules download.
+  // This runs synchronously in <head>, so #root may not exist yet.
+  // Use DOMContentLoaded or direct access if body is already available.
+  parts.push('function __showLoading() {');
+  parts.push('  var root = document.getElementById("root");');
+  parts.push('  if (root && !root.hasChildNodes()) {');
+  parts.push(
+    '    root.innerHTML = \'<div style="display:flex;align-items:center;justify-content:center;padding:2rem;color:#6b7280;font-family:system-ui,sans-serif"><div style="text-align:center"><div style="width:24px;height:24px;border:2px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:__spin 0.6s linear infinite;margin:0 auto 12px"></div><div style="font-size:0.875rem">Loading widget...</div></div></div><style>@keyframes __spin{to{transform:rotate(360deg)}}</style>\';',
+  );
+  parts.push('  }');
+  parts.push('}');
+  parts.push('if (document.readyState === "loading") {');
+  parts.push('  document.addEventListener("DOMContentLoaded", __showLoading);');
+  parts.push('} else {');
+  parts.push('  __showLoading();');
+  parts.push('}');
+
   // End IIFE
   parts.push('})();');
 
@@ -313,7 +330,20 @@ var ExtAppsAdapter = {
       self.handleMessage(context, event);
     });
 
-    return self.performHandshake(context);
+    // Defer handshake until after the document is fully loaded.
+    // During document.write() (used by the sandbox proxy), postMessage
+    // from the inner iframe may not reach the parent. Waiting for DOMContentLoaded
+    // or using setTimeout ensures the iframe is fully attached.
+    return new Promise(function(resolve) {
+      function doHandshake() {
+        self.sendHandshake(context).then(resolve, resolve);
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', doHandshake);
+      } else {
+        setTimeout(doHandshake, 0);
+      }
+    });
   },
   handleMessage: function(context, event) {
     if (!this.isOriginTrusted(event.origin)) return;
@@ -407,32 +437,67 @@ var ExtAppsAdapter = {
       window.parent.postMessage({ jsonrpc: '2.0', id: id, method: method, params: params }, targetOrigin);
     });
   },
-  performHandshake: function(context) {
+  sendHandshake: function(context) {
+    // Send ui/initialize using '*' as target origin since TOFU hasn't
+    // been established yet. The response from the host will establish
+    // TOFU trust via handleMessage → isOriginTrusted.
     var self = this;
+    var id = ++this.requestId;
     var params = {
       appInfo: { name: 'FrontMCP Widget', version: '1.0.0' },
       appCapabilities: { tools: { listChanged: false } },
       protocolVersion: '2024-11-05'
     };
 
-    return this.sendRequest('ui/initialize', params).then(function(result) {
-      self.hostCapabilities = result.hostCapabilities || {};
-      self.capabilities = Object.assign({}, self.capabilities, {
-        canCallTools: Boolean(self.hostCapabilities.serverToolProxy),
-        canSendMessages: true,
-        canOpenLinks: Boolean(self.hostCapabilities.openLink),
-        supportsDisplayModes: true
-      });
-      if (result.hostContext) {
-        Object.assign(context.hostContext, result.hostContext);
-      }
+    return new Promise(function(resolve, reject) {
+      var timeout = setTimeout(function() {
+        delete self.pendingRequests[id];
+        // Handshake timeout is non-fatal — notifications may still arrive
+        resolve();
+      }, 10000);
+
+      self.pendingRequests[id] = {
+        resolve: function(result) {
+          self.hostCapabilities = result.hostCapabilities || {};
+          self.capabilities = Object.assign({}, self.capabilities, {
+            canCallTools: Boolean(self.hostCapabilities.serverTools || self.hostCapabilities.serverToolProxy),
+            canSendMessages: true,
+            canOpenLinks: Boolean(self.hostCapabilities.openLinks || self.hostCapabilities.openLink),
+            supportsDisplayModes: true
+          });
+          if (result.hostContext) {
+            Object.assign(context.hostContext, result.hostContext);
+          }
+          // Send ui/notifications/initialized to tell the host the view is ready.
+          // Per MCP Apps spec, the host waits for this before sending tool-result.
+          var targetOrigin = self.trustedOrigin || '*';
+          window.parent.postMessage({
+            jsonrpc: '2.0',
+            method: 'ui/notifications/initialized',
+            params: {}
+          }, targetOrigin);
+          resolve();
+        },
+        reject: function(err) { resolve(); }, // Non-fatal
+        timeout: timeout
+      };
+
+      // Use '*' for the initial handshake — we don't know the host origin yet.
+      // The sandbox proxy will relay this to the host.
+      window.parent.postMessage({
+        jsonrpc: '2.0', id: id, method: 'ui/initialize', params: params
+      }, '*');
     });
   },
+  performHandshake: function(context) {
+    return this.sendHandshake(context);
+  },
   callTool: function(context, name, args) {
-    if (!this.hostCapabilities.serverToolProxy) {
+    if (!this.hostCapabilities.serverTools && !this.hostCapabilities.serverToolProxy) {
       return Promise.reject(new Error('Server tool proxy not supported'));
     }
-    return this.sendRequest('ui/callServerTool', { name: name, arguments: args });
+    // Per ext-apps spec: use standard MCP method 'tools/call' (not 'ui/callServerTool')
+    return this.sendRequest('tools/call', { name: name, arguments: args || {} });
   },
   sendMessage: function(context, content) {
     return this.sendRequest('ui/message', { content: content });

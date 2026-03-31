@@ -25,7 +25,7 @@ export interface RenderToolTemplateOptions {
   input: unknown;
   /** Tool output */
   output: unknown;
-  /** The template (function, string, or React component) */
+  /** The template — FileSource, function, or string */
   template: unknown;
   /** Platform type for rendering decisions */
   platformType?: string;
@@ -49,16 +49,39 @@ export interface RenderToolTemplateResult {
   meta: Record<string, unknown>;
 }
 
+function buildCspConfig(resolver?: ImportResolver) {
+  const cspResourceDomains = ['https://esm.sh'];
+  const cspConnectDomains = ['https://esm.sh'];
+  if (resolver && 'overrides' in resolver) {
+    const overrides = (resolver as { overrides?: Record<string, string> }).overrides;
+    if (overrides) {
+      for (const url of Object.values(overrides)) {
+        try {
+          const origin = new URL(url).origin;
+          if (!cspResourceDomains.includes(origin)) cspResourceDomains.push(origin);
+          if (!cspConnectDomains.includes(origin)) cspConnectDomains.push(origin);
+        } catch {
+          // skip invalid URLs
+        }
+      }
+    }
+  }
+  return { resourceDomains: cspResourceDomains, connectDomains: cspConnectDomains };
+}
+
 /**
  * Render a tool template into HTML.
  *
- * - Function templates: Calls `template(ctx)` with createTemplateHelpers()
- * - React components: Delegates to renderComponent() from uipack/component
- * - String templates: Wraps in buildShell()
- * - Auto-detect: wraps detected content (chart, mermaid, PDF, HTML)
+ * Supported template types:
+ * - FileSource object `{ file: './widget.tsx' }` — bundled with esbuild, React loaded from esm.sh
+ * - HTML template builder function `(ctx) => string`
+ * - Static HTML/MDX string
+ *
+ * React function references (`template: MyComponent`) are NOT supported for bundling.
+ * Use `template: { file: './my-component.tsx' }` instead.
  */
 export function renderToolTemplate(options: RenderToolTemplateOptions): RenderToolTemplateResult {
-  const { toolName, input, output, template, platformType, resolver } = options;
+  const { toolName, input, output, template, resolver } = options;
   const uiType = detectUIType(template);
 
   const shellConfig = {
@@ -74,40 +97,16 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
   let size = 0;
 
   if (typeof template === 'object' && template !== null && 'file' in template) {
-    // FileSource object — delegate to component renderer
-    const cspResourceDomains = ['https://esm.sh'];
-    const cspConnectDomains = ['https://esm.sh'];
-
-    // Extract origins from resolver override URLs for CSP
-    if (resolver && 'overrides' in resolver) {
-      const overrides = (resolver as { overrides?: Record<string, string> }).overrides;
-      if (overrides) {
-        for (const url of Object.values(overrides)) {
-          try {
-            const origin = new URL(url).origin;
-            if (!cspResourceDomains.includes(origin)) cspResourceDomains.push(origin);
-            if (!cspConnectDomains.includes(origin)) cspConnectDomains.push(origin);
-          } catch {
-            // skip invalid URLs
-          }
-        }
-      }
-    }
-
-    const cspConfig = {
-      resourceDomains: cspResourceDomains,
-      connectDomains: cspConnectDomains,
-    };
+    // FileSource object — delegate to component renderer (esbuild + esm.sh import map)
+    const cspConfig = buildCspConfig(resolver);
     const result = renderComponent({ source: template as FileSource }, { ...shellConfig, csp: cspConfig });
     html = result.html;
     hash = result.hash;
     size = result.size;
   } else if (typeof template === 'function') {
-    // Check if it's a React component
     if (uiType === 'react') {
-      // React functional component passed as function reference.
-      // Cannot be called directly (hooks require React render context).
-      // Generate a client-side shell with data injection for widget mounting.
+      // React function reference — cannot be bundled (no source file available).
+      // Generate a shell with data injection; the bridge handles data delivery.
       const shellResult = buildShell('<div id="root"></div>', shellConfig);
       html = shellResult.html;
       hash = shellResult.hash;

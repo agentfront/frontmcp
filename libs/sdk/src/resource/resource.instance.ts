@@ -100,9 +100,16 @@ export class ResourceInstance<
   }
 
   /**
-   * Get an argument completer from the resource class prototype.
-   * Returns a completer function if the resource class overrides getArgumentCompleter,
-   * or null if no completer is available.
+   * Get an argument completer for a template parameter.
+   *
+   * Supports two patterns (both have full DI access via `this.get()`):
+   *
+   * 1. **Convention-based (preferred):** Define `${argName}Completer` on the resource class.
+   *    Example: `async accountNameCompleter(partial: string) { ... }`
+   *
+   * 2. **Override-based:** Override `getArgumentCompleter(argName)` on the resource class.
+   *
+   * Convention-based completers take priority over override-based ones.
    */
   override getArgumentCompleter(
     argName: string,
@@ -113,13 +120,60 @@ export class ResourceInstance<
         | Promise<{ values: string[]; total?: number; hasMore?: boolean }>
         | { values: string[]; total?: number; hasMore?: boolean })
     | null {
-    const cls = this.record.provide;
-    if (typeof cls === 'function' && cls.prototype && typeof cls.prototype.getArgumentCompleter === 'function') {
-      // Call the method on the prototype — it doesn't need instance state for static completions
-      // For dynamic completions that need DI, the method should be overridden at instance level
-      return cls.prototype.getArgumentCompleter.call(cls.prototype, argName);
+    const record = this.record as ResourceRecord | ResourceTemplateRecord;
+
+    // Function-based resources don't have class-based completers
+    if (record.kind === ResourceKind.FUNCTION || record.kind === ResourceTemplateKind.FUNCTION) {
+      return null;
     }
-    return null;
+
+    const cls = record.provide;
+    if (typeof cls !== 'function' || !cls.prototype) {
+      return null;
+    }
+
+    // Check for convention-based completer: ${argName}Completer method on the class
+    const conventionMethodName = `${argName}Completer`;
+    const hasConventionMethod = typeof cls.prototype[conventionMethodName] === 'function';
+
+    // Check for override-based completer: getArgumentCompleter overridden from base class
+    const hasOverride =
+      typeof cls.prototype.getArgumentCompleter === 'function' &&
+      cls.prototype.getArgumentCompleter !== ResourceContext.prototype.getArgumentCompleter;
+
+    if (!hasConventionMethod && !hasOverride) {
+      return null;
+    }
+
+    // Create a real ResourceContext instance with proper DI (same pattern as create())
+    const providers = this._providers;
+    const scope = providers.getActiveScope();
+    const logger = scope.logger;
+    const metadata = this.getMetadata();
+    const uri = this.isTemplate ? (this.uriTemplate ?? '') : (this.uri ?? '');
+
+    const resourceCtorArgs: ResourceCtorArgs<Record<string, string>> = {
+      metadata,
+      uri,
+      params: {} as Record<string, string>,
+      providers,
+      logger,
+      authInfo: {},
+    };
+
+    const instance = new (cls as unknown as new (args: ResourceCtorArgs) => ResourceContext)(resourceCtorArgs);
+
+    if (hasConventionMethod) {
+      return (partial: string) =>
+        (
+          instance as unknown as Record<
+            string,
+            (partial: string) => Promise<{ values: string[]; total?: number; hasMore?: boolean }>
+          >
+        )[conventionMethodName](partial);
+    }
+
+    return instance.getArgumentCompleter(argName);
   }
 
   /**

@@ -95,11 +95,36 @@ const McpBridgeContext = createContext<McpBridgeContextValue | null>(null);
  * ```
  */
 export function McpBridgeProvider({ children, config, onReady, onError }: McpBridgeProviderProps) {
-  const [bridge, setBridge] = useState<FrontMcpBridgeInterface | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Detect existing IIFE bridge by shape (typeof callTool === 'function').
+  // Don't check .initialized — the IIFE handshake runs asynchronously after
+  // DOMContentLoaded, but <script type="module"> runs BEFORE DOMContentLoaded.
+  const existingBridge = (globalThis as Record<string, unknown>)['FrontMcpBridge'] as
+    | FrontMcpBridgeInterface
+    | undefined;
+  const hasExisting = !!(existingBridge && typeof existingBridge.callTool === 'function');
+
+  const [bridge, setBridge] = useState<FrontMcpBridgeInterface | null>(hasExisting ? existingBridge : null);
+  const [loading, setLoading] = useState(!hasExisting);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    if (hasExisting) {
+      // IIFE bridge exists. If already initialized, fire onReady.
+      // Otherwise wait for 'bridge:ready' event (handshake in progress).
+      if (existingBridge.initialized) {
+        onReady?.(existingBridge as FrontMcpBridgeInterface);
+      } else {
+        const handler = () => {
+          onReady?.(existingBridge as FrontMcpBridgeInterface);
+          // Force re-render so hooks see updated capabilities
+          setBridge(existingBridge as FrontMcpBridgeInterface);
+        };
+        window.addEventListener('bridge:ready', handler, { once: true });
+        return () => window.removeEventListener('bridge:ready', handler);
+      }
+      return;
+    }
+
     let mounted = true;
     let bridgeInstance: FrontMcpBridge | null = null;
 
@@ -127,6 +152,7 @@ export function McpBridgeProvider({ children, config, onReady, onError }: McpBri
 
     return () => {
       mounted = false;
+      // Only dispose if we created the instance (not the shared IIFE bridge)
       if (bridgeInstance) {
         bridgeInstance.dispose();
       }

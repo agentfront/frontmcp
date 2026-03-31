@@ -99,7 +99,8 @@ export class ToolUIRegistry {
 
   async renderAndRegisterAsync(options: Record<string, unknown>): Promise<{ meta: Record<string, unknown> }> {
     const toolName = options['toolName'] as string;
-    const template = (options['uiConfig'] as Record<string, unknown> | undefined)?.['template'];
+    const uiConfig = options['uiConfig'] as Record<string, unknown> | undefined;
+    const template = uiConfig?.['template'];
     const input = options['input'] ?? {};
     const output = options['output'] ?? {};
     const platformType = options['platformType'] as string | undefined;
