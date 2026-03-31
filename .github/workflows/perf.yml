@@ -80,12 +80,20 @@ jobs:
 
       - name: Run performance tests (chunk ${{ matrix.chunk.index }})
         run: |
+          FAILED=0
           IFS=',' read -ra PROJECTS <<< "${{ matrix.chunk.projects }}"
           for project in "${PROJECTS[@]}"; do
             echo "::group::Running perf tests for $project"
-            yarn nx run "$project":test:perf || true
+            if ! yarn nx run "$project":test:perf; then
+              echo "::error::Performance tests failed for $project"
+              FAILED=$((FAILED + 1))
+            fi
             echo "::endgroup::"
           done
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED project(s) had performance test failures"
+            exit 1
+          fi
         env:
           NODE_OPTIONS: "--expose-gc --max-old-space-size=4096"
           REDIS_HOST: localhost

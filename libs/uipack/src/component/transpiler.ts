@@ -100,7 +100,7 @@ if (__root) {
   // 4. Listen for tool:result CustomEvent
   window.addEventListener('tool:result', function(e) {
     var d = e.detail;
-    if (d) __render(d.structuredContent || d.content || d);
+    if (d) __render(d.structuredContent !== undefined ? d.structuredContent : d.content !== undefined ? d.content : d);
   });
 }`;
 

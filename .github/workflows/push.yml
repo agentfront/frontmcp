@@ -159,7 +159,7 @@ jobs:
 
           # Chunk projects into groups of 4 to reduce API rate limit pressure
           CHUNK_SIZE=4
-          CHUNKS=$(echo $PROJECTS_JSON | jq -c "[_nwise($CHUNK_SIZE)] | to_entries | map({index: .key, projects: .value})")
+          CHUNKS=$(echo $PROJECTS_JSON | jq -c --argjson n "$CHUNK_SIZE" '[range(0; length; $n) as $i | .[$i:$i+$n]] | to_entries | map({index: .key, projects: .value})')
           CHUNK_COUNT=$(echo $CHUNKS | jq 'length')
           echo "Created $CHUNK_COUNT chunks of up to $CHUNK_SIZE projects each"
           echo "chunks=$CHUNKS" >> $GITHUB_OUTPUT
@@ -189,7 +189,7 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: dist
 
@@ -245,7 +245,7 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: dist
 
@@ -312,13 +312,13 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Download unit coverage artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: unit-coverage
           path: coverage/unit/
 
       - name: Download E2E coverage artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: e2e-coverage-chunk-*
           path: coverage/e2e/
