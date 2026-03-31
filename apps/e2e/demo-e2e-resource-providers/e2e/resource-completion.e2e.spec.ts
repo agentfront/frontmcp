@@ -205,9 +205,10 @@ test.describe('Resource Argument Completion E2E', () => {
 
       expect(response.error).toBeUndefined();
       expect(response.result).toBeDefined();
-      expect(response.result.completion).toBeDefined();
-      expect(Array.isArray(response.result.completion.values)).toBe(true);
-      expect(response.result.completion.values).toContain('electronics');
+      const completion = response.result?.completion;
+      expect(completion).toBeDefined();
+      expect(Array.isArray(completion?.values)).toBe(true);
+      expect(completion?.values).toContain('electronics');
     });
 
     test('should support repeated completion requests (stateless)', async ({ mcp }) => {

@@ -69,16 +69,16 @@ import { McpBridgeProvider } from '@frontmcp/ui/react';
 var __root = document.getElementById('root');
 if (__root) {
   var __reactRoot = createRoot(__root);
-  function __hasData(v) { return v !== undefined && v !== null; }
+  function __hasData(v) { return v !== undefined; }
   function __render(output) {
     __reactRoot.render(
       __h(McpBridgeProvider, null,
-        __h(${componentName}, { output: output !== undefined && output !== null ? output : null, input: window.__mcpToolInput, loading: !__hasData(output) })
+        __h(${componentName}, { output: output !== undefined ? output : null, input: window.__mcpToolInput, loading: !__hasData(output) })
       )
     );
   }
   // Render immediately (component shows loading state until data arrives)
-  __render(null);
+  __render(undefined);
   // 1. Try OpenAI SDK (toolOutput set synchronously or after load)
   if (typeof window !== 'undefined') {
     if (!window.openai) window.openai = {};
@@ -96,12 +96,13 @@ if (__root) {
   var __bridge = window.FrontMcpBridge;
   if (__bridge && typeof __bridge.onToolResult === 'function') {
     __bridge.onToolResult(function(data) { __render(data); });
+  } else {
+    // 4. Fallback: listen for tool:result CustomEvent (standalone / MCP Inspector)
+    window.addEventListener('tool:result', function(e) {
+      var d = e.detail;
+      if (d) __render(d.structuredContent !== undefined ? d.structuredContent : d.content !== undefined ? d.content : d);
+    });
   }
-  // 4. Listen for tool:result CustomEvent
-  window.addEventListener('tool:result', function(e) {
-    var d = e.detail;
-    if (d) __render(d.structuredContent !== undefined ? d.structuredContent : d.content !== undefined ? d.content : d);
-  });
 }`;
 
   const loader: BuildOptions['loader'] = {
