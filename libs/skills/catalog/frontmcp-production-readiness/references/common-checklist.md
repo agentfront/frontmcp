@@ -154,3 +154,13 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 | Synchronous file I/O      | Use async operations from `@frontmcp/utils` |
 | Hardcoded secrets         | Use environment variables                   |
 | Unbounded caching         | Set TTL on all caches                       |
+
+## Examples
+
+| Example                                                                              | Level        | Description                                                                                                                |
+| ------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| [`caching-and-performance`](../examples/common-checklist/caching-and-performance.md) | Advanced     | Shows how to configure caching with TTL, optimize responses, and manage memory with proper provider lifecycle cleanup.     |
+| [`observability-setup`](../examples/common-checklist/observability-setup.md)         | Intermediate | Shows how to configure structured logging, error handling with MCP error codes, and monitoring integration for production. |
+| [`security-hardening`](../examples/common-checklist/security-hardening.md)           | Basic        | Shows how to configure authentication, CORS, input validation, and rate limiting for a production FrontMCP server.         |
+
+> See all examples in [`examples/common-checklist/`](../examples/common-checklist/)

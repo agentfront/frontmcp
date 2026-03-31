@@ -727,6 +727,16 @@ class DeployServiceSkill extends SkillContext {}
 | Instructions are empty at runtime            | `{ file: './path.md' }` path is relative to wrong directory | Use a path relative to the skill file's location, not the project root                 |
 | Parameters not visible to AI client          | `parameters` defined as a plain object instead of an array  | Use array format: `[{ name, description, type, required }]`                            |
 
+## Examples
+
+| Example                                                                                           | Level        | Description                                                                                                          |
+| ------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| [`basic-tool-orchestration`](../examples/create-skill-with-tools/basic-tool-orchestration.md)     | Basic        | A skill that guides an AI client through a deploy workflow using referenced MCP tools.                               |
+| [`directory-skill-with-tools`](../examples/create-skill-with-tools/directory-skill-with-tools.md) | Advanced     | A directory-based skill loaded with `skillDir()`, plus a class-based skill using Agent Skills spec metadata fields.  |
+| [`incident-response-skill`](../examples/create-skill-with-tools/incident-response-skill.md)       | Intermediate | A skill that uses object-style tool references with purpose descriptions and required flags, plus strict validation. |
+
+> See all examples in [`examples/create-skill-with-tools/`](../examples/create-skill-with-tools/)
+
 ## Reference
 
 - [Skills Documentation](https://docs.agentfront.dev/frontmcp/servers/skills)

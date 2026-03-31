@@ -357,6 +357,16 @@ You should see session keys like `mcp:session:<session-id>`.
 | Vercel KV `401 Unauthorized`          | Missing or invalid KV tokens in the environment     | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
 | Sessions lost after container restart | Redis running without append-only persistence       | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
 
+## Examples
+
+| Example                                                                                   | Level        | Description                                                                                         |
+| ----------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------- |
+| [`docker-redis-local-dev`](../examples/setup-redis/docker-redis-local-dev.md)             | Basic        | Provision Redis with Docker Compose and connect a FrontMCP server for local session storage.        |
+| [`hybrid-vercel-kv-with-pubsub`](../examples/setup-redis/hybrid-vercel-kv-with-pubsub.md) | Advanced     | Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions. |
+| [`vercel-kv-serverless`](../examples/setup-redis/vercel-kv-serverless.md)                 | Intermediate | Configure a FrontMCP server with Vercel KV as the session store for serverless deployment.          |
+
+> See all examples in [`examples/setup-redis/`](../examples/setup-redis/)
+
 ## Reference
 
 - [Redis Setup Docs](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)

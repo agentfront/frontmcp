@@ -437,6 +437,16 @@ This creates the prompt file, spec file, and updates barrel exports.
 | Type error on `execute()` return                  | Returning plain string instead of `GetPromptResult` | Wrap return in `{ messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }` |
 | `this.get(TOKEN)` throws DependencyNotFoundError  | Provider not registered in scope                    | Register provider in `providers` array of `@App` or `@FrontMcp`                           |
 
+## Examples
+
+| Example                                                                             | Level        | Description                                                                                          |
+| ----------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| [`basic-prompt`](../examples/create-prompt/basic-prompt.md)                         | Basic        | A simple prompt that generates a structured code review message from user-provided arguments.        |
+| [`dynamic-rag-prompt`](../examples/create-prompt/dynamic-rag-prompt.md)             | Advanced     | A prompt that queries a knowledge base via DI to build context-aware messages at runtime.            |
+| [`multi-turn-debug-session`](../examples/create-prompt/multi-turn-debug-session.md) | Intermediate | A prompt that uses alternating user/assistant messages to guide a structured debugging conversation. |
+
+> See all examples in [`examples/create-prompt/`](../examples/create-prompt/)
+
 ## Reference
 
 - [Prompts Documentation](https://docs.agentfront.dev/frontmcp/servers/prompts)

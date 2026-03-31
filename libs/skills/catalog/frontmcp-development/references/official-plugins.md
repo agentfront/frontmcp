@@ -731,6 +731,16 @@ class ProductionServer {}
 | Dashboard returns 404             | Plugin is in beta and auto-disabled in production (`NODE_ENV=production`)        | Dashboard is unstable — avoid in production. For dev: set `enabled: true` explicitly |
 | Approval webhook times out        | Callback URL not reachable from the external approval service                    | Verify `callbackPath` is publicly accessible and matches the webhook configuration   |
 
+## Examples
+
+| Example                                                                                            | Level        | Description                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`cache-and-feature-flags`](../examples/official-plugins/cache-and-feature-flags.md)               | Intermediate | Demonstrates combining the Cache plugin for tool result caching with the Feature Flags plugin for gating tools behind flags.                                                 |
+| [`production-multi-plugin-setup`](../examples/official-plugins/production-multi-plugin-setup.md)   | Advanced     | Demonstrates a production-ready server configuration combining CodeCall, Remember, Approval, Cache, and Feature Flags plugins with Redis storage and external flag services. |
+| [`remember-plugin-session-memory`](../examples/official-plugins/remember-plugin-session-memory.md) | Basic        | Demonstrates installing the Remember plugin and using `this.remember` in tools to store and retrieve session memory.                                                         |
+
+> See all examples in [`examples/official-plugins/`](../examples/official-plugins/)
+
 ## Reference
 
 - [Plugins Overview Documentation](https://docs.agentfront.dev/frontmcp/plugins/overview)

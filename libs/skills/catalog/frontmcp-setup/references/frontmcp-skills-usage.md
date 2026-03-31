@@ -274,6 +274,15 @@ frontmcp skills list --category guides       # End-to-end examples and best prac
 | Skill content is outdated after a CLI upgrade         | Static installs are point-in-time snapshots of the catalog          | Re-run `frontmcp skills install <name> --provider claude` to fetch the latest version                     |
 | Too many tokens consumed by agent context             | All skills installed statically, inflating the system prompt        | Uninstall rarely-used skills and switch to dynamic search (`frontmcp skills search`) for occasional needs |
 
+## Examples
+
+| Example                                                                                         | Level        | Description                                                                                   |
+| ----------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| [`bundle-presets-scaffolding`](../examples/frontmcp-skills-usage/bundle-presets-scaffolding.md) | Intermediate | Use `--skills` flag during project creation to install a skill bundle preset.                 |
+| [`install-and-search-skills`](../examples/frontmcp-skills-usage/install-and-search-skills.md)   | Basic        | Install skills statically for Claude Code and use dynamic CLI search for on-demand discovery. |
+
+> See all examples in [`examples/frontmcp-skills-usage/`](../examples/frontmcp-skills-usage/)
+
 ## Reference
 
 - **Docs:** <https://docs.agentfront.dev/frontmcp/servers/skills>

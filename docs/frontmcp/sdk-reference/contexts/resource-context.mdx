@@ -309,6 +309,51 @@ class DocsApp {}
 export default class DocServer {}
 ```
 
+## Argument Autocompletion
+
+Resource templates can provide autocompletion for their URI parameters. There are two approaches, both with full DI access via `this.get()`:
+
+### Convention-Based (Preferred)
+
+Define a method named `${argName}Completer` on your resource class. The framework discovers it automatically.
+
+```typescript
+@ResourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+})
+class UserProfileResource extends ResourceContext<{ userId: string }> {
+  async execute(uri: string, params: { userId: string }) {
+    const user = await this.get(UserService).findById(params.userId);
+    return { id: user.id, name: user.name };
+  }
+
+  async userIdCompleter(partial: string) {
+    const users = await this.get(UserService).search(partial);
+    return { values: users.map(u => u.id), total: users.length };
+  }
+}
+```
+
+### Override-Based
+
+Override `getArgumentCompleter(argName)` for dynamic dispatch across multiple parameters.
+
+```typescript
+getArgumentCompleter(argName: string): ResourceArgumentCompleter | null {
+  if (argName === 'userId') {
+    return async (partial) => {
+      const users = await this.get(UserService).search(partial);
+      return { values: users.map(u => u.id) };
+    };
+  }
+  return null;
+}
+```
+
+Convention-based completers take priority when both are present.
+
 ## Related
 
 <CardGroup cols={2}>

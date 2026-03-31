@@ -64,3 +64,13 @@ const result = await client.callTool('my_tool', { input: 'value' });
 await client.close();
 await server.dispose();
 ```
+
+## Examples
+
+| Example                                                                               | Level        | Description                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-sdk-lifecycle`](../examples/production-node-sdk/basic-sdk-lifecycle.md)       | Basic        | Shows the complete lifecycle of a FrontMCP SDK package used as an embedded client: initialization, tool invocation, and proper cleanup.                                           |
+| [`multi-instance-cleanup`](../examples/production-node-sdk/multi-instance-cleanup.md) | Advanced     | Shows how multiple SDK instances can coexist without conflicts, and how to implement proper cleanup to prevent memory leaks from event listeners, timers, and provider resources. |
+| [`package-json-config`](../examples/production-node-sdk/package-json-config.md)       | Intermediate | Shows the correct package.json configuration for publishing a FrontMCP SDK package with CJS + ESM entry points, peer dependencies, and proper file inclusions.                    |
+
+> See all examples in [`examples/production-node-sdk/`](../examples/production-node-sdk/)

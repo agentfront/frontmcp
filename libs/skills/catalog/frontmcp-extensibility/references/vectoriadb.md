@@ -282,6 +282,16 @@ export class KnowledgeBaseProvider {
 - [ ] Storage adapter configured if persistence is needed
 - [ ] Search tool injects provider via `this.get(TOKEN)`
 
+## Examples
+
+| Example                                                                                          | Level        | Description                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`product-catalog-search`](../examples/vectoriadb/product-catalog-search.md)                     | Advanced     | Shows advanced VectoriaDB usage with typed document metadata, batch operations, filtered search by multiple criteria, and batch indexing of a product catalog. |
+| [`semantic-search-with-persistence`](../examples/vectoriadb/semantic-search-with-persistence.md) | Intermediate | Shows how to use `VectoriaDB` for semantic search with transformer models, filtered search, and `FileStorageAdapter` for persistence across restarts.          |
+| [`tfidf-keyword-search`](../examples/vectoriadb/tfidf-keyword-search.md)                         | Basic        | Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMCP provider, with field weights and index building.                             |
+
+> See all examples in [`examples/vectoriadb/`](../examples/vectoriadb/)
+
 ## Reference
 
 - [VectoriaDB Documentation](https://docs.agentfront.dev/vectoriadb/get-started/welcome)

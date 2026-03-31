@@ -258,6 +258,16 @@ node -e "const { create } = require('./dist/my-sdk.cjs.js'); ..."
 | `connectOpenAI()` format wrong  | Using raw `listTools()` instead of platform client | Use `connectOpenAI()` which formats tools for OpenAI automatically  |
 | Bundle includes `@frontmcp/*`   | Build config missing externals                     | Verify `--target sdk` is set; it marks `@frontmcp/*` as external    |
 
+## Examples
+
+| Example                                                                         | Level        | Description                                                                                                |
+| ------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------- |
+| [`connect-openai`](../examples/build-for-sdk/connect-openai.md)                 | Intermediate | Use `connectOpenAI()` to get tools formatted for OpenAI's function-calling API.                            |
+| [`create-flat-config`](../examples/build-for-sdk/create-flat-config.md)         | Basic        | Spin up an in-memory FrontMCP server from a flat config object using `create()`.                           |
+| [`multi-platform-connect`](../examples/build-for-sdk/multi-platform-connect.md) | Advanced     | Connect the same FrontMCP server to multiple LLM platforms using platform-specific `connect*()` functions. |
+
+> See all examples in [`examples/build-for-sdk/`](../examples/build-for-sdk/)
+
 ## Reference
 
 - **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/direct-client>

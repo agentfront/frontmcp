@@ -211,6 +211,16 @@ Skills inside `src/skills/` are `@Skill` classes that are part of your applicati
 | Build target error             | Invalid `--target` flag value                                 | Use `node`, `vercel`, `lambda`, or `cloudflare` as the target value      |
 | Catalog skills not loaded      | Skills placed in `src/skills/` instead of top-level `skills/` | Move catalog `SKILL.md` directories to the top-level `skills/` directory |
 
+## Examples
+
+| Example                                                                                                  | Level        | Description                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| [`dev-workflow-commands`](../examples/project-structure-standalone/dev-workflow-commands.md)             | Basic        | Run the standard development workflow for a standalone FrontMCP project: dev server, build, and tests.                      |
+| [`feature-folder-organization`](../examples/project-structure-standalone/feature-folder-organization.md) | Intermediate | Organize a growing standalone project into domain-specific feature folders instead of flat type-based directories.          |
+| [`minimal-standalone-layout`](../examples/project-structure-standalone/minimal-standalone-layout.md)     | Basic        | Set up the canonical file structure for a standalone FrontMCP project with one app, one tool, and the required entry point. |
+
+> See all examples in [`examples/project-structure-standalone/`](../examples/project-structure-standalone/)
+
 ## Reference
 
 - [Quickstart Documentation](https://docs.agentfront.dev/frontmcp/getting-started/quickstart)

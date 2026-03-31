@@ -177,6 +177,15 @@ frontmcp dev
 | User sees raw JSON instead of a form              | The MCP client renders the `requestedSchema` as raw data rather than a form | Use standard JSON Schema types (`boolean`, `string`, `enum`) that clients can render as UI controls |
 | Tool hangs indefinitely waiting for user response | No timeout configured and user never responds                               | Implement a timeout or cancellation mechanism in the tool logic to handle non-responsive users      |
 
+## Examples
+
+| Example                                                                                               | Level        | Description                                                                         |
+| ----------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------- |
+| [`basic-confirmation-gate`](../examples/configure-elicitation/basic-confirmation-gate.md)             | Basic        | Request user confirmation before executing a destructive action.                    |
+| [`distributed-elicitation-redis`](../examples/configure-elicitation/distributed-elicitation-redis.md) | Intermediate | Configure elicitation with Redis storage for multi-instance production deployments. |
+
+> See all examples in [`examples/configure-elicitation/`](../examples/configure-elicitation/)
+
 ## Reference
 
 - [Elicitation Docs](https://docs.agentfront.dev/frontmcp/servers/elicitation)

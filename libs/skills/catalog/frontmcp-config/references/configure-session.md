@@ -204,6 +204,16 @@ const pubsubStore = createPubsubStore({
 | Session key collisions between servers | Multiple servers share the same Redis instance and `keyPrefix` | Set a unique `keyPrefix` per server (e.g., `billing-mcp:session:`, `api-mcp:session:`)         |
 | Pub/sub not working with Vercel KV     | Vercel KV does not support pub/sub operations                  | Add a separate `pubsub` config pointing to a real Redis instance                               |
 
+## Examples
+
+| Example                                                                               | Level        | Description                                                                      |
+| ------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| [`multi-server-key-prefix`](../examples/configure-session/multi-server-key-prefix.md) | Intermediate | Use unique key prefixes when multiple FrontMCP servers share one Redis instance. |
+| [`redis-session-store`](../examples/configure-session/redis-session-store.md)         | Basic        | Configure Redis-backed session storage for production deployments.               |
+| [`vercel-kv-session`](../examples/configure-session/vercel-kv-session.md)             | Intermediate | Configure Vercel KV for session storage in serverless Vercel deployments.        |
+
+> See all examples in [`examples/configure-session/`](../examples/configure-session/)
+
 ## Reference
 
 - [Session Storage Docs](https://docs.agentfront.dev/frontmcp/deployment/redis-setup)

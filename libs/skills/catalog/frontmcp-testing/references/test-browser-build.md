@@ -60,3 +60,12 @@ test('browser client can call a tool', async ({ page }) => {
   expect(result).toContain('8');
 });
 ```
+
+## Examples
+
+| Example                                                                                    | Level    | Description                                                                                      |
+| ------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------ |
+| [`browser-bundle-validation`](../examples/test-browser-build/browser-bundle-validation.md) | Basic    | Verify that the browser build produces a valid bundle without Node.js-only module references.    |
+| [`playwright-browser-test`](../examples/test-browser-build/playwright-browser-test.md)     | Advanced | Use Playwright to test a browser-based MCP client that loads and calls tools from an MCP server. |
+
+> See all examples in [`examples/test-browser-build/`](../examples/test-browser-build/)

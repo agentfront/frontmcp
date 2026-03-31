@@ -42,21 +42,24 @@ export async function scanSkillResources(dirPath: string): Promise<ScanResult> {
   const scriptsPath = joinPath(dirPath, 'scripts');
   const referencesPath = joinPath(dirPath, 'references');
   const assetsPath = joinPath(dirPath, 'assets');
+  const examplesPath = joinPath(dirPath, 'examples');
 
   const checks = await Promise.all([
     checkDirectory(scriptsPath),
     checkDirectory(referencesPath),
     checkDirectory(assetsPath),
+    checkDirectory(examplesPath),
     fileExists(joinPath(dirPath, 'SKILL.md')),
   ]);
 
   if (checks[0]) resources.scripts = scriptsPath;
   if (checks[1]) resources.references = referencesPath;
   if (checks[2]) resources.assets = assetsPath;
+  if (checks[3]) resources.examples = examplesPath;
 
   return {
     resources,
-    hasSkillMd: checks[3],
+    hasSkillMd: checks[4],
   };
 }
 
@@ -108,7 +111,7 @@ export async function loadSkillDirectory(dirPath: string, logger?: FrontMcpLogge
 
   // Scan for resource directories
   const { resources } = await scanSkillResources(dirPath);
-  const hasResources = resources.scripts || resources.references || resources.assets;
+  const hasResources = resources.scripts || resources.references || resources.assets || resources.examples;
   if (hasResources) {
     partialMetadata.resources = resources;
   }
