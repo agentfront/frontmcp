@@ -11,13 +11,14 @@
 
 import { SearchSkillsTool } from './search-skills.tool';
 import { LoadSkillsTool } from './load-skills.tool';
+import { ReadSkillContentTool } from './read-skill-content.tool';
 
-export { SearchSkillsTool, LoadSkillsTool };
+export { SearchSkillsTool, LoadSkillsTool, ReadSkillContentTool };
 
 /**
  * Get all skill-related tools.
  * Used by the SDK to register skill tools when skills are available.
  */
 export function getSkillTools() {
-  return [SearchSkillsTool, LoadSkillsTool];
+  return [SearchSkillsTool, LoadSkillsTool, ReadSkillContentTool];
 }

@@ -245,6 +245,16 @@ Use `nx graph` to visualize the dependency graph and ensure no circular imports 
 | Nx cache returns stale results           | Source files changed but Nx hash did not detect it      | Run `nx reset` to clear the cache, then rebuild                            |
 | Server cannot find app export            | App barrel `index.ts` does not export the `@App` class  | Add the app class to the barrel export in `apps/<name>/src/index.ts`       |
 
+## Examples
+
+| Example                                                                                    | Level        | Description                                                                                                                    |
+| ------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`nx-generator-scaffolding`](../examples/project-structure-nx/nx-generator-scaffolding.md) | Basic        | Use `@frontmcp/nx` generators to scaffold tools, resources, and providers within an app, with automatic barrel export updates. |
+| [`nx-workspace-with-apps`](../examples/project-structure-nx/nx-workspace-with-apps.md)     | Basic        | Scaffold an Nx monorepo with two apps and a server that composes them into a single gateway.                                   |
+| [`shared-library-usage`](../examples/project-structure-nx/shared-library-usage.md)         | Intermediate | Create a shared library in an Nx monorepo and use it from multiple apps to avoid cross-app imports.                            |
+
+> See all examples in [`examples/project-structure-nx/`](../examples/project-structure-nx/)
+
 ## Reference
 
 - [Nx Plugin Documentation](https://docs.agentfront.dev/frontmcp/nx-plugin/overview)

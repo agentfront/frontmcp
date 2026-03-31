@@ -50,3 +50,13 @@ Target-specific checklist for deploying FrontMCP to Cloudflare Workers.
 - [ ] Secrets set via `wrangler secret put`
 - [ ] Deploy with `wrangler deploy` (not manual upload)
 - [ ] Tail logs: `wrangler tail` for production debugging
+
+## Examples
+
+| Example                                                                                           | Level        | Description                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`durable-objects-state`](../examples/production-cloudflare/durable-objects-state.md)             | Advanced     | Shows how to use Cloudflare Durable Objects for stateful coordination alongside the stateless Workers runtime, with KV for cache and R2 for blob storage. |
+| [`workers-runtime-constraints`](../examples/production-cloudflare/workers-runtime-constraints.md) | Intermediate | Shows how to write tools that are compatible with the Cloudflare Workers runtime: no Node.js APIs, no eval, only async I/O, and using Web APIs.           |
+| [`wrangler-config`](../examples/production-cloudflare/wrangler-config.md)                         | Basic        | Shows how to configure `wrangler.toml` with correct routes, KV bindings for session storage, and secret management for a FrontMCP Cloudflare Worker.      |
+
+> See all examples in [`examples/production-cloudflare/`](../examples/production-cloudflare/)

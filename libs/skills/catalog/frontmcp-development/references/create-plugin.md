@@ -500,6 +500,16 @@ plugins/
 | `ProviderNotRegisteredError` for context extension   | Token in `contextExtensions` not in `providers`  | Ensure the token used in `contextExtensions[].token` is registered in the plugin's `providers` array. Use `{ provide: MyToken, useClass: MyService }` or list the class directly. If using `dynamicProviders()`, return the provider there |
 | Provider works in tools but not in context extension | Using class reference instead of Symbol token    | Create a typed `Token<T> = Symbol('name')` in `symbols.ts`, use it in both `providers` and `contextExtensions`. Direct class references can fail if not constructable without dependencies                                                 |
 
+## Examples
+
+| Example                                                                                       | Level        | Description                                                                                                               |
+| --------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-plugin-with-provider`](../examples/create-plugin/basic-plugin-with-provider.md)       | Basic        | A minimal plugin that contributes an injectable service via the `providers` and `exports` arrays.                         |
+| [`configurable-dynamic-plugin`](../examples/create-plugin/configurable-dynamic-plugin.md)     | Advanced     | A plugin that accepts runtime configuration via `DynamicPlugin` and extends decorator metadata with custom fields.        |
+| [`plugin-with-context-extension`](../examples/create-plugin/plugin-with-context-extension.md) | Intermediate | A plugin that adds a `this.auditLog` property to all execution contexts using context extensions and module augmentation. |
+
+> See all examples in [`examples/create-plugin/`](../examples/create-plugin/)
+
 ## Reference
 
 - [Plugin System Documentation](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)

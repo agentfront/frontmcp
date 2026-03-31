@@ -60,3 +60,12 @@ Checklist for publishing FrontMCP as a one-shot CLI binary — runs a command, p
 - [ ] No secrets logged to stderr
 - [ ] No hardcoded paths (use `os.homedir()`, `os.tmpdir()`)
 - [ ] No writes to unexpected locations
+
+## Examples
+
+| Example                                                                                                 | Level        | Description                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`binary-build-config`](../examples/production-cli-binary/binary-build-config.md)                       | Basic        | Shows how to configure a FrontMCP CLI binary with correct package.json `bin` field, shebang, stdio transport, and npm distribution settings. |
+| [`stdio-transport-error-handling`](../examples/production-cli-binary/stdio-transport-error-handling.md) | Intermediate | Shows how to handle stdin/stdout transport correctly, implement proper exit codes, and handle edge cases like EOF and broken pipes.          |
+
+> See all examples in [`examples/production-cli-binary/`](../examples/production-cli-binary/)

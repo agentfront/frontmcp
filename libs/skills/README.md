@@ -4,7 +4,7 @@ Curated skills catalog for FrontMCP projects. Skills are SKILL.md-based instruct
 
 ## Structure
 
-The catalog uses a **router skill model** — 6 domain-scoped router skills, each containing a SKILL.md with a routing table and a `references/` directory with detailed reference files.
+The catalog uses a **router skill model** — domain-scoped router skills, each containing a SKILL.md with a routing table, a `references/` directory with detailed topic guides, and optional `examples/` directories for standalone example files.
 
 ```text
 catalog/
@@ -28,6 +28,8 @@ frontmcp-development/
     ├── create-agent.md
     └── ...
 ```
+
+Example files live under `examples/<reference-name>/` and are the canonical source of example metadata used by `skills-manifest.json` and the reference `## Examples` tables.
 
 ## SKILL.md Frontmatter
 
@@ -68,6 +70,32 @@ Step-by-step markdown instructions here...
 2. Create a new `.md` reference file in that router's `references/` directory
 3. Add a routing entry in the router's `SKILL.md` routing table
 4. Run `nx test skills` to validate
+
+## Adding Example Files
+
+Each reference may have a matching `examples/<reference-name>/` directory with standalone example files.
+
+```yaml
+---
+name: example-name
+reference: parent-reference-name
+level: basic
+description: One sentence describing the exact scenario this example covers.
+tags: [keyword1, keyword2, keyword3]
+features:
+  - Concrete API or pattern this example demonstrates
+  - Another concrete behavior shown in the code
+---
+```
+
+Rules:
+
+- `name` must match the filename without `.md`
+- `reference` must match the parent examples directory
+- `description` is the canonical one-line summary reused by the manifest and reference table
+- `tags` are searchable keywords for the example
+- `features` are the concrete APIs or patterns demonstrated by the code
+- The first paragraph under the H1 should semantically match `description`
 
 ## Manifest Entry
 
@@ -125,3 +153,4 @@ Tests verify:
 - Names match between manifest and frontmatter
 - `hasResources` flags are accurate
 - Targets, categories, and bundles use valid values
+- Example metadata stays in sync across example files, reference tables, and the manifest

@@ -607,6 +607,16 @@ class DataServer {}
 | Job times out unexpectedly | Default 5-minute timeout too short              | Set `timeout` in `@Job` to a higher value (e.g., `600000` for 10 minutes)    |
 | Permission denied error    | User lacks required roles or scopes             | Verify user has one of the `roles` and all `scopes` defined in `permissions` |
 
+## Examples
+
+| Example                                                                  | Level        | Description                                                                                                        |
+| ------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [`basic-report-job`](../examples/create-job/basic-report-job.md)         | Basic        | A minimal job that generates a report with progress tracking and structured output.                                |
+| [`job-with-permissions`](../examples/create-job/job-with-permissions.md) | Advanced     | A data export job with declarative permission controls, plus a function-style job for simple tasks.                |
+| [`job-with-retry`](../examples/create-job/job-with-retry.md)             | Intermediate | A job that syncs data from an external API with automatic retry, exponential backoff, and batch progress tracking. |
+
+> See all examples in [`examples/create-job/`](../examples/create-job/)
+
 ## Reference
 
 - [Jobs Documentation](https://docs.agentfront.dev/frontmcp/servers/jobs)

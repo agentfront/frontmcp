@@ -15,8 +15,8 @@ import {
   SkillInstructionSource,
   normalizeToolRef,
 } from '../common';
-import { SkillContent, SkillReferenceInfo } from '../common/interfaces';
-import { readFile, readdir, fileExists } from '@frontmcp/utils';
+import { SkillContent, SkillReferenceInfo, SkillExampleInfo } from '../common/interfaces';
+import { readFile, readdir, fileExists, stat } from '@frontmcp/utils';
 import { InvalidSkillError, SkillInstructionFetchError, InvalidInstructionSourceError } from '../errors';
 import { stripFrontmatter } from './skill-md-parser';
 
@@ -171,11 +171,15 @@ export function buildSkillContent(
   metadata: SkillMetadata,
   instructions: string,
   resolvedReferences?: SkillReferenceInfo[],
+  resolvedExamples?: SkillExampleInfo[],
 ): SkillContent {
   // Append references routing table to instructions if references exist
   let finalInstructions = instructions;
   if (resolvedReferences && resolvedReferences.length > 0) {
     finalInstructions += buildReferencesTable(resolvedReferences);
+  }
+  if (resolvedExamples && resolvedExamples.length > 0) {
+    finalInstructions += buildExamplesTable(resolvedExamples);
   }
 
   return {
@@ -192,6 +196,7 @@ export function buildSkillContent(
     allowedTools: metadata.allowedTools,
     resources: metadata.resources,
     resolvedReferences,
+    resolvedExamples,
   };
 }
 
@@ -207,6 +212,103 @@ function buildReferencesTable(refs: SkillReferenceInfo[]): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Build a markdown examples table to append to skill instructions.
+ * Groups examples by their parent reference.
+ */
+function buildExamplesTable(examples: SkillExampleInfo[]): string {
+  const lines: string[] = [
+    '',
+    '',
+    '## Examples',
+    '',
+    '| Example | Reference | Level | Description |',
+    '| ------- | --------- | ----- | ----------- |',
+  ];
+
+  for (const ex of examples) {
+    lines.push(`| \`${ex.name}\` | \`${ex.reference}\` | ${ex.level} | ${ex.description} |`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Scan an examples/ directory for .md files organized by reference subdirectories.
+ * Parses YAML frontmatter for name, description, reference, and level.
+ *
+ * @param examplesDir - Absolute path to the examples/ directory
+ * @returns Array of resolved example info, or undefined if no examples
+ */
+export async function resolveExamples(examplesDir: string): Promise<SkillExampleInfo[] | undefined> {
+  if (!(await fileExists(examplesDir))) return undefined;
+
+  let refDirs: string[];
+  try {
+    refDirs = (await readdir(examplesDir)).sort();
+  } catch {
+    return undefined;
+  }
+
+  const examples: SkillExampleInfo[] = [];
+
+  for (const refDir of refDirs) {
+    const refPath = `${examplesDir}/${refDir}`;
+    try {
+      const s = await stat(refPath);
+      if (!s.isDirectory()) continue;
+    } catch {
+      continue;
+    }
+
+    let files: string[];
+    try {
+      files = (await readdir(refPath)).filter((f: string) => f.endsWith('.md')).sort();
+    } catch {
+      continue;
+    }
+
+    for (const file of files) {
+      const content = await readFile(`${refPath}/${file}`, 'utf-8');
+      const filenameWithoutExt = file.replace(/\.md$/, '');
+
+      let name = filenameWithoutExt;
+      let description = '';
+      let reference = refDir;
+      let level = 'basic';
+
+      // Parse frontmatter
+      const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      if (fmMatch) {
+        const fmLines = fmMatch[1].split(/\r?\n/);
+        for (const line of fmLines) {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx === -1) continue;
+          const key = line.slice(0, colonIdx).trim();
+          const val = line
+            .slice(colonIdx + 1)
+            .trim()
+            .replace(/^["']|["']$/g, '');
+          if (key === 'name' && val) name = val;
+          if (key === 'description' && val) description = val;
+          if (key === 'reference' && val) reference = val;
+          if (key === 'level' && val) level = val;
+        }
+      }
+
+      // Fallback description from first paragraph
+      if (!description) {
+        const body = fmMatch ? content.substring(content.indexOf('---', 3) + 3).trim() : content.trim();
+        description = extractFirstParagraph(body);
+      }
+
+      examples.push({ name, description, reference, level, filename: `${refDir}/${file}` });
+    }
+  }
+
+  return examples.length > 0 ? examples : undefined;
 }
 
 /**

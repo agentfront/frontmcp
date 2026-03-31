@@ -292,3 +292,13 @@ describe('Weather Server E2E', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                                     | Level        | Description                                                                                                                            |
+| ------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [`server-and-app-setup`](../examples/example-weather-api/server-and-app-setup.md)           | Basic        | Shows the server entry point, app registration, and static resource for a beginner FrontMCP weather API server.                        |
+| [`unit-and-e2e-tests`](../examples/example-weather-api/unit-and-e2e-tests.md)               | Intermediate | Shows how to write unit tests for tools by mocking context methods, and E2E tests using `McpTestClient` and `TestServer`.              |
+| [`weather-tool-with-schemas`](../examples/example-weather-api/weather-tool-with-schemas.md) | Basic        | Shows how to create a tool with Zod input and output schemas, use `this.fetch()` for HTTP calls, and handle errors with `this.fail()`. |
+
+> See all examples in [`examples/example-weather-api/`](../examples/example-weather-api/)

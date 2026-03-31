@@ -49,3 +49,12 @@ apiKey: 'sk-...';
 | Anthropic | `claude-opus-4-20250514`   | Most capable         |
 | OpenAI    | `gpt-4o`                   | General purpose      |
 | OpenAI    | `gpt-4o-mini`              | Fast, cost-effective |
+
+## Examples
+
+| Example                                                                       | Level | Description                                                                |
+| ----------------------------------------------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| [`anthropic-config`](../examples/create-agent-llm-config/anthropic-config.md) | Basic | Configuring an agent with the Anthropic provider and common model options. |
+| [`openai-config`](../examples/create-agent-llm-config/openai-config.md)       | Basic | Configuring an agent with the OpenAI provider and different model options. |
+
+> See all examples in [`examples/create-agent-llm-config/`](../examples/create-agent-llm-config/)

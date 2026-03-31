@@ -52,6 +52,27 @@ export interface SkillInstallConfig {
 }
 
 /**
+ * Complexity level for a reference example.
+ */
+export type SkillExampleLevel = 'basic' | 'intermediate' | 'advanced';
+
+/**
+ * Metadata for a single example file within a reference's examples/ directory.
+ */
+export interface SkillReferenceExampleEntry {
+  /** Example name — matches filename without extension */
+  name: string;
+  /** Short description of what the example demonstrates */
+  description: string;
+  /** Complexity level */
+  level: SkillExampleLevel;
+  /** Searchable tags for the example */
+  tags: string[];
+  /** Concrete APIs or patterns the example demonstrates */
+  features: string[];
+}
+
+/**
  * Metadata for a single reference file within a skill's references/ directory.
  * Extracted from YAML frontmatter or inferred from the markdown heading.
  */
@@ -60,6 +81,8 @@ export interface SkillReferenceEntry {
   name: string;
   /** Short description from frontmatter or first paragraph */
   description: string;
+  /** Example files for this reference, located in examples/<reference-name>/ */
+  examples?: SkillReferenceExampleEntry[];
 }
 
 /**
@@ -102,6 +125,9 @@ export interface SkillManifest {
   /** All catalog skills */
   skills: SkillCatalogEntry[];
 }
+
+/** Valid example levels for manifest validation */
+export const VALID_EXAMPLE_LEVELS: readonly SkillExampleLevel[] = ['basic', 'intermediate', 'advanced'];
 
 /** Valid deployment targets for manifest validation */
 export const VALID_TARGETS: readonly SkillTarget[] = ['node', 'vercel', 'lambda', 'cloudflare', 'all'];

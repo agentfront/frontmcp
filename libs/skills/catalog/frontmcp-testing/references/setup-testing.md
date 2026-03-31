@@ -551,6 +551,16 @@ node scripts/fix-unused-imports.mjs feature/my-branch
 | Istanbul shows 0% coverage for async methods | TypeScript compilation source-map mismatch              | Known issue with `ts-jest` and certain async patterns; check `tsconfig.spec.json` source-map settings |
 | Auth E2E test returns 401 unexpectedly       | Token not set or expired                                | Call `mcp.setAuthToken(token)` before the tool call; use `auth.createToken()` with valid claims       |
 
+## Examples
+
+| Example                                                                                         | Level        | Description                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`fixture-based-e2e-test`](../examples/setup-testing/fixture-based-e2e-test.md)                 | Advanced     | Write E2E tests using the fixture API from `@frontmcp/testing` that manages server lifecycle automatically and uses MCP-specific custom matchers. |
+| [`jest-config-with-coverage`](../examples/setup-testing/jest-config-with-coverage.md)           | Basic        | Set up a Jest configuration file that enforces 95%+ coverage across all metrics for a FrontMCP library.                                           |
+| [`unit-test-tool-resource-prompt`](../examples/setup-testing/unit-test-tool-resource-prompt.md) | Intermediate | Write unit tests for the three core MCP primitives, verifying that outputs match the expected MCP response shapes.                                |
+
+> See all examples in [`examples/setup-testing/`](../examples/setup-testing/)
+
 ## Reference
 
 - [Testing Documentation](https://docs.agentfront.dev/frontmcp/testing/overview)

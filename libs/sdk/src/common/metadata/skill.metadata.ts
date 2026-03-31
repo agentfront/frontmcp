@@ -28,6 +28,8 @@ export interface SkillResources {
   references?: string;
   /** Path to assets directory */
   assets?: string;
+  /** Path to examples directory */
+  examples?: string;
 }
 
 /**
@@ -411,6 +413,7 @@ const skillResourcesSchema = z.object({
   scripts: z.string().optional(),
   references: z.string().optional(),
   assets: z.string().optional(),
+  examples: z.string().optional(),
 });
 
 export const skillMetadataSchema = z

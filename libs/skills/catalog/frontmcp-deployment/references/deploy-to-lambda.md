@@ -316,6 +316,16 @@ Lambda cold starts occur when a new execution environment is initialized. Strate
 | Redis connection refused from Lambda | Lambda not in the same VPC as ElastiCache                       | Place the Lambda in the ElastiCache VPC with appropriate security group rules                             |
 | `sam deploy` fails with IAM error    | Insufficient permissions for CloudFormation stack creation      | Ensure the deploying IAM user/role has `cloudformation:*`, `lambda:*`, `apigateway:*`, and `iam:PassRole` |
 
+## Examples
+
+| Example                                                                                | Level        | Description                                                                                           |
+| -------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| [`cdk-deployment`](../examples/deploy-to-lambda/cdk-deployment.md)                     | Advanced     | Deploy a FrontMCP server to AWS Lambda using CDK with provisioned concurrency and secrets management. |
+| [`lambda-handler-with-cors`](../examples/deploy-to-lambda/lambda-handler-with-cors.md) | Intermediate | Create a custom Lambda handler with an explicit API Gateway definition for CORS support.              |
+| [`sam-template-basic`](../examples/deploy-to-lambda/sam-template-basic.md)             | Basic        | Deploy a FrontMCP server to AWS Lambda with API Gateway using a SAM template.                         |
+
+> See all examples in [`examples/deploy-to-lambda/`](../examples/deploy-to-lambda/)
+
 ## Reference
 
 - **Docs:** https://docs.agentfront.dev/frontmcp/deployment/serverless

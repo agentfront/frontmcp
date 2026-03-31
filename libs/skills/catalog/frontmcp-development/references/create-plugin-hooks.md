@@ -369,6 +369,16 @@ Any stage can have `@Will`, `@Did`, `@Stage`, or `@Around` hooks.
 | Multiple hooks execute in wrong order         | Priorities not set or conflicting                | Set explicit `priority` values; higher numbers execute first                      |
 | `@Stage` replacement causes downstream errors | Return value shape does not match stage contract | Ensure the return matches what the next stage expects (e.g., MCP response format) |
 
+## Examples
+
+| Example                                                                                                               | Level        | Description                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-logging-plugin`](../examples/create-plugin-hooks/basic-logging-plugin.md)                                     | Basic        | Demonstrates a plugin that logs tool execution using `@Will` and `@Did` hook decorators from the pre-built `ToolHook` export.                                                                                 |
+| [`caching-with-around`](../examples/create-plugin-hooks/caching-with-around.md)                                       | Intermediate | Demonstrates wrapping tool execution with an `@Around` hook to implement result caching with TTL-based expiry.                                                                                                |
+| [`tool-level-hooks-and-stage-replacement`](../examples/create-plugin-hooks/tool-level-hooks-and-stage-replacement.md) | Advanced     | Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@Tool` class (scoped to that tool only), and using `@Stage` in a plugin to replace a flow stage entirely with a filtered mock. |
+
+> See all examples in [`examples/create-plugin-hooks/`](../examples/create-plugin-hooks/)
+
 ## Reference
 
 - [Plugin Hooks Documentation](https://docs.agentfront.dev/frontmcp/plugins/creating-plugins)

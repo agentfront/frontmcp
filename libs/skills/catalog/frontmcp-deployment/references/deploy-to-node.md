@@ -256,6 +256,16 @@ services:
 | Out of memory (OOM kill)     | Container memory limit is too low            | Increase the memory limit in Docker or set `NODE_OPTIONS="--max-old-space-size=1024"`       |
 | PM2 not restarting on reboot | Startup hook was not saved                   | Run `pm2 save && pm2 startup` to persist the process list across reboots                    |
 
+## Examples
+
+| Example                                                                                | Level        | Description                                                                                               |
+| -------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| [`docker-compose-with-redis`](../examples/deploy-to-node/docker-compose-with-redis.md) | Basic        | Deploy a FrontMCP server with Redis using Docker Compose for production.                                  |
+| [`pm2-with-nginx`](../examples/deploy-to-node/pm2-with-nginx.md)                       | Intermediate | Deploy a FrontMCP server on bare metal using PM2 for process management and NGINX for TLS termination.    |
+| [`resource-limits`](../examples/deploy-to-node/resource-limits.md)                     | Advanced     | Configure resource limits, health checks, and environment variables for a production FrontMCP deployment. |
+
+> See all examples in [`examples/deploy-to-node/`](../examples/deploy-to-node/)
+
 ## Reference
 
 - **Docs:** https://docs.agentfront.dev/frontmcp/deployment/production-build

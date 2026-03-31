@@ -45,3 +45,13 @@ describe('AddTool', () => {
   });
 });
 ```
+
+## Examples
+
+| Example                                                                              | Level        | Description                                                                                              |
+| ------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------- |
+| [`basic-tool-test`](../examples/test-tool-unit/basic-tool-test.md)                   | Basic        | Test a simple tool's `execute()` method with mock context and verify the output.                         |
+| [`schema-validation-test`](../examples/test-tool-unit/schema-validation-test.md)     | Intermediate | Validate that a tool's Zod input schema rejects invalid data before `execute()` is called.               |
+| [`tool-error-handling-test`](../examples/test-tool-unit/tool-error-handling-test.md) | Advanced     | Test that a tool throws the correct MCP error classes with proper error codes and JSON-RPC error shapes. |
+
+> See all examples in [`examples/test-tool-unit/`](../examples/test-tool-unit/)
