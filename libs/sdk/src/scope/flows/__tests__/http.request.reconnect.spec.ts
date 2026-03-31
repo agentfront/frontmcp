@@ -1,34 +1,34 @@
 /**
  * @file http.request.reconnect.spec.ts
- * @description Tests for the reconnect behavior when a client sends
- * an initialize request with a terminated session ID (issue #280).
+ * @description Tests for session termination and reconnect behavior per MCP spec.
  *
- * These tests verify that:
- * - Non-initialize requests with terminated sessions still get 404
- * - Initialize requests with terminated sessions are allowed through
- *   with session references cleared so a fresh session is created
+ * MCP 2025-11-25 §Session Management:
+ * - Server MUST respond with 404 to requests containing a terminated session ID
+ * - Client MUST start a new session by sending InitializeRequest without session ID
+ * - Initialize always creates a new session (parseInput ignores incoming session ID)
  */
 
 import { ServerRequestTokens } from '../../../common';
 
 describe('HTTP Request Flow - Reconnect with Terminated Session', () => {
   /**
-   * Simulates the reconnect logic from http.request.flow.ts router stage.
-   * This extracts the exact branching logic for isolated testing without
-   * requiring the full flow framework infrastructure.
+   * Simulates the terminated session check from http.request.flow.ts router stage.
+   * Per MCP spec: terminated sessions return 404, except initialize which is
+   * allowed through so parseInput can create a fresh session.
    */
   function simulateTerminatedSessionCheck(params: {
     isTerminated: boolean;
     requestBody: { method?: string } | undefined;
     authorization: { session?: { id: string; payload?: { protocol?: string } } };
     requestHeaders: Record<string, string>;
+    unmarkTerminated?: (sessionId: string) => void;
   }): {
     action: 'allowed' | 'blocked-404';
     sessionCleared: boolean;
     headerCleared: boolean;
     sessionIdTokenCleared: boolean;
   } {
-    const { isTerminated, requestBody, authorization, requestHeaders } = params;
+    const { isTerminated, requestBody, authorization, requestHeaders, unmarkTerminated } = params;
     const request: Record<string | symbol, unknown> = {
       headers: requestHeaders,
       body: requestBody,
@@ -40,17 +40,17 @@ describe('HTTP Request Flow - Reconnect with Terminated Session', () => {
       if (isTerminated) {
         const body = requestBody as { method?: string } | undefined;
         if (body?.method === 'initialize') {
-          // Reconnect path: clear session references
-          authorization.session = undefined;
-          delete request[ServerRequestTokens.sessionId];
-          delete (request['headers'] as Record<string, string>)['mcp-session-id'];
+          // Initialize with terminated session — unmark and allow through.
+          // Session refs kept intact so parseInput can reuse the session ID.
+          unmarkTerminated?.(authorization.session.id);
           return {
             action: 'allowed',
-            sessionCleared: authorization.session === undefined,
-            headerCleared: !('mcp-session-id' in (request['headers'] as Record<string, string>)),
-            sessionIdTokenCleared: !(ServerRequestTokens.sessionId in request),
+            sessionCleared: false,
+            headerCleared: false,
+            sessionIdTokenCleared: false,
           };
         } else {
+          // Non-initialize to terminated session → 404 per MCP spec
           return {
             action: 'blocked-404',
             sessionCleared: false,
@@ -69,7 +69,7 @@ describe('HTTP Request Flow - Reconnect with Terminated Session', () => {
     };
   }
 
-  describe('terminated session + initialize (reconnect)', () => {
+  describe('terminated session + initialize (re-initialization)', () => {
     it('should allow initialize request through when session is terminated', () => {
       const result = simulateTerminatedSessionCheck({
         isTerminated: true,
@@ -83,7 +83,7 @@ describe('HTTP Request Flow - Reconnect with Terminated Session', () => {
       expect(result.action).toBe('allowed');
     });
 
-    it('should clear authorization.session on reconnect', () => {
+    it('should keep session refs intact for parseInput to reuse session ID', () => {
       const authorization: { session?: { id: string; payload?: { protocol?: string } } } = {
         session: { id: 'terminated-session-id-12345', payload: { protocol: 'streamable-http' } },
       };
@@ -95,10 +95,14 @@ describe('HTTP Request Flow - Reconnect with Terminated Session', () => {
         requestHeaders: { 'mcp-session-id': 'terminated-session-id-12345' },
       });
 
-      expect(authorization.session).toBeUndefined();
+      // Session refs are kept — parseInput will reuse the session ID
+      expect(authorization.session).toBeDefined();
+      expect(authorization.session?.id).toBe('terminated-session-id-12345');
     });
 
-    it('should clear mcp-session-id header on reconnect', () => {
+    it('should unmark session from terminated set', () => {
+      const terminatedSessions = new Set(['terminated-session-id-12345']);
+
       const result = simulateTerminatedSessionCheck({
         isTerminated: true,
         requestBody: { method: 'initialize' },
@@ -106,43 +110,19 @@ describe('HTTP Request Flow - Reconnect with Terminated Session', () => {
           session: { id: 'terminated-session-id-12345' },
         },
         requestHeaders: { 'mcp-session-id': 'terminated-session-id-12345' },
+        unmarkTerminated: (id) => terminatedSessions.delete(id),
       });
 
-      expect(result.headerCleared).toBe(true);
-    });
-
-    it('should clear ServerRequestTokens.sessionId on reconnect', () => {
-      const result = simulateTerminatedSessionCheck({
-        isTerminated: true,
-        requestBody: { method: 'initialize' },
-        authorization: {
-          session: { id: 'terminated-session-id-12345' },
-        },
-        requestHeaders: { 'mcp-session-id': 'terminated-session-id-12345' },
-      });
-
-      expect(result.sessionIdTokenCleared).toBe(true);
+      expect(result.action).toBe('allowed');
+      expect(terminatedSessions.has('terminated-session-id-12345')).toBe(false);
     });
   });
 
-  describe('terminated session + non-initialize (blocked)', () => {
+  describe('terminated session + non-initialize (404 per MCP spec)', () => {
     it('should return 404 for tools/list with terminated session', () => {
       const result = simulateTerminatedSessionCheck({
         isTerminated: true,
         requestBody: { method: 'tools/list' },
-        authorization: {
-          session: { id: 'terminated-session-id-12345' },
-        },
-        requestHeaders: { 'mcp-session-id': 'terminated-session-id-12345' },
-      });
-
-      expect(result.action).toBe('blocked-404');
-    });
-
-    it('should return 404 for tools/call with terminated session', () => {
-      const result = simulateTerminatedSessionCheck({
-        isTerminated: true,
-        requestBody: { method: 'tools/call' },
         authorization: {
           session: { id: 'terminated-session-id-12345' },
         },

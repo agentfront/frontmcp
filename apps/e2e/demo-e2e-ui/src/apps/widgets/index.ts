@@ -9,6 +9,7 @@ import MarkdownReportTool from './tools/markdown-report.tool';
 import MarkdownListTool from './tools/markdown-list.tool';
 import StaticBadgeTool from './tools/static-badge.tool';
 import HybridStatusTool from './tools/hybrid-status.tool';
+import ReactWeatherTool from './tools/react-weather.tool';
 import UiTemplatesResource from './resources/ui-templates.resource';
 import UiShowcasePrompt from './prompts/ui-showcase.prompt';
 
@@ -25,6 +26,7 @@ import UiShowcasePrompt from './prompts/ui-showcase.prompt';
     MarkdownListTool,
     StaticBadgeTool,
     HybridStatusTool,
+    ReactWeatherTool,
   ],
   resources: [UiTemplatesResource],
   prompts: [UiShowcasePrompt],

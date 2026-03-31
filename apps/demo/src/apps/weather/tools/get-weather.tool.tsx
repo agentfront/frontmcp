@@ -7,9 +7,7 @@
  * and other UI-capable hosts.
  */
 
-import React from 'react';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { Card, Badge } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 // Define input/output schemas
@@ -29,45 +27,8 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas for proper typing
-type WeatherInput = z.infer<z.ZodObject<typeof inputSchema>>;
-type WeatherOutput = z.infer<typeof outputSchema>;
-
-// Weather condition icon mapping (using emoji for simplicity)
-const iconMap: Record<string, string> = {
-  sunny: '☀️',
-  cloudy: '☁️',
-  rainy: '🌧️',
-  snowy: '❄️',
-  stormy: '⛈️',
-  windy: '💨',
-  foggy: '🌫️',
-};
-
-function WeatherWidget({ output }: { output: WeatherOutput }) {
-  const tempSymbol = output.units === 'celsius' ? '°C' : '°F';
-  const weatherIcon = iconMap[output.icon] || '🌤️';
-  const badgeVariant = output.conditions === 'sunny' ? 'success' : output.conditions === 'rainy' ? 'info' : 'default';
-
-  return (
-    <Card title={output.location} subtitle="Current Weather" elevation={2}>
-      <div style={{ textAlign: 'center', padding: '24px 0' }}>
-        <div style={{ fontSize: '3.75rem', marginBottom: '8px' }}>{weatherIcon}</div>
-        <div style={{ fontSize: '3rem', fontWeight: 300, marginBottom: '8px' }}>
-          {output.temperature}
-          {tempSymbol}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Badge label={output.conditions} variant={badgeVariant} />
-        </div>
-      </div>
-      <div style={{ marginTop: '16px' }}>
-        <div>Humidity: {output.humidity}%</div>
-        <div>Wind Speed: {output.windSpeed} km/h</div>
-        <div>Units: {output.units === 'celsius' ? 'Celsius' : 'Fahrenheit'}</div>
-      </div>
-    </Card>
-  );
-}
+export type WeatherInput = z.infer<z.ZodObject<typeof inputSchema>>;
+export type WeatherOutput = z.infer<typeof outputSchema>;
 
 @Tool({
   name: 'get_weather',
@@ -84,7 +45,7 @@ function WeatherWidget({ output }: { output: WeatherOutput }) {
     displayMode: 'inline',
     servingMode: 'static',
     uiType: 'react',
-    template: WeatherWidget,
+    template: { file: 'apps/demo/src/apps/weather/tools/get-weather.ui.tsx' },
   },
   codecall: {
     visibleInListTools: true,

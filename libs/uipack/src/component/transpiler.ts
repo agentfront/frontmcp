@@ -63,16 +63,45 @@ export function bundleFileSource(
 
   const mountCode = `
 // --- Auto-generated mount ---
+import { createElement as __h } from 'react';
 import { createRoot } from 'react-dom/client';
 import { McpBridgeProvider } from '@frontmcp/ui/react';
-import React from 'react';
-const __root = document.getElementById('root');
+var __root = document.getElementById('root');
 if (__root) {
-  createRoot(__root).render(
-    React.createElement(McpBridgeProvider, null,
-      React.createElement(${componentName})
-    )
-  );
+  var __reactRoot = createRoot(__root);
+  function __hasData(v) { return v != null && typeof v === 'object' && Object.keys(v).length > 0; }
+  function __render(output) {
+    __reactRoot.render(
+      __h(McpBridgeProvider, null,
+        __h(${componentName}, { output: output || null, input: window.__mcpToolInput, loading: !__hasData(output) })
+      )
+    );
+  }
+  // Render immediately (component shows loading state until data arrives)
+  __render(null);
+  // 1. Try OpenAI SDK (toolOutput set synchronously or after load)
+  if (typeof window !== 'undefined') {
+    if (!window.openai) window.openai = {};
+    var __cur = window.openai.toolOutput;
+    if (__hasData(__cur)) { __render(__cur); }
+    Object.defineProperty(window.openai, 'toolOutput', {
+      get: function() { return __cur; },
+      set: function(v) { __cur = v; __render(v); },
+      configurable: true, enumerable: true
+    });
+  }
+  // 2. Try injected data globals
+  if (__hasData(window.__mcpToolOutput)) { __render(window.__mcpToolOutput); }
+  // 3. Listen for bridge tool-result (ext-apps / MCP Inspector)
+  var __bridge = window.FrontMcpBridge;
+  if (__bridge && typeof __bridge.onToolResult === 'function') {
+    __bridge.onToolResult(function(data) { __render(data); });
+  }
+  // 4. Listen for tool:result CustomEvent
+  window.addEventListener('tool:result', function(e) {
+    var d = e.detail;
+    if (d) __render(d.structuredContent || d.content || d);
+  });
 }`;
 
   const loader: BuildOptions['loader'] = {
@@ -80,6 +109,31 @@ if (__root) {
     '.jsx': 'jsx',
   };
   const stdinLoader = filename.endsWith('.tsx') ? 'tsx' : 'jsx';
+
+  // Resolve @frontmcp/ui subpaths from local ESM dist when available.
+  // This ensures the widget uses the local build instead of the published esm.sh version.
+  // Uses runtime resolution from node_modules to avoid build-time circular deps.
+  const alias: Record<string, string> = {};
+  try {
+    const nodePath = require('path') as typeof import('path');
+    const nodeFs = require('fs') as typeof import('fs');
+    // Look for @frontmcp/ui in node_modules (symlinked in monorepo)
+    const candidates = [
+      nodePath.join(process.cwd(), 'node_modules', '@frontmcp', 'ui', 'dist', 'esm'),
+      nodePath.join(resolveDir, 'node_modules', '@frontmcp', 'ui', 'dist', 'esm'),
+    ];
+    for (const uiEsmBase of candidates) {
+      if (!nodeFs.existsSync(uiEsmBase)) continue;
+      const subpaths = ['components', 'react', 'theme', 'bridge', 'runtime'];
+      for (const sub of subpaths) {
+        const mjs = nodePath.join(uiEsmBase, sub, 'index.mjs');
+        if (nodeFs.existsSync(mjs)) alias[`@frontmcp/ui/${sub}`] = mjs;
+      }
+      if (Object.keys(alias).length > 0) break;
+    }
+  } catch {
+    // fs/path not available or @frontmcp/ui not found — aliases stay empty.
+  }
 
   try {
     const result = esbuild.buildSync({
@@ -93,10 +147,9 @@ if (__root) {
       write: false,
       format: 'esm',
       target: 'es2020',
-      jsx: 'transform',
-      jsxFactory: 'React.createElement',
-      jsxFragment: 'React.Fragment',
-      external: ['react', 'react-dom'],
+      jsx: 'automatic',
+      external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+      alias,
       define: { 'process.env.NODE_ENV': '"production"' },
       platform: 'browser',
       treeShaking: true,

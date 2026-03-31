@@ -117,6 +117,17 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     // Default no-op - override in subclasses
   }
 
+  /**
+   * Re-register the MCP server with the notification service.
+   * Called after resetForReinitialization() to restore the server mapping
+   * that was removed by terminateSession → unregisterServer.
+   */
+  reregisterServer(): void {
+    if (this.server) {
+      this.scope.notifications.registerServer(this.key.sessionId, this.server);
+    }
+  }
+
   connectServer() {
     const { info, apps } = this.scope.metadata;
 

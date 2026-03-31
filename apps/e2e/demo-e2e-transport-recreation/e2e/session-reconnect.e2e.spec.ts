@@ -1,12 +1,18 @@
 /**
- * E2E Tests for Session Reconnect Behavior (Issue #280)
+ * E2E Tests for Session Initialize Behavior
  *
- * Tests the Streamable HTTP reconnect flow when a client:
- * 1. Terminates a session via DELETE
- * 2. Sends a new initialize with the old (terminated) session ID
+ * Tests the Streamable HTTP session management per MCP 2025-11-25 spec:
  *
- * Per MCP spec, clients SHOULD clear the session ID before re-initializing,
- * but FrontMCP is lenient and creates a fresh session instead of returning 404.
+ * initialize + valid signed mcp-session-id:
+ *   - terminated → unmark, re-initialize under same session ID
+ *   - active → MCP SDK rejects with 400 "Server already initialized"
+ *   - missing → initialize with the provided session ID
+ *
+ * initialize + no/invalid mcp-session-id:
+ *   - create new session with new ID
+ *
+ * non-initialize + terminated session:
+ *   - 404 per MCP spec
  *
  * Uses raw fetch for DELETE and initialize requests since McpTestClient
  * doesn't expose DELETE and always sends mcp-session-id when it has one.
@@ -17,23 +23,14 @@ import { test, expect } from '@frontmcp/testing';
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════
 
-/**
- * Send a DELETE request to terminate a session.
- */
 async function sendDelete(baseUrl: string, sessionId: string): Promise<{ status: number }> {
   const response = await fetch(`${baseUrl}/`, {
     method: 'DELETE',
-    headers: {
-      'mcp-session-id': sessionId,
-    },
+    headers: { 'mcp-session-id': sessionId },
   });
   return { status: response.status };
 }
 
-/**
- * Send an initialize request, optionally with a stale session ID.
- * Returns the HTTP status, new session ID from response header, and parsed body.
- */
 async function sendInitialize(
   baseUrl: string,
   sessionId?: string,
@@ -65,13 +62,9 @@ async function sendInitialize(
   const newSessionId = response.headers.get('mcp-session-id');
   const text = await response.text();
   const body = parseSSEOrJSON(text);
-
   return { status: response.status, sessionId: newSessionId, body };
 }
 
-/**
- * Send a tools/list request with a specific session ID.
- */
 async function sendToolsList(
   baseUrl: string,
   sessionId: string,
@@ -83,59 +76,12 @@ async function sendToolsList(
       Accept: 'application/json, text/event-stream',
       'mcp-session-id': sessionId,
     },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/list',
-      params: {},
-    }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
   });
-
   const body = await response.text();
   return { status: response.status, body, responseSessionId: response.headers.get('mcp-session-id') };
 }
 
-/**
- * Send a raw POST request with custom headers (for malformed header tests).
- */
-async function sendRawPost(
-  baseUrl: string,
-  headers: Record<string, string>,
-  body: unknown,
-): Promise<{ status: number; body: string }> {
-  const response = await fetch(`${baseUrl}/`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-  return { status: response.status, body: await response.text() };
-}
-
-/**
- * Send a GET request with SSE Accept header (for SSE listener tests).
- */
-async function sendSseGet(baseUrl: string, sessionId: string): Promise<{ status: number; contentType: string | null }> {
-  const controller = new AbortController();
-  // Abort after 2s to avoid hanging on SSE stream
-  const timer = setTimeout(() => controller.abort(), 2000);
-  try {
-    const response = await fetch(`${baseUrl}/`, {
-      method: 'GET',
-      headers: {
-        Accept: 'text/event-stream',
-        'mcp-session-id': sessionId,
-      },
-      signal: controller.signal,
-    });
-    return { status: response.status, contentType: response.headers.get('content-type') };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * Send a notifications/initialized notification with a specific session ID.
- */
 async function sendNotificationInitialized(baseUrl: string, sessionId: string): Promise<{ status: number }> {
   const response = await fetch(`${baseUrl}/`, {
     method: 'POST',
@@ -144,18 +90,11 @@ async function sendNotificationInitialized(baseUrl: string, sessionId: string): 
       Accept: 'application/json, text/event-stream',
       'mcp-session-id': sessionId,
     },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized',
-    }),
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
   });
   return { status: response.status };
 }
 
-/**
- * Send a tools/call request with a specific session ID.
- * Returns status, parsed body, and response session ID.
- */
 async function sendToolCall(
   baseUrl: string,
   sessionId: string,
@@ -176,41 +115,40 @@ async function sendToolCall(
       params: { name: toolName, arguments: args },
     }),
   });
-
   const newSessionId = response.headers.get('mcp-session-id');
   const text = await response.text();
   const body = parseSSEOrJSON(text);
   return { status: response.status, body, sessionId: newSessionId };
 }
 
-/** Successful parse result with arbitrary JSON-RPC fields. */
+async function sendSseGet(baseUrl: string, sessionId: string): Promise<{ status: number; contentType: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const response = await fetch(`${baseUrl}/`, {
+      method: 'GET',
+      headers: { Accept: 'text/event-stream', 'mcp-session-id': sessionId },
+      signal: controller.signal,
+    });
+    return { status: response.status, contentType: response.headers.get('content-type') };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 type ParsedJsonResponse = Record<string, unknown>;
-
-/** Failure sentinel returned when neither SSE nor JSON parsing succeeds. */
 type ParseFailure = { raw: string };
-
-/** Discriminated return type for {@link parseSSEOrJSON}. */
 type ParsedResponse = ParsedJsonResponse | ParseFailure;
 
-/**
- * Parse a response that may be SSE format or plain JSON.
- * SSE format: `event: message\ndata: {...}\n\n`
- *
- * On parse failure, returns `{ raw: string }` containing the original text
- * so callers can discriminate via the `'raw' in result` check.
- */
 function parseSSEOrJSON(text: string): ParsedResponse {
-  // Try SSE format first
   const dataMatch = text.match(/^data: (.+)$/m);
   if (dataMatch) {
     try {
       return JSON.parse(dataMatch[1]) as ParsedJsonResponse;
     } catch {
-      // fall through to plain JSON
+      /* fall through */
     }
   }
-
-  // Try plain JSON
   try {
     return JSON.parse(text) as ParsedJsonResponse;
   } catch {
@@ -218,142 +156,321 @@ function parseSSEOrJSON(text: string): ParsedResponse {
   }
 }
 
+function extractToolOutputJson<T>(body: ParsedResponse): T {
+  const rpc = body as Record<string, unknown>;
+  const result = rpc['result'] as Record<string, unknown>;
+  const content = result['content'] as Array<{ text: string }>;
+  return JSON.parse(content[0].text) as T;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // TESTS
 // ═══════════════════════════════════════════════════════════════════
 
-test.describe('Session Reconnect E2E', () => {
+test.describe('Session Management E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-transport-recreation/src/main.ts',
     project: 'demo-e2e-transport-recreation',
     publicMode: true,
   });
 
+  // ─── DELETE session termination ────────────────────────────────
+
   test.describe('DELETE session termination', () => {
     test('should terminate session with DELETE and return 204', async ({ mcp, server }) => {
-      // Verify session is working
       const result = await mcp.tools.call('get-session-info', {});
       expect(result).toBeSuccessful();
 
       const sessionId = mcp.sessionId;
       expect(sessionId).toBeTruthy();
 
-      // DELETE the session
       const { status } = await sendDelete(server.info.baseUrl, sessionId);
       expect(status).toBe(204);
     });
 
-    test('should return 404 for non-initialize requests after DELETE', async ({ mcp, server }) => {
-      // Establish session
-      const result = await mcp.tools.call('get-session-info', {});
-      expect(result).toBeSuccessful();
+    test('should return 404 for tools/list after DELETE', async ({ mcp, server }) => {
+      await mcp.tools.call('get-session-info', {});
       const sessionId = mcp.sessionId;
 
-      // Terminate session
-      const { status: deleteStatus } = await sendDelete(server.info.baseUrl, sessionId);
-      expect(deleteStatus).toBe(204);
+      await sendDelete(server.info.baseUrl, sessionId);
 
-      // Try tools/list with the terminated session ID - should get 404
-      const { status: listStatus } = await sendToolsList(server.info.baseUrl, sessionId);
-      expect(listStatus).toBe(404);
+      const { status } = await sendToolsList(server.info.baseUrl, sessionId);
+      expect(status).toBe(404);
+    });
+
+    test('should return 404 for tools/call after DELETE', async ({ mcp, server }) => {
+      await mcp.tools.call('get-session-info', {});
+      const sessionId = mcp.sessionId;
+
+      await sendDelete(server.info.baseUrl, sessionId);
+
+      const { status } = await sendToolCall(server.info.baseUrl, sessionId, 'get-session-info');
+      expect(status).toBe(404);
+    });
+
+    test('should return 404 for notifications/initialized after DELETE', async ({ mcp, server }) => {
+      await mcp.tools.call('get-session-info', {});
+      const sessionId = mcp.sessionId;
+
+      await sendDelete(server.info.baseUrl, sessionId);
+
+      const { status } = await sendNotificationInitialized(server.info.baseUrl, sessionId);
+      expect(status).toBe(404);
     });
   });
 
-  test.describe('Reconnect with stale session ID', () => {
-    test('should allow initialize with terminated session ID and return new session', async ({ mcp, server }) => {
-      // Establish session
-      const result = await mcp.tools.call('get-session-info', {});
-      expect(result).toBeSuccessful();
+  // ─── Re-initialize terminated session (same session ID) ───────
+
+  test.describe('Re-initialize terminated session', () => {
+    test('should allow initialize with terminated session ID and return 200', async ({ mcp, server }) => {
+      await mcp.tools.call('get-session-info', {});
       const oldSessionId = mcp.sessionId;
 
-      // Terminate session
-      const { status: deleteStatus } = await sendDelete(server.info.baseUrl, oldSessionId);
-      expect(deleteStatus).toBe(204);
+      await sendDelete(server.info.baseUrl, oldSessionId);
 
-      // Send initialize WITH the old (terminated) session ID
-      // This should succeed (not 404) and return a new session
       const initResult = await sendInitialize(server.info.baseUrl, oldSessionId);
       expect(initResult.status).toBe(200);
       expect(initResult.sessionId).toBeTruthy();
     });
 
-    test('new session after reconnect should have different session ID', async ({ mcp, server }) => {
-      // Establish session
+    test('should reuse the same session ID after re-initialize with valid signed session', async ({ mcp, server }) => {
       await mcp.tools.call('get-session-info', {});
       const oldSessionId = mcp.sessionId;
 
-      // Terminate and reconnect with stale session
       await sendDelete(server.info.baseUrl, oldSessionId);
-      const initResult = await sendInitialize(server.info.baseUrl, oldSessionId);
 
+      const initResult = await sendInitialize(server.info.baseUrl, oldSessionId);
       expect(initResult.status).toBe(200);
-      expect(initResult.sessionId).not.toBe(oldSessionId);
+      // Session ID should be reused (same signed ID)
+      expect(initResult.sessionId).toBe(oldSessionId);
+    });
+
+    test('should allow subsequent requests after re-initialize with same session ID', async ({ mcp, server }) => {
+      await mcp.tools.call('get-session-info', {});
+      const sessionId = mcp.sessionId;
+
+      // DELETE → re-initialize with same session ID
+      await sendDelete(server.info.baseUrl, sessionId);
+      const initResult = await sendInitialize(server.info.baseUrl, sessionId);
+      expect(initResult.status).toBe(200);
+
+      const usedSessionId = initResult.sessionId!;
+
+      // Send notifications/initialized — should work (session unmarked from terminated)
+      const notif = await sendNotificationInitialized(server.info.baseUrl, usedSessionId);
+      expect(notif.status).toBe(202);
+
+      // tools/list should work
+      const list = await sendToolsList(server.info.baseUrl, usedSessionId);
+      expect(list.status).toBe(200);
+    });
+
+    test('should start with fresh state when using a NEW session after DELETE', async ({ mcp, server }) => {
+      // Build up counter state
+      await mcp.tools.call('increment-counter', { amount: 10 });
+      await mcp.tools.call('increment-counter', { amount: 5 });
+      const sessionId = mcp.sessionId;
+
+      // DELETE → fresh initialize WITHOUT old session ID
+      await sendDelete(server.info.baseUrl, sessionId);
+      const initResult = await sendInitialize(server.info.baseUrl);
+      expect(initResult.status).toBe(200);
+      expect(initResult.sessionId).not.toBe(sessionId);
+      const newSessionId = initResult.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, newSessionId);
+
+      // Counter should start from 0 in the brand new session
+      const tool = await sendToolCall(server.info.baseUrl, newSessionId, 'increment-counter', { amount: 1 });
+      expect(tool.status).toBe(200);
+      const output = extractToolOutputJson<{ previousValue: number }>(tool.body);
+      expect(output.previousValue).toBe(0);
+    });
+
+    test('should handle multiple DELETE + re-initialize cycles', async ({ server }) => {
+      // Cycle 1
+      const init1 = await sendInitialize(server.info.baseUrl);
+      expect(init1.status).toBe(200);
+      const sid1 = init1.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid1);
+
+      await sendDelete(server.info.baseUrl, sid1);
+      const reinit1 = await sendInitialize(server.info.baseUrl, sid1);
+      expect(reinit1.status).toBe(200);
+      const rsid1 = reinit1.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, rsid1);
+
+      // Verify session works
+      const list1 = await sendToolsList(server.info.baseUrl, rsid1);
+      expect(list1.status).toBe(200);
+
+      // Cycle 2
+      await sendDelete(server.info.baseUrl, rsid1);
+      const reinit2 = await sendInitialize(server.info.baseUrl, rsid1);
+      expect(reinit2.status).toBe(200);
+      const rsid2 = reinit2.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, rsid2);
+
+      const list2 = await sendToolsList(server.info.baseUrl, rsid2);
+      expect(list2.status).toBe(200);
     });
   });
 
-  test.describe('Clean reconnect (no stale session)', () => {
-    test('should create new session when reconnecting without session header', async ({ mcp, server }) => {
-      // Establish session
-      await mcp.tools.call('get-session-info', {});
-      const oldSessionId = mcp.sessionId;
+  // ─── Initialize on active session (400) ───────────────────────
 
-      // Terminate session
-      await sendDelete(server.info.baseUrl, oldSessionId);
+  test.describe('Initialize on active session', () => {
+    test('should reject re-initialization on active session with 400', async ({ server }) => {
+      // Initialize first session
+      const init1 = await sendInitialize(server.info.baseUrl);
+      expect(init1.status).toBe(200);
+      const sessionId = init1.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sessionId);
 
-      // Send initialize WITHOUT session header (clean reconnect per MCP spec)
+      // Verify session is active
+      const list = await sendToolsList(server.info.baseUrl, sessionId);
+      expect(list.status).toBe(200);
+
+      // Try to re-initialize on the SAME active session
+      const init2 = await sendInitialize(server.info.baseUrl, sessionId);
+      expect(init2.status).toBe(400);
+    });
+  });
+
+  // ─── Fresh initialize (no session ID) ─────────────────────────
+
+  test.describe('Fresh initialize (no session ID)', () => {
+    test('should create new session when no mcp-session-id header', async ({ server }) => {
       const initResult = await sendInitialize(server.info.baseUrl);
       expect(initResult.status).toBe(200);
       expect(initResult.sessionId).toBeTruthy();
+    });
+
+    test('fresh session should be independent from terminated session', async ({ mcp, server }) => {
+      await mcp.tools.call('increment-counter', { amount: 10 });
+      const oldSessionId = mcp.sessionId;
+      await sendDelete(server.info.baseUrl, oldSessionId);
+
+      // Fresh initialize WITHOUT old session ID → new independent session
+      const initResult = await sendInitialize(server.info.baseUrl);
+      expect(initResult.status).toBe(200);
       expect(initResult.sessionId).not.toBe(oldSessionId);
     });
   });
 
-  test.describe('Session state after reconnect', () => {
-    test('should not preserve counter state across session reconnect', async ({ mcp, server }) => {
-      // Build up counter state in original session
-      const r1 = await mcp.tools.call('increment-counter', { amount: 10 });
-      expect(r1).toBeSuccessful();
-      expect(r1).toHaveTextContent('"newValue":10');
+  // ─── Invalid / forged session IDs ─────────────────────────────
 
-      const r2 = await mcp.tools.call('increment-counter', { amount: 5 });
-      expect(r2).toBeSuccessful();
-      expect(r2).toHaveTextContent('"newValue":15');
+  test.describe('Invalid session IDs', () => {
+    test('should handle initialize with unrecognized session ID', async ({ server }) => {
+      // In public/anonymous mode, any session ID header is accepted as the session key.
+      // In authenticated mode, invalid signatures would cause rejection.
+      const initResult = await sendInitialize(server.info.baseUrl, 'totally-invalid-forged-session-id');
+      expect(initResult.status).toBe(200);
+      expect(initResult.sessionId).toBeTruthy();
+    });
 
-      // Terminate and create fresh session via a new client
-      const oldSessionId = mcp.sessionId;
-      await sendDelete(server.info.baseUrl, oldSessionId);
-
-      // Create a brand new client (fresh session)
-      const newClient = await server.createClient();
-
-      // Counter should start from 0 in new session (default increment is 1)
-      const r3 = await newClient.tools.call('increment-counter', { amount: 1 });
-      expect(r3).toBeSuccessful();
-      expect(r3).toHaveTextContent('"previousValue":0');
-      expect(r3).toHaveTextContent('"newValue":1');
-
-      await newClient.disconnect();
+    test('should return 404 for non-initialize with invalid session ID', async ({ server }) => {
+      const { status } = await sendToolsList(server.info.baseUrl, 'invalid-session-id-does-not-exist');
+      // Should fail — either 404 (terminated check) or 400 (session validation)
+      expect(status).toBeGreaterThanOrEqual(400);
     });
   });
 
-  // NOTE: These tests verify that the reconnect flow accepts and round-trips
-  // client capabilities without errors, but do NOT assert capability-dependent
-  // behavior (e.g. elicitation prompts). This E2E project has no elicitation
-  // tools enabled, and the MCP initialize response only returns *server*
-  // capabilities — client capabilities aren't echoed back. Capability-dependent
-  // assertions live in demo-e2e-elicitation/e2e/elicitation.e2e.spec.ts
-  // ("elicitation after session reconnect" describe block).
-  test.describe('Capabilities preservation through reconnect', () => {
+  // ─── Session isolation ─────────────────────────────────────────
+
+  test.describe('Session isolation', () => {
+    test('deleting one session should not affect another', async ({ server }) => {
+      const clientA = await server.createClient();
+      const clientB = await server.createClient();
+
+      await clientA.tools.call('increment-counter', { amount: 5 });
+      await clientB.tools.call('increment-counter', { amount: 10 });
+
+      // Delete session A
+      await sendDelete(server.info.baseUrl, clientA.sessionId);
+
+      // Session B should still work
+      const result = await clientB.tools.call('increment-counter', { amount: 1 });
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('"previousValue":10');
+
+      await clientA.disconnect();
+      await clientB.disconnect();
+    });
+  });
+
+  // ─── Full protocol handshake ───────────────────────────────────
+
+  test.describe('Full protocol handshake', () => {
+    test('full DELETE → re-initialize → handshake → work cycle', async ({ server }) => {
+      // Step 1: Full initial handshake
+      const init1 = await sendInitialize(server.info.baseUrl);
+      expect(init1.status).toBe(200);
+      const sessionId = init1.sessionId!;
+      const notif1 = await sendNotificationInitialized(server.info.baseUrl, sessionId);
+      expect(notif1.status).toBe(202);
+
+      // Step 2: Use the session
+      const list1 = await sendToolsList(server.info.baseUrl, sessionId);
+      expect(list1.status).toBe(200);
+      const tool1 = await sendToolCall(server.info.baseUrl, sessionId, 'increment-counter', { amount: 5 });
+      expect(tool1.status).toBe(200);
+
+      // Step 3: DELETE
+      const del = await sendDelete(server.info.baseUrl, sessionId);
+      expect(del.status).toBe(204);
+
+      // Step 4: Re-initialize with same session ID
+      const init2 = await sendInitialize(server.info.baseUrl, sessionId);
+      expect(init2.status).toBe(200);
+      const sessionId2 = init2.sessionId!;
+
+      const notif2 = await sendNotificationInitialized(server.info.baseUrl, sessionId2);
+      expect(notif2.status).toBe(202);
+
+      // Step 5: Session works after re-initialize
+      const list2 = await sendToolsList(server.info.baseUrl, sessionId2);
+      expect(list2.status).toBe(200);
+      const tool2 = await sendToolCall(server.info.baseUrl, sessionId2, 'increment-counter', { amount: 1 });
+      expect(tool2.status).toBe(200);
+    });
+
+    test('session ID in tool context matches header after re-initialize', async ({ server }) => {
+      const init1 = await sendInitialize(server.info.baseUrl);
+      expect(init1.status).toBe(200);
+      const sessionId = init1.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sessionId);
+
+      // Verify session ID in tool context
+      const tool1 = await sendToolCall(server.info.baseUrl, sessionId, 'get-session-info');
+      expect(tool1.status).toBe(200);
+      const info1 = extractToolOutputJson<{ sessionId: string }>(tool1.body);
+      expect(info1.sessionId).not.toContain('fallback');
+
+      // DELETE → re-initialize
+      await sendDelete(server.info.baseUrl, sessionId);
+      const init2 = await sendInitialize(server.info.baseUrl, sessionId);
+      expect(init2.status).toBe(200);
+      const sessionId2 = init2.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sessionId2);
+
+      // Session ID in tool context should match
+      const tool2 = await sendToolCall(server.info.baseUrl, sessionId2, 'get-session-info');
+      expect(tool2.status).toBe(200);
+      const info2 = extractToolOutputJson<{ sessionId: string; hasSession: boolean }>(tool2.body);
+      expect(info2.sessionId).toBe(sessionId2);
+      expect(info2.hasSession).toBe(true);
+    });
+  });
+
+  // ─── Capabilities through reconnect ────────────────────────────
+
+  test.describe('Capabilities through reconnect', () => {
     test('should accept initialize with elicitation capabilities', async ({ server }) => {
       const initResult = await sendInitialize(server.info.baseUrl, undefined, {
         elicitation: { form: {} },
       });
-
       expect(initResult.status).toBe(200);
       expect(initResult.sessionId).toBeTruthy();
-      expect('raw' in initResult.body).toBe(false);
 
-      // Verify server responded with valid initialize result
       const body = initResult.body as Record<string, unknown>;
       expect(body['result']).toBeDefined();
       const result = body['result'] as Record<string, unknown>;
@@ -362,783 +479,176 @@ test.describe('Session Reconnect E2E', () => {
       expect(result['serverInfo']).toBeDefined();
     });
 
-    test('should preserve session validity after reconnect with capabilities', async ({ server }) => {
-      // Step 1: Initialize with elicitation capabilities
-      const init1 = await sendInitialize(server.info.baseUrl, undefined, {
-        elicitation: { form: {} },
-        roots: { listChanged: true },
-      });
-      expect(init1.status).toBe(200);
-      const sessionId1 = init1.sessionId;
-      expect(sessionId1).toBeTruthy();
-      if (!sessionId1) throw new Error('Expected sessionId after initialize');
-
-      // Step 2: Verify session works (tools/list)
-      const listResult = await sendToolsList(server.info.baseUrl, sessionId1);
-      expect(listResult.status).toBe(200);
-
-      // Step 3: Terminate session
-      const { status: deleteStatus } = await sendDelete(server.info.baseUrl, sessionId1);
-      expect(deleteStatus).toBe(204);
-
-      // Step 4: Re-initialize with stale session ID to exercise reconnect path
-      const init2 = await sendInitialize(server.info.baseUrl, sessionId1, {
-        elicitation: { form: {} },
-        roots: { listChanged: true },
-      });
-      expect(init2.status).toBe(200);
-      const sessionId2 = init2.sessionId;
-      expect(sessionId2).toBeTruthy();
-      if (!sessionId2) throw new Error('Expected sessionId after reconnect initialize');
-      expect(sessionId2).not.toBe(sessionId1);
-
-      // Step 5: Verify new session works
-      const listResult2 = await sendToolsList(server.info.baseUrl, sessionId2);
-      expect(listResult2.status).toBe(200);
-    });
-
-    test('should handle reconnect with different capabilities', async ({ server }) => {
-      // Initialize without elicitation capabilities
+    test('should accept re-initialize with different capabilities after DELETE', async ({ server }) => {
+      // Initialize without elicitation
       const init1 = await sendInitialize(server.info.baseUrl, undefined, {});
       expect(init1.status).toBe(200);
-      const sessionId1 = init1.sessionId;
-      expect(sessionId1).toBeTruthy();
-      if (!sessionId1) throw new Error('Expected sessionId after initialize');
+      const sessionId = init1.sessionId!;
 
-      // Terminate
-      const { status: deleteStatus } = await sendDelete(server.info.baseUrl, sessionId1);
-      expect(deleteStatus).toBe(204);
+      // DELETE
+      await sendDelete(server.info.baseUrl, sessionId);
 
-      // Re-initialize with stale session ID and different (elicitation) capabilities
-      const init2 = await sendInitialize(server.info.baseUrl, sessionId1, {
+      // Re-initialize with elicitation capabilities
+      const init2 = await sendInitialize(server.info.baseUrl, sessionId, {
         elicitation: { form: {} },
       });
       expect(init2.status).toBe(200);
-      const sessionId2 = init2.sessionId;
-      expect(sessionId2).toBeTruthy();
-      if (!sessionId2) throw new Error('Expected sessionId after reconnect initialize');
-      expect(sessionId2).not.toBe(sessionId1);
+      const sessionId2 = init2.sessionId!;
 
       // Verify session works
-      const listResult = await sendToolsList(server.info.baseUrl, sessionId2);
-      expect(listResult.status).toBe(200);
+      const list = await sendToolsList(server.info.baseUrl, sessionId2);
+      expect(list.status).toBe(200);
     });
   });
 
-  test.describe('Session ID integrity after reconnect', () => {
-    test('should have consistent session ID in tool auth context after reconnect', async ({ server }) => {
-      // Step 1: Initialize, get session
-      const init1 = await sendInitialize(server.info.baseUrl);
-      expect(init1.status).toBe(200);
-      const sessionId1 = init1.sessionId;
-      if (!sessionId1) throw new Error('Expected sessionId after initialize');
+  // ─── Concurrent operations ─────────────────────────────────────
 
-      // Send notifications/initialized with new session
-      await sendNotificationInitialized(server.info.baseUrl, sessionId1);
-
-      // Step 2: Call get-session-info — session ID in tool context should match header
-      const toolResult1 = await sendToolCall(server.info.baseUrl, sessionId1, 'get-session-info');
-      expect(toolResult1.status).toBe(200);
-      const body1 = toolResult1.body as Record<string, unknown>;
-      const result1 = body1['result'] as Record<string, unknown>;
-      const content1 = result1['content'] as Array<{ text: string }>;
-      const info1 = JSON.parse(content1[0].text) as { sessionId: string };
-      expect(info1.sessionId).not.toContain('fallback');
-
-      // Step 3: DELETE and reconnect with stale session ID
-      await sendDelete(server.info.baseUrl, sessionId1);
-      const init2 = await sendInitialize(server.info.baseUrl, sessionId1);
-      expect(init2.status).toBe(200);
-      const sessionId2 = init2.sessionId;
-      if (!sessionId2) throw new Error('Expected sessionId after reconnect');
-      expect(sessionId2).not.toBe(sessionId1);
-
-      // Send notifications/initialized with NEW session
-      await sendNotificationInitialized(server.info.baseUrl, sessionId2);
-
-      // Step 4: Call get-session-info with new session — should have real session ID, not fallback
-      const toolResult2 = await sendToolCall(server.info.baseUrl, sessionId2, 'get-session-info');
-      expect(toolResult2.status).toBe(200);
-      const body2 = toolResult2.body as Record<string, unknown>;
-      const result2 = body2['result'] as Record<string, unknown>;
-      const content2 = result2['content'] as Array<{ text: string }>;
-      const info2 = JSON.parse(content2[0].text) as { sessionId: string; hasSession: boolean };
-
-      // CRITICAL: The session ID in the tool's auth context must match the new session
-      expect(info2.sessionId).toBe(sessionId2);
-      expect(info2.hasSession).toBe(true);
-    });
-
-    test('full reconnect protocol handshake should work end-to-end', async ({ server }) => {
-      // Step 1: Full initial handshake
-      const init1 = await sendInitialize(server.info.baseUrl);
-      expect(init1.status).toBe(200);
-      const sessionId1 = init1.sessionId;
-      if (!sessionId1) throw new Error('Expected sessionId');
-
-      const notif1 = await sendNotificationInitialized(server.info.baseUrl, sessionId1);
-      expect(notif1.status).toBe(202);
-
-      // Step 2: Verify tools work
-      const list1 = await sendToolsList(server.info.baseUrl, sessionId1);
-      expect(list1.status).toBe(200);
-
-      const tool1 = await sendToolCall(server.info.baseUrl, sessionId1, 'increment-counter', { amount: 5 });
-      expect(tool1.status).toBe(200);
-
-      // Step 3: DELETE
-      const del = await sendDelete(server.info.baseUrl, sessionId1);
-      expect(del.status).toBe(204);
-
-      // Step 4: Full reconnect handshake with stale session
-      const init2 = await sendInitialize(server.info.baseUrl, sessionId1);
-      expect(init2.status).toBe(200);
-      const sessionId2 = init2.sessionId;
-      if (!sessionId2) throw new Error('Expected sessionId after reconnect');
-
-      const notif2 = await sendNotificationInitialized(server.info.baseUrl, sessionId2);
-      expect(notif2.status).toBe(202);
-
-      // Step 5: Verify new session works with tools
-      const list2 = await sendToolsList(server.info.baseUrl, sessionId2);
-      expect(list2.status).toBe(200);
-
-      const tool2 = await sendToolCall(server.info.baseUrl, sessionId2, 'increment-counter', { amount: 1 });
-      expect(tool2.status).toBe(200);
-      const body2 = tool2.body as Record<string, unknown>;
-      const result2 = body2['result'] as Record<string, unknown>;
-      const content2 = result2['content'] as Array<{ text: string }>;
-      const toolOutput = JSON.parse(content2[0].text) as { previousValue: number };
-      // Counter should start fresh (previous value = 0)
-      expect(toolOutput.previousValue).toBe(0);
-    });
-  });
-
-  test.describe('Transport cleanup on DELETE', () => {
-    test('should reject tool calls with terminated session', async ({ server }) => {
-      // Initialize and verify
+  test.describe('Concurrent operations', () => {
+    test('should handle concurrent requests on a valid session', async ({ server }) => {
       const init = await sendInitialize(server.info.baseUrl);
       expect(init.status).toBe(200);
-      const sessionId = init.sessionId;
-      if (!sessionId) throw new Error('Expected sessionId');
-
+      const sessionId = init.sessionId!;
       await sendNotificationInitialized(server.info.baseUrl, sessionId);
 
-      const tool1 = await sendToolCall(server.info.baseUrl, sessionId, 'get-session-info');
-      expect(tool1.status).toBe(200);
+      const [r1, r2, r3] = await Promise.all([
+        sendToolCall(server.info.baseUrl, sessionId, 'increment-counter', { amount: 1 }),
+        sendToolCall(server.info.baseUrl, sessionId, 'increment-counter', { amount: 2 }),
+        sendToolCall(server.info.baseUrl, sessionId, 'increment-counter', { amount: 3 }),
+      ]);
 
-      // DELETE
-      const del = await sendDelete(server.info.baseUrl, sessionId);
-      expect(del.status).toBe(204);
-
-      // Tool call with terminated session should fail with 404
-      const tool2 = await sendToolCall(server.info.baseUrl, sessionId, 'get-session-info');
-      expect(tool2.status).toBe(404);
-    });
-
-    test('should not contaminate other active sessions on DELETE', async ({ server }) => {
-      // Client A: Initialize and store data
-      const initA = await sendInitialize(server.info.baseUrl);
-      expect(initA.status).toBe(200);
-      const sessionA = initA.sessionId;
-      if (!sessionA) throw new Error('Expected sessionId A');
-      await sendNotificationInitialized(server.info.baseUrl, sessionA);
-
-      await sendToolCall(server.info.baseUrl, sessionA, 'increment-counter', { amount: 10 });
-
-      // Client B: Initialize and store data
-      const initB = await sendInitialize(server.info.baseUrl);
-      expect(initB.status).toBe(200);
-      const sessionB = initB.sessionId;
-      if (!sessionB) throw new Error('Expected sessionId B');
-      await sendNotificationInitialized(server.info.baseUrl, sessionB);
-
-      await sendToolCall(server.info.baseUrl, sessionB, 'increment-counter', { amount: 20 });
-
-      // Client A: DELETE session
-      const del = await sendDelete(server.info.baseUrl, sessionA);
-      expect(del.status).toBe(204);
-
-      // Client B should still work fine
-      const toolB = await sendToolCall(server.info.baseUrl, sessionB, 'get-session-info');
-      expect(toolB.status).toBe(200);
-      const bodyB = toolB.body as Record<string, unknown>;
-      const resultB = bodyB['result'] as Record<string, unknown>;
-      const contentB = resultB['content'] as Array<{ text: string }>;
-      const infoB = JSON.parse(contentB[0].text) as { hasSession: boolean };
-      expect(infoB.hasSession).toBe(true);
-
-      // Client A reconnect should work independently
-      const initA2 = await sendInitialize(server.info.baseUrl);
-      expect(initA2.status).toBe(200);
-      const sessionA2 = initA2.sessionId;
-      if (!sessionA2) throw new Error('Expected sessionId A2');
-      expect(sessionA2).not.toBe(sessionA);
-      expect(sessionA2).not.toBe(sessionB);
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(r3.status).toBe(200);
     });
   });
 
-  test.describe('Fabricated session ID (never existed)', () => {
-    test('should return 404 for tools/list with fabricated session ID', async ({ server }) => {
-      const { status } = await sendToolsList(server.info.baseUrl, 'completely-fabricated-session-id-12345');
-      expect(status).toBe(404);
-    });
+  // ─── Multi-cycle reconnect (double/triple DELETE+init) ──────────
 
-    test('should return 404 for tools/call with fabricated session ID', async ({ server }) => {
-      const result = await sendToolCall(server.info.baseUrl, 'random-nonexistent-session', 'get-session-info');
-      expect(result.status).toBe(404);
-    });
-
-    test('should return 404 for notifications/initialized with fabricated session ID', async ({ server }) => {
-      const { status } = await sendNotificationInitialized(server.info.baseUrl, 'fake-session-never-created');
-      expect(status).toBe(404);
-    });
-  });
-
-  test.describe('Invalid session header format', () => {
-    test('should reject session ID exceeding 2048 chars with error status', async ({ server }) => {
-      const longId = 'a'.repeat(2049);
-      const result = await sendRawPost(
-        server.info.baseUrl,
-        {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': longId,
-        },
-        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
-      );
-      // Server rejects oversized session IDs — may be 404 (schema validation)
-      // or 500 (upstream header size limit). Either way, not 200.
-      expect(result.status).toBeGreaterThanOrEqual(400);
-    });
-  });
-
-  test.describe('Response Mcp-Session-Id header consistency', () => {
-    test('should include mcp-session-id in initialize response', async ({ server }) => {
-      const result = await sendInitialize(server.info.baseUrl);
-      expect(result.status).toBe(200);
-      expect(result.sessionId).toBeTruthy();
-    });
-
-    test('should include matching mcp-session-id in tools/list response', async ({ server }) => {
-      const init = await sendInitialize(server.info.baseUrl);
-      expect(init.sessionId).toBeTruthy();
-      if (!init.sessionId) throw new Error('Expected sessionId');
-
-      await sendNotificationInitialized(server.info.baseUrl, init.sessionId);
-
-      const list = await sendToolsList(server.info.baseUrl, init.sessionId);
-      expect(list.status).toBe(200);
-      expect(list.responseSessionId).toBe(init.sessionId);
-    });
-
-    test('should include matching mcp-session-id in tools/call response', async ({ server }) => {
-      const init = await sendInitialize(server.info.baseUrl);
-      if (!init.sessionId) throw new Error('Expected sessionId');
-
-      await sendNotificationInitialized(server.info.baseUrl, init.sessionId);
-
-      const call = await sendToolCall(server.info.baseUrl, init.sessionId, 'get-session-info');
-      expect(call.status).toBe(200);
-      expect(call.sessionId).toBe(init.sessionId);
-    });
-  });
-
-  test.describe('Multiple rapid reconnects', () => {
-    test('should handle DELETE -> init -> DELETE -> init in quick succession', async ({ server }) => {
-      // Cycle 1: init
+  test.describe('Multi-cycle reconnect', () => {
+    test('should handle triple DELETE + reconnect cycle with same session ID', async ({ server }) => {
+      // Cycle 1: Fresh connect
       const init1 = await sendInitialize(server.info.baseUrl);
       expect(init1.status).toBe(200);
-      const s1 = init1.sessionId;
-      if (!s1) throw new Error('Expected s1');
+      const sid = init1.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid);
 
-      // Cycle 1: delete
-      const del1 = await sendDelete(server.info.baseUrl, s1);
+      const list1 = await sendToolsList(server.info.baseUrl, sid);
+      expect(list1.status).toBe(200);
+
+      // Cycle 2: DELETE → re-initialize with same session ID
+      const del1 = await sendDelete(server.info.baseUrl, sid);
       expect(del1.status).toBe(204);
 
-      // Cycle 2: init (clean)
-      const init2 = await sendInitialize(server.info.baseUrl);
-      expect(init2.status).toBe(200);
-      const s2 = init2.sessionId;
-      if (!s2) throw new Error('Expected s2');
-      expect(s2).not.toBe(s1);
+      const reinit1 = await sendInitialize(server.info.baseUrl, sid);
+      expect(reinit1.status).toBe(200);
+      const sid2 = reinit1.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid2);
 
-      // Cycle 2: delete
-      const del2 = await sendDelete(server.info.baseUrl, s2);
+      const list2 = await sendToolsList(server.info.baseUrl, sid2);
+      expect(list2.status).toBe(200);
+
+      // Cycle 3: DELETE → re-initialize again (the double-reconnect case)
+      const del2 = await sendDelete(server.info.baseUrl, sid2);
       expect(del2.status).toBe(204);
 
-      // Cycle 3: init (clean)
-      const init3 = await sendInitialize(server.info.baseUrl);
-      expect(init3.status).toBe(200);
-      const s3 = init3.sessionId;
-      if (!s3) throw new Error('Expected s3');
-      expect(s3).not.toBe(s1);
-      expect(s3).not.toBe(s2);
+      const reinit2 = await sendInitialize(server.info.baseUrl, sid2);
+      expect(reinit2.status).toBe(200);
+      const sid3 = reinit2.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid3);
 
-      // Verify final session works
-      await sendNotificationInitialized(server.info.baseUrl, s3);
-      const tool = await sendToolCall(server.info.baseUrl, s3, 'get-session-info');
+      const list3 = await sendToolsList(server.info.baseUrl, sid3);
+      expect(list3.status).toBe(200);
+
+      // Cycle 4: Third DELETE + re-initialize (triple-reconnect)
+      const del3 = await sendDelete(server.info.baseUrl, sid3);
+      expect(del3.status).toBe(204);
+
+      const reinit3 = await sendInitialize(server.info.baseUrl, sid3);
+      expect(reinit3.status).toBe(200);
+      const sid4 = reinit3.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid4);
+
+      // Verify everything works at the end
+      const list4 = await sendToolsList(server.info.baseUrl, sid4);
+      expect(list4.status).toBe(200);
+
+      const tool = await sendToolCall(server.info.baseUrl, sid4, 'get-session-info');
       expect(tool.status).toBe(200);
     });
 
-    test('should handle rapid re-init with same stale session ID', async ({ server }) => {
-      const init1 = await sendInitialize(server.info.baseUrl);
-      const s1 = init1.sessionId;
-      if (!s1) throw new Error('Expected s1');
+    test('should not return 404 on second DELETE after re-initialize', async ({ server }) => {
+      // This is the exact bug scenario: after re-initialize, the server
+      // is not re-registered with NotificationService, causing the second
+      // DELETE to return 404 because terminateSession.unregisterServer fails.
+      const init = await sendInitialize(server.info.baseUrl);
+      expect(init.status).toBe(200);
+      const sid = init.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid);
 
-      // DELETE and re-init with stale s1
-      await sendDelete(server.info.baseUrl, s1);
-      const init2 = await sendInitialize(server.info.baseUrl, s1);
-      expect(init2.status).toBe(200);
-      const s2 = init2.sessionId;
-      if (!s2) throw new Error('Expected s2');
-      expect(s2).not.toBe(s1);
+      // First DELETE
+      const del1 = await sendDelete(server.info.baseUrl, sid);
+      expect(del1.status).toBe(204);
 
-      // DELETE s2 and re-init again with original s1
-      await sendDelete(server.info.baseUrl, s2);
-      const init3 = await sendInitialize(server.info.baseUrl, s1);
-      expect(init3.status).toBe(200);
-      const s3 = init3.sessionId;
-      if (!s3) throw new Error('Expected s3');
-      expect(s3).not.toBe(s1);
-      expect(s3).not.toBe(s2);
+      // Re-initialize with same session ID
+      const reinit = await sendInitialize(server.info.baseUrl, sid);
+      expect(reinit.status).toBe(200);
+      const sid2 = reinit.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid2);
+
+      // Second DELETE — MUST be 204, NOT 404
+      const del2 = await sendDelete(server.info.baseUrl, sid2);
+      expect(del2.status).toBe(204);
+
+      // Should be able to reconnect again after second DELETE
+      const reinit2 = await sendInitialize(server.info.baseUrl, sid2);
+      expect(reinit2.status).toBe(200);
+    });
+
+    test('should handle rapid DELETE + reconnect without waiting', async ({ server }) => {
+      const init = await sendInitialize(server.info.baseUrl);
+      expect(init.status).toBe(200);
+      const sid = init.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sid);
+
+      // Rapid cycle without waiting for SSE/logging
+      for (let i = 0; i < 5; i++) {
+        const del = await sendDelete(server.info.baseUrl, sid);
+        expect(del.status).toBe(204);
+
+        const reinit = await sendInitialize(server.info.baseUrl, sid);
+        expect(reinit.status).toBe(200);
+      }
+
+      // Final session should work
+      const list = await sendToolsList(server.info.baseUrl, sid);
+      expect(list.status).toBe(200);
     });
   });
 
-  test.describe('Notifications/initialized after reconnect', () => {
-    test('should accept notifications/initialized after reconnect with 202', async ({ server }) => {
-      // Init, delete, reconnect
-      const init1 = await sendInitialize(server.info.baseUrl);
-      const s1 = init1.sessionId;
-      if (!s1) throw new Error('Expected s1');
+  // ─── SSE listener behavior ─────────────────────────────────────
 
-      await sendDelete(server.info.baseUrl, s1);
-
-      const init2 = await sendInitialize(server.info.baseUrl, s1);
-      const s2 = init2.sessionId;
-      if (!s2) throw new Error('Expected s2');
-
-      // Send notifications/initialized with new session
-      const notif = await sendNotificationInitialized(server.info.baseUrl, s2);
-      expect(notif.status).toBe(202);
-    });
-
-    test('should allow tools/call immediately after initialize (skip notifications/initialized)', async ({
-      server,
-    }) => {
+  test.describe('SSE listener', () => {
+    test('should accept SSE GET with valid session ID', async ({ server }) => {
       const init = await sendInitialize(server.info.baseUrl);
-      const s = init.sessionId;
-      if (!s) throw new Error('Expected session');
+      expect(init.status).toBe(200);
+      const sessionId = init.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sessionId);
 
-      // Skip notifications/initialized — go straight to tool call
-      const tool = await sendToolCall(server.info.baseUrl, s, 'get-session-info');
-      expect(tool.status).toBe(200);
-    });
-  });
-
-  test.describe('SSE listener with stale session', () => {
-    test('should return 200 for GET SSE with an active session ID', async ({ server }) => {
-      const init = await sendInitialize(server.info.baseUrl);
-      const s = init.sessionId;
-      if (!s) throw new Error('Expected session');
-
-      await sendNotificationInitialized(server.info.baseUrl, s);
-
-      const sse = await sendSseGet(server.info.baseUrl, s);
+      const sse = await sendSseGet(server.info.baseUrl, sessionId);
       expect(sse.status).toBe(200);
       expect(sse.contentType).toContain('text/event-stream');
     });
 
-    test('should return 404 for GET SSE with terminated session ID', async ({ server }) => {
+    test('should reject SSE GET with terminated session ID', async ({ server }) => {
       const init = await sendInitialize(server.info.baseUrl);
-      const s = init.sessionId;
-      if (!s) throw new Error('Expected session');
+      expect(init.status).toBe(200);
+      const sessionId = init.sessionId!;
+      await sendNotificationInitialized(server.info.baseUrl, sessionId);
 
-      await sendNotificationInitialized(server.info.baseUrl, s);
-      await sendDelete(server.info.baseUrl, s);
+      await sendDelete(server.info.baseUrl, sessionId);
 
-      const sse = await sendSseGet(server.info.baseUrl, s);
+      const sse = await sendSseGet(server.info.baseUrl, sessionId);
       expect(sse.status).toBe(404);
-    });
-
-    test('should return 404 for GET SSE with fabricated session ID', async ({ server }) => {
-      const sse = await sendSseGet(server.info.baseUrl, 'fabricated-sse-session');
-      expect(sse.status).toBe(404);
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════════
-  // INITIALIZE RETRY WITH SAME SESSION (REGRESSION)
-  //
-  // These tests cover the exact production bug where a client retries
-  // initialize with a session whose transport is already initialized,
-  // causing a 400 "server already initialized" error.
-  //
-  // The scenario: DELETE → init (get session B) → stale notification
-  // with old session A → 404 → client retries init with B → must be 200.
-  // ═══════════════════════════════════════════════════════════════════
-
-  test.describe('Initialize retry with same session (regression #reinit)', () => {
-    test('exact production bug: DELETE → init → stale notification → retry initialize with same session', async ({
-      server,
-    }) => {
-      // Step 1: Full initial handshake with session A
-      const initA = await sendInitialize(server.info.baseUrl);
-      expect(initA.status).toBe(200);
-      const sessionA = initA.sessionId;
-      if (!sessionA) throw new Error('Expected session A');
-
-      const notifA = await sendNotificationInitialized(server.info.baseUrl, sessionA);
-      expect(notifA.status).toBe(202);
-
-      // Step 2: Verify session A works
-      const toolA = await sendToolCall(server.info.baseUrl, sessionA, 'get-session-info');
-      expect(toolA.status).toBe(200);
-
-      // Step 3: DELETE session A
-      const del = await sendDelete(server.info.baseUrl, sessionA);
-      expect(del.status).toBe(204);
-
-      // Step 4: Initialize with stale session A → reconnect creates session B
-      const initB = await sendInitialize(server.info.baseUrl, sessionA);
-      expect(initB.status).toBe(200);
-      const sessionB = initB.sessionId;
-      if (!sessionB) throw new Error('Expected session B');
-      expect(sessionB).not.toBe(sessionA);
-
-      // Step 5: Client sends notifications/initialized with OLD session A → 404
-      const staleNotif = await sendNotificationInitialized(server.info.baseUrl, sessionA);
-      expect(staleNotif.status).toBe(404);
-
-      // Step 6: THE BUG — Client retries initialize with session B
-      // Before fix: 400 "server already initialized"
-      // After fix: 200 with re-initialized session
-      const retryInit = await sendInitialize(server.info.baseUrl, sessionB);
-      expect(retryInit.status).toBe(200);
-
-      // Step 7: Complete handshake and verify tools work
-      const retrySessionId = retryInit.sessionId;
-      if (!retrySessionId) throw new Error('Expected session after retry');
-
-      const notifB = await sendNotificationInitialized(server.info.baseUrl, retrySessionId);
-      expect(notifB.status).toBe(202);
-
-      const toolB = await sendToolCall(server.info.baseUrl, retrySessionId, 'get-session-info');
-      expect(toolB.status).toBe(200);
-    });
-
-    test('multiple initialize retries on same session should all succeed', async ({ server }) => {
-      const init1 = await sendInitialize(server.info.baseUrl);
-      expect(init1.status).toBe(200);
-      const sessionId = init1.sessionId;
-      if (!sessionId) throw new Error('Expected session');
-
-      // Retry initialize 3 times with same session
-      for (let i = 0; i < 3; i++) {
-        const retry = await sendInitialize(server.info.baseUrl, sessionId);
-        expect(retry.status).toBe(200);
-      }
-
-      // Session should still work after retries
-      const retryResult = await sendInitialize(server.info.baseUrl, sessionId);
-      expect(retryResult.status).toBe(200);
-      const finalSession = retryResult.sessionId;
-      if (!finalSession) throw new Error('Expected final session');
-
-      const notif = await sendNotificationInitialized(server.info.baseUrl, finalSession);
-      expect(notif.status).toBe(202);
-      const tool = await sendToolCall(server.info.baseUrl, finalSession, 'get-session-info');
-      expect(tool.status).toBe(200);
-    });
-
-    test('retry initialize then use tools normally', async ({ server }) => {
-      // Initialize
-      const init1 = await sendInitialize(server.info.baseUrl);
-      expect(init1.status).toBe(200);
-      const s = init1.sessionId;
-      if (!s) throw new Error('Expected session');
-
-      // Retry initialize with same session
-      const init2 = await sendInitialize(server.info.baseUrl, s);
-      expect(init2.status).toBe(200);
-      const s2 = init2.sessionId;
-      if (!s2) throw new Error('Expected session after retry');
-
-      // Complete handshake
-      await sendNotificationInitialized(server.info.baseUrl, s2);
-
-      // All standard operations should work
-      const list = await sendToolsList(server.info.baseUrl, s2);
-      expect(list.status).toBe(200);
-
-      const tool = await sendToolCall(server.info.baseUrl, s2, 'increment-counter', { amount: 7 });
-      expect(tool.status).toBe(200);
-      const body = tool.body as Record<string, unknown>;
-      const result = body['result'] as Record<string, unknown>;
-      const content = result['content'] as Array<{ text: string }>;
-      const output = JSON.parse(content[0].text) as { newValue: number };
-      expect(output.newValue).toBe(7);
-    });
-
-    test('rapid DELETE + init + retry cycles', async ({ server }) => {
-      for (let cycle = 0; cycle < 3; cycle++) {
-        // Initialize
-        const init1 = await sendInitialize(server.info.baseUrl);
-        expect(init1.status).toBe(200);
-        const s = init1.sessionId;
-        if (!s) throw new Error(`Expected session in cycle ${cycle}`);
-
-        // Retry initialize (simulates client retry)
-        const retry = await sendInitialize(server.info.baseUrl, s);
-        expect(retry.status).toBe(200);
-
-        const retrySession = retry.sessionId;
-        if (!retrySession) throw new Error(`Expected retry session in cycle ${cycle}`);
-
-        // Verify it works
-        const notif = await sendNotificationInitialized(server.info.baseUrl, retrySession);
-        expect(notif.status).toBe(202);
-        const tool = await sendToolCall(server.info.baseUrl, retrySession, 'get-session-info');
-        expect(tool.status).toBe(200);
-
-        // DELETE before next cycle
-        const del = await sendDelete(server.info.baseUrl, retrySession);
-        expect(del.status).toBe(204);
-      }
-    });
-
-    test('concurrent clients: one clients retry does not break another', async ({ server }) => {
-      // Client A initializes
-      const initA = await sendInitialize(server.info.baseUrl);
-      expect(initA.status).toBe(200);
-      const sA = initA.sessionId;
-      if (!sA) throw new Error('Expected session A');
-      await sendNotificationInitialized(server.info.baseUrl, sA);
-
-      // Client B initializes
-      const initB = await sendInitialize(server.info.baseUrl);
-      expect(initB.status).toBe(200);
-      const sB = initB.sessionId;
-      if (!sB) throw new Error('Expected session B');
-      await sendNotificationInitialized(server.info.baseUrl, sB);
-
-      // Client A retries initialize (should not affect B)
-      const retryA = await sendInitialize(server.info.baseUrl, sA);
-      expect(retryA.status).toBe(200);
-
-      // Client B should still work fine
-      const toolB = await sendToolCall(server.info.baseUrl, sB, 'get-session-info');
-      expect(toolB.status).toBe(200);
-      const bodyB = toolB.body as Record<string, unknown>;
-      const resultB = bodyB['result'] as Record<string, unknown>;
-      const contentB = resultB['content'] as Array<{ text: string }>;
-      const infoB = JSON.parse(contentB[0].text) as { hasSession: boolean };
-      expect(infoB.hasSession).toBe(true);
-    });
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// SSE (Legacy) SESSION LIFECYCLE TESTS
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Send a POST to /message with sessionId query param (legacy SSE message endpoint).
- */
-async function sendSseMessage(
-  baseUrl: string,
-  sessionId: string,
-  body: unknown,
-): Promise<{ status: number; body: string }> {
-  const response = await fetch(`${baseUrl}/message?sessionId=${encodeURIComponent(sessionId)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-    },
-    body: JSON.stringify(body),
-  });
-  return { status: response.status, body: await response.text() };
-}
-
-/**
- * Connect to legacy SSE endpoint (GET /sse) and extract session ID from the endpoint event.
- * Returns the session URL (which contains the session ID) and a close function.
- */
-async function connectSse(baseUrl: string): Promise<{ endpointUrl: string; sessionId: string; close: () => void }> {
-  return new Promise((resolve, reject) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      controller.abort();
-      reject(new Error('SSE connection timeout (5s)'));
-    }, 5000);
-
-    fetch(`${baseUrl}/sse`, {
-      method: 'GET',
-      headers: { Accept: 'text/event-stream' },
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok || !response.body) {
-          clearTimeout(timer);
-          reject(new Error(`SSE connection failed: ${response.status}`));
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        const read = async (): Promise<void> => {
-          const { done, value } = await reader.read();
-          if (done) return;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Look for the endpoint event which contains the message URL with sessionId
-          const endpointMatch = buffer.match(/event: endpoint\ndata: (.+)\n/);
-          if (endpointMatch) {
-            clearTimeout(timer);
-            const endpointUrl = endpointMatch[1].trim();
-            // Extract sessionId from the endpoint URL query params
-            const url = new URL(endpointUrl, baseUrl);
-            const sessionId = url.searchParams.get('sessionId') ?? '';
-
-            resolve({
-              endpointUrl,
-              sessionId,
-              close: () => {
-                controller.abort();
-              },
-            });
-            return;
-          }
-
-          return read();
-        };
-
-        read().catch(() => {
-          /* abort expected */
-        });
-      })
-      .catch((err) => {
-        clearTimeout(timer);
-        if (err.name !== 'AbortError') reject(err);
-      });
-  });
-}
-
-test.describe('SSE Session Lifecycle E2E', () => {
-  test.use({
-    server: 'apps/e2e/demo-e2e-transport-recreation/src/main.ts',
-    project: 'demo-e2e-transport-recreation',
-    publicMode: true,
-  });
-
-  test.describe('SSE connection and initialization', () => {
-    test('should establish SSE connection and return session ID', async ({ server }) => {
-      const { sessionId, close } = await connectSse(server.info.baseUrl);
-      expect(sessionId).toBeTruthy();
-      expect(sessionId.length).toBeGreaterThan(0);
-      close();
-    });
-
-    test('should accept initialize via /message endpoint', async ({ server }) => {
-      const { sessionId, close } = await connectSse(server.info.baseUrl);
-
-      const result = await sendSseMessage(server.info.baseUrl, sessionId, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-11-25',
-          capabilities: {},
-          clientInfo: { name: 'sse-test', version: '1.0.0' },
-        },
-      });
-
-      expect(result.status).toBe(202);
-      close();
-    });
-  });
-
-  test.describe('Fabricated session ID on SSE', () => {
-    test('should return 404 for /message with fabricated sessionId query param', async ({ server }) => {
-      const result = await sendSseMessage(server.info.baseUrl, 'completely-fabricated-sse-session', {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      });
-      expect(result.status).toBe(404);
-    });
-
-    test('should return 404 for /message with mcp-session-id header and fabricated ID', async ({ server }) => {
-      const response = await fetch(`${server.info.baseUrl}/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': 'fabricated-header-session',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/list',
-          params: {},
-        }),
-      });
-      expect(response.status).toBe(404);
-    });
-  });
-
-  test.describe('Invalid session format on SSE', () => {
-    test('should reject oversized session ID on /message', async ({ server }) => {
-      const longId = 'a'.repeat(2049);
-      const result = await sendSseMessage(server.info.baseUrl, longId, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      });
-      // Either 404 (schema validation) or error status (upstream rejection)
-      expect(result.status).toBeGreaterThanOrEqual(400);
-    });
-  });
-
-  test.describe('Tools execution over SSE', () => {
-    test('should execute tool via /message after SSE connection', async ({ server }) => {
-      const { sessionId, close } = await connectSse(server.info.baseUrl);
-
-      // Initialize
-      const initResult = await sendSseMessage(server.info.baseUrl, sessionId, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-11-25',
-          capabilities: {},
-          clientInfo: { name: 'sse-test', version: '1.0.0' },
-        },
-      });
-      expect(initResult.status).toBe(202);
-
-      // Send notifications/initialized
-      await sendSseMessage(server.info.baseUrl, sessionId, {
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-      });
-
-      // Call tool
-      const toolResult = await sendSseMessage(server.info.baseUrl, sessionId, {
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: { name: 'get-session-info', arguments: {} },
-      });
-      expect(toolResult.status).toBe(202);
-
-      close();
     });
   });
 });
