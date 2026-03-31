@@ -16,7 +16,7 @@ function stripFrontmatter(content: string): string {
 
 export async function readSkill(
   nameOrPath: string,
-  options: { reference?: string; listRefs?: boolean },
+  options: { reference?: string; listRefs?: boolean; listExamples?: boolean; examplesForRef?: string },
 ): Promise<void> {
   // Support colon syntax: "skillName:path/to/file.ext"
   let skillName = nameOrPath;
@@ -58,6 +58,64 @@ export async function readSkill(
     console.log('');
     console.log(c('gray', `  ${refs.length} reference(s). Read with: frontmcp skills read ${skillName} <reference>`));
     console.log(c('gray', `  Or use colon syntax: frontmcp skills read ${skillName}:<reference>\n`));
+    return;
+  }
+
+  // Mode 1b: List examples
+  if (options.listExamples || options.examplesForRef) {
+    const refs = entry.references ?? [];
+    const refFilter = options.examplesForRef;
+
+    // Collect all examples, optionally filtered by reference
+    const allExamples: Array<{ ref: string; name: string; level: string; description: string }> = [];
+    for (const ref of refs) {
+      if (refFilter && ref.name !== refFilter) continue;
+      if (!ref.examples || ref.examples.length === 0) continue;
+      for (const ex of ref.examples) {
+        allExamples.push({ ref: ref.name, name: ex.name, level: ex.level, description: ex.description });
+      }
+    }
+
+    if (refFilter && !refs.some((r) => r.name === refFilter)) {
+      console.error(c('red', `Reference "${refFilter}" not found in skill "${skillName}".`));
+      console.log(c('gray', `Use 'frontmcp skills read ${skillName} --refs' to list available references.`));
+      process.exit(1);
+    }
+
+    if (allExamples.length === 0) {
+      const scope = refFilter ? `reference "${refFilter}"` : `skill "${skillName}"`;
+      console.log(c('yellow', `No examples found for ${scope}.`));
+      return;
+    }
+
+    const title = refFilter ? `Examples for ${skillName} > ${refFilter}` : `Examples for ${skillName}`;
+    console.log(c('bold', `\n  ${title}:\n`));
+
+    let currentRef = '';
+    for (const ex of allExamples) {
+      if (ex.ref !== currentRef) {
+        currentRef = ex.ref;
+        console.log(`  ${c('cyan', currentRef)}`);
+      }
+      const levelTag =
+        ex.level === 'advanced'
+          ? c('red', ex.level)
+          : ex.level === 'intermediate'
+            ? c('yellow', ex.level)
+            : c('green', ex.level);
+      console.log(`    ${c('green', ex.name)} ${c('gray', `[${levelTag}]`)}`);
+      if (ex.description) {
+        console.log(`      ${c('gray', ex.description)}`);
+      }
+    }
+    console.log('');
+    console.log(
+      c(
+        'gray',
+        `  ${allExamples.length} example(s). Read with: frontmcp skills read ${skillName}:examples/<reference>/<example>.md`,
+      ),
+    );
+    console.log('');
     return;
   }
 
@@ -122,6 +180,10 @@ export async function readSkill(
   console.log(c('gray', `  Has resources: ${entry.hasResources}`));
   if (entry.references && entry.references.length > 0) {
     console.log(c('gray', `  References: ${entry.references.length} (use --refs to list)`));
+    const exampleCount = entry.references.reduce((sum, r) => sum + (r.examples?.length ?? 0), 0);
+    if (exampleCount > 0) {
+      console.log(c('gray', `  Examples: ${exampleCount} (use --examples to list)`));
+    }
   }
   console.log('');
   console.log(c('gray', '  ─────────────────────────────────────'));
@@ -134,5 +196,6 @@ export async function readSkill(
   console.log(c('gray', `  Install: frontmcp skills install ${skillName} --provider claude`));
   if (entry.references && entry.references.length > 0) {
     console.log(c('gray', `  References: frontmcp skills read ${skillName} --refs`));
+    console.log(c('gray', `  Examples: frontmcp skills read ${skillName} --examples`));
   }
 }

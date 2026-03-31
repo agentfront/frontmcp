@@ -60,3 +60,12 @@ All protocols enabled. Maximum flexibility.
 | AWS Lambda                | `'stateless-api'`              | Stateless execution model                 |
 | Cloudflare Workers        | `'stateless-api'`              | Stateless edge runtime                    |
 | Development               | `'full'`                       | Test all protocols                        |
+
+## Examples
+
+| Example                                                                                                    | Level        | Description                                                                   |
+| ---------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------- |
+| [`legacy-preset-nodejs`](../examples/configure-transport-protocol-presets/legacy-preset-nodejs.md)         | Basic        | Use the default legacy preset for maximum compatibility with all MCP clients. |
+| [`stateless-api-serverless`](../examples/configure-transport-protocol-presets/stateless-api-serverless.md) | Intermediate | Use the stateless-api preset for Vercel, Lambda, or Cloudflare Workers.       |
+
+> See all examples in [`examples/configure-transport-protocol-presets/`](../examples/configure-transport-protocol-presets/)

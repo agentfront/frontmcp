@@ -185,6 +185,15 @@ frontmcp service uninstall my-server
 | Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                               |
 | Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds              |
 
+## Examples
+
+| Example                                                                 | Level        | Description                                                                                                  |
+| ----------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| [`cli-binary-build`](../examples/build-for-cli/cli-binary-build.md)     | Basic        | Build a FrontMCP server as a standalone binary using Node.js Single Executable Applications (SEA).           |
+| [`unix-socket-daemon`](../examples/build-for-cli/unix-socket-daemon.md) | Intermediate | Run a FrontMCP server as a local daemon accessible via Unix socket for IDE extensions and local MCP clients. |
+
+> See all examples in [`examples/build-for-cli/`](../examples/build-for-cli/)
+
 ## Reference
 
 - **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/production-build>

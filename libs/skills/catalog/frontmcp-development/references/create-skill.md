@@ -606,6 +606,16 @@ class DevServer {}
 | Skill parameters are ignored by the AI           | Parameters are declared but not referenced in the instruction text      | Mention each parameter by name in the instructions so the AI knows how to apply them   |
 | Directory-based skill missing bundled files      | Subdirectories are not named `scripts/`, `references/`, or `assets/`    | Use the exact conventional directory names; other names are not auto-bundled           |
 
+## Examples
+
+| Example                                                                      | Level        | Description                                                                                                             |
+| ---------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| [`basic-inline-skill`](../examples/create-skill/basic-inline-skill.md)       | Basic        | A minimal instruction-only skill with inline content and the function builder alternative.                              |
+| [`directory-based-skill`](../examples/create-skill/directory-based-skill.md) | Advanced     | A skill loaded from a directory structure with SKILL.md frontmatter, plus file-based and URL-based instruction sources. |
+| [`parameterized-skill`](../examples/create-skill/parameterized-skill.md)     | Intermediate | A skill with customizable parameters, usage examples for AI guidance, and controlled visibility.                        |
+
+> See all examples in [`examples/create-skill/`](../examples/create-skill/)
+
 ## Reference
 
 - **Docs:** <https://docs.agentfront.dev/frontmcp/servers/skills>

@@ -57,3 +57,12 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 CMD ["node", "dist/main.js"]
+
+## Examples
+
+| Example                                                                                               | Level    | Description                                                                                |
+| ----------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| [`basic-multistage-dockerfile`](../examples/deploy-to-node-dockerfile/basic-multistage-dockerfile.md) | Basic    | A minimal multi-stage Dockerfile for building and running a FrontMCP server in production. |
+| [`secure-nonroot-dockerfile`](../examples/deploy-to-node-dockerfile/secure-nonroot-dockerfile.md)     | Advanced | A production Dockerfile with a non-root user, proper ownership, and security hardening.    |
+
+> See all examples in [`examples/deploy-to-node-dockerfile/`](../examples/deploy-to-node-dockerfile/)

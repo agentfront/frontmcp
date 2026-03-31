@@ -137,6 +137,16 @@ ls dist/browser/
 | Bundle too large            | All server-side code included             | Use `--target browser` and a dedicated client entry file         |
 | `@frontmcp/utils` fs throws | File system ops called in browser         | Remove fs calls; use API endpoints or in-memory alternatives     |
 
+## Examples
+
+| Example                                                                                               | Level        | Description                                                                                           |
+| ----------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| [`browser-build-with-custom-entry`](../examples/build-for-browser/browser-build-with-custom-entry.md) | Intermediate | Build a browser bundle using a dedicated client entry file that avoids Node.js-only imports.          |
+| [`browser-crypto-and-storage`](../examples/build-for-browser/browser-crypto-and-storage.md)           | Advanced     | Use `@frontmcp/utils` crypto functions (WebCrypto API) and in-memory storage in browser environments. |
+| [`react-provider-setup`](../examples/build-for-browser/react-provider-setup.md)                       | Basic        | Connect a React application to a remote FrontMCP server using `@frontmcp/react`.                      |
+
+> See all examples in [`examples/build-for-browser/`](../examples/build-for-browser/)
+
 ## Reference
 
 - **Docs:** <https://docs.agentfront.dev/frontmcp/deployment/browser-compatibility>

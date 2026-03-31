@@ -194,6 +194,16 @@ curl -X POST http://localhost:3001/ -H 'Content-Type: application/json' -d '{"js
 | Session not found after server restart | In-memory sessions do not survive restarts                                 | Enable Redis persistence with `distributedMode: true`                                      |
 | Streamable HTTP returns 404            | Streamable HTTP is not enabled in the current preset                       | Use `'modern'`, `'legacy'`, or `'full'` preset, or set `streamable: true` in custom config |
 
+## Examples
+
+| Example                                                                                       | Level        | Description                                                                              |
+| --------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| [`custom-protocol-flags`](../examples/configure-transport/custom-protocol-flags.md)           | Advanced     | Override individual protocol flags instead of using a preset for fine-grained control.   |
+| [`distributed-sessions-redis`](../examples/configure-transport/distributed-sessions-redis.md) | Intermediate | Configure transport with Redis persistence for multi-instance load-balanced deployments. |
+| [`stateless-serverless`](../examples/configure-transport/stateless-serverless.md)             | Basic        | Configure stateless transport for Vercel, Lambda, or Cloudflare deployments.             |
+
+> See all examples in [`examples/configure-transport/`](../examples/configure-transport/)
+
 ## Reference
 
 - **Docs:** [Runtime Modes and Transport Configuration](https://docs.agentfront.dev/frontmcp/deployment/runtime-modes)

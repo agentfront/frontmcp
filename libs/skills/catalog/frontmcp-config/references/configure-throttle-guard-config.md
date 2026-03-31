@@ -71,3 +71,12 @@ interface IpFilterConfig {
 4. Per-tool rate limit — checked per tool
 5. Per-tool concurrency — checked per tool
 6. Per-tool timeout — enforced during execution
+
+## Examples
+
+| Example                                                                                       | Level    | Description                                                              |
+| --------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| [`full-guard-config`](../examples/configure-throttle-guard-config/full-guard-config.md)       | Advanced | Complete GuardConfig using every available field for maximum protection. |
+| [`minimal-guard-config`](../examples/configure-throttle-guard-config/minimal-guard-config.md) | Basic    | Enable throttle with just a global rate limit and default timeout.       |
+
+> See all examples in [`examples/configure-throttle-guard-config/`](../examples/configure-throttle-guard-config/)

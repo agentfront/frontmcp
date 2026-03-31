@@ -580,6 +580,16 @@ When a client requests completions for the `userId` parameter with a partial str
 | Binary content is garbled                        | Returning raw buffer in `text` field             | Use `blob: buffer.toString('base64')` instead of `text` for binary data            |
 | `this.get(TOKEN)` throws DependencyNotFoundError | Provider not registered in scope                 | Register provider in `providers` array of `@App` or `@FrontMcp`                    |
 
+## Examples
+
+| Example                                                                               | Level        | Description                                                                          |
+| ------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------ |
+| [`basic-static-resource`](../examples/create-resource/basic-static-resource.md)       | Basic        | A static resource that exposes application configuration at a fixed URI.             |
+| [`binary-and-multi-content`](../examples/create-resource/binary-and-multi-content.md) | Advanced     | A resource serving binary blob data and a resource returning multiple content items. |
+| [`parameterized-template`](../examples/create-resource/parameterized-template.md)     | Intermediate | A resource template with typed URI parameters and argument autocompletion.           |
+
+> See all examples in [`examples/create-resource/`](../examples/create-resource/)
+
 ## Reference
 
 - [Resources Documentation](https://docs.agentfront.dev/frontmcp/servers/resources)

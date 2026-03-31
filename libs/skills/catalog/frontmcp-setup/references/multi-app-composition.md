@@ -399,6 +399,16 @@ export default class Server {}
 | `standalone: true` app tools not visible | Standalone apps are fully isolated by design                | Use `standalone: 'includeInParent'` to expose tools in the parent server while keeping scope isolation   |
 | Per-app auth not working                 | App does not declare its own `auth` field                   | Add `auth` configuration directly on the `@App` decorator; omitted `auth` inherits server-level defaults |
 
+## Examples
+
+| Example                                                                                             | Level        | Description                                                                                     |
+| --------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
+| [`local-apps-with-shared-tools`](../examples/multi-app-composition/local-apps-with-shared-tools.md) | Basic        | Compose multiple local `@App` classes into a server with shared tools available to all apps.    |
+| [`per-app-auth-and-isolation`](../examples/multi-app-composition/per-app-auth-and-isolation.md)     | Advanced     | Configure mixed authentication modes and scope isolation for different apps in a single server. |
+| [`remote-and-esm-apps`](../examples/multi-app-composition/remote-and-esm-apps.md)                   | Intermediate | Compose local, ESM (npm package), and remote (external MCP server) apps into a single gateway.  |
+
+> See all examples in [`examples/multi-app-composition/`](../examples/multi-app-composition/)
+
 ## Reference
 
 - [Multi-App Composition Documentation](https://docs.agentfront.dev/frontmcp/features/multi-app-composition)

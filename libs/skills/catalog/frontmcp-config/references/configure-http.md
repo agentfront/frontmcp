@@ -204,6 +204,16 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 | Routes return 404 after setting `entryPath`      | Client is still requesting the root path without the prefix                                | Update client base URL to include the entry path (e.g., `http://localhost:3001/api/mcp`)                |
 | Server binds but external clients cannot connect | Server bound to `localhost` or `127.0.0.1` inside a container                              | Set `host: '0.0.0.0'` or use Docker port mapping to expose the container port                           |
 
+## Examples
+
+| Example                                                                              | Level        | Description                                                                          |
+| ------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
+| [`cors-restricted-origins`](../examples/configure-http/cors-restricted-origins.md)   | Basic        | Configure CORS to allow only specific frontend origins with credentials.             |
+| [`entry-path-reverse-proxy`](../examples/configure-http/entry-path-reverse-proxy.md) | Intermediate | Mount the MCP server under a URL prefix for reverse proxy or multi-service setups.   |
+| [`unix-socket-local`](../examples/configure-http/unix-socket-local.md)               | Intermediate | Bind the server to a unix socket instead of a TCP port for local-only communication. |
+
+> See all examples in [`examples/configure-http/`](../examples/configure-http/)
+
 ## Reference
 
 - [HTTP Server Docs](https://docs.agentfront.dev/frontmcp/deployment/local-dev-server)

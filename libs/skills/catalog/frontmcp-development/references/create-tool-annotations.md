@@ -37,3 +37,12 @@ Annotations provide hints to MCP clients about tool behavior:
 - Set `destructiveHint: true` for delete/overwrite operations (triggers client warnings)
 - Set `idempotentHint: true` for safe-to-retry tools
 - Set `openWorldHint: false` for tools that only access local data
+
+## Examples
+
+| Example                                                                                     | Level        | Description                                                                                                                     |
+| ------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`destructive-delete-tool`](../examples/create-tool-annotations/destructive-delete-tool.md) | Intermediate | Demonstrates annotating a tool that deletes data, enabling MCP clients to warn users before execution.                          |
+| [`readonly-query-tool`](../examples/create-tool-annotations/readonly-query-tool.md)         | Basic        | Demonstrates annotating a tool that only reads data, signaling to MCP clients that it has no side effects and is safe to retry. |
+
+> See all examples in [`examples/create-tool-annotations/`](../examples/create-tool-annotations/)

@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata } from '../../sdk/src/skill/skill-md-parser';
 import type { SkillManifest, SkillCatalogEntry } from '../src/manifest';
-import { VALID_TARGETS, VALID_CATEGORIES, VALID_BUNDLES } from '../src/manifest';
+import { VALID_TARGETS, VALID_CATEGORIES, VALID_BUNDLES, VALID_EXAMPLE_LEVELS } from '../src/manifest';
 
 const CATALOG_DIR = path.resolve(__dirname, '..', 'catalog');
 const MANIFEST_PATH = path.join(CATALOG_DIR, 'skills-manifest.json');
@@ -49,6 +49,145 @@ function findAllSkillDirs(): string[] {
     }
   }
   return dirs;
+}
+
+function readMarkdownBody(content: string): string {
+  return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+}
+
+function extractFirstParagraph(content: string): string {
+  const body = readMarkdownBody(content);
+  const lines = body.split(/\r?\n/);
+  let sawHeading = false;
+  const paragraph: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!sawHeading && trimmed.startsWith('#')) {
+      sawHeading = true;
+      continue;
+    }
+    if (!sawHeading) continue;
+    if (!trimmed) {
+      if (paragraph.length > 0) break;
+      continue;
+    }
+    if (trimmed.startsWith('##')) {
+      if (paragraph.length > 0) break;
+      continue;
+    }
+    paragraph.push(trimmed);
+  }
+
+  return paragraph.join(' ');
+}
+
+function extractSectionBullets(content: string, heading: string): string[] {
+  const body = readMarkdownBody(content);
+  const lines = body.split(/\r?\n/);
+  const bullets: string[] = [];
+  let inSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === `## ${heading}`) {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) continue;
+    if (trimmed.startsWith('## ')) break;
+    if (trimmed.startsWith('- ')) {
+      bullets.push(trimmed.slice(2).trim());
+    }
+  }
+
+  return bullets;
+}
+
+function humanizeExampleLevel(level: string): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+function parseExamplesTableRows(content: string): Array<{ name: string; level: string; description: string }> {
+  const lines = content.split(/\r?\n/);
+  const rows: Array<{ name: string; level: string; description: string }> = [];
+  let inTable = false;
+
+  for (const line of lines) {
+    if (line.trim() === '| Example | Level | Description |') {
+      inTable = true;
+      continue;
+    }
+    if (!inTable) continue;
+    if (line.startsWith('| ---')) continue;
+    if (!line.startsWith('|')) break;
+
+    const cells = line.split('|').map((cell) => cell.trim());
+    if (cells.length < 5) continue;
+
+    const exampleCell = cells[1];
+    const level = cells[2];
+    const description = cells[3];
+    const nameMatch = exampleCell.match(/\[`([^`]+)`\]/);
+
+    rows.push({
+      name: nameMatch ? nameMatch[1] : exampleCell,
+      level,
+      description,
+    });
+  }
+
+  return rows;
+}
+
+function getAllReferenceFiles(): { skill: string; file: string; fullPath: string }[] {
+  const results: { skill: string; file: string; fullPath: string }[] = [];
+  const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
+    const full = path.join(CATALOG_DIR, f);
+    return fs.statSync(full).isDirectory() && f !== 'node_modules';
+  });
+  for (const entry of entries) {
+    const refsDir = path.join(CATALOG_DIR, entry, 'references');
+    if (fs.existsSync(refsDir)) {
+      const files = fs.readdirSync(refsDir).filter((f) => f.endsWith('.md'));
+      for (const file of files) {
+        results.push({ skill: entry, file, fullPath: path.join(refsDir, file) });
+      }
+    }
+    const skillMd = path.join(CATALOG_DIR, entry, 'SKILL.md');
+    if (fs.existsSync(skillMd)) {
+      results.push({ skill: entry, file: 'SKILL.md', fullPath: skillMd });
+    }
+  }
+  return results;
+}
+
+function getAllExampleFiles(): { skill: string; reference: string; file: string; fullPath: string }[] {
+  const results: { skill: string; reference: string; file: string; fullPath: string }[] = [];
+  const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
+    const full = path.join(CATALOG_DIR, f);
+    return fs.statSync(full).isDirectory() && f !== 'node_modules';
+  });
+  for (const entry of entries) {
+    const examplesDir = path.join(CATALOG_DIR, entry, 'examples');
+    if (!fs.existsSync(examplesDir)) continue;
+    const refDirs = fs.readdirSync(examplesDir).filter((f) => {
+      return fs.statSync(path.join(examplesDir, f)).isDirectory();
+    });
+    for (const refDir of refDirs) {
+      const refPath = path.join(examplesDir, refDir);
+      const files = fs.readdirSync(refPath).filter((f) => f.endsWith('.md'));
+      for (const file of files) {
+        results.push({
+          skill: entry,
+          reference: refDir,
+          file,
+          fullPath: path.join(refPath, file),
+        });
+      }
+    }
+  }
+  return results;
 }
 
 describe('skills catalog validation', () => {
@@ -277,35 +416,18 @@ describe('skills catalog validation', () => {
   });
 
   describe('semantic content validation', () => {
-    /**
-     * Collects all .md files under references/ for all catalog skills.
-     */
-    function getAllReferenceFiles(): { skill: string; file: string; fullPath: string }[] {
-      const results: { skill: string; file: string; fullPath: string }[] = [];
-      const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
-        const full = path.join(CATALOG_DIR, f);
-        return fs.statSync(full).isDirectory() && f !== 'node_modules';
-      });
-      for (const entry of entries) {
-        const refsDir = path.join(CATALOG_DIR, entry, 'references');
-        if (fs.existsSync(refsDir)) {
-          const files = fs.readdirSync(refsDir).filter((f) => f.endsWith('.md'));
-          for (const file of files) {
-            results.push({ skill: entry, file, fullPath: path.join(refsDir, file) });
-          }
-        }
-        // Also include the SKILL.md itself
-        const skillMd = path.join(CATALOG_DIR, entry, 'SKILL.md');
-        if (fs.existsSync(skillMd)) {
-          results.push({ skill: entry, file: 'SKILL.md', fullPath: skillMd });
-        }
-      }
-      return results;
-    }
+    const documentationFiles = [
+      ...getAllReferenceFiles(),
+      ...getAllExampleFiles().map(({ skill, file, fullPath, reference }) => ({
+        skill,
+        file: `examples/${reference}/${file}`,
+        fullPath,
+      })),
+    ];
 
     it('should not use invalid LLM "adapter" field in code examples', () => {
       const violations: string[] = [];
-      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+      for (const { skill, file, fullPath } of documentationFiles) {
         const content = fs.readFileSync(fullPath, 'utf-8');
         // Match adapter: 'anthropic' or adapter: 'openai' in code blocks
         const adapterMatches = content.match(/adapter:\s*['"](?:anthropic|openai)['"]/g);
@@ -318,7 +440,7 @@ describe('skills catalog validation', () => {
 
     it('should not use auth string shorthand in decorator context', () => {
       const violations: string[] = [];
-      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+      for (const { skill, file, fullPath } of documentationFiles) {
         const content = fs.readFileSync(fullPath, 'utf-8');
         // Match auth: 'remote', auth: 'public', auth: 'transparent' as standalone config values
         const authShorthand = content.match(/auth:\s*['"](?:remote|public|transparent)['"]/g);
@@ -332,7 +454,7 @@ describe('skills catalog validation', () => {
     it('should not use "streamable-http" as a transport preset in SDK context', () => {
       const violations: string[] = [];
       const validPresets = ['modern', 'legacy', 'stateless-api', 'full'];
-      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+      for (const { skill, file, fullPath } of documentationFiles) {
         const content = fs.readFileSync(fullPath, 'utf-8');
         // Match protocol: 'streamable-http' or transport: 'streamable-http'
         const matches = content.match(/(?:protocol|transport):\s*['"]streamable-http['"]/g);
@@ -347,7 +469,7 @@ describe('skills catalog validation', () => {
 
     it('should not use bare @App() without metadata', () => {
       const violations: string[] = [];
-      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+      for (const { skill, file, fullPath } of documentationFiles) {
         const content = fs.readFileSync(fullPath, 'utf-8');
         // Match @App() with empty parens (no arguments)
         const bareApp = content.match(/@App\(\s*\)/g);
@@ -360,7 +482,7 @@ describe('skills catalog validation', () => {
 
     it('should not use "session:" as a top-level @FrontMcp field', () => {
       const violations: string[] = [];
-      for (const { skill, file, fullPath } of getAllReferenceFiles()) {
+      for (const { skill, file, fullPath } of documentationFiles) {
         const content = fs.readFileSync(fullPath, 'utf-8');
         // Look for session: { ... } in decorator blocks (preceded by @FrontMcp)
         // Simple heuristic: find session: { store in code blocks
@@ -370,6 +492,215 @@ describe('skills catalog validation', () => {
         }
       }
       expect(violations).toEqual([]);
+    });
+  });
+
+  describe('examples validation', () => {
+    it('every examples/ subfolder should match a reference filename', () => {
+      const mismatches: string[] = [];
+      const entries = fs.readdirSync(CATALOG_DIR).filter((f) => {
+        const full = path.join(CATALOG_DIR, f);
+        return fs.statSync(full).isDirectory() && f !== 'node_modules';
+      });
+      for (const entry of entries) {
+        const examplesDir = path.join(CATALOG_DIR, entry, 'examples');
+        if (!fs.existsSync(examplesDir)) continue;
+        const refsDir = path.join(CATALOG_DIR, entry, 'references');
+        const refNames = fs.existsSync(refsDir)
+          ? fs
+              .readdirSync(refsDir)
+              .filter((f) => f.endsWith('.md'))
+              .map((f) => f.replace(/\.md$/, ''))
+          : [];
+        const exampleDirs = fs.readdirSync(examplesDir).filter((f) => {
+          return fs.statSync(path.join(examplesDir, f)).isDirectory();
+        });
+        for (const dir of exampleDirs) {
+          if (!refNames.includes(dir)) {
+            mismatches.push(`${entry}/examples/${dir} has no matching reference file`);
+          }
+        }
+      }
+      expect(mismatches).toEqual([]);
+    });
+
+    it('every example .md file should have valid frontmatter', () => {
+      const invalid: string[] = [];
+      for (const { skill, reference, file, fullPath } of getAllExampleFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        const { frontmatter } = parseSkillMdFrontmatter(content);
+        const expectedName = file.replace(/\.md$/, '');
+        if (!frontmatter['name'] || typeof frontmatter['name'] !== 'string') {
+          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "name" in frontmatter`);
+        }
+        if (frontmatter['name'] && frontmatter['name'] !== expectedName) {
+          invalid.push(
+            `${skill}/examples/${reference}/${file}: frontmatter "name" must match filename "${expectedName}"`,
+          );
+        }
+        if (!frontmatter['reference'] || typeof frontmatter['reference'] !== 'string') {
+          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "reference" in frontmatter`);
+        }
+        if (
+          !frontmatter['level'] ||
+          !(VALID_EXAMPLE_LEVELS as readonly string[]).includes(frontmatter['level'] as string)
+        ) {
+          invalid.push(
+            `${skill}/examples/${reference}/${file}: missing or invalid "level" in frontmatter (must be ${VALID_EXAMPLE_LEVELS.join(', ')})`,
+          );
+        }
+        if (!frontmatter['description'] || typeof frontmatter['description'] !== 'string') {
+          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "description" in frontmatter`);
+        }
+        const tags = frontmatter['tags'];
+        if (!Array.isArray(tags) || tags.length === 0 || tags.some((tag) => typeof tag !== 'string' || !tag.trim())) {
+          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "tags" in frontmatter`);
+        }
+        const features = frontmatter['features'];
+        if (
+          !Array.isArray(features) ||
+          features.length === 0 ||
+          features.some((feature) => typeof feature !== 'string' || !feature.trim())
+        ) {
+          invalid.push(`${skill}/examples/${reference}/${file}: missing or invalid "features" in frontmatter`);
+        }
+        // reference field should match the parent directory name
+        if (frontmatter['reference'] && frontmatter['reference'] !== reference) {
+          invalid.push(
+            `${skill}/examples/${reference}/${file}: frontmatter "reference" is "${frontmatter['reference']}" but expected "${reference}"`,
+          );
+        }
+      }
+      expect(invalid).toEqual([]);
+    });
+
+    it('example frontmatter should stay aligned with the example body', () => {
+      const mismatches: string[] = [];
+      for (const { skill, reference, file, fullPath } of getAllExampleFiles()) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        const { frontmatter } = parseSkillMdFrontmatter(content);
+        const description = typeof frontmatter['description'] === 'string' ? frontmatter['description'] : '';
+        const features = Array.isArray(frontmatter['features'])
+          ? frontmatter['features'].filter((feature): feature is string => typeof feature === 'string')
+          : [];
+        const firstParagraph = extractFirstParagraph(content);
+        const whatThisDemonstrates = extractSectionBullets(content, 'What This Demonstrates');
+
+        if (description !== firstParagraph) {
+          mismatches.push(
+            `${skill}/examples/${reference}/${file}: frontmatter "description" must match the first paragraph after the H1`,
+          );
+        }
+        if (JSON.stringify(features) !== JSON.stringify(whatThisDemonstrates)) {
+          mismatches.push(
+            `${skill}/examples/${reference}/${file}: frontmatter "features" must match the "What This Demonstrates" bullets`,
+          );
+        }
+      }
+      expect(mismatches).toEqual([]);
+    });
+
+    it('manifest example entries should match example file metadata', () => {
+      const mismatches: string[] = [];
+      const manifestExampleKeys = new Set<string>();
+      for (const entry of manifest.skills) {
+        if (!entry.references) continue;
+        for (const ref of entry.references) {
+          const examples = ref.examples ?? [];
+          const exampleDir = path.join(CATALOG_DIR, entry.path, 'examples', ref.name);
+          for (const example of examples) {
+            manifestExampleKeys.add(`${entry.path}/${ref.name}/${example.name}`);
+            const exampleFile = path.join(exampleDir, `${example.name}.md`);
+            if (!fs.existsSync(exampleFile)) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name}.md listed in manifest but missing on disk`);
+              continue;
+            }
+            if (!(VALID_EXAMPLE_LEVELS as readonly string[]).includes(example.level)) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name} has invalid level "${example.level}"`);
+            }
+            if (!Array.isArray(example.tags) || example.tags.length === 0) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name} has invalid manifest tags`);
+            }
+            if (!Array.isArray(example.features) || example.features.length === 0) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name} has invalid manifest features`);
+            }
+
+            const { frontmatter } = parseSkillMdFrontmatter(fs.readFileSync(exampleFile, 'utf-8'));
+            const fileDescription = typeof frontmatter['description'] === 'string' ? frontmatter['description'] : '';
+            const fileLevel = typeof frontmatter['level'] === 'string' ? frontmatter['level'] : '';
+            const fileTags = Array.isArray(frontmatter['tags'])
+              ? frontmatter['tags'].filter((tag): tag is string => typeof tag === 'string')
+              : [];
+            const fileFeatures = Array.isArray(frontmatter['features'])
+              ? frontmatter['features'].filter((feature): feature is string => typeof feature === 'string')
+              : [];
+
+            if (example.description !== fileDescription) {
+              mismatches.push(
+                `${entry.name}/${ref.name}/${example.name}: manifest description differs from example file`,
+              );
+            }
+            if (example.level !== fileLevel) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name}: manifest level differs from example file`);
+            }
+            if (JSON.stringify(example.tags) !== JSON.stringify(fileTags)) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name}: manifest tags differ from example file`);
+            }
+            if (JSON.stringify(example.features) !== JSON.stringify(fileFeatures)) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name}: manifest features differ from example file`);
+            }
+          }
+        }
+      }
+
+      for (const { skill, reference, file } of getAllExampleFiles()) {
+        const exampleName = file.replace(/\.md$/, '');
+        const key = `${skill}/${reference}/${exampleName}`;
+        if (!manifestExampleKeys.has(key)) {
+          mismatches.push(`${key}.md exists on disk but is missing from the manifest`);
+        }
+      }
+
+      expect(mismatches).toEqual([]);
+    });
+
+    it('reference example tables should match manifest example metadata', () => {
+      const mismatches: string[] = [];
+      for (const entry of manifest.skills) {
+        for (const ref of entry.references ?? []) {
+          const referencePath = path.join(CATALOG_DIR, entry.path, 'references', `${ref.name}.md`);
+          if (!fs.existsSync(referencePath)) continue;
+
+          const tableRows = parseExamplesTableRows(fs.readFileSync(referencePath, 'utf-8'));
+          const examples = ref.examples ?? [];
+
+          if (tableRows.length !== examples.length) {
+            mismatches.push(
+              `${entry.name}/${ref.name}: reference table has ${tableRows.length} rows but manifest has ${examples.length} examples`,
+            );
+            continue;
+          }
+
+          for (const example of examples) {
+            const row = tableRows.find((tableRow) => tableRow.name === example.name);
+            if (!row) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name}: missing from reference example table`);
+              continue;
+            }
+
+            if (row.description !== example.description) {
+              mismatches.push(
+                `${entry.name}/${ref.name}/${example.name}: reference table description differs from manifest`,
+              );
+            }
+            if (row.level !== humanizeExampleLevel(example.level)) {
+              mismatches.push(`${entry.name}/${ref.name}/${example.name}: reference table level differs from manifest`);
+            }
+          }
+        }
+      }
+
+      expect(mismatches).toEqual([]);
     });
   });
 

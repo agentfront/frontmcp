@@ -88,6 +88,61 @@ Continue with subsequent steps.
 | -------------------- | -------------- | ------------- |
 | Common error message | Why it happens | How to fix it |
 
+## Examples
+
+Each reference file has a corresponding `examples/<reference-name>/` directory with standalone, copy-pasteable examples.
+
+### Example file structure
+
+````markdown
+---
+name: example-name
+reference: parent-reference-name
+level: basic | intermediate | advanced
+description: One sentence describing the exact scenario this example covers.
+tags: [keyword1, keyword2, keyword3]
+features:
+  - Concrete API or pattern this example demonstrates
+  - Another concrete behavior shown in the code
+---
+
+# Example Title
+
+One sentence expanding slightly on the frontmatter description.
+
+## Code
+
+\```typescript
+// src/path/to/file.ts
+import { ... } from '@frontmcp/sdk';
+// Complete, self-contained code
+\```
+
+## What This Demonstrates
+
+- Key pattern or API shown
+
+## Related
+
+- See `reference-name` for the full API reference
+````
+
+Use the example file frontmatter as the single source of truth for example metadata. Reference `## Examples` tables and `skills-manifest.json` should mirror `name`, `level`, `description`, `tags`, and `features` from the example file.
+
+### Linking from references
+
+Add a `## Examples` section at the bottom of each reference file (before `## Reference`):
+
+```markdown
+## Examples
+
+| Example                                                      | Level | Description   |
+| ------------------------------------------------------------ | ----- | ------------- |
+| [`example-name`](../examples/reference-name/example-name.md) | Basic | What it shows |
+
+> See all examples in [`examples/reference-name/`](../examples/reference-name/)
+```
+
 ## Reference
 
 - [Documentation](https://docs.agentfront.dev/frontmcp/...)

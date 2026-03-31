@@ -413,6 +413,16 @@ Complete list of all `@frontmcp/nx` generators from `generators.json`:
 | Build fails with circular dependency error     | Library A imports from Library B and vice versa             | Use `nx graph` to visualize the cycle; extract shared code into a new library                        |
 | Cache not working (full rebuild every time)    | Missing or misconfigured `cacheableOperations` in `nx.json` | Ensure `build`, `test`, and `lint` are listed in `targetDefaults` with `cache: true`                 |
 
+## Examples
+
+| Example                                                                         | Level        | Description                                                                                                   |
+| ------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| [`build-test-affected`](../examples/nx-workflow/build-test-affected.md)         | Intermediate | Use Nx commands for efficient building, testing, and CI with affected-only execution.                         |
+| [`multi-server-deployment`](../examples/nx-workflow/multi-server-deployment.md) | Advanced     | Generate multiple servers in an Nx workspace, each composing different apps for different deployment targets. |
+| [`scaffold-and-generate`](../examples/nx-workflow/scaffold-and-generate.md)     | Basic        | Initialize an Nx workspace and use generators to scaffold an app with tools, resources, and a server.         |
+
+> See all examples in [`examples/nx-workflow/`](../examples/nx-workflow/)
+
 ## Reference
 
 - **Docs:** [Nx Plugin Overview](https://docs.agentfront.dev/frontmcp/nx-plugin/overview)
