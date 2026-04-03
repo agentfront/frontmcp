@@ -1,0 +1,87 @@
+---
+title: Observability
+slug: features/observability
+icon: activity
+description: Built-in OpenTelemetry tracing, structured logging, and per-request log collection
+---
+
+FrontMCP has native observability built in. Enable it with a single config line and get automatic distributed tracing, structured JSON logging, and per-request log collection across your entire server — every tool call, resource read, prompt invocation, auth flow, and transport session.
+
+| Capability | What It Does |
+| --- | --- |
+| **OpenTelemetry tracing** | Automatic spans for all 33 SDK flows with parent-child hierarchy |
+| **Structured logging** | JSON log entries with trace correlation, sent to any backend |
+| **Request log collection** | Per-request aggregated view of all events during a request lifecycle |
+| **`this.telemetry` API** | Developer-facing API for custom spans, events, and attributes in tools |
+| **Vendor integrations** | OTLP, Coralogix, Datadog, Logz.io, Grafana, winston, pino |
+
+---
+
+## How It Works
+
+```typescript
+@FrontMcp({
+  observability: true, // That's it
+})
+```
+
+When enabled:
+
+- **Zero config** — 103+ hooks register automatically on every flow
+- **Single trace ID** — all spans in a request share the same W3C trace ID
+- **Privacy-safe session ID** — a truncated SHA-256 hash, never the real session ID
+- **Zero overhead when unused** — without a TracerProvider, all OTel calls are no-ops
+- **MCP-interoperable** — uses `rpc.system = "mcp"` and `mcp.*` attributes for cross-framework tracing
+
+---
+
+## What Gets Instrumented
+
+Every flow in the SDK is automatically traced:
+
+| Category | Flows |
+| --- | --- |
+| **HTTP & Transport** | HTTP requests, SSE sessions, Streamable HTTP, Stateless HTTP |
+| **Tools** | call-tool (every stage), list-tools |
+| **Resources** | read-resource, list-resources, list-templates, subscribe, unsubscribe |
+| **Prompts** | get-prompt, list-prompts |
+| **Agents** | call-agent (with nested tool call tracking) |
+| **Auth** | auth:verify, session:verify |
+| **OAuth** | token, authorize, callback, provider-callback, register |
+| **Skills** | search, load, llm-txt, llm-full-txt, API |
+| **Elicitation** | request, result |
+| **Other** | completion, well-known endpoints, logging/set-level |
+
+---
+
+## Logging vs Tracing
+
+They're complementary, not competing:
+
+| | Logging | Tracing |
+| --- | --- | --- |
+| **What** | Event stream — discrete log lines | Request lifecycle — spans with timing |
+| **Purpose** | Debug, audit, error forensics | Performance analysis, dependency mapping |
+| **Export to** | Stdout, winston, pino, OTLP | OTLP, Jaeger, Zipkin |
+| **Connection** | `trace_id` on every log line | Native parent-child span tree |
+
+A log line says "what happened." A span says "how long it took." When both share the same `trace_id`, platforms like Coralogix or Datadog show logs inline within a trace waterfall.
+
+---
+
+## Learn More
+
+<CardGroup cols={2}>
+  <Card title="Setup Guide" icon="rocket" href="/frontmcp/guides/observability">
+    Step-by-step: install, configure backends, use this.telemetry
+  </Card>
+  <Card title="Telemetry API Reference" icon="code" href="/frontmcp/sdk-reference/telemetry">
+    Full API for TelemetryAccessor, TelemetrySpan, and testing utilities
+  </Card>
+  <Card title="OpenTelemetry" icon="globe" href="https://opentelemetry.io/docs/">
+    OpenTelemetry documentation
+  </Card>
+  <Card title="Plugin System" icon="puzzle-piece" href="/frontmcp/features/plugin-system">
+    How plugins hook into the request lifecycle
+  </Card>
+</CardGroup>

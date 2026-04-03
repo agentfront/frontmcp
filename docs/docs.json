@@ -159,6 +159,7 @@
               "frontmcp/features/authentication-and-authorization",
               "frontmcp/features/deployment-targets",
               "frontmcp/features/plugin-system",
+              "frontmcp/features/observability",
               "frontmcp/features/testing-framework",
               "frontmcp/features/skill-based-workflows",
               "frontmcp/features/esm-dynamic-loading"
@@ -252,7 +253,8 @@
                   "frontmcp/guides/building-tool-ui",
                   "frontmcp/guides/prompts-and-resources",
                   "frontmcp/guides/publishing-esm-packages",
-                  "frontmcp/guides/rate-limiting-and-guards"
+                  "frontmcp/guides/rate-limiting-and-guards",
+                  "frontmcp/guides/observability"
                 ]
               },
               {
@@ -337,6 +339,10 @@
           {
             "group": "Guard",
             "pages": ["frontmcp/sdk-reference/guard"]
+          },
+          {
+            "group": "Telemetry",
+            "pages": ["frontmcp/sdk-reference/telemetry"]
           },
           {
             "group": "Errors",

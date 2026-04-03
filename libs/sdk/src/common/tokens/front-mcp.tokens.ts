@@ -43,4 +43,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   loader: tokenFactory.meta('loader'),
   // rate limiting, concurrency control, and timeout
   throttle: tokenFactory.meta('throttle'),
+  // observability (tracing, structured logging, request logs)
+  observability: tokenFactory.meta('observability'),
 };

@@ -26,6 +26,8 @@ import {
   extAppsOptionsSchema,
   SqliteOptionsInput,
   sqliteOptionsSchema,
+  ObservabilityOptionsInterface,
+  observabilityOptionsSchema,
 } from '../types';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
@@ -272,6 +274,29 @@ export interface FrontMcpBaseMetadata {
    * ```
    */
   throttle?: GuardConfig;
+
+  /**
+   * Observability configuration — OpenTelemetry tracing, structured logging,
+   * and per-request log collection.
+   *
+   * When set, the SDK auto-loads `@frontmcp/observability` and registers
+   * instrumentation hooks for all flows. No explicit plugin import needed.
+   *
+   * - `true` — enable tracing with defaults
+   * - Object — fine-grained control
+   *
+   * Requires `@frontmcp/observability` to be installed as a dependency.
+   *
+   * @example
+   * ```typescript
+   * observability: {
+   *   tracing: true,
+   *   logging: { sinks: [{ type: 'stdout' }] },
+   *   requestLogs: true,
+   * }
+   * ```
+   */
+  observability?: ObservabilityOptionsInterface | boolean;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -311,6 +336,7 @@ export const frontMcpBaseSchema = z.object({
     .optional(),
   loader: packageLoaderSchema.optional(),
   throttle: guardConfigSchema.optional(),
+  observability: observabilityOptionsSchema,
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

@@ -211,7 +211,85 @@ export class Scope extends ScopeEntry {
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
     // so AppRegistry must be fully ready before they start.
-    const serverPlugins = this.metadata.plugins ?? [];
+    const serverPlugins = [...(this.metadata.plugins ?? [])];
+
+    // Auto-load ObservabilityPlugin when observability config is present.
+    // Uses lazy require to avoid bundling @frontmcp/observability in browser builds.
+    const observabilityConfig = this.metadata.observability;
+    if (observabilityConfig) {
+      try {
+        const { ObservabilityPlugin } = require('@frontmcp/observability');
+        const pluginOptions = observabilityConfig === true ? {} : observabilityConfig;
+        serverPlugins.push(ObservabilityPlugin.init(pluginOptions));
+        this.logger.verbose('observability: auto-loaded ObservabilityPlugin from config');
+
+        // Wire StructuredLogTransport into the SDK logger pipeline so that
+        // every logger.info() call flows through it with trace correlation.
+        const loggingEnabled = pluginOptions.logging !== false && pluginOptions.logging !== undefined;
+        if (loggingEnabled) {
+          try {
+            const { StructuredLogTransport, createSinks } = require('@frontmcp/observability');
+            const LoggerRegistryCls = require('../logger/logger.registry').default;
+            let loggerRegistry: any;
+            try {
+              loggerRegistry = this.globalProviders.get(LoggerRegistryCls);
+            } catch {
+              /* not available */
+            }
+            if (loggerRegistry && typeof loggerRegistry.addTransport === 'function') {
+              const rawLogging = pluginOptions.logging;
+              const loggingOpts: Record<string, unknown> =
+                rawLogging === true ? {} : typeof rawLogging === 'object' ? rawLogging : {};
+              const sinks = createSinks(loggingOpts['sinks'] as any);
+              const { FrontMcpContextStorage: CtxStorage } = require('../context/frontmcp-context-storage');
+              let contextStorage: any;
+              try {
+                contextStorage = this.globalProviders.get(CtxStorage);
+              } catch {
+                /* not available */
+              }
+              const contextAccessor = contextStorage
+                ? () => {
+                    const ctx = contextStorage.getStore();
+                    if (!ctx) return undefined;
+                    return {
+                      requestId: ctx.requestId,
+                      traceContext: ctx.traceContext,
+                      sessionIdHash: require('@frontmcp/utils').sha256Hex(ctx.sessionId).slice(0, 12),
+                      scopeId: ctx.scopeId,
+                      flowName: ctx.flow?.name,
+                      elapsed: ctx.elapsed(),
+                    };
+                  }
+                : undefined;
+
+              const transport = new StructuredLogTransport(
+                sinks,
+                {
+                  redactFields: loggingOpts['redactFields'] as string[] | undefined,
+                  includeStacks: loggingOpts['includeStacks'] as boolean | undefined,
+                  staticFields: loggingOpts['staticFields'] as Record<string, unknown> | undefined,
+                },
+                contextAccessor,
+              );
+
+              loggerRegistry.addTransport(transport);
+              this.logger.verbose('observability: wired StructuredLogTransport into SDK logger');
+            }
+          } catch (e) {
+            this.logger.warn('observability: failed to wire structured logging', {
+              error: e instanceof Error ? e.message : 'Unknown error',
+            });
+          }
+        }
+      } catch {
+        this.logger.warn(
+          'observability config is set but @frontmcp/observability is not installed. ' +
+            'Install it with: npm install @frontmcp/observability',
+        );
+      }
+    }
+
     if (serverPlugins.length > 0) {
       const serverPluginScopeInfo: PluginScopeInfo = {
         ownScope: this,

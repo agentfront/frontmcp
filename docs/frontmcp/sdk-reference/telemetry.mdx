@@ -1,0 +1,286 @@
+---
+title: Telemetry API
+slug: sdk-reference/telemetry
+icon: activity
+description: API reference for this.telemetry — custom spans, events, and attributes in execution contexts
+---
+
+The `this.telemetry` API is available on all execution contexts (`ToolContext`, `ResourceContext`, `PromptContext`, `AgentContext`) when observability is enabled. It provides a simple interface for creating custom spans, recording events, and setting attributes — with automatic trace context propagation.
+
+<Info>
+Requires `@frontmcp/observability` installed and `observability` config enabled. See the [Observability Guide](/frontmcp/guides/observability) for setup.
+</Info>
+
+---
+
+## TelemetryAccessor
+
+Available as `this.telemetry` in all execution contexts. One instance per request (context-scoped). Automatically inherits the current request's trace ID, session ID, and scope.
+
+### `startSpan(name, attributes?)`
+
+Create a child span under the current execution span.
+
+```typescript
+startSpan(name: string, attributes?: Record<string, string | number | boolean>): TelemetrySpan
+```
+
+You **must** call `span.end()` or `span.endWithError()` when done.
+
+```typescript
+const span = this.telemetry.startSpan('fetch-user', { 'user.id': userId });
+try {
+  const user = await this.fetch(`/api/users/${userId}`);
+  span.setAttribute('user.name', user.name);
+  span.end();
+} catch (err) {
+  span.endWithError(err);
+  throw err;
+}
+```
+
+---
+
+### `withSpan(name, fn, attributes?)`
+
+Run a function within a span. The span is automatically ended on success or error.
+
+```typescript
+withSpan<T>(
+  name: string,
+  fn: (span: TelemetrySpan) => Promise<T>,
+  attributes?: Record<string, string | number | boolean>,
+): Promise<T>
+```
+
+```typescript
+const data = await this.telemetry.withSpan('query-database', async (span) => {
+  span.addEvent('query-sent');
+  const results = await db.query(sql);
+  span.setAttribute('rows', results.length);
+  return results;
+});
+```
+
+---
+
+### `addEvent(name, attributes?)`
+
+Add an event to the **active flow execution span** (e.g., the tool span during `execute()`).
+
+```typescript
+addEvent(name: string, attributes?: Record<string, string | number | boolean>): void
+```
+
+Events are lightweight markers that appear on the parent span's timeline. Use them for milestones rather than creating child spans.
+
+```typescript
+this.telemetry.addEvent('cache-checked', { hit: false });
+this.telemetry.addEvent('validation-complete', { fields: 5 });
+```
+
+<Tip>
+Events go on the **active execution span**, not a new span. If called during `tool.execute()`, they appear on the `"tool my_tool"` span. If called outside an execution context, a short-lived child span is created as a fallback.
+</Tip>
+
+---
+
+### `setAttributes(attrs)`
+
+Set attributes on the **active flow execution span**.
+
+```typescript
+setAttributes(attrs: Record<string, string | number | boolean>): void
+```
+
+```typescript
+this.telemetry.setAttributes({
+  'user.tier': 'premium',
+  'request.size': body.length,
+  'cache.hit': true,
+});
+```
+
+---
+
+### `traceId`
+
+Get the current request's trace ID. Useful for including in external API calls or logs.
+
+```typescript
+get traceId(): string
+```
+
+```typescript
+const response = await this.fetch('/api/data', {
+  headers: { 'X-Trace-Id': this.telemetry.traceId },
+});
+```
+
+---
+
+### `sessionId`
+
+Get the privacy-safe session tracing ID (16-char SHA-256 hash).
+
+```typescript
+get sessionId(): string
+```
+
+---
+
+## TelemetrySpan
+
+Returned by `startSpan()` and passed to `withSpan()` callbacks. All setter methods return `this` for chaining.
+
+### Methods
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `setAttribute` | `(key: string, value: string \| number \| boolean) => this` | Set a single attribute |
+| `setAttributes` | `(attrs: Record<string, string \| number \| boolean>) => this` | Set multiple attributes |
+| `addEvent` | `(name: string, attributes?: Record<...>) => this` | Add a named event |
+| `recordError` | `(error: Error) => this` | Record an exception on the span |
+| `end` | `() => void` | End the span with OK status |
+| `endWithError` | `(error: Error \| string) => void` | End with ERROR status |
+| `raw` | `Span` (getter) | Access the underlying OTel Span |
+
+```typescript
+const span = this.telemetry.startSpan('process');
+span
+  .setAttribute('input.size', 1024)
+  .addEvent('step-1-done')
+  .addEvent('step-2-done', { items: 42 });
+
+if (failed) {
+  span.recordError(new Error('processing failed'));
+}
+
+span.end(); // Preserves ERROR status if recordError was called
+```
+
+---
+
+## Testing Utilities
+
+Import from `@frontmcp/observability`:
+
+```typescript
+import {
+  createTestTracer,
+  getFinishedSpans,
+  assertSpanExists,
+  assertSpanAttribute,
+  findSpan,
+  findSpansByAttribute,
+} from '@frontmcp/observability';
+```
+
+### `createTestTracer(name?)`
+
+Create an isolated test tracer with in-memory span exporter. Does **not** register globally — safe for parallel tests.
+
+```typescript
+function createTestTracer(name?: string): {
+  tracer: Tracer;
+  exporter: InMemorySpanExporter;
+  provider: BasicTracerProvider;
+  cleanup: () => Promise<void>;
+}
+```
+
+```typescript
+const { tracer, exporter, cleanup } = createTestTracer();
+
+afterEach(() => exporter.reset());
+afterAll(() => cleanup());
+```
+
+---
+
+### `assertSpanExists(spans, name)`
+
+Assert that a span with the given name exists. Returns the span or throws.
+
+```typescript
+function assertSpanExists(spans: ReadableSpan[], name: string): ReadableSpan
+```
+
+```typescript
+const spans = getFinishedSpans(exporter);
+const toolSpan = assertSpanExists(spans, 'tool get_weather');
+```
+
+---
+
+### `assertSpanAttribute(span, key, value)`
+
+Assert a span has a specific attribute value.
+
+```typescript
+function assertSpanAttribute(span: ReadableSpan, key: string, value: string | number | boolean): void
+```
+
+---
+
+### `findSpan(spans, name)` / `findSpansByAttribute(spans, key, value)`
+
+Query helpers for finding spans in test assertions.
+
+```typescript
+const dbSpan = findSpan(spans, 'database-query');
+const toolSpans = findSpansByAttribute(spans, 'mcp.component.type', 'tool');
+```
+
+---
+
+## Configuration Types
+
+### ObservabilityOptionsInterface
+
+The config object for `@FrontMcp({ observability: { ... } })`:
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tracing` | `boolean \| TracingOptions` | `true` | Enable/configure OTel tracing |
+| `logging` | `boolean \| LoggingOptions` | `false` | Enable/configure structured logging |
+| `requestLogs` | `boolean \| RequestLogOptions` | `false` | Enable/configure per-request log collection |
+
+### TracingOptions
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `httpSpans` | `boolean` | `true` | HTTP request spans |
+| `executionSpans` | `boolean` | `true` | Tool/resource/prompt/agent spans |
+| `fetchSpans` | `boolean` | `true` | Outbound `ctx.fetch()` spans |
+| `flowStageEvents` | `boolean` | `true` | Flow stage events on execution spans |
+| `hookSpans` | `boolean` | `false` | Individual hook spans (verbose) |
+| `transportSpans` | `boolean` | `true` | SSE/HTTP transport spans |
+| `authSpans` | `boolean` | `true` | Auth/session verify spans |
+| `oauthSpans` | `boolean` | `true` | OAuth flow spans |
+| `elicitationSpans` | `boolean` | `true` | Elicitation request/result spans |
+| `startupReport` | `boolean` | `true` | Emit startup telemetry on first request |
+
+### SinkConfig
+
+| Type | Description | Platform |
+| --- | --- | --- |
+| `{ type: 'stdout' }` | NDJSON to stdout (12-factor) | Node.js |
+| `{ type: 'console' }` | `console.log/warn/error` | Browser, Node.js |
+| `{ type: 'otlp', endpoint, headers? }` | OTLP HTTP to any backend | Node.js |
+| `{ type: 'winston', logger }` | Forward to winston instance | Node.js |
+| `{ type: 'pino', logger }` | Forward to pino instance | Node.js |
+| `{ type: 'callback', fn }` | Custom callback function | Any |
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Observability Guide" icon="rocket" href="/frontmcp/guides/observability">
+    Step-by-step setup with vendor integrations
+  </Card>
+  <Card title="Observability Feature" icon="activity" href="/frontmcp/features/observability">
+    Overview of what FrontMCP observability provides
+  </Card>
+</CardGroup>

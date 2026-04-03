@@ -1,0 +1,442 @@
+---
+title: Observability & Telemetry
+slug: guides/observability
+icon: activity
+description: Add distributed tracing, structured logging, and vendor integrations to your FrontMCP server
+---
+
+This guide walks through adding production-grade observability to your FrontMCP server — from zero-config tracing to connecting Coralogix, Datadog, or any OTLP-compatible backend.
+
+<Info>
+**Prerequisites:** A working FrontMCP server with at least one tool. See [Your First Tool](/frontmcp/guides/your-first-tool) if you need to get started.
+</Info>
+
+## What You'll Get
+
+- Automatic spans for every tool call, resource read, auth flow, and HTTP request
+- Structured JSON logs with trace correlation (`trace_id`, `span_id`)
+- `this.telemetry` API for custom spans in your tools and plugins
+- Per-request log aggregation
+
+---
+
+## Step 1: Install
+
+```bash
+npm install @frontmcp/observability
+```
+
+This installs the observability package with `@opentelemetry/api` as the only hard dependency (~50KB). OTel SDK packages are optional peers — install only what you need.
+
+---
+
+## Step 2: Enable Observability
+
+Add the `observability` field to your `@FrontMcp` config:
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  observability: true, // Enable tracing with all defaults
+})
+export default class Server {}
+```
+
+That's it. Every flow is now instrumented. Without a TracerProvider configured, all OTel calls are no-ops with zero overhead.
+
+<Tip>
+For fine-grained control, pass an object instead of `true`:
+
+```typescript
+observability: {
+  tracing: {
+    httpSpans: true,
+    executionSpans: true,
+    fetchSpans: true,
+    flowStageEvents: true,
+    transportSpans: true,
+    authSpans: true,
+  },
+  logging: true,
+  requestLogs: true,
+}
+```
+</Tip>
+
+---
+
+## Step 3: Configure a Backend
+
+<Tabs>
+  <Tab title="Console (Dev)">
+    See spans printed to your terminal — great for development:
+
+    ```typescript
+    import { setupOTel } from '@frontmcp/observability';
+
+    setupOTel({
+      serviceName: 'my-server',
+      exporter: 'console',
+    });
+    ```
+  </Tab>
+
+  <Tab title="OTLP (Any Backend)">
+    Send traces to any OTLP-compatible collector (Jaeger, Grafana Tempo, etc.):
+
+    ```typescript
+    import { setupOTel } from '@frontmcp/observability';
+
+    setupOTel({
+      serviceName: 'my-server',
+      exporter: 'otlp',
+      endpoint: 'http://localhost:4318',
+    });
+    ```
+
+    Or use environment variables with no code changes:
+
+    ```bash
+    OTEL_SERVICE_NAME=my-server \
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+    node server.js
+    ```
+  </Tab>
+
+  <Tab title="Coralogix">
+    ```typescript
+    @FrontMcp({
+      observability: {
+        tracing: true,
+        logging: {
+          sinks: [{
+            type: 'otlp',
+            endpoint: 'https://ingress.coralogix.com:443',
+            headers: { Authorization: 'Bearer YOUR_CX_API_KEY' },
+          }],
+        },
+      },
+    })
+    ```
+  </Tab>
+
+  <Tab title="Datadog">
+    ```typescript
+    @FrontMcp({
+      observability: {
+        tracing: true,
+        logging: {
+          sinks: [{
+            type: 'otlp',
+            endpoint: 'https://http-intake.logs.datadoghq.com',
+            headers: { 'DD-API-KEY': 'YOUR_DD_KEY' },
+          }],
+        },
+      },
+    })
+    ```
+  </Tab>
+
+  <Tab title="Logz.io">
+    ```typescript
+    @FrontMcp({
+      observability: {
+        tracing: true,
+        logging: {
+          sinks: [{
+            type: 'otlp',
+            endpoint: 'https://otlp-listener.logz.io:8071',
+            headers: { Authorization: 'Bearer YOUR_SHIPPING_TOKEN' },
+          }],
+        },
+      },
+    })
+    ```
+  </Tab>
+
+  <Tab title="Winston">
+    Forward structured logs to an existing winston logger:
+
+    ```typescript
+    import winston from 'winston';
+
+    const logger = winston.createLogger({
+      transports: [new winston.transports.Console()],
+    });
+
+    @FrontMcp({
+      observability: {
+        tracing: true,
+        logging: {
+          sinks: [{ type: 'winston', logger }],
+        },
+      },
+    })
+    ```
+  </Tab>
+
+  <Tab title="Pino">
+    Forward structured logs to an existing pino logger:
+
+    ```typescript
+    import pino from 'pino';
+
+    const logger = pino({ transport: { target: 'pino-pretty' } });
+
+    @FrontMcp({
+      observability: {
+        tracing: true,
+        logging: {
+          sinks: [{ type: 'pino', logger }],
+        },
+      },
+    })
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Step 4: Use `this.telemetry` in Tools
+
+Every execution context (tools, resources, prompts, agents) gets a `this.telemetry` API when observability is enabled. No imports, no context construction — it just works.
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'search',
+  description: 'Search documents',
+  inputSchema: { query: z.string() },
+})
+class SearchTool extends ToolContext<typeof SearchTool> {
+  async execute({ query }: { query: string }) {
+    // Add events to the current tool execution span
+    this.telemetry.addEvent('query-parsed', { terms: query.split(' ').length });
+
+    // Create a child span for a specific operation
+    const results = await this.telemetry.withSpan('database-query', async (span) => {
+      span.setAttribute('db.query', query);
+      const data = await this.get(SearchService).search(query);
+      span.addEvent('rows-returned', { count: data.length });
+      return data;
+    });
+
+    // Set attributes on the tool execution span
+    this.telemetry.setAttributes({ 'results.count': results.length });
+
+    return { results };
+  }
+}
+```
+
+This produces:
+
+```
+tool search                          (auto-created by hooks)
+  |-- event: query-parsed            (from this.telemetry.addEvent)
+  |-- attribute: results.count=42    (from this.telemetry.setAttributes)
+  |
+  |-- database-query                 (child span from this.telemetry.withSpan)
+  |     |-- attribute: db.query=...
+  |     |-- event: rows-returned
+```
+
+---
+
+## Step 5: Structured Logging
+
+When `logging` is enabled, every `this.logger.info()` call produces a structured JSON entry with automatic trace correlation:
+
+```json
+{
+  "timestamp": "2026-04-03T10:15:30.123Z",
+  "level": "info",
+  "severity_number": 9,
+  "message": "processing user request",
+  "trace_id": "abcdef1234567890abcdef1234567890",
+  "span_id": "1234567890abcdef",
+  "request_id": "req-uuid-001",
+  "session_id_hash": "a3f8b2c1d4e5f6a7",
+  "scope_id": "my-app",
+  "flow_name": "tools:call-tool",
+  "elapsed_ms": 42,
+  "attributes": { "userId": 123 }
+}
+```
+
+Configure redaction for sensitive fields:
+
+```typescript
+observability: {
+  logging: {
+    sinks: [{ type: 'stdout' }],
+    redactFields: ['password', 'token', 'secret', 'authorization'],
+    includeStacks: process.env.NODE_ENV !== 'production',
+  },
+}
+```
+
+---
+
+## Step 6: Request Log Collection
+
+Enable `requestLogs` to get a complete aggregated view of each request:
+
+```typescript
+observability: {
+  requestLogs: {
+    maxEntries: 500,
+    onRequestComplete: async (log) => {
+      // log.request_id, log.trace_id, log.tool_name
+      // log.duration_ms, log.status, log.entries[]
+      await myStore.save(log);
+    },
+  },
+}
+```
+
+---
+
+## Step 7: Testing with Telemetry
+
+Use the built-in testing utilities to verify your spans:
+
+```typescript
+import { createTestTracer, assertSpanExists, assertSpanAttribute }
+  from '@frontmcp/observability';
+
+describe('SearchTool', () => {
+  const { tracer, exporter, cleanup } = createTestTracer();
+
+  afterEach(() => exporter.reset());
+  afterAll(() => cleanup());
+
+  it('should create a database-query child span', async () => {
+    // ... invoke tool ...
+
+    const spans = exporter.getFinishedSpans();
+    const dbSpan = assertSpanExists(spans, 'database-query');
+    assertSpanAttribute(dbSpan, 'db.query', 'test query');
+  });
+});
+```
+
+---
+
+## Span Hierarchy
+
+Every request produces a span tree like this:
+
+```
+HTTP Server Span: "POST /mcp"
+  |-- event: stage.traceRequest
+  |-- event: stage.acquireQuota
+  |-- event: stage.checkAuthorization
+  |-- event: stage.router
+  |
+  |-- RPC Span: "tools/call"
+  |     |-- rpc.system = "mcp"
+  |     |-- mcp.session.id = "a3f8b2c1..."
+  |     |-- event: stage.parseInput
+  |     |-- event: stage.findTool
+  |     |-- event: stage.validateInput
+  |     |
+  |     |-- Tool Span: "tool get_weather"
+  |     |     |-- mcp.component.type = "tool"
+  |     |     |-- enduser.id = "client-42"
+  |     |     |-- event: stage.execute.start
+  |     |     |
+  |     |     |-- HTTP Client Span: "GET" (from ctx.fetch)
+  |     |     |     |-- url.full = "https://api.weather.com/..."
+  |     |     |     |-- http.response.status_code = 200
+  |     |     |
+  |     |     |-- event: stage.execute.done
+  |     |
+  |     |-- event: stage.validateOutput
+  |     |-- event: stage.finalize
+  |
+  |-- event: stage.finalize
+```
+
+---
+
+## Attributes Reference
+
+### MCP Protocol Attributes (interoperable)
+
+| Attribute | Example | Description |
+| --- | --- | --- |
+| `mcp.method.name` | `tools/call` | MCP protocol method |
+| `mcp.session.id` | `a3f8b2c1d4e5f6a7` | Hashed session ID |
+| `mcp.resource.uri` | `file:///data.txt` | Resource URI |
+| `mcp.component.type` | `tool` | Component type: tool, resource, prompt, agent |
+| `mcp.component.key` | `tool:get_weather` | Fully qualified component key |
+
+### Standard OTel Attributes
+
+| Attribute | Example | Description |
+| --- | --- | --- |
+| `rpc.system` | `mcp` | RPC system identifier |
+| `rpc.service` | `my-server` | Server name |
+| `rpc.method` | `tools/call` | RPC method |
+| `http.request.method` | `POST` | HTTP method |
+| `http.response.status_code` | `200` | HTTP status |
+| `enduser.id` | `client-42` | Client ID from auth token |
+| `enduser.scope` | `read write admin` | OAuth scopes |
+
+### FrontMCP Vendor Attributes
+
+| Attribute | Description |
+| --- | --- |
+| `frontmcp.scope.id` | Scope identifier |
+| `frontmcp.request.id` | Unique request ID |
+| `frontmcp.tool.name` | Tool name |
+| `frontmcp.tool.owner` | Tool owner class |
+| `frontmcp.flow.name` | Flow name (e.g., `tools:call-tool`) |
+| `frontmcp.transport.type` | Transport: `legacy-sse`, `streamable-http` |
+| `frontmcp.auth.mode` | Auth mode: `public`, `transparent`, `orchestrated` |
+| `frontmcp.session.id_hash` | Privacy-safe session hash |
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="1. Use this.telemetry for custom instrumentation">
+    Don't create spans with raw OTel API. Use `this.telemetry.withSpan()` or `this.telemetry.startSpan()` — they automatically inherit the trace context and add base attributes.
+  </Accordion>
+
+  <Accordion title="2. Add events, not child spans, for lightweight markers">
+    `this.telemetry.addEvent('step-done')` is cheaper than `this.telemetry.startSpan('step')`. Use events for milestones, spans for timed operations.
+  </Accordion>
+
+  <Accordion title="3. Redact sensitive fields in structured logs">
+    Always configure `redactFields` in production: `['password', 'token', 'secret', 'authorization', 'cookie']`.
+  </Accordion>
+
+  <Accordion title="4. Use OTLP for vendor integrations">
+    The `otlp` sink type works with all major platforms (Coralogix, Datadog, Logz.io, Grafana). Don't build vendor-specific integrations.
+  </Accordion>
+
+  <Accordion title="5. Don't over-instrument">
+    The auto-instrumentation covers all SDK flows. Only add `this.telemetry` spans for your business logic operations (API calls, database queries, complex processing).
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Telemetry API Reference" icon="code" href="/frontmcp/sdk-reference/telemetry">
+    Full API docs for TelemetryAccessor, TelemetrySpan, and testing utilities
+  </Card>
+  <Card title="Rate Limiting" icon="shield-check" href="/frontmcp/guides/rate-limiting-and-guards">
+    Add rate limiting alongside observability for production readiness
+  </Card>
+</CardGroup>

@@ -22,7 +22,8 @@ export type SkillCategory =
   | 'testing'
   | 'guides'
   | 'production'
-  | 'extensibility';
+  | 'extensibility'
+  | 'observability';
 
 /**
  * Bundle membership for curated scaffold presets.
@@ -142,6 +143,7 @@ export const VALID_CATEGORIES: readonly SkillCategory[] = [
   'guides',
   'production',
   'extensibility',
+  'observability',
 ];
 
 /** Valid bundles for manifest validation */
