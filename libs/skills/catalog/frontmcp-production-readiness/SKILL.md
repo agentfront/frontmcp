@@ -95,4 +95,4 @@ After completing both common and target-specific checklists:
 ## Reference
 
 - [Production Build](https://docs.agentfront.dev/frontmcp/deployment/production-build)
-- Related skills: `frontmcp-config`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-setup`
+- Related skills: `frontmcp-config`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-setup`, `frontmcp-observability`

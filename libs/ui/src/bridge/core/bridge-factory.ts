@@ -251,9 +251,9 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
   /**
    * Get structured content (parsed output).
    */
-  getStructuredContent(): unknown {
+  getStructuredContent<T = unknown>(): T | null {
     const adapter = this._ensureInitialized();
-    return adapter.getStructuredContent();
+    return adapter.getStructuredContent<T>();
   }
 
   /**
