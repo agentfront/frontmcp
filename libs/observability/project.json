@@ -7,7 +7,7 @@
   "targets": {
     "build-cjs": {
       "executor": "@nx/esbuild:esbuild",
-      "dependsOn": [],
+      "dependsOn": ["sdk:build-cjs", "utils:build-cjs", "di:build-cjs"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/observability/dist",

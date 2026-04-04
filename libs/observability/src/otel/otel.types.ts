@@ -121,6 +121,9 @@ export const FrontMcpAttributes = {
   /** Agent execution loop iterations */
   AGENT_ITERATIONS: 'frontmcp.agent.iterations',
 
+  /** Agent execution duration in ms */
+  AGENT_EXECUTION_DURATION_MS: 'frontmcp.agent.execution_duration_ms',
+
   // ── Startup ──
 
   /** Total tools registered at startup */

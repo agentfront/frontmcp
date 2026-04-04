@@ -70,8 +70,8 @@ function parseTraceparent(value: string): { traceId: string; parentId: string; t
   if (!/^[a-f0-9]{32}$/i.test(traceId) || traceId === '00000000000000000000000000000000') return null;
   if (!/^[a-f0-9]{16}$/i.test(parentId) || parentId === '0000000000000000') return null;
 
+  if (!/^[0-9a-fA-F]{2}$/.test(flags)) return null;
   const traceFlags = parseInt(flags, 16);
-  if (isNaN(traceFlags)) return null;
 
   return {
     traceId: traceId.toLowerCase(),

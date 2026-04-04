@@ -4,6 +4,7 @@
   "sourceRoot": "libs/sdk/src",
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "implicitDependencies": ["!observability"],
   "targets": {
     "build-cjs": {
       "executor": "@nx/esbuild:esbuild",

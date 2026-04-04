@@ -97,13 +97,29 @@ export class OtlpSink implements LogSink {
     const payload = this.buildOtlpPayload(entries);
 
     try {
-      await fetch(this.endpoint, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(payload),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const response = await fetch(this.endpoint, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          // eslint-disable-next-line no-console
+          console.error(`[OtlpSink] Export failed: HTTP ${response.status} — ${body.slice(0, 200)}`);
+          this.batch.unshift(...entries);
+        }
+      } catch {
+        clearTimeout(timeout);
+        this.batch.unshift(...entries);
+      }
     } catch {
       // Log export failures must not break the application
+      this.batch.unshift(...entries);
     }
   }
 
@@ -176,7 +192,12 @@ export class OtlpSink implements LogSink {
       record.attributes!.push({ key: 'log.prefix', value: { stringValue: entry.prefix } });
     }
     if (entry.elapsed_ms !== undefined) {
-      record.attributes!.push({ key: 'elapsed_ms', value: { intValue: String(entry.elapsed_ms) } });
+      record.attributes!.push({
+        key: 'elapsed_ms',
+        value: Number.isInteger(entry.elapsed_ms)
+          ? { intValue: String(entry.elapsed_ms) }
+          : { doubleValue: entry.elapsed_ms },
+      });
     }
 
     // Error attributes
@@ -197,7 +218,10 @@ export class OtlpSink implements LogSink {
         if (typeof value === 'string') {
           record.attributes!.push({ key, value: { stringValue: value } });
         } else if (typeof value === 'number') {
-          record.attributes!.push({ key, value: { intValue: String(value) } });
+          record.attributes!.push({
+            key,
+            value: Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value },
+          });
         } else if (typeof value === 'boolean') {
           record.attributes!.push({ key, value: { boolValue: value } });
         }
@@ -232,5 +256,5 @@ interface OtlpLogRecord {
 
 interface OtlpAttribute {
   key: string;
-  value: { stringValue?: string; intValue?: string; boolValue?: boolean };
+  value: { stringValue?: string; intValue?: string; doubleValue?: number; boolValue?: boolean };
 }

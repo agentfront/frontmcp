@@ -215,22 +215,21 @@ export function useStructuredContent<T = unknown>(): T | null {
   const [content, setContent] = useState<T | null>(null);
 
   useEffect(() => {
-    if (!ready || !bridge) return;
+    if (!ready || !bridge) {
+      setContent(null);
+      return;
+    }
 
     const readStructured = (): T | null => {
       try {
-        const sc = bridge.getStructuredContent();
-        return (sc ?? null) as T | null;
+        return bridge.getStructuredContent<T>();
       } catch {
         return null;
       }
     };
 
-    // Get initial structured content
-    const initial = readStructured();
-    if (initial !== null) {
-      setContent(initial);
-    }
+    // Get initial structured content (sync even if null)
+    setContent(readStructured());
 
     // Subscribe to tool result updates — when a result arrives,
     // the adapter has already stored structuredContent, so read it.

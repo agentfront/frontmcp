@@ -225,7 +225,7 @@ export class Scope extends ScopeEntry {
 
         // Wire StructuredLogTransport into the SDK logger pipeline so that
         // every logger.info() call flows through it with trace correlation.
-        const loggingEnabled = pluginOptions.logging !== false && pluginOptions.logging !== undefined;
+        const loggingEnabled = pluginOptions.logging !== false;
         if (loggingEnabled) {
           try {
             const { StructuredLogTransport, createSinks } = require('@frontmcp/observability');

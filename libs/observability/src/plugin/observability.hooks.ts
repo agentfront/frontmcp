@@ -38,6 +38,10 @@ import { startPromptSpan } from '../otel/spans/prompt.span';
 import { startSpan, endSpanOk, endSpanError } from '../otel/spans/span.utils';
 import { FrontMcpAttributes, McpAttributes } from '../otel/otel.types';
 import type { TracingOptions } from '../otel/otel.types';
+import { startTransportSpan, setTransportRequestType } from '../otel/spans/transport.span';
+import { startAuthSpan, setAuthMode, setAuthResult } from '../otel/spans/auth.span';
+import { startFetchSpan, setFetchResponseStatus } from '../otel/spans/fetch.span';
+import { emitStartupReport, type StartupTelemetryData } from '../otel/spans/startup.span';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Span storage keys (symbols to avoid user-state collision)
@@ -89,10 +93,17 @@ interface FlowRequestContext {
   };
 }
 
+/** Minimal interface for flow context objects passed to hooks. */
+export interface FlowContextLike {
+  get?(key: symbol): unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  state?: Record<symbol | string, any>;
+}
+
 /** Try to extract FrontMcpContext from a flow context. */
-function extractContext(flowCtx: any): FlowRequestContext | undefined {
+function extractContext(flowCtx: FlowContextLike): FlowRequestContext | undefined {
   try {
-    const ctx = flowCtx.get?.(Symbol.for('frontmcp:CONTEXT'));
+    const ctx = flowCtx.get?.(Symbol.for('frontmcp:CONTEXT')) as FlowRequestContext | undefined;
     if (ctx) return ctx;
   } catch {
     /* ignore */
@@ -603,8 +614,6 @@ export function onGenericFlowDidFinalize(flowCtx: any): void {
 // Transport Flow Hooks (SSE, Streamable HTTP, Stateless HTTP)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { startTransportSpan, setTransportRequestType } from '../otel/spans/transport.span';
-
 export function onTransportWillStart(transportType: string, options: TracingOptions, flowCtx: any): void {
   if (options.transportSpans === false) return;
   const ctx = extractContext(flowCtx);
@@ -656,8 +665,6 @@ export function onTransportDidFinalize(flowCtx: any): void {
 // Auth Flow Hooks (auth:verify, session:verify)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { startAuthSpan, setAuthMode, setAuthResult } from '../otel/spans/auth.span';
-
 export function onAuthWillStart(flowName: string, options: TracingOptions, flowCtx: any): void {
   if (options.authSpans === false) return;
   const ctx = extractContext(flowCtx);
@@ -707,8 +714,6 @@ export function onAuthDidFinalize(flowCtx: any): void {
 // Fetch Instrumentation (wraps ctx.fetch with OTel client spans)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { startFetchSpan, setFetchResponseStatus } from '../otel/spans/fetch.span';
-
 export function wrapContextFetch(options: TracingOptions, flowCtx: any): void {
   if (options.fetchSpans === false) return;
 
@@ -753,7 +758,7 @@ export function onAgentDidExecuteEnrich(flowCtx: any): void {
       agentSpan.setAttribute(FrontMcpAttributes.AGENT_ITERATIONS, meta.iterations);
     }
     if (typeof meta.durationMs === 'number') {
-      agentSpan.setAttribute(FrontMcpAttributes.STARTUP_DURATION_MS, meta.durationMs);
+      agentSpan.setAttribute(FrontMcpAttributes.AGENT_EXECUTION_DURATION_MS, meta.durationMs);
     }
   }
 }
@@ -761,8 +766,6 @@ export function onAgentDidExecuteEnrich(flowCtx: any): void {
 // ─────────────────────────────────────────────────────────────────────────────
 // Startup Report
 // ─────────────────────────────────────────────────────────────────────────────
-
-import { emitStartupReport, type StartupTelemetryData } from '../otel/spans/startup.span';
 
 export function reportStartup(data: StartupTelemetryData): void {
   const tracer = getTracer();
