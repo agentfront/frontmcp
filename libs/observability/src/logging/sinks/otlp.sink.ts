@@ -228,6 +228,9 @@ export class OtlpSink implements LogSink {
       if (entry.error.code) {
         attrs.push({ key: 'error.code', value: { stringValue: entry.error.code } });
       }
+      if (entry.error.error_id) {
+        attrs.push({ key: 'error.id', value: { stringValue: entry.error.error_id } });
+      }
       if (entry.error.stack) {
         attrs.push({ key: 'error.stack', value: { stringValue: entry.error.stack } });
       }
