@@ -13,7 +13,7 @@ import { z } from 'zod';
 // Define input/output schemas
 const inputSchema = {
   location: z.string().describe('City name or location'),
-  units: z.enum(['celsius', 'fahrenheit']).optional().describe('Temperature units'),
+  units: z.enum(['celsius', 'fahrenheit']).nullish().describe('Temperature units'),
 };
 
 const outputSchema = z.object({

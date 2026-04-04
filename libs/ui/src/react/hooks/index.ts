@@ -60,6 +60,7 @@ export {
   useToolCalls,
   useSendMessage,
   useOpenLink,
+  type ToolCallResult,
   type ToolState,
   type UseCallToolOptions,
   type UseCallToolReturn,

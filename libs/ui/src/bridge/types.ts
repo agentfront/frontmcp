@@ -486,6 +486,7 @@ export interface FrontMcpBridgeInterface {
   getDisplayMode(): DisplayMode;
   getToolInput(): Record<string, unknown>;
   getToolOutput(): unknown;
+  getStructuredContent(): unknown;
   callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
   sendMessage(content: string): Promise<void>;
   openLink(url: string): Promise<void>;
