@@ -120,8 +120,8 @@ export abstract class BaseAdapter implements PlatformAdapter {
     return this._toolOutput;
   }
 
-  getStructuredContent(): unknown {
-    return this._structuredContent;
+  getStructuredContent<T = unknown>(): T | null {
+    return (this._structuredContent ?? null) as T | null;
   }
 
   getWidgetState(): Record<string, unknown> {

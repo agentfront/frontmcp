@@ -30,6 +30,7 @@ export {
 export * from './common';
 export * from './errors';
 export * from './elicitation';
+export { default as LoggerRegistry } from './logger/logger.registry';
 export * from '@frontmcp/guard';
 export * from './remote-mcp';
 export * from './esm-loader';

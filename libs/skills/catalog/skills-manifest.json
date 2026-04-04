@@ -2680,6 +2680,173 @@
           ]
         }
       ]
+    },
+    {
+      "name": "frontmcp-observability",
+      "category": "observability",
+      "description": "Use when you want to add tracing, structured logging, or monitoring to your FrontMCP server. Covers OpenTelemetry instrumentation, vendor integrations (Coralogix, Datadog, Logz.io, Grafana), this.telemetry API for custom spans, structured JSON logging with sinks, and testing observability. Triggers: observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans, datadog, coralogix, logz, grafana, winston, pino.",
+      "path": "frontmcp-observability",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "router",
+        "observability",
+        "telemetry",
+        "tracing",
+        "logging",
+        "monitoring",
+        "opentelemetry",
+        "otel",
+        "spans"
+      ],
+      "bundle": ["recommended", "full"],
+      "references": [
+        {
+          "name": "tracing-setup",
+          "description": "Enable OpenTelemetry distributed tracing for all FrontMCP flows with zero configuration.",
+          "examples": [
+            {
+              "name": "basic-tracing",
+              "description": "Enable auto-tracing and see spans printed to your terminal.",
+              "level": "basic",
+              "tags": ["tracing", "setup", "console", "basic"],
+              "features": [
+                "Zero-config tracing via observability: true",
+                "Console exporter for local development",
+                "Single trace ID shared across all spans in a request"
+              ]
+            },
+            {
+              "name": "production-tracing",
+              "description": "Full production observability — traces to OTLP, structured logs to stdout, per-request log collection.",
+              "level": "intermediate",
+              "tags": ["tracing", "production", "otlp", "logging", "request-logs"],
+              "features": [
+                "OTLP exporter with env var configuration",
+                "Structured logging with sensitive field redaction",
+                "Request log collection with error alerting",
+                "Full tracing across all SDK flows"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "structured-logging",
+          "description": "Add structured JSON logging with trace correlation and configurable sinks.",
+          "examples": [
+            {
+              "name": "stdout-logging",
+              "description": "Enable NDJSON structured logging to stdout with automatic trace correlation and field redaction.",
+              "level": "basic",
+              "tags": ["logging", "stdout", "ndjson", "redaction", "basic"],
+              "features": [
+                "NDJSON format for stdout (Docker/K8s log collection)",
+                "Automatic trace context enrichment (trace_id, span_id)",
+                "Sensitive field redaction (token \u2192 [REDACTED])"
+              ]
+            },
+            {
+              "name": "winston-integration",
+              "description": "Forward FrontMCP structured log entries to your existing winston logger. Each entry includes trace_id and span_id as metadata.",
+              "level": "intermediate",
+              "tags": ["logging", "winston", "integration", "intermediate"],
+              "features": [
+                "WinstonSink forwarding structured entries with trace metadata",
+                "Multiple sinks running simultaneously (stdout + winston)",
+                "Winston transports handle file logging, remote forwarding, etc."
+              ]
+            }
+          ]
+        },
+        {
+          "name": "telemetry-api",
+          "description": "Use this.telemetry in tools, plugins, and agents to create custom spans, events, and attributes.",
+          "examples": [
+            {
+              "name": "tool-custom-spans",
+              "description": "Create child spans, events, and attributes inside a tool's execute method using this.telemetry.",
+              "level": "basic",
+              "tags": ["telemetry", "tool", "spans", "events", "attributes"],
+              "features": [
+                "this.telemetry.withSpan() creates auto-managed child spans",
+                "this.telemetry.addEvent() adds events to the parent tool span",
+                "this.telemetry.setAttributes() adds metadata to the parent tool span",
+                "Child spans inherit the trace ID automatically"
+              ]
+            },
+            {
+              "name": "plugin-telemetry",
+              "description": "Add telemetry events from a custom plugin's hooks. Events appear on the tool execution span, giving you visibility into plugin behavior within the trace.",
+              "level": "intermediate",
+              "tags": ["telemetry", "plugin", "hooks", "cache", "audit"],
+              "features": [
+                "Plugin hooks can access toolCtx.telemetry to add events to the active span",
+                "Events from plugins appear in the same trace as the tool execution",
+                "Graceful degradation when observability is not enabled"
+              ]
+            },
+            {
+              "name": "agent-nested-tracing",
+              "description": "Trace an agent's execution lifecycle including its nested tool calls. Every span shares the same trace ID.",
+              "level": "advanced",
+              "tags": ["telemetry", "agent", "nested", "tools", "trace-id"],
+              "features": [
+                "Agent span wraps the entire execution (including LLM loop)",
+                "Nested tool calls automatically get their own spans",
+                "All spans share the same trace ID for end-to-end visibility",
+                "this.telemetry works identically in agents and tools"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "vendor-integrations",
+          "description": "Connect FrontMCP observability to Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend.",
+          "examples": [
+            {
+              "name": "coralogix-setup",
+              "description": "Send both traces and structured logs to Coralogix. Logs include trace_id so Coralogix links them to traces automatically.",
+              "level": "intermediate",
+              "tags": ["coralogix", "otlp", "vendor", "integration", "production"],
+              "features": [
+                "Traces and logs both sent to Coralogix via OTLP",
+                "Automatic trace_id correlation — click a trace, see its logs",
+                "Environment variable configuration for production"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "testing-observability",
+          "description": "Test that your spans, log entries, and telemetry instrumentation work correctly.",
+          "examples": [
+            {
+              "name": "test-custom-spans",
+              "description": "Verify that your tool creates the expected child spans with correct attributes.",
+              "level": "basic",
+              "tags": ["testing", "spans", "assertions", "jest", "basic"],
+              "features": [
+                "createTestTracer() provides isolated OTel setup (no global pollution)",
+                "assertSpanExists() throws helpful errors when spans are missing",
+                "assertSpanAttribute() verifies span attributes",
+                "findSpansByAttribute() queries spans by attribute value"
+              ]
+            },
+            {
+              "name": "test-log-correlation",
+              "description": "Verify that structured log entries include trace context fields for correlation with spans.",
+              "level": "intermediate",
+              "tags": ["testing", "logging", "correlation", "trace-id", "intermediate"],
+              "features": [
+                "CallbackSink captures log entries for test assertions",
+                "StructuredLogTransport with mock context accessor provides trace fields",
+                "Verifying trace_id, span_id, request_id are present",
+                "Testing field redaction behavior"
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

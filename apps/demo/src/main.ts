@@ -19,6 +19,11 @@ const defaultIdpProvider = process.env['IDP_PROVIDER_URL'] ?? 'https://sample-ap
   transport: {
     protocol: 'legacy',
   },
+  observability: {
+    logging: true,
+    requestLogs: true,
+    tracing: true,
+  },
   redis: {
     port: 6379,
     host: 'localhost',

@@ -23,7 +23,8 @@ describe('manifest constants', () => {
     expect(VALID_CATEGORIES).toContain('guides');
     expect(VALID_CATEGORIES).toContain('production');
     expect(VALID_CATEGORIES).toContain('extensibility');
-    expect(VALID_CATEGORIES).toHaveLength(8);
+    expect(VALID_CATEGORIES).toContain('observability');
+    expect(VALID_CATEGORIES).toHaveLength(9);
   });
 
   it('should export valid bundles', () => {

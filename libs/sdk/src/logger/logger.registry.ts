@@ -87,9 +87,13 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
     this.bindLogger();
   }
 
+  /** The mutable transports array — shared by all loggers via getTransports closure. */
+  private _transports: LogTransportInterface[] = [];
+
   protected bindLogger() {
     const consoleTransport = this.instances.get(ConsoleLogTransportInstance) as ConsoleLogTransportInstance;
-    const transports = [...this.instances.values()];
+    this._transports = [...this.instances.values()];
+    const transports = this._transports;
     const getTransports: GetTransports = () => {
       return { consoleTransport, transports };
     };
@@ -105,5 +109,45 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
         description: 'Logger instance that transport logs to all registered transporters.',
       },
     });
+
+    // Inject self so scope/plugins can add transports post-initialization
+    this.providers.injectProvider({
+      provide: LoggerRegistry,
+      value: this,
+      metadata: {
+        id: 'frontmcp-logger-registry',
+        name: 'LoggerRegistry',
+        scope: ProviderScope.GLOBAL,
+        description: 'Logger registry for post-init transport injection.',
+      },
+    });
+  }
+
+  /**
+   * Add a transport to the logger pipeline after initialization.
+   *
+   * The transport will receive all future log records. Existing child loggers
+   * created via logger.child() will also receive logs through this transport
+   * because they share the same getTransports closure.
+   *
+   * Used by the observability system to inject StructuredLogTransport
+   * after plugin initialization.
+   */
+  addTransport(transport: LogTransportInterface): void {
+    this._transports.push(transport);
+  }
+
+  /**
+   * Remove the built-in ConsoleLogTransportInstance.
+   *
+   * Called when observability structured logging replaces it with a
+   * ConsoleSink that provides human-readable output with trace context.
+   * Prevents double console output.
+   */
+  removeConsoleTransport(): void {
+    const idx = this._transports.findIndex((t) => t instanceof ConsoleLogTransportInstance);
+    if (idx !== -1) {
+      this._transports.splice(idx, 1);
+    }
   }
 }
