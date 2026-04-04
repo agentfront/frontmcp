@@ -60,7 +60,10 @@ export function createSinks(configs?: SinkConfig[]): LogSink[] {
     return configs.map(createSink);
   }
 
-  // Default: stdout in Node.js, console in browser
-  const isBrowser = typeof window !== 'undefined' && typeof process === 'undefined';
-  return [isBrowser ? new ConsoleSink() : new StdoutSink()];
+  // No default sinks — the StructuredLogTransport runs without output sinks.
+  // Telemetry data still flows to RequestLogCollector and OTel spans.
+  // Add explicit sinks for output: { type: 'stdout' }, { type: 'otlp' },
+  // { type: 'callback', fn: ... }, etc.
+  // The SDK console logger (Stream 1) handles dev console output independently.
+  return [];
 }

@@ -41,6 +41,7 @@ export {
   setAuthMode,
   setAuthResult,
   emitStartupReport,
+  PrettySpanExporter,
 } from './otel';
 export type {
   TracingOptions,

@@ -1,6 +1,6 @@
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { diag, DiagLogLevel, SpanStatusCode, trace, context as otelContext } from '@opentelemetry/api';
-import { TelemetryAccessor, TelemetrySpan } from '../telemetry/telemetry.accessor';
+import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
 import { ACTIVE_SPAN_KEY, ACTIVE_OTEL_CTX_KEY } from '../plugin/observability.hooks';
 
 const exporter = new InMemorySpanExporter();

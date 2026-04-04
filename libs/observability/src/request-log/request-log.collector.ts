@@ -33,6 +33,7 @@ export class RequestLogCollector {
   private statusCode?: number;
   private error?: RequestLog['error'];
   private finalized = false;
+  private finalizedLog?: RequestLog;
 
   constructor(
     context: {
@@ -152,11 +153,12 @@ export class RequestLogCollector {
    */
   async finalize(): Promise<RequestLog> {
     if (this.finalized) {
-      return this.toRequestLog();
+      return this.finalizedLog as RequestLog;
     }
     this.finalized = true;
 
     const log = this.toRequestLog();
+    this.finalizedLog = log;
 
     if (this.onComplete) {
       try {

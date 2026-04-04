@@ -306,4 +306,42 @@ describe('StructuredLogTransport', () => {
 
     expect(sink.entries.map((e) => e.level)).toEqual(['debug', 'verbose', 'info', 'warn', 'error']);
   });
+
+  it('should map verbose severity to DEBUG2 (6), not INFO (9)', () => {
+    const sink = createMockSink();
+    const transport = new StructuredLogTransport([sink]);
+
+    transport.log(makeLogRecord({ level: LogLevel.Verbose, levelName: 'verbose' }));
+    transport.log(makeLogRecord({ level: LogLevel.Info, levelName: 'info' }));
+
+    expect(sink.entries[0].severity_number).toBe(6);
+    expect(sink.entries[1].severity_number).toBe(9);
+  });
+
+  it('should not let staticFields clobber canonical fields', () => {
+    const sink = createMockSink();
+    const transport = new StructuredLogTransport([sink], {
+      staticFields: { timestamp: 'CLOBBERED', level: 'CLOBBERED', message: 'CLOBBERED', severity_number: 0 },
+    });
+
+    transport.log(makeLogRecord());
+
+    const entry = sink.entries[0];
+    expect(entry.timestamp).toBe('2026-03-31T14:00:00.000Z');
+    expect(entry.level).toBe('info');
+    expect(entry.message).toBe('test message');
+    expect(entry.severity_number).toBe(9);
+  });
+
+  it('should not break if onEntry throws', () => {
+    const sink = createMockSink();
+    const transport = new StructuredLogTransport([sink]);
+    transport.onEntry = () => {
+      throw new Error('listener error');
+    };
+
+    transport.log(makeLogRecord());
+
+    expect(sink.entries).toHaveLength(1);
+  });
 });

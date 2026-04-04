@@ -28,7 +28,7 @@
  * ```
  */
 
-import { type Tracer, type Span, trace } from '@opentelemetry/api';
+import { type Tracer } from '@opentelemetry/api';
 
 import {
   BasicTracerProvider,

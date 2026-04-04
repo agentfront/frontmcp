@@ -25,7 +25,8 @@ export interface CardProps {
   children: React.ReactNode;
 }
 
-const StyledCard = styled(MuiCard, {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const StyledCard: any = styled(MuiCard, {
   name: 'Card',
   slot: 'Root',
 })(({ theme }) => ({

@@ -12,7 +12,6 @@ import {
   type TextMapSetter,
   type TextMapPropagator,
   trace,
-  TraceFlags,
 } from '@opentelemetry/api';
 
 const TRACEPARENT_HEADER = 'traceparent';

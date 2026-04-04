@@ -56,40 +56,13 @@ describe('createSinks', () => {
     expect(sinks[1]).toBeInstanceOf(ConsoleSink);
   });
 
-  it('should default to StdoutSink in Node.js environment', () => {
+  it('should return empty array when no sinks configured', () => {
     const sinks = createSinks();
-    expect(sinks).toHaveLength(1);
-    // In Node.js test environment, should default to StdoutSink
-    expect(sinks[0]).toBeInstanceOf(StdoutSink);
+    expect(sinks).toHaveLength(0);
   });
 
-  it('should default to StdoutSink when empty array', () => {
+  it('should return empty array for empty config', () => {
     const sinks = createSinks([]);
-    // Empty array = use defaults
-    expect(sinks).toHaveLength(1);
-  });
-
-  it('should default to ConsoleSink in browser environment', () => {
-    // Simulate browser: define window, undefine process
-    const origProcess = globalThis.process;
-    const origWindow = (globalThis as any).window;
-    (globalThis as any).window = {};
-    // Need to delete process to simulate browser
-    delete (globalThis as any).process;
-
-    // Re-require to get fresh module evaluation
-    jest.resetModules();
-    const { createSinks: freshCreateSinks } = require('../logging/sink.factory');
-    const sinks = freshCreateSinks();
-    expect(sinks).toHaveLength(1);
-    expect(sinks[0].constructor.name).toBe('ConsoleSink');
-
-    // Restore
-    globalThis.process = origProcess;
-    if (origWindow === undefined) {
-      delete (globalThis as any).window;
-    } else {
-      (globalThis as any).window = origWindow;
-    }
+    expect(sinks).toHaveLength(0);
   });
 });

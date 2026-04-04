@@ -84,7 +84,17 @@ export class LoggerInstance extends FrontMcpLogger {
 
   private _getter(level: LogLevel): LogFn {
     if (level < this.level || this.level === LogLevel.Off) return () => void 0;
-    if (isDevelopment() && this.config.enableConsole && this.consoleTransport) {
+    // Dev shortcut: bind console directly for fast dev output.
+    // Only when console is the SOLE transport. When observability adds
+    // StructuredLogTransport, transports.length > 1 so we fall through
+    // to emit() which fans out to ALL transports (including console).
+    if (
+      isDevelopment() &&
+      this.config.enableConsole &&
+      this.consoleTransport &&
+      this.transports.length === 1 &&
+      this.transports[0] === this.consoleTransport
+    ) {
       return this.consoleTransport.bind(level, this.prefix);
     }
     const emit = this.emit.bind(this);

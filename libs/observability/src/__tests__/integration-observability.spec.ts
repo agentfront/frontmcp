@@ -17,13 +17,12 @@
  */
 
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { trace, SpanStatusCode, diag, DiagLogLevel } from '@opentelemetry/api';
+import { SpanStatusCode, diag, DiagLogLevel } from '@opentelemetry/api';
 
 import { StructuredLogTransport, type ContextSnapshot } from '../logging/structured-log-transport';
 import type { StructuredLogEntry } from '../logging/structured-log.types';
 import { CallbackSink } from '../logging/sinks/callback.sink';
 import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
-import { ACTIVE_SPAN_KEY, ACTIVE_OTEL_CTX_KEY } from '../plugin/observability.hooks';
 
 import {
   onToolWillParse,
@@ -51,7 +50,6 @@ import {
   onAuthDidFinalize,
   onGenericFlowWillStart,
   onGenericFlowDidFinalize,
-  SPAN_KEY,
 } from '../plugin/observability.hooks';
 
 import type { TracingOptions } from '../otel/otel.types';

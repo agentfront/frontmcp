@@ -204,6 +204,14 @@ describe('OtlpSink', () => {
     expect(fetchSpy.mock.calls[0][0]).toBe('http://localhost:4318/v1/logs');
   });
 
+  it('should strip multiple trailing slashes from endpoint', async () => {
+    const sink = new OtlpSink({ endpoint: 'http://localhost:4318///', flushIntervalMs: 0 });
+    sink.write(makeEntry());
+    await sink.flush();
+
+    expect(fetchSpy.mock.calls[0][0]).toBe('http://localhost:4318/v1/logs');
+  });
+
   it('should flush on close', async () => {
     const sink = new OtlpSink({ endpoint: 'http://localhost:4318', flushIntervalMs: 0 });
     sink.write(makeEntry());

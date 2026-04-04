@@ -23,7 +23,8 @@ export interface ModalProps {
   children: React.ReactNode;
 }
 
-const StyledDialogTitle = styled(DialogTitle, {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const StyledDialogTitle: any = styled(DialogTitle, {
   name: 'Modal',
   slot: 'Title',
 })(({ theme }) => ({
@@ -34,7 +35,8 @@ const StyledDialogTitle = styled(DialogTitle, {
   fontSize: theme.typography.h6.fontSize,
 }));
 
-const StyledDialogContent = styled(DialogContent, {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const StyledDialogContent: any = styled(DialogContent, {
   name: 'Modal',
   slot: 'Content',
 })(({ theme }) => ({

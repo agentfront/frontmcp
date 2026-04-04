@@ -136,4 +136,18 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
   addTransport(transport: LogTransportInterface): void {
     this._transports.push(transport);
   }
+
+  /**
+   * Remove the built-in ConsoleLogTransportInstance.
+   *
+   * Called when observability structured logging replaces it with a
+   * ConsoleSink that provides human-readable output with trace context.
+   * Prevents double console output.
+   */
+  removeConsoleTransport(): void {
+    const idx = this._transports.findIndex((t) => t instanceof ConsoleLogTransportInstance);
+    if (idx !== -1) {
+      this._transports.splice(idx, 1);
+    }
+  }
 }

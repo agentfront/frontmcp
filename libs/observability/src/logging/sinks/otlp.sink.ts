@@ -56,7 +56,10 @@ export class OtlpSink implements LogSink {
   private flushTimer?: ReturnType<typeof setInterval>;
 
   constructor(options: OtlpSinkOptions) {
-    const base = options.endpoint.replace(/\/+$/, '');
+    let base = options.endpoint;
+    while (base.endsWith('/')) {
+      base = base.slice(0, -1);
+    }
     this.endpoint = `${base}/v1/logs`;
     this.headers = {
       'Content-Type': 'application/json',

@@ -156,11 +156,14 @@ describe('RequestLogCollector', () => {
     const onComplete = jest.fn();
     const collector = new RequestLogCollector(makeContext(), { onRequestComplete: onComplete });
 
-    await collector.finalize();
-    await collector.finalize(); // Second call
+    const log1 = await collector.finalize();
+    const log2 = await collector.finalize(); // Second call
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(collector.isFinalized()).toBe(true);
+    expect(log1.end_time).toBe(log2.end_time);
+    expect(log1.duration_ms).toBe(log2.duration_ms);
+    expect(log1).toEqual(log2);
   });
 
   it('should not add entries after finalization', async () => {

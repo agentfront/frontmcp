@@ -1,4 +1,4 @@
-import { SpanKind, SpanStatusCode, context as otelContext, type Tracer } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode, type Tracer } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { startSpan, endSpanOk, endSpanError, withSpan } from '../otel/spans/span.utils';
 import { startHttpServerSpan, setHttpResponseStatus } from '../otel/spans/http-server.span';

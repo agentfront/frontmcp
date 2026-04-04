@@ -282,6 +282,41 @@ export class Scope extends ScopeEntry {
             });
           }
         }
+
+        // Auto-configure tracing exporter if none is set
+        if (pluginOptions.tracing !== false) {
+          try {
+            const { trace } = require('@opentelemetry/api');
+            const currentProvider = trace.getTracerProvider();
+            // ProxyTracerProvider is the default no-op when nothing is configured
+            const isNoop = !currentProvider || currentProvider.constructor?.name === 'ProxyTracerProvider';
+            if (isNoop) {
+              const { isDevelopment: checkDev } = require('@frontmcp/utils');
+              if (checkDev()) {
+                const { BasicTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+                let exporter: any;
+                try {
+                  const { PrettySpanExporter } = require('@frontmcp/observability');
+                  exporter = new PrettySpanExporter();
+                } catch {
+                  const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
+                  exporter = new ConsoleSpanExporter();
+                }
+                const devProvider = new BasicTracerProvider();
+                devProvider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+                devProvider.register();
+                this.logger.info('observability: auto-configured tracing (development mode)');
+              } else {
+                this.logger.warn(
+                  'observability: tracing enabled but no TracerProvider configured. ' +
+                    'Set OTEL_EXPORTER_OTLP_ENDPOINT or call setupOTel() before server start.',
+                );
+              }
+            }
+          } catch {
+            // @opentelemetry/sdk-trace-base not installed — tracing will be no-op
+          }
+        }
       } catch {
         this.logger.warn(
           'observability config is set but @frontmcp/observability is not installed. ' +

@@ -1,4 +1,4 @@
-import { LogTransportInterface, LogRecord, LogLevel, LogLevelName, LogTransport } from '@frontmcp/sdk';
+import { LogTransportInterface, LogRecord, LogLevelName, LogTransport } from '@frontmcp/sdk';
 
 import type { LogSink } from './log-sink.interface';
 import type { StructuredLogEntry, StructuredLogTransportOptions } from './structured-log.types';
@@ -70,7 +70,11 @@ export class StructuredLogTransport extends LogTransportInterface {
 
     // Notify request log collector (if active)
     if (this.onEntry) {
-      this.onEntry(entry);
+      try {
+        this.onEntry(entry);
+      } catch {
+        // onEntry errors must not break the logging pipeline
+      }
     }
 
     // Forward to all sinks
@@ -87,11 +91,11 @@ export class StructuredLogTransport extends LogTransportInterface {
     const levelName = (LogLevelName[rec.level] ?? 'info') as StructuredLogEntry['level'];
 
     const entry: StructuredLogEntry = {
+      ...this.staticFields,
       timestamp: rec.timestamp.toISOString(),
       level: levelName,
       severity_number: LOG_LEVEL_TO_OTEL_SEVERITY[levelName] ?? 9,
       message: String(rec.message),
-      ...this.staticFields,
     };
 
     // Add prefix if present

@@ -84,7 +84,7 @@
       "outputs": ["{workspaceRoot}/coverage/unit/observability"],
       "options": {
         "jestConfig": "libs/observability/jest.config.ts",
-        "passWithNoTests": true
+        "passWithNoTests": false
       }
     },
     "publish": {

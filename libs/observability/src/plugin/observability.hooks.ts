@@ -25,7 +25,6 @@ import {
   type Span,
   type Context as OTelContext,
   SpanKind,
-  SpanStatusCode,
   trace,
   context as otelContext,
 } from '@opentelemetry/api';
@@ -37,7 +36,7 @@ import { startToolSpan } from '../otel/spans/tool.span';
 import { startResourceSpan } from '../otel/spans/resource.span';
 import { startPromptSpan } from '../otel/spans/prompt.span';
 import { startSpan, endSpanOk, endSpanError } from '../otel/spans/span.utils';
-import { FrontMcpAttributes, McpAttributes, EnduserAttributes, HttpAttributes } from '../otel/otel.types';
+import { FrontMcpAttributes, McpAttributes } from '../otel/otel.types';
 import type { TracingOptions } from '../otel/otel.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,7 +160,7 @@ export function onHttpWillTrace(options: TracingOptions, flowCtx: any): void {
 
   const { span, context: spanCtx } = startHttpServerSpan(tracer, {
     method: ctx.metadata?.customHeaders?.['x-http-method'] ?? 'POST',
-    path: ctx.metadata?.customHeaders?.['x-url-path'] ?? '/mcp',
+    path: ctx.metadata?.customHeaders?.['x-url-path'] ?? '/',
     scopeId: ctx.scopeId,
     requestId: ctx.requestId,
     parentContext: parentOTelCtx,

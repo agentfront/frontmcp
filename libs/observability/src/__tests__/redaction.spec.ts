@@ -102,4 +102,20 @@ describe('redactFields', () => {
     const result = redactFields({}, ['password']);
     expect(result).toEqual({});
   });
+
+  it('should preserve Map, Set, RegExp, and Error values unchanged', () => {
+    const map = new Map([['a', 1]]);
+    const set = new Set([1, 2]);
+    const regex = /test/;
+    const error = new Error('test');
+
+    const obj = { map, set, regex, error, token: 'abc' };
+    const result = redactFields(obj, ['token']);
+
+    expect(result.map).toBe(map);
+    expect(result.set).toBe(set);
+    expect(result.regex).toBe(regex);
+    expect(result.error).toBe(error);
+    expect(result.token).toBe('[REDACTED]');
+  });
 });

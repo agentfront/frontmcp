@@ -93,7 +93,7 @@ export interface StructuredLogTransportOptions {
  */
 export const LOG_LEVEL_TO_OTEL_SEVERITY: Record<string, number> = {
   debug: 5, // DEBUG
-  verbose: 9, // DEBUG2 (verbose is between debug and info)
+  verbose: 6, // DEBUG2
   info: 9, // INFO
   warn: 13, // WARN
   error: 17, // ERROR

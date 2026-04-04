@@ -1,5 +1,5 @@
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { trace, SpanStatusCode, diag, DiagLogLevel } from '@opentelemetry/api';
+import { SpanStatusCode, diag, DiagLogLevel } from '@opentelemetry/api';
 import {
   onToolWillParse,
   onToolWillFindTool,
@@ -51,7 +51,6 @@ import {
   sessionTracingId,
   SPAN_KEY,
   SPAN_CTX_KEY,
-  EXEC_SPAN_KEY,
 } from '../plugin/observability.hooks';
 import type { TracingOptions } from '../otel/otel.types';
 

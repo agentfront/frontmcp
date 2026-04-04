@@ -64,7 +64,8 @@ describe('ConsoleSink', () => {
     const sink = new ConsoleSink();
     const entry = makeEntry({ level: 'info' });
     sink.write(entry);
-    expect(spy).toHaveBeenCalledWith(entry);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('test message'));
     spy.mockRestore();
   });
 

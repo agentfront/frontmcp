@@ -29,4 +29,6 @@ export { startAuthSpan, setAuthMode, setAuthResult } from './auth.span';
 export type { AuthSpanOptions } from './auth.span';
 
 export { emitStartupReport } from './startup.span';
+
+export { PrettySpanExporter } from './pretty-span-exporter';
 export type { StartupTelemetryData } from './startup.span';
