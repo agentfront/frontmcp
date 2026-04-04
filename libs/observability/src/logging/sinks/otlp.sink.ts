@@ -37,6 +37,9 @@ export interface OtlpSinkOptions {
   /** Max batch size before auto-flush (default: 100) */
   batchSize?: number;
 
+  /** Max queue capacity — oldest entries are dropped when exceeded (default: 5000) */
+  maxQueueSize?: number;
+
   /** Flush interval in ms (default: 5000) */
   flushIntervalMs?: number;
 
@@ -52,6 +55,7 @@ export class OtlpSink implements LogSink {
   private readonly endpoint: string;
   private readonly headers: Record<string, string>;
   private readonly batchSize: number;
+  private readonly maxQueueSize: number;
   private readonly serviceName: string;
   private flushTimer?: ReturnType<typeof setInterval>;
 
@@ -66,6 +70,7 @@ export class OtlpSink implements LogSink {
       ...(options.headers ?? {}),
     };
     this.batchSize = options.batchSize ?? 100;
+    this.maxQueueSize = options.maxQueueSize ?? 5000;
     this.serviceName =
       options.serviceName ??
       (typeof process !== 'undefined' ? process.env?.['OTEL_SERVICE_NAME'] : undefined) ??
@@ -85,6 +90,7 @@ export class OtlpSink implements LogSink {
 
   write(entry: StructuredLogEntry): void {
     this.batch.push(entry);
+    this.enforceCapacity();
     if (this.batch.length >= this.batchSize) {
       void this.flush();
     }
@@ -111,15 +117,29 @@ export class OtlpSink implements LogSink {
           const body = await response.text().catch(() => '');
           // eslint-disable-next-line no-console
           console.error(`[OtlpSink] Export failed: HTTP ${response.status} — ${body.slice(0, 200)}`);
-          this.batch.unshift(...entries);
+          this.requeue(entries);
         }
-      } catch {
+      } catch (err) {
         clearTimeout(timeout);
-        this.batch.unshift(...entries);
+        // eslint-disable-next-line no-console
+        console.debug(
+          `[OtlpSink] Export error (${entries.length} entries): ${err instanceof Error ? err.message : err}`,
+        );
+        this.requeue(entries);
       }
     } catch {
       // Log export failures must not break the application
-      this.batch.unshift(...entries);
+    }
+  }
+
+  private requeue(entries: StructuredLogEntry[]): void {
+    this.batch.unshift(...entries);
+    this.enforceCapacity();
+  }
+
+  private enforceCapacity(): void {
+    if (this.batch.length > this.maxQueueSize) {
+      this.batch.splice(0, this.batch.length - this.maxQueueSize);
     }
   }
 
@@ -156,12 +176,13 @@ export class OtlpSink implements LogSink {
   }
 
   private entryToLogRecord(entry: StructuredLogEntry): OtlpLogRecord {
+    const attrs: OtlpAttribute[] = [];
     const record: OtlpLogRecord = {
       timeUnixNano: String(new Date(entry.timestamp).getTime() * 1_000_000),
       severityNumber: entry.severity_number,
       severityText: entry.level.toUpperCase(),
       body: { stringValue: entry.message },
-      attributes: [],
+      attributes: attrs,
     };
 
     // Trace correlation
@@ -177,22 +198,22 @@ export class OtlpSink implements LogSink {
 
     // Standard attributes
     if (entry.request_id) {
-      record.attributes!.push({ key: 'frontmcp.request.id', value: { stringValue: entry.request_id } });
+      attrs.push({ key: 'frontmcp.request.id', value: { stringValue: entry.request_id } });
     }
     if (entry.session_id_hash) {
-      record.attributes!.push({ key: 'mcp.session.id', value: { stringValue: entry.session_id_hash } });
+      attrs.push({ key: 'mcp.session.id', value: { stringValue: entry.session_id_hash } });
     }
     if (entry.scope_id) {
-      record.attributes!.push({ key: 'frontmcp.scope.id', value: { stringValue: entry.scope_id } });
+      attrs.push({ key: 'frontmcp.scope.id', value: { stringValue: entry.scope_id } });
     }
     if (entry.flow_name) {
-      record.attributes!.push({ key: 'frontmcp.flow.name', value: { stringValue: entry.flow_name } });
+      attrs.push({ key: 'frontmcp.flow.name', value: { stringValue: entry.flow_name } });
     }
     if (entry.prefix) {
-      record.attributes!.push({ key: 'log.prefix', value: { stringValue: entry.prefix } });
+      attrs.push({ key: 'log.prefix', value: { stringValue: entry.prefix } });
     }
     if (entry.elapsed_ms !== undefined) {
-      record.attributes!.push({
+      attrs.push({
         key: 'elapsed_ms',
         value: Number.isInteger(entry.elapsed_ms)
           ? { intValue: String(entry.elapsed_ms) }
@@ -202,28 +223,31 @@ export class OtlpSink implements LogSink {
 
     // Error attributes
     if (entry.error) {
-      record.attributes!.push({ key: 'error.type', value: { stringValue: entry.error.type } });
-      record.attributes!.push({ key: 'error.message', value: { stringValue: entry.error.message } });
+      attrs.push({ key: 'error.type', value: { stringValue: entry.error.type } });
+      attrs.push({ key: 'error.message', value: { stringValue: entry.error.message } });
       if (entry.error.code) {
-        record.attributes!.push({ key: 'error.code', value: { stringValue: entry.error.code } });
+        attrs.push({ key: 'error.code', value: { stringValue: entry.error.code } });
       }
       if (entry.error.stack) {
-        record.attributes!.push({ key: 'error.stack', value: { stringValue: entry.error.stack } });
+        attrs.push({ key: 'error.stack', value: { stringValue: entry.error.stack } });
       }
     }
 
     // User attributes
     if (entry.attributes) {
       for (const [key, value] of Object.entries(entry.attributes)) {
+        if (value == null) continue;
         if (typeof value === 'string') {
-          record.attributes!.push({ key, value: { stringValue: value } });
+          attrs.push({ key, value: { stringValue: value } });
         } else if (typeof value === 'number') {
-          record.attributes!.push({
+          attrs.push({
             key,
             value: Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value },
           });
         } else if (typeof value === 'boolean') {
-          record.attributes!.push({ key, value: { boolValue: value } });
+          attrs.push({ key, value: { boolValue: value } });
+        } else {
+          attrs.push({ key, value: { stringValue: JSON.stringify(value) } });
         }
       }
     }

@@ -416,8 +416,8 @@ export function useToolCalls<T extends Record<string, string>>(
   toolMap: T,
 ): {
   [K in keyof T]: {
-    call: (args: Record<string, unknown>) => Promise<ToolCallResult | null>;
-    data: ToolCallResult | null;
+    call: (args: Record<string, unknown>) => Promise<ToolCallResult<unknown> | null>;
+    data: ToolCallResult<unknown> | null;
     loading: boolean;
     error: Error | null;
     reset: () => void;
@@ -434,7 +434,7 @@ export function useToolCalls<T extends Record<string, string>>(
 
   const createCallFn = useCallback(
     (key: string, toolName: string) =>
-      async (args: Record<string, unknown>): Promise<ToolCallResult | null> => {
+      async (args: Record<string, unknown>): Promise<ToolCallResult<unknown> | null> => {
         if (!bridge) {
           setStates((prev) => ({
             ...prev,
@@ -454,7 +454,7 @@ export function useToolCalls<T extends Record<string, string>>(
 
         try {
           const result = await bridge.callTool(toolName, args);
-          const data = result as ToolCallResult;
+          const data = result as ToolCallResult<unknown>;
           setStates((prev) => ({
             ...prev,
             [key]: { data, loading: false, error: null, called: true },
@@ -485,8 +485,8 @@ export function useToolCalls<T extends Record<string, string>>(
   // Build result object
   const result = {} as {
     [K in keyof T]: {
-      call: (args: Record<string, unknown>) => Promise<ToolCallResult | null>;
-      data: ToolCallResult | null;
+      call: (args: Record<string, unknown>) => Promise<ToolCallResult<unknown> | null>;
+      data: ToolCallResult<unknown> | null;
       loading: boolean;
       error: Error | null;
       reset: () => void;

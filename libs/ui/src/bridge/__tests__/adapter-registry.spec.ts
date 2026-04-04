@@ -56,8 +56,8 @@ class MockAdapter implements PlatformAdapter {
   getToolOutput(): unknown {
     return undefined;
   }
-  getStructuredContent(): unknown {
-    return undefined;
+  getStructuredContent<T = unknown>(): T | null {
+    return null;
   }
   getWidgetState(): Record<string, unknown> {
     return {};

@@ -217,112 +217,126 @@ export class Scope extends ScopeEntry {
     // Uses lazy require to avoid bundling @frontmcp/observability in browser builds.
     const observabilityConfig = this.metadata.observability;
     if (observabilityConfig) {
+      let ObservabilityPluginModule: any;
       try {
-        const { ObservabilityPlugin } = require('@frontmcp/observability');
-        const pluginOptions = observabilityConfig === true ? {} : observabilityConfig;
-        serverPlugins.push(ObservabilityPlugin.init(pluginOptions));
-        this.logger.verbose('observability: auto-loaded ObservabilityPlugin from config');
-
-        // Wire StructuredLogTransport into the SDK logger pipeline so that
-        // every logger.info() call flows through it with trace correlation.
-        const loggingEnabled = pluginOptions.logging !== false;
-        if (loggingEnabled) {
-          try {
-            const { StructuredLogTransport, createSinks } = require('@frontmcp/observability');
-            const LoggerRegistryCls = require('../logger/logger.registry').default;
-            let loggerRegistry: any;
-            try {
-              loggerRegistry = this.globalProviders.get(LoggerRegistryCls);
-            } catch {
-              /* not available */
-            }
-            if (loggerRegistry && typeof loggerRegistry.addTransport === 'function') {
-              const rawLogging = pluginOptions.logging;
-              const loggingOpts: Record<string, unknown> =
-                rawLogging === true ? {} : typeof rawLogging === 'object' ? rawLogging : {};
-              const sinks = createSinks(loggingOpts['sinks'] as any);
-              const { FrontMcpContextStorage: CtxStorage } = require('../context/frontmcp-context-storage');
-              let contextStorage: any;
-              try {
-                contextStorage = this.globalProviders.get(CtxStorage);
-              } catch {
-                /* not available */
-              }
-              const contextAccessor = contextStorage
-                ? () => {
-                    const ctx = contextStorage.getStore();
-                    if (!ctx) return undefined;
-                    return {
-                      requestId: ctx.requestId,
-                      traceContext: ctx.traceContext,
-                      sessionIdHash: require('@frontmcp/utils').sha256Hex(ctx.sessionId).slice(0, 12),
-                      scopeId: ctx.scopeId,
-                      flowName: ctx.flow?.name,
-                      elapsed: ctx.elapsed(),
-                    };
-                  }
-                : undefined;
-
-              const transport = new StructuredLogTransport(
-                sinks,
-                {
-                  redactFields: loggingOpts['redactFields'] as string[] | undefined,
-                  includeStacks: loggingOpts['includeStacks'] as boolean | undefined,
-                  staticFields: loggingOpts['staticFields'] as Record<string, unknown> | undefined,
-                },
-                contextAccessor,
-              );
-
-              loggerRegistry.addTransport(transport);
-              this.logger.verbose('observability: wired StructuredLogTransport into SDK logger');
-            }
-          } catch (e) {
-            this.logger.warn('observability: failed to wire structured logging', {
-              error: e instanceof Error ? e.message : 'Unknown error',
-            });
-          }
-        }
-
-        // Auto-configure tracing exporter if none is set
-        if (pluginOptions.tracing !== false) {
-          try {
-            const { trace } = require('@opentelemetry/api');
-            const currentProvider = trace.getTracerProvider();
-            // ProxyTracerProvider is the default no-op when nothing is configured
-            const isNoop = !currentProvider || currentProvider.constructor?.name === 'ProxyTracerProvider';
-            if (isNoop) {
-              const { isDevelopment: checkDev } = require('@frontmcp/utils');
-              if (checkDev()) {
-                const { BasicTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-                let exporter: any;
-                try {
-                  const { PrettySpanExporter } = require('@frontmcp/observability');
-                  exporter = new PrettySpanExporter();
-                } catch {
-                  const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
-                  exporter = new ConsoleSpanExporter();
-                }
-                const devProvider = new BasicTracerProvider();
-                devProvider.addSpanProcessor(new SimpleSpanProcessor(exporter));
-                devProvider.register();
-                this.logger.info('observability: auto-configured tracing (development mode)');
-              } else {
-                this.logger.warn(
-                  'observability: tracing enabled but no TracerProvider configured. ' +
-                    'Set OTEL_EXPORTER_OTLP_ENDPOINT or call setupOTel() before server start.',
-                );
-              }
-            }
-          } catch {
-            // @opentelemetry/sdk-trace-base not installed — tracing will be no-op
-          }
-        }
+        ObservabilityPluginModule = require('@frontmcp/observability');
       } catch {
         this.logger.warn(
           'observability config is set but @frontmcp/observability is not installed. ' +
             'Install it with: npm install @frontmcp/observability',
         );
       }
+      if (ObservabilityPluginModule)
+        try {
+          const { ObservabilityPlugin } = ObservabilityPluginModule;
+          const pluginOptions = observabilityConfig === true ? {} : observabilityConfig;
+          serverPlugins.push(ObservabilityPlugin.init(pluginOptions));
+          this.logger.verbose('observability: auto-loaded ObservabilityPlugin from config');
+
+          // Wire StructuredLogTransport into the SDK logger pipeline so that
+          // every logger.info() call flows through it with trace correlation.
+          const loggingEnabled = pluginOptions.logging !== false;
+          if (loggingEnabled) {
+            try {
+              const { StructuredLogTransport, createSinks } = require('@frontmcp/observability');
+              const LoggerRegistryCls = require('../logger/logger.registry').default;
+              let loggerRegistry: any;
+              try {
+                loggerRegistry = this.globalProviders.get(LoggerRegistryCls);
+              } catch {
+                /* not available */
+              }
+              if (
+                loggerRegistry &&
+                typeof loggerRegistry.addTransport === 'function' &&
+                !loggerRegistry._hasStructuredTransport
+              ) {
+                const rawLogging = pluginOptions.logging;
+                const loggingOpts: Record<string, unknown> =
+                  rawLogging === true ? {} : typeof rawLogging === 'object' ? rawLogging : {};
+                const sinks = createSinks(loggingOpts['sinks'] as any);
+                const { FrontMcpContextStorage: CtxStorage } = require('../context/frontmcp-context-storage');
+                let contextStorage: any;
+                try {
+                  contextStorage = this.globalProviders.get(CtxStorage);
+                } catch {
+                  /* not available */
+                }
+                const contextAccessor = contextStorage
+                  ? () => {
+                      const ctx = contextStorage.getStore();
+                      if (!ctx) return undefined;
+                      return {
+                        requestId: ctx.requestId,
+                        traceContext: ctx.traceContext,
+                        sessionIdHash: require('@frontmcp/utils').sha256Hex(ctx.sessionId).slice(0, 12),
+                        scopeId: ctx.scopeId,
+                        flowName: ctx.flow?.name,
+                        elapsed: ctx.elapsed(),
+                      };
+                    }
+                  : undefined;
+
+                const transport = new StructuredLogTransport(
+                  sinks,
+                  {
+                    redactFields: loggingOpts['redactFields'] as string[] | undefined,
+                    includeStacks: loggingOpts['includeStacks'] as boolean | undefined,
+                    staticFields: loggingOpts['staticFields'] as Record<string, unknown> | undefined,
+                  },
+                  contextAccessor,
+                );
+
+                loggerRegistry.addTransport(transport);
+                loggerRegistry._hasStructuredTransport = true;
+                this.logger.verbose('observability: wired StructuredLogTransport into SDK logger');
+              }
+            } catch (e) {
+              this.logger.warn('observability: failed to wire structured logging', {
+                error: e instanceof Error ? e.message : 'Unknown error',
+              });
+            }
+          }
+
+          // Auto-configure tracing exporter if none is set
+          if (pluginOptions.tracing !== false) {
+            try {
+              const { trace } = require('@opentelemetry/api');
+              const currentProvider = trace.getTracerProvider();
+              // ProxyTracerProvider is the default no-op when nothing is configured
+              const isNoop = !currentProvider || currentProvider.constructor?.name === 'ProxyTracerProvider';
+              if (isNoop) {
+                const { isDevelopment: checkDev } = require('@frontmcp/utils');
+                if (checkDev()) {
+                  const { BasicTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+                  let exporter: any;
+                  try {
+                    const { PrettySpanExporter } = require('@frontmcp/observability');
+                    exporter = new PrettySpanExporter();
+                  } catch {
+                    const { ConsoleSpanExporter } = require('@opentelemetry/sdk-trace-base');
+                    exporter = new ConsoleSpanExporter();
+                  }
+                  const devProvider = new BasicTracerProvider();
+                  devProvider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+                  devProvider.register();
+                  this.logger.info('observability: auto-configured tracing (development mode)');
+                } else {
+                  this.logger.warn(
+                    'observability: tracing enabled but no TracerProvider configured. ' +
+                      'Set OTEL_EXPORTER_OTLP_ENDPOINT or call setupOTel() before server start.',
+                  );
+                }
+              }
+            } catch {
+              // @opentelemetry/sdk-trace-base not installed — tracing will be no-op
+            }
+          }
+        } catch (e) {
+          this.logger.warn('observability: plugin initialization failed', {
+            error: e instanceof Error ? e.message : 'Unknown error',
+          });
+        }
     }
 
     if (serverPlugins.length > 0) {
