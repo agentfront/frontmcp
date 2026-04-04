@@ -1,0 +1,87 @@
+{
+  "name": "@frontmcp/observability",
+  "version": "1.0.0-beta.14",
+  "description": "OpenTelemetry instrumentation, structured JSON logging, and request log objects for FrontMCP",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "observability",
+    "tracing",
+    "structured-logging",
+    "json-logging",
+    "request-log",
+    "mcp",
+    "frontmcp",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/observability"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/observability/README.md",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./esm": null
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "peerDependencies": {
+    "@frontmcp/sdk": "^1.0.0-beta.13",
+    "@frontmcp/utils": "^1.0.0-beta.13",
+    "@opentelemetry/sdk-trace-base": "^1.25.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",
+    "winston": "^3.0.0",
+    "pino": "^8.0.0 || ^9.0.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-node": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-trace-otlp-http": {
+      "optional": true
+    },
+    "winston": {
+      "optional": true
+    },
+    "pino": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "zod": "^4.0.0",
+    "@opentelemetry/sdk-trace-base": "^1.25.0"
+  }
+}

@@ -38,11 +38,22 @@ import { useMcpBridgeContext, useMcpBridge } from './context';
 // ============================================
 
 /**
+ * MCP tool call result shape.
+ * Matches the actual runtime response from bridge.callTool().
+ */
+export interface ToolCallResult<T = unknown> {
+  _meta?: Record<string, unknown>;
+  content: Array<{ type: string; text?: string; [key: string]: unknown }>;
+  structuredContent?: T;
+  isError?: boolean;
+}
+
+/**
  * State for tool execution.
  */
 export interface ToolState<T = unknown> {
   /** Tool result data */
-  data: T | null;
+  data: ToolCallResult<T> | null;
   /** Whether the tool is currently executing */
   loading: boolean;
   /** Execution error, if any */
@@ -68,7 +79,7 @@ export interface UseCallToolOptions {
  */
 export type UseCallToolReturn<TInput extends object, TOutput> = [
   /** Function to call the tool */
-  (args: TInput) => Promise<TOutput | null>,
+  (args: TInput) => Promise<ToolCallResult<TOutput> | null>,
   /** Current tool state */
   ToolState<TOutput>,
   /** Reset state to initial values */
@@ -201,20 +212,35 @@ export function useToolOutput<T = unknown>(): T | null {
  */
 export function useStructuredContent<T = unknown>(): T | null {
   const { bridge, ready } = useMcpBridgeContext();
+  const [content, setContent] = useState<T | null>(null);
 
-  if (!ready || !bridge) {
-    return null;
-  }
-
-  try {
-    const adapter = bridge.getAdapter?.();
-    if (adapter) {
-      return adapter.getStructuredContent() as T;
+  useEffect(() => {
+    if (!ready || !bridge) {
+      setContent(null);
+      return;
     }
-    return null;
-  } catch {
-    return null;
-  }
+
+    const readStructured = (): T | null => {
+      try {
+        return bridge.getStructuredContent<T>();
+      } catch {
+        return null;
+      }
+    };
+
+    // Get initial structured content (sync even if null)
+    setContent(readStructured());
+
+    // Subscribe to tool result updates — when a result arrives,
+    // the adapter has already stored structuredContent, so read it.
+    const unsubscribe = bridge.onToolResult(() => {
+      setContent(readStructured());
+    });
+
+    return unsubscribe;
+  }, [bridge, ready]);
+
+  return content;
 }
 
 // ============================================
@@ -310,7 +336,7 @@ export function useCallTool<TInput extends object = Record<string, unknown>, TOu
   }, []);
 
   const callTool = useCallback(
-    async (args: TInput): Promise<TOutput | null> => {
+    async (args: TInput): Promise<ToolCallResult<TOutput> | null> => {
       if (!ready || !bridge) {
         const error = new Error('Bridge not initialized');
         setState((prev) => ({ ...prev, error, called: true }));
@@ -327,7 +353,7 @@ export function useCallTool<TInput extends object = Record<string, unknown>, TOu
 
       try {
         const result = await bridge.callTool(toolName, args as Record<string, unknown>);
-        const data = result as TOutput;
+        const data = result as ToolCallResult<TOutput>;
 
         setState({
           data,
@@ -390,8 +416,8 @@ export function useToolCalls<T extends Record<string, string>>(
   toolMap: T,
 ): {
   [K in keyof T]: {
-    call: (args: Record<string, unknown>) => Promise<unknown>;
-    data: unknown;
+    call: (args: Record<string, unknown>) => Promise<ToolCallResult<unknown> | null>;
+    data: ToolCallResult<unknown> | null;
     loading: boolean;
     error: Error | null;
     reset: () => void;
@@ -408,7 +434,7 @@ export function useToolCalls<T extends Record<string, string>>(
 
   const createCallFn = useCallback(
     (key: string, toolName: string) =>
-      async (args: Record<string, unknown>): Promise<unknown> => {
+      async (args: Record<string, unknown>): Promise<ToolCallResult<unknown> | null> => {
         if (!bridge) {
           setStates((prev) => ({
             ...prev,
@@ -428,11 +454,12 @@ export function useToolCalls<T extends Record<string, string>>(
 
         try {
           const result = await bridge.callTool(toolName, args);
+          const data = result as ToolCallResult<unknown>;
           setStates((prev) => ({
             ...prev,
-            [key]: { data: result, loading: false, error: null, called: true },
+            [key]: { data, loading: false, error: null, called: true },
           }));
-          return result;
+          return data;
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));
           setStates((prev) => ({
@@ -458,8 +485,8 @@ export function useToolCalls<T extends Record<string, string>>(
   // Build result object
   const result = {} as {
     [K in keyof T]: {
-      call: (args: Record<string, unknown>) => Promise<unknown>;
-      data: unknown;
+      call: (args: Record<string, unknown>) => Promise<ToolCallResult<unknown> | null>;
+      data: ToolCallResult<unknown> | null;
       loading: boolean;
       error: Error | null;
       reset: () => void;

@@ -164,7 +164,7 @@ export interface PlatformAdapter {
   getToolOutput(): unknown;
 
   /** Get structured content (parsed output) */
-  getStructuredContent(): unknown;
+  getStructuredContent<T = unknown>(): T | null;
 
   /** Get persisted widget state */
   getWidgetState(): Record<string, unknown>;
@@ -486,6 +486,7 @@ export interface FrontMcpBridgeInterface {
   getDisplayMode(): DisplayMode;
   getToolInput(): Record<string, unknown>;
   getToolOutput(): unknown;
+  getStructuredContent<T = unknown>(): T | null;
   callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
   sendMessage(content: string): Promise<void>;
   openLink(url: string): Promise<void>;

@@ -1,6 +1,6 @@
-import type { WeatherOutput } from './get-weather.tool';
+import type { WeatherInput, WeatherOutput } from './get-weather.tool';
 import { Badge, Card } from './get-weather.ui-2';
-import { useCallTool } from '@frontmcp/ui/react';
+import { useCallTool, useStructuredContent } from '@frontmcp/ui/react';
 
 const iconMap: Record<string, string> = {
   sunny: '☀️',
@@ -12,19 +12,32 @@ const iconMap: Record<string, string> = {
   foggy: '🌫️',
 };
 
-export default function WeatherWidget(props: { output: WeatherOutput | null; loading?: boolean }) {
-  const { output, loading } = props;
-  console.log('WeatherWidget props:', props);
-  const [getWeather, state, reset] = useCallTool('get_weather'); // Example call to fetch weather for SF
+export default function WeatherWidget(props: { loading?: boolean }) {
+  const { loading } = props;
+  let output = useStructuredContent<WeatherOutput>();
+  const [getWeather, state, reset] = useCallTool<WeatherInput, WeatherOutput>('get_weather');
 
-  console.log('WeatherWidget state:', state);
+  if (state.data?.structuredContent) {
+    output = state.data.structuredContent as WeatherOutput;
+  }
 
-  if (loading || !output) {
+  if (state.loading || loading) {
     return (
       <Card title="Weather" subtitle="Loading...">
         <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
           <div style={{ fontSize: '2rem', marginBottom: '8px' }}>{'🌤️'}</div>
           <div>Fetching weather data...</div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (!output) {
+    return (
+      <Card title="Weather" subtitle="No Data">
+        <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '8px' }}>{'🌤️'}</div>
+          <div>No weather data available.</div>
         </div>
       </Card>
     );
