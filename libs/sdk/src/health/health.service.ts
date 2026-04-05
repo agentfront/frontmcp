@@ -6,7 +6,7 @@
 import { sha256Hex, getRuntimeContext } from '@frontmcp/utils';
 import type { HealthOptionsInterface, ServerInfoOptions, HealthProbeDefinition } from '../common';
 import type { HealthProbe, HealthzResponse, ReadyzResponse, CatalogInfo, HealthProbeResult } from './health.types';
-import { createTransportSessionProbe, createRemoteAppProbe } from './health.probes';
+import { createTransportSessionProbe, createRemoteAppProbe, type HealthResultProvider } from './health.probes';
 
 const processStartTime = Date.now();
 
@@ -85,7 +85,7 @@ export class HealthService {
       if (app.isRemote && typeof app.getMcpClient === 'function') {
         const client = app.getMcpClient();
         if (client && typeof client.getHealthStatus === 'function') {
-          this.registerProbe(createRemoteAppProbe(app.id, client as { getHealthStatus(appId: string): any }));
+          this.registerProbe(createRemoteAppProbe(app.id, client as HealthResultProvider));
         }
       }
     }
@@ -172,14 +172,29 @@ export class HealthService {
     return this.probes.length;
   }
 
+  /**
+   * Get all registered probes (used for aggregation across scopes).
+   */
+  getProbes(): readonly HealthProbe[] {
+    return this.probes;
+  }
+
+  /**
+   * Set the scope view for catalog computation (used for composite services).
+   */
+  setScopeView(scope: HealthScopeView): void {
+    this.scopeView = scope;
+  }
+
   // ============================================
   // PRIVATE HELPERS
   // ============================================
 
   private async runProbeWithTimeout(probe: HealthProbe, timeoutMs: number): Promise<HealthProbeResult> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       const timeoutPromise = new Promise<HealthProbeResult>((resolve) => {
-        setTimeout(
+        timeoutId = setTimeout(
           () =>
             resolve({
               status: 'unhealthy',
@@ -194,8 +209,12 @@ export class HealthService {
     } catch (err) {
       return {
         status: 'unhealthy',
-        error: (err as Error).message,
+        error: err instanceof Error ? err.message : String(err),
       };
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 
@@ -218,9 +237,9 @@ export class HealthService {
     return {
       toolsHash,
       toolCount: tools.length,
-      resourceCount: this.scopeView.resources.getResources().length,
-      promptCount: this.scopeView.prompts.getPrompts().length,
-      skillCount: this.scopeView.skills.getSkills().length,
+      resourceCount: this.scopeView.resources.getResources(true).length,
+      promptCount: this.scopeView.prompts.getPrompts(true).length,
+      skillCount: this.scopeView.skills.getSkills(true).length,
       agentCount: this.scopeView.agents.getAgents().length,
     };
   }

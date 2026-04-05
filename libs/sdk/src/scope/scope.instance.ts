@@ -550,6 +550,7 @@ export class Scope extends ScopeEntry {
     ]);
 
     await this.auth.ready;
+    await this.transportService.ready;
 
     // Initialize health service (after all registries and stores are ready)
     if (this.metadata.health?.enabled !== false) {

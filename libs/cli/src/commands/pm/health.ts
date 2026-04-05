@@ -62,11 +62,12 @@ export function checkHealth(opts: {
           body,
         });
       });
-      res.on('error', () => {
+      res.on('error', (err) => {
         resolve({
-          healthy: res.statusCode === 200,
+          healthy: false,
           statusCode: res.statusCode,
           responseTime,
+          error: err.message,
         });
       });
     });

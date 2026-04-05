@@ -53,13 +53,24 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     this._healthConfig = healthConfig;
   }
 
+  /**
+   * Set health config without a service (e.g., when health is explicitly disabled).
+   * Allows prepare() to distinguish "not configured" from "disabled".
+   */
+  setHealthConfig(healthConfig: HealthOptionsInterface): void {
+    this._healthConfig = healthConfig;
+  }
+
   prepare() {
     if (!this.healthRouteRegistered) {
       this.healthRouteRegistered = true;
       if (this._healthService && this._healthConfig) {
+        // Enriched health/readiness endpoints
         registerHealthRoutes(this, this._healthService, this._healthConfig);
+      } else if (this._healthConfig?.enabled === false) {
+        // Health explicitly disabled — no routes registered
       } else {
-        // Legacy fallback: bare-bones /health endpoint
+        // Legacy fallback: bare-bones /health endpoint (no health config wired)
         this.registerRoute('GET', '/health', async (req, res) => {
           res.status(200).json({ status: 'ok' });
         });

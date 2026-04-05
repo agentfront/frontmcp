@@ -6,6 +6,12 @@
 import type { HealthProbe, HealthProbeResult } from './health.types';
 import type { HealthCheckResult } from '../remote-mcp/resilience/health-check';
 
+/** Safely extract an error message from an unknown thrown value. */
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 // ============================================
 // STORAGE PROBE
 // ============================================
@@ -39,7 +45,7 @@ export function createStorageProbe(name: string, adapter: Pingable): HealthProbe
         return {
           status: 'unhealthy',
           latencyMs: Date.now() - start,
-          error: (err as Error).message,
+          error: getErrorMessage(err),
         };
       }
     },
@@ -112,7 +118,7 @@ export function createTransportSessionProbe(provider: SessionStorePingProvider):
         return {
           status: 'unhealthy',
           latencyMs: Date.now() - start,
-          error: (err as Error).message,
+          error: getErrorMessage(err),
         };
       }
     },
