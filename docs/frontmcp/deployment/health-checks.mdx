@@ -1,0 +1,228 @@
+---
+title: Health & Readiness Checks
+description: Configure /healthz and /readyz endpoints for Kubernetes, Docker, and load balancer health probing
+---
+
+FrontMCP provides Kubernetes-style `/healthz` (liveness) and `/readyz` (readiness) endpoints out of the box, with automatic dependency probing, catalog introspection, and runtime-aware behavior.
+
+## Quick Start
+
+Health endpoints are enabled by default with zero configuration:
+
+```bash
+# Liveness probe (lightweight, no I/O)
+curl http://localhost:3001/healthz
+
+# Readiness probe (probes dependencies, returns catalog hash)
+curl http://localhost:3001/readyz
+
+# Legacy endpoint (alias for /healthz)
+curl http://localhost:3001/health
+```
+
+## Endpoints
+
+### `/healthz` --- Liveness Probe
+
+Returns server info, runtime context, and uptime. No I/O, no dependency checks.
+
+```json
+{
+  "status": "ok",
+  "server": { "name": "my-server", "version": "1.0.0" },
+  "runtime": {
+    "platform": "linux",
+    "runtime": "node",
+    "deployment": "standalone",
+    "env": "production"
+  },
+  "uptime": 3600.5
+}
+```
+
+- **HTTP 200** --- server process is alive
+- **HTTP 503** --- server is degraded
+
+### `/readyz` --- Readiness Probe
+
+Runs all registered probes in parallel, returns aggregate status with catalog introspection.
+
+```json
+{
+  "status": "ready",
+  "totalLatencyMs": 45,
+  "catalog": {
+    "toolsHash": "a1b2c3d4e5f6...",
+    "toolCount": 12,
+    "resourceCount": 3,
+    "promptCount": 2,
+    "skillCount": 1,
+    "agentCount": 0
+  },
+  "probes": {
+    "session-store": { "status": "healthy", "latencyMs": 12 },
+    "remote:payment-svc": { "status": "healthy", "latencyMs": 25 }
+  }
+}
+```
+
+- **HTTP 200** --- all probes pass (`"status": "ready"`)
+- **HTTP 503** --- at least one probe unhealthy (`"status": "not_ready"`)
+
+<Note>
+  The `probes` field is included by default in development but omitted in production to avoid leaking infrastructure topology. Control this with `includeDetails`.
+</Note>
+
+## Runtime Availability
+
+| Runtime | `/healthz` | `/readyz` | Notes |
+| --- | --- | --- | --- |
+| Node.js / Bun / Deno | Yes | Yes | Full support |
+| Edge / Cloudflare / Vercel | Yes | No | No persistent connections to probe |
+| CLI (stdio) | Yes | No | No HTTP server |
+| Browser | Yes | Yes | Full support |
+
+## Auto-Discovered Probes
+
+FrontMCP automatically registers probes for infrastructure it knows about:
+
+- **Session store** --- pings Redis or Vercel KV when transport persistence is configured
+- **Remote MCP apps** --- reads health status from the built-in `HealthCheckManager`
+
+No configuration needed --- if you configure `redis` + `transport.persistence`, the session-store probe appears automatically.
+
+## Custom Probes
+
+Add your own dependency checks:
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  health: {
+    probes: [
+      {
+        name: 'postgres',
+        async check() {
+          const start = Date.now();
+          await pool.query('SELECT 1');
+          return { status: 'healthy', latencyMs: Date.now() - start };
+        },
+      },
+      {
+        name: 'external-api',
+        async check() {
+          const res = await fetch('https://api.example.com/ping', {
+            signal: AbortSignal.timeout(2000),
+          });
+          return { status: res.ok ? 'healthy' : 'unhealthy' };
+        },
+      },
+    ],
+  },
+})
+```
+
+Each probe must return a `HealthProbeResult`:
+
+```typescript
+interface HealthProbeResult {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  latencyMs?: number;
+  details?: Record<string, unknown>;
+  error?: string;
+}
+```
+
+## Configuration
+
+```typescript
+@FrontMcp({
+  health: {
+    enabled: true,              // default: true
+    healthzPath: '/healthz',    // custom liveness path
+    readyzPath: '/readyz',      // custom readiness path
+    includeDetails: false,      // omit per-probe details (default: true in dev, false in prod)
+    readyz: {
+      enabled: true,            // auto-determined by runtime when omitted
+      timeoutMs: 5000,          // per-probe timeout (default: 5000ms)
+    },
+    probes: [],                 // custom probes
+  },
+})
+```
+
+## Kubernetes
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+```
+
+<Tip>
+  Set `readyz.timeoutMs` lower than your Kubernetes `timeoutSeconds` to ensure probes complete before the orchestrator times out.
+</Tip>
+
+## Docker
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3001/healthz || exit 1
+```
+
+## Catalog Hash
+
+The `toolsHash` in the `/readyz` response is a SHA-256 hash of sorted tool names. Use it to detect config drift across instances:
+
+```bash
+# Compare catalog hash across replicas
+curl -s http://replica-1:3001/readyz | jq .catalog.toolsHash
+curl -s http://replica-2:3001/readyz | jq .catalog.toolsHash
+```
+
+If hashes differ, one instance has a different tool configuration.
+
+## Disabling Health Endpoints
+
+```typescript
+@FrontMcp({
+  health: { enabled: false },
+})
+```
+
+This disables `/healthz`, `/readyz`, and the legacy `/health` alias entirely.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Server Configuration" icon="server" href="/frontmcp/sdk-reference/core/server">
+    HTTP server options
+  </Card>
+  <Card title="Production Build" icon="rocket" href="/frontmcp/deployment/production-build">
+    Production deployment guide
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/frontmcp/deployment/redis-setup">
+    Redis configuration
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/frontmcp/guides/observability">
+    Tracing and monitoring
+  </Card>
+</CardGroup>

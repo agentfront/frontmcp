@@ -45,4 +45,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   throttle: tokenFactory.meta('throttle'),
   // observability (tracing, structured logging, request logs)
   observability: tokenFactory.meta('observability'),
+  // health and readiness endpoints
+  health: tokenFactory.meta('health'),
 };

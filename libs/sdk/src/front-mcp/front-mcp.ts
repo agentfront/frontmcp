@@ -18,6 +18,8 @@ import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError, ServerNotFoundError } from '../errors';
 import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
 import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
+import type { FrontMcpServerInstance } from '../server/server.instance';
+import { HealthService } from '../health';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -56,6 +58,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     if (!server) {
       throw new ServerNotFoundError();
     }
+
+    // Wire health service from the first scope (if available)
+    this.wireHealthService(server);
+
     await server.start();
 
     // Emit server-started lifecycle event to all scopes
@@ -77,6 +83,43 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   getScopes(): ScopeEntry[] {
     return this.scopes.getScopes();
+  }
+
+  /**
+   * Wire the health service from the first scope into the server instance.
+   * Called before server.start() or server.prepare() to register health routes.
+   */
+  private wireHealthService(server: FrontMcpServer): void {
+    const serverInstance = server as FrontMcpServerInstance;
+    if (typeof serverInstance.setHealthService !== 'function') return;
+
+    const healthConfig = this.config.health ?? {};
+    const scopes = this.getScopes() as Scope[];
+
+    // Collect health services from all scopes (split-by-app can produce multiple)
+    const scopeServices = scopes.map((s) => s.healthService).filter((hs): hs is HealthService => hs !== undefined);
+
+    if (scopeServices.length === 1) {
+      serverInstance.setHealthService(scopeServices[0], healthConfig);
+    } else if (scopeServices.length > 1) {
+      // Aggregate: create a composite service that merges probes from all scopes
+      const composite = new HealthService(healthConfig, this.config.info);
+      for (const scopeService of scopeServices) {
+        for (const probe of scopeService.getProbes()) {
+          composite.registerProbe(probe);
+        }
+      }
+      // Use first scope's catalog view (catalog is scope-level; probes are aggregated)
+      const firstScope = scopes[0];
+      if (firstScope) {
+        composite.setScopeView(firstScope);
+      }
+      serverInstance.setHealthService(composite, healthConfig);
+    } else {
+      // No health service (disabled or CLI mode) — still pass config so
+      // server.prepare() can check enabled=false and skip legacy fallback
+      serverInstance.setHealthConfig(healthConfig);
+    }
   }
 
   public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
@@ -116,6 +159,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
     if (!server) {
       throw new ServerNotFoundError();
     }
+
+    // Wire health service for serverless mode
+    frontMcp.wireHealthService(server);
 
     server.prepare();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');

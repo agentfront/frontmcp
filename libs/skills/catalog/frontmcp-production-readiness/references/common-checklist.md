@@ -101,6 +101,15 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Sensitive data is redacted from logs (tokens, passwords, PII)
 - [ ] Request/response logging includes correlation IDs
 
+### Health & Readiness
+
+- [ ] `/healthz` endpoint is reachable from load balancer or orchestrator
+- [ ] `/readyz` endpoint is configured for Kubernetes readiness or similar
+- [ ] Custom probes added for external dependencies (databases, APIs, queues)
+- [ ] `includeDetails: false` in production to avoid leaking infrastructure topology
+- [ ] Probe timeout (`readyz.timeoutMs`) is lower than orchestrator probe timeout
+- [ ] `toolsHash` from `/readyz` is monitored for config drift across instances
+
 ### Monitoring
 
 - [ ] Request count and latency metrics are exposed

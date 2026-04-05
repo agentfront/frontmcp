@@ -1,6 +1,9 @@
 import { FrontMcpServer, HttpOptions, HttpMethod, ServerRequestHandler, CorsOptions } from '../common';
 import { ExpressHostAdapter } from '#express-host';
 import { HostServerAdapter } from './adapters/base.host.adapter';
+import type { HealthService } from '../health';
+import type { HealthOptionsInterface } from '../common/types/options/health';
+import { registerHealthRoutes } from '../health';
 
 const DEFAULT_CORS: CorsOptions = { origin: true, credentials: false };
 
@@ -8,6 +11,8 @@ export class FrontMcpServerInstance extends FrontMcpServer {
   config: HttpOptions;
   host: HostServerAdapter;
   private healthRouteRegistered = false;
+  private _healthService?: HealthService;
+  private _healthConfig?: HealthOptionsInterface;
 
   constructor(httpConfig: HttpOptions) {
     super();
@@ -39,12 +44,37 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     return this.host.enhancedHandler(handler);
   }
 
+  /**
+   * Set the health service and config for route registration.
+   * Must be called before prepare() to enable enriched health endpoints.
+   */
+  setHealthService(healthService: HealthService, healthConfig: HealthOptionsInterface): void {
+    this._healthService = healthService;
+    this._healthConfig = healthConfig;
+  }
+
+  /**
+   * Set health config without a service (e.g., when health is explicitly disabled).
+   * Allows prepare() to distinguish "not configured" from "disabled".
+   */
+  setHealthConfig(healthConfig: HealthOptionsInterface): void {
+    this._healthConfig = healthConfig;
+  }
+
   prepare() {
     if (!this.healthRouteRegistered) {
       this.healthRouteRegistered = true;
-      this.registerRoute('GET', '/health', async (req, res) => {
-        res.status(200).json({ status: 'ok' });
-      });
+      if (this._healthService && this._healthConfig) {
+        // Enriched health/readiness endpoints
+        registerHealthRoutes(this, this._healthService, this._healthConfig);
+      } else if (this._healthConfig?.enabled === false) {
+        // Health explicitly disabled — no routes registered
+      } else {
+        // Legacy fallback: bare-bones /health endpoint (no health config wired)
+        this.registerRoute('GET', '/health', async (req, res) => {
+          res.status(200).json({ status: 'ok' });
+        });
+      }
     }
     this.host.prepare();
   }

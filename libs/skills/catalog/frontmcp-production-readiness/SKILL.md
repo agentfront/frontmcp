@@ -56,17 +56,18 @@ After the common checklist, run the checklist for your deployment target.
 
 ## Scenario Routing Table
 
-| Scenario                                                 | Reference                              | Description                                         |
-| -------------------------------------------------------- | -------------------------------------- | --------------------------------------------------- |
-| Common security, performance, reliability, observability | `references/common-checklist.md`       | Applies to ALL targets — run this first             |
-| Standalone Node.js server with Docker                    | `references/production-node-server.md` | Docker, health checks, Redis, scaling, CI/CD        |
-| Node.js SDK / direct client (npm package)                | `references/production-node-sdk.md`    | create()/connect() API, disposal, npm publishing    |
-| Vercel serverless / edge                                 | `references/production-vercel.md`      | Vercel config, edge runtime, cold starts, Vercel KV |
-| Cloudflare Workers                                       | `references/production-cloudflare.md`  | Wrangler, Workers runtime, KV, Durable Objects      |
-| AWS Lambda                                               | `references/production-lambda.md`      | SAM template, cold starts, DynamoDB, API Gateway    |
-| CLI daemon (local MCP server)                            | `references/production-cli-daemon.md`  | Process manager, socket files, service registration |
-| CLI binary (one-shot execution)                          | `references/production-cli-binary.md`  | Fast startup, stdio transport, exit codes, npm bin  |
-| Browser SDK                                              | `references/production-browser.md`     | Bundle size, browser APIs, CSP, CDN distribution    |
+| Scenario                                                 | Reference                                  | Description                                         |
+| -------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------- |
+| Common security, performance, reliability, observability | `references/common-checklist.md`           | Applies to ALL targets — run this first             |
+| Health & readiness endpoints (/healthz, /readyz)         | `references/health-readiness-endpoints.md` | Custom probes, Kubernetes, runtime-aware readiness  |
+| Standalone Node.js server with Docker                    | `references/production-node-server.md`     | Docker, health checks, Redis, scaling, CI/CD        |
+| Node.js SDK / direct client (npm package)                | `references/production-node-sdk.md`        | create()/connect() API, disposal, npm publishing    |
+| Vercel serverless / edge                                 | `references/production-vercel.md`          | Vercel config, edge runtime, cold starts, Vercel KV |
+| Cloudflare Workers                                       | `references/production-cloudflare.md`      | Wrangler, Workers runtime, KV, Durable Objects      |
+| AWS Lambda                                               | `references/production-lambda.md`          | SAM template, cold starts, DynamoDB, API Gateway    |
+| CLI daemon (local MCP server)                            | `references/production-cli-daemon.md`      | Process manager, socket files, service registration |
+| CLI binary (one-shot execution)                          | `references/production-cli-binary.md`      | Fast startup, stdio transport, exit codes, npm bin  |
+| Browser SDK                                              | `references/production-browser.md`         | Bundle size, browser APIs, CSP, CDN distribution    |
 
 ## Quick Reference: Target Detection
 

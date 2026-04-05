@@ -146,7 +146,10 @@ describe('Unix Socket Transport E2E', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({ status: 'ok' });
+      expect(body).toMatchObject({ status: 'ok' });
+      expect(body.server).toBeDefined();
+      expect(body.runtime).toBeDefined();
+      expect(typeof body.uptime).toBe('number');
     });
   });
 
