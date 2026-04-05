@@ -1,6 +1,7 @@
 // file: libs/sdk/src/common/interfaces/prompt.interface.ts
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, getRuntimeContext } from '@frontmcp/utils';
+import type { RuntimeContext } from '@frontmcp/utils';
 import { FuncType, Token, Type } from '@frontmcp/di';
 import { PromptMetadata } from '../metadata';
 import { ProviderRegistryInterface } from './internal';
@@ -127,5 +128,32 @@ export abstract class PromptContext {
 
   mark(stage: string): void {
     this.activeStage = stage;
+  }
+
+  // ---- Runtime context helpers ----
+
+  /** Get the current runtime context (platform, runtime, deployment, env). */
+  get runtimeContext(): RuntimeContext {
+    return getRuntimeContext();
+  }
+
+  /** Check if running on a specific OS platform. */
+  isPlatform(platform: RuntimeContext['platform']): boolean {
+    return this.runtimeContext.platform === platform;
+  }
+
+  /** Check if running in a specific JavaScript runtime. */
+  isRuntime(runtime: RuntimeContext['runtime']): boolean {
+    return this.runtimeContext.runtime === runtime;
+  }
+
+  /** Check if running in a specific deployment mode. */
+  isDeployment(deployment: RuntimeContext['deployment']): boolean {
+    return this.runtimeContext.deployment === deployment;
+  }
+
+  /** Check if running in a specific environment. */
+  isEnv(env: RuntimeContext['env']): boolean {
+    return this.runtimeContext.env === env;
   }
 }

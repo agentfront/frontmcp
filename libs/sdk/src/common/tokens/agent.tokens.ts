@@ -31,6 +31,7 @@ export const FrontMcpAgentTokens = {
   rateLimit: tokenFactory.meta('rateLimit'),
   concurrency: tokenFactory.meta('concurrency'),
   timeout: tokenFactory.meta('timeout'),
+  availableWhen: tokenFactory.meta('availableWhen'),
 } as const satisfies RawMetadataShape<AgentMetadata, ExtendFrontMcpAgentMetadata>;
 
 /**

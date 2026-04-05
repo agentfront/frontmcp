@@ -3,6 +3,8 @@ import { FuncType, Type, Token } from '@frontmcp/di';
 import { RawZodShape } from '../types';
 import type { RateLimitConfig, ConcurrencyConfig, TimeoutConfig } from '@frontmcp/guard';
 import { rateLimitConfigSchema, concurrencyConfigSchema, timeoutConfigSchema } from '@frontmcp/guard';
+import type { EntryAvailability } from '@frontmcp/utils';
+import { entryAvailabilitySchema } from '@frontmcp/utils';
 import { ProviderType } from '../interfaces/provider.interface';
 import { PluginType } from '../interfaces/plugin.interface';
 import { AdapterType } from '../interfaces/adapter.interface';
@@ -501,6 +503,17 @@ export interface AgentMetadata<
    * Timeout configuration for this agent's execution.
    */
   timeout?: TimeoutConfig;
+
+  /**
+   * Environment availability constraint.
+   * When set, the agent is only discoverable and invocable in matching environments.
+   *
+   * @example Node.js only agent
+   * ```typescript
+   * @Agent({ name: 'deploy-agent', availableWhen: { runtime: ['node'] } })
+   * ```
+   */
+  availableWhen?: EntryAvailability;
 }
 
 // ============================================================================
@@ -598,5 +611,6 @@ export const frontMcpAgentMetadataSchema = z
     rateLimit: rateLimitConfigSchema.optional(),
     concurrency: concurrencyConfigSchema.optional(),
     timeout: timeoutConfigSchema.optional(),
+    availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<AgentMetadata, ExtendFrontMcpAgentMetadata>)
   .passthrough();

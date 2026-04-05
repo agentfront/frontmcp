@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { RawZodShape } from '../types';
 import { Icon, IconSchema } from '@frontmcp/protocol';
 import { isValidMcpUri, isValidMcpUriTemplate } from '@frontmcp/utils';
+import type { EntryAvailability } from '@frontmcp/utils';
+import { entryAvailabilitySchema } from '@frontmcp/utils';
 
 declare global {
   /**
@@ -52,6 +54,12 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
    * A list of icons that can be used to represent this resource template.
    */
   icons?: Icon[];
+
+  /**
+   * Environment availability constraint.
+   * When set, the resource is only discoverable and readable in matching environments.
+   */
+  availableWhen?: EntryAvailability;
 }
 
 export const frontMcpResourceMetadataSchema = z
@@ -64,6 +72,7 @@ export const frontMcpResourceMetadataSchema = z
     description: z.string().optional(),
     mimeType: z.string().optional(),
     icons: z.array(IconSchema).optional(),
+    availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
 
@@ -104,6 +113,12 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
    * A list of icons that can be used to represent this resource template.
    */
   icons?: Icon[];
+
+  /**
+   * Environment availability constraint.
+   * When set, the resource template is only discoverable in matching environments.
+   */
+  availableWhen?: EntryAvailability;
 }
 
 export const frontMcpResourceTemplateMetadataSchema = z
@@ -116,6 +131,7 @@ export const frontMcpResourceTemplateMetadataSchema = z
     description: z.string().optional(),
     mimeType: z.string().optional(),
     icons: z.array(IconSchema).optional(),
+    availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
   .passthrough();
 
