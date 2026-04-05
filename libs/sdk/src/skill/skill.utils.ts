@@ -523,7 +523,7 @@ export function generateNextSteps(
   allToolsAvailable: boolean,
 ): string {
   if (skills.length === 0) {
-    return 'No skills were loaded. Try searchSkills to find available skills.';
+    return 'No skills were loaded. Try reading the skills://catalog resource to find available skills.';
   }
 
   if (!allToolsAvailable) {
@@ -576,14 +576,14 @@ export function generateSearchGuidance(
   if (executableSkills.length > 0) {
     const topExecutable = executableSkills[0];
     return (
-      `Found ${skills.length} skill(s). Recommended: loadSkills({ skillIds: ["${topExecutable.name}"] }) ` +
+      `Found ${skills.length} skill(s). Recommended: read the skills://${topExecutable.name} resource ` +
       `to get full instructions. ${executableSkills.length} skill(s) have all tools available.`
     );
   }
 
   return (
     `Found ${skills.length} skill(s), but some tools are missing. ` +
-    `Try loadSkills({ skillIds: ["${topSkill.name}"] }) to see which tools are available. ` +
+    `Try reading the skills://${topSkill.name} resource to see which tools are available. ` +
     'You may be able to partially execute the workflow.'
   );
 }

@@ -151,8 +151,24 @@ export type { CompactSkillSummary } from './skill-http.utils';
 // Flows
 export { SearchSkillsFlow, LoadSkillFlow } from './flows';
 
-// Tools (deprecated - use flows instead)
-export { SearchSkillsTool, LoadSkillsTool, getSkillTools } from './tools';
+// Resources (skills:// URI scheme)
+export {
+  getSkillResources,
+  SkillsCatalogResource,
+  SkillContentResource,
+  SkillContentAliasResource,
+  SkillReferencesListResource,
+  SkillReferenceContentResource,
+  SkillExamplesListResource,
+  SkillExampleContentResource,
+  getMcpVisibleSkills,
+  getMcpVisibleSkillNames,
+  findAndLoadSkill,
+  readSkillFile,
+  readAndParseSkillFile,
+  collectAllReferenceNames,
+  collectAllExampleNames,
+} from './resources';
 
 // Session Management
 export { SkillSessionManager } from './session/skill-session.manager';

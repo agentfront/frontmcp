@@ -1,5 +1,5 @@
 /**
- * E2E Tests for loadSkills Tool
+ * E2E Tests for skills/load Flow
  *
  * Tests skill loading functionality:
  * - Loading skill by ID/name
@@ -49,6 +49,18 @@ interface LoadSkillsResult {
   nextSteps: string;
 }
 
+let nextId = 1;
+async function loadSkills(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/load',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
 test.describe('loadSkills E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
@@ -58,13 +70,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Load Skill by ID', () => {
     test('should load skill with full content', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       expect(content.skills).toBeDefined();
       expect(content.skills.length).toBe(1);
       const skill = content.skills[0];
@@ -76,26 +88,26 @@ test.describe('loadSkills E2E', () => {
     });
 
     test('should include instructions content', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.instructions).toContain('PR Review Process');
       expect(skill.instructions).toContain('github_add_comment');
     });
 
     test('should include formatted content for LLM', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.formattedContent).toBeDefined();
       expect(typeof skill.formattedContent).toBe('string');
@@ -105,13 +117,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Tool Availability', () => {
     test('should include available tools list', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.availableTools).toBeDefined();
       expect(Array.isArray(skill.availableTools)).toBe(true);
@@ -122,13 +134,13 @@ test.describe('loadSkills E2E', () => {
     });
 
     test('should include missing tools list', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['deploy-app'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.missingTools).toBeDefined();
       expect(Array.isArray(skill.missingTools)).toBe(true);
@@ -141,45 +153,44 @@ test.describe('loadSkills E2E', () => {
 
     test('should set isComplete flag based on tool availability', async ({ mcp }) => {
       // Skill with all tools available
-      const completeResult = await mcp.tools.call('loadSkills', {
+      const completeResult = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(completeResult).toBeSuccessful();
-      const completeContent = completeResult.json<LoadSkillsResult>();
+      expect(completeResult).toBeDefined();
+      const completeContent = completeResult as LoadSkillsResult;
       expect(completeContent.skills[0].isComplete).toBe(true);
 
       // Skill with missing tools
-      const incompleteResult = await mcp.tools.call('loadSkills', {
+      const incompleteResult = await loadSkills(mcp, {
         skillIds: ['deploy-app'],
       });
 
-      expect(incompleteResult).toBeSuccessful();
-      const incompleteContent = incompleteResult.json<LoadSkillsResult>();
+      expect(incompleteResult).toBeDefined();
+      const incompleteContent = incompleteResult as LoadSkillsResult;
       expect(incompleteContent.skills[0].isComplete).toBe(false);
     });
 
     test('should include warning for missing tools', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['deploy-app'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
-      const skill = content.skills[0];
-      expect(skill.warning).toBeDefined();
-      expect(skill.warning).toContain('missing');
+      const content = result as LoadSkillsResult;
+      expect(content.summary.combinedWarnings).toBeDefined();
+      expect(content.summary.combinedWarnings!.some((w: string) => w.toLowerCase().includes('missing'))).toBe(true);
     });
 
     test('should include tools with availability in skill object', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.tools).toBeDefined();
       expect(Array.isArray(skill.tools)).toBe(true);
@@ -193,13 +204,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Tool Purposes', () => {
     test('should include tool purposes when defined', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       const githubGetPr = skill.tools.find((t) => t.name === 'github_get_pr');
 
@@ -211,13 +222,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Parameters', () => {
     test('should include skill parameters', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.parameters).toBeDefined();
       expect(Array.isArray(skill.parameters)).toBe(true);
@@ -232,13 +243,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Hidden Skills', () => {
     test('should load hidden skills directly by ID', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['hidden-internal'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       expect(content.skills).toBeDefined();
       expect(content.skills.length).toBe(1);
       expect(content.skills[0].name).toBe('hidden-internal');
@@ -247,13 +258,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Format Options', () => {
     test('should return full format by default', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // Full format includes formattedContent with full skill details
       expect(skill.formattedContent).toBeDefined();
@@ -261,14 +272,14 @@ test.describe('loadSkills E2E', () => {
     });
 
     test('should return instructions-only format when requested', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         format: 'instructions-only',
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // Instructions-only format has simpler formattedContent
       expect(skill.formattedContent).toBeDefined();
@@ -279,13 +290,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Error Handling', () => {
     test('should return error for non-existent skill', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['non-existent-skill-xyz-12345'],
       });
 
       // When all skills fail to load, the tool returns empty skills array with warning
-      expect(result).toBeSuccessful();
-      const content = result.json<LoadSkillsResult>();
+      expect(result).toBeDefined();
+      const content = result as LoadSkillsResult;
       expect(content.skills.length).toBe(0);
       expect(content.summary.combinedWarnings).toBeDefined();
       expect(content.summary.combinedWarnings?.some((w) => w.includes('not found'))).toBe(true);
@@ -294,13 +305,13 @@ test.describe('loadSkills E2E', () => {
 
   test.describe('Skill with Simple Tool References', () => {
     test('should load skill with simple string tool references', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['notify-team'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.name).toBe('notify-team');
       expect(skill.availableTools).toContain('slack_notify');
@@ -308,10 +319,11 @@ test.describe('loadSkills E2E', () => {
     });
   });
 
-  test.describe('Tool Discovery', () => {
-    test('should list loadSkills tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('loadSkills');
+  test.describe('Resource Template Discovery', () => {
+    test('should expose skills resource templates', async ({ mcp }) => {
+      const templates = await mcp.resources.listTemplates();
+      const uris = templates.map((t: any) => t.uriTemplate);
+      expect(uris).toContain('skills://{skillName}');
     });
   });
 });

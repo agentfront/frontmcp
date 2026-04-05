@@ -70,6 +70,29 @@ interface SlackResult {
   timestamp: string;
 }
 
+let nextId = 1;
+async function searchSkills(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/search',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
+async function loadSkills(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/load',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
 test.describe('Skill Session E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
@@ -79,13 +102,13 @@ test.describe('Skill Session E2E', () => {
 
   test.describe('Tool Availability in Skills', () => {
     test('should correctly identify available tools when loading skill', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // These tools are registered in the app
       expect(skill.availableTools).toContain('github_get_pr');
@@ -93,13 +116,13 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should correctly identify missing tools when loading skill', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['deploy-app'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // These tools are NOT registered in the app
       expect(skill.missingTools).toContain('docker_build');
@@ -146,20 +169,20 @@ test.describe('Skill Session E2E', () => {
   test.describe('Multi-Skill Tool Coverage', () => {
     test('should show combined tool availability across skills', async ({ mcp }) => {
       // Load skill that uses github tools
-      const reviewResult = await mcp.tools.call('loadSkills', {
+      const reviewResult = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(reviewResult).toBeSuccessful();
-      const reviewContent = reviewResult.json<LoadSkillsResult>();
+      expect(reviewResult).toBeDefined();
+      const reviewContent = reviewResult as LoadSkillsResult;
 
       // Load skill that uses slack tools
-      const notifyResult = await mcp.tools.call('loadSkills', {
+      const notifyResult = await loadSkills(mcp, {
         skillIds: ['notify-team'],
       });
 
-      expect(notifyResult).toBeSuccessful();
-      const notifyContent = notifyResult.json<LoadSkillsResult>();
+      expect(notifyResult).toBeDefined();
+      const notifyContent = notifyResult as LoadSkillsResult;
 
       // Review skill should have github tools
       expect(reviewContent.skills[0].availableTools).toContain('github_get_pr');
@@ -170,13 +193,13 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should identify full workflow skill with multiple tool types', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['full-pr-workflow'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // This skill uses all three available tools
       expect(skill.availableTools).toContain('github_get_pr');
@@ -189,24 +212,24 @@ test.describe('Skill Session E2E', () => {
   test.describe('Skill Search and Load Workflow', () => {
     test('should find and load skill in typical workflow', async ({ mcp }) => {
       // Step 1: Search for relevant skills
-      const searchResult = await mcp.tools.call('searchSkills', {
+      const searchResult = await searchSkills(mcp, {
         query: 'review pull request',
       });
 
-      expect(searchResult).toBeSuccessful();
+      expect(searchResult).toBeDefined();
 
-      const searchContent = searchResult.json<SearchSkillsResult>();
+      const searchContent = searchResult as SearchSkillsResult;
       expect(searchContent.skills.length).toBeGreaterThan(0);
 
       // Step 2: Load the first matching skill
       const skillIdToLoad = searchContent.skills[0].id;
-      const loadResult = await mcp.tools.call('loadSkills', {
+      const loadResult = await loadSkills(mcp, {
         skillIds: [skillIdToLoad],
       });
 
-      expect(loadResult).toBeSuccessful();
+      expect(loadResult).toBeDefined();
 
-      const loadContent = loadResult.json<LoadSkillsResult>();
+      const loadContent = loadResult as LoadSkillsResult;
       const skill = loadContent.skills[0];
       expect(skill.instructions).toBeDefined();
       expect(skill.formattedContent).toBeDefined();
@@ -270,14 +293,14 @@ test.describe('Skill Session E2E', () => {
   test.describe('Skill Priority', () => {
     test('should respect skill priority in search results', async ({ mcp }) => {
       // deploy-app has priority: 10 (higher)
-      const result = await mcp.tools.call('searchSkills', {
+      const result = await searchSkills(mcp, {
         query: 'workflow process',
         limit: 10,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<SearchSkillsResult>();
+      const content = result as SearchSkillsResult;
       const skillIds = content.skills.map((s) => s.id);
 
       // If deploy-app matches, it should appear due to priority boost
@@ -291,18 +314,18 @@ test.describe('Skill Session E2E', () => {
   test.describe('Complete Workflow Integration', () => {
     test('should support full PR review workflow', async ({ mcp }) => {
       // 1. Find the review-pr skill
-      const searchResult = await mcp.tools.call('searchSkills', {
+      const searchResult = await searchSkills(mcp, {
         query: 'PR review',
       });
 
-      expect(searchResult).toBeSuccessful();
+      expect(searchResult).toBeDefined();
 
       // 2. Load the skill
-      const loadResult = await mcp.tools.call('loadSkills', {
+      const loadResult = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(loadResult).toBeSuccessful();
+      expect(loadResult).toBeDefined();
 
       // 3. Follow the skill instructions - get PR
       const prResult = await mcp.tools.call('github_get_pr', {
@@ -322,13 +345,13 @@ test.describe('Skill Session E2E', () => {
 
     test('should support notification workflow', async ({ mcp }) => {
       // 1. Load the notify-team skill
-      const loadResult = await mcp.tools.call('loadSkills', {
+      const loadResult = await loadSkills(mcp, {
         skillIds: ['notify-team'],
       });
 
-      expect(loadResult).toBeSuccessful();
+      expect(loadResult).toBeDefined();
 
-      const loadContent = loadResult.json<LoadSkillsResult>();
+      const loadContent = loadResult as LoadSkillsResult;
       expect(loadContent.skills[0].instructions).toContain('slack_notify');
 
       // 2. Send notification
@@ -343,14 +366,14 @@ test.describe('Skill Session E2E', () => {
 
   test.describe('Session Activation', () => {
     test('should return session info when activateSession is true and session context exists', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // Session object may or may not be present depending on session context availability
@@ -361,14 +384,14 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should not return session info when activateSession is false', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: false,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // Session should not be present when activateSession is false
@@ -376,13 +399,13 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should not return session info when activateSession is not specified', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // Session should not be present when activateSession defaults to false
@@ -392,15 +415,15 @@ test.describe('Skill Session E2E', () => {
 
   test.describe('Policy Mode Override', () => {
     test('should set strict policyMode when specified', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'strict',
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // If session was activated, verify policy mode
@@ -410,15 +433,15 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should set approval policyMode when specified', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'approval',
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // If session was activated, verify policy mode
@@ -428,14 +451,14 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should default to permissive policyMode', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // If session was activated, default policy mode should be permissive
@@ -447,14 +470,14 @@ test.describe('Skill Session E2E', () => {
 
   test.describe('Session Allowed Tools', () => {
     test('should include allowedTools in session when activated', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // If session was activated, allowedTools should match availableTools
@@ -466,14 +489,14 @@ test.describe('Skill Session E2E', () => {
     });
 
     test('should include full-pr-workflow tools in session', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['full-pr-workflow'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
       // If session was activated, verify all tools from full workflow

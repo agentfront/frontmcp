@@ -1,7 +1,7 @@
 import { Skill } from '@frontmcp/sdk';
 
 /**
- * MCP-Only Skill - only visible via MCP tools (searchSkills/loadSkills)
+ * MCP-Only Skill - only visible via skills:// MCP resources
  * Not visible via HTTP endpoints (/llm.txt, /skills)
  */
 @Skill({

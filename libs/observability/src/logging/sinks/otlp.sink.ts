@@ -115,13 +115,13 @@ export class OtlpSink implements LogSink {
         clearTimeout(timeout);
         if (!response.ok) {
           const body = await response.text().catch(() => '');
-          // eslint-disable-next-line no-console
+
           console.error(`[OtlpSink] Export failed: HTTP ${response.status} — ${body.slice(0, 200)}`);
           this.requeue(entries);
         }
       } catch (err) {
         clearTimeout(timeout);
-        // eslint-disable-next-line no-console
+
         console.debug(
           `[OtlpSink] Export error (${entries.length} entries): ${err instanceof Error ? err.message : err}`,
         );

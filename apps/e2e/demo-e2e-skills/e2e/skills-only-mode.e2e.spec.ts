@@ -35,6 +35,29 @@ interface LoadSkillsResult {
   nextSteps: string;
 }
 
+let nextId = 1;
+async function searchSkills(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/search',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
+async function loadSkills(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/load',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
 test.describe('MCP Skills-Only Mode E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
@@ -53,11 +76,10 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       expect(tools).toContainTool('slack_notify');
     });
 
-    test('should list searchSkills and loadSkills tools', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-
-      expect(tools).toContainTool('searchSkills');
-      expect(tools).toContainTool('loadSkills');
+    test('should expose skills resource templates', async ({ mcp }) => {
+      const templates = await mcp.resources.listTemplates();
+      const uris = templates.map((t: any) => t.uriTemplate);
+      expect(uris).toContain('skills://{skillName}');
     });
   });
 
@@ -82,7 +104,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       }
     });
 
-    test('should still allow searchSkills in skills-only mode', async ({ server }) => {
+    test('should still allow skills/search in skills-only mode', async ({ server }) => {
       const builder = server.createClientBuilder();
       const client = await builder
         .withTransport('streamable-http')
@@ -90,14 +112,14 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         .buildAndConnect();
 
       try {
-        // searchSkills should work even though tools aren't listed
-        const result = await client.tools.call('searchSkills', {
+        // skills/search should work even though tools aren't listed
+        const result = await searchSkills(client, {
           query: 'review',
         });
 
-        expect(result).toBeSuccessful();
+        expect(result).toBeDefined();
 
-        const content = result.json<{ skills: Array<{ id: string }> }>();
+        const content = result as { skills: Array<{ id: string }> };
         expect(content.skills).toBeDefined();
         expect(content.skills.length).toBeGreaterThan(0);
         expect(content.skills.map((s) => s.id)).toContain('review-pr');
@@ -106,7 +128,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       }
     });
 
-    test('should still allow loadSkills in skills-only mode', async ({ server }) => {
+    test('should still allow skills/load in skills-only mode', async ({ server }) => {
       const builder = server.createClientBuilder();
       const client = await builder
         .withTransport('streamable-http')
@@ -114,13 +136,13 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         .buildAndConnect();
 
       try {
-        const result = await client.tools.call('loadSkills', {
+        const result = await loadSkills(client, {
           skillIds: ['review-pr'],
         });
 
-        expect(result).toBeSuccessful();
+        expect(result).toBeDefined();
 
-        const content = result.json<LoadSkillsResult>();
+        const content = result as LoadSkillsResult;
         expect(content.skills).toBeDefined();
         expect(content.skills.length).toBe(1);
         expect(content.skills[0].id).toBe('review-pr');
@@ -171,13 +193,13 @@ test.describe('MCP Skills-Only Mode E2E', () => {
       const client = await builder.withTransport('sse').withQueryParams({ mode: 'skills_only' }).buildAndConnect();
 
       try {
-        const result = await client.tools.call('searchSkills', {
+        const result = await searchSkills(client, {
           query: 'deploy',
         });
 
-        expect(result).toBeSuccessful();
+        expect(result).toBeDefined();
 
-        const content = result.json<{ skills: Array<{ id: string }> }>();
+        const content = result as { skills: Array<{ id: string }> };
         expect(content.skills).toBeDefined();
       } finally {
         await client.disconnect();
@@ -205,11 +227,11 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         expect(skillsOnlyTools.length).toBe(0);
 
         // Both should be able to search skills
-        const normalSkillSearch = await mcp.tools.call('searchSkills', { query: 'review' });
-        const skillsOnlySearch = await skillsOnlyClient.tools.call('searchSkills', { query: 'review' });
+        const normalSkillSearch = await searchSkills(mcp, { query: 'review' });
+        const skillsOnlySearch = await searchSkills(skillsOnlyClient, { query: 'review' });
 
-        expect(normalSkillSearch).toBeSuccessful();
-        expect(skillsOnlySearch).toBeSuccessful();
+        expect(normalSkillSearch).toBeDefined();
+        expect(skillsOnlySearch).toBeDefined();
       } finally {
         await skillsOnlyClient.disconnect();
       }

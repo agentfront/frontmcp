@@ -5,6 +5,29 @@
  */
 import { perfTest, expect } from '@frontmcp/testing';
 
+let nextId = 1;
+async function loadSkillsRaw(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/load',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
+async function searchSkillsRaw(mcp: any, params: Record<string, unknown>) {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/search',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
 perfTest.describe('Skills Leak Detection', () => {
   perfTest.use({
     server: 'apps/e2e/demo-e2e-skills/src/main.ts',
@@ -15,7 +38,7 @@ perfTest.describe('Skills Leak Detection', () => {
   perfTest('no memory leak on repeated loadSkills calls', async ({ mcp, perf }) => {
     const result = await perf.checkLeak(
       async () => {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['review-pr'],
         });
       },
@@ -34,7 +57,7 @@ perfTest.describe('Skills Leak Detection', () => {
   perfTest('no memory leak on repeated searchSkills calls', async ({ mcp, perf }) => {
     const result = await perf.checkLeak(
       async () => {
-        await mcp.tools.call('searchSkills', {
+        await searchSkillsRaw(mcp, {
           query: 'test',
         });
       },
@@ -55,11 +78,11 @@ perfTest.describe('Skills Leak Detection', () => {
     const result = await perf.checkLeak(
       async () => {
         if (callIndex % 2 === 0) {
-          await mcp.tools.call('loadSkills', {
+          await loadSkillsRaw(mcp, {
             skillIds: ['review-pr', 'notify-team'],
           });
         } else {
-          await mcp.tools.call('searchSkills', {
+          await searchSkillsRaw(mcp, {
             query: 'deploy',
           });
         }

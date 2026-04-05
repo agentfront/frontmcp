@@ -143,6 +143,20 @@ Add a `## Examples` section at the bottom of each reference file (before `## Ref
 > See all examples in [`examples/reference-name/`](../examples/reference-name/)
 ```
 
+## Resource Access
+
+Skills are accessible via the `skills://` URI scheme as MCP resources with auto-complete:
+
+| URI                                               | Returns                                   |
+| ------------------------------------------------- | ----------------------------------------- |
+| `skills://catalog`                                | JSON list of all available skills         |
+| `skills://{skillName}`                            | Full SKILL.md content (formatted for LLM) |
+| `skills://{skillName}/SKILL.md`                   | Same as above (explicit path alias)       |
+| `skills://{skillName}/references`                 | JSON list of references for this skill    |
+| `skills://{skillName}/references/{referenceName}` | Reference markdown content                |
+| `skills://{skillName}/examples`                   | JSON list of examples for this skill      |
+| `skills://{skillName}/examples/{exampleName}`     | Example markdown content                  |
+
 ## Reference
 
 - [Documentation](https://docs.agentfront.dev/frontmcp/...)

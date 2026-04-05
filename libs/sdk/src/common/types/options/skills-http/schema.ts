@@ -65,7 +65,7 @@ export const skillsConfigOptionsSchema = z.object({
   llmTxt: skillsConfigEndpointInputSchema.optional().default(true),
   llmFullTxt: skillsConfigEndpointInputSchema.optional().default(true),
   api: skillsConfigEndpointInputSchema.optional().default(true),
-  mcpTools: z.boolean().optional().default(true),
+  mcpResources: z.boolean().optional().default(true),
   cache: skillsConfigCacheOptionsSchema.optional(),
 } satisfies RawZodShape<SkillsConfigOptionsInterface>);
 

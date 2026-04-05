@@ -1,10 +1,33 @@
 /**
- * Parallel Stress Tests for Skills System (5 workers × 1000 iterations)
+ * Parallel Stress Tests for Skills System (5 workers x 1000 iterations)
  *
  * Tests skills system under parallel load using multiple clients
  * to achieve higher throughput (400-2000+ req/s)
  */
 import { perfTest, expect } from '@frontmcp/testing';
+
+let nextId = 1;
+async function loadSkillsRaw(client: any, params: Record<string, unknown>) {
+  const response = await client.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/load',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
+
+async function searchSkillsRaw(client: any, params: Record<string, unknown>) {
+  const response = await client.raw.request({
+    jsonrpc: '2.0' as const,
+    id: nextId++,
+    method: 'skills/search',
+    params,
+  });
+  if (response.error) throw new Error(response.error.message);
+  return response.result;
+}
 
 perfTest.describe('Skills Parallel Stress Testing', () => {
   perfTest.use({
@@ -16,7 +39,7 @@ perfTest.describe('Skills Parallel Stress Testing', () => {
   perfTest('parallel stress: 5000 total loadSkills operations', async ({ perf, server }) => {
     const result = await perf.checkLeakParallel(
       (client) => async () => {
-        await client.tools.call('loadSkills', { skillIds: ['review-pr'] });
+        await loadSkillsRaw(client, { skillIds: ['review-pr'] });
       },
       {
         iterations: 1000,
@@ -30,10 +53,10 @@ perfTest.describe('Skills Parallel Stress Testing', () => {
 
     console.log(
       `[PARALLEL] loadSkills: ${result.totalRequestsPerSecond.toFixed(1)} req/s total ` +
-        `(${result.workersUsed} workers × ${result.totalIterations / result.workersUsed} iterations)`,
+        `(${result.workersUsed} workers x ${result.totalIterations / result.workersUsed} iterations)`,
     );
 
-    // 5 workers × ~80 req/s = ~400 req/s expected (allow for variance)
+    // 5 workers x ~80 req/s = ~400 req/s expected (allow for variance)
     expect(result.totalRequestsPerSecond).toBeGreaterThan(200);
     expect(result.growthRate).toBeLessThan(200 * 1024);
   });
@@ -44,7 +67,7 @@ perfTest.describe('Skills Parallel Stress Testing', () => {
       (client, workerId) => {
         let queryIndex = workerId;
         return async () => {
-          await client.tools.call('searchSkills', {
+          await searchSkillsRaw(client, {
             query: queries[queryIndex++ % queries.length],
           });
         };
@@ -75,11 +98,11 @@ perfTest.describe('Skills Parallel Stress Testing', () => {
         return async () => {
           const op = callIndex++ % 3;
           if (op === 0) {
-            await client.tools.call('loadSkills', { skillIds: ['review-pr'] });
+            await loadSkillsRaw(client, { skillIds: ['review-pr'] });
           } else if (op === 1) {
-            await client.tools.call('searchSkills', { query: 'deploy' });
+            await searchSkillsRaw(client, { query: 'deploy' });
           } else {
-            await client.tools.call('loadSkills', { skillIds: ['notify-team', 'deploy-app'] });
+            await loadSkillsRaw(client, { skillIds: ['notify-team', 'deploy-app'] });
           }
         };
       },
