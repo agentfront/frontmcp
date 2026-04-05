@@ -105,11 +105,16 @@ export async function readSkillFile(
   const resources = instance.getResources();
   const resourcePath = resources?.[resourceType];
 
-  if (!baseDir || !resourcePath) {
+  if (!resourcePath) {
     throw new Error(`Skill does not have a ${resourceType} directory configured.`);
   }
 
-  const resourceDir = resourcePath.startsWith('/') ? resourcePath : pathResolve(baseDir, resourcePath);
+  // Absolute resource paths don't need baseDir; relative paths require it
+  if (!resourcePath.startsWith('/') && !baseDir) {
+    throw new Error(`Skill does not have a ${resourceType} directory configured.`);
+  }
+
+  const resourceDir = resourcePath.startsWith('/') ? resourcePath : pathResolve(baseDir!, resourcePath);
   const filePath = pathResolve(resourceDir, filename);
 
   // Prevent path traversal — filePath must stay inside resourceDir

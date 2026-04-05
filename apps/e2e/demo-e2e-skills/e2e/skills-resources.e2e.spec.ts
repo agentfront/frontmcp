@@ -12,19 +12,10 @@
  * - Auto-complete for skill names
  */
 import { test, expect } from '@frontmcp/testing';
+import type { JsonRpcRequest, JsonRpcResponse } from './helpers/skills-protocol';
 
-interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  id: number;
-  method: string;
-  params: Record<string, unknown>;
-}
-
-interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  id: number;
-  result?: Record<string, unknown>;
-  error?: { code: number; message: string };
+interface CompletionPayload {
+  completion?: { values: string[]; total?: number; hasMore?: boolean };
 }
 
 let nextRequestId = 1000;
@@ -60,10 +51,11 @@ async function requestCompletion(
     throw new Error(`Completion error: ${JSON.stringify(response.error)}`);
   }
 
-  if (!response.result?.completion || !Array.isArray((response.result.completion as any).values)) {
+  const completionResult = response.result as CompletionPayload | undefined;
+  if (!completionResult?.completion || !Array.isArray(completionResult.completion.values)) {
     throw new Error(`Malformed completion response: ${JSON.stringify(response)}`);
   }
-  return response.result.completion as { values: string[]; total?: number; hasMore?: boolean };
+  return completionResult.completion;
 }
 
 test.describe('Skills Resources E2E', () => {

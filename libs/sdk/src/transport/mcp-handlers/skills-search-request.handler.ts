@@ -62,7 +62,8 @@ export default function skillsSearchRequestHandler({
       });
 
       const total = skills.length;
-      const hasMore = false; // Search doesn't support pagination
+      // hasMore is true if pre-filtered results hit the limit (more may exist beyond visibility filtering)
+      const hasMore = results.length >= (limit ?? 10);
 
       const guidance =
         total > 0

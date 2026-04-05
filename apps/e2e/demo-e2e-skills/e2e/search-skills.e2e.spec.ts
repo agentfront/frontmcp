@@ -251,7 +251,7 @@ test.describe('searchSkills E2E', () => {
   test.describe('Resource Template Discovery', () => {
     test('should expose skills resource templates', async ({ mcp }) => {
       const templates = await mcp.resources.listTemplates();
-      const uris = templates.map((t: any) => t.uriTemplate);
+      const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
       expect(uris).toContain('skills://{skillName}');
     });
   });

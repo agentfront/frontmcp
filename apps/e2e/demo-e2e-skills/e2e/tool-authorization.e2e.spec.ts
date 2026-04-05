@@ -418,7 +418,7 @@ test.describe('Tool Authorization E2E', () => {
 
       // Skills are now exposed as resources, not tools
       const templates = await mcp.resources.listTemplates();
-      const uris = templates.map((t: any) => t.uriTemplate);
+      const uris = templates.map((t: { uriTemplate: string }) => t.uriTemplate);
       expect(uris).toContain('skills://{skillName}');
     });
   });

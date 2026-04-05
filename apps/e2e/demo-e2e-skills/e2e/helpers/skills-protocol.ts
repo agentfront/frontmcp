@@ -5,14 +5,14 @@
  * JSON-RPC methods used across E2E tests.
  */
 
-interface JsonRpcRequest {
+export interface JsonRpcRequest {
   jsonrpc: '2.0';
   id: number;
   method: string;
   params: Record<string, unknown>;
 }
 
-interface JsonRpcResponse {
+export interface JsonRpcResponse {
   jsonrpc: '2.0';
   id: number;
   result?: Record<string, unknown>;
