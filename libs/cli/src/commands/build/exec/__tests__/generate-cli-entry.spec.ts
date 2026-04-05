@@ -599,34 +599,6 @@ describe('generateCliEntry', () => {
   });
 
   describe('system tool filtering', () => {
-    it('should not include searchSkills as a tool command', () => {
-      const source = generateCliEntry(makeOptions({
-        schema: makeSchema({
-          tools: [
-            { name: 'searchSkills', description: 'Search skills', inputSchema: { type: 'object', properties: {} } },
-            { name: 'my_tool', description: 'My tool', inputSchema: { type: 'object', properties: {} } },
-          ],
-          capabilities: { skills: true, jobs: false, workflows: false },
-        }),
-      }));
-
-      expect(source).not.toContain('callTool("searchSkills"');
-      expect(source).toContain('callTool("my_tool"');
-    });
-
-    it('should not include loadSkills as a tool command', () => {
-      const source = generateCliEntry(makeOptions({
-        schema: makeSchema({
-          tools: [
-            { name: 'loadSkills', description: 'Load skills', inputSchema: { type: 'object', properties: {} } },
-          ],
-          capabilities: { skills: true, jobs: false, workflows: false },
-        }),
-      }));
-
-      expect(source).not.toContain('callTool("loadSkills"');
-    });
-
     it('should not include execute-job as a tool command', () => {
       const source = generateCliEntry(makeOptions({
         schema: makeSchema({

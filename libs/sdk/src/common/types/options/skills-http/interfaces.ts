@@ -26,7 +26,7 @@
  * ## Visibility Control
  *
  * Skills can have a `visibility` property to control where they appear:
- * - `'mcp'`: Only via searchSkills/loadSkill MCP tools
+ * - `'mcp'`: Only via skills:// MCP resources
  * - `'http'`: Only via HTTP API endpoints (/llm.txt, /skills)
  * - `'both'`: Visible in both MCP and HTTP (default)
  *
@@ -161,13 +161,13 @@ export interface SkillsConfigEndpointConfig {
  * })
  * ```
  *
- * @example HTTP only (no MCP tools)
+ * @example HTTP only (no MCP resources)
  * ```typescript
  * @FrontMcp({
  *   skillsConfig: {
  *     enabled: true,
  *     auth: 'public',
- *     mcpTools: false,  // No searchSkills/loadSkill MCP tools
+ *     mcpResources: false,  // No skills:// MCP resource templates
  *   },
  * })
  * ```
@@ -271,12 +271,20 @@ export interface SkillsConfigOptions {
   api?: SkillsConfigEndpointConfig | boolean;
 
   /**
-   * Whether to include searchSkills/loadSkill MCP tools.
+   * Whether to register skills:// MCP resource templates.
    * Set to false to expose skills only via HTTP endpoints.
+   *
+   * When enabled (default), the following resource templates are registered:
+   * - `skills://catalog` — list all skills
+   * - `skills://{skillName}` — load skill content
+   * - `skills://{skillName}/references` — list references
+   * - `skills://{skillName}/references/{referenceName}` — read reference
+   * - `skills://{skillName}/examples` — list examples
+   * - `skills://{skillName}/examples/{exampleName}` — read example
    *
    * @default true
    */
-  mcpTools?: boolean;
+  mcpResources?: boolean;
 
   /**
    * Cache configuration for HTTP endpoints.

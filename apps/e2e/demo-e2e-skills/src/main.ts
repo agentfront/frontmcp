@@ -19,7 +19,7 @@ const port = parseInt(process.env['PORT'] ?? '3107', 10);
   skillsConfig: {
     enabled: true,
     auth: 'public', // Single auth config for all HTTP endpoints
-    mcpTools: true, // Keep searchSkills/loadSkills MCP tools enabled
+    mcpResources: true, // Enable skills:// MCP resource templates
   },
 })
 export default class Server {}

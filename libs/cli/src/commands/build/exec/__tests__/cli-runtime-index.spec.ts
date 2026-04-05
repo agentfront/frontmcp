@@ -48,7 +48,7 @@ describe('cli-runtime barrel exports', () => {
   it('should export schema-extractor functions and constants', () => {
     expect(typeof extractSchemas).toBe('function');
     expect(SYSTEM_TOOL_NAMES).toBeInstanceOf(Set);
-    expect(SYSTEM_TOOL_NAMES.has('searchSkills')).toBe(true);
+    expect(SYSTEM_TOOL_NAMES.has('list-jobs')).toBe(true);
   });
 
   it('should export generate-cli-entry functions and constants', () => {

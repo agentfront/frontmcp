@@ -9,16 +9,15 @@
  * @module skill/skill-scope.helper
  */
 
-import type { FrontMcpLogger, EntryOwnerRef } from '../common';
+import type { FrontMcpLogger } from '../common';
 import type { SkillsConfigOptions } from '../common/types/options/skills-http';
 import type FlowRegistry from '../flows/flow.registry';
-import type ToolRegistry from '../tool/tool.registry';
 import type ProviderRegistry from '../provider/provider.registry';
+import type { ResourceType } from '../common/interfaces';
+import type ResourceRegistry from '../resource/resource.registry';
 import type SkillRegistry from './skill.registry';
 import { SearchSkillsFlow, LoadSkillFlow, LlmTxtFlow, LlmFullTxtFlow, SkillsApiFlow } from './flows';
-import { getSkillTools } from './tools';
-import { normalizeTool } from '../tool/tool.utils';
-import { ToolInstance } from '../tool/tool.instance';
+import { getSkillResources } from './resources';
 
 /**
  * Options for registering skill capabilities.
@@ -28,8 +27,8 @@ export interface SkillScopeRegistrationOptions {
   skillRegistry: SkillRegistry;
   /** Flow registry for registering skill flows */
   flowRegistry: FlowRegistry;
-  /** Tool registry for registering skill tools */
-  toolRegistry: ToolRegistry;
+  /** Resource registry for registering skill resource templates */
+  resourceRegistry: ResourceRegistry;
   /** Provider registry for dependency injection */
   providers: ProviderRegistry;
   /** Skills configuration from @FrontMcp metadata */
@@ -39,11 +38,11 @@ export interface SkillScopeRegistrationOptions {
 }
 
 /**
- * Register skill-related flows and tools in the scope.
+ * Register skill-related flows and resources in the scope.
  *
  * This function handles:
  * - Registering MCP flows for skill discovery/loading (SearchSkillsFlow, LoadSkillFlow)
- * - Registering skill MCP tools (searchSkills, loadSkill) unless disabled
+ * - Registering skill MCP resources (skills:// URI scheme) unless disabled
  * - Registering HTTP flows (llm.txt, llm_full.txt, /skills) when skillsConfig is enabled
  *
  * @param options - Registration options
@@ -53,7 +52,7 @@ export interface SkillScopeRegistrationOptions {
  * await registerSkillCapabilities({
  *   skillRegistry: this.scopeSkills,
  *   flowRegistry: this.scopeFlows,
- *   toolRegistry: this.scopeTools,
+ *   resourceRegistry: this.scopeResources,
  *   providers: this.scopeProviders,
  *   skillsConfig: this.metadata.skillsConfig,
  *   logger: this.logger,
@@ -61,7 +60,7 @@ export interface SkillScopeRegistrationOptions {
  * ```
  */
 export async function registerSkillCapabilities(options: SkillScopeRegistrationOptions): Promise<void> {
-  const { skillRegistry, flowRegistry, toolRegistry, providers, skillsConfig, logger } = options;
+  const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger } = options;
 
   // Early exit if no skills registered
   if (!skillRegistry.hasAny()) {
@@ -71,13 +70,13 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   // Always register MCP flows for skills
   await flowRegistry.registryFlows([SearchSkillsFlow, LoadSkillFlow]);
 
-  // Register skill MCP tools (searchSkills, loadSkill) unless disabled
-  const shouldRegisterMcpTools = skillsConfig?.mcpTools !== false;
+  // Register skill MCP resources (skills:// URI scheme) unless disabled
+  const shouldRegisterMcpResources = skillsConfig?.mcpResources !== false;
 
-  if (shouldRegisterMcpTools) {
-    await registerSkillMcpTools({ toolRegistry, providers, logger });
+  if (shouldRegisterMcpResources) {
+    await registerSkillMcpResources({ resourceRegistry, logger });
   } else {
-    logger.verbose('Skill MCP tools disabled via skillsConfig.mcpTools=false');
+    logger.verbose('Skill MCP resources disabled via skillsConfig.mcpResources=false');
   }
 
   // Register HTTP flows if skillsConfig is enabled
@@ -88,38 +87,24 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
 }
 
 /**
- * Register skill MCP tools in the tool registry.
+ * Register skill MCP resources in the resource registry.
  *
  * @internal
  */
-async function registerSkillMcpTools(options: {
-  toolRegistry: ToolRegistry;
-  providers: ProviderRegistry;
+async function registerSkillMcpResources(options: {
+  resourceRegistry: ResourceRegistry;
   logger: FrontMcpLogger;
 }): Promise<void> {
-  const { toolRegistry, providers, logger } = options;
-  const skillTools = getSkillTools();
+  const { resourceRegistry, logger } = options;
+  const skillResources = getSkillResources();
 
-  const ownerRef: EntryOwnerRef = {
-    kind: 'scope',
-    id: '_skills',
-    ref: undefined as unknown as new (...args: unknown[]) => unknown,
-  };
-
-  for (const SkillToolClass of skillTools) {
+  for (const ResourceClass of skillResources) {
     try {
-      const toolRecord = normalizeTool(SkillToolClass);
-
-      // Update owner ref for each tool
-      ownerRef.ref = SkillToolClass;
-
-      const toolEntry = new ToolInstance(toolRecord, providers, ownerRef);
-      await toolEntry.ready;
-
-      toolRegistry.registerToolInstance(toolEntry);
-      logger.verbose(`Registered skill tool: ${toolRecord.metadata.name}`);
+      resourceRegistry.registerDynamicResource(ResourceClass as ResourceType);
+      const resourceName = typeof ResourceClass === 'function' ? ResourceClass.name : 'unknown';
+      logger.verbose(`Registered skill resource: ${resourceName}`);
     } catch (error) {
-      logger.warn(`Failed to register skill tool: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`Failed to register skill resource: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

@@ -9,6 +9,7 @@
  * - Visibility filtering (mcp-only, http-only, both)
  */
 import { test, expect } from '@frontmcp/testing';
+import { searchSkills } from './helpers/skills-protocol';
 
 interface SkillApiResponse {
   id: string;
@@ -384,11 +385,11 @@ test.describe('Skills HTTP Endpoints E2E', () => {
   test.describe('Visibility Filtering', () => {
     test('mcp-only skill should be visible via MCP but not HTTP', async ({ mcp, server }) => {
       // Via MCP - should find the skill
-      const mcpResult = await mcp.tools.call('searchSkills', {
+      const mcpResult = await searchSkills(mcp, {
         query: 'mcp-only-workflow',
       });
-      expect(mcpResult).toBeSuccessful();
-      const mcpContent = mcpResult.json<{ skills: Array<{ id: string }> }>();
+      expect(mcpResult).toBeDefined();
+      const mcpContent = mcpResult as { skills: Array<{ id: string }> };
       const mcpSkillIds = mcpContent.skills.map((s) => s.id);
       expect(mcpSkillIds).toContain('mcp-only-workflow');
 
@@ -407,22 +408,22 @@ test.describe('Skills HTTP Endpoints E2E', () => {
       expect(httpSkillIds).toContain('http-only-workflow');
 
       // Via MCP - should NOT find the skill
-      const mcpResult = await mcp.tools.call('searchSkills', {
+      const mcpResult = await searchSkills(mcp, {
         query: 'http-only-workflow',
       });
-      expect(mcpResult).toBeSuccessful();
-      const mcpContent = mcpResult.json<{ skills: Array<{ id: string }> }>();
+      expect(mcpResult).toBeDefined();
+      const mcpContent = mcpResult as { skills: Array<{ id: string }> };
       const mcpSkillIds = mcpContent.skills.map((s) => s.id);
       expect(mcpSkillIds).not.toContain('http-only-workflow');
     });
 
     test('both-visibility skills should be visible everywhere', async ({ mcp, server }) => {
       // Via MCP - should find review-pr
-      const mcpResult = await mcp.tools.call('searchSkills', {
+      const mcpResult = await searchSkills(mcp, {
         query: 'review-pr',
       });
-      expect(mcpResult).toBeSuccessful();
-      const mcpContent = mcpResult.json<{ skills: Array<{ id: string }> }>();
+      expect(mcpResult).toBeDefined();
+      const mcpContent = mcpResult as { skills: Array<{ id: string }> };
       const mcpSkillIds = mcpContent.skills.map((s) => s.id);
       expect(mcpSkillIds).toContain('review-pr');
 

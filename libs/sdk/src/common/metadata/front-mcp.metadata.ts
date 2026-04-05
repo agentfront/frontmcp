@@ -131,11 +131,11 @@ export interface FrontMcpBaseMetadata {
    * skillsConfig: { enabled: true }
    * ```
    *
-   * @example HTTP-only (disable MCP tools)
+   * @example HTTP-only (disable MCP resources)
    * ```typescript
    * skillsConfig: {
    *   enabled: true,
-   *   mcpTools: false,  // No searchSkills/loadSkill MCP tools
+   *   mcpResources: false,  // No skills:// MCP resources
    * }
    * ```
    */
