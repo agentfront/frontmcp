@@ -264,9 +264,11 @@ test.describe('searchSkills E2E', () => {
 
       expect(result).toBeDefined();
 
-      const content = result as { skills: unknown[]; total: number };
-      expect(content.skills).toBeDefined();
-      expect(content.total).toBeDefined();
+      const content = result as { skills: Array<{ id: string; score: number }>; total: number };
+      expect(Array.isArray(content.skills)).toBe(true);
+      expect(typeof content.total).toBe('number');
+      // TF-IDF may return fuzzy matches; verify no exact match exists
+      expect(content.skills.find((s) => s.id === 'nonexistent-workflow-xyz-12345')).toBeUndefined();
     });
   });
 });
