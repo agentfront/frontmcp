@@ -461,11 +461,11 @@ export class Scope extends ScopeEntry {
       }
     }
 
-    // Register skill flows and tools if any skills are available
+    // Register skill flows and resources if any skills are available
     await registerSkillCapabilities({
       skillRegistry: this.scopeSkills,
       flowRegistry: this.scopeFlows,
-      toolRegistry: this.scopeTools,
+      resourceRegistry: this.scopeResources,
       providers: this.scopeProviders,
       skillsConfig: this.metadata.skillsConfig,
       logger: this.logger,

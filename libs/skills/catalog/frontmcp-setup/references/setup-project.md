@@ -164,7 +164,7 @@ import { FrontMcp } from '@frontmcp/sdk';
   // tools?: ToolType[]         - shared tools available to all apps
   // resources?: ResourceType[] - shared resources available to all apps
   // skills?: SkillType[]       - shared skills available to all apps
-  // skillsConfig?: { enabled: boolean, mcpTools?: boolean, cache?: {...}, auth?: 'api-key' | 'bearer' }
+  // skillsConfig?: { enabled: boolean, mcpResources?: boolean, cache?: {...}, auth?: 'api-key' | 'bearer' }
   // elicitation?: { enabled: boolean }
   // pubsub?: { provider: 'redis', host: string, ... }
   // pagination?: { ... }

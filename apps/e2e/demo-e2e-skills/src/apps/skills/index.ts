@@ -12,12 +12,22 @@ import {
   FullPRWorkflowSkill,
   McpOnlySkill,
   HttpOnlySkill,
+  DocsSkill,
 } from './skills';
 
 @App({
   name: 'skills-e2e',
   tools: [GitHubGetPRTool, GitHubAddCommentTool, SlackNotifyTool, AdminActionTool],
-  skills: [ReviewPRSkill, NotifyTeamSkill, HiddenSkill, DeploySkill, FullPRWorkflowSkill, McpOnlySkill, HttpOnlySkill],
+  skills: [
+    ReviewPRSkill,
+    NotifyTeamSkill,
+    HiddenSkill,
+    DeploySkill,
+    FullPRWorkflowSkill,
+    McpOnlySkill,
+    HttpOnlySkill,
+    DocsSkill,
+  ],
   plugins: [DevOpsPlugin],
 })
 export class SkillsE2EApp {}

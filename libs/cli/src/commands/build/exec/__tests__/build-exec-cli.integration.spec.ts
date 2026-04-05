@@ -53,7 +53,6 @@ jest.mock('../setup', () => {
 jest.mock('../cli-runtime/schema-extractor', () => ({
   extractSchemas: jest.fn(),
   SYSTEM_TOOL_NAMES: new Set([
-    'searchSkills', 'loadSkills',
     'list-jobs', 'execute-job', 'get-job-status', 'register-job', 'remove-job',
     'list-workflows', 'execute-workflow', 'get-workflow-status', 'register-workflow', 'remove-workflow',
   ]),

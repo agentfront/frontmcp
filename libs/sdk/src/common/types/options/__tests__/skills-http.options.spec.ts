@@ -79,9 +79,9 @@ describe('skillsConfigOptionsSchema', () => {
       expect(result.auth).toBe('inherit');
     });
 
-    it('should apply default mcpTools=true', () => {
+    it('should apply default mcpResources=true', () => {
       const result = skillsConfigOptionsSchema.parse({});
-      expect(result.mcpTools).toBe(true);
+      expect(result.mcpResources).toBe(true);
     });
 
     it('should apply default llmTxt=true', () => {
@@ -107,7 +107,7 @@ describe('skillsConfigOptionsSchema', () => {
         prefix: '/api',
         auth: 'api-key',
         apiKeys: ['sk-123'],
-        mcpTools: false,
+        mcpResources: false,
       });
       expect(result.success).toBe(true);
       if (result.success) {
@@ -115,7 +115,7 @@ describe('skillsConfigOptionsSchema', () => {
         expect(result.data.prefix).toBe('/api');
         expect(result.data.auth).toBe('api-key');
         expect(result.data.apiKeys).toEqual(['sk-123']);
-        expect(result.data.mcpTools).toBe(false);
+        expect(result.data.mcpResources).toBe(false);
       }
     });
 
@@ -149,7 +149,7 @@ describe('skillsConfigOptionsSchema', () => {
         llmTxt: { enabled: true, path: '/custom-llm.txt' },
         llmFullTxt: { enabled: false },
         api: { enabled: true },
-        mcpTools: false,
+        mcpResources: false,
       });
       expect(result.success).toBe(true);
     });
@@ -223,7 +223,7 @@ describe('normalizeSkillsConfigOptions', () => {
     const result = normalizeSkillsConfigOptions(undefined);
     expect(result.enabled).toBe(false);
     expect(result.auth).toBe('inherit');
-    expect(result.mcpTools).toBe(true);
+    expect(result.mcpResources).toBe(true);
     expect(result.normalizedLlmTxt.enabled).toBe(true);
     expect(result.normalizedLlmTxt.path).toBe('/llm.txt');
     expect(result.normalizedLlmTxt.auth).toBe('inherit');
@@ -266,9 +266,9 @@ describe('normalizeSkillsConfigOptions', () => {
     expect(result.normalizedLlmFullTxt.path).toBe('/api/llm_full.txt');
   });
 
-  it('should handle mcpTools=false', () => {
-    const result = normalizeSkillsConfigOptions({ mcpTools: false });
-    expect(result.mcpTools).toBe(false);
+  it('should handle mcpResources=false', () => {
+    const result = normalizeSkillsConfigOptions({ mcpResources: false });
+    expect(result.mcpResources).toBe(false);
   });
 
   it('should handle disabled endpoints', () => {
