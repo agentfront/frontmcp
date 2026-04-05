@@ -25,7 +25,7 @@ type Params = { skillName: string; exampleName: string };
   uriTemplate: 'skills://{skillName}/examples/{exampleName}',
   description:
     'Read the full content of a specific worked example from a skill. ' +
-    'Returns the example markdown with complexity level and parent reference info.',
+    'Returns the example markdown body with frontmatter stripped.',
   mimeType: 'text/markdown',
 })
 export class SkillExampleContentResource extends ResourceContext<Params> {
@@ -34,6 +34,8 @@ export class SkillExampleContentResource extends ResourceContext<Params> {
     return { values: names, total: names.length };
   }
 
+  // Note: MCP completion/complete doesn't provide other template parameter values,
+  // so this completer returns examples from ALL skills, not scoped to skillName.
   async exampleNameCompleter(partial: string): Promise<ResourceCompletionResult> {
     const names = await collectAllExampleNames(this.scope, partial);
     return { values: names, total: names.length };

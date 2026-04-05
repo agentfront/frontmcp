@@ -10,7 +10,7 @@ import { Skill } from '@frontmcp/sdk';
   instructions: `
 ## MCP-Only Workflow
 
-This skill is only accessible via MCP tools and should not appear in HTTP endpoint responses.
+This skill is only accessible via skills:// MCP resources and should not appear in HTTP endpoint responses.
 
 ### Steps
 1. Use github_get_pr to fetch PR details

@@ -37,7 +37,7 @@ export class SkillReferencesListResource extends ResourceContext<SkillNameParams
     const listing = refs.map((ref) => ({
       name: ref.name,
       description: ref.description,
-      uri: `skills://${params.skillName}/references/${ref.name}`,
+      uri: `skills://${params.skillName}/references/${encodeURIComponent(ref.name)}`,
     }));
 
     return {

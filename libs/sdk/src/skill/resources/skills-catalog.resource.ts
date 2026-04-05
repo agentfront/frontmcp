@@ -26,12 +26,13 @@ export class SkillsCatalogResource extends ResourceContext {
   async execute(uri: string): Promise<ReadResourceResult> {
     const skills = getMcpVisibleSkills(this.scope);
 
-    const catalog = await Promise.all(
+    const results = await Promise.allSettled(
       skills.map(async (skill) => {
         const content = await skill.load();
         return {
           id: content.id,
           name: content.name,
+          uri: `skills://${content.name}`,
           description: content.description,
           tags: skill.getTags(),
           hasReferences: (content.resolvedReferences ?? []).length > 0,
@@ -40,6 +41,7 @@ export class SkillsCatalogResource extends ResourceContext {
         };
       }),
     );
+    const catalog = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
 
     return {
       contents: [

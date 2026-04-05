@@ -22,7 +22,7 @@ describe('skill resources', () => {
 
     it('should return classes with names', () => {
       const resources = getSkillResources();
-      const names = resources.map((r) => (r as any).name);
+      const names = resources.map((r) => (r as Function).name);
       expect(names).toContain('SkillsCatalogResource');
       expect(names).toContain('SkillContentResource');
       expect(names).toContain('SkillContentAliasResource');

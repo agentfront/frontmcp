@@ -50,7 +50,7 @@ export {
  * Get all skill-related resources.
  * Used by the SDK to register skill resources when skills are available.
  */
-export function getSkillResources(): unknown[] {
+export function getSkillResources(): Function[] {
   return [
     SkillsCatalogResource,
     SkillContentResource,

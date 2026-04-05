@@ -17,8 +17,9 @@ import {
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
 
-// Mock @frontmcp/utils
+// Mock @frontmcp/utils (partial — keep real exports, override file I/O)
 jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
   readFile: jest.fn(),
   pathResolve: jest.fn((...parts: string[]) => parts.join('/')),
 }));
@@ -165,7 +166,7 @@ describe('skill-resource.helpers', () => {
 
     it('should throw when skill not found', async () => {
       const scope = createMockScope([createMockSkillEntry('other')]);
-      await expect(findAndLoadSkill(scope, 'missing')).rejects.toThrow('not found');
+      await expect(findAndLoadSkill(scope, 'missing')).rejects.toThrow(/not found/i);
     });
 
     it('should throw when skill is not MCP-visible', async () => {

@@ -5,29 +5,7 @@
  * to achieve higher throughput (400-2000+ req/s)
  */
 import { perfTest, expect } from '@frontmcp/testing';
-
-let nextId = 1;
-async function loadSkillsRaw(client: any, params: Record<string, unknown>) {
-  const response = await client.raw.request({
-    jsonrpc: '2.0' as const,
-    id: nextId++,
-    method: 'skills/load',
-    params,
-  });
-  if (response.error) throw new Error(response.error.message);
-  return response.result;
-}
-
-async function searchSkillsRaw(client: any, params: Record<string, unknown>) {
-  const response = await client.raw.request({
-    jsonrpc: '2.0' as const,
-    id: nextId++,
-    method: 'skills/search',
-    params,
-  });
-  if (response.error) throw new Error(response.error.message);
-  return response.result;
-}
+import { searchSkills as searchSkillsRaw, loadSkills as loadSkillsRaw } from './helpers/skills-protocol';
 
 perfTest.describe('Skills Parallel Stress Testing', () => {
   perfTest.use({

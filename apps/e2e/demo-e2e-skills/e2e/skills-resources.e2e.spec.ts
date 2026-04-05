@@ -198,8 +198,32 @@ test.describe('Skills Resources E2E', () => {
       expect(result).toBeSuccessful();
 
       const refs = extractResourceJson<Array<{ name: string }>>(result);
-      // Inline skills without file resources have no references
       expect(Array.isArray(refs)).toBe(true);
+      expect(refs.length).toBe(0);
+    });
+
+    test('should list references for docs-skill', async ({ mcp }) => {
+      const result = await mcp.resources.read('skills://docs-skill/references');
+      expect(result).toBeSuccessful();
+
+      const refs = extractResourceJson<Array<{ name: string; description: string; uri: string }>>(result);
+      expect(refs.length).toBeGreaterThan(0);
+      const names = refs.map((r) => r.name);
+      expect(names).toContain('getting-started');
+    });
+
+    test('should read a specific reference', async ({ mcp }) => {
+      const result = await mcp.resources.read('skills://docs-skill/references/getting-started');
+      expect(result).toBeSuccessful();
+
+      const text = extractResourceText(result);
+      expect(text).toContain('Getting Started');
+      expect(text).toContain('Prerequisites');
+    });
+
+    test('should return error for missing reference', async ({ mcp }) => {
+      const result = await mcp.resources.read('skills://docs-skill/references/nonexistent-ref');
+      expect(result).toBeError();
     });
   });
 
@@ -210,6 +234,31 @@ test.describe('Skills Resources E2E', () => {
 
       const examples = extractResourceJson<Array<{ name: string }>>(result);
       expect(Array.isArray(examples)).toBe(true);
+      expect(examples.length).toBe(0);
+    });
+
+    test('should list examples for docs-skill', async ({ mcp }) => {
+      const result = await mcp.resources.read('skills://docs-skill/examples');
+      expect(result).toBeSuccessful();
+
+      const examples = extractResourceJson<Array<{ name: string; level: string; reference: string }>>(result);
+      expect(examples.length).toBeGreaterThan(0);
+      const names = examples.map((e) => e.name);
+      expect(names).toContain('basic-setup');
+    });
+
+    test('should read a specific example', async ({ mcp }) => {
+      const result = await mcp.resources.read('skills://docs-skill/examples/basic-setup');
+      expect(result).toBeSuccessful();
+
+      const text = extractResourceText(result);
+      expect(text).toContain('Basic Setup');
+      expect(text).toContain('What This Demonstrates');
+    });
+
+    test('should return error for missing example', async ({ mcp }) => {
+      const result = await mcp.resources.read('skills://docs-skill/examples/nonexistent-example');
+      expect(result).toBeError();
     });
   });
 
@@ -247,6 +296,21 @@ test.describe('Skills Resources E2E', () => {
     test('should not include hidden skills in completions', async ({ mcp }) => {
       const result = await requestCompletion(mcp, 'skills://{skillName}', 'skillName', '');
       expect(result.values).not.toContain('hidden-internal');
+    });
+
+    test('should complete referenceName across all skills', async ({ mcp }) => {
+      const result = await requestCompletion(
+        mcp,
+        'skills://{skillName}/references/{referenceName}',
+        'referenceName',
+        '',
+      );
+      expect(result.values).toContain('getting-started');
+    });
+
+    test('should complete exampleName across all skills', async ({ mcp }) => {
+      const result = await requestCompletion(mcp, 'skills://{skillName}/examples/{exampleName}', 'exampleName', '');
+      expect(result.values).toContain('basic-setup');
     });
   });
 

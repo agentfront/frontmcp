@@ -39,7 +39,7 @@ export class SkillExamplesListResource extends ResourceContext<SkillNameParams> 
       description: ex.description,
       reference: ex.reference,
       level: ex.level,
-      uri: `skills://${params.skillName}/examples/${ex.name}`,
+      uri: `skills://${params.skillName}/examples/${encodeURIComponent(ex.name)}`,
     }));
 
     return {

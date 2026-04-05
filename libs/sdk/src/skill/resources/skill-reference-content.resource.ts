@@ -34,6 +34,8 @@ export class SkillReferenceContentResource extends ResourceContext<Params> {
     return { values: names, total: names.length };
   }
 
+  // Note: MCP completion/complete doesn't provide other template parameter values,
+  // so this completer returns references from ALL skills, not scoped to skillName.
   async referenceNameCompleter(partial: string): Promise<ResourceCompletionResult> {
     const names = await collectAllReferenceNames(this.scope, partial);
     return { values: names, total: names.length };

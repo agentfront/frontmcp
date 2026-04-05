@@ -9,18 +9,7 @@
  * - Result limit
  */
 import { test, expect } from '@frontmcp/testing';
-
-let nextId = 1;
-async function searchSkills(mcp: any, params: Record<string, unknown>) {
-  const response = await mcp.raw.request({
-    jsonrpc: '2.0' as const,
-    id: nextId++,
-    method: 'skills/search',
-    params,
-  });
-  if (response.error) throw new Error(response.error.message);
-  return response.result;
-}
+import { searchSkills } from './helpers/skills-protocol';
 
 test.describe('searchSkills E2E', () => {
   test.use({
@@ -147,28 +136,30 @@ test.describe('searchSkills E2E', () => {
 
   test.describe('Result Limit', () => {
     test('should respect limit parameter', async ({ mcp }) => {
+      // Use a broad query that matches many skills to ensure truncation
       const result = await searchSkills(mcp, {
-        query: 'github slack',
+        query: 'workflow github deploy review slack',
         limit: 2,
       });
 
       expect(result).toBeDefined();
 
       const content = result as { skills: unknown[] };
-      expect(content.skills.length).toBeLessThanOrEqual(2);
+      expect(content.skills.length).toBe(2);
     });
 
     test('should return hasMore indicator when more results exist', async ({ mcp }) => {
+      // Use a broad query that returns >1 skill, request only 1
       const result = await searchSkills(mcp, {
-        query: 'workflow',
+        query: 'workflow github deploy review slack',
         limit: 1,
       });
 
       expect(result).toBeDefined();
 
-      const content = result as { hasMore: boolean };
-      // hasMore should indicate if there are more skills than returned
-      expect(typeof content.hasMore).toBe('boolean');
+      const content = result as { skills: unknown[]; hasMore: boolean };
+      expect(content.skills.length).toBe(1);
+      expect(content.hasMore).toBe(true);
     });
   });
 

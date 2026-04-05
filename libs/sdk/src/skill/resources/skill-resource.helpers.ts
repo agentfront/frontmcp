@@ -14,6 +14,7 @@ import type { SkillInstance } from '../skill.instance';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
 import { readFile, pathResolve } from '@frontmcp/utils';
 import { parseSkillMdFrontmatter } from '../skill-md-parser';
+import { ResourceNotFoundError, PublicMcpError } from '../../errors';
 
 /**
  * Get all MCP-visible skill entries from the scope's skill registry.
@@ -60,23 +61,27 @@ export async function findAndLoadSkill(
 ): Promise<{ loadResult: SkillLoadResult; instance: SkillInstance }> {
   const registry = scope.skills;
   if (!registry || !registry.hasAny()) {
-    throw new Error('Skills are not available in this scope.');
+    throw new PublicMcpError('Skills are not available in this scope.', 'CAPABILITY_NOT_AVAILABLE', 501);
   }
 
   const entry = registry.findByName(skillName);
   if (!entry) {
-    throw new Error(`Skill "${skillName}" not found. Available skills: ${getMcpVisibleSkillNames(scope).join(', ')}`);
+    throw new ResourceNotFoundError(`skills://${skillName}`);
   }
 
   // Verify MCP visibility
   const visibility = entry.metadata.visibility ?? 'both';
   if (visibility !== 'mcp' && visibility !== 'both') {
-    throw new Error(`Skill "${skillName}" is not available via MCP resources (visibility: ${visibility}).`);
+    throw new PublicMcpError(
+      `Skill "${skillName}" is not available via MCP resources (visibility: ${visibility}).`,
+      'RESOURCE_NOT_FOUND',
+      403,
+    );
   }
 
   const loadResult = await registry.loadSkill(skillName);
   if (!loadResult) {
-    throw new Error(`Failed to load skill "${skillName}".`);
+    throw new PublicMcpError(`Failed to load skill "${skillName}".`, 'INTERNAL_ERROR', 500);
   }
 
   return { loadResult, instance: entry as SkillInstance };
@@ -106,6 +111,12 @@ export async function readSkillFile(
 
   const resourceDir = resourcePath.startsWith('/') ? resourcePath : pathResolve(baseDir, resourcePath);
   const filePath = pathResolve(resourceDir, filename);
+
+  // Prevent path traversal — filePath must stay inside resourceDir
+  const resourceDirPrefix = resourceDir.endsWith('/') ? resourceDir : `${resourceDir}/`;
+  if (filePath !== resourceDir && !filePath.startsWith(resourceDirPrefix)) {
+    throw new Error(`Invalid ${resourceType} filename "${filename}".`);
+  }
 
   try {
     return await readFile(filePath, 'utf-8');

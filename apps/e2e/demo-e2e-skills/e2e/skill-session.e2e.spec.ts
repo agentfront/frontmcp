@@ -11,6 +11,7 @@
  * observable behavior through the MCP protocol.
  */
 import { test, expect } from '@frontmcp/testing';
+import { searchSkills, loadSkills } from './helpers/skills-protocol';
 
 interface SkillResult {
   id: string;
@@ -68,29 +69,6 @@ interface SlackResult {
   messageId: string;
   success: boolean;
   timestamp: string;
-}
-
-let nextId = 1;
-async function searchSkills(mcp: any, params: Record<string, unknown>) {
-  const response = await mcp.raw.request({
-    jsonrpc: '2.0' as const,
-    id: nextId++,
-    method: 'skills/search',
-    params,
-  });
-  if (response.error) throw new Error(response.error.message);
-  return response.result;
-}
-
-async function loadSkills(mcp: any, params: Record<string, unknown>) {
-  const response = await mcp.raw.request({
-    jsonrpc: '2.0' as const,
-    id: nextId++,
-    method: 'skills/load',
-    params,
-  });
-  if (response.error) throw new Error(response.error.message);
-  return response.result;
 }
 
 test.describe('Skill Session E2E', () => {

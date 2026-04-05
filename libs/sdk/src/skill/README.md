@@ -537,10 +537,16 @@ libs/sdk/src/
 │   │   ├── index.ts
 │   │   ├── search-skills.flow.ts
 │   │   └── load-skill.flow.ts
-│   ├── tools/
+│   ├── resources/
 │   │   ├── index.ts
-│   │   ├── search-skills.tool.ts
-│   │   └── load-skill.tool.ts
+│   │   ├── skill-resource.helpers.ts
+│   │   ├── skills-catalog.resource.ts
+│   │   ├── skill-content.resource.ts
+│   │   ├── skill-content-alias.resource.ts
+│   │   ├── skill-references-list.resource.ts
+│   │   ├── skill-reference-content.resource.ts
+│   │   ├── skill-examples-list.resource.ts
+│   │   └── skill-example-content.resource.ts
 │   ├── session/
 │   │   ├── index.ts
 │   │   ├── skill-session.manager.ts
