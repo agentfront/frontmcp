@@ -4,6 +4,7 @@
  * Tests memory leak detection on repeated skill operations
  */
 import { perfTest, expect } from '@frontmcp/testing';
+import { searchSkills as searchSkillsRaw, loadSkills as loadSkillsRaw } from './helpers/skills-protocol';
 
 perfTest.describe('Skills Leak Detection', () => {
   perfTest.use({
@@ -15,7 +16,7 @@ perfTest.describe('Skills Leak Detection', () => {
   perfTest('no memory leak on repeated loadSkills calls', async ({ mcp, perf }) => {
     const result = await perf.checkLeak(
       async () => {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['review-pr'],
         });
       },
@@ -34,7 +35,7 @@ perfTest.describe('Skills Leak Detection', () => {
   perfTest('no memory leak on repeated searchSkills calls', async ({ mcp, perf }) => {
     const result = await perf.checkLeak(
       async () => {
-        await mcp.tools.call('searchSkills', {
+        await searchSkillsRaw(mcp, {
           query: 'test',
         });
       },
@@ -55,11 +56,11 @@ perfTest.describe('Skills Leak Detection', () => {
     const result = await perf.checkLeak(
       async () => {
         if (callIndex % 2 === 0) {
-          await mcp.tools.call('loadSkills', {
+          await loadSkillsRaw(mcp, {
             skillIds: ['review-pr', 'notify-team'],
           });
         } else {
-          await mcp.tools.call('searchSkills', {
+          await searchSkillsRaw(mcp, {
             query: 'deploy',
           });
         }

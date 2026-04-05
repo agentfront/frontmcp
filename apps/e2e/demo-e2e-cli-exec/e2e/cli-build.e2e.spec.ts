@@ -26,8 +26,10 @@ describe('CLI Exec Build Output', () => {
     expect(manifest.cli.enabled).toBe(true);
     // toolCount should only count user tools (not system tools like searchSkills, execute-job, etc.)
     expect(manifest.cli.toolCount).toBeGreaterThanOrEqual(4);
-    expect(manifest.cli.resourceCount).toBe(1);
-    expect(manifest.cli.templateCount).toBe(1);
+    // resourceCount includes user resources + skills://catalog
+    expect(manifest.cli.resourceCount).toBeGreaterThanOrEqual(1);
+    // templateCount includes user templates + skills:// resource templates
+    expect(manifest.cli.templateCount).toBeGreaterThanOrEqual(1);
     expect(manifest.cli.promptCount).toBe(1);
     // Capability flags
     expect(manifest.cli.skillsEnabled).toBe(true);

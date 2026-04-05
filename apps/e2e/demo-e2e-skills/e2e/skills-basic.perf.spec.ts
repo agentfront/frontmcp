@@ -8,6 +8,7 @@
  * - Tool discovery performance
  */
 import { perfTest } from '@frontmcp/testing';
+import { searchSkills as searchSkillsRaw, loadSkills as loadSkillsRaw } from './helpers/skills-protocol';
 
 perfTest.describe('Skills Basic Performance', () => {
   perfTest.use({
@@ -20,7 +21,7 @@ perfTest.describe('Skills Basic Performance', () => {
     perfTest('loadSkills should have bounded memory overhead', async ({ mcp, perf }) => {
       // Load skills multiple times
       for (let i = 0; i < 50; i++) {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['review-pr'],
         });
       }
@@ -32,7 +33,7 @@ perfTest.describe('Skills Basic Performance', () => {
     perfTest('loading multiple skills should be efficient', async ({ mcp, perf }) => {
       // Load multiple skills in single call
       for (let i = 0; i < 30; i++) {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['review-pr', 'notify-team', 'deploy-app'],
         });
       }
@@ -45,7 +46,7 @@ perfTest.describe('Skills Basic Performance', () => {
 
     perfTest('loading hidden skills should be performant', async ({ mcp, perf }) => {
       for (let i = 0; i < 30; i++) {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['hidden-internal'],
         });
       }
@@ -58,7 +59,7 @@ perfTest.describe('Skills Basic Performance', () => {
     perfTest('searchSkills should be fast', async ({ mcp, perf }) => {
       // Perform many searches
       for (let i = 0; i < 50; i++) {
-        await mcp.tools.call('searchSkills', {
+        await searchSkillsRaw(mcp, {
           query: 'review',
         });
       }
@@ -74,7 +75,7 @@ perfTest.describe('Skills Basic Performance', () => {
 
       for (let i = 0; i < 30; i++) {
         const query = queries[i % queries.length];
-        await mcp.tools.call('searchSkills', { query });
+        await searchSkillsRaw(mcp, { query });
       }
 
       perf.assertThresholds({
@@ -87,7 +88,7 @@ perfTest.describe('Skills Basic Performance', () => {
   perfTest.describe('Format Options Performance', () => {
     perfTest('full format should be performant', async ({ mcp, perf }) => {
       for (let i = 0; i < 30; i++) {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['review-pr'],
           format: 'full',
         });
@@ -101,7 +102,7 @@ perfTest.describe('Skills Basic Performance', () => {
 
     perfTest('instructions-only format should be lighter', async ({ mcp, perf }) => {
       for (let i = 0; i < 30; i++) {
-        await mcp.tools.call('loadSkills', {
+        await loadSkillsRaw(mcp, {
           skillIds: ['review-pr'],
           format: 'instructions-only',
         });

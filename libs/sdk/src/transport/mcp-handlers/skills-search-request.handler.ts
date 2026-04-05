@@ -38,8 +38,14 @@ export default function skillsSearchRequestHandler({
         requireAllTools,
       });
 
+      // Filter by MCP visibility (only 'mcp' or 'both' should be visible via MCP)
+      const mcpVisibleResults = results.filter((r) => {
+        const visibility = r.metadata.visibility ?? 'both';
+        return visibility === 'mcp' || visibility === 'both';
+      });
+
       // Transform results to response format
-      const skills = results.map((r) => {
+      const skills = mcpVisibleResults.map((r) => {
         const toolNames = extractToolNames(r.metadata);
         return {
           id: r.metadata.id ?? r.metadata.name,
