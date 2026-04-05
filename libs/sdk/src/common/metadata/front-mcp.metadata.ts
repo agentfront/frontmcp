@@ -28,6 +28,8 @@ import {
   sqliteOptionsSchema,
   ObservabilityOptionsInterface,
   observabilityOptionsSchema,
+  HealthOptionsInput,
+  healthOptionsSchema,
 } from '../types';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
@@ -276,6 +278,38 @@ export interface FrontMcpBaseMetadata {
   throttle?: GuardConfig;
 
   /**
+   * Health and readiness endpoint configuration.
+   * Provides Kubernetes-style `/healthz` (liveness) and `/readyz` (readiness) probes
+   * with runtime introspection, dependency health probing, and catalog hashing.
+   *
+   * **Runtime matrix:**
+   * - Node/Bun/Deno/Browser: `/healthz` + `/readyz`
+   * - Edge/Cloudflare/Vercel: `/healthz` only
+   * - CLI: `/healthz` only
+   *
+   * @default { enabled: true }
+   *
+   * @example Default (auto-enabled)
+   * ```typescript
+   * // health endpoints enabled by default
+   * ```
+   *
+   * @example Custom probes
+   * ```typescript
+   * health: {
+   *   probes: [{
+   *     name: 'postgres',
+   *     async check() {
+   *       await pool.query('SELECT 1');
+   *       return { status: 'healthy' };
+   *     },
+   *   }],
+   * }
+   * ```
+   */
+  health?: HealthOptionsInput;
+
+  /**
    * Observability configuration — OpenTelemetry tracing, structured logging,
    * and per-request log collection.
    *
@@ -337,6 +371,7 @@ export const frontMcpBaseSchema = z.object({
   loader: packageLoaderSchema.optional(),
   throttle: guardConfigSchema.optional(),
   observability: observabilityOptionsSchema,
+  health: healthOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
@@ -485,6 +520,7 @@ const frontMcpLiteSchema = z.object({
   ui: z.any().optional(),
   jobs: z.any().optional(),
   throttle: z.any().optional(),
+  health: z.any().optional(),
 });
 
 /**

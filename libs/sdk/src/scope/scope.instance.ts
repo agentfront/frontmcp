@@ -56,6 +56,7 @@ import type { WorkflowType } from '../common/interfaces/workflow.interface';
 import type { JobStateStore } from '../job/store/job-state.interface';
 import type { JobDefinitionStore } from '../job/store/job-definition.interface';
 import { createGuardManager, type GuardManager } from '@frontmcp/guard';
+import { HealthService } from '../health';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -101,6 +102,9 @@ export class Scope extends ScopeEntry {
 
   /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
   private _rateLimitManager?: GuardManager;
+
+  /** Health service for liveness and readiness probes (optional) */
+  private _healthService?: HealthService;
 
   /** CLI mode flag — skips non-essential initialization for faster startup */
   private readonly cliMode: boolean;
@@ -546,6 +550,14 @@ export class Scope extends ScopeEntry {
     ]);
 
     await this.auth.ready;
+    await this.transportService.ready;
+
+    // Initialize health service (after all registries and stores are ready)
+    if (this.metadata.health?.enabled !== false) {
+      this._healthService = new HealthService(this.metadata.health ?? {}, this.metadata.info);
+      this._healthService.autoDiscoverProbes(this);
+      this.logger.verbose(`HealthService initialized (${this._healthService.getProbeCount()} probe(s))`);
+    }
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
@@ -838,6 +850,14 @@ export class Scope extends ScopeEntry {
    */
   get rateLimitManager(): GuardManager | undefined {
     return this._rateLimitManager;
+  }
+
+  /**
+   * Health service for liveness and readiness probes.
+   * Returns undefined if health endpoints are disabled.
+   */
+  get healthService(): HealthService | undefined {
+    return this._healthService;
   }
 
   /**

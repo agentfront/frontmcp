@@ -2037,6 +2037,36 @@
               ]
             }
           ]
+        },
+        {
+          "name": "health-readiness-endpoints",
+          "description": "Configure /healthz and /readyz endpoints with custom probes, runtime-aware readiness, and dependency health checks",
+          "examples": [
+            {
+              "name": "basic-health-setup",
+              "description": "Default health endpoints with Redis session store, showing /healthz and /readyz responses.",
+              "level": "basic",
+              "tags": ["production", "health", "readiness", "redis", "kubernetes", "docker"],
+              "features": [
+                "Zero-config /healthz and /readyz endpoints enabled by default",
+                "Auto-discovered session-store probe via Redis persistence",
+                "Catalog hash for config drift detection across instances",
+                "Docker HEALTHCHECK directive using /healthz"
+              ]
+            },
+            {
+              "name": "custom-probes",
+              "description": "Custom database and API probes with Kubernetes deployment configuration.",
+              "level": "intermediate",
+              "tags": ["production", "health", "readiness", "kubernetes", "postgres", "probes", "custom"],
+              "features": [
+                "Custom health probes for PostgreSQL and external API dependencies",
+                "Kubernetes liveness and readiness probe configuration",
+                "Production includeDetails: false to hide infrastructure topology",
+                "Per-probe timeout to prevent slow dependencies from blocking readiness"
+              ]
+            }
+          ]
         }
       ]
     },
