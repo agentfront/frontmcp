@@ -117,24 +117,28 @@ test.describe('Environment Awareness E2E', () => {
       const result = await mcp.tools.call('impossible_platform_tool', { msg: 'hello' });
 
       expect(result).toBeError();
+      expect(result).toHaveTextContent('not available in the current environment');
     });
 
     test('should return error when calling a tool filtered by runtime', async ({ mcp }) => {
       const result = await mcp.tools.call('browser_only_tool', { msg: 'hello' });
 
       expect(result).toBeError();
+      expect(result).toHaveTextContent('not available in the current environment');
     });
 
     test('should return error when calling a tool filtered by deployment', async ({ mcp }) => {
       const result = await mcp.tools.call('serverless_only_tool', { msg: 'hello' });
 
       expect(result).toBeError();
+      expect(result).toHaveTextContent('not available in the current environment');
     });
 
     test('should return error when calling a tool where AND constraint fails', async ({ mcp }) => {
       const result = await mcp.tools.call('multi_constraint_fail_tool', { msg: 'hello' });
 
       expect(result).toBeError();
+      expect(result).toHaveTextContent('not available in the current environment');
     });
   });
 
@@ -231,6 +235,7 @@ test.describe('Environment Awareness E2E', () => {
       const result = await mcp.tools.call('production_only_tool', { msg: 'hi' });
 
       expect(result).toBeError();
+      expect(result).toHaveTextContent('not available in the current environment');
     });
   });
 });

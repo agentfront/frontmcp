@@ -51,5 +51,6 @@ test.describe('Environment Awareness — NODE_ENV=development', () => {
     const result = await mcp.tools.call('test_env_only_tool', { msg: 'nope' });
 
     expect(result).toBeError();
+    expect(result).toHaveTextContent('not available in the current environment');
   });
 });

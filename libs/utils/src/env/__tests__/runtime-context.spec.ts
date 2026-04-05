@@ -131,7 +131,8 @@ describe('runtime-context', () => {
         process.env['NODE_ENV'] = 'test';
         expect(detectRuntimeContext().env).toBe('test');
       } finally {
-        process.env['NODE_ENV'] = original;
+        if (original === undefined) delete process.env['NODE_ENV'];
+        else process.env['NODE_ENV'] = original;
       }
     });
 
@@ -141,7 +142,8 @@ describe('runtime-context', () => {
         delete process.env['NODE_ENV'];
         expect(detectRuntimeContext().env).toBe('development');
       } finally {
-        process.env['NODE_ENV'] = original;
+        if (original === undefined) delete process.env['NODE_ENV'];
+        else process.env['NODE_ENV'] = original;
       }
     });
   });
