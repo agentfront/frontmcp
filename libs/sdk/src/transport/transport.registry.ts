@@ -163,6 +163,18 @@ export class TransportService {
     }
   }
 
+  /**
+   * Ping the session store to check connectivity.
+   * Returns true if no session store is configured (in-memory only).
+   */
+  async pingSessionStore(): Promise<boolean> {
+    if (!this.sessionStore) return true;
+    if (typeof this.sessionStore.ping === 'function') {
+      return this.sessionStore.ping();
+    }
+    return true;
+  }
+
   async getTransporter(type: TransportType, token: string, sessionId: string): Promise<Transporter | undefined> {
     const key = this.keyOf(type, token, sessionId);
 

@@ -18,6 +18,7 @@ import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError, ServerNotFoundError } from '../errors';
 import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
 import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
+import type { FrontMcpServerInstance } from '../server/server.instance';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -56,6 +57,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     if (!server) {
       throw new ServerNotFoundError();
     }
+
+    // Wire health service from the first scope (if available)
+    this.wireHealthService(server);
+
     await server.start();
 
     // Emit server-started lifecycle event to all scopes
@@ -77,6 +82,18 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   getScopes(): ScopeEntry[] {
     return this.scopes.getScopes();
+  }
+
+  /**
+   * Wire the health service from the first scope into the server instance.
+   * Called before server.start() or server.prepare() to register health routes.
+   */
+  private wireHealthService(server: FrontMcpServer): void {
+    const scopes = this.getScopes() as Scope[];
+    const firstScope = scopes[0];
+    if (firstScope?.healthService && typeof (server as FrontMcpServerInstance).setHealthService === 'function') {
+      (server as FrontMcpServerInstance).setHealthService(firstScope.healthService, this.config.health ?? {});
+    }
   }
 
   public static async bootstrap(options: FrontMcpConfigInput | FrontMcpConfigType) {
@@ -116,6 +133,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
     if (!server) {
       throw new ServerNotFoundError();
     }
+
+    // Wire health service for serverless mode
+    frontMcp.wireHealthService(server);
 
     server.prepare();
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');
