@@ -9,6 +9,7 @@
  * - Session state updates after skill changes
  */
 import { test, expect } from '@frontmcp/testing';
+import { loadSkills } from './helpers/skills-protocol';
 
 interface SkillResult {
   id: string;
@@ -67,14 +68,14 @@ test.describe('Multi-Skill Loading E2E', () => {
 
   test.describe('Loading Multiple Skills', () => {
     test('should load first skill and return skill content', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.id).toBe('review-pr');
       expect(skill.availableTools).toContain('github_get_pr');
@@ -88,20 +89,20 @@ test.describe('Multi-Skill Loading E2E', () => {
 
     test('should load second skill after first', async ({ mcp }) => {
       // Load first skill
-      const firstResult = await mcp.tools.call('loadSkills', {
+      const firstResult = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
-      expect(firstResult).toBeSuccessful();
+      expect(firstResult).toBeDefined();
 
       // Load second skill
-      const secondResult = await mcp.tools.call('loadSkills', {
+      const secondResult = await loadSkills(mcp, {
         skillIds: ['notify-team'],
         activateSession: true,
       });
-      expect(secondResult).toBeSuccessful();
+      expect(secondResult).toBeDefined();
 
-      const content = secondResult.json<LoadSkillsResult>();
+      const content = secondResult as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.id).toBe('notify-team');
       expect(skill.availableTools).toContain('slack_notify');
@@ -109,18 +110,18 @@ test.describe('Multi-Skill Loading E2E', () => {
 
     test('should track tool availability from both skills', async ({ mcp }) => {
       // Load review-pr skill
-      const reviewResult = await mcp.tools.call('loadSkills', {
+      const reviewResult = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
-      expect(reviewResult).toBeSuccessful();
-      const reviewContent = reviewResult.json<LoadSkillsResult>();
+      expect(reviewResult).toBeDefined();
+      const reviewContent = reviewResult as LoadSkillsResult;
 
       // Load notify-team skill
-      const notifyResult = await mcp.tools.call('loadSkills', {
+      const notifyResult = await loadSkills(mcp, {
         skillIds: ['notify-team'],
       });
-      expect(notifyResult).toBeSuccessful();
-      const notifyContent = notifyResult.json<LoadSkillsResult>();
+      expect(notifyResult).toBeDefined();
+      const notifyContent = notifyResult as LoadSkillsResult;
 
       // Review skill should have github tools
       expect(reviewContent.skills[0].availableTools).toContain('github_get_pr');
@@ -131,14 +132,14 @@ test.describe('Multi-Skill Loading E2E', () => {
     });
 
     test('should load full-pr-workflow skill with all tools', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['full-pr-workflow'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.id).toBe('full-pr-workflow');
 
@@ -152,14 +153,14 @@ test.describe('Multi-Skill Loading E2E', () => {
 
   test.describe('Session Activation', () => {
     test('should include session object when activateSession is true and session context exists', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // Session object may or may not be present depending on session context availability
       // When present, it should have an activated field
@@ -169,29 +170,29 @@ test.describe('Multi-Skill Loading E2E', () => {
     });
 
     test('should not include session object when activateSession is false', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: false,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // Session should not be present when activateSession is false
       expect(skill.session).toBeUndefined();
     });
 
     test('should respect policyMode parameter when session is activated', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
         policyMode: 'strict',
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // If session was activated, policyMode should be set
       if (skill.session?.activated) {
@@ -200,14 +201,14 @@ test.describe('Multi-Skill Loading E2E', () => {
     });
 
     test('should default to permissive policyMode when session is activated', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // If session was activated, default policyMode should be permissive
       if (skill.session?.activated) {
@@ -219,11 +220,11 @@ test.describe('Multi-Skill Loading E2E', () => {
   test.describe('Tool Execution After Skill Loading', () => {
     test('should execute tool from loaded skill', async ({ mcp }) => {
       // Load review-pr skill
-      const loadResult = await mcp.tools.call('loadSkills', {
+      const loadResult = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
-      expect(loadResult).toBeSuccessful();
+      expect(loadResult).toBeDefined();
 
       // Execute tool from the skill
       const toolResult = await mcp.tools.call('github_get_pr', {
@@ -237,16 +238,16 @@ test.describe('Multi-Skill Loading E2E', () => {
 
     test('should execute tools from different loaded skills', async ({ mcp }) => {
       // Load review-pr skill
-      const reviewLoad = await mcp.tools.call('loadSkills', {
+      const reviewLoad = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
-      expect(reviewLoad).toBeSuccessful();
+      expect(reviewLoad).toBeDefined();
 
       // Load notify-team skill
-      const notifyLoad = await mcp.tools.call('loadSkills', {
+      const notifyLoad = await loadSkills(mcp, {
         skillIds: ['notify-team'],
       });
-      expect(notifyLoad).toBeSuccessful();
+      expect(notifyLoad).toBeDefined();
 
       // Execute github tool
       const ghResult = await mcp.tools.call('github_get_pr', {
@@ -268,31 +269,31 @@ test.describe('Multi-Skill Loading E2E', () => {
 
   test.describe('Skill Incompleteness', () => {
     test('should identify incomplete skill with missing tools', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['deploy-app'],
         activateSession: true,
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.id).toBe('deploy-app');
       expect(skill.isComplete).toBe(false);
       expect(skill.missingTools).toContain('docker_build');
       expect(skill.missingTools).toContain('docker_push');
       expect(skill.missingTools).toContain('k8s_apply');
-      expect(skill.warning).toBeDefined();
+      expect(content.summary.combinedWarnings).toBeDefined();
     });
 
     test('should still include available tools for incomplete skill', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['deploy-app'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       // slack_notify is available even though other tools are missing
       expect(skill.availableTools).toContain('slack_notify');
@@ -321,13 +322,13 @@ test.describe('Multi-Skill Loading E2E', () => {
 
   test.describe('Format Options', () => {
     test('should return full format by default', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.formattedContent).toBeDefined();
       expect(skill.id).toBeDefined();
@@ -335,14 +336,14 @@ test.describe('Multi-Skill Loading E2E', () => {
     });
 
     test('should return instructions-only format when requested', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         format: 'instructions-only',
       });
 
-      expect(result).toBeSuccessful();
+      expect(result).toBeDefined();
 
-      const content = result.json<LoadSkillsResult>();
+      const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.formattedContent).toBeDefined();
       // Instructions-only format should be the raw instructions
@@ -352,32 +353,32 @@ test.describe('Multi-Skill Loading E2E', () => {
 
   test.describe('Error Handling', () => {
     test('should return warning for non-existent skill', async ({ mcp }) => {
-      const result = await mcp.tools.call('loadSkills', {
+      const result = await loadSkills(mcp, {
         skillIds: ['non-existent-skill-xyz'],
       });
 
-      expect(result).toBeSuccessful();
-      const content = result.json<LoadSkillsResult>();
+      expect(result).toBeDefined();
+      const content = result as LoadSkillsResult;
       expect(content.skills.length).toBe(0);
       expect(content.summary.combinedWarnings).toBeDefined();
     });
 
     test('should handle loading same skill twice', async ({ mcp }) => {
       // Load skill first time
-      const firstLoad = await mcp.tools.call('loadSkills', {
+      const firstLoad = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
-      expect(firstLoad).toBeSuccessful();
+      expect(firstLoad).toBeDefined();
 
       // Load same skill again - should succeed
-      const secondLoad = await mcp.tools.call('loadSkills', {
+      const secondLoad = await loadSkills(mcp, {
         skillIds: ['review-pr'],
         activateSession: true,
       });
-      expect(secondLoad).toBeSuccessful();
+      expect(secondLoad).toBeDefined();
 
-      const content = secondLoad.json<LoadSkillsResult>();
+      const content = secondLoad as LoadSkillsResult;
       expect(content.skills[0].id).toBe('review-pr');
     });
   });

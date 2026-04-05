@@ -55,10 +55,8 @@ export interface ExtractedSchema {
   capabilities: ExtractedCapabilities;
 }
 
-/** Known system tool names injected by SDK features (skills, jobs, workflows). */
+/** Known system tool names injected by SDK features (jobs, workflows). */
 export const SYSTEM_TOOL_NAMES = new Set([
-  'searchSkills',
-  'loadSkills',
   'list-jobs',
   'execute-job',
   'get-job-status',
@@ -164,8 +162,11 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     }));
 
     const toolNameSet = new Set(tools.map((t) => t.name));
+    const hasSkillsResources = resourceTemplates.some(
+      (rt) => rt.uriTemplate.startsWith('skills://'),
+    );
     const capabilities: ExtractedCapabilities = {
-      skills: toolNameSet.has('searchSkills') || toolNameSet.has('loadSkills'),
+      skills: hasSkillsResources,
       jobs: toolNameSet.has('execute-job') || toolNameSet.has('get-job-status'),
       workflows: toolNameSet.has('execute-workflow') || toolNameSet.has('get-workflow-status'),
     };

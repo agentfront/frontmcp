@@ -6,7 +6,7 @@ This directory implements the Skill discovery and loading system. It covers:
 - Discovery via TF-IDF search
 - Session-based tool authorization
 - Tool validation at initialization and load time
-- MCP protocol integration (`searchSkills`, `loadSkill`)
+- MCP resource integration (`skills://` URI scheme)
 
 The README is intended for contributors who want to add skills, integrate external skill providers, or extend the session/authorization system.
 
@@ -83,10 +83,17 @@ Key differences from tools:
 
 Skills are exposed through multiple MCP interfaces:
 
-**MCP Tools (for LLMs):**
+**MCP Resources (`skills://` URI scheme):**
 
-- **tools/search-skills.tool.ts** - `searchSkills` tool definition
-- **tools/load-skill.tool.ts** - `loadSkill` tool definition
+- **resources/skills-catalog.resource.ts** - `skills://catalog` static resource (list all skills)
+- **resources/skill-content.resource.ts** - `skills://{skillName}` template (load skill SKILL.md)
+- **resources/skill-content-alias.resource.ts** - `skills://{skillName}/SKILL.md` template (alias)
+- **resources/skill-references-list.resource.ts** - `skills://{skillName}/references` template
+- **resources/skill-reference-content.resource.ts** - `skills://{skillName}/references/{referenceName}` template
+- **resources/skill-examples-list.resource.ts** - `skills://{skillName}/examples` template
+- **resources/skill-example-content.resource.ts** - `skills://{skillName}/examples/{exampleName}` template
+
+All resource templates support auto-complete for `skillName`, `referenceName`, and `exampleName` parameters.
 
 **MCP Flows (internal):**
 
@@ -530,10 +537,16 @@ libs/sdk/src/
 │   │   ├── index.ts
 │   │   ├── search-skills.flow.ts
 │   │   └── load-skill.flow.ts
-│   ├── tools/
+│   ├── resources/
 │   │   ├── index.ts
-│   │   ├── search-skills.tool.ts
-│   │   └── load-skill.tool.ts
+│   │   ├── skill-resource.helpers.ts
+│   │   ├── skills-catalog.resource.ts
+│   │   ├── skill-content.resource.ts
+│   │   ├── skill-content-alias.resource.ts
+│   │   ├── skill-references-list.resource.ts
+│   │   ├── skill-reference-content.resource.ts
+│   │   ├── skill-examples-list.resource.ts
+│   │   └── skill-example-content.resource.ts
 │   ├── session/
 │   │   ├── index.ts
 │   │   ├── skill-session.manager.ts

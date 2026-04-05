@@ -286,7 +286,7 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * Where this skill is visible for discovery.
    * Controls which discovery mechanisms can find this skill.
    *
-   * - 'mcp': Only via searchSkills/loadSkill MCP tools
+   * - 'mcp': Only via skills:// MCP resources (skills://catalog, skills://{skillName})
    * - 'http': Only via HTTP API endpoints (/llm.txt, /skills)
    * - 'both': Visible in both MCP and HTTP (default)
    *
@@ -294,7 +294,7 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    *
    * @default 'both'
    *
-   * @example HTTP-only skill (not visible via MCP searchSkills)
+   * @example HTTP-only skill (not visible via skills://catalog MCP resource)
    * ```typescript
    * @Skill({
    *   name: 'internal-process',

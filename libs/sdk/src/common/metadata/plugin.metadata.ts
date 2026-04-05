@@ -116,7 +116,8 @@ export interface PluginMetadata {
   /**
    * Plugin-scoped Skills that teach AI how to perform multi-step tasks.
    * Skills are workflow guides that combine tools into coherent recipes.
-   * They can be discovered via searchSkills and loaded via loadSkill.
+   * They can be discovered via the skills://catalog MCP resource
+   * and loaded via skills://{skillName} MCP resources.
    */
   skills?: SkillType[];
 
