@@ -5,6 +5,8 @@ import { ToolUIConfig } from './tool-ui.metadata';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import type { RateLimitConfig, ConcurrencyConfig, TimeoutConfig } from '@frontmcp/guard';
 import { rateLimitConfigSchema, concurrencyConfigSchema, timeoutConfigSchema } from '@frontmcp/guard';
+import type { EntryAvailability } from '@frontmcp/utils';
+import { entryAvailabilitySchema } from '@frontmcp/utils';
 
 // ============================================
 // Auth Provider Mapping for Tools
@@ -328,6 +330,24 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * ```
    */
   timeout?: TimeoutConfig;
+
+  /**
+   * Environment availability constraint.
+   * When set, the tool is only discoverable and executable in matching environments.
+   * Fields are AND-ed (all must match), values within a field are OR-ed (any can match).
+   * Omitted fields are unconstrained.
+   *
+   * @example macOS only
+   * ```typescript
+   * @Tool({ name: 'apple_notes', availableWhen: { platform: ['darwin'] } })
+   * ```
+   *
+   * @example Node.js production only
+   * ```typescript
+   * @Tool({ name: 'deploy', availableWhen: { runtime: ['node'], env: ['production'] } })
+   * ```
+   */
+  availableWhen?: EntryAvailability;
 }
 
 /**
@@ -374,5 +394,6 @@ export const frontMcpToolMetadataSchema = z
     rateLimit: rateLimitConfigSchema.optional(),
     concurrency: concurrencyConfigSchema.optional(),
     timeout: timeoutConfigSchema.optional(),
+    availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

@@ -291,6 +291,12 @@ execute() {
   },
   ui?: ToolUIConfig,         // Optional: visual widget configuration
   hideFromDiscovery?: boolean, // Optional: hide from tools/list (default: false)
+  availableWhen?: {          // Optional: environment availability constraint
+    platform?: string[];     //   - OS: 'darwin', 'linux', 'win32'
+    runtime?: string[];      //   - runtime: 'node', 'browser', 'edge', 'bun', 'deno'
+    deployment?: string[];   //   - deployment: 'serverless', 'standalone'
+    env?: string[];          //   - NODE_ENV: 'production', 'development', 'test'
+  },
 })
 ```
 
@@ -309,6 +315,7 @@ execute() {
 | `examples`          | Usage examples for discovery and LLM understanding           |
 | `ui`                | Visual widget configuration (template, display mode, etc.)   |
 | `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list` |
+| `availableWhen`     | Restrict discovery and execution to specific environments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
 
 ---
 

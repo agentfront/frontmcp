@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { Type, isClass, getMetadata } from '@frontmcp/di';
 import { isValidMcpUri } from '@frontmcp/utils';
+import type { EntryAvailability } from '@frontmcp/utils';
+import { entryAvailabilitySchema } from '@frontmcp/utils';
 import { RawZodShape } from '../types';
 import { FrontMcpToolTokens } from '../tokens';
 import type { ToolContext } from '../interfaces';
@@ -343,6 +345,17 @@ export interface SkillMetadata extends ExtendFrontMcpSkillMetadata {
    * Per Agent Skills specification.
    */
   resources?: SkillResources;
+
+  /**
+   * Environment availability constraint.
+   * When set, the skill is only discoverable and loadable in matching environments.
+   *
+   * @example macOS only skill
+   * ```typescript
+   * @Skill({ name: 'xcode-review', availableWhen: { platform: ['darwin'] } })
+   * ```
+   */
+  availableWhen?: EntryAvailability;
 }
 
 // ============================================
@@ -451,6 +464,7 @@ export const skillMetadataSchema = z
     specMetadata: z.record(z.string(), z.string()).optional(),
     allowedTools: z.string().optional(),
     resources: skillResourcesSchema.optional(),
+    availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<SkillMetadata, ExtendFrontMcpSkillMetadata>)
   .passthrough();
 

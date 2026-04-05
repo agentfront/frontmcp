@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
 import { Icon, IconSchema } from '@frontmcp/protocol';
+import type { EntryAvailability } from '@frontmcp/utils';
+import { entryAvailabilitySchema } from '@frontmcp/utils';
 
 declare global {
   /**
@@ -73,6 +75,12 @@ export interface FrontMcpPromptMetadata extends ExtendFrontMcpPromptMetadata {
    * A list of icons that can be used to represent this resource template.
    */
   icons?: Icon[];
+
+  /**
+   * Environment availability constraint.
+   * When set, the prompt is only discoverable and usable in matching environments.
+   */
+  availableWhen?: EntryAvailability;
 }
 
 export const frontMcpPromptMetadataSchema = z
@@ -82,6 +90,7 @@ export const frontMcpPromptMetadataSchema = z
     description: z.string().optional(),
     arguments: z.array(promptArgumentSchema).optional(),
     icons: z.array(IconSchema).optional(),
+    availableWhen: entryAvailabilitySchema.optional(),
   } satisfies RawZodShape<FrontMcpPromptMetadata, ExtendFrontMcpPromptMetadata>)
   .passthrough();
 

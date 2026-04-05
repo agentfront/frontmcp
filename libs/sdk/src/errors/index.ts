@@ -7,6 +7,8 @@ export {
   // Tool errors
   ToolNotFoundError,
   ToolExecutionError,
+  // Availability errors
+  EntryUnavailableError,
   // Resource errors
   ResourceNotFoundError,
   ResourceReadError,

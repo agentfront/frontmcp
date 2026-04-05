@@ -50,7 +50,7 @@ export default [
             '@frontmcp/uipack/*',
             '@frontmcp/protocol',
             '@frontmcp/testing',
-            '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|stdio-.+|env|path)$',
+            '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|stdio-.+|env|runtime-context|path)$',
           ],
           depConstraints: [
             {
