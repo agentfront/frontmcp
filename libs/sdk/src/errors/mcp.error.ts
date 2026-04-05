@@ -167,8 +167,15 @@ export class EntryUnavailableError extends PublicMcpError {
   readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
 
   constructor(entryType: string, entryName: string, availability?: unknown, runtimeContext?: unknown) {
-    const constraint = availability ? ` (requires: ${JSON.stringify(availability)})` : '';
-    const current = runtimeContext ? ` (current: ${JSON.stringify(runtimeContext)})` : '';
+    const safeStringify = (v: unknown): string => {
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
+    };
+    const constraint = availability ? ` (requires: ${safeStringify(availability)})` : '';
+    const current = runtimeContext ? ` (current: ${safeStringify(runtimeContext)})` : '';
     super(
       `${entryType} "${entryName}" is not available in the current environment${constraint}${current}`,
       'ENTRY_UNAVAILABLE',

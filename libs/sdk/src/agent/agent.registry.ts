@@ -324,10 +324,19 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
   }
 
   /**
-   * List all instances (locals + adopted).
+   * List all instances (locals + adopted) — unfiltered.
    */
   listAllInstances(): readonly AgentInstance[] {
     return this.listAllIndexed().map((r) => r.instance);
+  }
+
+  /**
+   * List available instances (locals + adopted), filtered by availability.
+   * Used by discovery/listing APIs to enforce registry-level constraints.
+   */
+  private getAvailableInstances(): AgentInstance[] {
+    const ctx = getRuntimeContext();
+    return [...this.listAllInstances()].filter((a) => isEntryAvailable(a.metadata.availableWhen, ctx));
   }
 
   /**
@@ -359,7 +368,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     if (!canSeeSwarm) return [];
 
     const visibleIds = agent.getVisibleAgentIds();
-    const allAgents = this.listAllInstances();
+    const allAgents = this.getAvailableInstances();
 
     return allAgents.filter((a) => {
       // Don't include self
@@ -383,7 +392,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
    * Each agent is exposed as a tool with name `use-agent:<agent_id>`.
    */
   getAgentsAsTools(): Tool[] {
-    return this.listAllInstances()
+    return this.getAvailableInstances()
       .filter((a) => a.isVisibleToSwarm())
       .map((a) => a.getToolDefinition());
   }

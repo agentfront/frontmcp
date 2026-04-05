@@ -218,33 +218,33 @@ export abstract class ExecutionContextBase<Out = unknown> {
 
   /**
    * Check if running on a specific OS platform.
-   * @param platform - 'darwin' (macOS), 'linux', 'win32' (Windows), 'browser', etc.
+   * @param platform - 'darwin' (macOS), 'linux', 'win32' (Windows), etc.
    */
-  isPlatform(platform: string): boolean {
-    return getRuntimeContext().platform === platform;
+  isPlatform(platform: RuntimeContext['platform']): boolean {
+    return this.runtimeContext.platform === platform;
   }
 
   /**
    * Check if running in a specific JavaScript runtime.
    * @param runtime - 'node', 'browser', 'edge', 'bun', 'deno'
    */
-  isRuntime(runtime: string): boolean {
-    return getRuntimeContext().runtime === runtime;
+  isRuntime(runtime: RuntimeContext['runtime']): boolean {
+    return this.runtimeContext.runtime === runtime;
   }
 
   /**
    * Check if running in a specific deployment mode.
    * @param deployment - 'serverless' or 'standalone'
    */
-  isDeployment(deployment: string): boolean {
-    return getRuntimeContext().deployment === deployment;
+  isDeployment(deployment: RuntimeContext['deployment']): boolean {
+    return this.runtimeContext.deployment === deployment;
   }
 
   /**
    * Check if running in a specific environment.
    * @param env - 'production', 'development', 'test', etc.
    */
-  isEnv(env: string): boolean {
-    return getRuntimeContext().env === env;
+  isEnv(env: RuntimeContext['env']): boolean {
+    return this.runtimeContext.env === env;
   }
 }

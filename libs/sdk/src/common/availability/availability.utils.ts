@@ -88,7 +88,7 @@ export function logAvailabilityFiltering<T extends { name: string; metadata: { a
   // Warn about empty constraint arrays
   for (const entry of emptyConstraints) {
     const aw = entry.metadata.availableWhen;
-    const emptyFields = fields.filter((f) => aw?.[f] && aw[f]!.length === 0);
+    const emptyFields = fields.filter((f) => aw?.[f]?.length === 0);
     logger.warn(
       `[${registryKind}] "${entry.name}" has empty availableWhen arrays ` +
         `for [${emptyFields.join(', ')}] — this entry will never be available. ` +

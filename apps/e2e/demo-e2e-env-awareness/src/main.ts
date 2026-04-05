@@ -1,7 +1,9 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { EnvAwareApp } from './apps/env-aware';
 
-const port = parseInt(process.env['PORT'] ?? '3150', 10);
+const DEFAULT_PORT = 3150;
+const parsedPort = Number(process.env['PORT']);
+const port = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : DEFAULT_PORT;
 
 /**
  * E2E Test Server for Environment Awareness

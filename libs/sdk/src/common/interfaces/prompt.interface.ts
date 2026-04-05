@@ -138,22 +138,22 @@ export abstract class PromptContext {
   }
 
   /** Check if running on a specific OS platform. */
-  isPlatform(platform: string): boolean {
-    return getRuntimeContext().platform === platform;
+  isPlatform(platform: RuntimeContext['platform']): boolean {
+    return this.runtimeContext.platform === platform;
   }
 
   /** Check if running in a specific JavaScript runtime. */
-  isRuntime(runtime: string): boolean {
-    return getRuntimeContext().runtime === runtime;
+  isRuntime(runtime: RuntimeContext['runtime']): boolean {
+    return this.runtimeContext.runtime === runtime;
   }
 
   /** Check if running in a specific deployment mode. */
-  isDeployment(deployment: string): boolean {
-    return getRuntimeContext().deployment === deployment;
+  isDeployment(deployment: RuntimeContext['deployment']): boolean {
+    return this.runtimeContext.deployment === deployment;
   }
 
   /** Check if running in a specific environment. */
-  isEnv(env: string): boolean {
-    return getRuntimeContext().env === env;
+  isEnv(env: RuntimeContext['env']): boolean {
+    return this.runtimeContext.env === env;
   }
 }

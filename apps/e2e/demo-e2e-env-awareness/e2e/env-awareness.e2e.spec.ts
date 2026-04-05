@@ -80,7 +80,7 @@ test.describe('Environment Awareness E2E', () => {
   });
 
   // ================================================================
-  // Tool Execution
+  // Tool Execution (including hidden tool invocation)
   // ================================================================
 
   test.describe('Tool Execution', () => {
@@ -96,6 +96,14 @@ test.describe('Environment Awareness E2E', () => {
 
       expect(result).toBeSuccessful();
       expect(result).toHaveTextContent(process.platform);
+    });
+
+    test('should execute hidden tool that matches availableWhen (soft hide, not hard block)', async ({ mcp }) => {
+      // hideFromDiscovery is a soft hide — tool should still be callable directly
+      const result = await mcp.tools.call('hidden_but_available', { msg: 'secret' });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('hidden but available');
     });
 
     test('should execute a tool with multiple matching constraints', async ({ mcp }) => {

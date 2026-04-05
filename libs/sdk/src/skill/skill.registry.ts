@@ -495,6 +495,12 @@ export default class SkillRegistry
     }
 
     if (localSkill) {
+      // Gate by availability — same constraint as getSkills()
+      const ctx = getRuntimeContext();
+      if (!isEntryAvailable(localSkill.metadata.availableWhen, ctx)) {
+        return undefined;
+      }
+
       const instance = localSkill as SkillInstance;
       const content = await instance.load();
       const toolNames = instance.getToolNames();

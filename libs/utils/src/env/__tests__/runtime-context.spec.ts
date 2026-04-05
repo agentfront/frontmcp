@@ -118,6 +118,32 @@ describe('runtime-context', () => {
       const ctx = detectRuntimeContext();
       expect(ctx.deployment).toBe('standalone');
     });
+
+    it('env matches NODE_ENV when set', () => {
+      const original = process.env['NODE_ENV'];
+      try {
+        process.env['NODE_ENV'] = 'production';
+        expect(detectRuntimeContext().env).toBe('production');
+
+        process.env['NODE_ENV'] = 'development';
+        expect(detectRuntimeContext().env).toBe('development');
+
+        process.env['NODE_ENV'] = 'test';
+        expect(detectRuntimeContext().env).toBe('test');
+      } finally {
+        process.env['NODE_ENV'] = original;
+      }
+    });
+
+    it('env defaults to "development" when NODE_ENV is unset', () => {
+      const original = process.env['NODE_ENV'];
+      try {
+        delete process.env['NODE_ENV'];
+        expect(detectRuntimeContext().env).toBe('development');
+      } finally {
+        process.env['NODE_ENV'] = original;
+      }
+    });
   });
 
   // ---- getRuntimeContext (singleton) ----
