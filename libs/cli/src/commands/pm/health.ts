@@ -10,12 +10,15 @@ export interface HealthCheckResult {
   statusCode?: number;
   responseTime: number;
   error?: string;
+  body?: Record<string, unknown>;
 }
 
 export function checkHealth(opts: {
   port?: number;
   socketPath?: string;
   timeout?: number;
+  /** Endpoint to check: '/health', '/healthz', or '/readyz'. Defaults to '/health'. */
+  endpoint?: string;
 }): Promise<HealthCheckResult> {
   const timeout = opts.timeout ?? 5000;
   const start = Date.now();
@@ -23,7 +26,7 @@ export function checkHealth(opts: {
   return new Promise((resolve) => {
     const requestOpts: http.RequestOptions = {
       method: 'GET',
-      path: '/health',
+      path: opts.endpoint ?? '/health',
       timeout,
     };
 
@@ -43,12 +46,30 @@ export function checkHealth(opts: {
 
     const req = http.request(requestOpts, (res) => {
       const responseTime = Date.now() - start;
-      resolve({
-        healthy: res.statusCode === 200,
-        statusCode: res.statusCode,
-        responseTime,
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        let body: Record<string, unknown> | undefined;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        } catch {
+          // Ignore parse errors — body is optional
+        }
+        resolve({
+          healthy: res.statusCode === 200,
+          statusCode: res.statusCode,
+          responseTime,
+          body,
+        });
       });
-      res.resume(); // drain the response
+      res.on('error', (err) => {
+        resolve({
+          healthy: false,
+          statusCode: res.statusCode,
+          responseTime,
+          error: err.message,
+        });
+      });
     });
 
     req.on('error', (err) => {

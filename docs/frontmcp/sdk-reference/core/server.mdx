@@ -186,20 +186,34 @@ export default FrontMcpInstance.createHandler(config);
 })
 ```
 
-## Health Endpoint
+## Health & Readiness Endpoints
 
-FrontMCP automatically registers a `/health` endpoint:
+FrontMCP automatically registers health and readiness endpoints:
 
 ```bash
+# Liveness probe (lightweight, no I/O)
+curl http://localhost:3001/healthz
+# {"status":"ok","server":{"name":"my-server","version":"1.0.0"},"runtime":{"platform":"linux","runtime":"node",...},"uptime":42.5}
+
+# Readiness probe (deep dependency checks)
+curl http://localhost:3001/readyz
+# {"status":"ready","totalLatencyMs":15,"catalog":{"toolsHash":"a1b2...","toolCount":5,...},"probes":{"session-store":{"status":"healthy","latencyMs":3}}}
+
+# Legacy endpoint (alias for /healthz)
 curl http://localhost:3001/health
-# {"status":"ok"}
 ```
 
-This is useful for:
+| Endpoint | Purpose | I/O | Runtime |
+| --- | --- | --- | --- |
+| `/healthz` | Liveness probe | None | All |
+| `/readyz` | Readiness probe with dependency checks | Yes | Node, Bun, Deno, Browser |
+| `/health` | Legacy alias for `/healthz` | None | All |
 
-- Load balancer health checks
-- Kubernetes liveness probes
-- Monitoring systems
+The readiness endpoint automatically discovers and probes session stores (Redis/Vercel KV) and remote MCP app connections. Add custom probes for databases and APIs via `health.probes`.
+
+<Card title="Health Checks Guide" icon="heart-pulse" href="/frontmcp/deployment/health-checks">
+  Full configuration, custom probes, Kubernetes & Docker examples
+</Card>
 
 ## Related
 

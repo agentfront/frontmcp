@@ -62,6 +62,13 @@ export class TransportService {
   private pendingStoreConfig?: RedisOptions;
 
   /**
+   * Whether a session store backend was configured (regardless of current connection state).
+   * Set once during constructor when persistence config has redis.
+   * Used by pingSessionStore() to distinguish "not configured" from "configured but unavailable".
+   */
+  private readonly sessionStoreConfigured: boolean = false;
+
+  /**
    * Mutex map for preventing concurrent transport creation for the same key.
    * Key: JSON-encoded {t: type, h: tokenHash, s: sessionId}, Value: Promise that resolves when creation completes
    */
@@ -87,6 +94,8 @@ export class TransportService {
     // Initialize session store if persistence is enabled (Redis or Vercel KV)
     // Simplified format: false = disabled, object with redis = enabled, undefined = not configured
     if (persistenceConfig !== false && persistenceConfig?.redis) {
+      this.sessionStoreConfigured = true;
+
       // Use factory to create appropriate session store based on provider
       const redisConfig = persistenceConfig.redis;
       const providerType = 'provider' in redisConfig ? redisConfig.provider : 'redis';
@@ -161,6 +170,23 @@ export class TransportService {
         });
       }
     }
+  }
+
+  /**
+   * Ping the session store to check connectivity.
+   *
+   * Returns:
+   * - `true` if no persistence backend was configured (in-memory only)
+   * - `false` if a backend was configured but is unavailable (creation failed or disconnected)
+   * - the result of `store.ping()` if the backend is present and reachable
+   */
+  async pingSessionStore(): Promise<boolean> {
+    if (!this.sessionStoreConfigured) return true;
+    if (!this.sessionStore) return false; // configured but unavailable
+    if (typeof this.sessionStore.ping === 'function') {
+      return this.sessionStore.ping();
+    }
+    return true;
   }
 
   async getTransporter(type: TransportType, token: string, sessionId: string): Promise<Transporter | undefined> {

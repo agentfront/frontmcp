@@ -136,6 +136,7 @@
                   "frontmcp/deployment/direct-client",
                   "frontmcp/deployment/unix-socket",
                   "frontmcp/deployment/serverless",
+                  "frontmcp/deployment/health-checks",
                   "frontmcp/deployment/browser-compatibility",
                   {
                     "group": "Storage",
