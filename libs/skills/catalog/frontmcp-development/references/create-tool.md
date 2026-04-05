@@ -486,6 +486,67 @@ Auth provider mapping fields:
 - `scopes?` — Required OAuth scopes
 - `alias?` — Alias for injection when using multiple providers
 
+## Environment Availability
+
+Restrict a tool to specific platforms, runtimes, or environments using `availableWhen`. The tool will be automatically filtered from discovery and blocked from execution when the constraint doesn't match.
+
+> **Important:** `availableWhen` is a **registry-level** constraint, evaluated at server boot time against the process's runtime context (OS, runtime, deployment mode, NODE_ENV). This is fundamentally different from:
+>
+> - **Authorization** — per-request, evaluated in HTTP flows against session/user identity
+> - **Rule-based filtering** — dynamic, policy-driven, evaluated at request time
+> - **`hideFromDiscovery`** — a soft hide from listing; hidden tools can still be called directly
+>
+> `availableWhen` is a **hard constraint**: filtered tools are excluded from both listing AND execution. Results are logged at boot time for operational visibility.
+
+```typescript
+// macOS-only tool
+@Tool({
+  name: 'apple_notes_search',
+  description: 'Search Apple Notes',
+  inputSchema: { query: z.string() },
+  availableWhen: { platform: ['darwin'] },
+})
+class AppleNotesSearchTool extends ToolContext {
+  async execute(input: { query: string }) {
+    // Only runs on macOS
+  }
+}
+
+// Node.js production-only tool
+@Tool({
+  name: 'deploy_service',
+  description: 'Deploy to production',
+  inputSchema: { service: z.string() },
+  availableWhen: { runtime: ['node'], env: ['production'] },
+})
+class DeployServiceTool extends ToolContext {
+  async execute(input: { service: string }) {
+    // Only available in Node.js production
+  }
+}
+```
+
+Available constraint fields (AND across fields, OR within arrays):
+
+- `platform` — OS: `'darwin'`, `'linux'`, `'win32'`
+- `runtime` — JS runtime: `'node'`, `'browser'`, `'edge'`, `'bun'`, `'deno'`
+- `deployment` — Mode: `'serverless'`, `'standalone'`
+- `env` — NODE_ENV: `'production'`, `'development'`, `'test'`
+
+You can also check the platform imperatively inside `execute()`:
+
+```typescript
+if (this.isPlatform('darwin')) {
+  /* macOS logic */
+}
+if (this.isRuntime('node')) {
+  /* Node.js logic */
+}
+if (this.isEnv('production')) {
+  /* production logic */
+}
+```
+
 ## Elicitation (Interactive Input)
 
 Tools can request interactive input from users mid-execution using `this.elicit()`. Requires `elicitation` to be enabled at server level.

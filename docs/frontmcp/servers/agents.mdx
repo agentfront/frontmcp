@@ -168,6 +168,23 @@ class MyApp {}
 
 ---
 
+## Environment Availability
+
+Restrict when an agent is discoverable and invocable using `availableWhen`:
+
+```ts
+@Agent({
+  name: 'local-build-agent',
+  llm: { provider: 'openai', model: 'gpt-4-turbo', apiKey: { env: 'OPENAI_API_KEY' } },
+  availableWhen: { runtime: ['node'], deployment: ['standalone'] },
+})
+class LocalBuildAgent extends AgentContext { ... }
+```
+
+See [Environment Awareness](/frontmcp/features/environment-awareness) for the full reference.
+
+---
+
 ## LLM Configuration
 
 Agents require an LLM configuration. FrontMCP provides **native adapters** for OpenAI and Anthropic SDKs with built-in retry logic, streaming support, and token tracking.

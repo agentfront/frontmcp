@@ -4,7 +4,8 @@ import { Token, tokenName, getMetadata } from '@frontmcp/di';
 import { AppEntry, EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptType, ScopeEntry } from '../common';
 import { PromptChangeEvent, PromptEmitter } from './prompt.events';
 import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor } from '@frontmcp/utils';
+import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+import { logAvailabilityFiltering } from '../common/availability';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizePrompt, promptDiscoveryDeps } from './prompt.utils';
@@ -138,6 +139,10 @@ export default class PromptRegistry extends RegistryAbstract<
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
+
+    // Log availability filtering at boot (registry-level, not HTTP/flow-level auth)
+    logAvailabilityFiltering('PromptRegistry', this.listAllInstances(), scope.logger);
+
     this.bump('reset');
 
     // Register prompt flows with the scope
@@ -242,10 +247,12 @@ export default class PromptRegistry extends RegistryAbstract<
    * Get all prompts
    */
   getPrompts(includeHidden = false): PromptEntry[] {
+    const ctx = getRuntimeContext();
     const all = this.listAllIndexed();
     return all
       .filter((r) => {
         const meta = r.instance.metadata;
+        if (!isEntryAvailable(meta.availableWhen, ctx)) return false;
         const hidden =
           'hideFromDiscovery' in meta && (meta as { hideFromDiscovery?: boolean }).hideFromDiscovery === true;
         return !hidden || includeHidden;

@@ -23,6 +23,8 @@ import type { ExternalSkillProviderBase } from './providers/external-skill.provi
 import type { SyncResult } from './sync/sync-state.interface';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { ServerCapabilities } from '@frontmcp/protocol';
+import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+import { logAvailabilityFiltering } from '../common/availability';
 import { SkillValidationError, SkillValidationResult, SkillValidationReport } from './errors/skill-validation.error';
 
 /**
@@ -340,6 +342,14 @@ export default class SkillRegistry
 
     // Build indexes
     this.reindex();
+
+    // Log availability filtering at boot (registry-level, not HTTP/flow-level auth)
+    logAvailabilityFiltering(
+      'SkillRegistry',
+      this.listAllIndexed().map((r) => r.instance),
+      this.scope.logger,
+    );
+
     this.bump('reset');
   }
 
@@ -422,6 +432,10 @@ export default class SkillRegistry
       });
     }
 
+    // Filter by environment availability
+    const ctx = getRuntimeContext();
+    skills = skills.filter((s) => isEntryAvailable(s.metadata.availableWhen, ctx));
+
     return skills;
   }
 
@@ -481,6 +495,12 @@ export default class SkillRegistry
     }
 
     if (localSkill) {
+      // Gate by availability — same constraint as getSkills()
+      const ctx = getRuntimeContext();
+      if (!isEntryAvailable(localSkill.metadata.availableWhen, ctx)) {
+        return undefined;
+      }
+
       const instance = localSkill as SkillInstance;
       const content = await instance.load();
       const toolNames = instance.getToolNames();

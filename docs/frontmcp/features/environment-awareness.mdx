@@ -1,0 +1,290 @@
+---
+title: Environment Awareness
+slug: features/environment-awareness
+icon: microchip
+description: Conditionally expose tools, resources, prompts, skills, and agents based on platform, runtime, and environment
+---
+
+FrontMCP's environment-awareness system lets you **declaratively restrict** when entries (tools, resources, prompts, skills, agents) are discoverable and executable, based on the runtime environment. Entries that don't match the current environment are automatically filtered from discovery and blocked from execution.
+
+<Info>
+This enables platform-specific tools (e.g., Apple Notes on macOS only), runtime-specific resources (e.g., Node.js file system), and environment-gated features (e.g., debug tools in development only).
+</Info>
+
+---
+
+## The `availableWhen` Option
+
+Add `availableWhen` to any entry's metadata to constrain its availability:
+
+```ts
+@Tool({
+  name: 'apple_notes_search',
+  description: 'Search Apple Notes',
+  inputSchema: { query: z.string() },
+  availableWhen: { platform: ['darwin'] },
+})
+class AppleNotesSearchTool extends ToolContext {
+  async execute({ query }: { query: string }) {
+    // This tool only appears on macOS
+  }
+}
+```
+
+### Matching Semantics
+
+- **AND across fields** — all specified fields must match
+- **OR within arrays** — at least one value in an array must match
+- **Omitted fields** — unconstrained (matches everything)
+- **Empty array** — matches nothing (entry is never available)
+- **No `availableWhen`** — always available (default)
+
+```ts
+// Matches: Node.js OR Bun, AND production only
+availableWhen: {
+  runtime: ['node', 'bun'],
+  env: ['production'],
+}
+```
+
+---
+
+## Available Fields
+
+### `platform`
+
+Operating system, matching [`process.platform`](https://nodejs.org/api/process.html#processplatform) values:
+
+| Value       | OS              |
+| ----------- | --------------- |
+| `'darwin'`  | macOS           |
+| `'linux'`   | Linux           |
+| `'win32'`   | Windows         |
+| `'freebsd'` | FreeBSD         |
+
+### `runtime`
+
+JavaScript runtime:
+
+| Value        | Runtime                     |
+| ------------ | --------------------------- |
+| `'node'`     | Node.js                     |
+| `'bun'`      | Bun                         |
+| `'deno'`     | Deno                        |
+| `'edge'`     | Edge runtime (Vercel, CF)   |
+| `'browser'`  | Browser                     |
+
+### `deployment`
+
+Deployment mode:
+
+| Value           | Description                  |
+| --------------- | ---------------------------- |
+| `'standalone'`  | Standard server              |
+| `'serverless'`  | Serverless (Lambda, Vercel)  |
+
+### `env`
+
+`NODE_ENV` value:
+
+| Value            | Description                  |
+| ---------------- | ---------------------------- |
+| `'production'`   | Production                   |
+| `'development'`  | Development                  |
+| `'test'`         | Testing                      |
+
+---
+
+## Supported Entry Types
+
+`availableWhen` works on all five entry types:
+
+<Tabs>
+  <Tab title="Tool">
+    ```ts
+    @Tool({
+      name: 'apple_notes_search',
+      inputSchema: { query: z.string() },
+      availableWhen: { platform: ['darwin'] },
+    })
+    class AppleNotesSearchTool extends ToolContext { ... }
+    ```
+  </Tab>
+  <Tab title="Resource">
+    ```ts
+    @Resource({
+      name: 'system-info',
+      uri: 'system://info',
+      availableWhen: { platform: ['darwin', 'linux'] },
+    })
+    class SystemInfoResource extends ResourceContext { ... }
+    ```
+  </Tab>
+  <Tab title="Prompt">
+    ```ts
+    @Prompt({
+      name: 'xcode-review',
+      arguments: [{ name: 'project', required: true }],
+      availableWhen: { platform: ['darwin'] },
+    })
+    class XcodeReviewPrompt extends PromptContext { ... }
+    ```
+  </Tab>
+  <Tab title="Skill">
+    ```ts
+    @Skill({
+      name: 'ios-deploy',
+      description: 'Deploy to iOS devices',
+      instructions: { file: './skills/ios-deploy.md' },
+      availableWhen: { platform: ['darwin'] },
+    })
+    class IosDeploySkill extends SkillContext { ... }
+    ```
+  </Tab>
+  <Tab title="Agent">
+    ```ts
+    @Agent({
+      name: 'local-build-agent',
+      llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: { env: 'ANTHROPIC_API_KEY' } },
+      availableWhen: { runtime: ['node'], deployment: ['standalone'] },
+    })
+    class LocalBuildAgent extends AgentContext { ... }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Runtime Context API
+
+Inside `execute()` methods, use runtime context helpers for imperative checks:
+
+```ts
+@Tool({
+  name: 'system_command',
+  inputSchema: { cmd: z.string() },
+})
+class SystemCommandTool extends ToolContext {
+  async execute({ cmd }: { cmd: string }) {
+    if (this.isPlatform('win32')) {
+      // Windows-specific path
+      return await this.runPowershell(cmd);
+    }
+    // Unix path
+    return await this.runBash(cmd);
+  }
+}
+```
+
+### Available Methods
+
+| Method                        | Returns   | Description                                |
+| ----------------------------- | --------- | ------------------------------------------ |
+| `this.isPlatform('darwin')`   | `boolean` | Check OS platform                          |
+| `this.isRuntime('node')`      | `boolean` | Check JavaScript runtime                   |
+| `this.isDeployment('serverless')` | `boolean` | Check deployment mode                  |
+| `this.isEnv('production')`    | `boolean` | Check NODE_ENV                             |
+| `this.runtimeContext`         | `RuntimeContext` | Full context object                   |
+
+These methods are available on `ToolContext`, `ResourceContext`, `PromptContext`, and `AgentContext`.
+
+---
+
+## Multi-Platform Pattern
+
+When building tools that serve the same purpose across platforms, use separate files with `availableWhen` in each:
+
+```
+tools/
+  notes/
+    notes.darwin.tool.ts     # Apple Notes (macOS)
+    notes.win32.tool.ts      # OneNote (Windows)
+    notes.linux.tool.ts      # GNOME Notes (Linux)
+    index.ts                 # Re-exports all variants
+```
+
+```ts
+// tools/notes/notes.darwin.tool.ts
+@Tool({
+  name: 'notes_search',
+  description: 'Search notes on this system',
+  inputSchema: { query: z.string() },
+  availableWhen: { platform: ['darwin'] },
+})
+export class AppleNotesSearchTool extends ToolContext {
+  async execute({ query }) { /* Apple Notes API */ }
+}
+```
+
+```ts
+// tools/notes/index.ts
+export { AppleNotesSearchTool } from './notes.darwin.tool';
+export { OneNoteSearchTool } from './notes.win32.tool';
+export { GnomeNotesSearchTool } from './notes.linux.tool';
+```
+
+Register all variants — the SDK automatically exposes only the one matching the current platform:
+
+```ts
+import { AppleNotesSearchTool, OneNoteSearchTool, GnomeNotesSearchTool } from './tools/notes';
+
+@FrontMcp({
+  tools: [AppleNotesSearchTool, OneNoteSearchTool, GnomeNotesSearchTool],
+})
+class MyApp {}
+```
+
+<Tip>
+The multi-platform file pattern (`name.platform.tool.ts`) is recommended when you have platform-specific implementations of the same logical capability. For simple cases where a single tool needs a platform check, use `this.isPlatform()` inside `execute()` instead.
+</Tip>
+
+---
+
+## Error Handling
+
+When a client tries to call a tool that exists but is unavailable in the current environment, the SDK returns an `EntryUnavailableError` (HTTP 403) with both the constraint and the current context:
+
+```json
+{
+  "code": -32603,
+  "message": "Tool \"apple_notes_search\" is not available in the current environment (requires: {\"platform\":[\"darwin\"]}) (current: {\"platform\":\"linux\",\"runtime\":\"node\",\"deployment\":\"standalone\",\"env\":\"production\"})"
+}
+```
+
+This is distinct from a `ToolNotFoundError` (404), helping clients understand why a tool is inaccessible.
+
+---
+
+## How It Works: Registry-Level Filtering
+
+<Warning>
+`availableWhen` is **not** the same as authorization or rule-based filtering. It is evaluated at the **registry level** during server boot, not in HTTP request flows.
+</Warning>
+
+| Concern | Layer | When | Scope |
+| --- | --- | --- | --- |
+| **`availableWhen`** | Registry (boot) | Server startup | Process-wide, immutable |
+| **Authorization** | HTTP flow (request) | Per request | Per session/user |
+| **Rule-based filtering** | HTTP flow (request) | Per request | Dynamic, policy-driven |
+| **`hideFromDiscovery`** | Registry (listing) | Per list call | Soft hide (entry still callable) |
+
+Key differences:
+- `availableWhen` is a **hard constraint** — filtered entries cannot be listed OR called
+- It runs at **registry initialization**, not in HTTP flows — no per-request overhead
+- The runtime context (OS, runtime, deployment, NODE_ENV) is detected once and cached
+- Results are logged at boot time for operational visibility
+
+### Boot-Time Logging
+
+When entries have `availableWhen` constraints, the SDK logs a summary at startup:
+
+```
+[ToolRegistry] availability: 10 total, 5 with availableWhen constraint, 3 available, 2 filtered [ctx: platform=darwin, runtime=node, deployment=standalone, env=production]
+[ToolRegistry] filtered: "windows_tool" — constraint={"platform":["win32"]}, current=platform=darwin
+[ToolRegistry] filtered: "browser_tool" — constraint={"runtime":["browser"]}, current=runtime=node
+```
+
+Empty constraint arrays trigger a warning (likely a configuration bug):
+```
+[ToolRegistry] "broken_tool" has empty availableWhen arrays for [platform] — this entry will never be available.
+```

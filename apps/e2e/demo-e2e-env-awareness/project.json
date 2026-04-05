@@ -1,0 +1,45 @@
+{
+  "name": "demo-e2e-env-awareness",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-env-awareness/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:env-awareness"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-env-awareness",
+        "main": "apps/e2e/demo-e2e-env-awareness/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-env-awareness/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-env-awareness/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-env-awareness/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-env-awareness"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-env-awareness/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

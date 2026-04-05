@@ -178,7 +178,14 @@ export {
   isEdgeRuntime,
   isServerless,
   supportsAnsi,
+  // Runtime context detection and entry availability matching
+  getRuntimeContext,
+  resetRuntimeContext,
+  detectRuntimeContext,
+  isEntryAvailable,
+  entryAvailabilitySchema,
 } from './env';
+export type { RuntimeContext, EntryAvailability } from './env';
 
 // Safe regex utilities (ReDoS prevention)
 export {
