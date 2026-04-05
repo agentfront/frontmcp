@@ -19,6 +19,7 @@ export const FrontMcpToolTokens = {
   rateLimit: tokenFactory.meta('rateLimit'), // Rate limiting configuration
   concurrency: tokenFactory.meta('concurrency'), // Concurrency control configuration
   timeout: tokenFactory.meta('timeout'), // Timeout configuration
+  availableWhen: tokenFactory.meta('availableWhen'), // Environment availability constraint
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
 export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');

@@ -2,7 +2,7 @@ import { Token, tokenName, getMetadata } from '@frontmcp/di';
 import { AppEntry, EntryLineage, EntryOwnerRef, ScopeEntry, ToolEntry, ToolRecord, ToolType } from '../common';
 import { ToolChangeEvent, ToolEmitter } from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor } from '@frontmcp/utils';
+import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
@@ -13,6 +13,7 @@ import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
 import { ServerCapabilities } from '@frontmcp/protocol';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import { logAvailabilityFiltering } from '../common/availability';
 import {
   NameDisambiguationError,
   EntryValidationError,
@@ -134,6 +135,11 @@ export default class ToolRegistry extends RegistryAbstract<
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
+
+    // Log availability filtering results at boot time.
+    // This is a REGISTRY-LEVEL concern — not HTTP/flow-level auth or rule-based filtering.
+    logAvailabilityFiltering('ToolRegistry', this.listAllInstances(), scope.logger);
+
     this.bump('reset');
 
     await scope.registryFlows(ToolsListFlow, CallToolFlow);
@@ -262,10 +268,22 @@ export default class ToolRegistry extends RegistryAbstract<
 
   // NOTE: `any` is intentional here - heterogeneous tool collections can't use `unknown`
   // because ToolEntry has constrained generics (InSchema extends ToolInputType, etc.)
+  //
+  // AVAILABILITY FILTERING (registry-level, not HTTP/flow-level):
+  // `availableWhen` is evaluated against the process's RuntimeContext (OS, runtime, env).
+  // This is a hard constraint — unlike hideFromDiscovery (soft listing hide) or
+  // authorization (per-request in HTTP flows). Filtered entries cannot be listed or called.
   getTools(includeHidden = false): ToolEntry<any, any>[] {
+    const ctx = getRuntimeContext();
     const local = [...this.localRows].flat().map((t) => t.instance);
     const adopted = [...this.adopted.values()].flat().map((t) => t.instance);
-    return [...local, ...adopted].filter((t) => t.metadata.hideFromDiscovery !== true || includeHidden);
+    return [...local, ...adopted].filter((t) => {
+      // Availability: hard filter — unavailable entries are excluded from both listing and execution
+      if (!isEntryAvailable(t.metadata.availableWhen, ctx)) return false;
+      // Discovery: soft filter — hidden entries can still be called directly
+      if (!includeHidden && t.metadata.hideFromDiscovery === true) return false;
+      return true;
+    });
   }
 
   /**

@@ -9,6 +9,8 @@ import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AgentInstance } from './agent.instance';
 import type { Tool, ServerCapabilities } from '@frontmcp/protocol';
 import { DependencyNotFoundError } from '../errors/mcp.error';
+import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+import { logAvailabilityFiltering } from '../common/availability';
 
 // ============================================================================
 // Types
@@ -161,6 +163,11 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
 
     // Build effective indexes
     this.reindex();
+
+    // Log availability filtering at boot (registry-level, not HTTP/flow-level auth)
+    const scope = this.providers.getActiveScope();
+    logAvailabilityFiltering('AgentRegistry', this.listAllInstances(), scope.logger);
+
     this.bump('reset');
 
     // Wait for all agent instances to be ready
@@ -291,9 +298,14 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
    */
   // NOTE: `any` is intentional - heterogeneous agent collections
   getAgents(includeHidden = false): AgentEntry<any, any>[] {
+    const ctx = getRuntimeContext();
     const local = [...this.localRows].map((a) => a.instance);
     const adopted = [...this.adopted.values()].flat().map((a) => a.instance);
-    return [...local, ...adopted].filter((a) => a.metadata.hideFromDiscovery !== true || includeHidden);
+    return [...local, ...adopted].filter((a) => {
+      if (!isEntryAvailable(a.metadata.availableWhen, ctx)) return false;
+      if (!includeHidden && a.metadata.hideFromDiscovery === true) return false;
+      return true;
+    });
   }
 
   /**

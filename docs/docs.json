@@ -158,6 +158,7 @@
               "frontmcp/features/multi-app-composition",
               "frontmcp/features/authentication-and-authorization",
               "frontmcp/features/deployment-targets",
+              "frontmcp/features/environment-awareness",
               "frontmcp/features/plugin-system",
               "frontmcp/features/observability",
               "frontmcp/features/testing-framework",

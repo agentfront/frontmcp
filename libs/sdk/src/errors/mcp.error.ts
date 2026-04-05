@@ -159,6 +159,35 @@ export class ToolNotFoundError extends PublicMcpError {
 }
 
 /**
+ * Entry unavailable in the current environment.
+ * Thrown when a tool/resource/prompt/skill/agent exists but is restricted
+ * by its `availableWhen` constraint (platform, runtime, deployment, or env).
+ */
+export class EntryUnavailableError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
+
+  constructor(entryType: string, entryName: string, availability?: unknown, runtimeContext?: unknown) {
+    const constraint = availability ? ` (requires: ${JSON.stringify(availability)})` : '';
+    const current = runtimeContext ? ` (current: ${JSON.stringify(runtimeContext)})` : '';
+    super(
+      `${entryType} "${entryName}" is not available in the current environment${constraint}${current}`,
+      'ENTRY_UNAVAILABLE',
+      403,
+    );
+  }
+
+  /**
+   * Convert to JSON-RPC error format per MCP specification.
+   */
+  toJsonRpcError(): { code: number; message: string } {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+    };
+  }
+}
+
+/**
  * Resource not found error
  */
 export class ResourceNotFoundError extends PublicMcpError {

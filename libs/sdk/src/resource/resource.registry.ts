@@ -13,7 +13,8 @@ import {
 } from '../common';
 import { ResourceChangeEvent, ResourceEmitter } from './resource.events';
 import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor } from '@frontmcp/utils';
+import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+import { logAvailabilityFiltering } from '../common/availability';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import {
@@ -147,6 +148,10 @@ export default class ResourceRegistry extends RegistryAbstract<
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
+
+    // Log availability filtering at boot (registry-level, not HTTP/flow-level auth)
+    logAvailabilityFiltering('ResourceRegistry', this.listAllInstances(), scope.logger);
+
     this.bump('reset');
 
     // Register resource flows with the scope (scope already declared above)
@@ -259,11 +264,13 @@ export default class ResourceRegistry extends RegistryAbstract<
    * Get all static resources (not templates)
    */
   getResources(includeHidden = false): ResourceEntry[] {
+    const ctx = getRuntimeContext();
     const all = this.listAllIndexed();
     return all
       .filter((r) => !r.isTemplate)
       .filter((r) => {
         const meta = r.instance.metadata;
+        if (!isEntryAvailable(meta.availableWhen, ctx)) return false;
         const hidden = 'hideFromDiscovery' in meta && meta.hideFromDiscovery === true;
         return !hidden || includeHidden;
       })
@@ -274,8 +281,12 @@ export default class ResourceRegistry extends RegistryAbstract<
    * Get all resource templates
    */
   getResourceTemplates(): ResourceEntry[] {
+    const ctx = getRuntimeContext();
     const all = this.listAllIndexed();
-    return all.filter((r) => r.isTemplate).map((r) => r.instance);
+    return all
+      .filter((r) => r.isTemplate)
+      .filter((r) => isEntryAvailable(r.instance.metadata.availableWhen, ctx))
+      .map((r) => r.instance);
   }
 
   /**

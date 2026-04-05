@@ -9,6 +9,7 @@ export const FrontMcpPromptTokens = {
   arguments: tokenFactory.meta('arguments'),
   description: tokenFactory.meta('description'),
   icons: tokenFactory.meta('icons'),
+  availableWhen: tokenFactory.meta('availableWhen'),
   metadata: tokenFactory.meta('metadata'), // used in prompt({}) construction
 } as const satisfies RawMetadataShape<PromptMetadata, ExtendFrontMcpPromptMetadata>;
 

@@ -1,6 +1,7 @@
 // file: libs/sdk/src/common/interfaces/execution-context.interface.ts
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, getRuntimeContext } from '@frontmcp/utils';
+import type { RuntimeContext } from '@frontmcp/utils';
 import { Token } from '@frontmcp/di';
 import { ProviderRegistryInterface } from './internal';
 import { FrontMcpLogger } from './logger.interface';
@@ -204,5 +205,46 @@ export abstract class ExecutionContextBase<Out = unknown> {
   get config(): ConfigService {
     // ConfigService class serves as its own DI token; cast needed for type compatibility
     return this.providers.get(ConfigService as unknown as Token<ConfigService>);
+  }
+
+  // ---- Runtime context helpers ----
+
+  /**
+   * Get the current runtime context (platform, runtime, deployment, env).
+   */
+  get runtimeContext(): RuntimeContext {
+    return getRuntimeContext();
+  }
+
+  /**
+   * Check if running on a specific OS platform.
+   * @param platform - 'darwin' (macOS), 'linux', 'win32' (Windows), 'browser', etc.
+   */
+  isPlatform(platform: string): boolean {
+    return getRuntimeContext().platform === platform;
+  }
+
+  /**
+   * Check if running in a specific JavaScript runtime.
+   * @param runtime - 'node', 'browser', 'edge', 'bun', 'deno'
+   */
+  isRuntime(runtime: string): boolean {
+    return getRuntimeContext().runtime === runtime;
+  }
+
+  /**
+   * Check if running in a specific deployment mode.
+   * @param deployment - 'serverless' or 'standalone'
+   */
+  isDeployment(deployment: string): boolean {
+    return getRuntimeContext().deployment === deployment;
+  }
+
+  /**
+   * Check if running in a specific environment.
+   * @param env - 'production', 'development', 'test', etc.
+   */
+  isEnv(env: string): boolean {
+    return getRuntimeContext().env === env;
   }
 }

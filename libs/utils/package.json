@@ -61,6 +61,10 @@
       "browser": "./src/env/browser-env.ts",
       "default": "./src/env/node-env.ts"
     },
+    "#runtime-context": {
+      "browser": "./src/env/browser-runtime-context.ts",
+      "default": "./src/env/runtime-context.ts"
+    },
     "#path": {
       "browser": "./src/path/browser-path.ts",
       "default": "./src/path/node-path.ts"
