@@ -1,6 +1,7 @@
 import { FuncType, Type } from '@frontmcp/di';
 import { ChannelMetadata, ChannelNotification } from '../metadata/channel.metadata';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
+import { PublicMcpError } from '../../errors/mcp.error';
 
 /**
  * Channel type definition (class or factory function).
@@ -115,9 +116,11 @@ export abstract class ChannelContext extends ExecutionContextBase<ChannelNotific
    * @param meta - Optional metadata from the reply tool call
    */
   async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
-    throw new Error(
+    throw new PublicMcpError(
       `Channel "${this.channelName}" has twoWay: true but onReply() is not implemented. ` +
         `Override onReply() to forward replies to the external system.`,
+      'CHANNEL_REPLY_NOT_IMPLEMENTED',
+      501,
     );
   }
 

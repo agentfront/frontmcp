@@ -147,6 +147,8 @@ export class ChannelInstance extends ChannelEntry {
         // Class-based channel: instantiate directly (same pattern as ToolInstance)
         return new this.record.provide(ctorArgs) as ChannelContext;
       }
+      default:
+        throw new Error(`Unknown channel kind: ${(this.record as { kind: string }).kind}`);
     }
   }
 

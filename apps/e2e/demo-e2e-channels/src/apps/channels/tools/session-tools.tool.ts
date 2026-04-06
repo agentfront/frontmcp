@@ -29,6 +29,7 @@ const sessionNotifications = new Map<string, Array<{ content: string; meta: Reco
 /** Minimal MCP server interface for test notification capture */
 interface FakeServer {
   notification(msg: { method: string; params: Record<string, unknown> }): void;
+  request(msg: { method: string; params?: unknown }): Promise<unknown>;
 }
 
 /** Fake MCP server that captures notifications */
@@ -46,6 +47,9 @@ function createFakeServer(sessionId: string): FakeServer {
           meta: msg.params['meta'] as Record<string, string>,
         });
       }
+    },
+    async request() {
+      return {};
     },
   };
 }
@@ -201,10 +205,10 @@ export class PushTargetedNotificationTool extends ToolContext<{
     const scope = this.scope as unknown as { channels?: ChannelRegistryLike };
     const channel = scope.channels?.findByName(input.channelName);
     if (!channel) {
-      this.fail(new Error(`Channel "${input.channelName}" not found`));
+      throw new Error(`Channel "${input.channelName}" not found`);
     }
 
-    channel!.pushNotification(input.content, {}, input.targetSessionId);
+    channel.pushNotification(input.content, {}, input.targetSessionId);
     return {
       pushed: true,
       channelName: input.channelName,

@@ -113,7 +113,7 @@ export class Scope extends ScopeEntry {
   private _scopeChannels?: ChannelRegistry;
   private _channelNotificationService?: ChannelNotificationService;
   private _channelEventBus?: ChannelEventBus;
-  private _channelTeardown?: () => void;
+  private _channelTeardown?: () => Promise<void>;
 
   /** Health service for liveness and readiness probes (optional) */
   private _healthService?: HealthService;
@@ -574,6 +574,9 @@ export class Scope extends ScopeEntry {
         if (Array.isArray(appMeta['channels'])) appChannels.push(...(appMeta['channels'] as ChannelType[]));
       }
 
+      // TODO: Pass agentEmitterSubscribe/jobEmitterSubscribe when agent/job registries
+      // expose completion event subscriptions. Currently agent-completion and job-completion
+      // channel sources are not wired (the helper logs a warning and skips them).
       const channelResult = await registerChannelCapabilities({
         providers: this.scopeProviders,
         owner: scopeRef,
@@ -973,7 +976,11 @@ export class Scope extends ScopeEntry {
    */
   async shutdown(): Promise<void> {
     if (this._channelTeardown) {
-      this._channelTeardown();
+      try {
+        await this._channelTeardown();
+      } catch (err) {
+        this.logger.error('Channel teardown failed', { error: err });
+      }
       this._channelTeardown = undefined;
     }
   }

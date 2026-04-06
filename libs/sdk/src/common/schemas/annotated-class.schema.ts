@@ -1,6 +1,20 @@
 import { Type } from '@frontmcp/di';
 import type { AgentType } from '../interfaces';
 import { z } from 'zod';
+
+/**
+ * Check if an object has metadata for a given token, handling both Symbol() and Symbol.for()
+ * tokens. This is needed because plugins built with older versions of @frontmcp/di used
+ * Symbol() (non-shared) tokens, while newer versions use Symbol.for() (shared) tokens.
+ */
+function hasMetadataCompat(token: symbol, target: object): boolean {
+  // Fast path: direct match (same Symbol instance)
+  if (Reflect.hasMetadata(token, target)) return true;
+  // Slow path: match by description (handles Symbol() vs Symbol.for() mismatch)
+  const desc = token.description;
+  if (!desc) return false;
+  return Reflect.getMetadataKeys(target).some((k) => typeof k === 'symbol' && k.description === desc);
+}
 import {
   FrontMcpAdapterTokens,
   FrontMcpAgentTokens,
@@ -30,7 +44,7 @@ import { isPackageSpecifier } from '../../esm-loader/package-specifier';
 export const annotatedFrontMcpAppSchema = z.custom<Type>(
   (v): v is Type => {
     // Check for class-based @App() decorator
-    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpLocalAppTokens.type, v)) {
+    if (typeof v === 'function' && hasMetadataCompat(FrontMcpLocalAppTokens.type, v)) {
       return true;
     }
     // Check for remote app configuration object
@@ -49,7 +63,7 @@ export const annotatedFrontMcpAppSchema = z.custom<Type>(
 
 export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
   (v): v is Type => {
-    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpProviderTokens.type, v)) {
+    if (typeof v === 'function' && hasMetadataCompat(FrontMcpProviderTokens.type, v)) {
       return true;
     }
     if (typeof v === 'object' && v !== null) {
@@ -57,7 +71,7 @@ export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
       const useValue = obj['useValue'];
       if (useValue && typeof useValue === 'object' && useValue !== null) {
         const ctor = (useValue as Record<string, unknown>)['constructor'];
-        if (ctor && Reflect.hasMetadata(FrontMcpProviderTokens.type, ctor as object)) {
+        if (ctor && hasMetadataCompat(FrontMcpProviderTokens.type, ctor as object)) {
           return true;
         }
       }
@@ -72,7 +86,7 @@ export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
 
 export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
   (v): v is Type => {
-    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpAuthProviderTokens.type, v)) {
+    if (typeof v === 'function' && hasMetadataCompat(FrontMcpAuthProviderTokens.type, v)) {
       return true;
     }
     if (typeof v === 'object' && v !== null) {
@@ -80,7 +94,7 @@ export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
       const useValue = obj['useValue'];
       if (useValue && typeof useValue === 'object' && useValue !== null) {
         const ctor = (useValue as Record<string, unknown>)['constructor'];
-        if (ctor && Reflect.hasMetadata(FrontMcpAuthProviderTokens.type, ctor as object)) {
+        if (ctor && hasMetadataCompat(FrontMcpAuthProviderTokens.type, ctor as object)) {
           return true;
         }
       }
@@ -95,7 +109,7 @@ export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
 
 export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
   (v): v is Type => {
-    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpPluginTokens.type, v)) {
+    if (typeof v === 'function' && hasMetadataCompat(FrontMcpPluginTokens.type, v)) {
       return true;
     }
     if (typeof v === 'object' && v !== null) {
@@ -103,7 +117,7 @@ export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
       const useValue = obj['useValue'];
       if (useValue && typeof useValue === 'object' && useValue !== null) {
         const ctor = (useValue as Record<string, unknown>)['constructor'];
-        if (ctor && Reflect.hasMetadata(FrontMcpPluginTokens.type, ctor as object)) {
+        if (ctor && hasMetadataCompat(FrontMcpPluginTokens.type, ctor as object)) {
           return true;
         }
       }
@@ -118,7 +132,7 @@ export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
 
 export const annotatedFrontMcpAdaptersSchema = z.custom<Type>(
   (v): v is Type => {
-    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpAdapterTokens.type, v)) {
+    if (typeof v === 'function' && hasMetadataCompat(FrontMcpAdapterTokens.type, v)) {
       return true;
     }
     if (typeof v === 'object' && v !== null) {
@@ -126,7 +140,7 @@ export const annotatedFrontMcpAdaptersSchema = z.custom<Type>(
       const useValue = obj['useValue'];
       if (useValue && typeof useValue === 'object' && useValue !== null) {
         const ctor = (useValue as Record<string, unknown>)['constructor'];
-        if (ctor && Reflect.hasMetadata(FrontMcpAdapterTokens.type, ctor as object)) {
+        if (ctor && hasMetadataCompat(FrontMcpAdapterTokens.type, ctor as object)) {
           return true;
         }
       }
@@ -147,7 +161,7 @@ export const annotatedFrontMcpToolsSchema = z.custom<Type | string>(
     }
     return (
       typeof v === 'function' &&
-      (Reflect.hasMetadata(FrontMcpToolTokens.type, v) || v[FrontMcpToolTokens.type] !== undefined)
+      (hasMetadataCompat(FrontMcpToolTokens.type, v) || v[FrontMcpToolTokens.type] !== undefined)
     );
   },
   { message: 'tools items must be annotated with @Tool() | @FrontMcpTool() or be a package specifier string.' },
@@ -158,9 +172,9 @@ export const annotatedFrontMcpResourcesSchema = z.custom<Type>(
     return (
       typeof v === 'function' &&
       // Class-based @Resource decorator
-      (Reflect.hasMetadata(FrontMcpResourceTokens.type, v) ||
+      (hasMetadataCompat(FrontMcpResourceTokens.type, v) ||
         // Class-based @ResourceTemplate decorator
-        Reflect.hasMetadata(FrontMcpResourceTemplateTokens.type, v) ||
+        hasMetadataCompat(FrontMcpResourceTemplateTokens.type, v) ||
         // Function-style resource() builder
         v[FrontMcpResourceTokens.type] !== undefined ||
         // Function-style resourceTemplate() builder
@@ -178,7 +192,7 @@ export const annotatedFrontMcpPromptsSchema = z.custom<Type>(
     return (
       typeof v === 'function' &&
       // Class-based @Prompt decorator
-      (Reflect.hasMetadata(FrontMcpPromptTokens.type, v) ||
+      (hasMetadataCompat(FrontMcpPromptTokens.type, v) ||
         // Function-style prompt() builder
         v[FrontMcpPromptTokens.type] !== undefined)
     );
@@ -187,7 +201,7 @@ export const annotatedFrontMcpPromptsSchema = z.custom<Type>(
 );
 
 export const annotatedFrontMcpLoggerSchema = z.custom<Type>(
-  (v): v is Type => typeof v === 'function' && Reflect.hasMetadata(FrontMcpLogTransportTokens.type, v),
+  (v): v is Type => typeof v === 'function' && hasMetadataCompat(FrontMcpLogTransportTokens.type, v),
   { message: 'logger items must be annotated with @Logger() | @FrontMcpLogger().' },
 );
 
@@ -199,7 +213,7 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
     }
     // Check for class-based @Agent decorator
     if (typeof v === 'function') {
-      if (Reflect.hasMetadata(FrontMcpAgentTokens.type, v)) {
+      if (hasMetadataCompat(FrontMcpAgentTokens.type, v)) {
         return true;
       }
       // Check for function-style agent() builder
@@ -232,7 +246,7 @@ export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
 export const annotatedFrontMcpJobsSchema = z.custom<Type>(
   (v): v is Type => {
     if (typeof v === 'function') {
-      if (Reflect.hasMetadata(FrontMcpJobTokens.type, v)) {
+      if (hasMetadataCompat(FrontMcpJobTokens.type, v)) {
         return true;
       }
       // Function-style job() builder
@@ -248,7 +262,7 @@ export const annotatedFrontMcpJobsSchema = z.custom<Type>(
 export const annotatedFrontMcpWorkflowsSchema = z.custom<Type>(
   (v): v is Type => {
     if (typeof v === 'function') {
-      if (Reflect.hasMetadata(FrontMcpWorkflowTokens.type, v)) {
+      if (hasMetadataCompat(FrontMcpWorkflowTokens.type, v)) {
         return true;
       }
       // Function-style workflow() builder
@@ -265,7 +279,7 @@ export const annotatedFrontMcpSkillsSchema = z.custom<Type>(
   (v): v is Type => {
     // Check for class-based @Skill decorator
     if (typeof v === 'function') {
-      if (Reflect.hasMetadata(FrontMcpSkillTokens.type, v)) {
+      if (hasMetadataCompat(FrontMcpSkillTokens.type, v)) {
         return true;
       }
       // Check for function-style skill() builder
@@ -295,7 +309,7 @@ export const annotatedFrontMcpSkillsSchema = z.custom<Type>(
 export const annotatedFrontMcpChannelsSchema = z.custom<Type>(
   (v): v is Type => {
     if (typeof v === 'function') {
-      if (Reflect.hasMetadata(FrontMcpChannelTokens.type, v)) {
+      if (hasMetadataCompat(FrontMcpChannelTokens.type, v)) {
         return true;
       }
       // Function-style channel() builder
