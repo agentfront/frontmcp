@@ -1454,10 +1454,13 @@ function generateFooter(): string {
   process.exitCode = 1;
 });
 program.parseAsync(process.argv).then(function() {
-  process.exit(process.exitCode || 0);
+  // Use exitCode instead of process.exit() so long-running commands
+  // (e.g., serve) keep the event loop alive while short-lived commands
+  // exit naturally when the event loop drains.
+  process.exitCode = process.exitCode || 0;
 }).catch(function(err) {
   console.error('Fatal:', err.message || err);
-  process.exit(1);
+  process.exitCode = 1;
 });`;
 }
 

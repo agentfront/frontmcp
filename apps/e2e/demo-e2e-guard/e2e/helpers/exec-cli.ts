@@ -48,7 +48,7 @@ export function runCli(args: string[], extraEnv?: Record<string, string>): CliRe
       encoding: 'utf-8',
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     });
-    return { stdout: stdout.toString(), stderr: '', exitCode: 0 };
+    return { stdout, stderr: '', exitCode: 0 };
   } catch (err: unknown) {
     const error = err as { stdout?: string | Buffer; stderr?: string | Buffer; status?: number };
     return {

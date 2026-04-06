@@ -61,7 +61,7 @@ describe('FileLogTransportInstance', () => {
 
   function createTransport() {
     const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    const t = new FileLogTransportInstance({});
+    const t = new FileLogTransportInstance();
     transports.push(t);
     return t;
   }

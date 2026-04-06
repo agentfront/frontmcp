@@ -158,49 +158,21 @@ export class SkillInstance extends SkillEntry {
     const instructions = await this.loadInstructions();
     const baseDir = this.getBaseDir();
 
-    // Resolve references from the references/ directory if it exists
-    const refsPath = this.metadata.resources?.references;
-    let resolvedRefs: SkillReferenceInfo[] | undefined;
-    if (refsPath) {
-      let refsDir = refsPath.startsWith('/') ? refsPath : baseDir ? pathResolve(baseDir, refsPath) : undefined;
-      // Fall back to manifest for bundled environments
-      if (refsDir) {
-        try {
-          resolvedRefs = await resolveReferences(refsDir);
-        } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-          refsDir = await resolveResourceFromManifest(this.metadata.name, 'references');
-          if (refsDir) resolvedRefs = await resolveReferences(refsDir);
-        }
-      } else {
-        refsDir = await resolveResourceFromManifest(this.metadata.name, 'references');
-        if (refsDir) resolvedRefs = await resolveReferences(refsDir);
-      }
-    }
+    const resolvedRefs = await loadResourceWithManifestFallback(
+      this.metadata.resources?.references,
+      baseDir,
+      this.metadata.name,
+      'references',
+      resolveReferences,
+    );
 
-    // Resolve examples from the examples/ directory if it exists
-    const examplesPath = this.metadata.resources?.examples;
-    let resolvedExs: SkillExampleInfo[] | undefined;
-    if (examplesPath) {
-      let exDir = examplesPath.startsWith('/')
-        ? examplesPath
-        : baseDir
-          ? pathResolve(baseDir, examplesPath)
-          : undefined;
-      // Fall back to manifest for bundled environments
-      if (exDir) {
-        try {
-          resolvedExs = await resolveExamples(exDir);
-        } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-          exDir = await resolveResourceFromManifest(this.metadata.name, 'examples');
-          if (exDir) resolvedExs = await resolveExamples(exDir);
-        }
-      } else {
-        exDir = await resolveResourceFromManifest(this.metadata.name, 'examples');
-        if (exDir) resolvedExs = await resolveExamples(exDir);
-      }
-    }
+    const resolvedExs = await loadResourceWithManifestFallback(
+      this.metadata.resources?.examples,
+      baseDir,
+      this.metadata.name,
+      'examples',
+      resolveExamples,
+    );
 
     const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs, resolvedExs);
 
@@ -319,6 +291,35 @@ type SkillManifestEntry = {
 let skillManifestCache: Record<string, SkillManifestEntry> | null | undefined;
 
 /**
+ * Try to load a skill resource (references or examples) from the given path,
+ * falling back to the build-time manifest on ENOENT.
+ */
+async function loadResourceWithManifestFallback<T>(
+  resourcePath: string | undefined,
+  baseDir: string | undefined,
+  skillName: string,
+  resourceType: 'references' | 'examples' | 'scripts' | 'assets',
+  loader: (dir: string) => Promise<T>,
+): Promise<T | undefined> {
+  if (!resourcePath) return undefined;
+
+  let dir = resourcePath.startsWith('/') ? resourcePath : baseDir ? pathResolve(baseDir, resourcePath) : undefined;
+  if (dir) {
+    try {
+      return await loader(dir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      dir = await resolveResourceFromManifest(skillName, resourceType);
+      if (dir) return await loader(dir);
+    }
+  } else {
+    dir = await resolveResourceFromManifest(skillName, resourceType);
+    if (dir) return await loader(dir);
+  }
+  return undefined;
+}
+
+/**
  * Resolve a skill's instruction file path from the build-time `_skills/manifest.json`.
  *
  * During `frontmcp build -t cli`, skill content files are copied into a flat
@@ -342,9 +343,12 @@ async function resolveFromSkillManifest(skillName: string): Promise<string | und
         skillManifestCache = null;
         return undefined;
       }
-    } catch {
-      skillManifestCache = null;
-      return undefined;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        skillManifestCache = null;
+        return undefined;
+      }
+      throw err;
     }
   }
 

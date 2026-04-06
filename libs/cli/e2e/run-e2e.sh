@@ -470,10 +470,28 @@ else
   exit 1
 fi
 
+# Verify CLI manifest and runner exist before reading them
+CLI_MANIFEST_PATH="dist/cli/${APP_NAME}.manifest.json"
+CLI_RUNNER_PATH="dist/cli/${APP_NAME}"
+
+if [ -f "$CLI_MANIFEST_PATH" ]; then
+  echo "  ✅ CLI manifest exists: $CLI_MANIFEST_PATH"
+else
+  echo "  ❌ CLI manifest not found: $CLI_MANIFEST_PATH"
+  exit 1
+fi
+
+if [ -f "$CLI_RUNNER_PATH" ]; then
+  echo "  ✅ CLI runner exists: $CLI_RUNNER_PATH"
+else
+  echo "  ❌ CLI runner not found: $CLI_RUNNER_PATH"
+  exit 1
+fi
+
 # Verify manifest has CLI metadata
 if command -v jq &> /dev/null; then
-  CLI_ENABLED=$(jq -r '.cli.enabled' "dist/cli/${APP_NAME}.manifest.json" 2>/dev/null)
-  CLI_TOOL_COUNT=$(jq -r '.cli.toolCount' "dist/cli/${APP_NAME}.manifest.json" 2>/dev/null)
+  CLI_ENABLED=$(jq -r '.cli.enabled' "$CLI_MANIFEST_PATH" 2>/dev/null)
+  CLI_TOOL_COUNT=$(jq -r '.cli.toolCount' "$CLI_MANIFEST_PATH" 2>/dev/null)
 
   if [ "$CLI_ENABLED" = "true" ]; then
     echo "  ✅ Manifest cli.enabled = true"
@@ -492,7 +510,7 @@ else
 fi
 
 # Verify runner script references CLI bundle
-RUNNER_CONTENT=$(cat "dist/cli/${APP_NAME}")
+RUNNER_CONTENT=$(cat "$CLI_RUNNER_PATH")
 if echo "$RUNNER_CONTENT" | grep -q "cli.bundle.js"; then
   echo "  ✅ Runner script references CLI bundle"
 else
@@ -520,8 +538,8 @@ echo ""
 echo "Test 16: Run produced CLI subcommand --help"
 cd "$TEST_DIR/test-docker-app"
 
-# Get the first tool command from help output
-FIRST_CMD=$(node "dist/cli/${APP_NAME}-cli.bundle.js" --help 2>&1 | grep -E '^\s+\S+\s' | head -1 | awk '{print $1}' || true)
+# Get the first tool command from the Commands section of help output
+FIRST_CMD=$(node "dist/cli/${APP_NAME}-cli.bundle.js" --help 2>&1 | sed -n '/^Commands:/,/^$/p' | grep -E '^\s+\S+' | head -1 | awk '{print $1}' || true)
 
 if [ -n "$FIRST_CMD" ] && [ "$FIRST_CMD" != "help" ]; then
   if node "dist/cli/${APP_NAME}-cli.bundle.js" "$FIRST_CMD" --help > /dev/null 2>&1; then

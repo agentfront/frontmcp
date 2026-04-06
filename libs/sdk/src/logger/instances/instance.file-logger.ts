@@ -51,7 +51,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
   private readonly logDir: string;
   private readonly appName: string;
 
-  constructor(_config: unknown, ..._args: unknown[]) {
+  constructor() {
     super();
     // Sanitize app name to prevent path traversal (e.g., "../" in env var)
     const rawAppName = process.env['FRONTMCP_APP_NAME'] || 'frontmcp';
