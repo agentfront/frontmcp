@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/observability",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "OpenTelemetry instrumentation, structured JSON logging, and request log objects for FrontMCP",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
