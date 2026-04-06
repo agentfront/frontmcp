@@ -100,11 +100,10 @@ describe('CLI Logging', () => {
       runCli(['add', '--a', '1', '--b', '2'], { FRONTMCP_LOG_DIR: tmpLogDir });
 
       const logFiles = fs.readdirSync(tmpLogDir).filter((f) => f.endsWith('.log'));
-      if (logFiles.length > 0) {
-        const content = fs.readFileSync(path.join(tmpLogDir, logFiles[0]), 'utf-8');
-        // eslint-disable-next-line no-control-regex
-        expect(content).not.toMatch(/\x1b\[/);
-      }
+      expect(logFiles.length).toBeGreaterThan(0);
+      const content = fs.readFileSync(path.join(tmpLogDir, logFiles[0]), 'utf-8');
+
+      expect(content).not.toMatch(/\x1b\[/);
     });
 
     it('should contain server log messages in log file', () => {
@@ -134,13 +133,18 @@ describe('CLI Skill Asset Copying', () => {
     await ensureBuild();
   });
 
-  it('should copy file-based skill instruction .md files to dist', () => {
+  it('should copy file-based skill instruction files to _skills/ with manifest', () => {
     const distDir = getDistDir();
-    const docsDir = path.join(distDir, 'docs');
-    // The greeting-helper skill has instructions: { file: './docs/greeting-guide.md' }
-    // Build should have copied it to dist/docs/greeting-guide.md
-    expect(fs.existsSync(docsDir)).toBe(true);
-    const mdFile = path.join(docsDir, 'greeting-guide.md');
+    const skillsDir = path.join(distDir, '_skills');
+    expect(fs.existsSync(skillsDir)).toBe(true);
+
+    // Manifest should exist and map greeting-helper to its content file
+    const manifest = JSON.parse(fs.readFileSync(path.join(skillsDir, 'manifest.json'), 'utf-8'));
+    expect(manifest['greeting-helper']).toBeDefined();
+    expect(manifest['greeting-helper'].instructions).toContain('greeting-helper--greeting-guide.md');
+
+    // The actual content file should exist
+    const mdFile = path.join(distDir, manifest['greeting-helper'].instructions);
     expect(fs.existsSync(mdFile)).toBe(true);
 
     const content = fs.readFileSync(mdFile, 'utf-8');
@@ -151,8 +155,13 @@ describe('CLI Skill Asset Copying', () => {
     const { stdout, exitCode } = runCli(['skills', 'list', '--output', 'json']);
     expect(exitCode).toBe(0);
 
-    const result = JSON.parse(stdout);
-    const skills = result.skills || result || [];
+    let result: Record<string, unknown>;
+    try {
+      result = JSON.parse(stdout);
+    } catch {
+      throw new Error(`Failed to parse CLI stdout as JSON (exitCode=${exitCode}):\n${stdout}`);
+    }
+    const skills = (result.skills as unknown[]) || (result as unknown) || [];
     const greetingSkill = skills.find((s: { name?: string; id?: string }) => (s.name || s.id) === 'greeting-helper');
     expect(greetingSkill).toBeDefined();
   });

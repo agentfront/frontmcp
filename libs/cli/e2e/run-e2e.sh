@@ -420,32 +420,32 @@ else
   exit 1
 fi
 
-# Verify output artifacts
-if [ -f "dist/${APP_NAME}.bundle.js" ]; then
-  echo "  ✅ Server bundle exists: dist/${APP_NAME}.bundle.js"
+# Verify output artifacts (build targets output to dist/{target}/)
+if [ -f "dist/node/${APP_NAME}.bundle.js" ]; then
+  echo "  ✅ Server bundle exists: dist/node/${APP_NAME}.bundle.js"
 else
-  echo "  ❌ Server bundle not found: dist/${APP_NAME}.bundle.js"
+  echo "  ❌ Server bundle not found: dist/node/${APP_NAME}.bundle.js"
   exit 1
 fi
 
-if [ -f "dist/${APP_NAME}.manifest.json" ]; then
-  echo "  ✅ Manifest exists: dist/${APP_NAME}.manifest.json"
+if [ -f "dist/node/${APP_NAME}.manifest.json" ]; then
+  echo "  ✅ Manifest exists: dist/node/${APP_NAME}.manifest.json"
 else
-  echo "  ❌ Manifest not found: dist/${APP_NAME}.manifest.json"
+  echo "  ❌ Manifest not found: dist/node/${APP_NAME}.manifest.json"
   exit 1
 fi
 
-if [ -f "dist/${APP_NAME}" ] && [ -x "dist/${APP_NAME}" ]; then
+if [ -f "dist/node/${APP_NAME}" ] && [ -x "dist/node/${APP_NAME}" ]; then
   echo "  ✅ Runner script exists and is executable"
 else
-  echo "  ❌ Runner script not found or not executable: dist/${APP_NAME}"
+  echo "  ❌ Runner script not found or not executable: dist/node/${APP_NAME}"
   exit 1
 fi
 
-if [ -f "dist/install-${APP_NAME}.sh" ]; then
-  echo "  ✅ Installer script exists: dist/install-${APP_NAME}.sh"
+if [ -f "dist/node/install-${APP_NAME}.sh" ]; then
+  echo "  ✅ Installer script exists: dist/node/install-${APP_NAME}.sh"
 else
-  echo "  ❌ Installer script not found: dist/install-${APP_NAME}.sh"
+  echo "  ❌ Installer script not found: dist/node/install-${APP_NAME}.sh"
   exit 1
 fi
 
@@ -462,18 +462,18 @@ else
   exit 1
 fi
 
-# Verify CLI bundle exists
-if [ -f "dist/${APP_NAME}-cli.bundle.js" ]; then
-  echo "  ✅ CLI bundle exists: dist/${APP_NAME}-cli.bundle.js"
+# Verify CLI bundle exists (CLI target outputs to dist/cli/)
+if [ -f "dist/cli/${APP_NAME}-cli.bundle.js" ]; then
+  echo "  ✅ CLI bundle exists: dist/cli/${APP_NAME}-cli.bundle.js"
 else
-  echo "  ❌ CLI bundle not found: dist/${APP_NAME}-cli.bundle.js"
+  echo "  ❌ CLI bundle not found: dist/cli/${APP_NAME}-cli.bundle.js"
   exit 1
 fi
 
 # Verify manifest has CLI metadata
 if command -v jq &> /dev/null; then
-  CLI_ENABLED=$(jq -r '.cli.enabled' "dist/${APP_NAME}.manifest.json" 2>/dev/null)
-  CLI_TOOL_COUNT=$(jq -r '.cli.toolCount' "dist/${APP_NAME}.manifest.json" 2>/dev/null)
+  CLI_ENABLED=$(jq -r '.cli.enabled' "dist/cli/${APP_NAME}.manifest.json" 2>/dev/null)
+  CLI_TOOL_COUNT=$(jq -r '.cli.toolCount' "dist/cli/${APP_NAME}.manifest.json" 2>/dev/null)
 
   if [ "$CLI_ENABLED" = "true" ]; then
     echo "  ✅ Manifest cli.enabled = true"
@@ -492,7 +492,7 @@ else
 fi
 
 # Verify runner script references CLI bundle
-RUNNER_CONTENT=$(cat "dist/${APP_NAME}")
+RUNNER_CONTENT=$(cat "dist/cli/${APP_NAME}")
 if echo "$RUNNER_CONTENT" | grep -q "cli.bundle.js"; then
   echo "  ✅ Runner script references CLI bundle"
 else
@@ -505,7 +505,7 @@ echo ""
 echo "Test 15: Run produced CLI --help"
 cd "$TEST_DIR/test-docker-app"
 
-help_output=$(node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1) && help_exit=0 || help_exit=$?
+help_output=$(node "dist/cli/${APP_NAME}-cli.bundle.js" --help 2>&1) && help_exit=0 || help_exit=$?
 if [ "$help_exit" -eq 0 ]; then
   echo "  ✅ CLI --help exited successfully"
   echo "$help_output" | head -5 | sed 's/^/    /'
@@ -521,10 +521,10 @@ echo "Test 16: Run produced CLI subcommand --help"
 cd "$TEST_DIR/test-docker-app"
 
 # Get the first tool command from help output
-FIRST_CMD=$(node "dist/${APP_NAME}-cli.bundle.js" --help 2>&1 | grep -E '^\s+\S+\s' | head -1 | awk '{print $1}' || true)
+FIRST_CMD=$(node "dist/cli/${APP_NAME}-cli.bundle.js" --help 2>&1 | grep -E '^\s+\S+\s' | head -1 | awk '{print $1}' || true)
 
 if [ -n "$FIRST_CMD" ] && [ "$FIRST_CMD" != "help" ]; then
-  if node "dist/${APP_NAME}-cli.bundle.js" "$FIRST_CMD" --help > /dev/null 2>&1; then
+  if node "dist/cli/${APP_NAME}-cli.bundle.js" "$FIRST_CMD" --help > /dev/null 2>&1; then
     echo "  ✅ CLI subcommand '$FIRST_CMD --help' exited successfully"
   else
     echo "  ⚠️  CLI subcommand '$FIRST_CMD --help' failed (may not have subcommands)"

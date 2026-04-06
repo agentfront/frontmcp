@@ -13,10 +13,12 @@ async function main(): Promise<void> {
   try {
     const program = createProgram();
     await program.parseAsync(process.argv);
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   } catch (err: unknown) {
     console.error('\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 

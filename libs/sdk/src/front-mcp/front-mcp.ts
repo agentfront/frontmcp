@@ -206,10 +206,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const verbose = process.env['FRONTMCP_CLI_VERBOSE'] === '1';
     if (parsedConfig.logging) {
       parsedConfig.logging.enableConsole = verbose;
-      parsedConfig.logging.transports = [...(parsedConfig.logging.transports ?? []), FileLogTransportInstance];
+      const transports = parsedConfig.logging.transports ?? [];
+      if (!transports.includes(FileLogTransportInstance)) {
+        transports.push(FileLogTransportInstance);
+      }
+      parsedConfig.logging.transports = transports;
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (parsedConfig as any).logging = {
+      (parsedConfig as Record<string, unknown>)['logging'] = {
         enableConsole: verbose,
         transports: [FileLogTransportInstance],
       };

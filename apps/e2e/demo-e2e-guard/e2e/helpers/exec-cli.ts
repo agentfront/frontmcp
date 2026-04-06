@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import * as path from 'path';
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../fixture');
-const DIST_DIR = path.join(FIXTURE_DIR, 'dist');
+const DIST_DIR = path.join(FIXTURE_DIR, 'dist', 'cli');
 const CLI_BUNDLE = path.join(DIST_DIR, 'guard-cli-demo-cli.bundle.js');
 
 let buildDone = false;

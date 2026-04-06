@@ -17,10 +17,20 @@ function restoreEnv() {
   }
 }
 
+const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
+  [LogLevel.Off]: 'OFF',
+  [LogLevel.Debug]: 'DEBUG',
+  [LogLevel.Verbose]: 'VERBOSE',
+  [LogLevel.Info]: 'INFO',
+  [LogLevel.Warn]: 'WARN',
+  [LogLevel.Error]: 'ERROR',
+};
+
 function makeRecord(overrides?: Partial<{ level: LogLevel; message: string; prefix: string }>) {
+  const level = overrides?.level ?? LogLevel.Info;
   return {
-    level: overrides?.level ?? LogLevel.Info,
-    levelName: 'INFO',
+    level,
+    levelName: LOG_LEVEL_NAMES[level],
     message: overrides?.message ?? 'test message',
     args: [],
     timestamp: new Date('2026-04-06T12:34:56.789Z'),
@@ -30,24 +40,34 @@ function makeRecord(overrides?: Partial<{ level: LogLevel; message: string; pref
 
 describe('FileLogTransportInstance', () => {
   let tmpDir: string;
+  const transports: Array<{ close?: () => void }> = [];
 
   beforeEach(() => {
     saveEnv();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-file-logger-'));
     process.env['FRONTMCP_LOG_DIR'] = tmpDir;
     process.env['FRONTMCP_APP_NAME'] = 'test-app';
+    transports.length = 0;
     // Clear module cache so each test gets a fresh instance
     jest.resetModules();
   });
 
   afterEach(() => {
+    // Close all file descriptors to prevent handle leaks
+    for (const t of transports) t.close?.();
     restoreEnv();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should create a log file in the configured directory', () => {
+  function createTransport() {
     const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    new FileLogTransportInstance({});
+    const t = new FileLogTransportInstance({});
+    transports.push(t);
+    return t;
+  }
+
+  it('should create a log file in the configured directory', () => {
+    createTransport();
 
     const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.log'));
     expect(files.length).toBe(1);
@@ -55,8 +75,7 @@ describe('FileLogTransportInstance', () => {
   });
 
   it('should write log records as plain text lines', () => {
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    const transport = new FileLogTransportInstance({});
+    const transport = createTransport();
 
     transport.log(makeRecord({ message: 'hello world' }));
     transport.log(makeRecord({ level: LogLevel.Warn, message: 'a warning', prefix: 'MyScope' }));
@@ -71,8 +90,7 @@ describe('FileLogTransportInstance', () => {
   });
 
   it('should strip ANSI escape codes from messages', () => {
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    const transport = new FileLogTransportInstance({});
+    const transport = createTransport();
 
     transport.log(makeRecord({ message: '\x1b[31mred text\x1b[0m and \x1b[1mbold\x1b[0m' }));
 
@@ -84,8 +102,7 @@ describe('FileLogTransportInstance', () => {
   });
 
   it('should use timestamped filename with underscores instead of colons', () => {
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    new FileLogTransportInstance({});
+    createTransport();
 
     const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.log'));
     expect(files[0]).not.toContain(':');
@@ -96,8 +113,7 @@ describe('FileLogTransportInstance', () => {
 
   it('should disable file logging when FRONTMCP_LOGS_MAX=0', () => {
     process.env['FRONTMCP_LOGS_MAX'] = '0';
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    const transport = new FileLogTransportInstance({});
+    const transport = createTransport();
 
     transport.log(makeRecord());
 
@@ -113,8 +129,7 @@ describe('FileLogTransportInstance', () => {
     }
 
     process.env['FRONTMCP_LOGS_MAX'] = '3';
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    new FileLogTransportInstance({});
+    createTransport();
 
     // 5 old + 1 new = 6, max 3 → should keep 3 newest
     const files = fs
@@ -133,8 +148,7 @@ describe('FileLogTransportInstance', () => {
     const customHome = path.join(tmpDir, 'custom-home');
     process.env['FRONTMCP_HOME'] = customHome;
 
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    new FileLogTransportInstance({});
+    createTransport();
 
     const logDir = path.join(customHome, 'logs');
     expect(fs.existsSync(logDir)).toBe(true);
@@ -144,8 +158,7 @@ describe('FileLogTransportInstance', () => {
 
   it('should default app name to "frontmcp" when FRONTMCP_APP_NAME is not set', () => {
     delete process.env['FRONTMCP_APP_NAME'];
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    new FileLogTransportInstance({});
+    createTransport();
 
     const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.log'));
     expect(files[0]).toMatch(/^frontmcp-/);
@@ -157,22 +170,10 @@ describe('FileLogTransportInstance', () => {
     fs.writeFileSync(blockingFile, 'x');
     process.env['FRONTMCP_LOG_DIR'] = path.join(blockingFile, 'subdir');
 
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    const transport = new FileLogTransportInstance({});
+    const transport = createTransport();
 
     // Should not throw when logging
     expect(() => transport.log(makeRecord())).not.toThrow();
-  });
-
-  it('should not write to file when fd is undefined (degraded mode)', () => {
-    process.env['FRONTMCP_LOGS_MAX'] = '0';
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    const transport = new FileLogTransportInstance({});
-
-    transport.log(makeRecord());
-
-    const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.log'));
-    expect(files).toHaveLength(0);
   });
 
   it('should only rotate files matching the app name prefix', () => {
@@ -181,8 +182,7 @@ describe('FileLogTransportInstance', () => {
     fs.writeFileSync(path.join(tmpDir, 'other-app-2026-01-01T00_00_00_000Z.log'), 'b\n');
 
     process.env['FRONTMCP_LOGS_MAX'] = '1';
-    const { FileLogTransportInstance } = require('../instances/instance.file-logger');
-    new FileLogTransportInstance({});
+    createTransport();
 
     const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.log'));
     // other-app file should still exist (not rotated)

@@ -52,7 +52,7 @@ import {
 } from './llm-platform';
 import type { Scope } from '../scope/scope.instance';
 import { PublicMcpError } from '../errors';
-import { randomUUID, pathResolve } from '@frontmcp/utils';
+import { randomUUID, pathResolve, fileExists } from '@frontmcp/utils';
 import { Client } from '@frontmcp/protocol';
 import {
   SkillsSearchResultSchema,
@@ -562,7 +562,6 @@ export class DirectClientImpl implements DirectClient {
 
     const skills = scope.skills.getSkills({ includeHidden: true });
     const entries: SkillAssetEntry[] = [];
-    const fs = require('fs');
 
     for (const skill of skills) {
       const baseDir = (skill as { getBaseDir?: () => string | undefined }).getBaseDir?.();
@@ -580,7 +579,7 @@ export class DirectClientImpl implements DirectClient {
 
         // In bundled environments, baseDir may resolve incorrectly (e.g., to the SDK dist).
         // If the resolved path doesn't exist, try resolving from cwd (the project root during build).
-        if (resolved && fs.existsSync(resolved)) {
+        if (resolved && (await fileExists(resolved))) {
           entry.instructionFile = resolved;
         } else if (!filePath.startsWith('/')) {
           // Search from project root using a glob-like walk for the relative path
@@ -599,12 +598,9 @@ export class DirectClientImpl implements DirectClient {
         for (const key of ['references', 'examples', 'scripts', 'assets'] as const) {
           const p = resources[key];
           if (p) {
-            const resolved = p.startsWith('/')
-              ? p
-              : entry.baseDir || baseDir
-                ? pathResolve(entry.baseDir || baseDir!, p)
-                : undefined;
-            if (resolved && fs.existsSync(resolved)) {
+            const base = entry.baseDir || baseDir;
+            const resolved = p.startsWith('/') ? p : base ? pathResolve(base, p) : undefined;
+            if (resolved && (await fileExists(resolved))) {
               entry.resources[key] = resolved;
             }
           }
@@ -648,12 +644,15 @@ function walkForFile(
   targetRelative: string,
   fs: typeof import('fs'),
   path: typeof import('path'),
+  maxDepth = 10,
 ): { absolute: string; baseDir: string } | undefined {
   // Check if targetRelative exists relative to this dir
   const candidate = path.join(dir, targetRelative);
   if (fs.existsSync(candidate)) {
     return { absolute: candidate, baseDir: dir };
   }
+
+  if (maxDepth <= 0) return undefined;
 
   // Recurse into subdirectories
   try {
@@ -665,7 +664,7 @@ function walkForFile(
         entry.name !== 'node_modules' &&
         entry.name !== 'dist'
       ) {
-        const result = walkForFile(path.join(dir, entry.name), targetRelative, fs, path);
+        const result = walkForFile(path.join(dir, entry.name), targetRelative, fs, path, maxDepth - 1);
         if (result) return result;
       }
     }

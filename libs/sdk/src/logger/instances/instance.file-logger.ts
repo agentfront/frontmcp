@@ -13,9 +13,12 @@ const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
 };
 
 /** Strip ANSI escape codes from a string (colors, bold, etc.). */
+const ESC = String.fromCharCode(0x1b);
 function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return str
+    .split(ESC)
+    .map((s) => s.replace(/\[[0-9;]*m/, ''))
+    .join('');
 }
 
 /** Maximum number of log files to keep per app (npm-style count-based rotation). */
@@ -50,7 +53,10 @@ export class FileLogTransportInstance extends LogTransportInterface {
 
   constructor(_config: unknown, ..._args: unknown[]) {
     super();
-    this.appName = process.env['FRONTMCP_APP_NAME'] || 'frontmcp';
+    // Sanitize app name to prevent path traversal (e.g., "../" in env var)
+    const rawAppName = process.env['FRONTMCP_APP_NAME'] || 'frontmcp';
+    const sanitized = rawAppName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    this.appName = sanitized.length > 0 ? sanitized : 'frontmcp';
     this.logDir =
       process.env['FRONTMCP_LOG_DIR'] ||
       path.join(process.env['FRONTMCP_HOME'] || path.join(os.homedir(), '.frontmcp'), 'logs');
@@ -74,6 +80,18 @@ export class FileLogTransportInstance extends LogTransportInterface {
       this.rotate(isNaN(logsMax) ? DEFAULT_LOGS_MAX : logsMax);
     } catch {
       // If we can't open the log file, degrade silently
+      this.fd = undefined;
+    }
+  }
+
+  /** Close the file descriptor. Call during shutdown to prevent handle leaks. */
+  close(): void {
+    if (this.fd !== undefined) {
+      try {
+        fs.closeSync(this.fd);
+      } catch {
+        /* ignore */
+      }
       this.fd = undefined;
     }
   }
