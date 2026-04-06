@@ -12,8 +12,9 @@ import type { TFIDFVectoria } from 'vectoriadb';
 interface SkillReferenceExample {
   name: string;
   description: string;
-  level: string;
+  level: 'basic' | 'intermediate' | 'advanced';
   tags: string[];
+  features: string[];
 }
 
 interface SkillReference {
