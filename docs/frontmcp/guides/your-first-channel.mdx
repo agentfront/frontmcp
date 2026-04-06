@@ -1,0 +1,256 @@
+---
+title: Your First Channel
+slug: guides/your-first-channel
+description: Build a real-time notification channel that pushes events into Claude Code
+icon: bell
+---
+
+Build a CI/CD alert channel that forwards deploy events into Claude Code, then upgrade it to a two-way service connector with replay support. By the end, you'll understand how channels work end-to-end.
+
+<Info>
+**Prerequisites**: A FrontMCP project initialized ([see Installation](/frontmcp/getting-started/installation)). Channels require `@frontmcp/sdk` >= 1.0.0.
+</Info>
+
+## What You'll Build
+
+1. A webhook channel that receives deploy events and pushes them to Claude Code
+2. Upgrade to a two-way channel where Claude can reply
+3. Add a service connector with outbound tools
+4. Add replay buffering for offline sessions
+
+---
+
+## Step 1: Create the Channel
+
+Create `src/apps/devops/channels/deploy.channel.ts`:
+
+```typescript
+import { Channel, ChannelContext } from '@frontmcp/sdk';
+import type { ChannelNotification } from '@frontmcp/sdk';
+
+@Channel({
+  name: 'deploy-alerts',
+  description: 'CI/CD deployment status notifications',
+  source: { type: 'webhook', path: '/hooks/deploy' },
+  meta: { team: 'platform' },
+})
+export class DeployChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body } = payload as { body: { status: string; version: string; env: string } };
+    return {
+      content: `Deploy ${body.status}: ${body.version} to ${body.env}`,
+      meta: { status: body.status, version: body.version, env: body.env },
+    };
+  }
+}
+```
+
+Key concepts:
+
+| Part | Purpose |
+| --- | --- |
+| `@Channel()` | Declares metadata — name, source, static meta |
+| `ChannelContext` | Base class providing logger, DI, and lifecycle hooks |
+| `onEvent()` | **Inbound handler** — receives external events, returns a notification for Claude |
+| `source: { type: 'webhook', path: '...' }` | Registers an HTTP POST endpoint |
+| `meta` | Static key-value pairs added to every notification |
+
+---
+
+## Step 2: Register in an App
+
+Create `src/apps/devops/index.ts`:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import { DeployChannel } from './channels/deploy.channel';
+
+@App({
+  name: 'DevOps',
+  description: 'CI/CD and deployment monitoring',
+  channels: [DeployChannel],
+})
+export class DevOpsApp {}
+```
+
+---
+
+## Step 3: Enable Channels in Server
+
+Update `src/main.ts`:
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+import { DevOpsApp } from './apps/devops';
+
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [DevOpsApp],
+  channels: { enabled: true },
+})
+export default class Server {}
+```
+
+<Warning>
+Channels must be explicitly enabled with `channels: { enabled: true }`. Without this, channel declarations are ignored.
+</Warning>
+
+---
+
+## Step 4: Test It
+
+Write an E2E test using `createDirect()`:
+
+```typescript
+import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
+
+describe('Deploy Channel', () => {
+  let server: DirectMcpServer;
+
+  beforeEach(async () => {
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'test', version: '0.0.1' },
+      apps: [DevOpsApp],
+      auth: { mode: 'public' },
+      channels: { enabled: true },
+    });
+  });
+
+  afterEach(async () => {
+    await server.dispose();
+  });
+
+  it('should register the channel', async () => {
+    const tools = await server.listTools();
+    // No tools from this channel (it's one-way, no reply tool needed)
+    expect(tools).toBeDefined();
+  });
+});
+```
+
+When Claude Code connects to this server, it will see events as:
+
+```xml
+<channel source="deploy-alerts" team="platform" status="success" version="1.2.3" env="production">
+Deploy success: 1.2.3 to production
+</channel>
+```
+
+---
+
+## Step 5: Add Two-Way Support
+
+Make it so Claude can reply to deploy events (e.g., to trigger a rollback):
+
+```typescript
+@Channel({
+  name: 'deploy-alerts',
+  description: 'CI/CD notifications. Reply to trigger actions.',
+  source: { type: 'webhook', path: '/hooks/deploy' },
+  twoWay: true,  // Enables the channel-reply tool
+  meta: { team: 'platform' },
+})
+export class DeployChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    // ... same as before
+  }
+
+  async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
+    // Claude replied — forward to Slack, trigger rollback, etc.
+    console.log(`Claude says: ${reply}`);
+    if (reply.toLowerCase().includes('rollback')) {
+      await triggerRollback(meta?.version);
+    }
+  }
+}
+```
+
+Setting `twoWay: true` auto-registers a `channel-reply` tool. Claude can now call:
+
+```
+channel-reply({ channel_name: "deploy-alerts", text: "Rollback to v1.2.2", meta: { version: "1.2.2" } })
+```
+
+---
+
+## Step 6: Upgrade to Service Connector
+
+For full bidirectional messaging (like WhatsApp), use a service connector with contributed tools:
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Outbound tool — Claude calls this to send messages
+@Tool({
+  name: 'send-deploy-command',
+  description: 'Send a deploy command to the CD system',
+  inputSchema: {
+    env: z.enum(['staging', 'production']),
+    version: z.string(),
+  },
+})
+class SendDeployCommand extends ToolContext {
+  async execute(input: { env: string; version: string }) {
+    // Call CD API to trigger deploy
+    return { triggered: true, env: input.env, version: input.version };
+  }
+}
+
+// Upgrade the channel to service connector
+@Channel({
+  name: 'deploy-service',
+  description: 'Bidirectional deploy service. Send commands and receive status.',
+  source: { type: 'service', service: 'deploy-pipeline' },
+  tools: [SendDeployCommand],  // Auto-registered in tool list
+  twoWay: true,
+})
+export class DeployServiceChannel extends ChannelContext {
+  async onConnect(): Promise<void> {
+    // Start listening to deploy pipeline events
+    this.logger.info('Connected to deploy pipeline');
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const event = payload as { status: string; version: string };
+    return { content: `Deploy ${event.status}: ${event.version}` };
+  }
+}
+```
+
+---
+
+## Step 7: Add Replay Buffer
+
+Events that arrive while Claude is offline can be buffered and replayed:
+
+```typescript
+@Channel({
+  name: 'deploy-alerts',
+  source: { type: 'webhook', path: '/hooks/deploy' },
+  replay: {
+    enabled: true,
+    maxEvents: 50,  // Ring buffer, oldest evicted
+  },
+})
+export class DeployChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    // ... same as before
+  }
+}
+```
+
+When a new Claude Code session connects, buffered events can be replayed. Replayed events include `replayed: "true"` in their meta so Claude can distinguish them from live events.
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Channels Reference" icon="book" href="/frontmcp/servers/channels">
+    Full channels documentation with all 7 source types
+  </Card>
+  <Card title="@Channel API" icon="at" href="/frontmcp/sdk-reference/decorators/channel">
+    Complete decorator and configuration reference
+  </Card>
+</CardGroup>

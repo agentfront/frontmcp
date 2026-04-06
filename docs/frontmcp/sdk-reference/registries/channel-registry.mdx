@@ -1,0 +1,228 @@
+---
+title: "ChannelRegistry"
+description: "Registry that manages channel instances, advertises capabilities, and provides lookup methods."
+icon: "bell"
+---
+
+## Overview
+
+`ChannelRegistry` extends `RegistryAbstract` and manages all channel instances in a scope. It advertises `experimental: { 'claude/channel': {} }` in server capabilities when channels are registered.
+
+## Methods
+
+### getChannels
+
+Get all channel entries.
+
+```typescript
+getChannels(): ChannelEntry[]
+```
+
+### getChannelInstances
+
+Get all concrete channel instances.
+
+```typescript
+getChannelInstances(): ChannelInstance[]
+```
+
+### findByName
+
+Find a channel by its declared name.
+
+```typescript
+findByName(name: string): ChannelInstance | undefined
+```
+
+### hasAny
+
+Check if any channels are registered.
+
+```typescript
+hasAny(): boolean
+```
+
+### size
+
+Get the number of registered channels.
+
+```typescript
+get size(): number
+```
+
+### getCapabilities
+
+Get MCP server capabilities contributed by channels.
+
+```typescript
+getCapabilities(): Partial<ServerCapabilities>
+```
+
+Returns `{ experimental: { 'claude/channel': {} } }` when channels exist, empty object otherwise.
+
+### subscribe
+
+Subscribe to channel registry changes.
+
+```typescript
+subscribe(
+  opts: { immediate?: boolean },
+  cb: (e: ChannelChangeEvent) => void
+): () => void
+```
+
+Returns an unsubscribe function.
+
+## ChannelChangeEvent
+
+```typescript
+type ChannelChangeEvent = {
+  kind: 'added' | 'updated' | 'removed' | 'reset';
+  changeScope: 'global' | 'session';
+  sessionId?: string;
+  version: number;
+  snapshot: readonly ChannelEntry[];
+};
+```
+
+## Accessing the Registry
+
+The channel registry is available on the scope after initialization:
+
+```typescript
+// From a tool context
+const scope = this.scope as unknown as { channels?: ChannelRegistry };
+const channels = scope.channels;
+
+if (channels?.hasAny()) {
+  const allChannels = channels.getChannels();
+  const chatBridge = channels.findByName('chat-bridge');
+}
+```
+
+## Session-Scoped Subscriptions
+
+Channel notifications are **session-scoped**. Sessions must be subscribed to a channel to receive its notifications. This prevents data from leaking between connected agents.
+
+Subscription methods are on `NotificationService` (accessed via `scope.notifications`):
+
+### subscribeChannel
+
+```typescript
+scope.notifications.subscribeChannel(sessionId: string, channelName: string): boolean
+```
+
+Subscribe a session to a specific channel. Returns `true` if this is a new subscription.
+
+### unsubscribeChannel
+
+```typescript
+scope.notifications.unsubscribeChannel(sessionId: string, channelName: string): boolean
+```
+
+Remove a session's subscription to a channel.
+
+### subscribeAllChannels
+
+```typescript
+scope.notifications.subscribeAllChannels(sessionId: string, channelNames: string[]): void
+```
+
+Bulk subscribe a session to multiple channels. Called automatically during MCP initialize when the client has `claude/channel` capability.
+
+### isChannelSubscribed
+
+```typescript
+scope.notifications.isChannelSubscribed(sessionId: string, channelName: string): boolean
+```
+
+### getSubscribersForChannel
+
+```typescript
+scope.notifications.getSubscribersForChannel(channelName: string): string[]
+```
+
+Returns all session IDs subscribed to a channel.
+
+### getChannelSubscriptions
+
+```typescript
+scope.notifications.getChannelSubscriptions(sessionId: string): string[]
+```
+
+Returns all channel names a session is subscribed to.
+
+<Info>
+**Auto-subscription:** When a session initializes with `experimental: { 'claude/channel': {} }` capability, it is automatically subscribed to all available channels. Channel subscriptions are cleaned up automatically when a session disconnects.
+</Info>
+
+## Session-Targeted Delivery
+
+Events from session-scoped sources (agent completion, job completion) carry the originating `sessionId` and are delivered ONLY to that session:
+
+```typescript
+// ChannelInstance.pushNotification() with targetSessionId
+channel.pushNotification('Job completed', { job: 'daily-report' }, targetSessionId);
+//                                                                  ^^^^^^^^^^^^^^^^
+//                                                            only this session receives it
+```
+
+Global events (webhooks, file changes, app events) have no `targetSessionId` and go to all subscribed sessions.
+
+## Replay Buffer
+
+Channels with `replay: { enabled: true }` buffer events for later delivery:
+
+### replayBufferedEvents
+
+```typescript
+channel.replayBufferedEvents(sessionId: string): number
+```
+
+Replay all buffered events to a session. Returns the number of events replayed. Replayed events include `replayed: "true"` in their meta.
+
+### clearReplayBuffer
+
+```typescript
+channel.clearReplayBuffer(): void
+```
+
+<Info>
+Session-targeted events are NOT buffered (they're ephemeral to the session). Only global events are stored in the replay buffer.
+</Info>
+
+## ChannelNotificationService
+
+The companion service for sending notifications (session-scoped):
+
+```typescript
+const scope = this.scope as unknown as {
+  channelNotifications?: ChannelNotificationService;
+};
+
+// Send to all sessions subscribed to 'status' channel
+scope.channelNotifications?.send('status', 'Deployment complete');
+
+// Send to a specific session only
+scope.channelNotifications?.sendToSession(sessionId, 'Job result', { source: 'jobs' });
+```
+
+## ChannelEventBus
+
+The in-process event bus for `app-event` sources:
+
+```typescript
+const scope = this.scope as unknown as { channelEventBus?: ChannelEventBus };
+
+// Emit an event that channels with matching app-event source receive
+scope.channelEventBus?.emit('app:error', {
+  message: 'Connection refused',
+  level: 'critical',
+});
+```
+
+## Related
+
+- [@Channel Decorator](/frontmcp/sdk-reference/decorators/channel) — decorator configuration
+- [ChannelContext](/frontmcp/sdk-reference/contexts/channel-context) — context class
+- [Channels Guide](/frontmcp/servers/channels) — full documentation

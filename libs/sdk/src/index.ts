@@ -104,6 +104,26 @@ export type {
   WorkflowChangeScope,
 } from './workflow';
 
+// Channel exports - push-based notification channels for Claude Code
+export {
+  ChannelInstance,
+  ChannelRegistry,
+  ChannelEmitter,
+  ChannelNotificationService,
+  ChannelEventBus,
+  ChannelReplyTool,
+} from './channel';
+export type {
+  ChannelRegistryInterface,
+  IndexedChannel,
+  ChannelChangeEvent,
+  ChannelChangeKind,
+  ChannelChangeScope,
+  ChannelReplyInput,
+  RegisterChannelCapabilitiesArgs,
+  ChannelCapabilitiesResult,
+} from './channel';
+
 // Skill exports - skills are knowledge/workflow packages for multi-step tasks
 export {
   // Registry
@@ -185,6 +205,10 @@ export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-te
 
 // Agent hooks
 export const AgentCallHook = FlowHooksOf('agents:call-agent');
+
+// Channel hooks
+export const ChannelSendHook = FlowHooksOf('channels:send-notification');
+export const ChannelListHook = FlowHooksOf('channels:list');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Built-in Plugins

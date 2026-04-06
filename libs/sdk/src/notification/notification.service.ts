@@ -272,6 +272,15 @@ export function detectAIPlatform(clientInfo?: ClientInfo, config?: PlatformDetec
 }
 
 /**
+ * Check if client capabilities include Claude Code channels support.
+ * @param capabilities - Client capabilities from initialize request
+ * @returns true if the client supports the claude/channel experimental extension
+ */
+export function supportsChannels(capabilities?: ClientCapabilities): boolean {
+  return capabilities?.experimental?.['claude/channel'] !== undefined;
+}
+
+/**
  * MCP logging level priority (lower number = more verbose).
  * Uses LoggingLevel from MCP SDK for type safety.
  */
@@ -347,6 +356,8 @@ export class NotificationService {
   private readonly unsubscribers: Array<() => void> = [];
   /** Maps session ID to set of subscribed resource URIs */
   private readonly subscriptions = new Map<string, Set<string>>();
+  /** Maps session ID to set of subscribed channel names */
+  private readonly channelSubscriptions = new Map<string, Set<string>>();
   /** Maps session ID to minimum log level for that session */
   private readonly logLevels = new Map<string, McpLoggingLevel>();
   /**
@@ -441,6 +452,10 @@ export class NotificationService {
     const subCount = this.subscriptions.get(sessionId)?.size ?? 0;
     this.subscriptions.delete(sessionId);
 
+    // Clean up channel subscriptions for this session
+    const channelSubCount = this.channelSubscriptions.get(sessionId)?.size ?? 0;
+    this.channelSubscriptions.delete(sessionId);
+
     // Clean up log level setting for this session
     const hadLogLevel = this.logLevels.delete(sessionId);
 
@@ -448,7 +463,7 @@ export class NotificationService {
       this.logger.verbose(
         `Unregistered server for session: ${sessionId.slice(0, 20)}... (remaining: ${
           this.servers.size
-        }, cleaned ${subCount} subscription(s)${hadLogLevel ? ', removed log level' : ''})`,
+        }, cleaned ${subCount} resource sub(s), ${channelSubCount} channel sub(s)${hadLogLevel ? ', removed log level' : ''})`,
       );
     }
     return deleted;
@@ -651,6 +666,101 @@ export class NotificationService {
     for (const sessionId of subscribers) {
       this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
     }
+  }
+
+  // =====================================================
+  // Channel Subscriptions (session-scoped)
+  // =====================================================
+
+  /**
+   * Subscribe a session to receive notifications from a specific channel.
+   * Only sessions subscribed to a channel will receive its notifications.
+   *
+   * @param sessionId - The session to subscribe
+   * @param channelName - The channel name to subscribe to
+   * @returns true if this is a new subscription
+   */
+  subscribeChannel(sessionId: string, channelName: string): boolean {
+    if (!this.servers.has(sessionId)) {
+      this.logger.warn(`Cannot subscribe unregistered session ${sessionId.slice(0, 20)}... to channel ${channelName}`);
+      return false;
+    }
+
+    let sessionSubs = this.channelSubscriptions.get(sessionId);
+    if (!sessionSubs) {
+      sessionSubs = new Set();
+      this.channelSubscriptions.set(sessionId, sessionSubs);
+    }
+
+    const isNew = !sessionSubs.has(channelName);
+    sessionSubs.add(channelName);
+
+    if (isNew) {
+      this.logger.verbose(`Session ${sessionId.slice(0, 20)}... subscribed to channel "${channelName}"`);
+    }
+    return isNew;
+  }
+
+  /**
+   * Unsubscribe a session from a specific channel.
+   *
+   * @param sessionId - The session to unsubscribe
+   * @param channelName - The channel name
+   * @returns true if the subscription was removed
+   */
+  unsubscribeChannel(sessionId: string, channelName: string): boolean {
+    const sessionSubs = this.channelSubscriptions.get(sessionId);
+    if (!sessionSubs) return false;
+
+    const wasSubscribed = sessionSubs.delete(channelName);
+    if (sessionSubs.size === 0) {
+      this.channelSubscriptions.delete(sessionId);
+    }
+    return wasSubscribed;
+  }
+
+  /**
+   * Subscribe a session to ALL available channels at once.
+   * Convenience method called during initialization when a session has claude/channel capability.
+   *
+   * @param sessionId - The session to subscribe
+   * @param channelNames - Array of all channel names to subscribe to
+   */
+  subscribeAllChannels(sessionId: string, channelNames: string[]): void {
+    for (const name of channelNames) {
+      this.subscribeChannel(sessionId, name);
+    }
+  }
+
+  /**
+   * Check if a session is subscribed to a specific channel.
+   */
+  isChannelSubscribed(sessionId: string, channelName: string): boolean {
+    return this.channelSubscriptions.get(sessionId)?.has(channelName) ?? false;
+  }
+
+  /**
+   * Get all sessions subscribed to a specific channel.
+   *
+   * @param channelName - The channel name
+   * @returns Array of session IDs subscribed to this channel
+   */
+  getSubscribersForChannel(channelName: string): string[] {
+    const subscribers: string[] = [];
+    for (const [sessionId, channels] of this.channelSubscriptions) {
+      if (channels.has(channelName)) {
+        subscribers.push(sessionId);
+      }
+    }
+    return subscribers;
+  }
+
+  /**
+   * Get all channel names a session is subscribed to.
+   */
+  getChannelSubscriptions(sessionId: string): string[] {
+    const subs = this.channelSubscriptions.get(sessionId);
+    return subs ? [...subs] : [];
   }
 
   /**
@@ -1028,6 +1138,45 @@ export class NotificationService {
     this.terminatedSessions.clear();
 
     this.logger.info('Notification service destroyed');
+  }
+
+  /**
+   * Send a custom/experimental notification to sessions matching an optional filter.
+   * Used for non-standard notification methods like 'notifications/claude/channel'.
+   *
+   * @param method - The notification method string (can be non-standard)
+   * @param params - Notification parameters
+   * @param filter - Optional filter function to select which sessions receive the notification
+   */
+  sendCustomNotification(
+    method: string,
+    params: Record<string, unknown>,
+    filter?: (session: RegisteredServer) => boolean,
+  ): void {
+    if (this.servers.size === 0) {
+      this.logger.verbose(`No servers registered for custom notification: ${method}`);
+      return;
+    }
+
+    let sent = 0;
+    for (const [sessionId, registered] of this.servers) {
+      if (filter && !filter(registered)) continue;
+      this.sendNotificationToServer(registered.server, sessionId, method as McpNotificationMethod, params);
+      sent++;
+    }
+
+    this.logger.verbose(`Sent custom notification ${method} to ${sent}/${this.servers.size} session(s)`);
+  }
+
+  /**
+   * Get a registered server by session ID.
+   * Used by ChannelNotificationService for targeted sends.
+   *
+   * @param sessionId - The session ID
+   * @returns The registered server info, or undefined if not found
+   */
+  getRegisteredServer(sessionId: string): RegisteredServer | undefined {
+    return this.servers.get(sessionId);
   }
 
   private sendNotificationToServer(

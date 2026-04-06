@@ -24,9 +24,16 @@ describe('createTokenFactory', () => {
       expect(token.toString()).toBe('Symbol(DI:meta:config)');
     });
 
-    it('should create unique symbols for each call', () => {
+    it('should return the same global symbol for the same key', () => {
       const token1 = factory.type('Service');
       const token2 = factory.type('Service');
+      // Symbol.for() returns the same symbol for the same key (cross-module safe)
+      expect(token1).toBe(token2);
+    });
+
+    it('should return different symbols for different names', () => {
+      const token1 = factory.type('ServiceA');
+      const token2 = factory.type('ServiceB');
       expect(token1).not.toBe(token2);
     });
   });

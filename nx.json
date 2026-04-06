@@ -92,9 +92,8 @@
   "release": {
     "projects": ["libs/*", "plugins/*"],
     "version": {
-      "generatorOptions": {
-        "updateDependents": "auto"
-      }
+      "updateDependents": "always"
     }
-  }
+  },
+  "analytics": false
 }

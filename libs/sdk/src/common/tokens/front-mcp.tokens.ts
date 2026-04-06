@@ -47,4 +47,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   observability: tokenFactory.meta('observability'),
   // health and readiness endpoints
   health: tokenFactory.meta('health'),
+  // channels configuration (Claude Code notifications)
+  channels: tokenFactory.meta('channels'),
 };

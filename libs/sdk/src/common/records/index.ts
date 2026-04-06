@@ -27,3 +27,4 @@ export * from './agent.record';
 export * from './skill.record';
 export * from './job.record';
 export * from './workflow.record';
+export * from './channel.record';
