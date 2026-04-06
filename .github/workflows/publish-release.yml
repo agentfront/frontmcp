@@ -503,7 +503,7 @@ jobs:
           generate_release_notes: true
           body_path: /tmp/release-body.md
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.DOCS_SYNC_TOKEN }}
 
       - name: Trigger docs sync
         if: ${{ needs.prepare.outputs.is_prerelease != 'true' }}

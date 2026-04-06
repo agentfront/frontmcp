@@ -57,11 +57,17 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-uipack': { start: 50320, size: 10 },
   'demo-e2e-agent-adapters': { start: 50330, size: 10 },
   'demo-e2e-guard': { start: 50340, size: 10 },
+  'demo-e2e-cli-exec': { start: 50350, size: 10 },
+  'demo-e2e-env-awareness': { start: 50360, size: 10 },
+  'demo-e2e-esm': { start: 50370, size: 10 },
+  'demo-e2e-feature-flags': { start: 50380, size: 10 },
+  'demo-e2e-resource-providers': { start: 50390, size: 10 },
 
   // ESM E2E tests (50400-50449)
   'esm-package-server': { start: 50400, size: 10 },
   'esm-package-server-hot-reload': { start: 50410, size: 10 },
   'esm-package-server-cli': { start: 50420, size: 10 },
+  'demo-e2e-unix-socket': { start: 50430, size: 10 },
 
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },
