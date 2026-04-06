@@ -54,7 +54,7 @@ describe('workspace generator', () => {
 
     const packageJson = readJson(tree, 'my-project/package.json');
     expect(packageJson.dependencies['@frontmcp/sdk']).toBeDefined();
-    expect(packageJson.dependencies['@frontmcp/cli']).toBeDefined();
+    expect(packageJson.dependencies['frontmcp']).toBeDefined();
     expect(packageJson.devDependencies['@frontmcp/nx']).toBeDefined();
     expect(packageJson.devDependencies['@frontmcp/testing']).toBeDefined();
   });

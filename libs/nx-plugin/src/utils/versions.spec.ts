@@ -2,6 +2,7 @@ import {
   getFrontmcpVersion,
   getFrontmcpDependencies,
   getFrontmcpDevDependencies,
+  getNxVersion,
   getNxDependencies,
   getNxDevDependencies,
 } from './versions';
@@ -26,7 +27,7 @@ describe('versions', () => {
     it('should return frontmcp dependencies with version range', () => {
       const deps = getFrontmcpDependencies();
       expect(deps['@frontmcp/sdk']).toBe('~0.11.1');
-      expect(deps['@frontmcp/cli']).toBe('~0.11.1');
+      expect(deps['frontmcp']).toBe('~0.11.1');
       expect(deps['reflect-metadata']).toBe('^0.2.2');
       expect(deps['zod']).toBe('^4.0.0');
     });
@@ -39,11 +40,18 @@ describe('versions', () => {
     });
   });
 
+  describe('getNxVersion', () => {
+    it('should return the nx version string', () => {
+      expect(getNxVersion()).toBe('22.6.4');
+    });
+  });
+
   describe('getNxDependencies', () => {
-    it('should return nx core dependencies', () => {
+    it('should return nx core dependencies using NX_VERSION', () => {
       const deps = getNxDependencies();
-      expect(deps['nx']).toBe('22.3.3');
-      expect(deps['@nx/devkit']).toBe('22.3.3');
+      const version = getNxVersion();
+      expect(deps['nx']).toBe(version);
+      expect(deps['@nx/devkit']).toBe(version);
     });
   });
 
