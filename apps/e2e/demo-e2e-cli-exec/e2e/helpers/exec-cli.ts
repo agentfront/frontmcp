@@ -5,13 +5,14 @@ import type { StdioOptions } from 'node:child_process';
 
 const APP_NAME = 'cli-exec-demo';
 const FIXTURE_DIR = path.resolve(__dirname, '../../fixture');
-const DIST_DIR = path.join(FIXTURE_DIR, 'dist');
+// Build targets output to dist/{target}/ subdirectories
+const DIST_DIR = path.join(FIXTURE_DIR, 'dist', 'cli');
 const CLI_BUNDLE = path.join(DIST_DIR, 'cli-exec-demo-cli.bundle.js');
 const SERVER_BUNDLE = path.join(DIST_DIR, 'cli-exec-demo.bundle.js');
 const MANIFEST = path.join(DIST_DIR, 'cli-exec-demo.manifest.json');
 
 // SEA build support — separate output dir to avoid interfering with regular builds
-const SEA_DIST_DIR = path.join(FIXTURE_DIR, 'dist-sea');
+const SEA_DIST_DIR = path.join(FIXTURE_DIR, 'dist-sea', 'cli');
 const SEA_CLI_BINARY = path.join(SEA_DIST_DIR, `${APP_NAME}-cli-bin`);
 
 let buildDone = false;

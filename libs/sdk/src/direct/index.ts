@@ -47,6 +47,9 @@ export type {
   ExecuteWorkflowOptions,
   WorkflowExecutionResult,
   WorkflowStatusResult,
+  // Build-time asset types
+  SkillAssetEntry,
+  SkillAssetManifest,
 } from './client.types';
 
 // ─────────────────────────────────────────────────────────────────────────────

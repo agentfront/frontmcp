@@ -707,4 +707,44 @@ export interface DirectClient {
    * @returns Workflow status with state, step results, etc.
    */
   getWorkflowStatus(runId: string): Promise<WorkflowStatusResult>;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Build-Time Asset Collection
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Collect file assets referenced by skills (for build tooling).
+   *
+   * Used during `frontmcp build -t cli` to discover which content files
+   * (instruction .md files, reference/example directories) need to be
+   * copied to the dist folder.
+   *
+   * @returns Manifest of skill asset entries with resolved absolute paths
+   */
+  collectSkillAssets(): Promise<SkillAssetManifest>;
+}
+
+/**
+ * A single skill's file assets for build-time collection.
+ */
+export interface SkillAssetEntry {
+  skillName: string;
+  /** Resolved base directory for relative path resolution */
+  baseDir?: string;
+  /** Absolute path to instructions file (if file-based) */
+  instructionFile?: string;
+  /** Absolute paths to resource directories */
+  resources?: {
+    references?: string;
+    examples?: string;
+    scripts?: string;
+    assets?: string;
+  };
+}
+
+/**
+ * Manifest of all skill file assets, collected at build time.
+ */
+export interface SkillAssetManifest {
+  entries: SkillAssetEntry[];
 }

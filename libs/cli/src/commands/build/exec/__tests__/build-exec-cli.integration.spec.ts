@@ -203,6 +203,7 @@ beforeEach(() => {
       },
     ],
     capabilities: { skills: false, jobs: false, workflows: false },
+    skillAssets: [],
   });
 
   cli.generateCliEntry.mockReturnValue('// generated CLI entry\nvar { Command } = require("commander");');
