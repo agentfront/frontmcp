@@ -12,7 +12,9 @@ function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
     resources: [],
     resourceTemplates: [],
     prompts: [],
+    jobs: [],
     capabilities: { skills: false, jobs: false, workflows: false },
+    skillAssets: [],
     ...overrides,
   };
 }

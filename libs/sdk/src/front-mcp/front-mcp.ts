@@ -16,6 +16,7 @@ import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
 import { InternalMcpError, ServerNotFoundError } from '../errors';
+import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
 import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import type { FrontMcpServerInstance } from '../server/server.instance';
@@ -198,6 +199,25 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const parsedConfig = parseFrontMcpConfigLite(options);
     // Mark config for CLI mode so Scope can skip non-essential work
     (parsedConfig as Record<string, unknown>)['__cliMode'] = true;
+
+    // CLI logging: file transport always on, console only with --verbose.
+    // Follows npm/pip pattern: full verbosity goes to ~/.frontmcp/logs/,
+    // console stays clean unless explicitly requested.
+    const verbose = process.env['FRONTMCP_CLI_VERBOSE'] === '1';
+    if (parsedConfig.logging) {
+      parsedConfig.logging.enableConsole = verbose;
+      const transports = parsedConfig.logging.transports ?? [];
+      if (!transports.includes(FileLogTransportInstance)) {
+        transports.push(FileLogTransportInstance);
+      }
+      parsedConfig.logging.transports = transports;
+    } else {
+      (parsedConfig as Record<string, unknown>)['logging'] = {
+        enableConsole: verbose,
+        transports: [FileLogTransportInstance],
+      };
+    }
+
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;

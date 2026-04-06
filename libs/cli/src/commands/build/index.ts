@@ -104,28 +104,33 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
 export async function runBuild(opts: ParsedArgs): Promise<void> {
   const target = opts.buildTarget ?? 'node';
 
+  // Each target outputs to dist/{target}/ for clean separation
+  const baseOutDir = path.resolve(process.cwd(), opts.outDir || 'dist');
+  const targetOutDir = path.join(baseOutDir, target);
+  const targetOpts = { ...opts, outDir: targetOutDir };
+
   switch (target) {
     case 'cli': {
       const { buildExec } = await import('./exec/index.js');
-      return buildExec({ ...opts, cli: true, sea: !opts.js } as ParsedArgs & { cli: boolean; sea: boolean });
+      return buildExec({ ...targetOpts, cli: true, sea: !opts.js } as ParsedArgs & { cli: boolean; sea: boolean });
     }
     case 'node': {
       const { buildExec } = await import('./exec/index.js');
-      return buildExec(opts);
+      return buildExec(targetOpts);
     }
     case 'sdk': {
       const { buildSdk } = await import('./sdk/index.js');
-      return buildSdk(opts);
+      return buildSdk(targetOpts);
     }
     case 'browser': {
       const { buildBrowser } = await import('./browser/index.js');
-      return buildBrowser(opts);
+      return buildBrowser(targetOpts);
     }
     case 'vercel':
     case 'lambda':
     case 'cloudflare': {
       const adapter = TARGET_TO_ADAPTER[target];
-      return runAdapterBuild(opts, adapter);
+      return runAdapterBuild(targetOpts, adapter);
     }
     default:
       throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda`);

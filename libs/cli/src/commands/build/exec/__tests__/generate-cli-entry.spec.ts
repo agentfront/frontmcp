@@ -15,6 +15,7 @@ function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
     prompts: [],
     jobs: [],
     capabilities: { skills: false, jobs: false, workflows: false },
+    skillAssets: [],
     ...overrides,
   };
 }

@@ -40,6 +40,8 @@ import type {
   ExecuteWorkflowOptions,
   WorkflowExecutionResult,
   WorkflowStatusResult,
+  SkillAssetManifest,
+  SkillAssetEntry,
 } from './client.types';
 import {
   detectPlatform,
@@ -50,7 +52,7 @@ import {
 } from './llm-platform';
 import type { Scope } from '../scope/scope.instance';
 import { PublicMcpError } from '../errors';
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, pathResolve, fileExists } from '@frontmcp/utils';
 import { Client } from '@frontmcp/protocol';
 import {
   SkillsSearchResultSchema,
@@ -86,6 +88,9 @@ export class DirectClientImpl implements DirectClient {
 
   // Generic notification handlers
   private notificationHandlers: Set<(notification: { method: string; params?: unknown }) => void> = new Set();
+
+  // Scope reference for build-time operations (collectSkillAssets)
+  private scopeRef?: Scope;
 
   private constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,6 +171,7 @@ export class DirectClientImpl implements DirectClient {
 
       const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
       client.closeServer = close;
+      client.scopeRef = scope;
 
       // Set up internal handlers for notifications and requests
       // Note: MCP SDK uses typed notification/request handlers with zod schemas
@@ -545,4 +551,125 @@ export class DirectClientImpl implements DirectClient {
   async getWorkflowStatus(runId: string): Promise<WorkflowStatusResult> {
     return this.callToolAndParseJson('get-workflow-status', { runId });
   }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Build-Time Asset Collection
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async collectSkillAssets(): Promise<SkillAssetManifest> {
+    const scope = this.scopeRef;
+    if (!scope?.skills) return { entries: [] };
+
+    const skills = scope.skills.getSkills({ includeHidden: true });
+    const entries: SkillAssetEntry[] = [];
+
+    for (const skill of skills) {
+      const baseDir = (skill as { getBaseDir?: () => string | undefined }).getBaseDir?.();
+      const meta = skill.metadata;
+
+      const entry: SkillAssetEntry = {
+        skillName: meta.name,
+        baseDir,
+      };
+
+      // Collect instruction file path if file-based
+      if (meta.instructions && typeof meta.instructions === 'object' && 'file' in meta.instructions) {
+        const filePath = (meta.instructions as { file: string }).file;
+        const resolved = filePath.startsWith('/') ? filePath : baseDir ? pathResolve(baseDir, filePath) : undefined;
+
+        // In bundled environments, baseDir may resolve incorrectly (e.g., to the SDK dist).
+        // If the resolved path doesn't exist, try resolving from cwd (the project root during build).
+        if (resolved && (await fileExists(resolved))) {
+          entry.instructionFile = resolved;
+        } else if (!filePath.startsWith('/')) {
+          // Search from project root using a glob-like walk for the relative path
+          const fromCwd = findFileFromRoot(process.cwd(), filePath);
+          if (fromCwd) {
+            entry.instructionFile = fromCwd.absolute;
+            entry.baseDir = fromCwd.baseDir;
+          }
+        }
+      }
+
+      // Collect resource directory paths
+      const resources = skill.getResources?.();
+      if (resources) {
+        entry.resources = {};
+        for (const key of ['references', 'examples', 'scripts', 'assets'] as const) {
+          const p = resources[key];
+          if (p) {
+            const base = entry.baseDir || baseDir;
+            const resolved = p.startsWith('/') ? p : base ? pathResolve(base, p) : undefined;
+            if (resolved && (await fileExists(resolved))) {
+              entry.resources[key] = resolved;
+            }
+          }
+        }
+      }
+
+      entries.push(entry);
+    }
+
+    return { entries };
+  }
+}
+
+/**
+ * Search for a relative file path (e.g., './docs/foo.md') starting from a root directory.
+ * Walks src/ subdirectories to find the file when baseDir from stack-walking is incorrect
+ * in bundled environments.
+ */
+function findFileFromRoot(root: string, relativePath: string): { absolute: string; baseDir: string } | undefined {
+  const fs = require('fs');
+  const path = require('path');
+
+  // Strip leading ./ from relative path
+  const cleanRelative = relativePath.replace(/^\.\//, '');
+
+  // Try common source directories
+  const searchDirs = ['src', '.'];
+  for (const srcDir of searchDirs) {
+    const srcRoot = path.join(root, srcDir);
+    if (!fs.existsSync(srcRoot)) continue;
+
+    // Walk recursively looking for the file
+    const found = walkForFile(srcRoot, cleanRelative, fs, path);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function walkForFile(
+  dir: string,
+  targetRelative: string,
+  fs: typeof import('fs'),
+  path: typeof import('path'),
+  maxDepth = 10,
+): { absolute: string; baseDir: string } | undefined {
+  // Check if targetRelative exists relative to this dir
+  const candidate = path.join(dir, targetRelative);
+  if (fs.existsSync(candidate)) {
+    return { absolute: candidate, baseDir: dir };
+  }
+
+  if (maxDepth <= 0) return undefined;
+
+  // Recurse into subdirectories
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (
+        entry.isDirectory() &&
+        !entry.name.startsWith('.') &&
+        entry.name !== 'node_modules' &&
+        entry.name !== 'dist'
+      ) {
+        const result = walkForFile(path.join(dir, entry.name), targetRelative, fs, path, maxDepth - 1);
+        if (result) return result;
+      }
+    }
+  } catch {
+    // Ignore read errors
+  }
+  return undefined;
 }
