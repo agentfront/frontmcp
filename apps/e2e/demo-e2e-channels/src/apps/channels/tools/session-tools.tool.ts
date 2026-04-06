@@ -7,8 +7,21 @@
 
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import type { NotificationService } from '../../../../../../libs/sdk/src/notification/notification.service';
-import type ChannelRegistry from '../../../../../../libs/sdk/src/channel/channel.registry';
+// Use structural types instead of deep internal SDK imports
+interface NotificationServiceLike {
+  registerServer(sessionId: string, server: unknown): void;
+  unregisterServer(sessionId: string): void;
+  setClientCapabilities(sessionId: string, capabilities: Record<string, unknown>): void;
+  subscribeChannel(sessionId: string, channelName: string): boolean;
+  unsubscribeChannel(sessionId: string, channelName: string): boolean;
+  subscribeAllChannels(sessionId: string, channelNames: string[]): void;
+}
+interface ChannelRegistryLike {
+  findByName(
+    name: string,
+  ): { pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): void } | undefined;
+  getChannelInstances(): Array<{ name: string; twoWay: boolean }>;
+}
 
 /** Track which notifications each fake session receives (for test assertions) */
 const sessionNotifications = new Map<string, Array<{ content: string; meta: Record<string, string> }>>();
@@ -52,8 +65,8 @@ export class RegisterTestSessionTool extends ToolContext<{
   channels: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }> {
   async execute(input: { sessionId: string; channels?: string[] }) {
-    const notifications = this.scope.notifications as NotificationService;
-    const scope = this.scope as unknown as { channels?: ChannelRegistry };
+    const notifications = this.scope.notifications as NotificationServiceLike;
+    const scope = this.scope as unknown as { channels?: ChannelRegistryLike };
     const channelRegistry = scope.channels;
 
     // Clear any previous notifications for this session
@@ -98,7 +111,7 @@ export class RegisterTestSessionTool extends ToolContext<{
 })
 export class UnregisterTestSessionTool extends ToolContext<{ sessionId: z.ZodString }> {
   async execute(input: { sessionId: string }) {
-    const notifications = this.scope.notifications as NotificationService;
+    const notifications = this.scope.notifications as NotificationServiceLike;
     notifications.unregisterServer(input.sessionId);
     sessionNotifications.delete(input.sessionId);
     return { unregistered: true, sessionId: input.sessionId };
@@ -143,22 +156,20 @@ export class ClearSessionNotificationsTool extends ToolContext<{ sessionId: z.Zo
 
 // ─── Subscribe/Unsubscribe Channel Tool ─────────────────
 
+const manageSubSchema = {
+  sessionId: z.string(),
+  channelName: z.string(),
+  action: z.enum(['subscribe', 'unsubscribe']),
+};
+
 @Tool({
   name: 'manage-channel-subscription',
   description: 'Subscribe or unsubscribe a session from a specific channel',
-  inputSchema: {
-    sessionId: z.string(),
-    channelName: z.string(),
-    action: z.enum(['subscribe', 'unsubscribe']),
-  },
+  inputSchema: manageSubSchema,
 })
-export class ManageChannelSubscriptionTool extends ToolContext<{
-  sessionId: z.ZodString;
-  channelName: z.ZodString;
-  action: z.ZodEnum<['subscribe', 'unsubscribe']>;
-}> {
+export class ManageChannelSubscriptionTool extends ToolContext<typeof manageSubSchema> {
   async execute(input: { sessionId: string; channelName: string; action: 'subscribe' | 'unsubscribe' }) {
-    const notifications = this.scope.notifications as NotificationService;
+    const notifications = this.scope.notifications as NotificationServiceLike;
 
     if (input.action === 'subscribe') {
       const isNew = notifications.subscribeChannel(input.sessionId, input.channelName);
@@ -187,13 +198,13 @@ export class PushTargetedNotificationTool extends ToolContext<{
   targetSessionId: z.ZodOptional<z.ZodString>;
 }> {
   async execute(input: { channelName: string; content: string; targetSessionId?: string }) {
-    const scope = this.scope as unknown as { channels?: ChannelRegistry };
+    const scope = this.scope as unknown as { channels?: ChannelRegistryLike };
     const channel = scope.channels?.findByName(input.channelName);
     if (!channel) {
-      this.fail(`Channel "${input.channelName}" not found`);
+      this.fail(new Error(`Channel "${input.channelName}" not found`));
     }
 
-    channel.pushNotification(input.content, {}, input.targetSessionId);
+    channel!.pushNotification(input.content, {}, input.targetSessionId);
     return {
       pushed: true,
       channelName: input.channelName,

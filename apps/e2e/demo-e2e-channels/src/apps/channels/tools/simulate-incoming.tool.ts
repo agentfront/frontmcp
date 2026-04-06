@@ -20,15 +20,13 @@ export default class SimulateIncomingTool extends ToolContext<typeof inputSchema
   }
 }
 
-const listSentSchema = {};
-
 @Tool({
   name: 'list-sent-messages',
   description: 'List all messages sent through the messaging service (for testing)',
-  inputSchema: listSentSchema,
+  inputSchema: {},
 })
-export class ListSentMessagesTool extends ToolContext<typeof listSentSchema> {
-  async execute() {
+export class ListSentMessagesTool extends ToolContext {
+  async execute(_input: Record<string, never>) {
     return { messages: sentMessages, count: sentMessages.length };
   }
 }
