@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/nx",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Nx plugin for FrontMCP — generators and executors for building MCP servers",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -33,7 +33,7 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/skills": "1.0.0-rc.1",
+    "@frontmcp/skills": "1.0.0",
     "@nx/devkit": "22.3.3",
     "tslib": "^2.3.0"
   },

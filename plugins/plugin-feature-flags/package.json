@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-feature-flags",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Feature flag plugin for FrontMCP - dynamically gate MCP capabilities behind feature flags",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -47,8 +47,8 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.0.0-rc.1",
-    "@frontmcp/utils": "1.0.0-rc.1",
+    "@frontmcp/sdk": "1.0.0",
+    "@frontmcp/utils": "1.0.0",
     "zod": "^4.0.0"
   },
   "peerDependencies": {
