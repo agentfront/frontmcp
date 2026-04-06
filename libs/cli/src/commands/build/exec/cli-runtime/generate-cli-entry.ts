@@ -191,6 +191,16 @@ async function getClient() {
   return _client;
 }
 
+async function closeClient() {
+  if (_client && typeof _client.close === 'function') {
+    try { await _client.close(); } catch (_) {}
+  }
+  _client = null;
+}
+
+// Flag set by long-running commands (serve, daemon) to prevent the footer from calling process.exit().
+var _isLongRunning = false;
+
 var program = new Command();
 program
   .name(${JSON.stringify(appName)})
@@ -539,15 +549,20 @@ skillsCmd
       if (mode === 'json') {
         console.log(JSON.stringify(result, null, 2));
       } else {
-        var skills = result.skills || result || [];
-        if (Array.isArray(skills) && skills.length === 0) { console.log('No skills found.'); return; }
-        if (Array.isArray(skills)) {
-          skills.forEach(function(s) {
-            console.log('  ' + (s.name || s.id || JSON.stringify(s)));
-          });
-        } else {
-          console.log(JSON.stringify(result, null, 2));
-        }
+        var skills = result.skills || [];
+        if (skills.length === 0) { console.log('No skills found.'); return; }
+        console.log('\\n  Skills matching "' + (query || '') + '":\\n');
+        skills.forEach(function(s) {
+          var tags = (s.tags || []).slice(0, 3).join(', ');
+          var score = s.score != null ? ' [score: ' + Number(s.score).toFixed(2) + ']' : '';
+          console.log('  ' + (s.name || s.id) + score);
+          if (s.description) console.log('    ' + s.description.split('. Use when')[0]);
+          if (tags) console.log('    tags: ' + tags);
+          console.log('');
+        });
+        console.log('  ' + skills.length + ' result(s).');
+        console.log("  Use '" + program.name() + " skills read <name>' for full details.");
+        console.log("  Use '" + program.name() + " skills load <name>' to load a skill.\\n");
       }
     } catch (err) {
       console.error('Error:', err.message || err);
@@ -578,6 +593,43 @@ skillsCmd
   });
 
 skillsCmd
+  .command('read <name>')
+  .description('Read full details for a skill')
+  .action(async function(name) {
+    try {
+      var client = await getClient();
+      var result = await client.loadSkills([name]);
+      var mode = program.opts().output || 'text';
+      if (mode === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        var skills = result.skills || [];
+        if (skills.length === 0) { console.log('Skill "' + name + '" not found.'); return; }
+        var sk = skills[0];
+        console.log('\\n  ' + sk.name);
+        if (sk.description) console.log('  ' + sk.description);
+        console.log('');
+        if (sk.instructions) {
+          console.log(sk.instructions);
+          console.log('');
+        }
+        if (sk.tools && sk.tools.length > 0) {
+          console.log('  Tools (' + sk.tools.length + '):');
+          sk.tools.forEach(function(t) {
+            console.log('    ' + t.name + (t.available ? '' : ' (unavailable)'));
+          });
+          console.log('');
+        }
+        if (result.nextSteps) console.log('  ' + result.nextSteps);
+        console.log("  Load: " + program.name() + " skills load " + name + '\\n');
+      }
+    } catch (err) {
+      console.error('Error:', err.message || err);
+      process.exitCode = 1;
+    }
+  });
+
+skillsCmd
   .command('list')
   .description('List available skills')
   .action(async function() {
@@ -588,15 +640,17 @@ skillsCmd
       if (mode === 'json') {
         console.log(JSON.stringify(result, null, 2));
       } else {
-        var skills = result.skills || result || [];
-        if (Array.isArray(skills) && skills.length === 0) { console.log('No skills available.'); return; }
-        if (Array.isArray(skills)) {
-          skills.forEach(function(s) {
-            console.log('  ' + (s.name || s.id || JSON.stringify(s)));
-          });
-        } else {
-          console.log(JSON.stringify(result, null, 2));
-        }
+        var skills = result.skills || [];
+        if (skills.length === 0) { console.log('No skills available.'); return; }
+        console.log('\\n  Available Skills (' + skills.length + '):\\n');
+        skills.forEach(function(s) {
+          var desc = s.description ? s.description.split('. Use when')[0] : '';
+          console.log('  ' + (s.name || s.id));
+          if (desc) console.log('    ' + desc);
+          console.log('');
+        });
+        console.log("  Use '" + program.name() + " skills search <query>' for semantic search.");
+        console.log("  Use '" + program.name() + " skills read <name>' for full details.\\n");
       }
     } catch (err) {
       console.error('Error:', err.message || err);
@@ -878,7 +932,9 @@ async function getSubscribeClient() {
   // If connected via daemon, the onNotification/onResourceUpdated are no-ops.
   // Reconnect via in-process for push support.
   if (client._isDaemon) {
-    _client = null; // clear cached daemon client
+    // Close the daemon client before replacing with in-process client
+    if (typeof client.close === 'function') { try { await client.close(); } catch (_) {} }
+    _client = null;
     var mod = require(SERVER_BUNDLE);
     var configOrClass = mod.default || mod;
     var sdk = require('@frontmcp/sdk');
@@ -907,6 +963,7 @@ subscribeCmd
       process.on('SIGINT', async function() {
         console.log('\\nUnsubscribing...');
         try { await client.unsubscribeResource(uri); } catch (_) { /* ok */ }
+        await closeClient();
         process.exit(0);
       });
       // Keep process alive — setInterval creates an active event loop handle
@@ -933,8 +990,9 @@ subscribeCmd
           console.log(fmt.formatSubscriptionEvent({ type: 'notification', method: notification.method, params: notification.params, timestamp: new Date().toISOString() }, mode));
         }
       });
-      process.on('SIGINT', function() {
+      process.on('SIGINT', async function() {
         console.log('\\nStopping...');
+        await closeClient();
         process.exit(0);
       });
       // Keep process alive — setInterval creates an active event loop handle
@@ -1081,6 +1139,7 @@ function generateServeCommand(serverBundleFilename: string, selfContained?: bool
   .description('Start the HTTP/SSE server')
   .option('-p, --port <port>', 'Port number', function(v) { return parseInt(v, 10); })
   .action(async function(opts) {
+    _isLongRunning = true;
     var mod = ${requireExpr};
     if (opts.port) process.env.PORT = String(opts.port);
     // If the bundle exports a start() function (@FrontMcp-decorated class auto-bootstraps), use it
@@ -1370,6 +1429,10 @@ ${selfContained ? `    // SEA mode: spawn the binary itself in daemon mode — a
       env: env
     });`}
 
+    // Close inherited file descriptors in the parent — the child already has its own copy.
+    fs.closeSync(out);
+    fs.closeSync(err);
+
     fs.writeFileSync(pidPath, JSON.stringify({
       pid: child.pid,
       socketPath: socketPath,
@@ -1453,14 +1516,17 @@ function generateFooter(): string {
   console.error('Unknown command: ' + args[0]);
   process.exitCode = 1;
 });
-program.parseAsync(process.argv).then(function() {
-  // Use exitCode instead of process.exit() so long-running commands
-  // (e.g., serve) keep the event loop alive while short-lived commands
-  // exit naturally when the event loop drains.
-  process.exitCode = process.exitCode || 0;
-}).catch(function(err) {
+program.parseAsync(process.argv).then(async function() {
+  // Long-running commands (serve) set _isLongRunning to keep the event loop alive.
+  // Short-lived commands close the client and exit explicitly to avoid hanging
+  // on unclosed handles (file loggers, in-memory transport, etc.).
+  if (_isLongRunning) return;
+  await closeClient();
+  process.exit(process.exitCode || 0);
+}).catch(async function(err) {
   console.error('Fatal:', err.message || err);
-  process.exitCode = 1;
+  await closeClient();
+  process.exit(1);
 });`;
 }
 
