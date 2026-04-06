@@ -6,8 +6,13 @@ import {
   getNxDevDependencies,
 } from './versions';
 
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn().mockReturnValue(true),
+}));
+
 jest.mock('@nx/devkit', () => ({
-  readJsonFile: jest.fn().mockReturnValue({ version: '0.11.1' }),
+  readJsonFile: jest.fn().mockReturnValue({ name: '@frontmcp/nx', version: '0.11.1' }),
 }));
 
 describe('versions', () => {

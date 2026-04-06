@@ -7,8 +7,21 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { TFIDFVectoria } from 'vectoriadb';
-import type { SkillReferenceEntry } from '@frontmcp/skills';
+import type { TFIDFVectoria } from 'vectoriadb';
+
+interface SkillReferenceExample {
+  name: string;
+  description: string;
+  level: 'basic' | 'intermediate' | 'advanced';
+  tags: string[];
+  features: string[];
+}
+
+interface SkillReference {
+  name: string;
+  description: string;
+  examples?: SkillReferenceExample[];
+}
 
 interface SkillEntry {
   name: string;
@@ -19,7 +32,7 @@ interface SkillEntry {
   hasResources: boolean;
   tags: string[];
   bundle?: string[];
-  references?: SkillReferenceEntry[];
+  references?: SkillReference[];
 }
 
 interface SkillManifest {
@@ -237,8 +250,14 @@ export function getCatalogDir(): string {
 function getSearchIndex(): TFIDFVectoria<SkillDocMetadata> {
   if (cachedIndex) return cachedIndex;
 
+  // Lazy-load vectoriadb to avoid triggering TF/HF model initialization
+  // when only loadCatalog() is needed (e.g., skills list command).
+  const { TFIDFVectoria: TFIDFVectoriaImpl } = require('vectoriadb') as {
+    TFIDFVectoria: typeof TFIDFVectoria;
+  };
+
   const manifest = loadCatalog();
-  cachedIndex = new TFIDFVectoria<SkillDocMetadata>({
+  const index = new TFIDFVectoriaImpl<SkillDocMetadata>({
     defaultTopK: 10,
     defaultSimilarityThreshold: 0.0,
   });
@@ -249,10 +268,11 @@ function getSearchIndex(): TFIDFVectoria<SkillDocMetadata> {
     metadata: { id: skill.name, skill },
   }));
 
-  cachedIndex.addDocuments(documents);
-  cachedIndex.reindex();
+  index.addDocuments(documents);
+  index.reindex();
 
-  return cachedIndex;
+  cachedIndex = index;
+  return index;
 }
 
 /**

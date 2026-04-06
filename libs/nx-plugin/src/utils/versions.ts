@@ -1,17 +1,28 @@
 import { readJsonFile } from '@nx/devkit';
 import { join } from 'path';
+import { existsSync } from 'fs';
 
 let cachedVersion: string | undefined;
 
 function readPluginVersion(): string {
   if (cachedVersion) return cachedVersion;
-  const pkgPath = join(__dirname, '..', '..', 'package.json');
-  const pkg = readJsonFile<{ version?: unknown }>(pkgPath);
-  if (!pkg.version || typeof pkg.version !== 'string') {
-    throw new Error(`@frontmcp/nx package.json at ${pkgPath} is missing a valid "version" field`);
+
+  // Walk up from __dirname to find the @frontmcp/nx package.json.
+  // In monorepo (src/utils/ or dist/utils/): ../../package.json
+  // When published to npm (utils/): ../package.json
+  let dir = __dirname;
+  for (let i = 0; i < 4; i++) {
+    dir = join(dir, '..');
+    const candidate = join(dir, 'package.json');
+    if (!existsSync(candidate)) continue;
+    const pkg = readJsonFile<{ name?: string; version?: unknown }>(candidate);
+    if (pkg.name === '@frontmcp/nx' && typeof pkg.version === 'string') {
+      cachedVersion = pkg.version;
+      return cachedVersion;
+    }
   }
-  cachedVersion = pkg.version;
-  return cachedVersion;
+
+  throw new Error(`@frontmcp/nx package.json not found (searched from ${__dirname})`);
 }
 
 export function getFrontmcpVersion(): string {
