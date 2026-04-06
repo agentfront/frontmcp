@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/ui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "FrontMCP UI - MUI-based React components, renderers, and MCP bridge for MCP applications",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -448,7 +448,7 @@
     }
   },
   "optionalDependencies": {
-    "@frontmcp/uipack": "1.0.0"
+    "@frontmcp/uipack": "1.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
