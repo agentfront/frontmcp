@@ -160,6 +160,17 @@ export abstract class ResourceContext<
     return this._outputHistory;
   }
 
+  /**
+   * Notify subscribers that this resource's content has changed.
+   * Only sessions subscribed via `resources/subscribe` receive the notification.
+   *
+   * @param uri - Optional URI to notify about. Defaults to `this.uri`.
+   */
+  notifyUpdated(uri?: string): void {
+    const targetUri = uri ?? this.uri;
+    this.scope.notifications.notifyResourceUpdated(targetUri);
+  }
+
   respond(value: Out): never {
     // record validated output and surface the value via control flow
     this.output = value;

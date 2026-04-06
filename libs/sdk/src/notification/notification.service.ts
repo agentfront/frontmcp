@@ -380,7 +380,13 @@ export class NotificationService {
     // Subscribe to resource changes
     const unsubResources = this.scope.resources.subscribe({ immediate: false }, (event) => {
       if (event.changeScope === 'global') {
-        this.broadcastNotification('notifications/resources/list_changed');
+        if (event.kind === 'updated' && event.updatedUri) {
+          // Content-level change: notify only subscribers of this specific URI
+          this.notifyResourceUpdated(event.updatedUri);
+        } else {
+          // Structural change (added/removed/reset): broadcast list_changed to all sessions
+          this.broadcastNotification('notifications/resources/list_changed');
+        }
       }
     });
     this.unsubscribers.push(unsubResources);
