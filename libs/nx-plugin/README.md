@@ -74,7 +74,7 @@ nx serve my-server
 ## Related Packages
 
 - [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk) — Core FrontMCP SDK
-- [`@frontmcp/cli`](https://www.npmjs.com/package/@frontmcp/cli) — FrontMCP CLI
+- [`frontmcp`](https://www.npmjs.com/package/frontmcp) — FrontMCP CLI
 - [`@frontmcp/adapters`](https://www.npmjs.com/package/@frontmcp/adapters) — Framework adapters
 - [`@frontmcp/plugins`](https://www.npmjs.com/package/@frontmcp/plugins) — Plugin system
 
