@@ -10,6 +10,7 @@ import AppInfoResource from './resources/app-info.resource';
 import ItemByIdTemplate from './resources/item-by-id.resource-template';
 import CodeReviewPrompt from './prompts/code-review.prompt';
 import { MathHelperSkill } from './skills/math-helper.skill';
+import greetingHelper from './skills/greeting-helper.skill';
 import ProcessDataJob from './jobs/process-data.job';
 
 @App({
@@ -18,7 +19,7 @@ import ProcessDataJob from './jobs/process-data.job';
   tools: [AddTool, TransformDataTool, DoctorTool, GreetTool, JobTool, SubscribeTool, SkillsTool],
   resources: [AppInfoResource, ItemByIdTemplate],
   prompts: [CodeReviewPrompt],
-  skills: [MathHelperSkill],
+  skills: [MathHelperSkill, greetingHelper],
   jobs: [ProcessDataJob],
 })
 export class CliExecApp {}

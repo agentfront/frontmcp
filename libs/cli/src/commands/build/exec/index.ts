@@ -142,6 +142,56 @@ export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolea
     if (capabilities.jobs) console.log(`${c('cyan', '[build:exec]')} capability: jobs`);
     if (capabilities.workflows) console.log(`${c('cyan', '[build:exec]')} capability: workflows`);
 
+    // Copy skill content files into _skills/ directory with a manifest.
+    // Uses a flat structure to avoid path traversal issues when skills
+    // reference files outside their own directory (e.g., '../../../docs/guide.md').
+    if (schema.skillAssets.length > 0) {
+      const skillsDir = path.join(outDir, '_skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+
+      const manifest: Record<string, { instructions?: string; references?: string; examples?: string; scripts?: string; assets?: string }> = {};
+      let copiedCount = 0;
+
+      for (const asset of schema.skillAssets) {
+        const entry: (typeof manifest)[string] = {};
+
+        // Copy instruction file
+        if (asset.instructionFile && fs.existsSync(asset.instructionFile)) {
+          const filename = path.basename(asset.instructionFile);
+          const dest = path.join(skillsDir, `${asset.skillName}--${filename}`);
+          fs.copyFileSync(asset.instructionFile, dest);
+          entry.instructions = `_skills/${asset.skillName}--${filename}`;
+          copiedCount++;
+        }
+
+        // Copy resource directories
+        if (asset.resourceDirs) {
+          for (const [key, dirPath] of Object.entries(asset.resourceDirs)) {
+            if (dirPath && fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+              const destDir = path.join(skillsDir, `${asset.skillName}--${key}`);
+              fs.cpSync(dirPath, destDir, { recursive: true });
+              entry[key as keyof typeof entry] = `_skills/${asset.skillName}--${key}`;
+              copiedCount++;
+            }
+          }
+        }
+
+        if (Object.keys(entry).length > 0) {
+          manifest[asset.skillName] = entry;
+        }
+      }
+
+      // Write manifest so runtime can resolve paths
+      fs.writeFileSync(
+        path.join(skillsDir, 'manifest.json'),
+        JSON.stringify(manifest, null, 2),
+      );
+
+      if (copiedCount > 0) {
+        console.log(`${c('green', '[build:exec]')} copied ${copiedCount} skill content file(s) to _skills/`);
+      }
+    }
+
     // Log tool name conflicts
     const cliConfig = config.cli || { enabled: true };
     const excludeTools = cliConfig.excludeTools || [];
@@ -299,6 +349,7 @@ export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolea
     `install-${config.name}.sh`,
     `${config.name}-bin`,
     `${config.name}-cli-bin`,
+    '_skills',
   ]);
 
   const allFiles = fs.readdirSync(outDir);
@@ -307,7 +358,8 @@ export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolea
     if (!keepFiles.has(file)) {
       const filePath = path.join(outDir, file);
       const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
+      // Only clean intermediate compiled files; preserve .md and _skills/ directory
+      if (stat.isFile() && !file.endsWith('.md')) {
         fs.unlinkSync(filePath);
         cleaned++;
       }
