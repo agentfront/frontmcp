@@ -913,4 +913,17 @@ export class Scope extends ScopeEntry {
     }
     throw new FlowExitedWithoutOutputError();
   }
+
+  /**
+   * Dispose of this scope, cleaning up all registries and native resources.
+   * Call before process exit to prevent native mutex crashes from addons
+   * (e.g., ONNX runtime) whose threads are still running during teardown.
+   */
+  async dispose(): Promise<void> {
+    this.scopeProviders.dispose();
+    const notif = this.notifications as unknown as { dispose?: () => void };
+    if (typeof notif.dispose === 'function') {
+      notif.dispose();
+    }
+  }
 }

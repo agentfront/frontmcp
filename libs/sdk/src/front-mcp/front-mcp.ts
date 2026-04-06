@@ -382,14 +382,43 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   public static async runStdio(options: FrontMcpConfigInput): Promise<void> {
+    // ── Stdio stdout protection ──────────────────────────────────────────
+    // In stdio mode, stdout is the MCP JSON-RPC channel. ANY non-protocol
+    // output (logs, warnings, debug prints) on stdout corrupts the wire.
+    // Redirect all stdout-bound console methods to stderr BEFORE anything
+    // else runs — this catches direct console.log() calls in SDK code,
+    // plugins, adapters, and third-party dependencies.
+    const { Console } = require('node:console');
+    const stderrConsole = new Console({ stdout: process.stderr, stderr: process.stderr });
+    console.log = stderrConsole.log.bind(stderrConsole);
+    console.info = stderrConsole.info.bind(stderrConsole);
+    console.debug = stderrConsole.debug.bind(stderrConsole);
+    // console.warn and console.error already go to stderr — leave them.
+
     // Dynamically import to avoid bundling issues
     const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
 
-    // Parse config through Zod to apply defaults, then disable HTTP server
+    // Parse config: disable HTTP server, disable console logging, enable file logging.
+    // All structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP protocol.
     const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
       http: undefined,
     });
+    // Force console logging off and file transport on (same pattern as createForCli)
+    if (parsedConfig.logging) {
+      parsedConfig.logging.enableConsole = false;
+      const transports = parsedConfig.logging.transports ?? [];
+      if (!transports.includes(FileLogTransportInstance)) {
+        transports.push(FileLogTransportInstance);
+      }
+      parsedConfig.logging.transports = transports;
+    } else {
+      (parsedConfig as Record<string, unknown>)['logging'] = {
+        enableConsole: false,
+        transports: [FileLogTransportInstance],
+      };
+    }
+
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
