@@ -96,5 +96,6 @@
         "updateDependents": "auto"
       }
     }
-  }
+  },
+  "analytics": false
 }
