@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 import { join } from 'path';
 import type { WorkspaceGeneratorSchema } from './schema.js';
 import { normalizeOptions } from './lib/index.js';
-import { getFrontmcpVersion } from '../../utils/versions.js';
+import { getFrontmcpVersion, getNxVersion } from '../../utils/versions.js';
 
 export async function workspaceGenerator(tree: Tree, schema: WorkspaceGeneratorSchema): Promise<GeneratorCallback> {
   return workspaceGeneratorInternal(tree, schema);
@@ -12,7 +12,7 @@ export async function workspaceGenerator(tree: Tree, schema: WorkspaceGeneratorS
 async function workspaceGeneratorInternal(tree: Tree, schema: WorkspaceGeneratorSchema): Promise<GeneratorCallback> {
   const options = normalizeOptions(schema);
   const frontmcpVersion = `~${getFrontmcpVersion()}`;
-  const nxVersion = '22.3.3';
+  const nxVersion = getNxVersion();
 
   generateFiles(tree, join(__dirname, 'files'), options.workspaceRoot, {
     ...options,

@@ -95,8 +95,8 @@
     "@frontmcp/sdk": "1.0.2",
     "@frontmcp/ui": "1.0.2",
     "@playwright/test": "^1.40.0",
-    "jest": "^29.0.0",
-    "@jest/globals": "^29.0.0"
+    "jest": "^29.0.0 || ^30.0.0",
+    "@jest/globals": "^29.0.0 || ^30.0.0"
   },
   "peerDependenciesMeta": {
     "@frontmcp/ui": {
@@ -122,7 +122,7 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.14",
+    "@types/jest": "^30.0.0",
     "typescript": "^5.9.3"
   }
 }
