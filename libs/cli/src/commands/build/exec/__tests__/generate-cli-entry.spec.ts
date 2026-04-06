@@ -676,6 +676,7 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'skills'");
       expect(source).toContain("'search [query]'");
       expect(source).toContain("'load <ids...>'");
+      expect(source).toContain("'read <name>'");
       expect(source).toContain('searchSkills');
       expect(source).toContain('loadSkills');
       expect(source).toContain('listSkills');
@@ -1074,13 +1075,27 @@ describe('generateCliEntry', () => {
   });
 
   describe('skills list command', () => {
-    it('should generate skills list subcommand with listSkills', () => {
+    it('should generate skills list subcommand with listSkills and next-action hints', () => {
       const source = generateCliEntry(makeOptions({
         schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
       }));
 
       expect(source).toContain("'list'");
       expect(source).toContain('listSkills');
+      expect(source).toContain('skills search <query>');
+      expect(source).toContain('skills read <name>');
+    });
+  });
+
+  describe('skills read command', () => {
+    it('should generate skills read subcommand with loadSkills', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
+      }));
+
+      expect(source).toContain("'read <name>'");
+      expect(source).toContain('loadSkills');
+      expect(source).toContain('skills load');
     });
   });
 });
