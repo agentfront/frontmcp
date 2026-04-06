@@ -2,6 +2,7 @@ import {
   getFrontmcpVersion,
   getFrontmcpDependencies,
   getFrontmcpDevDependencies,
+  getNxVersion,
   getNxDependencies,
   getNxDevDependencies,
 } from './versions';
@@ -39,11 +40,18 @@ describe('versions', () => {
     });
   });
 
+  describe('getNxVersion', () => {
+    it('should return the nx version string', () => {
+      expect(getNxVersion()).toBe('22.6.4');
+    });
+  });
+
   describe('getNxDependencies', () => {
-    it('should return nx core dependencies', () => {
+    it('should return nx core dependencies using NX_VERSION', () => {
       const deps = getNxDependencies();
-      expect(deps['nx']).toBe('22.6.4');
-      expect(deps['@nx/devkit']).toBe('22.6.4');
+      const version = getNxVersion();
+      expect(deps['nx']).toBe(version);
+      expect(deps['@nx/devkit']).toBe(version);
     });
   });
 

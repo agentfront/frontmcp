@@ -20,6 +20,8 @@ export default [
       '**/*.pw.spec.ts',
       '**/__tests__/**',
       '**/__test-utils__/**',
+      '**/jest.config.ts',
+      '**/jest.config.js',
     ],
   },
   {
@@ -50,6 +52,7 @@ export default [
             '@frontmcp/uipack/*',
             '@frontmcp/protocol',
             '@frontmcp/testing',
+            '@frontmcp/observability',
             '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|stdio-.+|env|runtime-context|path)$',
           ],
           depConstraints: [

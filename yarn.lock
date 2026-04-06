@@ -2737,7 +2737,7 @@
   resolved "https://registry.yarnpkg.com/@nx/nx-win32-x64-msvc/-/nx-win32-x64-msvc-22.6.4.tgz#dd7232091c4007b856e1cee3ecd7ea46fbc8c11e"
   integrity sha512-CIL9m6uilGGr/eU+41/+aVWUnEcq+j1EDynUX2A4InLTbAN0ylte4Af+72mvipNiqJgDkjKaNzOCQDnp8QBjEQ==
 
-"@nx/vite@^22.6.4":
+"@nx/vite@22.6.4":
   version "22.6.4"
   resolved "https://registry.yarnpkg.com/@nx/vite/-/vite-22.6.4.tgz#b21a99093094d03b394c0deb214b5de19ff2ca2c"
   integrity sha512-fD1eSfZv9FISoaLzYyjji8hzM5oewFAtMMxaERn0Li5tqL+LvmmhEB7IiTGah2BrhtPcrkZcvFGWl/x4Cu2N0A==
@@ -14168,11 +14168,6 @@ vary@^1, vary@^1.1.2, vary@~1.1.2:
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/vary/-/vary-1.1.2.tgz#2299f02c6ded30d4a5961b0b9f74524a18f634fc"
   integrity sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==
-
-vectoriadb@^2.1.3:
-  version "2.1.3"
-  resolved "https://registry.yarnpkg.com/vectoriadb/-/vectoriadb-2.1.3.tgz#688925b0b190758d03d2c4283c271954b2e75633"
-  integrity sha512-0bkkoZN6JqOBhqns7ZOmsTnyglOUYUnbumulHWwIxrnry/PMsrib+Cw6QCJP85lpHk3+bVRcTzaPyQU1QCC9lQ==
 
 vectoriadb@^2.2.0:
   version "2.2.0"

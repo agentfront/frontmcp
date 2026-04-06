@@ -46,20 +46,26 @@ export function getFrontmcpDevDependencies(): Record<string, string> {
   };
 }
 
+const NX_VERSION = '22.6.4';
+
+export function getNxVersion(): string {
+  return NX_VERSION;
+}
+
 export function getNxDependencies(): Record<string, string> {
   return {
-    nx: '22.6.4',
-    '@nx/devkit': '22.6.4',
-    '@nx/js': '22.6.4',
-    '@nx/eslint': '22.6.4',
-    '@nx/jest': '22.6.4',
-    '@nx/esbuild': '22.6.4',
+    nx: NX_VERSION,
+    '@nx/devkit': NX_VERSION,
+    '@nx/js': NX_VERSION,
+    '@nx/eslint': NX_VERSION,
+    '@nx/jest': NX_VERSION,
+    '@nx/esbuild': NX_VERSION,
   };
 }
 
 export function getNxDevDependencies(): Record<string, string> {
   return {
-    '@nx/workspace': '22.6.4',
+    '@nx/workspace': NX_VERSION,
     '@swc-node/register': '~1.9.1',
     '@swc/core': '~1.5.7',
     '@swc/helpers': '~0.5.11',
