@@ -198,6 +198,9 @@ async function closeClient() {
   _client = null;
 }
 
+// Flag set by long-running commands (serve, daemon) to prevent the footer from calling process.exit().
+var _isLongRunning = false;
+
 var program = new Command();
 program
   .name(${JSON.stringify(appName)})
@@ -1136,6 +1139,7 @@ function generateServeCommand(serverBundleFilename: string, selfContained?: bool
   .description('Start the HTTP/SSE server')
   .option('-p, --port <port>', 'Port number', function(v) { return parseInt(v, 10); })
   .action(async function(opts) {
+    _isLongRunning = true;
     var mod = ${requireExpr};
     if (opts.port) process.env.PORT = String(opts.port);
     // If the bundle exports a start() function (@FrontMcp-decorated class auto-bootstraps), use it
@@ -1513,9 +1517,10 @@ function generateFooter(): string {
   process.exitCode = 1;
 });
 program.parseAsync(process.argv).then(async function() {
-  // Close the client to release file descriptors and in-memory transport.
-  // Long-running commands (serve, subscribe) never reach here because they
-  // block the event loop, so process.exit() only fires for short-lived commands.
+  // Long-running commands (serve) set _isLongRunning to keep the event loop alive.
+  // Short-lived commands close the client and exit explicitly to avoid hanging
+  // on unclosed handles (file loggers, in-memory transport, etc.).
+  if (_isLongRunning) return;
   await closeClient();
   process.exit(process.exitCode || 0);
 }).catch(async function(err) {
