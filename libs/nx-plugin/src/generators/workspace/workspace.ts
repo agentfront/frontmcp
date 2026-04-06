@@ -12,7 +12,7 @@ export async function workspaceGenerator(tree: Tree, schema: WorkspaceGeneratorS
 async function workspaceGeneratorInternal(tree: Tree, schema: WorkspaceGeneratorSchema): Promise<GeneratorCallback> {
   const options = normalizeOptions(schema);
   const frontmcpVersion = `~${getFrontmcpVersion()}`;
-  const nxVersion = '22.3.3';
+  const nxVersion = '22.6.4';
 
   generateFiles(tree, join(__dirname, 'files'), options.workspaceRoot, {
     ...options,

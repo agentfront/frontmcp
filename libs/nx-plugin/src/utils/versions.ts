@@ -33,7 +33,7 @@ export function getFrontmcpDependencies(): Record<string, string> {
   const range = `~${getFrontmcpVersion()}`;
   return {
     '@frontmcp/sdk': range,
-    '@frontmcp/cli': range,
+    frontmcp: range,
     'reflect-metadata': '^0.2.2',
     zod: '^4.0.0',
   };
@@ -48,18 +48,18 @@ export function getFrontmcpDevDependencies(): Record<string, string> {
 
 export function getNxDependencies(): Record<string, string> {
   return {
-    nx: '22.3.3',
-    '@nx/devkit': '22.3.3',
-    '@nx/js': '22.3.3',
-    '@nx/eslint': '22.3.3',
-    '@nx/jest': '22.3.3',
-    '@nx/esbuild': '22.3.3',
+    nx: '22.6.4',
+    '@nx/devkit': '22.6.4',
+    '@nx/js': '22.6.4',
+    '@nx/eslint': '22.6.4',
+    '@nx/jest': '22.6.4',
+    '@nx/esbuild': '22.6.4',
   };
 }
 
 export function getNxDevDependencies(): Record<string, string> {
   return {
-    '@nx/workspace': '22.3.3',
+    '@nx/workspace': '22.6.4',
     '@swc-node/register': '~1.9.1',
     '@swc/core': '~1.5.7',
     '@swc/helpers': '~0.5.11',
