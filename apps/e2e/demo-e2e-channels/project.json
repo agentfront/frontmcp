@@ -1,0 +1,46 @@
+{
+  "name": "demo-e2e-channels",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-channels/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:channels"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-channels",
+        "main": "apps/e2e/demo-e2e-channels/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-channels/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-channels/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-channels/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-channels"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-channels/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

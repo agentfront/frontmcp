@@ -67,7 +67,8 @@ export type AppRegistryKind =
   | 'AgentRegistry'
   | 'SkillRegistry'
   | 'JobRegistry'
-  | 'WorkflowRegistry';
+  | 'WorkflowRegistry'
+  | 'ChannelRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
 
@@ -75,6 +76,7 @@ export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistry
 import type { SkillRegistryInterface } from '../../../skill/skill.registry';
 import type { JobRegistryInterface } from '../../../job/job.registry';
 import type { WorkflowRegistryInterface } from '../../../workflow/workflow.registry';
+import type { ChannelRegistryInterface } from '../../../channel/channel.registry';
 
 export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;
@@ -93,4 +95,5 @@ export type RegistryType = {
   SkillRegistry: SkillRegistryInterface;
   JobRegistry: JobRegistryInterface;
   WorkflowRegistry: WorkflowRegistryInterface;
+  ChannelRegistry: ChannelRegistryInterface;
 };

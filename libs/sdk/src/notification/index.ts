@@ -16,4 +16,5 @@ export {
   hasMcpAppsExtension,
   MCP_APPS_EXTENSION_KEY,
   supportsElicitation,
+  supportsChannels,
 } from './notification.service';

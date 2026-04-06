@@ -19,6 +19,7 @@ export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   skills: tokenFactory.meta('skills'),
   jobs: tokenFactory.meta('jobs'),
   workflows: tokenFactory.meta('workflows'),
+  channels: tokenFactory.meta('channels'),
   standalone: tokenFactory.meta('standalone'),
 } as const;
 

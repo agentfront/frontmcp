@@ -1,0 +1,77 @@
+---
+title: Real-Time Channels
+slug: features/channels
+icon: bell
+description: Push real-time notifications into Claude Code sessions with webhook, event, and chat bridge support
+---
+
+FrontMCP Channels let your MCP server push real-time events directly into Claude Code. Unlike resources (which are pulled by the client), channels are **server-initiated** — your server decides when to send notifications based on external triggers.
+
+## What Channels Enable
+
+- **Webhook forwarding** — CI/CD pipelines, GitHub events, monitoring alerts stream into Claude's context automatically
+- **Chat bridges** — WhatsApp, Telegram, Slack users can message Claude Code and receive replies
+- **Error monitoring** — Application errors pushed to Claude for immediate debugging assistance
+- **Agent/Job completion** — Background AI agents and jobs notify Claude when they finish
+- **Event bus** — Any in-process event can trigger a channel notification
+
+## How It Works
+
+```
+External Event → Channel Source → onEvent() → ChannelNotificationService → Claude Code
+                                                                            ↓
+                                                 onReply() ← channel-reply tool ← Claude
+```
+
+1. An event arrives from a **source** (webhook HTTP POST, event bus, agent emitter, or manual push)
+2. The channel's `onEvent()` transforms the payload into a `{ content, meta }` notification
+3. `ChannelNotificationService` sends `notifications/claude/channel` to all capable sessions
+4. Claude sees the event as `<channel source="..." ...meta>content</channel>` in its context
+5. For two-way channels, Claude can reply using the auto-registered `channel-reply` tool
+
+## Declarative Definition
+
+Channels use the same decorator pattern as tools, resources, and prompts:
+
+```ts
+@Channel({
+  name: 'deploy-alerts',
+  source: { type: 'webhook', path: '/hooks/deploy' },
+  twoWay: true,
+})
+class DeployChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    return { content: `Deploy event received` };
+  }
+  async onReply(reply: string): Promise<void> {
+    await forwardToSlack(reply);
+  }
+}
+```
+
+## Seven Source Types
+
+| Source | Use Case | Trigger |
+| --- | --- | --- |
+| `webhook` | GitHub, CI/CD, Stripe, any HTTP POST | External HTTP request |
+| `app-event` | Application errors, status changes | In-process event bus |
+| `agent-completion` | AI agent results | Agent registry emitter |
+| `job-completion` | Background job results | Job execution manager |
+| `service` | WhatsApp, Telegram, Slack connectors | Persistent connection with tools |
+| `file-watcher` | Log files, config changes, build outputs | File system events |
+| `manual` | Custom logic | `scope.channelNotifications.send()` |
+
+## Capability-Based Delivery
+
+Channel notifications are only sent to MCP sessions that advertise `experimental: { 'claude/channel': {} }` in their capabilities. Non-Claude Code clients (Cursor, Cody, generic MCP) are automatically filtered out — no errors, no wasted bandwidth.
+
+## Learn More
+
+<CardGroup cols={2}>
+  <Card title="Channels Guide" icon="book" href="/frontmcp/servers/channels">
+    Full channels documentation with all source types and examples
+  </Card>
+  <Card title="@Channel API" icon="at" href="/frontmcp/sdk-reference/decorators/channel">
+    Decorator reference and configuration options
+  </Card>
+</CardGroup>

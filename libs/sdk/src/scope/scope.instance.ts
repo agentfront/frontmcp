@@ -57,6 +57,12 @@ import type { JobStateStore } from '../job/store/job-state.interface';
 import type { JobDefinitionStore } from '../job/store/job-definition.interface';
 import { createGuardManager, type GuardManager } from '@frontmcp/guard';
 import { HealthService } from '../health';
+import ChannelRegistry from '../channel/channel.registry';
+import { ChannelNotificationService } from '../channel/channel-notification.service';
+import { ChannelEventBus } from '../channel/sources/app-event.source';
+import { registerChannelCapabilities } from '../channel/channel-scope.helper';
+import type { ChannelType } from '../common/interfaces/channel.interface';
+import type { ChannelsConfigOptions } from '../common/metadata/channel.metadata';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -102,6 +108,12 @@ export class Scope extends ScopeEntry {
 
   /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
   private _rateLimitManager?: GuardManager;
+
+  /** Channel system (optional) */
+  private _scopeChannels?: ChannelRegistry;
+  private _channelNotificationService?: ChannelNotificationService;
+  private _channelEventBus?: ChannelEventBus;
+  private _channelTeardown?: () => void;
 
   /** Health service for liveness and readiness probes (optional) */
   private _healthService?: HealthService;
@@ -552,6 +564,33 @@ export class Scope extends ScopeEntry {
     await this.auth.ready;
     await this.transportService.ready;
 
+    // Initialize channels if enabled (after notification service and all registries are ready)
+    const channelsConfig = this.metadata.channels as ChannelsConfigOptions | undefined;
+    if (channelsConfig?.enabled) {
+      // Collect channel definitions from apps
+      const appChannels: ChannelType[] = [];
+      for (const app of this.scopeApps.getApps()) {
+        const appMeta = app.metadata as unknown as Record<string, unknown>;
+        if (Array.isArray(appMeta['channels'])) appChannels.push(...(appMeta['channels'] as ChannelType[]));
+      }
+
+      const channelResult = await registerChannelCapabilities({
+        providers: this.scopeProviders,
+        owner: scopeRef,
+        channelsList: appChannels,
+        channelsConfig,
+        notificationService: this.notificationService,
+        flowRegistry: this.scopeFlows,
+        toolRegistry: this.scopeTools,
+        logger: this.logger,
+      });
+
+      this._scopeChannels = channelResult.channelRegistry;
+      this._channelNotificationService = channelResult.channelNotificationService;
+      this._channelEventBus = channelResult.channelEventBus;
+      this._channelTeardown = channelResult.teardown;
+    }
+
     // Initialize health service (after all registries and stores are ready)
     if (this.metadata.health?.enabled !== false) {
       this._healthService = new HealthService(this.metadata.health ?? {}, this.metadata.info);
@@ -698,6 +737,7 @@ export class Scope extends ScopeEntry {
     add(this.scopeSkills.getSkills().length, 'skill');
     if (this._scopeJobs) add(this._scopeJobs.getJobs().length, 'job');
     if (this._scopeWorkflows) add(this._scopeWorkflows.getWorkflows().length, 'workflow');
+    if (this._scopeChannels) add(this._scopeChannels.size, 'channel');
     return entries.length > 0 ? entries.join(', ') : 'empty';
   }
 
@@ -784,6 +824,18 @@ export class Scope extends ScopeEntry {
 
   get workflows(): WorkflowRegistry | undefined {
     return this._scopeWorkflows;
+  }
+
+  get channels(): ChannelRegistry | undefined {
+    return this._scopeChannels;
+  }
+
+  get channelNotifications(): ChannelNotificationService | undefined {
+    return this._channelNotificationService;
+  }
+
+  get channelEventBus(): ChannelEventBus | undefined {
+    return this._channelEventBus;
   }
 
   /**

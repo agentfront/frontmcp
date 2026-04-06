@@ -15,3 +15,4 @@ export * from './agent.entry';
 export * from './skill.entry';
 export * from './job.entry';
 export * from './workflow.entry';
+export * from './channel.entry';

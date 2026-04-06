@@ -36,5 +36,6 @@ export * from './agent.interface';
 export * from './skill.interface';
 export * from './job.interface';
 export * from './workflow.interface';
+export * from './channel.interface';
 
 export * from './internal';

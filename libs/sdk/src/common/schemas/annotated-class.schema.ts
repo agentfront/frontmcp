@@ -16,6 +16,7 @@ import {
   FrontMcpToolTokens,
   FrontMcpJobTokens,
   FrontMcpWorkflowTokens,
+  FrontMcpChannelTokens,
 } from '../tokens';
 import {
   frontMcpAdapterMetadataSchema,
@@ -289,4 +290,20 @@ export const annotatedFrontMcpSkillsSchema = z.custom<Type>(
     return false;
   },
   { message: 'skills items must be annotated with @Skill() | @FrontMcpSkill() or use skill() builder.' },
+);
+
+export const annotatedFrontMcpChannelsSchema = z.custom<Type>(
+  (v): v is Type => {
+    if (typeof v === 'function') {
+      if (Reflect.hasMetadata(FrontMcpChannelTokens.type, v)) {
+        return true;
+      }
+      // Function-style channel() builder
+      if ((v as unknown as Record<symbol, unknown>)[FrontMcpChannelTokens.type] !== undefined) {
+        return true;
+      }
+    }
+    return false;
+  },
+  { message: 'channels items must be annotated with @Channel() or use channel() builder.' },
 );
