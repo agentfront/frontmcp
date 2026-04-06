@@ -2371,13 +2371,13 @@
             },
             {
               "name": "hybrid-vercel-kv-with-pubsub",
-              "description": "Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions.",
+              "description": "Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions in distributed multi-instance deployments.",
               "level": "advanced",
               "tags": ["setup", "vercel-kv", "redis", "vercel", "session", "hybrid"],
               "features": [
                 "Vercel KV handles sessions (`redis` config) while a real Redis handles pub/sub (`pubsub` config)",
-                "Vercel KV does not support pub/sub operations, so a separate Redis instance is required",
-                "Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications",
+                "Vercel KV does not support pub/sub operations, so a separate Redis instance is required for distributed setups",
+                "Resource subscriptions across multiple server instances rely on the `pubsub` config for cross-instance notifications (single-instance servers use in-memory subscriptions automatically)",
                 "The `pubsub` field accepts `provider: 'redis'` only (no Vercel KV support)"
               ]
             },

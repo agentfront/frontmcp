@@ -478,10 +478,16 @@ FrontMCP automatically advertises resource capabilities during MCP initializatio
 | `subscribe`   | When `true`, clients can subscribe to individual resource changes via `resources/subscribe`                  |
 | `listChanged` | When `true`, the server will send `notifications/resources/list_changed` when resources are added or removed |
 
-The SDK sets these capabilities based on your registered resources:
+Per the [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25/server/resources), both capabilities are **server-level** — they apply to all resources globally, not per-resource. There is no `subscribe` field on individual `Resource` or `ResourceTemplate` objects.
+
+The SDK sets these capabilities automatically based on your registered resources:
 
 - `listChanged: true` when you have any resources registered
-- `subscribe: true` when any resources are registered (subscriptions work in-memory for single-server, stdio, and binary deployments — no Redis required)
+- `subscribe: true` when any resources are registered — clients can subscribe to **any** resource via `resources/subscribe`
+
+<Info>
+You do **not** need to add `subscribe: true` to `@Resource()` or `@ResourceTemplate()` decorators. Subscription support is automatic for all resources when the server has any resources registered. Subscriptions work in-memory on single-server deployments (stdio, binary, single-instance HTTP) — no Redis or pub/sub required.
+</Info>
 
 ### Change Notifications
 
@@ -519,3 +525,22 @@ To learn how clients discover your resources via MCP flows like `resources/list`
 - Return extremely large datasets—paginate or summarize when needed
 - Expose sensitive data without proper authentication checks
 - Hardcode values that should come from configuration
+- Add `subscribe: true` to `@Resource()` — subscriptions are automatic at the server level per MCP spec
+
+### URI Template Encoding
+
+Resource template parameters are **percent-encoded** per [RFC 6570](https://datatracker.ietf.org/doc/html/rfc6570) Level 1 during URI expansion. This is important when parameters contain special characters like `://`, `/`, or spaces.
+
+For example, if a tool returns a raw ID like `x-coredata://3823FD9C/ICNote/p216` and you use it as a template parameter in `notes://note/{noteId}`, the expanded URI becomes:
+
+```
+notes://note/x-coredata%3A%2F%2F3823FD9C%2FICNote%2Fp216
+```
+
+When the framework matches this URI back against the template, parameters are automatically decoded to their original values. The round-trip is consistent:
+- `expandUriTemplate("notes://note/{noteId}", { noteId: "x-coredata://..." })` → percent-encoded URI
+- `matchUriTemplate("notes://note/{noteId}", encodedUri)` → `{ noteId: "x-coredata://..." }` (decoded)
+
+<Warning>
+When clients construct resource URIs from IDs returned by tools, they must percent-encode the parameters (e.g., using `encodeURIComponent()`) to match the canonical URI format. The `resources/subscribe` and `resources/read` requests use the encoded URI.
+</Warning>

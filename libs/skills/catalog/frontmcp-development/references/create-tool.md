@@ -158,6 +158,66 @@ class GetWeatherTool extends ToolContext {
 - CodeCall cannot infer return types for chaining tool calls in VM scripts
 - No compile-time type checking on the return value
 
+### Typed Output Patterns
+
+The `Out` generic on `ToolContext<InSchema, OutSchema, In, Out>` is inferred from `outputSchema`. You can wire the generics explicitly for full type safety — no `as any` casts needed:
+
+```typescript
+const inputSchema = {
+  city: z.string(),
+};
+
+const outputSchema = {
+  temperature: z.number(),
+  unit: z.enum(['celsius', 'fahrenheit']),
+};
+
+@Tool({
+  name: 'get_weather',
+  inputSchema,
+  outputSchema,
+})
+// Wire generics: ToolContext<typeof inputSchema, typeof outputSchema>
+// This makes execute() return type and respond() argument fully typed
+class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input: { city: string }) {
+    // Return type is inferred as { temperature: number; unit: 'celsius' | 'fahrenheit' }
+    // TypeScript will error if you return the wrong shape
+    return { temperature: 22, unit: 'celsius' as const };
+  }
+}
+```
+
+**`return` vs `this.respond()`** — Both work and both are validated against `outputSchema` in the finalize stage:
+
+```typescript
+// Option 1: return (preferred — simpler, same validation)
+async execute(input: Input) {
+  return { temperature: 22, unit: 'celsius' };
+}
+
+// Option 2: this.respond() — useful for early exit (throws FlowControl.respond internally)
+async execute(input: Input) {
+  if (someCondition) {
+    this.respond({ temperature: 0, unit: 'celsius' }); // never returns
+  }
+  return { temperature: 22, unit: 'celsius' };
+}
+```
+
+**Early returns from elicitation** must still match the output schema:
+
+```typescript
+async execute(input: Input) {
+  const result = await this.elicit('Confirm?', { confirm: z.boolean() });
+  if (result.action !== 'accept') {
+    // Must return a value matching outputSchema, not a raw string
+    return { temperature: 0, unit: 'celsius' as const };
+  }
+  // ... normal execution
+}
+```
+
 Supported `outputSchema` types:
 
 - **Zod raw shapes** (recommended): `{ field: z.string(), count: z.number() }` — structured JSON output with validation
@@ -549,7 +609,20 @@ if (this.isEnv('production')) {
 
 ## Elicitation (Interactive Input)
 
-Tools can request interactive input from users mid-execution using `this.elicit()`. Requires `elicitation` to be enabled at server level.
+Tools can request interactive input from users mid-execution using `this.elicit()`.
+
+> **Prerequisite:** Elicitation must be enabled at server level:
+>
+> ```typescript
+> @FrontMcp({
+>   elicitation: { enabled: true },
+>   // ... rest of config
+> })
+> ```
+>
+> See `configure-elicitation` for full configuration options including Redis-backed elicitation stores.
+>
+> **What happens without it:** Calling `this.elicit()` throws `ElicitationDisabledError` at runtime with the message: _"Elicitation is disabled in server configuration. Enable it via @FrontMcp({ elicitation: { enabled: true } })"_. The tool call fails and the error is returned to the client. There is no compile-time or startup warning — the error only occurs when the tool is actually invoked.
 
 ```typescript
 @Tool({
@@ -572,8 +645,6 @@ class ConfirmDeleteTool extends ToolContext {
   }
 }
 ```
-
-> **Note:** Elicitation must be enabled at server level: `@FrontMcp({ elicitation: { enabled: true } })`. See `configure-elicitation` for full configuration options.
 
 ## Tool Examples
 
@@ -634,13 +705,14 @@ class ConvertCurrencyTool extends ToolContext {
 
 ## Troubleshooting
 
-| Problem                                          | Cause                                       | Solution                                                                     |
-| ------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------- |
-| Tool not appearing in `tools/list`               | Not registered in `tools` array             | Add tool class to `@App` or `@FrontMcp` `tools` array                        |
-| Zod validation error on valid input              | Using `z.object()` wrapper in `inputSchema` | Use raw shape: `{ field: z.string() }` not `z.object({ field: z.string() })` |
-| `this.get(TOKEN)` throws DependencyNotFoundError | Provider not registered in scope            | Register provider in `providers` array of `@App` or `@FrontMcp`              |
-| Output contains unexpected fields                | No `outputSchema` defined                   | Add `outputSchema` to strip unvalidated fields from response                 |
-| Tool times out                                   | No timeout configured for long operation    | Add `timeout: { executeMs: 30_000 }` to `@Tool` options                      |
+| Problem                                           | Cause                                       | Solution                                                                     |
+| ------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
+| Tool not appearing in `tools/list`                | Not registered in `tools` array             | Add tool class to `@App` or `@FrontMcp` `tools` array                        |
+| Zod validation error on valid input               | Using `z.object()` wrapper in `inputSchema` | Use raw shape: `{ field: z.string() }` not `z.object({ field: z.string() })` |
+| `this.get(TOKEN)` throws DependencyNotFoundError  | Provider not registered in scope            | Register provider in `providers` array of `@App` or `@FrontMcp`              |
+| Output contains unexpected fields                 | No `outputSchema` defined                   | Add `outputSchema` to strip unvalidated fields from response                 |
+| Tool times out                                    | No timeout configured for long operation    | Add `timeout: { executeMs: 30_000 }` to `@Tool` options                      |
+| `this.elicit()` throws `ElicitationDisabledError` | Elicitation not enabled at server level     | Add `elicitation: { enabled: true }` to `@FrontMcp` config                   |
 
 ## Examples
 

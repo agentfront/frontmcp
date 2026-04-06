@@ -14,7 +14,7 @@ module.exports = {
     new NxAppWebpackPlugin({
       target: 'node',
       compiler: 'tsc',
-      main: './src/main.ts',
+      main: './src/stdio-entrypoint.ts',
       sourceMap: true,
       tsConfig: './tsconfig.app.json',
       assets: [],

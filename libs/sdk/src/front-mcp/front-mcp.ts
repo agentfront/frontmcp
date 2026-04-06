@@ -393,6 +393,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
     console.log = stderrConsole.log.bind(stderrConsole);
     console.info = stderrConsole.info.bind(stderrConsole);
     console.debug = stderrConsole.debug.bind(stderrConsole);
+    console.dir = stderrConsole.dir.bind(stderrConsole);
+    console.table = stderrConsole.table.bind(stderrConsole);
+    console.time = stderrConsole.time.bind(stderrConsole);
+    console.timeLog = stderrConsole.timeLog.bind(stderrConsole);
+    console.group = stderrConsole.group.bind(stderrConsole);
+    console.groupEnd = stderrConsole.groupEnd.bind(stderrConsole);
+    console.count = stderrConsole.count.bind(stderrConsole);
     // console.warn and console.error already go to stderr — leave them.
 
     // Dynamically import to avoid bundling issues

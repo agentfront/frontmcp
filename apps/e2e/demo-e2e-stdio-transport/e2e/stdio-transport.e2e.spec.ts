@@ -110,13 +110,12 @@ describe('Stdio Transport E2E', () => {
       const lines = rawStdout.split('\n').filter((l) => l.trim().length > 0);
 
       for (const line of lines) {
-        // MCP uses JSON-RPC 2.0 — every stdout line should parse as JSON
-        // (content-length headers are also valid in the protocol framing)
-        if (line.startsWith('{')) {
-          expect(() => JSON.parse(line)).not.toThrow();
-          const parsed = JSON.parse(line);
-          expect(parsed).toHaveProperty('jsonrpc', '2.0');
-        }
+        const trimmed = line.trim();
+        if (/^content-(length|type):/i.test(trimmed)) continue;
+        // Every non-header stdout line must be valid JSON-RPC 2.0
+        expect(trimmed.startsWith('{')).toBe(true);
+        const parsed = JSON.parse(trimmed);
+        expect(parsed).toHaveProperty('jsonrpc', '2.0');
       }
     }, 15000);
 
@@ -237,14 +236,17 @@ describe('Stdio Transport E2E', () => {
     it('should return error for unknown tool', async () => {
       await startServerAndConnect();
 
-      try {
-        await client!.callTool({
+      const outcome = await client!
+        .callTool({
           name: 'nonexistent-tool',
           arguments: {},
-        });
-        // Some implementations throw, some return isError
-      } catch (err) {
-        expect(err).toBeDefined();
+        })
+        .catch((error: unknown) => error);
+
+      if (outcome instanceof Error) {
+        expect(outcome).toBeInstanceOf(Error);
+      } else {
+        expect(outcome.isError).toBe(true);
       }
     }, 30000);
   });
@@ -332,19 +334,23 @@ describe('Stdio Transport E2E', () => {
       child.kill('SIGTERM');
 
       // Wait for process to exit
-      const exitCode = await new Promise<number | null>((resolve) => {
-        const timeout = setTimeout(() => {
-          child.kill('SIGKILL');
-          resolve(null);
-        }, 5000);
-        child.on('close', (code) => {
-          clearTimeout(timeout);
-          resolve(code);
-        });
-      });
+      const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; timedOut: boolean }>(
+        (resolve) => {
+          const timeout = setTimeout(() => {
+            child.kill('SIGKILL');
+            resolve({ code: null, signal: 'SIGKILL', timedOut: true });
+          }, 5000);
+          child.on('close', (code, signal) => {
+            clearTimeout(timeout);
+            resolve({ code, signal, timedOut: false });
+          });
+        },
+      );
 
-      // Process should exit cleanly (0) or be killed (null if we had to SIGKILL)
-      expect(exitCode === 0 || exitCode === null).toBe(true);
+      // Process should exit cleanly — not via timeout or signal
+      expect(result.timedOut).toBe(false);
+      expect(result.signal).toBeNull();
+      expect(result.code).toBe(0);
     }, 15000);
   });
 });

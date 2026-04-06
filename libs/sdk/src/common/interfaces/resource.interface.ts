@@ -168,7 +168,7 @@ export abstract class ResourceContext<
    */
   notifyUpdated(uri?: string): void {
     const targetUri = uri ?? this.uri;
-    this.scope.notifications.notifyResourceUpdated(targetUri);
+    this.scope.resources.notifyContentChanged(targetUri);
   }
 
   respond(value: Out): never {

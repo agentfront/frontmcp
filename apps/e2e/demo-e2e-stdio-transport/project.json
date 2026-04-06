@@ -13,7 +13,7 @@
         "target": "node",
         "compiler": "tsc",
         "outputPath": "dist/apps/e2e/demo-e2e-stdio-transport",
-        "main": "apps/e2e/demo-e2e-stdio-transport/src/main.ts",
+        "main": "apps/e2e/demo-e2e-stdio-transport/src/stdio-entrypoint.ts",
         "tsConfig": "apps/e2e/demo-e2e-stdio-transport/tsconfig.app.json",
         "webpackConfig": "apps/e2e/demo-e2e-stdio-transport/webpack.config.js",
         "generatePackageJson": true
@@ -35,7 +35,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-stdio-transport"],
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-stdio-transport"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-stdio-transport/jest.e2e.config.ts",
         "passWithNoTests": true
@@ -43,7 +43,7 @@
     },
     "test:e2e": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-stdio-transport-e2e"],
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-stdio-transport"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-stdio-transport/jest.e2e.config.ts",
         "runInBand": true,

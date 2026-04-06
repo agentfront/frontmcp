@@ -1,6 +1,6 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import { notesStore } from '../data/notes.store';
 
 const inputSchema = {

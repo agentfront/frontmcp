@@ -7,7 +7,7 @@ tags: [setup, vercel-kv, redis, vercel, session, hybrid]
 features:
   - 'Vercel KV handles sessions (`redis` config) while a real Redis handles pub/sub (`pubsub` config)'
   - 'Vercel KV does not support pub/sub operations, so a separate Redis instance is required for distributed setups'
-  - 'Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications across multiple server instances (single-instance servers use in-memory subscriptions)'
+  - 'Resource subscriptions across multiple server instances rely on the `pubsub` config for cross-instance notifications (single-instance servers use in-memory subscriptions automatically)'
   - "The `pubsub` field accepts `provider: 'redis'` only (no Vercel KV support)"
 ---
 
@@ -52,7 +52,6 @@ import { Resource, ResourceContext } from '@frontmcp/sdk';
   uri: 'metrics://live',
   name: 'Live Metrics',
   mimeType: 'application/json',
-  subscribe: true,
 })
 export default class LiveMetricsResource extends ResourceContext {
   async read() {
@@ -72,7 +71,7 @@ REDIS_PUBSUB_PASSWORD=secret
 
 - Vercel KV handles sessions (`redis` config) while a real Redis handles pub/sub (`pubsub` config)
 - Vercel KV does not support pub/sub operations, so a separate Redis instance is required for distributed setups
-- Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications across multiple server instances (single-instance servers use in-memory subscriptions)
+- Resource subscriptions across multiple server instances rely on the `pubsub` config for cross-instance notifications (single-instance servers use in-memory subscriptions automatically)
 - The `pubsub` field accepts `provider: 'redis'` only (no Vercel KV support)
 
 ## Related

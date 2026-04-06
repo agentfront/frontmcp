@@ -921,9 +921,8 @@ export class Scope extends ScopeEntry {
    */
   async dispose(): Promise<void> {
     this.scopeProviders.dispose();
-    const notif = this.notifications as unknown as { dispose?: () => void };
-    if (typeof notif.dispose === 'function') {
-      notif.dispose();
+    if (this.notificationService) {
+      await this.notificationService.destroy();
     }
   }
 }

@@ -99,9 +99,12 @@ export function matchUriTemplate(template: string, uri: string): Record<string, 
 /**
  * Expand a URI template with the given parameters.
  *
+ * Parameter values are **percent-encoded** per RFC 6570 Level 1 using
+ * `encodeURIComponent()`. Use {@link matchUriTemplate} to decode them back.
+ *
  * @param template - The URI template
- * @param params - Object with parameter values
- * @returns Expanded URI with parameters substituted
+ * @param params - Object with parameter values (raw, unencoded)
+ * @returns Expanded URI with parameters percent-encoded and substituted
  * @throws Error if a required parameter is missing
  *
  * @example
@@ -110,6 +113,10 @@ export function matchUriTemplate(template: string, uri: string): Record<string, 
  *
  * expandUriTemplate("users/{userId}/posts/{postId}", { userId: "123", postId: "456" })
  * // "users/123/posts/456"
+ *
+ * // Special characters are percent-encoded:
+ * expandUriTemplate("notes://{id}", { id: "x-coredata://ABC/Note/1" })
+ * // "notes://x-coredata%3A%2F%2FABC%2FNote%2F1"
  */
 export function expandUriTemplate(template: string, params: Record<string, string>): string {
   // Use [^{}]+ instead of [^}]+ to fail fast on nested braces (ReDoS prevention)

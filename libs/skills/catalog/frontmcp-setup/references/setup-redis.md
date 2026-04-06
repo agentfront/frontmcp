@@ -362,11 +362,11 @@ You should see session keys like `mcp:session:<session-id>`.
 
 ## Examples
 
-| Example                                                                                   | Level        | Description                                                                                         |
-| ----------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------- |
-| [`docker-redis-local-dev`](../examples/setup-redis/docker-redis-local-dev.md)             | Basic        | Provision Redis with Docker Compose and connect a FrontMCP server for local session storage.        |
-| [`hybrid-vercel-kv-with-pubsub`](../examples/setup-redis/hybrid-vercel-kv-with-pubsub.md) | Advanced     | Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions. |
-| [`vercel-kv-serverless`](../examples/setup-redis/vercel-kv-serverless.md)                 | Intermediate | Configure a FrontMCP server with Vercel KV as the session store for serverless deployment.          |
+| Example                                                                                   | Level        | Description                                                                                                                                   |
+| ----------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docker-redis-local-dev`](../examples/setup-redis/docker-redis-local-dev.md)             | Basic        | Provision Redis with Docker Compose and connect a FrontMCP server for local session storage.                                                  |
+| [`hybrid-vercel-kv-with-pubsub`](../examples/setup-redis/hybrid-vercel-kv-with-pubsub.md) | Advanced     | Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions in distributed multi-instance deployments. |
+| [`vercel-kv-serverless`](../examples/setup-redis/vercel-kv-serverless.md)                 | Intermediate | Configure a FrontMCP server with Vercel KV as the session store for serverless deployment.                                                    |
 
 > See all examples in [`examples/setup-redis/`](../examples/setup-redis/)
 
