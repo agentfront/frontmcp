@@ -154,6 +154,19 @@ export default function initializeRequestHandler({
         }
       }
 
+      // Auto-subscribe session to channels if client supports claude/channel capability
+      if (sessionId && request.params.capabilities?.experimental?.['claude/channel'] !== undefined) {
+        const channelRegistry = scope.channels;
+        if (channelRegistry) {
+          const channelNames = channelRegistry.getChannelInstances().map((ch) => ch.name);
+          scope.notifications.subscribeAllChannels(sessionId, channelNames);
+          logger.info(`initialize: auto-subscribed session to ${channelNames.length} channel(s)`, {
+            channels: channelNames.join(', '),
+            sessionId: sessionId.slice(0, 20),
+          });
+        }
+      }
+
       // MCP Protocol Version Negotiation (per spec):
       // "If the server supports the requested protocol version, it MUST respond with the same version.
       //  Otherwise, the server MUST respond with another protocol version it supports."

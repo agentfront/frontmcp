@@ -1,0 +1,211 @@
+---
+title: "ChannelContext"
+description: "Abstract base class for channel execution contexts. Handles incoming events and transforms them into Claude Code notifications."
+icon: "bell"
+---
+
+## Overview
+
+`ChannelContext` extends `ExecutionContextBase` and provides the foundation for all channel implementations. It handles event transformation via `onEvent()` and optional reply handling via `onReply()`.
+
+## Class Hierarchy
+
+```
+ExecutionContextBase<ChannelNotification>
+  └── ChannelContext (abstract)
+        ├── Your @Channel class
+        └── FunctionChannelContext (internal, for channel() builder)
+```
+
+## Abstract Methods
+
+### onEvent
+
+Transform an incoming event payload into a channel notification.
+
+```typescript
+abstract onEvent(payload: unknown): Promise<ChannelNotification>;
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `payload` | `unknown` | Raw event payload from the source. Shape depends on source type. |
+
+**Returns:** `Promise<ChannelNotification>` — the notification to push to Claude Code sessions.
+
+### Payload Shapes by Source
+
+| Source | Payload Shape |
+| --- | --- |
+| `webhook` | `WebhookPayload { body, headers, method, query }` |
+| `app-event` | Whatever was passed to `eventBus.emit(event, payload)` |
+| `agent-completion` | `AgentCompletionEvent { agentId, agentName, status, durationMs, output, error }` |
+| `job-completion` | `JobCompletionEvent { jobName, jobId, status, durationMs, output, error, sessionId }` |
+| `service` | Whatever `pushIncoming(payload)` receives from your connection listener |
+| `file-watcher` | Whatever `pushIncoming(payload)` receives from your file watcher |
+| `manual` | Whatever was passed to `handleEvent(payload)` |
+
+## Optional Methods
+
+### onReply
+
+Handle a reply from Claude Code. Only called when the channel has `twoWay: true`.
+
+```typescript
+async onReply(reply: string, meta?: Record<string, string>): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `reply` | `string` | The reply text from Claude |
+| `meta` | `Record<string, string>` | Metadata from the `channel-reply` tool call (e.g., `chat_id`) |
+
+Default implementation logs a warning. Override to forward replies to external systems.
+
+## Lifecycle Hooks (Service Connectors)
+
+For channels with `source: { type: 'service' }` or `source: { type: 'file-watcher' }`, these lifecycle hooks manage persistent connections.
+
+### onConnect
+
+Establish a persistent connection to an external service. Called during scope initialization after the notification service is wired.
+
+```typescript
+async onConnect(): Promise<void>
+```
+
+Use this to set up WebSocket connections, API clients, polling loops, or file watchers. Call `pushIncoming()` inside event listeners to feed incoming events into the notification pipeline.
+
+```typescript
+async onConnect(): Promise<void> {
+  this.client = new WhatsAppClient(process.env['WA_TOKEN']);
+  this.client.on('message', (msg) => {
+    this.pushIncoming({ sender: msg.from, text: msg.body, chatId: msg.chatId });
+  });
+  await this.client.connect();
+}
+```
+
+### onDisconnect
+
+Tear down the persistent connection. Called during scope shutdown.
+
+```typescript
+async onDisconnect(): Promise<void>
+```
+
+```typescript
+async onDisconnect(): Promise<void> {
+  await this.client?.disconnect();
+  this.watcher?.close();
+}
+```
+
+### pushIncoming
+
+Push an incoming event from a service connection into the notification pipeline. Triggers `onEvent()` → notification push to subscribed sessions.
+
+```typescript
+protected pushIncoming(payload: unknown): void
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `payload` | `unknown` | Raw event payload to process through `onEvent()` |
+
+<Warning>
+Only call `pushIncoming()` inside `onConnect()` event listeners. Calling it before `onConnect()` completes will log a warning since the handler is not yet wired.
+</Warning>
+
+## Inherited Properties
+
+From `ExecutionContextBase`:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `logger` | `FrontMcpLogger` | Scoped logger for this channel |
+| `metadata` | `ChannelMetadata` | The channel's decorator metadata |
+| `channelName` | `string` | The channel name (from metadata) |
+
+## Inherited Methods
+
+From `ExecutionContextBase`:
+
+| Method | Description |
+| --- | --- |
+| `get<T>(token)` | Resolve a dependency from the DI container |
+| `tryGet<T>(token)` | Resolve or return `undefined` if not found |
+| `scope` | Access the parent scope |
+| `fail(error)` | Throw an MCP error |
+
+## Examples
+
+### Webhook Channel
+
+```typescript
+@Channel({
+  name: 'monitoring',
+  source: { type: 'webhook', path: '/hooks/monitor' },
+  twoWay: true,
+})
+class MonitoringChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body } = payload as { body: { alert: string; severity: string } };
+    return { content: `Alert: ${body.alert}`, meta: { severity: body.severity } };
+  }
+
+  async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
+    const messenger = this.get(MessengerServiceToken);
+    await messenger.send(meta?.chat_id, reply);
+  }
+}
+```
+
+### Service Connector (Full Lifecycle)
+
+```typescript
+@Channel({
+  name: 'whatsapp',
+  source: { type: 'service', service: 'whatsapp-business' },
+  tools: [SendWhatsAppTool],  // Claude calls this to send outbound messages
+  twoWay: true,
+})
+class WhatsAppChannel extends ChannelContext {
+  private client: WhatsAppClient;
+
+  async onConnect(): Promise<void> {
+    // Called during scope initialization
+    this.client = new WhatsAppClient(process.env['WA_TOKEN']);
+    this.client.on('message', (msg) => {
+      // Feed incoming messages into the notification pipeline
+      this.pushIncoming({ from: msg.sender, text: msg.body, chatId: msg.chatId });
+    });
+    await this.client.connect();
+  }
+
+  async onDisconnect(): Promise<void> {
+    // Called during scope teardown
+    await this.client.disconnect();
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    // Transform incoming service event → notification for Claude
+    const msg = payload as { from: string; text: string; chatId: string };
+    return {
+      content: `${msg.from}: ${msg.text}`,
+      meta: { chat_id: msg.chatId, sender: msg.from },
+    };
+  }
+
+  async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
+    // Forward Claude's reply back through the service
+    await this.client.sendMessage(meta?.chat_id, reply);
+  }
+}
+```
+
+## Related
+
+- [@Channel Decorator](/frontmcp/sdk-reference/decorators/channel) — decorator configuration options
+- [Channels Guide](/frontmcp/servers/channels) — full documentation
+- [ExecutionContextBase](/frontmcp/sdk-reference/contexts/execution-context-base) — base class reference

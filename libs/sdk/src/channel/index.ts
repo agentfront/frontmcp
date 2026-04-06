@@ -1,0 +1,13 @@
+export { ChannelInstance } from './channel.instance';
+export { default as ChannelRegistry } from './channel.registry';
+export type { ChannelRegistryInterface } from './channel.registry';
+export { ChannelEmitter } from './channel.events';
+export type { ChannelChangeEvent, ChannelChangeKind, ChannelChangeScope } from './channel.events';
+export type { IndexedChannel } from './channel.types';
+export { normalizeChannel, normalizeChannels } from './channel.utils';
+export { ChannelNotificationService } from './channel-notification.service';
+export { ChannelEventBus } from './sources/app-event.source';
+export { registerChannelCapabilities } from './channel-scope.helper';
+export type { RegisterChannelCapabilitiesArgs, ChannelCapabilitiesResult } from './channel-scope.helper';
+export { ChannelReplyTool } from './reply/channel-reply.tool';
+export type { ChannelReplyInput } from './reply/reply.types';

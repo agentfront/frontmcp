@@ -1,0 +1,497 @@
+---
+title: Channels
+slug: servers/channels
+icon: bell
+---
+
+Channels are **push-based notification streams** that deliver real-time events into Claude Code sessions. They enable your MCP server to forward webhooks, application errors, agent completions, job results, and chat messages directly into Claude's context — with optional two-way reply support.
+
+<Info>
+This feature implements the [Claude Code Channels extension](https://code.claude.com/docs/en/channels-reference) — an experimental MCP protocol extension using `notifications/claude/channel`.
+</Info>
+
+## Why Channels?
+
+Channels fill a gap that tools, resources, and prompts cannot address — **server-initiated push notifications**:
+
+| Aspect           | Tool                    | Resource              | Channel                          |
+| ---------------- | ----------------------- | --------------------- | -------------------------------- |
+| **Purpose**      | Execute actions         | Provide data          | Push real-time events            |
+| **Direction**    | Client triggers         | Client pulls          | Server pushes                    |
+| **Side effects** | Yes                     | No                    | No (notification only)           |
+| **Two-way**      | Request/response        | Read-only             | Optional reply tool              |
+| **Use case**     | Actions, calculations   | Context loading       | Alerts, chat bridges, monitoring |
+
+Channels are ideal for:
+
+- **CI/CD alerts** — deploy status, build failures, PR notifications
+- **Chat bridges** — WhatsApp, Telegram, Slack, Discord messaging with Claude
+- **Error monitoring** — forward application errors for debugging assistance
+- **Agent notifications** — notify when AI agents complete background tasks
+- **Job completion** — alert when background jobs or workflows finish
+
+---
+
+## Creating Channels
+
+### Class Style
+
+Use class decorators for channels that need complex message transformation or two-way communication:
+
+```ts
+import { Channel, ChannelContext } from '@frontmcp/sdk';
+import type { ChannelNotification } from '@frontmcp/sdk';
+
+@Channel({
+  name: 'deploy-alerts',
+  description: 'CI/CD deployment notifications',
+  source: { type: 'webhook', path: '/hooks/deploy' },
+  meta: { team: 'platform' },
+})
+class DeployAlertChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body } = payload as { body: { status: string; version: string } };
+    return {
+      content: `Deploy ${body.status}: ${body.version}`,
+      meta: { status: body.status },
+    };
+  }
+}
+```
+
+### Function Style
+
+Use the `channel()` builder for simple transform-only channels:
+
+```ts
+import { channel } from '@frontmcp/sdk';
+
+const ErrorChannel = channel({
+  name: 'error-alerts',
+  source: { type: 'app-event', event: 'app:error' },
+})((payload) => {
+  const error = payload as { message: string; level: string };
+  return {
+    content: `[${error.level.toUpperCase()}] ${error.message}`,
+    meta: { severity: error.level },
+  };
+});
+```
+
+---
+
+## Channel Sources
+
+Every channel has a source that determines how events flow into it:
+
+| Source | Trigger | Config |
+| --- | --- | --- |
+| `webhook` | HTTP POST to a path | `{ type: 'webhook', path: '/hooks/deploy' }` |
+| `app-event` | In-process event bus | `{ type: 'app-event', event: 'error' }` |
+| `agent-completion` | Agent finishes | `{ type: 'agent-completion', agentIds?: ['reviewer'] }` |
+| `job-completion` | Job completes | `{ type: 'job-completion', jobNames?: ['daily-report'] }` |
+| `service` | Persistent connection | `{ type: 'service', service: 'whatsapp-business' }` |
+| `manual` | Programmatic push | `{ type: 'manual' }` |
+
+### Webhook Source
+
+External services send HTTP POST requests to the configured path:
+
+```ts
+@Channel({
+  name: 'github-events',
+  source: { type: 'webhook', path: '/hooks/github' },
+})
+class GitHubChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body, headers } = payload as {
+      body: Record<string, unknown>;
+      headers: Record<string, string | string[] | undefined>;
+    };
+    const eventType = headers['x-github-event'] as string;
+    return { content: `GitHub: ${eventType} event`, meta: { event: eventType } };
+  }
+}
+```
+
+### App Event Source
+
+Your application emits events to the `ChannelEventBus`:
+
+```ts
+// Channel declaration
+@Channel({
+  name: 'errors',
+  source: { type: 'app-event', event: 'app:error' },
+})
+class ErrorChannel extends ChannelContext { /* ... */ }
+
+// Emit from anywhere with scope access
+scope.channelEventBus.emit('app:error', {
+  message: 'Connection refused',
+  level: 'critical',
+});
+```
+
+### Agent & Job Completion
+
+Auto-subscribe to system events with optional filtering:
+
+```ts
+// Notify when specific agents finish
+@Channel({
+  name: 'agent-done',
+  source: { type: 'agent-completion', agentIds: ['code-reviewer'] },
+})
+class AgentDoneChannel extends ChannelContext { /* ... */ }
+
+// Notify when specific jobs complete
+@Channel({
+  name: 'job-done',
+  source: { type: 'job-completion', jobNames: ['daily-report'] },
+})
+class JobDoneChannel extends ChannelContext { /* ... */ }
+```
+
+### Service Connector
+
+Service connectors maintain **persistent connections** to external messaging services. Claude sends messages via channel-contributed tools, and incoming responses arrive as channel notifications.
+
+This is the most powerful channel pattern — it turns Claude Code into a full messaging client.
+
+```ts
+import { Channel, ChannelContext, Tool, ToolContext } from '@frontmcp/sdk';
+import type { ChannelNotification } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Outbound tool — Claude calls this to send messages
+@Tool({
+  name: 'send-whatsapp',
+  description: 'Send a WhatsApp message. Replies will arrive as channel notifications.',
+  inputSchema: {
+    to: z.string().describe('Recipient phone number'),
+    text: z.string().describe('Message text'),
+  },
+})
+class SendWhatsAppTool extends ToolContext {
+  async execute(input: { to: string; text: string }) {
+    const client = this.get(WhatsAppClientToken);
+    await client.sendMessage(input.to, input.text);
+    return { sent: true, to: input.to };
+  }
+}
+
+// Channel — maintains connection, receives responses
+@Channel({
+  name: 'whatsapp',
+  description: 'WhatsApp messaging. Send via send-whatsapp tool, replies arrive here.',
+  source: { type: 'service', service: 'whatsapp-business' },
+  tools: [SendWhatsAppTool],  // Auto-registered in tool registry
+  twoWay: true,
+})
+class WhatsAppChannel extends ChannelContext {
+  private client: WhatsAppClient;
+
+  async onConnect(): Promise<void> {
+    this.client = new WhatsAppClient(process.env['WHATSAPP_TOKEN']);
+    // Incoming messages from WhatsApp → push into notification pipeline
+    this.client.on('message', (msg) => {
+      this.pushIncoming({
+        from: msg.from,
+        text: msg.body,
+        chatId: msg.chatId,
+      });
+    });
+    await this.client.connect();
+  }
+
+  async onDisconnect(): Promise<void> {
+    await this.client.disconnect();
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const msg = payload as { from: string; text: string; chatId: string };
+    return {
+      content: `${msg.from}: ${msg.text}`,
+      meta: { chat_id: msg.chatId, sender: msg.from },
+    };
+  }
+}
+```
+
+The conversation flow:
+
+1. Claude calls `send-whatsapp({ to: "+1234567890", text: "Hi Alice!" })`
+2. Message is delivered to Alice's WhatsApp
+3. Alice replies "Got it, will review the PR"
+4. `onConnect()`'s listener fires → `pushIncoming()` → `onEvent()` transforms it
+5. Claude sees: `<channel source="whatsapp" sender="Alice">Alice: Got it, will review the PR</channel>`
+6. Claude can continue the conversation by calling `send-whatsapp` again
+
+<Info>
+Service connector channels call `onConnect()` during scope initialization and `onDisconnect()` during teardown. The connection persists for the lifetime of the server.
+</Info>
+
+### File Watcher
+
+Watch file system paths and notify Claude when files change. Uses `onConnect()` to start watching.
+
+```ts
+@Channel({
+  name: 'log-watcher',
+  description: 'Watches log files for new errors',
+  source: {
+    type: 'file-watcher',
+    paths: ['./logs/app.log', './logs/error.log'],
+    events: ['change', 'create'],
+  },
+})
+class LogWatcher extends ChannelContext {
+  private watchers: any[] = [];
+
+  async onConnect(): Promise<void> {
+    const { watch } = require('node:fs');
+    for (const path of (this.metadata.source as any).paths) {
+      this.watchers.push(
+        watch(path, () => this.pushIncoming({ file: path })),
+      );
+    }
+  }
+
+  async onDisconnect(): Promise<void> {
+    this.watchers.forEach((w) => w.close());
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { file } = payload as { file: string };
+    return { content: `File changed: ${file}`, meta: { file } };
+  }
+}
+```
+
+### Manual Push
+
+Push notifications programmatically from any code with scope access:
+
+```ts
+scope.channelNotifications.send('status', 'Server maintenance in 5 minutes');
+```
+
+---
+
+## Replay Buffer
+
+By default, events are lost when no Claude Code sessions are connected. Enable replay to buffer events:
+
+```ts
+@Channel({
+  name: 'ci-alerts',
+  source: { type: 'webhook', path: '/hooks/ci' },
+  replay: {
+    enabled: true,
+    maxEvents: 100,  // Ring buffer — oldest events evicted when full
+  },
+})
+class CIAlertChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    // ...
+  }
+}
+```
+
+How it works:
+
+1. Events arrive and are processed normally via `onEvent()`
+2. Each notification is also stored in an in-memory ring buffer
+3. When a new session connects, `replayBufferedEvents(sessionId)` sends all buffered events
+4. Replayed events include `replayed: "true"` in their meta
+
+<Tip>
+For events that must survive server restarts, combine replay with a persistent store (Redis, SQLite) in `onConnect()`. See the [replay buffer skill example](/frontmcp/servers/channels#replay-buffer) for the pattern.
+</Tip>
+
+---
+
+## Two-Way Communication
+
+Set `twoWay: true` to enable Claude Code to reply back through the channel. This auto-registers a `channel-reply` tool.
+
+```ts
+@Channel({
+  name: 'whatsapp',
+  description: 'WhatsApp chat bridge',
+  source: { type: 'webhook', path: '/hooks/whatsapp' },
+  twoWay: true,
+})
+class WhatsAppChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body } = payload as { body: { sender: string; text: string; chatId: string } };
+    return {
+      content: `${body.sender}: ${body.text}`,
+      meta: { chat_id: body.chatId, sender: body.sender },
+    };
+  }
+
+  async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
+    const chatId = meta?.chat_id;
+    await sendWhatsAppMessage(chatId, reply);
+  }
+}
+```
+
+Claude Code sees the channel notification as:
+
+```xml
+<channel source="whatsapp" chat_id="123" sender="Alice">
+Alice: Can you review the PR?
+</channel>
+```
+
+And can reply using the auto-registered `channel-reply` tool:
+
+```
+channel-reply({ channel_name: "whatsapp", text: "I'll review it now.", meta: { chat_id: "123" } })
+```
+
+---
+
+## Registration
+
+### In an App
+
+```ts
+@App({
+  name: 'DevOps',
+  channels: [DeployAlertChannel, ErrorChannel, WhatsAppChannel],
+  tools: [/* your tools */],
+})
+class DevOpsApp {}
+```
+
+### Enable at Server Level
+
+```ts
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [DevOpsApp],
+  channels: { enabled: true },
+})
+export default class Server {}
+```
+
+<Warning>
+Channels must be explicitly enabled with `channels: { enabled: true }` in the `@FrontMcp` config. Without this, channel declarations are ignored.
+</Warning>
+
+---
+
+## Wire Protocol
+
+Channel notifications use the experimental `notifications/claude/channel` JSON-RPC method:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/claude/channel",
+  "params": {
+    "content": "Deploy succeeded: v1.2.3",
+    "meta": {
+      "source": "deploy-alerts",
+      "team": "platform",
+      "status": "success"
+    }
+  }
+}
+```
+
+The server advertises `experimental: { 'claude/channel': {} }` in its capabilities. Only sessions whose client capabilities include this extension receive channel notifications.
+
+---
+
+## Session Isolation
+
+Channel notifications are **session-scoped** to prevent data leaking between connected agents.
+
+### How It Works
+
+1. When a session initializes with `claude/channel` capability, it is auto-subscribed to all channels
+2. Notifications are only delivered to sessions subscribed to the specific channel
+3. **Session-targeted events** (job completions, agent results) go ONLY to the originating session
+4. **Global events** (webhooks, file changes) go to all subscribed sessions
+5. Channel subscriptions are cleaned up automatically on disconnect
+
+### Delivery Matrix
+
+| Source | Target | Delivery |
+| --- | --- | --- |
+| Webhook, file-watcher, app-event | All subscribers | Every subscribed session |
+| Agent completion | Originating session | ONLY the session that triggered the agent |
+| Job completion | Originating session | ONLY the session that triggered the job |
+| Manual push | Configurable | `send()` = all subscribers, `sendToSession()` = one session |
+
+### Selective Subscriptions
+
+Sessions can subscribe to specific channels instead of all:
+
+```ts
+// Subscribe to only deploy-alerts (not error-alerts)
+scope.notifications.subscribeChannel(sessionId, 'deploy-alerts');
+
+// Unsubscribe from a channel
+scope.notifications.unsubscribeChannel(sessionId, 'deploy-alerts');
+```
+
+<Warning>
+Session-targeted events from job/agent completions carry the originating `sessionId` in the event payload. If your custom source produces session-scoped data, pass `targetSessionId` to `channel.pushNotification()` to enforce isolation.
+</Warning>
+
+---
+
+## Security
+
+### Sender Gating
+
+For chat bridges, always validate individual sender identity:
+
+```ts
+const ALLOWED = new Set(process.env['ALLOWED_SENDERS']?.split(',') ?? []);
+
+async onEvent(payload: unknown): Promise<ChannelNotification> {
+  const sender = extractSender(payload);
+  if (!ALLOWED.has(sender)) {
+    return { content: `Blocked: unverified sender`, meta: { verified: 'false' } };
+  }
+  // ...
+}
+```
+
+### Meta Key Restrictions
+
+Meta keys must be valid identifiers (letters, digits, underscores). Invalid keys are rejected at startup:
+
+```ts
+// Good
+meta: { env: 'production', build_id: '42' }
+
+// Bad — will fail validation
+meta: { 'my-env': 'production' }
+```
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="@Channel Decorator" icon="at" href="/frontmcp/sdk-reference/decorators/channel">
+    Full decorator API reference
+  </Card>
+  <Card title="ChannelContext" icon="code" href="/frontmcp/sdk-reference/contexts/channel-context">
+    Context class API reference
+  </Card>
+  <Card title="ChannelRegistry" icon="database" href="/frontmcp/sdk-reference/registries/channel-registry">
+    Registry API reference
+  </Card>
+  <Card title="Claude Code Channels" icon="link" href="https://code.claude.com/docs/en/channels-reference">
+    Official Claude Code channels specification
+  </Card>
+</CardGroup>

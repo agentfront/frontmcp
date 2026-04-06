@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/observability",
-  "version": "1.0.3",
+  "version": "1.0.2",
   "description": "OpenTelemetry instrumentation, structured JSON logging, and request log objects for FrontMCP",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -52,8 +52,8 @@
     "@opentelemetry/api": "^1.9.0"
   },
   "peerDependencies": {
-    "@frontmcp/sdk": "^1.0.0-beta.13",
-    "@frontmcp/utils": "^1.0.0-beta.13",
+    "@frontmcp/sdk": "^1.0.2",
+    "@frontmcp/utils": "^1.0.2",
     "@opentelemetry/sdk-trace-base": "^1.25.0",
     "@opentelemetry/sdk-node": "^0.52.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",

@@ -33,6 +33,7 @@ import {
 } from '../types';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
+import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
@@ -331,6 +332,33 @@ export interface FrontMcpBaseMetadata {
    * ```
    */
   observability?: ObservabilityOptionsInterface | boolean;
+
+  /**
+   * Channels configuration for Claude Code real-time notifications.
+   * Enables push-based event channels using the `notifications/claude/channel` extension.
+   *
+   * When enabled, the server advertises `experimental: { 'claude/channel': {} }` capability.
+   * Channels can be declared via `@Channel()` decorator or `channel()` function builder
+   * in app definitions.
+   *
+   * Supported sources: webhook, app-event, agent-completion, job-completion, manual.
+   *
+   * @default { enabled: false }
+   *
+   * @example Enable channels
+   * ```typescript
+   * channels: { enabled: true }
+   * ```
+   *
+   * @example With default metadata for all notifications
+   * ```typescript
+   * channels: {
+   *   enabled: true,
+   *   defaultMeta: { server: 'my-app', team: 'platform' },
+   * }
+   * ```
+   */
+  channels?: ChannelsConfigInput;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -372,6 +400,7 @@ export const frontMcpBaseSchema = z.object({
   throttle: guardConfigSchema.optional(),
   observability: observabilityOptionsSchema,
   health: healthOptionsSchema.optional(),
+  channels: channelsConfigSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

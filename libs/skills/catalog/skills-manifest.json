@@ -2877,6 +2877,134 @@
           ]
         }
       ]
+    },
+    {
+      "name": "frontmcp-channels",
+      "category": "development",
+      "description": "Use when you want to push real-time notifications into Claude Code sessions. Build webhook channels, chat bridges (WhatsApp, Telegram, Slack), agent completion alerts, job status notifications, or error forwarding. The skill for CHANNELS and NOTIFICATIONS.",
+      "path": "frontmcp-channels",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "channels",
+        "notifications",
+        "claude-code",
+        "webhooks",
+        "messaging",
+        "real-time",
+        "two-way",
+        "whatsapp",
+        "telegram",
+        "slack",
+        "chat-bridge"
+      ],
+      "bundle": ["full"],
+      "references": [
+        {
+          "name": "channel-sources",
+          "description": "Configure different channel source types - webhooks, app events, agent completion, job completion, and manual push",
+          "examples": [
+            {
+              "name": "webhook-github",
+              "description": "Forward GitHub webhook events (PRs, pushes, CI) into Claude Code",
+              "level": "basic",
+              "tags": ["webhook", "github", "ci", "notifications"],
+              "features": [
+                "Webhook source with HTTP POST endpoint",
+                "GitHub event type routing",
+                "Static meta for team context"
+              ]
+            },
+            {
+              "name": "app-errors",
+              "description": "Forward application errors to Claude Code via the in-process event bus",
+              "level": "basic",
+              "tags": ["errors", "app-event", "debugging", "monitoring"],
+              "features": [
+                "App event source with ChannelEventBus",
+                "Error severity classification",
+                "Stack trace forwarding"
+              ]
+            },
+            {
+              "name": "agent-notify",
+              "description": "Notify Claude Code when AI agents complete their tasks",
+              "level": "intermediate",
+              "tags": ["agents", "completion", "notifications", "automation"],
+              "features": [
+                "Agent completion source with ID filtering",
+                "Duration and output reporting",
+                "Integration with agent registry emitter"
+              ]
+            },
+            {
+              "name": "job-completion",
+              "description": "Notify Claude Code when background jobs and workflows complete",
+              "level": "intermediate",
+              "tags": ["jobs", "workflows", "completion", "background", "notifications"],
+              "features": [
+                "Job completion source with name filtering",
+                "Status-aware notification formatting",
+                "Duration and output reporting"
+              ]
+            },
+            {
+              "name": "service-connector",
+              "description": "Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API",
+              "level": "advanced",
+              "tags": ["service", "connector", "whatsapp", "persistent-connection", "bidirectional"],
+              "features": [
+                "Service source type with onConnect/onDisconnect lifecycle",
+                "Channel-contributed tools for outbound messages",
+                "pushIncoming() for feeding service events into the notification pipeline",
+                "Bidirectional conversation flow"
+              ]
+            },
+            {
+              "name": "file-watcher",
+              "description": "Watch files for changes and notify Claude Code in real-time",
+              "level": "intermediate",
+              "tags": ["file-watcher", "filesystem", "logs", "monitoring", "real-time"],
+              "features": [
+                "File watcher source type with glob patterns",
+                "onConnect lifecycle for starting the watcher",
+                "pushIncoming for streaming file events",
+                "Log file monitoring example"
+              ]
+            },
+            {
+              "name": "replay-buffer",
+              "description": "Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline",
+              "level": "advanced",
+              "tags": ["replay", "buffer", "persistence", "offline", "reconnect"],
+              "features": [
+                "Replay configuration with maxEvents cap",
+                "In-memory ring buffer for event storage",
+                "Replay on session connect",
+                "Persistent store pattern with onConnect"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "channel-two-way",
+          "description": "Build two-way chat bridges connecting WhatsApp, Telegram, Slack, and Discord to Claude Code",
+          "examples": [
+            {
+              "name": "whatsapp-bridge",
+              "description": "Full WhatsApp Business API bridge allowing users to chat with Claude Code via WhatsApp",
+              "level": "advanced",
+              "tags": ["whatsapp", "chat", "two-way", "messaging", "bridge"],
+              "features": [
+                "Two-way channel with reply support",
+                "WhatsApp Cloud API integration",
+                "Sender verification and allowlisting",
+                "Webhook signature validation"
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

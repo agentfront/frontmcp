@@ -457,14 +457,25 @@ export class FrontMcpInstance implements FrontMcpInterface {
         }
       : {};
 
+    // Channel capabilities (experimental extension for Claude Code)
+    const channelCapabilities = scope.channels?.getCapabilities() ?? {};
+
+    // Build channel instructions for Claude Code if channels exist
+    const channelInstructions = scope.channels?.hasAny()
+      ? `Events arrive as <channel> tags. ${
+          scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''
+        }`
+      : '';
+
     const serverOptions = {
-      instructions: '',
+      instructions: channelInstructions,
       capabilities: {
         ...remoteCapabilities,
         ...scope.tools.getCapabilities(),
         ...scope.resources.getCapabilities(),
         ...scope.prompts.getCapabilities(),
         ...scope.agents.getCapabilities(),
+        ...channelCapabilities,
         ...completionsCapability,
         logging: {},
       },
@@ -504,22 +515,26 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const transport = new StdioServerTransport();
     await mcpServer.connect(transport);
 
-    // Handle graceful shutdown with error handling
-    process.on('SIGINT', async () => {
+    // Register server and auto-subscribe stdio session to all channels
+    // (stdio sessions always have channel capability since we advertise it)
+    scope.notifications.registerServer(sessionId, mcpServer);
+    if (scope.channels?.hasAny()) {
+      const channelNames = scope.channels.getChannelInstances().map((ch: { name: string }) => ch.name);
+      scope.notifications.subscribeAllChannels(sessionId, channelNames);
+    }
+
+    // Handle graceful shutdown with cleanup
+    const shutdownHandler = async () => {
       try {
+        scope.notifications.unregisterServer(sessionId);
+        await scope.shutdown();
         await mcpServer.close();
       } catch (err) {
         console.error('Error closing MCP server:', err);
       }
       process.exit(0);
-    });
-    process.on('SIGTERM', async () => {
-      try {
-        await mcpServer.close();
-      } catch (err) {
-        console.error('Error closing MCP server:', err);
-      }
-      process.exit(0);
-    });
+    };
+    process.on('SIGINT', shutdownHandler);
+    process.on('SIGTERM', shutdownHandler);
   }
 }

@@ -1,0 +1,222 @@
+---
+title: "@Channel"
+description: "The @Channel decorator defines a push-based notification channel with source configuration and optional two-way communication."
+icon: "bell"
+---
+
+## Basic Usage
+
+```typescript
+import { Channel, ChannelContext } from '@frontmcp/sdk';
+import type { ChannelNotification } from '@frontmcp/sdk';
+
+@Channel({
+  name: 'deploy-alerts',
+  description: 'CI/CD deployment notifications',
+  source: { type: 'webhook', path: '/hooks/deploy' },
+})
+class DeployAlertChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body } = payload as { body: { status: string; version: string } };
+    return {
+      content: `Deploy ${body.status}: ${body.version}`,
+      meta: { status: body.status },
+    };
+  }
+}
+```
+
+## Signature
+
+```typescript
+function Channel(opts: ChannelMetadata): ClassDecorator
+```
+
+## Function Builder
+
+```typescript
+function channel(opts: ChannelMetadata): (handler: ChannelMessageHandler) => () => void
+```
+
+```typescript
+const ErrorChannel = channel({
+  name: 'error-alerts',
+  source: { type: 'app-event', event: 'app:error' },
+})((payload) => ({
+  content: `Error: ${(payload as { message: string }).message}`,
+}));
+```
+
+## Configuration Options
+
+### Required Properties
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Unique channel identifier. Becomes the `source` attribute in notifications. |
+| `source` | `ChannelSourceConfig` | Event source configuration (see Source Types below). |
+
+### Optional Properties
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `description` | `string` | — | Human-readable description. Included in server instructions for Claude. |
+| `twoWay` | `boolean` | `false` | Enable reply support. Auto-registers `channel-reply` tool when `true`. |
+| `meta` | `Record<string, string>` | — | Static metadata appended to every notification from this channel. |
+| `tools` | `ToolType[]` | — | Tools contributed by this channel. Auto-registered in the scope's tool registry. |
+| `replay` | `{ enabled: boolean; maxEvents?: number }` | — | Buffer events for replay when sessions connect later. |
+| `tags` | `string[]` | — | Tags for categorization and filtering. |
+| `availableWhen` | `EntryAvailability` | — | Environment constraints (platform, runtime, env). |
+
+### Source Types
+
+#### Webhook
+
+```typescript
+source: { type: 'webhook', path: '/hooks/github' }
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `'webhook'` | Source discriminator |
+| `path` | `string` | HTTP POST endpoint path |
+
+#### App Event
+
+```typescript
+source: { type: 'app-event', event: 'app:error' }
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `'app-event'` | Source discriminator |
+| `event` | `string` | Event name to subscribe to on `ChannelEventBus` |
+
+#### Agent Completion
+
+```typescript
+source: { type: 'agent-completion', agentIds: ['code-reviewer'] }
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `'agent-completion'` | Source discriminator |
+| `agentIds` | `string[]` | Optional filter — only these agent IDs trigger the channel |
+
+#### Job Completion
+
+```typescript
+source: { type: 'job-completion', jobNames: ['daily-report'] }
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `'job-completion'` | Source discriminator |
+| `jobNames` | `string[]` | Optional filter — only these job names trigger the channel |
+
+#### Service
+
+```typescript
+source: { type: 'service', service: 'whatsapp-business' }
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `'service'` | Source discriminator |
+| `service` | `string` | Human-readable service identifier |
+
+Channels with `service` source use `onConnect()` / `onDisconnect()` lifecycle hooks and `pushIncoming()` for feeding incoming events.
+
+#### File Watcher
+
+```typescript
+source: { type: 'file-watcher', paths: ['./logs/*.log'], events: ['change'] }
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `'file-watcher'` | Source discriminator |
+| `paths` | `string[]` | Glob patterns or file paths to watch |
+| `events` | `Array<'change' \| 'create' \| 'delete' \| 'rename'>` | Optional file system events to watch |
+
+#### Manual
+
+```typescript
+source: { type: 'manual' }
+```
+
+No automatic wiring. Push programmatically via `scope.channelNotifications.send()`.
+
+## ChannelNotification Type
+
+The return type of `onEvent()`:
+
+```typescript
+interface ChannelNotification {
+  /** Notification content (appears inside <channel> tags in Claude) */
+  content: string;
+  /** Key-value metadata (becomes XML attributes on the <channel> tag) */
+  meta?: Record<string, string>;
+}
+```
+
+<Warning>
+Meta keys must be valid identifiers: letters, digits, and underscores only. Keys like `my-env` or `123start` will fail validation.
+</Warning>
+
+## Two-Way Channels
+
+When `twoWay: true`, implement `onReply()` to handle responses from Claude:
+
+```typescript
+@Channel({
+  name: 'chat-bridge',
+  source: { type: 'webhook', path: '/hooks/chat' },
+  twoWay: true,
+})
+class ChatBridge extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { body } = payload as { body: { sender: string; text: string; chatId: string } };
+    return {
+      content: `${body.sender}: ${body.text}`,
+      meta: { chat_id: body.chatId },
+    };
+  }
+
+  async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
+    await sendToChatPlatform(meta?.chat_id, reply);
+  }
+}
+```
+
+The `channel-reply` tool is auto-registered with this input schema:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `channel_name` | `string` | Yes | Target channel name |
+| `text` | `string` | Yes | Reply text |
+| `meta` | `Record<string, string>` | No | Metadata passed to `onReply()` |
+
+## Server Configuration
+
+Enable channels at the server level:
+
+```typescript
+@FrontMcp({
+  channels: {
+    enabled: true,
+    defaultMeta: { server: 'my-app' },  // Optional
+  },
+})
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Enable the channel system |
+| `defaultMeta` | `Record<string, string>` | — | Metadata appended to all channel notifications |
+
+## Related
+
+- [Channels Guide](/frontmcp/servers/channels) — full documentation with all source types
+- [ChannelContext](/frontmcp/sdk-reference/contexts/channel-context) — context class reference
+- [ChannelRegistry](/frontmcp/sdk-reference/registries/channel-registry) — registry API

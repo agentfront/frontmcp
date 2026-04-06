@@ -150,14 +150,21 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
     const elicitationCapability = this.scope.metadata.elicitation?.enabled ? { elicitation: {} } : {};
 
+    // Channel capabilities (experimental extension for Claude Code)
+    const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
+    const channelInstructions = this.scope.channels?.hasAny()
+      ? `Events arrive as <channel> tags. ${this.scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''}`
+      : '';
+
     const serverOptions = {
-      instructions: '',
+      instructions: channelInstructions,
       capabilities: {
         ...remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
         ...this.scope.tools.getCapabilities(),
         ...this.scope.resources.getCapabilities(),
         ...this.scope.prompts.getCapabilities(),
         ...this.scope.agents.getCapabilities(), // Include agent capabilities (agents as tools)
+        ...channelCapabilities, // Channel capabilities (claude/channel extension)
         ...completionsCapability,
         // MCP logging protocol support - allows clients to set log level via logging/setLevel
         logging: {},

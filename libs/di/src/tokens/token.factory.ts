@@ -6,12 +6,12 @@
  * // Create a factory with custom prefix
  * const tokens = createTokenFactory({ prefix: 'MyApp' });
  *
- * // Create typed tokens
+ * // Create globally shared tokens (safe across multiple module instances)
  * const serviceToken = tokens.type('UserService');
- * // => Symbol('MyApp:type:UserService')
+ * // => Symbol.for('MyApp:type:UserService')
  *
  * const metaToken = tokens.meta('config');
- * // => Symbol('MyApp:meta:config')
+ * // => Symbol.for('MyApp:meta:config')
  * ```
  */
 
@@ -55,8 +55,10 @@ export function createTokenFactory(options: TokenFactoryOptions = {}): TokenFact
   const prefix = options.prefix ?? 'DI';
 
   return {
-    type: (name: string) => Symbol(`${prefix}:type:${name}`),
-    meta: (name: string) => Symbol(`${prefix}:meta:${name}`),
+    // Use Symbol.for() to create globally shared symbols that survive across
+    // multiple module instances (e.g., SDK loaded from both app and plugin paths).
+    type: (name: string) => Symbol.for(`${prefix}:type:${name}`),
+    meta: (name: string) => Symbol.for(`${prefix}:meta:${name}`),
   };
 }
 

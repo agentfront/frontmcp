@@ -96,6 +96,7 @@
                   "frontmcp/servers/flows",
                   "frontmcp/servers/jobs",
                   "frontmcp/servers/workflows",
+                  "frontmcp/servers/channels",
                   "frontmcp/servers/guard"
                 ]
               },
@@ -109,7 +110,8 @@
                   "frontmcp/sdk-reference/contexts/prompt-context",
                   "frontmcp/sdk-reference/contexts/agent-context",
                   "frontmcp/sdk-reference/contexts/skill-context",
-                  "frontmcp/sdk-reference/contexts/job-context"
+                  "frontmcp/sdk-reference/contexts/job-context",
+                  "frontmcp/sdk-reference/contexts/channel-context"
                 ]
               },
               {
@@ -164,6 +166,7 @@
               "frontmcp/features/observability",
               "frontmcp/features/testing-framework",
               "frontmcp/features/skill-based-workflows",
+              "frontmcp/features/channels",
               "frontmcp/features/esm-dynamic-loading"
             ]
           },
@@ -256,7 +259,8 @@
                   "frontmcp/guides/prompts-and-resources",
                   "frontmcp/guides/publishing-esm-packages",
                   "frontmcp/guides/rate-limiting-and-guards",
-                  "frontmcp/guides/observability"
+                  "frontmcp/guides/observability",
+                  "frontmcp/guides/your-first-channel"
                 ]
               },
               {
@@ -309,6 +313,7 @@
               "frontmcp/sdk-reference/decorators/plugin",
               "frontmcp/sdk-reference/decorators/job",
               "frontmcp/sdk-reference/decorators/workflow",
+              "frontmcp/sdk-reference/decorators/channel",
               "frontmcp/sdk-reference/decorators/hooks"
             ]
           },
@@ -335,7 +340,8 @@
               "frontmcp/sdk-reference/registries/provider-registry",
               "frontmcp/sdk-reference/registries/auth-registry",
               "frontmcp/sdk-reference/registries/job-registry",
-              "frontmcp/sdk-reference/registries/workflow-registry"
+              "frontmcp/sdk-reference/registries/workflow-registry",
+              "frontmcp/sdk-reference/registries/channel-registry"
             ]
           },
           {

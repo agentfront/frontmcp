@@ -16,6 +16,7 @@ import type {
   SkillType,
   JobType,
   WorkflowType,
+  ChannelType,
 } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -29,6 +30,7 @@ import {
   annotatedFrontMcpAgentsSchema,
   annotatedFrontMcpJobsSchema,
   annotatedFrontMcpWorkflowsSchema,
+  annotatedFrontMcpChannelsSchema,
 } from '../schemas';
 
 /**
@@ -131,6 +133,13 @@ export interface LocalAppMetadata {
   workflows?: WorkflowType[];
 
   /**
+   * Notification channels registered by this app.
+   * Channels push real-time events to Claude Code sessions via the
+   * `notifications/claude/channel` experimental extension.
+   */
+  channels?: ChannelType[];
+
+  /**
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
@@ -160,6 +169,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   skills: z.array(annotatedFrontMcpSkillsSchema).optional(),
   jobs: z.array(annotatedFrontMcpJobsSchema).optional(),
   workflows: z.array(annotatedFrontMcpWorkflowsSchema).optional(),
+  channels: z.array(annotatedFrontMcpChannelsSchema).optional(),
   auth: authOptionsSchema.optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])
