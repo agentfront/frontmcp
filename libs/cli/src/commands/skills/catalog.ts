@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { TFIDFVectoria } from 'vectoriadb';
+import type { TFIDFVectoria } from 'vectoriadb';
 import type { SkillReferenceEntry } from '@frontmcp/skills';
 
 interface SkillEntry {
@@ -237,8 +237,13 @@ export function getCatalogDir(): string {
 function getSearchIndex(): TFIDFVectoria<SkillDocMetadata> {
   if (cachedIndex) return cachedIndex;
 
+  // Lazy-load vectoriadb to avoid triggering TF/HF model initialization
+  // when only loadCatalog() is needed (e.g., skills list command).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { TFIDFVectoria: TFIDFVectoriaImpl } = require('vectoriadb');
+
   const manifest = loadCatalog();
-  cachedIndex = new TFIDFVectoria<SkillDocMetadata>({
+  cachedIndex = new TFIDFVectoriaImpl({
     defaultTopK: 10,
     defaultSimilarityThreshold: 0.0,
   });
