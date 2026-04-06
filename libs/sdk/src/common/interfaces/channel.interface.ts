@@ -115,7 +115,10 @@ export abstract class ChannelContext extends ExecutionContextBase<ChannelNotific
    * @param meta - Optional metadata from the reply tool call
    */
   async onReply(reply: string, meta?: Record<string, string>): Promise<void> {
-    this.logger.warn(`Channel "${this.channelName}" received a reply but onReply() is not implemented`);
+    throw new Error(
+      `Channel "${this.channelName}" has twoWay: true but onReply() is not implemented. ` +
+        `Override onReply() to forward replies to the external system.`,
+    );
   }
 
   /**

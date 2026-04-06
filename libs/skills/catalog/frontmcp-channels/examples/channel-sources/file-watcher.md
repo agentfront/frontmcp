@@ -63,6 +63,7 @@ export class LogWatcherChannel extends ChannelContext {
       watcher.close();
     }
     this.watchers = [];
+    this.lastSize.clear();
   }
 
   async onEvent(payload: unknown): Promise<ChannelNotification> {

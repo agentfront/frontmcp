@@ -88,16 +88,16 @@ export class ChannelInstance extends ChannelEntry {
       });
     };
 
-    this._serviceContext = ctx;
-
     try {
       await ctx.onConnect();
+      this._serviceContext = ctx;
       const sourceLabel =
         this.metadata.source.type === 'service'
           ? (this.metadata.source as { service: string }).service
           : this.metadata.source.type;
       logger.info(`Channel "${this.name}" connected (${sourceLabel})`);
     } catch (err) {
+      this._serviceContext = undefined;
       logger.error(`Channel "${this.name}" service failed to connect`, { error: err });
     }
   }
@@ -179,11 +179,12 @@ export class ChannelInstance extends ChannelEntry {
    * @param targetSessionId - If set, deliver ONLY to this session
    */
   pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): void {
-    // Merge static meta from channel metadata with per-notification meta
+    // Merge static meta from channel metadata with per-notification meta.
+    // source is always authoritative (set last to prevent overrides).
     const mergedMeta: Record<string, string> = {
-      source: this.name,
       ...(this.staticMeta ?? {}),
       ...(meta ?? {}),
+      source: this.name,
     };
 
     const notification: ChannelNotification = { content, meta: mergedMeta };
@@ -249,7 +250,7 @@ export class ChannelInstance extends ChannelEntry {
    */
   async handleEvent(payload: unknown, targetSessionId?: string): Promise<ChannelNotification | null> {
     try {
-      const ctx = this.create({});
+      const ctx = this._serviceContext ?? this.create({});
       const notification = await ctx.onEvent(payload);
       if (notification) {
         this.pushNotification(notification.content, notification.meta, targetSessionId);
@@ -270,7 +271,7 @@ export class ChannelInstance extends ChannelEntry {
       return;
     }
     try {
-      const ctx = this.create({});
+      const ctx = this._serviceContext ?? this.create({});
       await ctx.onReply(reply, meta);
     } catch (err) {
       const logger = this._providers.get(FrontMcpLogger);

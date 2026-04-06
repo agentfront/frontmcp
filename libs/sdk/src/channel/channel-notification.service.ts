@@ -21,12 +21,15 @@ const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
  */
 export class ChannelNotificationService {
   private readonly logger: FrontMcpLogger;
+  private readonly defaultMeta: Record<string, string>;
 
   constructor(
     private readonly notificationService: NotificationService,
     logger: FrontMcpLogger,
+    defaultMeta?: Record<string, string>,
   ) {
     this.logger = logger.child('ChannelNotificationService');
+    this.defaultMeta = defaultMeta ?? {};
   }
 
   /**
@@ -118,8 +121,9 @@ export class ChannelNotificationService {
    */
   send(channelName: string, content: string, additionalMeta?: Record<string, string>): void {
     const meta: Record<string, string> = {
-      source: channelName,
+      ...this.defaultMeta,
       ...(additionalMeta ?? {}),
+      source: channelName,
     };
     this.sendToSubscribedSessions(content, meta);
   }

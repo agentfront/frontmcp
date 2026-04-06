@@ -1,5 +1,11 @@
 import { Channel, ChannelContext } from '@frontmcp/sdk';
 import type { ChannelNotification } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const replayAlertPayloadSchema = z.object({
+  index: z.number(),
+  message: z.string(),
+});
 
 @Channel({
   name: 'replay-alerts',
@@ -12,7 +18,7 @@ import type { ChannelNotification } from '@frontmcp/sdk';
 })
 export class ReplayAlertChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const data = payload as { index: number; message: string };
+    const data = replayAlertPayloadSchema.parse(payload);
     return {
       content: `Event #${data.index}: ${data.message}`,
       meta: { index: String(data.index) },

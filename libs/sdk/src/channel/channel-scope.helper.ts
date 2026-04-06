@@ -67,8 +67,12 @@ export async function registerChannelCapabilities(
   const channelRegistry = new ChannelRegistry(providers, channelsList, owner);
   await channelRegistry.ready;
 
-  // 2. Create notification service
-  const channelNotificationService = new ChannelNotificationService(notificationService, logger);
+  // 2. Create notification service (with server-level default metadata if configured)
+  const channelNotificationService = new ChannelNotificationService(
+    notificationService,
+    logger,
+    channelsConfig?.defaultMeta,
+  );
 
   // 3. Create event bus for app-event sources
   const channelEventBus = new ChannelEventBus(logger);

@@ -9,7 +9,6 @@
  * Pattern follows SendElicitationResultTool — system tool registered dynamically.
  */
 
-import { z } from 'zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 import { Tool, ToolContext } from '../../common';
 import { channelReplyInputSchema, type ChannelReplyInput } from './reply.types';

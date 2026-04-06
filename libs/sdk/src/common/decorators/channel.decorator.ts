@@ -2,7 +2,6 @@ import 'reflect-metadata';
 import { FrontMcpChannelTokens } from '../tokens';
 import { ChannelMetadata, ChannelNotification, frontMcpChannelMetadataSchema } from '../metadata';
 import { ChannelContext } from '../interfaces';
-import { ChannelKind } from '../records/channel.record';
 
 /**
  * Decorator that marks a class as a Channel and provides metadata.

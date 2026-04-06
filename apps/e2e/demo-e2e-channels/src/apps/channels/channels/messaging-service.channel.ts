@@ -102,8 +102,14 @@ export class MessagingServiceChannel extends ChannelContext {
     this.logger.info('Messaging service: disconnected');
   }
 
+  private static readonly incomingMessageSchema = z.object({
+    from: z.string(),
+    text: z.string(),
+    chatId: z.string(),
+  });
+
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const msg = payload as { from: string; text: string; chatId: string };
+    const msg = MessagingServiceChannel.incomingMessageSchema.parse(payload);
     return {
       content: `${msg.from}: ${msg.text}`,
       meta: {

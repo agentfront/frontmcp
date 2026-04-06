@@ -151,16 +151,9 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const elicitationCapability = this.scope.metadata.elicitation?.enabled ? { elicitation: {} } : {};
 
     // Channel capabilities (experimental extension for Claude Code)
-    const scope = this.scope as unknown as {
-      channels?: {
-        hasAny(): boolean;
-        getCapabilities(): Record<string, unknown>;
-        getChannelInstances(): Array<{ twoWay: boolean }>;
-      };
-    };
-    const channelCapabilities = scope.channels?.getCapabilities() ?? {};
-    const channelInstructions = scope.channels?.hasAny()
-      ? `Events arrive as <channel> tags. ${scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''}`
+    const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
+    const channelInstructions = this.scope.channels?.hasAny()
+      ? `Events arrive as <channel> tags. ${this.scope.channels.getChannelInstances().some((ch) => ch.twoWay) ? 'Reply with the channel-reply tool.' : ''}`
       : '';
 
     const serverOptions = {

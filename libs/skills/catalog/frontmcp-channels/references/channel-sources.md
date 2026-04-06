@@ -1,11 +1,11 @@
 ---
 name: channel-sources
-description: Configure different channel source types - webhooks, app events, agent completion, job completion, and manual push
+description: Configure different channel source types - webhooks, app events, agent/job completion, service connectors, file watchers, and manual push
 ---
 
 # Channel Sources
 
-Every channel has a source that determines how events flow into it. FrontMCP supports five source types, each optimized for a different integration pattern.
+Every channel has a source that determines how events flow into it. FrontMCP supports seven source types, each optimized for a different integration pattern.
 
 ## Webhook Source
 

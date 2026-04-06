@@ -965,4 +965,16 @@ export class Scope extends ScopeEntry {
     }
     throw new FlowExitedWithoutOutputError();
   }
+
+  /**
+   * Shut down the scope and release resources.
+   * Disconnects channel service connectors, unsubscribes event handlers,
+   * and clears the channel event bus.
+   */
+  async shutdown(): Promise<void> {
+    if (this._channelTeardown) {
+      this._channelTeardown();
+      this._channelTeardown = undefined;
+    }
+  }
 }

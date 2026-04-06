@@ -38,11 +38,19 @@ export function wireAgentCompletionSource(
   const filterAgentIds = sourceConfig.agentIds;
 
   return agentEmitterSubscribe((event) => {
-    // Apply agent ID filter if specified
+    // Apply agent ID filter — match only on agentId, not display name
     if (filterAgentIds && filterAgentIds.length > 0) {
-      if (!filterAgentIds.includes(event.agentId) && !filterAgentIds.includes(event.agentName)) {
+      if (!filterAgentIds.includes(event.agentId)) {
         return;
       }
+    }
+
+    // Session-scoped: don't broadcast globally when sessionId is missing
+    if (!event.sessionId) {
+      logger.verbose(
+        `Skipping agent completion for channel "${channel.name}": no sessionId (prevents cross-session leak)`,
+      );
+      return;
     }
 
     logger.verbose(

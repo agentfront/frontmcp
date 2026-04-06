@@ -44,7 +44,8 @@ export class ChannelEventBus {
 
     return () => {
       handlers!.delete(handler);
-      if (handlers!.size === 0) {
+      // Only remove the map entry if the set reference hasn't been replaced
+      if (handlers!.size === 0 && this.handlers.get(event) === handlers) {
         this.handlers.delete(event);
       }
     };

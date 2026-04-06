@@ -1,5 +1,4 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 import { replyLog } from '../channels/chat-bridge.channel';
 
 const inputSchema = {};

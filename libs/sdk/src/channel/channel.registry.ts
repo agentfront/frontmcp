@@ -76,6 +76,12 @@ export default class ChannelRegistry
       const instance = new ChannelInstance(rec, this.providers, this.owner);
       await instance.ready;
 
+      // Fail fast on duplicate channel names
+      const existingRow = this.localRows.find((r) => r.resolvedName === instance.name);
+      if (existingRow) {
+        throw new Error(`Duplicate channel name "${instance.name}" — each channel must have a unique name.`);
+      }
+
       this.instances.set(token as Token<ChannelInstance>, instance);
       this.localRows.push({
         instance,

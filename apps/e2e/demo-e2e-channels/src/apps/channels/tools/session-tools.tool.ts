@@ -9,7 +9,6 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import type { NotificationService } from '../../../../../../libs/sdk/src/notification/notification.service';
 import type ChannelRegistry from '../../../../../../libs/sdk/src/channel/channel.registry';
-import type { ChannelNotificationService } from '../../../../../../libs/sdk/src/channel/channel-notification.service';
 
 /** Track which notifications each fake session receives (for test assertions) */
 const sessionNotifications = new Map<string, Array<{ content: string; meta: Record<string, string> }>>();
@@ -191,7 +190,7 @@ export class PushTargetedNotificationTool extends ToolContext<{
     const scope = this.scope as unknown as { channels?: ChannelRegistry };
     const channel = scope.channels?.findByName(input.channelName);
     if (!channel) {
-      return { error: `Channel "${input.channelName}" not found` };
+      this.fail(`Channel "${input.channelName}" not found`);
     }
 
     channel.pushNotification(input.content, {}, input.targetSessionId);

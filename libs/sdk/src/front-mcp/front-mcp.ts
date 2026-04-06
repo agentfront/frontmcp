@@ -487,22 +487,18 @@ export class FrontMcpInstance implements FrontMcpInterface {
       scope.notifications.subscribeAllChannels(sessionId, channelNames);
     }
 
-    // Handle graceful shutdown with error handling
-    process.on('SIGINT', async () => {
+    // Handle graceful shutdown with cleanup
+    const shutdownHandler = async () => {
       try {
+        scope.notifications.unregisterServer(sessionId);
+        await scope.shutdown();
         await mcpServer.close();
       } catch (err) {
         console.error('Error closing MCP server:', err);
       }
       process.exit(0);
-    });
-    process.on('SIGTERM', async () => {
-      try {
-        await mcpServer.close();
-      } catch (err) {
-        console.error('Error closing MCP server:', err);
-      }
-      process.exit(0);
-    });
+    };
+    process.on('SIGINT', shutdownHandler);
+    process.on('SIGTERM', shutdownHandler);
   }
 }
