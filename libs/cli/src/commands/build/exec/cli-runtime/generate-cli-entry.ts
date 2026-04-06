@@ -151,6 +151,8 @@ ${hasOAuth ? "var oauthHelper = require('./oauth-helper');" : ''}
 var APP_NAME = ${JSON.stringify(appName)};
 var SCRIPT_DIR = __dirname;
 var FRONTMCP_HOME = process.env.FRONTMCP_HOME || path.join(os.homedir(), '.frontmcp');
+// Set app name for file logger (writes to ~/.frontmcp/logs/{appName}-{timestamp}.log)
+process.env.FRONTMCP_APP_NAME = process.env.FRONTMCP_APP_NAME || APP_NAME;
 ${selfContained
     ? `// Self-contained: server bundle and SDK are inlined by esbuild
 var SERVER_BUNDLE = '../${serverBundleFilename}';`
@@ -173,7 +175,10 @@ async function getClient() {
   }
 
   // Fallback: in-process connect (with CLI mode for faster init)
+  // Suppress @FrontMcp decorator bootstrap — we only need config metadata, not a running server.
+  process.env.FRONTMCP_SCHEMA_EXTRACT = '1';
   var mod = require(${selfContained ? `'../${serverBundleFilename}'` : 'SERVER_BUNDLE'});
+  delete process.env.FRONTMCP_SCHEMA_EXTRACT;
   var configOrClass = mod.default || mod;
   var sdk = require('@frontmcp/sdk');
   var connect = sdk.connect || sdk.direct.connect;${authRequired ? `
@@ -191,7 +196,22 @@ program
   .name(${JSON.stringify(appName)})
   .version(${JSON.stringify(appVersion)})
   .description(${JSON.stringify(description || `${appName} CLI`)})
-  .option('--output <mode>', 'Output format: text or json', ${JSON.stringify(outputDefault)});
+  .option('--output <mode>', 'Output format: text or json', ${JSON.stringify(outputDefault)})
+  .option('--verbose', 'Enable verbose console logging (logs always go to ~/.frontmcp/logs/)')
+  .option('--log-dir <path>', 'Directory for log files (default: ~/.frontmcp/logs/)');
+
+// Wire --verbose and --log-dir to env vars early (before any command action runs).
+// Parse argv directly since commander hooks may not be available in all versions.
+(function() {
+  var argv = process.argv;
+  if (argv.indexOf('--verbose') !== -1) {
+    process.env.FRONTMCP_CLI_VERBOSE = '1';
+  }
+  var logDirIdx = argv.indexOf('--log-dir');
+  if (logDirIdx !== -1 && argv[logDirIdx + 1]) {
+    process.env.FRONTMCP_LOG_DIR = argv[logDirIdx + 1];
+  }
+})();
 
 program.configureHelp({
   sortSubcommands: false,
@@ -1199,12 +1219,19 @@ function generateInstallCommand(
     console.log('Installing ${appName}...');
     dirs.forEach(function(d) { fs.mkdirSync(d, { recursive: true }); });
 
-    // Copy bundle files
+    // Copy bundle files and skill content
     var files = fs.readdirSync(SCRIPT_DIR).filter(function(f) {
-      return f.endsWith('.js') || f.endsWith('.json')${selfContained ? " || f.endsWith('-bin')" : ''};
+      return f.endsWith('.js') || f.endsWith('.json') || f.endsWith('.md')${selfContained ? " || f.endsWith('-bin')" : ''};
     });
     files.forEach(function(f) {
       fs.copyFileSync(pathMod.join(SCRIPT_DIR, f), pathMod.join(appDir, f));
+    });
+    // Copy skill content directories (only those that exist in the build output)
+    var entries = fs.readdirSync(SCRIPT_DIR, { withFileTypes: true });
+    entries.forEach(function(ent) {
+      if (ent.isDirectory()) {
+        fs.cpSync(pathMod.join(SCRIPT_DIR, ent.name), pathMod.join(appDir, ent.name), { recursive: true });
+      }
     });
     console.log('  Copied ' + files.length + ' files to ' + appDir);
 
@@ -1426,9 +1453,14 @@ function generateFooter(): string {
   console.error('Unknown command: ' + args[0]);
   process.exitCode = 1;
 });
-program.parseAsync(process.argv).catch(function(err) {
+program.parseAsync(process.argv).then(function() {
+  // Use exitCode instead of process.exit() so long-running commands
+  // (e.g., serve) keep the event loop alive while short-lived commands
+  // exit naturally when the event loop drains.
+  process.exitCode = process.exitCode || 0;
+}).catch(function(err) {
   console.error('Fatal:', err.message || err);
-  process.exit(1);
+  process.exitCode = 1;
 });`;
 }
 

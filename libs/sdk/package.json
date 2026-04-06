@@ -79,7 +79,7 @@
     "@enclave-vm/core": "^2.11.1",
     "openai": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "@anthropic-ai/sdk": "^0.30.0 || ^0.78.0",
-    "@frontmcp/observability": "1.0.0-beta.14",
+    "@frontmcp/observability": "1.0.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-base": "^1.25.0"
   },

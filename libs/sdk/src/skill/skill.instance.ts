@@ -6,7 +6,7 @@ import { SkillVisibility } from '../common/metadata/skill.metadata';
 import ProviderRegistry from '../provider/provider.registry';
 import { ScopeEntry } from '../common';
 import { loadInstructions, buildSkillContent, resolveReferences, resolveExamples } from './skill.utils';
-import { dirname, pathResolve } from '@frontmcp/utils';
+import { dirname, pathResolve, pathJoin, fileExists, readJSON } from '@frontmcp/utils';
 
 /**
  * Extended SkillContent with additional metadata for caching.
@@ -113,7 +113,23 @@ export class SkillInstance extends SkillEntry {
     }
 
     // Load instructions from source
-    this.cachedInstructions = await loadInstructions(this.metadata.instructions, basePath);
+    try {
+      this.cachedInstructions = await loadInstructions(this.metadata.instructions, basePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        // In bundled/CLI environments, callerDir may resolve incorrectly.
+        // Fall back to the build-time _skills/manifest.json which maps skill
+        // names to their copied content files relative to the bundle directory.
+        const resolved = await resolveFromSkillManifest(this.metadata.name);
+        if (resolved) {
+          this.cachedInstructions = await loadInstructions({ file: resolved }, undefined);
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
     return this.cachedInstructions;
   }
 
@@ -142,29 +158,21 @@ export class SkillInstance extends SkillEntry {
     const instructions = await this.loadInstructions();
     const baseDir = this.getBaseDir();
 
-    // Resolve references from the references/ directory if it exists
-    const refsPath = this.metadata.resources?.references;
-    let resolvedRefs: SkillReferenceInfo[] | undefined;
-    if (refsPath) {
-      const refsDir = refsPath.startsWith('/') ? refsPath : baseDir ? pathResolve(baseDir, refsPath) : undefined;
-      if (refsDir) {
-        resolvedRefs = await resolveReferences(refsDir);
-      }
-    }
+    const resolvedRefs = await loadResourceWithManifestFallback(
+      this.metadata.resources?.references,
+      baseDir,
+      this.metadata.name,
+      'references',
+      resolveReferences,
+    );
 
-    // Resolve examples from the examples/ directory if it exists
-    const examplesPath = this.metadata.resources?.examples;
-    let resolvedExs: SkillExampleInfo[] | undefined;
-    if (examplesPath) {
-      const exDir = examplesPath.startsWith('/')
-        ? examplesPath
-        : baseDir
-          ? pathResolve(baseDir, examplesPath)
-          : undefined;
-      if (exDir) {
-        resolvedExs = await resolveExamples(exDir);
-      }
-    }
+    const resolvedExs = await loadResourceWithManifestFallback(
+      this.metadata.resources?.examples,
+      baseDir,
+      this.metadata.name,
+      'examples',
+      resolveExamples,
+    );
 
     const baseContent = buildSkillContent(this.metadata, instructions, resolvedRefs, resolvedExs);
 
@@ -268,4 +276,106 @@ export function createSkillInstance(
   owner: EntryOwnerRef,
 ): SkillInstance {
   return new SkillInstance(record, providers, owner);
+}
+
+// ─── Build-time skill manifest resolution ──────────────────────────────────
+
+type SkillManifestEntry = {
+  instructions?: string;
+  references?: string;
+  examples?: string;
+  scripts?: string;
+  assets?: string;
+};
+
+let skillManifestCache: Record<string, SkillManifestEntry> | null | undefined;
+
+/**
+ * Try to load a skill resource (references or examples) from the given path,
+ * falling back to the build-time manifest on ENOENT.
+ */
+async function loadResourceWithManifestFallback<T>(
+  resourcePath: string | undefined,
+  baseDir: string | undefined,
+  skillName: string,
+  resourceType: 'references' | 'examples' | 'scripts' | 'assets',
+  loader: (dir: string) => Promise<T>,
+): Promise<T | undefined> {
+  if (!resourcePath) return undefined;
+
+  let dir = resourcePath.startsWith('/') ? resourcePath : baseDir ? pathResolve(baseDir, resourcePath) : undefined;
+  if (dir) {
+    try {
+      return await loader(dir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      dir = await resolveResourceFromManifest(skillName, resourceType);
+      if (dir) return await loader(dir);
+    }
+  } else {
+    dir = await resolveResourceFromManifest(skillName, resourceType);
+    if (dir) return await loader(dir);
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a skill's instruction file path from the build-time `_skills/manifest.json`.
+ *
+ * During `frontmcp build -t cli`, skill content files are copied into a flat
+ * `_skills/` directory with a manifest mapping skill names to their file paths.
+ * This function reads that manifest at runtime to resolve paths that would
+ * otherwise fail due to incorrect `callerDir` in bundled environments.
+ *
+ * @returns Absolute path to the instructions file, or undefined if not found.
+ */
+async function resolveFromSkillManifest(skillName: string): Promise<string | undefined> {
+  if (skillManifestCache === null) return undefined; // Already tried, not found
+
+  if (skillManifestCache === undefined) {
+    // Try to load manifest from the main module's directory
+    try {
+      const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
+      const manifestPath = pathJoin(mainDir, '_skills', 'manifest.json');
+      if (await fileExists(manifestPath)) {
+        skillManifestCache = await readJSON(manifestPath);
+      } else {
+        skillManifestCache = null;
+        return undefined;
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        skillManifestCache = null;
+        return undefined;
+      }
+      throw err;
+    }
+  }
+
+  if (!skillManifestCache) return undefined;
+  const entry = skillManifestCache[skillName];
+  if (!entry?.instructions) return undefined;
+
+  const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
+  return pathResolve(mainDir, entry.instructions);
+}
+
+/**
+ * Resolve a skill's resource directory from the build-time manifest.
+ * @returns Absolute path to the resource directory, or undefined if not found.
+ */
+export async function resolveResourceFromManifest(
+  skillName: string,
+  resourceType: 'references' | 'examples' | 'scripts' | 'assets',
+): Promise<string | undefined> {
+  // Ensure manifest is loaded
+  await resolveFromSkillManifest(skillName);
+  if (!skillManifestCache) return undefined;
+
+  const entry = skillManifestCache[skillName];
+  const relPath = entry?.[resourceType];
+  if (!relPath) return undefined;
+
+  const mainDir = require.main?.filename ? dirname(require.main.filename) : process.cwd();
+  return pathResolve(mainDir, relPath);
 }

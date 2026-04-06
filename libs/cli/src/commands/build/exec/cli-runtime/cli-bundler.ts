@@ -44,6 +44,7 @@ export async function bundleCliWithEsbuild(
         // Only true native addons and optional peer deps stay external in self-contained mode
         'better-sqlite3',
         'fsevents',
+        'esbuild',
         '@vercel/kv',
         '@frontmcp/storage-sqlite',
         '@enclave-vm/core',
@@ -54,6 +55,7 @@ export async function bundleCliWithEsbuild(
         '@frontmcp/sdk',
         'better-sqlite3',
         'fsevents',
+        'esbuild',
         '@vercel/kv',
         '@frontmcp/storage-sqlite',
         '@enclave-vm/core',

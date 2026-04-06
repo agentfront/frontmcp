@@ -46,6 +46,18 @@ export interface ExtractedCapabilities {
   workflows: boolean;
 }
 
+export interface ExtractedSkillAsset {
+  skillName: string;
+  baseDir?: string;
+  instructionFile?: string;
+  resourceDirs?: {
+    references?: string;
+    examples?: string;
+    scripts?: string;
+    assets?: string;
+  };
+}
+
 export interface ExtractedSchema {
   tools: ExtractedTool[];
   resources: ExtractedResource[];
@@ -53,6 +65,7 @@ export interface ExtractedSchema {
   prompts: ExtractedPrompt[];
   jobs: ExtractedJob[];
   capabilities: ExtractedCapabilities;
+  skillAssets: ExtractedSkillAsset[];
 }
 
 /** Known system tool names injected by SDK features (jobs, workflows). */
@@ -112,6 +125,7 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;
     listPrompts(): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: unknown[] }> }>;
     listJobs?(): Promise<{ jobs: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown>; tags?: string[] }>; count: number }>;
+    collectSkillAssets?(): Promise<{ entries: Array<{ skillName: string; baseDir?: string; instructionFile?: string; resources?: Record<string, string | undefined> }> }>;
     close(): Promise<void>;
   };
 
@@ -187,7 +201,23 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
       }
     }
 
-    return { tools, resources, resourceTemplates, prompts, jobs, capabilities };
+    // Collect skill file assets for copying to dist
+    let skillAssets: ExtractedSkillAsset[] = [];
+    if (capabilities.skills && client.collectSkillAssets) {
+      try {
+        const manifest = await client.collectSkillAssets();
+        skillAssets = manifest.entries.map((e) => ({
+          skillName: e.skillName,
+          baseDir: e.baseDir,
+          instructionFile: e.instructionFile,
+          resourceDirs: e.resources as ExtractedSkillAsset['resourceDirs'],
+        }));
+      } catch {
+        // Skill asset collection not available
+      }
+    }
+
+    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets };
   } finally {
     await client.close().catch(() => {});
   }

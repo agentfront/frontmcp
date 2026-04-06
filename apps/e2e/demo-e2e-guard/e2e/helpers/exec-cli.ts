@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import * as path from 'path';
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../fixture');
-const DIST_DIR = path.join(FIXTURE_DIR, 'dist');
+const DIST_DIR = path.join(FIXTURE_DIR, 'dist', 'cli');
 const CLI_BUNDLE = path.join(DIST_DIR, 'guard-cli-demo-cli.bundle.js');
 
 let buildDone = false;
@@ -48,7 +48,7 @@ export function runCli(args: string[], extraEnv?: Record<string, string>): CliRe
       encoding: 'utf-8',
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     });
-    return { stdout: stdout.toString(), stderr: '', exitCode: 0 };
+    return { stdout, stderr: '', exitCode: 0 };
   } catch (err: unknown) {
     const error = err as { stdout?: string | Buffer; stderr?: string | Buffer; status?: number };
     return {
