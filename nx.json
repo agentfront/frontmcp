@@ -90,6 +90,11 @@
     }
   },
   "release": {
-    "projects": ["libs/*", "plugins/*"]
+    "projects": ["libs/*", "plugins/*"],
+    "version": {
+      "generatorOptions": {
+        "updateDependents": "auto"
+      }
+    }
   }
 }
