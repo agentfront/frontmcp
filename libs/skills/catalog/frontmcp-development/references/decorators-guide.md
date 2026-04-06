@@ -61,32 +61,32 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 
 **Key fields:**
 
-| Field           | Description                                                                      |
-| --------------- | -------------------------------------------------------------------------------- |
-| `info`          | Server name, version, and description                                            |
-| `apps`          | Array of `@App` classes to mount                                                 |
-| `serve?`        | Auto-start HTTP server (default: `true`). Set `false` for programmatic usage     |
-| `splitByApp?`   | If `true`, each app gets its own scope and basePath. Default: `false`            |
-| `redis?`        | Redis / Vercel KV connection for sessions, transport persistence, auth tokens    |
-| `plugins?`      | Global plugins (instantiated per scope)                                          |
-| `providers?`    | Global DI providers available to all apps                                        |
-| `tools?`        | Standalone tools (outside apps, merged with app tools)                           |
-| `resources?`    | Standalone resources (merged with app resources)                                 |
-| `skills?`       | Standalone skills (merged with app skills)                                       |
-| `skillsConfig?` | Skills HTTP endpoints (`/llm.txt`, `/skills`) and MCP tool config                |
-| `transport?`    | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object |
-| `auth?`         | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`          |
-| `http?`         | HTTP server options (port, host, cors, socketPath)                               |
-| `logging?`      | Logging configuration (transports and levels)                                    |
-| `elicitation?`  | Enable interactive user input during tool execution                              |
-| `sqlite?`       | SQLite storage for local deployments (sessions, events)                          |
-| `pubsub?`       | Redis pub/sub for resource subscriptions (falls back to `redis` config)          |
-| `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                         |
-| `throttle?`     | Server-level guard config (see note below)                                       |
-| `pagination?`   | List operation pagination (`tools/list` endpoint)                                |
-| `ui?`           | UI rendering config (CDN overrides for widget imports)                           |
-| `extApps?`      | Widget-to-host MCP Apps communication (host capabilities, session validation)    |
-| `loader?`       | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps             |
+| Field           | Description                                                                                                                                                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `info`          | Server name, version, and description                                                                                                                                |
+| `apps`          | Array of `@App` classes to mount                                                                                                                                     |
+| `serve?`        | Auto-start HTTP server (default: `true`). Set `false` for programmatic usage                                                                                         |
+| `splitByApp?`   | If `true`, each app gets its own scope and basePath. Default: `false`                                                                                                |
+| `redis?`        | Redis / Vercel KV connection for sessions, transport persistence, auth tokens                                                                                        |
+| `plugins?`      | Global plugins (instantiated per scope)                                                                                                                              |
+| `providers?`    | Global DI providers available to all apps                                                                                                                            |
+| `tools?`        | Standalone tools (outside apps, merged with app tools)                                                                                                               |
+| `resources?`    | Standalone resources (merged with app resources)                                                                                                                     |
+| `skills?`       | Standalone skills (merged with app skills)                                                                                                                           |
+| `skillsConfig?` | Skills HTTP endpoints (`/llm.txt`, `/skills`) and MCP tool config                                                                                                    |
+| `transport?`    | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object                                                                                     |
+| `auth?`         | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`                                                                                              |
+| `http?`         | HTTP server options (port, host, cors, socketPath)                                                                                                                   |
+| `logging?`      | Logging configuration (transports and levels)                                                                                                                        |
+| `elicitation?`  | Enable interactive user input during tool execution                                                                                                                  |
+| `sqlite?`       | SQLite storage for local deployments (sessions, events)                                                                                                              |
+| `pubsub?`       | Redis pub/sub for distributed resource subscriptions across multiple instances (single-server deployments use in-memory subscriptions; falls back to `redis` config) |
+| `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                             |
+| `throttle?`     | Server-level guard config (see note below)                                                                                                                           |
+| `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                    |
+| `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                               |
+| `extApps?`      | Widget-to-host MCP Apps communication (host capabilities, session validation)                                                                                        |
+| `loader?`       | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps                                                                                                 |
 
 > **Throttle vs per-tool guards:** Server-level `throttle` is a `GuardConfig` object with `global`, `defaultRateLimit`, `defaultConcurrency`, `defaultTimeout` sub-fields that set server-wide defaults. Tool-level `rateLimit`, `concurrency`, `timeout` fields (on `@Tool`) override these defaults per tool.
 

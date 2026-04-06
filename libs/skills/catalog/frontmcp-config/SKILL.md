@@ -60,7 +60,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 | Enable tools to ask users for input                            | `configure-elicitation`                | Elicitation schemas, stores, and multi-step flows                |
 | Set up authentication (public, transparent, local, remote)     | `configure-auth`                       | OAuth flows, credential vault, multi-app auth                    |
 | Configure session storage backends                             | `configure-session`                    | Memory, Redis, Vercel KV, and custom session stores              |
-| Add Redis for production storage                               | `setup-redis`                          | Docker Redis, Vercel KV, pub/sub for subscriptions               |
+| Add Redis for production storage                               | `setup-redis`                          | Docker Redis, Vercel KV, pub/sub for distributed subscriptions   |
 | Add SQLite for local development                               | `setup-sqlite`                         | SQLite with WAL mode, migration helpers                          |
 | Understand auth mode details (public/transparent/local/remote) | `configure-auth-modes`                 | Authentication mode details (public, transparent, local, remote) |
 | Fine-tune guard configuration for throttling                   | `configure-throttle-guard-config`      | Advanced guard configuration for throttling                      |

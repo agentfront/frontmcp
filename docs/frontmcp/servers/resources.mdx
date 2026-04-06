@@ -481,13 +481,17 @@ FrontMCP automatically advertises resource capabilities during MCP initializatio
 The SDK sets these capabilities based on your registered resources:
 
 - `listChanged: true` when you have any resources registered
-- `subscribe: true` when subscription support is enabled
+- `subscribe: true` when any resources are registered (subscriptions work in-memory for single-server, stdio, and binary deployments — no Redis required)
 
 ### Change Notifications
 
 When resources change dynamically (e.g., via adapters or plugins), FrontMCP automatically sends `notifications/resources/list_changed` to connected clients. Clients that support this notification will refresh their resource list.
 
-For subscribed resources, the server sends `notifications/resources/updated` when the content changes.
+For subscribed resources, the server sends `notifications/resources/updated` when the content changes. Resource authors can trigger this notification by calling `this.notifyUpdated()` from within a `ResourceContext`, or programmatically via `scope.resources.notifyContentChanged(uri)`.
+
+<Info>
+Resource subscriptions work out of the box on single-server deployments (stdio, binary, single-instance HTTP) using in-memory tracking — no Redis or pub/sub configuration is needed. The `pubsub` config is only required for **distributed multi-instance** deployments where subscription state must be shared across server instances.
+</Info>
 
 <Tip>
 For the full protocol specification, see [MCP Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources).

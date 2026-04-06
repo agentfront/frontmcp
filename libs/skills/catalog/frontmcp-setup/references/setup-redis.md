@@ -15,15 +15,16 @@ description: Provision and configure Redis or Vercel KV for session storage and 
 
 ### Recommended
 
-- Resource subscriptions with `subscribe: true` are enabled and need pub/sub
+- Resource subscriptions with `subscribe: true` across **multiple server instances** (distributed pub/sub)
 - Auth sessions or elicitation state must persist across server restarts
 - Distributed rate limiting is configured in the throttle guard
 
 ### Skip When
 
-- Running a single-instance stdio-only server for local development -- use `setup-sqlite` or in-memory stores
+- Running a single-instance stdio-only server for local development -- use `setup-sqlite` or in-memory stores (resource subscriptions work in-memory without Redis)
 - Only need to configure session TTL and key prefix on an already-provisioned Redis -- use `configure-session`
 - Deploying a read-only MCP server with no sessions, subscriptions, or stateful tools
+- Using resource subscriptions on a single server instance -- subscriptions work in-memory out of the box
 
 > **Decision:** Use this skill to provision and connect Redis (Docker, existing instance, or Vercel KV); use `configure-session` to tune session-specific options after Redis is available.
 
@@ -217,9 +218,11 @@ const sessionStore = createSessionStoreSync({
 });
 ```
 
-## Step 4 -- Pub/Sub for Resource Subscriptions
+## Step 4 -- Pub/Sub for Resource Subscriptions (Multi-Instance Only)
 
-If your server exposes resources with `subscribe: true`, you need pub/sub. Pub/sub requires a real Redis instance -- Vercel KV does not support pub/sub operations.
+> **Single-server note:** If you run a single server instance (stdio, binary, or single-instance HTTP), resource subscriptions work in-memory without any Redis or pub/sub configuration. Skip this step for local development and single-server deployments.
+
+For **distributed multi-instance** deployments where subscription state must be shared across server instances, you need pub/sub. Pub/sub requires a real Redis instance -- Vercel KV does not support pub/sub operations.
 
 For a hybrid setup (Vercel KV for sessions, Redis for pub/sub):
 
@@ -318,13 +321,13 @@ You should see session keys like `mcp:session:<session-id>`.
 
 ## Common Patterns
 
-| Pattern                | Correct                                                                                    | Incorrect                                               | Why                                                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Redis provider field   | `redis: { provider: 'redis', host: '...', port: 6379 }`                                    | `redis: { host: '...', port: 6379 }` without `provider` | Both forms are type-safe (the SDK's `RedisOptions` union accepts both shapes), but explicit `provider: 'redis'` improves clarity and intent |
-| Environment variables  | `host: process.env['REDIS_HOST'] ?? 'localhost'`                                           | Hardcoding `host: 'redis.internal'` in source           | Hardcoded values break across environments (dev, staging, prod); always read from env with a sensible fallback                              |
-| Vercel KV credentials  | Let Vercel auto-inject `KV_REST_API_URL` and `KV_REST_API_TOKEN`                           | Manually setting KV tokens in the `redis` config object | Auto-injection is safer and ensures tokens rotate correctly; manual values risk stale or committed secrets                                  |
-| Docker persistence     | `command: redis-server --appendonly yes` in docker-compose                                 | Running Redis without `--appendonly` in development     | Without AOF persistence, data is lost on container restart; `--appendonly yes` preserves data across restarts                               |
-| Pub/sub with Vercel KV | Separate `pubsub: { provider: 'redis', ... }` alongside `redis: { provider: 'vercel-kv' }` | Expecting Vercel KV to handle pub/sub                   | Vercel KV does not support pub/sub; a real Redis instance is required for resource subscriptions                                            |
+| Pattern                | Correct                                                                                    | Incorrect                                               | Why                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Redis provider field   | `redis: { provider: 'redis', host: '...', port: 6379 }`                                    | `redis: { host: '...', port: 6379 }` without `provider` | Both forms are type-safe (the SDK's `RedisOptions` union accepts both shapes), but explicit `provider: 'redis'` improves clarity and intent                                                |
+| Environment variables  | `host: process.env['REDIS_HOST'] ?? 'localhost'`                                           | Hardcoding `host: 'redis.internal'` in source           | Hardcoded values break across environments (dev, staging, prod); always read from env with a sensible fallback                                                                             |
+| Vercel KV credentials  | Let Vercel auto-inject `KV_REST_API_URL` and `KV_REST_API_TOKEN`                           | Manually setting KV tokens in the `redis` config object | Auto-injection is safer and ensures tokens rotate correctly; manual values risk stale or committed secrets                                                                                 |
+| Docker persistence     | `command: redis-server --appendonly yes` in docker-compose                                 | Running Redis without `--appendonly` in development     | Without AOF persistence, data is lost on container restart; `--appendonly yes` preserves data across restarts                                                                              |
+| Pub/sub with Vercel KV | Separate `pubsub: { provider: 'redis', ... }` alongside `redis: { provider: 'vercel-kv' }` | Expecting Vercel KV to handle pub/sub                   | Vercel KV does not support pub/sub; a real Redis instance is required for distributed resource subscriptions (single-instance servers use in-memory subscriptions and do not need pub/sub) |
 
 ## Verification Checklist
 

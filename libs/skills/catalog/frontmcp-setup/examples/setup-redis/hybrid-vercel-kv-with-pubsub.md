@@ -2,18 +2,20 @@
 name: hybrid-vercel-kv-with-pubsub
 reference: setup-redis
 level: advanced
-description: 'Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions.'
+description: 'Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions in distributed multi-instance deployments.'
 tags: [setup, vercel-kv, redis, vercel, session, hybrid]
 features:
   - 'Vercel KV handles sessions (`redis` config) while a real Redis handles pub/sub (`pubsub` config)'
-  - 'Vercel KV does not support pub/sub operations, so a separate Redis instance is required'
-  - 'Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications'
+  - 'Vercel KV does not support pub/sub operations, so a separate Redis instance is required for distributed setups'
+  - 'Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications across multiple server instances (single-instance servers use in-memory subscriptions)'
   - "The `pubsub` field accepts `provider: 'redis'` only (no Vercel KV support)"
 ---
 
 # Hybrid Vercel KV with Redis Pub/Sub
 
-Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions.
+Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions in distributed multi-instance deployments.
+
+> **Note:** Single-server deployments (stdio, binary, or single-instance HTTP) do not need pub/sub — resource subscriptions work in-memory out of the box.
 
 ## Code
 
@@ -69,8 +71,8 @@ REDIS_PUBSUB_PASSWORD=secret
 ## What This Demonstrates
 
 - Vercel KV handles sessions (`redis` config) while a real Redis handles pub/sub (`pubsub` config)
-- Vercel KV does not support pub/sub operations, so a separate Redis instance is required
-- Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications
+- Vercel KV does not support pub/sub operations, so a separate Redis instance is required for distributed setups
+- Resources with `subscribe: true` rely on the `pubsub` config for real-time notifications across multiple server instances (single-instance servers use in-memory subscriptions)
 - The `pubsub` field accepts `provider: 'redis'` only (no Vercel KV support)
 
 ## Related
