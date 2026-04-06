@@ -99,6 +99,7 @@ export class ChannelInstance extends ChannelEntry {
     } catch (err) {
       this._serviceContext = undefined;
       logger.error(`Channel "${this.name}" service failed to connect`, { error: err });
+      throw err;
     }
   }
 

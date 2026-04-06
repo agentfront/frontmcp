@@ -6,12 +6,12 @@
  * // Create a factory with custom prefix
  * const tokens = createTokenFactory({ prefix: 'MyApp' });
  *
- * // Create typed tokens
+ * // Create globally shared tokens (safe across multiple module instances)
  * const serviceToken = tokens.type('UserService');
- * // => Symbol('MyApp:type:UserService')
+ * // => Symbol.for('MyApp:type:UserService')
  *
  * const metaToken = tokens.meta('config');
- * // => Symbol('MyApp:meta:config')
+ * // => Symbol.for('MyApp:meta:config')
  * ```
  */
 

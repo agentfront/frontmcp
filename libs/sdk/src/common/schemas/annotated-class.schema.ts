@@ -1,20 +1,6 @@
 import { Type } from '@frontmcp/di';
 import type { AgentType } from '../interfaces';
 import { z } from 'zod';
-
-/**
- * Check if an object has metadata for a given token, handling both Symbol() and Symbol.for()
- * tokens. This is needed because plugins built with older versions of @frontmcp/di used
- * Symbol() (non-shared) tokens, while newer versions use Symbol.for() (shared) tokens.
- */
-function hasMetadataCompat(token: symbol, target: object): boolean {
-  // Fast path: direct match (same Symbol instance)
-  if (Reflect.hasMetadata(token, target)) return true;
-  // Slow path: match by description (handles Symbol() vs Symbol.for() mismatch)
-  const desc = token.description;
-  if (!desc) return false;
-  return Reflect.getMetadataKeys(target).some((k) => typeof k === 'symbol' && k.description === desc);
-}
 import {
   FrontMcpAdapterTokens,
   FrontMcpAgentTokens,
@@ -40,6 +26,20 @@ import {
   frontMcpRemoteAppMetadataSchema,
 } from '../metadata';
 import { isPackageSpecifier } from '../../esm-loader/package-specifier';
+
+/**
+ * Check if an object has metadata for a given token, handling both Symbol() and Symbol.for()
+ * tokens. This is needed because plugins built with older versions of @frontmcp/di used
+ * Symbol() (non-shared) tokens, while newer versions use Symbol.for() (shared) tokens.
+ */
+function hasMetadataCompat(token: symbol, target: object): boolean {
+  // Fast path: direct match (same Symbol instance)
+  if (Reflect.hasMetadata(token, target)) return true;
+  // Slow path: match by description (handles Symbol() vs Symbol.for() mismatch)
+  const desc = token.description;
+  if (!desc) return false;
+  return Reflect.getMetadataKeys(target).some((k) => typeof k === 'symbol' && k.description === desc);
+}
 
 export const annotatedFrontMcpAppSchema = z.custom<Type>(
   (v): v is Type => {
