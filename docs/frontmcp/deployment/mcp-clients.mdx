@@ -157,6 +157,92 @@ The `--stdio` flag is detected early, before any CLI framework initialization. B
 
 ---
 
+## Development with AI Coding Agents
+
+When building a FrontMCP server with an AI coding agent (Claude Code, Cursor, Windsurf, etc.), use **HTTP transport with `frontmcp dev`** for the best experience. The dev server watches your source files and auto-reloads on every change — your agent edits code, the server restarts instantly, and the MCP client reconnects automatically.
+
+<Info>
+This is the recommended workflow for "vibe coding" with FrontMCP. The agent has live access to the tools it's building — it can edit code, test the result immediately, and iterate without any manual restart.
+</Info>
+
+### Step 1: Start the Dev Server
+
+```bash
+npm run dev
+# or: frontmcp dev
+# or: frontmcp dev -e src/main.ts
+```
+
+This starts two parallel processes:
+- **`tsx --watch`** — runs your server and auto-reloads on file changes
+- **`tsc --watch`** — async type-checker running in the background
+
+The server URL is printed on startup (default: `http://localhost:3000`).
+
+### Step 2: Register as HTTP in Your MCP Client
+
+Add your dev server to `.mcp.json` so the coding agent can use it while building:
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+```json Cursor (.cursor/mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+```json VS Code (.vscode/mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Step 3: Code and Iterate
+
+The workflow is now fully live:
+
+1. **Agent edits** a tool, resource, or prompt in `src/`
+2. **`tsx --watch`** detects the change and restarts the server (~200ms)
+3. **MCP client** reconnects and sees the updated capabilities
+4. **Agent tests** the change by calling the tool directly
+5. **Repeat** — no manual restart needed
+
+### Why HTTP (Not Stdio) for Development
+
+| Aspect | HTTP + `frontmcp dev` | Stdio |
+| ------ | --------------------- | ----- |
+| **Hot reload** | Server restarts on file change, client reconnects | Must restart the entire process |
+| **Multiple clients** | Agent + Inspector + you can all connect simultaneously | One client per process |
+| **Debugging** | Logs visible in terminal, Inspector UI available | Logs mixed with protocol |
+| **Persistence** | Server stays running across edits | New process per connection |
+
+<Tip>
+Run `npm run inspect` in a separate terminal to launch the MCP Inspector alongside your dev server. This gives you a visual UI to test tools while your agent codes.
+</Tip>
+
+---
+
 ## HTTP Transport
 
 Connect to a FrontMCP server running as an HTTP server. Use this for remote deployments, cloud servers, or when you need the server to persist independently.

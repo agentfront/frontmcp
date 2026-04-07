@@ -37,6 +37,34 @@ Configure MCP clients to connect to your FrontMCP server. Covers all transport t
 | Remote/cloud server                   | HTTP        | `my-server serve -p 3000`        | `type: "http"`, `url`               |
 | Local persistent daemon (low latency) | Unix Socket | `my-server daemon start`         | `type: "http"`, `url`, `socketPath` |
 | Background daemon on specific port    | HTTP        | `my-server daemon start -p 4000` | `type: "http"`, `url`               |
+| Vibe coding with AI agent (dev mode)  | HTTP        | `frontmcp dev`                   | `type: "http"`, `url`               |
+
+## Development with AI Coding Agents
+
+When building a FrontMCP server with a coding agent (Claude Code, Cursor, Windsurf), use **HTTP transport with `frontmcp dev`** for live hot reload. The agent edits code, the server auto-restarts, and the MCP client reconnects — no manual restart needed.
+
+### Setup
+
+1. Start the dev server: `npm run dev` (or `frontmcp dev`)
+2. Register in `.mcp.json`:
+   ```json
+   {
+     "mcpServers": {
+       "my-server": {
+         "type": "http",
+         "url": "http://localhost:3000/mcp"
+       }
+     }
+   }
+   ```
+3. Code and iterate — every file save triggers a server reload
+
+### Why HTTP for development (not stdio)
+
+- **Hot reload:** Server restarts on file change (~200ms), client reconnects automatically
+- **Multiple clients:** Agent + MCP Inspector + you can all connect simultaneously
+- **Debugging:** Logs visible in terminal, Inspector UI available via `npm run inspect`
+- **Persistence:** Server stays running across edits, no new process per connection
 
 ## Stdio Transport
 
