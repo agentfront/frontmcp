@@ -691,6 +691,48 @@
               ]
             }
           ]
+        },
+        {
+          "name": "mcp-client-integration",
+          "description": "Configure MCP clients (Claude Desktop, Claude Code, Cursor, VS Code) to connect to a FrontMCP server via stdio, HTTP, or Unix socket",
+          "examples": [
+            {
+              "name": "stdio-npx",
+              "description": "Publish a FrontMCP server to npm and configure MCP clients to use it with npx --stdio.",
+              "level": "basic",
+              "tags": ["deployment", "stdio", "npx", "npm", "mcp-client", "claude-code", "claude-desktop"],
+              "features": [
+                "Building a FrontMCP server as a distributable CLI bundle",
+                "Configuring package.json bin field for npx execution",
+                "Setting up Claude Code, Claude Desktop, and Cursor to use the server via stdio",
+                "Passing environment variables from MCP client config to the server"
+              ]
+            },
+            {
+              "name": "http-remote",
+              "description": "Connect an MCP client to a FrontMCP server running as an HTTP server, locally or remotely.",
+              "level": "basic",
+              "tags": ["deployment", "http", "mcp-client", "remote", "cloud", "production"],
+              "features": [
+                "Connecting to a local FrontMCP dev server on a custom port",
+                "Connecting to a remote production FrontMCP server with authentication",
+                "Configuring HTTP transport in Claude Code and Claude Desktop",
+                "Using a background daemon on a TCP port for persistent local access"
+              ]
+            },
+            {
+              "name": "stdio-binary-with-env",
+              "description": "Configure a local FrontMCP CLI binary with environment variables and custom arguments in MCP client configs.",
+              "level": "intermediate",
+              "tags": ["deployment", "stdio", "cli", "binary", "env", "mcp-client", "configuration"],
+              "features": [
+                "Pointing MCP clients at a locally installed FrontMCP binary",
+                "Passing database URLs, API keys, and feature flags via environment variables",
+                "Using absolute paths for reliable binary resolution",
+                "Configuring different environments (dev, staging) via env vars"
+              ]
+            }
+          ]
         }
       ]
     },
