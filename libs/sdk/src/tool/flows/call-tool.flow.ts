@@ -117,6 +117,7 @@ const plan = {
     'ensureRemoteCapabilities',
     'findTool',
     'checkToolAuthorization',
+    'checkEntryAuthorities',
     'createToolCallContext',
     'acquireQuota',
     'acquireSemaphore',
@@ -399,6 +400,64 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   private buildProgressiveAuthUrl(appId: string, toolId: string): string {
     const baseUrl = this.scope.fullPath || '';
     return `${baseUrl}/oauth/authorize?app=${encodeURIComponent(appId)}&tool=${encodeURIComponent(toolId)}`;
+  }
+
+  /**
+   * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in tool metadata.
+   * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   * Skips silently if no authorities engine is configured or no authorities on the tool.
+   */
+  @Stage('checkEntryAuthorities')
+  async checkEntryAuthorities() {
+    this.logger.verbose('checkEntryAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      this.logger.verbose('checkEntryAuthorities:skip (no engine configured)');
+      return;
+    }
+
+    const tool = this.state.tool;
+    if (!tool) return;
+
+    const metadata = tool.metadata as unknown as Record<string, unknown>;
+    const authorities = metadata['authorities'];
+    if (!authorities) {
+      this.logger.verbose('checkEntryAuthorities:skip (no authorities on tool)');
+      return;
+    }
+
+    const authInfo = this.state.authInfo ?? {};
+    const stateInput = this.state.input;
+    const input = ((stateInput as Record<string, unknown>)?.['arguments'] ?? stateInput ?? {}) as Record<string, unknown>;
+
+    const evalCtx = ctxBuilder.build(authInfo as Record<string, unknown>, input);
+    const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+
+    if (!result.granted) {
+      // Resolve required scopes from scopeMapping if available
+      let requiredScopes: string[] | undefined;
+      const scopeMapping = this.scope.authoritiesScopeMapping;
+      if (scopeMapping && result.denial) {
+        const { resolveRequiredScopes } = await import('@frontmcp/auth');
+        requiredScopes = resolveRequiredScopes(
+          result.denial,
+          scopeMapping,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+        );
+      }
+
+      const { AuthorityDeniedError } = await import('@frontmcp/auth');
+      throw new AuthorityDeniedError({
+        entryType: 'Tool',
+        entryName: tool.fullName || tool.name,
+        deniedBy: result.deniedBy ?? 'policy denied',
+        denial: result.denial,
+        requiredScopes,
+      });
+    }
+
+    this.logger.verbose('checkEntryAuthorities:done');
   }
 
   @Stage('createToolCallContext')

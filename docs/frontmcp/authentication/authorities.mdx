@@ -1,0 +1,900 @@
+---
+title: 'Authorities'
+description: 'Built-in RBAC, ABAC, and ReBAC authorization for FrontMCP entries'
+---
+
+> For the full auth architecture — including auth providers, credential vault, scope challenges,
+> and how all three layers compose — see [Auth Architecture](/frontmcp/authentication/architecture).
+
+## Overview
+
+The Authorities system provides declarative, built-in authorization on tools, resources, prompts, and skills. Instead of writing imperative access-control checks inside every handler, you declare **who** can access **what** directly in decorator metadata.
+
+Authorities supports four authorization paradigms:
+
+| Paradigm | Description | Use Case |
+| -------- | ----------- | -------- |
+| **RBAC** | Role-based and permission-based checks | "Only admins can delete users" |
+| **ABAC** | Attribute-based conditions with operators | "Only users in the `engineering` department" |
+| **ReBAC** | Relationship-based checks via an external resolver | "Only the owner of this document" |
+| **Custom** | Extend with your own evaluator functions | "Only requests from allowed IP ranges" |
+
+These paradigms can be composed using `allOf`, `anyOf`, and `not` combinators to express complex policies.
+
+The system consists of two packages:
+
+- **`@frontmcp/auth`** -- Core types, evaluation engine, registries, and errors
+- **`@frontmcp/sdk`** -- Built-in flow stages (`checkEntryAuthorities`, `filterByAuthorities`) for enforcement, configured via `@FrontMcp({ authorities })` metadata
+
+No plugin required — authorities is a first-class framework feature.
+
+## Quick Start
+
+Add the `authorities` config to your `@FrontMcp()` decorator and set `authorities` on any entry.
+
+```typescript
+import { FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@FrontMcp({
+  info: { name: 'MyServer', version: '1.0.0' },
+  authorities: {
+    claimsMapping: { roles: 'roles', permissions: 'permissions' },
+    profiles: {
+      admin: { roles: { any: ['admin', 'superadmin'] } },
+      authenticated: {
+        attributes: {
+          conditions: [{ path: 'user.sub', op: 'exists', value: true }],
+        },
+      },
+    },
+  },
+})
+export class MyServer {}
+
+@Tool({
+  name: 'delete_user',
+  description: 'Delete a user account',
+  authorities: 'admin', // Only users with the 'admin' profile
+})
+class DeleteUserTool extends ToolContext<typeof DeleteUserTool> {
+  static inputSchema = z.object({ userId: z.string() });
+
+  async execute(input: z.infer<typeof DeleteUserTool.inputSchema>) {
+    // Only reached if the user has the 'admin' or 'superadmin' role
+    return { content: [{ type: 'text', text: `Deleted user ${input.userId}` }] };
+  }
+}
+```
+
+If a user without the required role calls `delete_user`, the `checkEntryAuthorities` flow stage throws an `AuthorityDeniedError` with MCP error code `-32003` before the handler executes.
+
+## JWT Claims Mapping
+
+Every identity provider stores roles and permissions in different JWT claim paths. The `claimsMapping` option tells the engine where to find them.
+
+<Tabs>
+  <Tab title="Auth0">
+    Auth0 uses namespaced custom claims for roles and the standard `permissions` claim.
+
+    ```typescript
+    // In @FrontMcp({ authorities: { ... } })
+    authorities: {
+      claimsMapping: {
+        roles: 'https://myapp.com/roles',
+        permissions: 'permissions',
+        tenantId: 'org_id',
+      },
+    })
+    ```
+
+  </Tab>
+  <Tab title="Keycloak">
+    Keycloak nests roles under `realm_access.roles` and permissions under `scope`.
+
+    ```typescript
+    // In @FrontMcp({ authorities: { ... } })
+    authorities: {
+      claimsMapping: {
+        roles: 'realm_access.roles',
+        permissions: 'scope',
+      },
+    })
+    ```
+
+  </Tab>
+  <Tab title="Okta">
+    Okta maps groups to roles and uses `scp` for scopes/permissions.
+
+    ```typescript
+    // In @FrontMcp({ authorities: { ... } })
+    authorities: {
+      claimsMapping: {
+        roles: 'groups',
+        permissions: 'scp',
+      },
+    })
+    ```
+
+  </Tab>
+  <Tab title="Cognito">
+    AWS Cognito uses `cognito:groups` for roles and `scope` for permissions.
+
+    ```typescript
+    // In @FrontMcp({ authorities: { ... } })
+    authorities: {
+      claimsMapping: {
+        roles: 'cognito:groups',
+        permissions: 'scope',
+      },
+    })
+    ```
+
+  </Tab>
+  <Tab title="Frontegg">
+    Frontegg places roles, permissions, and tenant ID at the top level of the JWT.
+
+    ```typescript
+    // In @FrontMcp({ authorities: { ... } })
+    authorities: {
+      claimsMapping: {
+        roles: 'roles',
+        permissions: 'permissions',
+        tenantId: 'tenantId',
+      },
+    })
+    ```
+
+  </Tab>
+</Tabs>
+
+The `claimsMapping` supports dot-path traversal (e.g., `realm_access.roles`) and also direct key lookup for namespaced claims containing dots (e.g., `https://myapp.com/roles`).
+
+### Custom Claims Resolver
+
+For more complex scenarios, provide a `claimsResolver` function instead of (or in addition to) `claimsMapping`. It takes precedence when both are configured.
+
+```typescript
+// In @FrontMcp({ authorities: { ... } })
+authorities: {
+  claimsResolver: (authInfo) => ({
+    roles: authInfo.user?.roles ?? [],
+    permissions: authInfo.user?.permissions ?? [],
+    claims: { ...authInfo.user, ...authInfo.extra },
+  }),
+})
+```
+
+## Authority Profiles
+
+Profiles are named, reusable authorization policies registered at the server or app level. They let you write `authorities: 'admin'` instead of repeating the full policy object on every entry.
+
+### Registering Profiles
+
+```typescript
+@FrontMcp({
+  info: { name: 'MyServer', version: '1.0.0' },
+  authorities: {
+    claimsMapping: { roles: 'realm_access.roles', permissions: 'scope' },
+    profiles: {
+      admin: {
+        roles: { any: ['admin', 'superadmin'] },
+      },
+      authenticated: {
+        attributes: {
+          conditions: [{ path: 'user.sub', op: 'exists', value: true }],
+        },
+      },
+      matchTenant: {
+        attributes: {
+          conditions: [
+            {
+              path: 'claims.org_id',
+              op: 'eq',
+              value: { fromInput: 'tenantId' },
+            },
+          ],
+        },
+      },
+      editor: {
+        permissions: { all: ['content:write', 'content:publish'] },
+      },
+    },
+  },
+})
+export class MyServer {}
+```
+
+### Using Profiles on Entries
+
+```typescript
+// Single profile
+@Tool({ name: 'admin_panel', authorities: 'admin' })
+
+// Multiple profiles (AND semantics -- all must pass)
+@Tool({ name: 'edit_tenant_doc', authorities: ['authenticated', 'matchTenant'] })
+
+// Works on all entry types
+@Resource({ uri: 'config://settings', authorities: 'admin' })
+@Prompt({ name: 'debug_prompt', authorities: 'admin' })
+@Skill({ name: 'internal_skill', authorities: 'authenticated' })
+```
+
+When an array of profiles is provided, they are evaluated with AND semantics -- every profile must pass for access to be granted.
+
+## RBAC
+
+Role-based access control checks the user's roles and permissions against required values.
+
+### Roles
+
+```typescript
+@Tool({
+  name: 'manage_users',
+  authorities: {
+    roles: {
+      // User must have ALL of these roles
+      all: ['admin', 'user-manager'],
+    },
+  },
+})
+
+@Tool({
+  name: 'view_dashboard',
+  authorities: {
+    roles: {
+      // User must have at least ONE of these roles
+      any: ['admin', 'analyst', 'viewer'],
+    },
+  },
+})
+
+@Tool({
+  name: 'critical_operation',
+  authorities: {
+    roles: {
+      // Both conditions must be satisfied
+      all: ['admin'],
+      any: ['us-east', 'eu-west'],
+    },
+  },
+})
+```
+
+### Permissions
+
+Permission checks follow the same `all`/`any` semantics as roles.
+
+```typescript
+@Tool({
+  name: 'delete_record',
+  authorities: {
+    permissions: {
+      all: ['records:delete', 'records:read'],
+    },
+  },
+})
+
+@Tool({
+  name: 'export_data',
+  authorities: {
+    permissions: {
+      any: ['data:export', 'data:admin'],
+    },
+  },
+})
+```
+
+### Combining Roles and Permissions
+
+When both `roles` and `permissions` are specified in the same policy, they are combined with AND by default.
+
+```typescript
+@Tool({
+  name: 'delete_user',
+  authorities: {
+    roles: { any: ['admin'] },
+    permissions: { all: ['users:delete'] },
+    // User must have the 'admin' role AND the 'users:delete' permission
+  },
+})
+```
+
+## ABAC
+
+Attribute-based access control evaluates conditions against a context envelope with four namespaces:
+
+| Prefix | Source |
+| -------- | ------ |
+| `user.*` | Resolved user object (`sub`, `roles`, `permissions`, `claims`) |
+| `claims.*` | Raw JWT claims |
+| `input.*` | Tool/prompt input arguments |
+| `env.*` | Runtime environment variables |
+
+### Simple Match
+
+The `match` field provides simple equality checks. All pairs must match (AND semantics).
+
+```typescript
+@Tool({
+  name: 'internal_tool',
+  authorities: {
+    attributes: {
+      match: {
+        'claims.department': 'engineering',
+        'env.NODE_ENV': 'production',
+      },
+    },
+  },
+})
+```
+
+### Advanced Conditions
+
+The `conditions` field supports a rich set of operators for more complex checks.
+
+```typescript
+@Tool({
+  name: 'premium_feature',
+  authorities: {
+    attributes: {
+      conditions: [
+        { path: 'claims.plan', op: 'in', value: ['pro', 'enterprise'] },
+        { path: 'claims.credits', op: 'gt', value: 0 },
+        { path: 'user.sub', op: 'exists', value: true },
+      ],
+    },
+  },
+})
+```
+
+### Operator Reference
+
+| Operator | Description | Value Type |
+| ------------ | ---------------------------------------- | ------------- |
+| `eq` | Strict equality (`===`) | any |
+| `neq` | Strict inequality (`!==`) | any |
+| `in` | Value is in the array | array |
+| `notIn` | Value is not in the array | array |
+| `gt` | Greater than | number |
+| `gte` | Greater than or equal | number |
+| `lt` | Less than | number |
+| `lte` | Less than or equal | number |
+| `contains` | String includes substring, or array contains value | string/array |
+| `startsWith` | String starts with prefix | string |
+| `endsWith` | String ends with suffix | string |
+| `exists` | Value is defined (`true`) or undefined (`false`) | boolean |
+| `matches` | Regular expression match | string (regex) |
+
+### Dynamic Value References
+
+Condition values can reference runtime data instead of using static literals.
+
+```typescript
+@Tool({
+  name: 'tenant_tool',
+  authorities: {
+    attributes: {
+      conditions: [
+        // Compare a JWT claim against a tool input argument
+        {
+          path: 'claims.tenantId',
+          op: 'eq',
+          value: { fromInput: 'tenantId' },
+        },
+        // Compare a JWT claim against another claim
+        {
+          path: 'claims.org_id',
+          op: 'eq',
+          value: { fromClaims: 'user.default_org' },
+        },
+      ],
+    },
+  },
+})
+```
+
+| Ref | Description |
+| ---- | ----------- |
+| `{ fromInput: 'fieldName' }` | Resolves to the value of the named tool input argument |
+| `{ fromClaims: 'dot.path' }` | Resolves to a value from the user's JWT claims via dot-path |
+
+## ReBAC
+
+Relationship-based access control delegates checks to an external authorization backend (e.g., SpiceDB, OpenFGA, or a custom database query).
+
+### Configuring a Relationship Resolver
+
+First, implement the `RelationshipResolver` interface and pass it in the `authorities` config.
+
+```typescript
+import type { RelationshipResolver } from '@frontmcp/auth';
+
+const myResolver: RelationshipResolver = {
+  async check(type, resource, resourceId, userSub, ctx) {
+    // Query your authorization backend
+    // e.g., SpiceDB: check if userSub has relationship 'type' to resource:resourceId
+    const result = await spiceDb.checkPermission({
+      subject: { object: { objectType: 'user', objectId: userSub } },
+      permission: type,
+      resource: { objectType: resource, objectId: resourceId },
+    });
+    return result.hasPermission;
+  },
+};
+
+// In @FrontMcp({ authorities: { ... } })
+authorities: {
+  claimsMapping: { roles: 'roles' },
+  relationshipResolver: myResolver,
+}
+```
+
+### Using ReBAC on Entries
+
+```typescript
+@Tool({
+  name: 'edit_document',
+  authorities: {
+    relationships: {
+      type: 'editor',
+      resource: 'document',
+      resourceId: { fromInput: 'documentId' },
+    },
+  },
+})
+class EditDocumentTool extends ToolContext<typeof EditDocumentTool> {
+  static inputSchema = z.object({ documentId: z.string(), content: z.string() });
+
+  async execute(input: z.infer<typeof EditDocumentTool.inputSchema>) {
+    // Only reached if user is an 'editor' of the document
+    return { content: [{ type: 'text', text: 'Document updated' }] };
+  }
+}
+```
+
+### Multiple Relationships (AND)
+
+Pass an array of relationship checks. All must pass.
+
+```typescript
+@Tool({
+  name: 'transfer_site',
+  authorities: {
+    relationships: [
+      { type: 'owner', resource: 'site', resourceId: { fromInput: 'siteId' } },
+      { type: 'member', resource: 'org', resourceId: { fromClaims: 'org_id' } },
+    ],
+  },
+})
+```
+
+### Resource ID Sources
+
+| Source | Example | Description |
+| ------ | ------- | ----------- |
+| Static string | `resourceId: 'site-123'` | Hardcoded resource ID |
+| From input | `resourceId: { fromInput: 'siteId' }` | Resolved from tool input arguments |
+| From claims | `resourceId: { fromClaims: 'user.orgId' }` | Resolved from JWT claims via dot-path |
+
+## Combinators
+
+For complex authorization requirements, compose policies using `allOf`, `anyOf`, `not`, and the `operator` field.
+
+### allOf (AND)
+
+All nested policies must pass.
+
+```typescript
+@Tool({
+  name: 'sensitive_operation',
+  authorities: {
+    allOf: [
+      { roles: { any: ['admin'] } },
+      { attributes: { match: { 'env.NODE_ENV': 'production' } } },
+      { permissions: { all: ['ops:execute'] } },
+    ],
+  },
+})
+```
+
+### anyOf (OR)
+
+At least one nested policy must pass.
+
+```typescript
+@Tool({
+  name: 'view_metrics',
+  authorities: {
+    anyOf: [
+      { roles: { any: ['admin'] } },
+      { permissions: { any: ['metrics:read'] } },
+      { attributes: { match: { 'claims.department': 'engineering' } } },
+    ],
+  },
+})
+```
+
+### not (Negation)
+
+Invert a nested policy.
+
+```typescript
+@Tool({
+  name: 'non_guest_tool',
+  authorities: {
+    not: { roles: { any: ['guest', 'anonymous'] } },
+    // Passes when the user does NOT have 'guest' or 'anonymous' roles
+  },
+})
+```
+
+### operator: 'OR'
+
+By default, top-level fields in a single policy object are combined with AND. Set `operator: 'OR'` to use OR instead.
+
+```typescript
+@Tool({
+  name: 'flexible_access',
+  authorities: {
+    roles: { any: ['admin'] },
+    permissions: { any: ['override:access'] },
+    operator: 'OR',
+    // Passes if user has the 'admin' role OR the 'override:access' permission
+  },
+})
+```
+
+### Nested Composition
+
+Combinators nest freely for arbitrarily complex policies.
+
+```typescript
+@Tool({
+  name: 'complex_policy',
+  authorities: {
+    allOf: [
+      // Must be authenticated
+      { attributes: { conditions: [{ path: 'user.sub', op: 'exists', value: true }] } },
+      // Must be admin OR (editor with publish permission)
+      {
+        anyOf: [
+          { roles: { any: ['admin'] } },
+          {
+            allOf: [
+              { roles: { any: ['editor'] } },
+              { permissions: { all: ['content:publish'] } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+})
+```
+
+## Custom Evaluators
+
+Extend the authorities system with your own evaluators for domain-specific checks.
+
+### Defining an Evaluator
+
+Implement the `AuthoritiesEvaluator` interface.
+
+```typescript
+import type { AuthoritiesEvaluator, AuthoritiesEvaluationContext } from '@frontmcp/auth';
+
+const ipAllowListEvaluator: AuthoritiesEvaluator = {
+  name: 'ipAllowList',
+  async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext) {
+    const { cidr } = policy as { cidr: string[] };
+    const remoteIp = ctx.env['remoteIp'] as string;
+    const allowed = cidr.some((range) => isInCidr(remoteIp, range));
+
+    return {
+      granted: allowed,
+      deniedBy: allowed ? undefined : `ipAllowList: ${remoteIp} not in allowed ranges`,
+      evaluatedPolicies: ['custom.ipAllowList'],
+    };
+  },
+};
+
+const rateLimitEvaluator: AuthoritiesEvaluator = {
+  name: 'rateLimit',
+  async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext) {
+    const { maxPerMinute } = policy as { maxPerMinute: number };
+    const count = await getRequestCount(ctx.user.sub);
+
+    return {
+      granted: count < maxPerMinute,
+      deniedBy: count >= maxPerMinute ? `rateLimit: ${count}/${maxPerMinute} exceeded` : undefined,
+      evaluatedPolicies: ['custom.rateLimit'],
+    };
+  },
+};
+```
+
+### Registering Evaluators
+
+```typescript
+// In @FrontMcp({ authorities: { ... } })
+authorities: {
+  claimsMapping: { roles: 'roles' },
+  evaluators: {
+    ipAllowList: ipAllowListEvaluator,
+    rateLimit: rateLimitEvaluator,
+  },
+})
+```
+
+### Using Custom Evaluators in Policies
+
+Reference evaluators under the `custom` field. The key must match the evaluator name.
+
+```typescript
+@Tool({
+  name: 'admin_api',
+  authorities: {
+    roles: { any: ['admin'] },
+    custom: {
+      ipAllowList: { cidr: ['10.0.0.0/8', '172.16.0.0/12'] },
+      rateLimit: { maxPerMinute: 100 },
+    },
+  },
+})
+```
+
+If a referenced custom evaluator is not registered, the policy is denied with the message `custom evaluator '<name>' is not registered`.
+
+## Discovery Filtering
+
+List flows automatically filter entries based on the caller's authorities via the built-in `filterByAuthorities` stage. When a client calls `tools/list`, `resources/list`, or `prompts/list`, entries the user is not authorized to access are silently removed from the results.
+
+| Flow | Stage | Runs After |
+| ---- | ----- | ---------- |
+| `tools:list-tools` | `filterByAuthorities` | `findTools` |
+| `resources:list-resources` | `filterByAuthorities` | `findResources` |
+| `prompts:list-prompts` | `filterByAuthorities` | `findPrompts` |
+
+```typescript
+// A viewer calling tools/list will only see tools they are authorized to use.
+// Tools with `authorities: 'admin'` will not appear in the response.
+
+@Tool({ name: 'public_tool' })                       // Visible to everyone
+@Tool({ name: 'admin_tool', authorities: 'admin' })  // Only visible to admins
+@Tool({ name: 'editor_tool', authorities: 'editor' }) // Only visible to editors
+```
+
+This ensures AI agents only see tools they can actually call, preventing wasted context and failed invocations.
+
+## Hooking into Authority Checks
+
+Authority enforcement runs as **native flow stages**, not plugin hooks. This means developers can hook into them with `Will`, `Did`, and `Around` decorators — just like any other flow stage.
+
+### Flow Stages Reference
+
+| Flow | Stage | Purpose |
+| ---- | ----- | ------- |
+| `tools:call-tool` | `checkEntryAuthorities` | Enforce before tool execution |
+| `tools:list-tools` | `filterByAuthorities` | Filter unauthorized tools from discovery |
+| `resources:read-resource` | `checkEntryAuthorities` | Enforce before resource read |
+| `resources:list-resources` | `filterByAuthorities` | Filter unauthorized resources from discovery |
+| `prompts:get-prompt` | `checkEntryAuthorities` | Enforce before prompt execution |
+| `prompts:list-prompts` | `filterByAuthorities` | Filter unauthorized prompts from discovery |
+
+### Will Hook — Run Before the Authority Check
+
+Use `Will` to add custom pre-checks, logging, or feature-flag gates that run before the built-in authority evaluation.
+
+```typescript
+import { DynamicPlugin, Plugin, FlowHooksOf, FlowCtxOf } from '@frontmcp/sdk';
+
+const ToolCallHook = FlowHooksOf('tools:call-tool');
+
+@Plugin({ name: 'auth-audit' })
+export class AuthAuditPlugin extends DynamicPlugin<{}> {
+  @ToolCallHook.Will('checkEntryAuthorities', { priority: 100 })
+  async logBeforeCheck(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const tool = flowCtx.state.tool;
+    const authInfo = flowCtx.state.authInfo;
+    console.log(`[auth] checking authorities for tool=${tool?.name} user=${authInfo?.user?.sub}`);
+  }
+}
+```
+
+### Did Hook — Run After the Authority Check
+
+Use `Did` to audit authority decisions or emit metrics after the check completes (whether it passed or threw).
+
+```typescript
+const ToolCallHook = FlowHooksOf('tools:call-tool');
+
+@Plugin({ name: 'auth-metrics' })
+export class AuthMetricsPlugin extends DynamicPlugin<{}> {
+  @ToolCallHook.Did('checkEntryAuthorities', { priority: 50 })
+  async recordMetric(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const tool = flowCtx.state.tool;
+    metrics.increment('authorities.checked', { tool: tool?.name });
+  }
+}
+```
+
+### Around Hook — Replace the Entire Authority Check
+
+Use `Around` to wrap or completely replace the built-in authority evaluation with custom logic. This is useful for integrating external policy engines like OPA or Cedar.
+
+```typescript
+const ToolCallHook = FlowHooksOf('tools:call-tool');
+
+@Plugin({ name: 'opa-authorities' })
+export class OpaAuthoritiesPlugin extends DynamicPlugin<{}> {
+  @ToolCallHook.Around('checkEntryAuthorities', { priority: 1000 })
+  async opaCheck(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const tool = flowCtx.state.tool;
+    const authInfo = flowCtx.state.authInfo;
+
+    // Call your external policy engine instead of the built-in evaluator
+    const allowed = await opaClient.evaluate({
+      input: {
+        user: authInfo?.user?.sub,
+        action: 'call',
+        resource: tool?.name,
+      },
+    });
+
+    if (!allowed) {
+      const { AuthorityDeniedError } = await import('@frontmcp/auth');
+      throw new AuthorityDeniedError({
+        entryType: 'Tool',
+        entryName: tool?.name ?? 'unknown',
+        deniedBy: 'OPA policy denied access',
+      });
+    }
+
+    // Do NOT call next() — the Around hook replaces the stage entirely
+  }
+}
+```
+
+### Hooking into List Filtering
+
+```typescript
+const ListToolsHook = FlowHooksOf('tools:list-tools');
+
+@Plugin({ name: 'filter-audit' })
+export class FilterAuditPlugin extends DynamicPlugin<{}> {
+  @ListToolsHook.Will('filterByAuthorities')
+  async beforeFilter(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    const tools = flowCtx.state.required.tools;
+    console.log(`[auth] filtering ${tools.length} tools by authorities`);
+  }
+
+  @ListToolsHook.Did('filterByAuthorities')
+  async afterFilter(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    const tools = flowCtx.state.required.tools;
+    console.log(`[auth] ${tools.length} tools remaining after filter`);
+  }
+}
+```
+
+## Error Handling
+
+When an authorities check fails at execution time (as opposed to list filtering), the `checkEntryAuthorities` stage throws an `AuthorityDeniedError`.
+
+### AuthorityDeniedError
+
+| Property | Type | Value |
+| ------------- | -------- | ----- |
+| `mcpErrorCode` | `number` | `-32003` (FORBIDDEN) |
+| `statusCode` | `number` | `403` |
+| `code` | `string` | `AUTHORITY_DENIED` |
+| `entryType` | `string` | `'Tool'`, `'Resource'`, `'Prompt'`, `'Skill'` |
+| `entryName` | `string` | Name of the denied entry |
+| `deniedBy` | `string` | Human-readable reason (e.g., `"roles.all: missing 'admin'"`) |
+
+```typescript
+import { AuthorityDeniedError } from '@frontmcp/auth';
+
+// The error is thrown automatically by the checkEntryAuthorities flow stage.
+// You can also throw it manually in custom logic:
+throw new AuthorityDeniedError({
+  entryType: 'Tool',
+  entryName: 'delete_user',
+  deniedBy: "roles.all: missing 'admin'",
+});
+```
+
+### JSON-RPC Error Format
+
+The error serializes to a standard JSON-RPC error for MCP transport:
+
+```json
+{
+  "code": -32003,
+  "message": "Access denied to Tool \"delete_user\": roles.all: missing 'admin'",
+  "data": {
+    "entryType": "Tool",
+    "entryName": "delete_user",
+    "deniedBy": "roles.all: missing 'admin'"
+  }
+}
+```
+
+### Denial Reasons
+
+The `deniedBy` field provides actionable feedback:
+
+| Pattern | Example |
+| ------- | ------- |
+| `roles.all: missing '<role>'` | `roles.all: missing 'admin'` |
+| `roles.any: user has none of '<role>', ...` | `roles.any: user has none of 'admin', 'superadmin'` |
+| `permissions.all: missing '<perm>'` | `permissions.all: missing 'users:delete'` |
+| `permissions.any: user has none of '<perm>', ...` | `permissions.any: user has none of 'data:export'` |
+| `attributes.match: '<path>' expected ...` | `attributes.match: 'claims.dept' expected 'eng' but got 'sales'` |
+| `attributes.conditions: '<path>' failed '<op>' check` | `attributes.conditions: 'claims.credits' failed 'gt' check against '0'` |
+| `relationships: user '<sub>' is not '<type>' of <resource>:<id>` | `relationships: user 'u-123' is not 'owner' of document:doc-456` |
+| `profile '<name>' is not registered` | `profile 'admin' is not registered` |
+| `custom evaluator '<name>' is not registered` | `custom evaluator 'ipAllowList' is not registered` |
+
+## Type-Safe Profiles
+
+Use the `FrontMcpAuthorityProfiles` global interface augmentation to get autocomplete and compile-time checks for profile names.
+
+### Declaring Profiles
+
+Create a type declaration file (e.g., `authorities.d.ts`) in your project:
+
+```typescript
+// authorities.d.ts
+declare global {
+  interface FrontMcpAuthorityProfiles {
+    admin: true;
+    authenticated: true;
+    matchTenant: true;
+    editor: true;
+    viewer: true;
+  }
+}
+
+export {};
+```
+
+### Autocomplete in Decorators
+
+Once declared, TypeScript provides autocomplete when using string profile references:
+
+```typescript
+// TypeScript will suggest: 'admin', 'authenticated', 'matchTenant', 'editor', 'viewer'
+@Tool({ name: 'my_tool', authorities: 'admin' })
+
+// Array form also gets autocomplete
+@Tool({ name: 'my_tool', authorities: ['authenticated', 'matchTenant'] })
+
+// Typos are caught at compile time
+@Tool({ name: 'my_tool', authorities: 'adimn' }) // Type error
+```
+
+### Metadata Augmentation
+
+The `@frontmcp/auth` authorities module automatically augments all entry metadata interfaces to accept the `authorities` field:
+
+```typescript
+// These are added automatically when importing from '@frontmcp/auth'
+interface ExtendFrontMcpToolMetadata {
+  authorities?: AuthoritiesMetadata;
+}
+
+interface ExtendFrontMcpResourceMetadata {
+  authorities?: AuthoritiesMetadata;
+}
+
+interface ExtendFrontMcpPromptMetadata {
+  authorities?: AuthoritiesMetadata;
+}
+
+interface ExtendFrontMcpSkillMetadata {
+  authorities?: AuthoritiesMetadata;
+}
+```
+
+This means `authorities` is accepted on `@Tool()`, `@Resource()`, `@ResourceTemplate()`, `@Prompt()`, and `@Skill()` decorators without any additional configuration.

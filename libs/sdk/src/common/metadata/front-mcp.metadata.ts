@@ -359,6 +359,38 @@ export interface FrontMcpBaseMetadata {
    * ```
    */
   channels?: ChannelsConfigInput;
+
+  /**
+   * Authorities configuration for built-in RBAC/ABAC/ReBAC enforcement.
+   * Enables the `checkEntryAuthorities` and `filterByAuthorities` flow stages
+   * that enforce `authorities` metadata on tools, resources, and prompts.
+   *
+   * @example Simple role-based setup
+   * ```typescript
+   * authorities: {
+   *   claimsMapping: { roles: 'roles', permissions: 'permissions' },
+   *   profiles: {
+   *     admin: { roles: { any: ['admin', 'superadmin'] } },
+   *   },
+   * }
+   * ```
+   *
+   * @example With JWT claims mapping for Keycloak
+   * ```typescript
+   * authorities: {
+   *   claimsMapping: { roles: 'realm_access.roles', permissions: 'scope' },
+   *   profiles: {
+   *     admin: { roles: { any: ['admin'] } },
+   *     matchTenant: {
+   *       attributes: {
+   *         conditions: [{ path: 'claims.org_id', op: 'eq', value: { fromInput: 'tenantId' } }],
+   *       },
+   *     },
+   *   },
+   * }
+   * ```
+   */
+  authorities?: import('@frontmcp/auth').AuthoritiesConfig;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -401,6 +433,23 @@ export const frontMcpBaseSchema = z.object({
   observability: observabilityOptionsSchema,
   health: healthOptionsSchema.optional(),
   channels: channelsConfigSchema.optional(),
+  authorities: z
+    .object({
+      claimsMapping: z.record(z.string(), z.string().optional()).optional(),
+      profiles: z.record(z.string(), z.looseObject({})).optional(),
+      relationshipResolver: z.any().optional(),
+      evaluators: z.record(z.string(), z.any()).optional(),
+      claimsResolver: z.any().optional(),
+      scopeMapping: z
+        .object({
+          roles: z.record(z.string(), z.array(z.string())).optional(),
+          permissions: z.record(z.string(), z.array(z.string())).optional(),
+          profiles: z.record(z.string(), z.array(z.string())).optional(),
+        })
+        .optional(),
+      pipes: z.array(z.any()).optional(),
+    })
+    .optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

@@ -109,6 +109,11 @@ export class Scope extends ScopeEntry {
   /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
   private _rateLimitManager?: GuardManager;
 
+  /** Authorities engine for RBAC/ABAC/ReBAC enforcement (optional) */
+  private _authoritiesEngine?: import('@frontmcp/auth').AuthoritiesEngine;
+  private _authoritiesContextBuilder?: import('@frontmcp/auth').AuthoritiesContextBuilder;
+  private _authoritiesScopeMapping?: import('@frontmcp/auth').AuthoritiesScopeMapping;
+
   /** Channel system (optional) */
   private _scopeChannels?: ChannelRegistry;
   private _channelNotificationService?: ChannelNotificationService;
@@ -371,6 +376,9 @@ export class Scope extends ScopeEntry {
       await this.scopePlugins.ready;
     }
 
+    // Initialize authorities engine from metadata config (built-in, no plugin needed)
+    this.initAuthoritiesFromConfig();
+
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
@@ -396,6 +404,9 @@ export class Scope extends ScopeEntry {
     this.logger.verbose(`AgentRegistry initialized (${this.scopeAgents.getAgents().length} agent(s))`);
     this.logger.verbose(`SkillRegistry initialized (${this.scopeSkills.getSkills().length} skill(s))`);
     mark('batch2:parallel (tools+resources+prompts+agents+skills+plugins)');
+
+    // Fail-fast: entries with 'authorities' metadata but no engine configured
+    this.validateAuthoritiesConfig();
 
     // ═══ BATCH 3: Cross-registry finalization (sequential) ═══
 
@@ -913,6 +924,174 @@ export class Scope extends ScopeEntry {
    */
   get healthService(): HealthService | undefined {
     return this._healthService;
+  }
+
+  /**
+   * Authorities engine for evaluating RBAC/ABAC/ReBAC policies.
+   * Returns undefined if AuthoritiesPlugin is not configured.
+   * Used by flow `checkEntryAuthorities` stages.
+   */
+  get authoritiesEngine(): import('@frontmcp/auth').AuthoritiesEngine | undefined {
+    return this._authoritiesEngine;
+  }
+
+  /**
+   * Authorities context builder for creating evaluation contexts from AuthInfo.
+   * Returns undefined if AuthoritiesPlugin is not configured.
+   */
+  get authoritiesContextBuilder(): import('@frontmcp/auth').AuthoritiesContextBuilder | undefined {
+    return this._authoritiesContextBuilder;
+  }
+
+  /**
+   * Scope mapping for converting authority denials to OAuth scope challenges.
+   * Returns undefined if no scopeMapping is configured.
+   */
+  get authoritiesScopeMapping(): import('@frontmcp/auth').AuthoritiesScopeMapping | undefined {
+    return this._authoritiesScopeMapping;
+  }
+
+  /**
+   * Collect all supported OAuth scopes from base OIDC scopes and
+   * tool-level authProvider scope declarations.
+   * Used by PRM endpoint to populate `scopes_supported` (RFC 9728).
+   */
+  getAllSupportedScopes(): string[] {
+    const scopes = new Set<string>(['openid', 'profile', 'email']);
+
+    for (const tool of this.scopeTools.getTools(true)) {
+      const authProviders = (tool.metadata as unknown as Record<string, unknown>)['authProviders'];
+      if (Array.isArray(authProviders)) {
+        for (const ap of authProviders) {
+          if (typeof ap === 'object' && ap !== null && 'scopes' in ap) {
+            const apScopes = (ap as Record<string, unknown>)['scopes'];
+            if (Array.isArray(apScopes)) {
+              apScopes.forEach((s) => {
+                if (typeof s === 'string') scopes.add(s);
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return [...scopes].sort();
+  }
+
+  /**
+   * Register the authorities engine and context builder.
+   * Called by AuthoritiesPlugin during plugin initialization.
+   * @internal
+   */
+  registerAuthoritiesEngine(
+    engine: import('@frontmcp/auth').AuthoritiesEngine,
+    contextBuilder: import('@frontmcp/auth').AuthoritiesContextBuilder,
+  ): void {
+    this._authoritiesEngine = engine;
+    this._authoritiesContextBuilder = contextBuilder;
+  }
+
+  /**
+   * Initialize authorities engine from @FrontMcp({ authorities: { ... } }) config.
+   * Built-in integration — no plugin required.
+   * @internal
+   */
+  private initAuthoritiesFromConfig(): void {
+    const config = (this.metadata as unknown as Record<string, unknown>)['authorities'] as
+      | Record<string, unknown>
+      | undefined;
+    if (!config) return;
+
+    try {
+      const {
+        AuthoritiesEngine,
+        AuthoritiesContextBuilder,
+        AuthoritiesProfileRegistry,
+        AuthoritiesEvaluatorRegistry,
+      } = require('@frontmcp/auth');
+
+      const profileRegistry = new AuthoritiesProfileRegistry();
+      const profiles = config['profiles'] as Record<string, unknown> | undefined;
+      if (profiles) {
+        profileRegistry.registerAll(profiles);
+      }
+
+      const evaluatorRegistry = new AuthoritiesEvaluatorRegistry();
+      const evaluators = config['evaluators'] as Record<string, unknown> | undefined;
+      if (evaluators) {
+        evaluatorRegistry.registerAll(evaluators);
+      }
+
+      this._authoritiesEngine = new AuthoritiesEngine(profileRegistry, evaluatorRegistry);
+      this._authoritiesContextBuilder = new AuthoritiesContextBuilder({
+        claimsMapping: config['claimsMapping'] as Record<string, string | undefined> | undefined,
+        claimsResolver: config['claimsResolver'] as ((...args: unknown[]) => unknown) | undefined,
+        relationshipResolver: config['relationshipResolver'] as Record<string, unknown> | undefined,
+      });
+
+      this._authoritiesScopeMapping = config['scopeMapping'] as import('@frontmcp/auth').AuthoritiesScopeMapping | undefined;
+
+      this.logger.verbose('Scope: authorities engine initialized from config');
+    } catch {
+      this.logger.warn('Scope: @frontmcp/auth not available — authorities config ignored');
+    }
+  }
+
+  /**
+   * Fail-fast: if any registered entry has 'authorities' metadata but no
+   * AuthoritiesEngine is configured, throw at startup instead of silently
+   * allowing unrestricted access.
+   * @internal
+   */
+  private validateAuthoritiesConfig(): void {
+    if (this._authoritiesEngine) return; // Engine configured — all good
+
+    const entriesWithAuthorities: string[] = [];
+
+    // Check tools
+    for (const tool of this.scopeTools.getTools(true)) {
+      const metadata = tool.metadata as unknown as Record<string, unknown>;
+      if (metadata['authorities']) {
+        entriesWithAuthorities.push(`Tool "${tool.name}"`);
+      }
+    }
+
+    // Check resources
+    for (const resource of this.scopeResources.getResources()) {
+      const metadata = resource.metadata as unknown as Record<string, unknown>;
+      if (metadata['authorities']) {
+        entriesWithAuthorities.push(`Resource "${resource.name}"`);
+      }
+    }
+
+    // Check prompts
+    for (const prompt of this.scopePrompts.getPrompts()) {
+      const metadata = prompt.metadata as unknown as Record<string, unknown>;
+      if (metadata['authorities']) {
+        entriesWithAuthorities.push(`Prompt "${prompt.name}"`);
+      }
+    }
+
+    // Check agents
+    for (const agent of this.scopeAgents.getAgents()) {
+      const metadata = (agent as unknown as Record<string, unknown>)['metadata'] as
+        | Record<string, unknown>
+        | undefined;
+      if (metadata?.['authorities']) {
+        entriesWithAuthorities.push(`Agent "${(agent as unknown as Record<string, unknown>)['name'] ?? 'unknown'}"`);
+      }
+    }
+
+    if (entriesWithAuthorities.length > 0) {
+      const names = entriesWithAuthorities.slice(0, 5).join(', ');
+      const suffix =
+        entriesWithAuthorities.length > 5 ? ` and ${entriesWithAuthorities.length - 5} more` : '';
+      throw new Error(
+        `Authorities configuration required: ${names}${suffix} declare 'authorities' metadata ` +
+          `but no authorities engine is configured. Add 'authorities: { claimsMapping: {...}, profiles: {...} }' ` +
+          `to your @FrontMcp() decorator to enable enforcement, or remove 'authorities' from entry metadata.`,
+      );
+    }
   }
 
   /**

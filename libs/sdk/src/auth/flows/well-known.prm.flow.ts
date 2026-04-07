@@ -85,7 +85,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
       stateSchema.parse({
         resource,
         baseUrl,
-        scopesSupported: ['openid', 'profile', 'email'],
+        scopesSupported: scope.getAllSupportedScopes(),
         isOrchestrated: false, //scope.orchestrated,// TODO: fix
       }),
     );

@@ -17,6 +17,7 @@ import type { ToolUIRegistry } from '../../tool/ui/ui-shared';
 import type { TransportService } from '../../transport/transport.registry';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { GuardManager } from '@frontmcp/guard';
+import type { AuthoritiesEngine, AuthoritiesContextBuilder, AuthoritiesScopeMapping } from '@frontmcp/auth';
 import type HookRegistry from '../../hooks/hook.registry';
 import type { AuthRegistry } from '../../auth/auth.registry';
 import type AppRegistry from '../../app/app.registry';
@@ -66,6 +67,19 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get rateLimitManager(): GuardManager | undefined;
 
   abstract get elicitationStore(): ElicitationStore | undefined;
+
+  abstract get authoritiesEngine(): AuthoritiesEngine | undefined;
+
+  abstract get authoritiesContextBuilder(): AuthoritiesContextBuilder | undefined;
+
+  abstract get authoritiesScopeMapping(): AuthoritiesScopeMapping | undefined;
+
+  /**
+   * Collect all supported OAuth scopes from base OIDC scopes and
+   * tool-level authProvider scope declarations.
+   * Used by PRM endpoint to populate `scopes_supported`.
+   */
+  abstract getAllSupportedScopes(): string[];
 
   /**
    * Lifecycle callbacks registered by plugins via onServerStarted().

@@ -11,6 +11,8 @@ import { ScopeEntry } from '../entries';
 import { FrontMcpContext, FRONTMCP_CONTEXT } from '../../context';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { ConfigService } from '../../builtin/config/providers/config.service';
+import { buildAuthContext } from '@frontmcp/auth';
+import type { FrontMcpAuthContext, FrontMcpFetchInit } from '@frontmcp/auth';
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -43,6 +45,9 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /** Error if execution failed */
   private _error?: Error;
 
+  /** Cached auth context (built lazily on first access) */
+  private _authContext?: FrontMcpAuthContext;
+
   constructor(args: ExecutionContextBaseArgs) {
     const { providers, logger, authInfo } = args;
     this.runId = randomUUID();
@@ -66,6 +71,27 @@ export abstract class ExecutionContextBase<Out = unknown> {
       // Context not available (likely called during initialization or outside request scope)
       throw new RequestContextNotAvailableError();
     }
+  }
+
+  /**
+   * Get the FrontMcpAuthContext for the current request.
+   *
+   * Provides typed access to user identity, roles, permissions, scopes,
+   * and convenience methods like `hasRole()`, `hasPermission()`, `hasScope()`.
+   *
+   * Custom fields from `ExtendFrontMcpAuthContext` are available if pipes
+   * are configured in `@FrontMcp({ authorities: { pipes } })`.
+   *
+   * @example
+   * ```typescript
+   * if (!this.auth.hasRole('admin')) throw new Error('Admin required');
+   * const tenantId = this.auth.claims['tenantId'];
+   * ```
+   */
+  get auth(): FrontMcpAuthContext {
+    if (this._authContext) return this._authContext;
+    this._authContext = buildAuthContext(this._authInfo);
+    return this._authContext;
   }
 
   /**
@@ -175,12 +201,13 @@ export abstract class ExecutionContextBase<Out = unknown> {
    *
    * Falls back to standard fetch if context is not available.
    */
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
     const ctx = this.tryGetContext();
     if (ctx) {
       return ctx.fetch(input, init);
     }
-    return fetch(input, init);
+    // Fallback: no context available — use standard fetch (no credential injection)
+    return fetch(input, init as RequestInit);
   }
 
   /**

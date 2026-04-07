@@ -1,0 +1,18 @@
+{
+  "name": "demo-e2e-authorities",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-authorities/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:authorities"],
+  "targets": {
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-authorities"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-authorities/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

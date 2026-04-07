@@ -76,7 +76,15 @@ const AuthorizedSchema = z
   })
   .describe('Authorized response with Authorization object');
 
-export const authVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema]);
+const ForbiddenSchema = z
+  .object({
+    kind: z.literal('forbidden'),
+    wwwAuthenticateHeader: z.string().describe('WWW-Authenticate header with insufficient_scope error'),
+    reason: z.string().optional().describe('Human-readable reason for rejection'),
+  })
+  .describe('403 Forbidden — token valid but insufficient scope');
+
+export const authVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema, ForbiddenSchema]);
 
 export type AuthVerifyOutput = z.infer<typeof authVerifyOutputSchema>;
 
@@ -356,7 +364,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       if (!hasAllScopes) {
         this.logger.warn(`Insufficient scopes. Required: ${requiredScopes.join(', ')}`);
         this.respond({
-          kind: 'unauthorized',
+          kind: 'forbidden',
           wwwAuthenticateHeader: buildInsufficientScopeHeader(prmUrl, requiredScopes),
           reason: `Missing required scopes: ${requiredScopes.join(', ')}`,
         });

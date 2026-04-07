@@ -28,6 +28,8 @@ import {
   HttpTextSchema,
   StageHookOf,
   isOrchestratedMode,
+  computeResource,
+  resourceUriMatches,
 } from '../../common';
 import { z, ZodError } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
@@ -321,6 +323,22 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     // Store validated request
     this.state.set('validatedRequest', result.data);
+
+    // Validate resource parameter against server's canonical URI (RFC 8707)
+    if (result.data.resource) {
+      const canonicalResource = computeResource(request, this.scope.entryPath, this.scope.routeBase);
+      if (!resourceUriMatches(result.data.resource, canonicalResource)) {
+        this.logger.warn(
+          `OAuth authorize: resource mismatch. Provided: ${result.data.resource}, canonical: ${canonicalResource}`,
+        );
+        this.respondWithError(
+          ['Invalid resource parameter: does not match server resource URI'],
+          rawRedirectUri,
+          rawState,
+        );
+        return;
+      }
+    }
 
     // CIMD validation: Check if client_id is a CIMD URL
     const { client_id, redirect_uri } = result.data;

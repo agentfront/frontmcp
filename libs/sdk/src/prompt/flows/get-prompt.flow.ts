@@ -42,7 +42,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findPrompt', 'createPromptContext'],
+  pre: ['parseInput', 'ensureRemoteCapabilities', 'findPrompt', 'checkEntryAuthorities', 'createPromptContext'],
   execute: ['execute', 'validateOutput'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -173,6 +173,51 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     this.state.set('prompt', prompt);
     this.logger.info(`findPrompt: prompt "${prompt.name}" found`);
     this.logger.verbose('findPrompt:done');
+  }
+
+  /**
+   * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in prompt metadata.
+   * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   */
+  @Stage('checkEntryAuthorities')
+  async checkEntryAuthorities() {
+    this.logger.verbose('checkEntryAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) return;
+
+    const prompt = this.state.prompt;
+    if (!prompt) return;
+
+    const metadata = prompt.metadata as unknown as Record<string, unknown>;
+    const authorities = metadata['authorities'];
+    if (!authorities) {
+      this.logger.verbose('checkEntryAuthorities:skip (no authorities)');
+      return;
+    }
+
+    const authInfo = (this.state.authInfo ?? {}) as Record<string, unknown>;
+    const evalCtx = ctxBuilder.build(authInfo);
+    const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+
+    if (!result.granted) {
+      let requiredScopes: string[] | undefined;
+      const scopeMapping = this.scope.authoritiesScopeMapping;
+      if (scopeMapping && result.denial) {
+        const { resolveRequiredScopes } = await import('@frontmcp/auth');
+        requiredScopes = resolveRequiredScopes(result.denial, scopeMapping, authorities as import('@frontmcp/auth').AuthoritiesMetadata);
+      }
+
+      const { AuthorityDeniedError } = await import('@frontmcp/auth');
+      throw new AuthorityDeniedError({
+        entryType: 'Prompt',
+        entryName: prompt.fullName || prompt.name,
+        deniedBy: result.deniedBy ?? 'policy denied',
+        denial: result.denial,
+        requiredScopes,
+      });
+    }
+    this.logger.verbose('checkEntryAuthorities:done');
   }
 
   @Stage('createPromptContext')
