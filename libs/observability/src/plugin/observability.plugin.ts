@@ -334,6 +334,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onResourceWillFind(ctx);
   }
 
+  @ResourceHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _resourceWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+  }
+
+  @ResourceHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _resourceDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
+  }
+
   @ResourceHook.Will('execute', { priority: -1000 })
   _resourceWillExecute(ctx: unknown): void {
     if (this.tracingEnabled) onResourceWillExecute(this.tracingOpts, ctx);
@@ -363,6 +373,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onPromptWillFind(ctx);
   }
 
+  @PromptHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _promptWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+  }
+
+  @PromptHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _promptDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
+  }
+
   @PromptHook.Will('execute', { priority: -1000 })
   _promptWillExecute(ctx: unknown): void {
     if (this.tracingEnabled) onPromptWillExecute(this.tracingOpts, ctx);
@@ -390,6 +410,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @AgentCallHook.Will('findAgent', { priority: -1000 })
   _agentWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onAgentWillFind(ctx);
+  }
+
+  @AgentCallHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _agentWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+  }
+
+  @AgentCallHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _agentDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
   }
 
   @AgentCallHook.Will('execute', { priority: -1000 })
