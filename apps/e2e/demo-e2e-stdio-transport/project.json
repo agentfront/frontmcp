@@ -1,0 +1,61 @@
+{
+  "name": "demo-e2e-stdio-transport",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-stdio-transport/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:stdio-transport"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-stdio-transport",
+        "main": "apps/e2e/demo-e2e-stdio-transport/src/stdio-entrypoint.ts",
+        "tsConfig": "apps/e2e/demo-e2e-stdio-transport/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-stdio-transport/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-stdio-transport/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-stdio-transport"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-stdio-transport/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-stdio-transport"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-stdio-transport/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-stdio-transport"
+      }
+    }
+  }
+}

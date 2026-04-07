@@ -19,6 +19,8 @@ export type ResourceChangeEvent = {
   relatedRequestId?: string;
   version: number;
   snapshot: readonly ResourceEntry[];
+  /** URI of the specific resource whose content changed (for kind: 'updated') */
+  updatedUri?: string;
 };
 
 type Listener = (e: ResourceChangeEvent) => void;

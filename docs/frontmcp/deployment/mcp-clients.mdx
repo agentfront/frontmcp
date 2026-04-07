@@ -1,0 +1,469 @@
+---
+title: MCP Client Configuration
+slug: deployment/mcp-clients
+icon: plug
+description: Connect Claude Desktop, Claude Code, Cursor, and other MCP clients to your FrontMCP server
+---
+
+Configure MCP clients to connect to your FrontMCP server using stdio, HTTP, or Unix socket transport. This guide covers every supported connection mode and client.
+
+## Quick Reference
+
+| Transport | Best For | Config Key | Server Command |
+| --------- | -------- | ---------- | -------------- |
+| **Stdio** | npm packages, local binaries | `command` + `args` | `my-app --stdio` |
+| **HTTP** | Remote servers, cloud deployments | `url` | `my-app serve -p 3000` |
+| **Unix Socket** | Local daemons, low-latency | `url` + `socketPath` | `my-app daemon start` |
+
+---
+
+## Stdio Transport
+
+Stdio is the most common transport for MCP servers. The client spawns your server as a child process and communicates via stdin/stdout using JSON-RPC 2.0. No network setup required.
+
+<Info>
+In stdio mode, **stdout is reserved for MCP protocol messages**. All logs are automatically redirected to stderr and `~/.frontmcp/logs/`. You don't need to configure anything — FrontMCP handles this automatically when `--stdio` is passed.
+</Info>
+
+### Using npx (npm package)
+
+The simplest way to distribute your MCP server. Publish to npm, then users can run it with `npx`:
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-frontmcp-server", "--stdio"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+```json Claude Desktop (claude_desktop_config.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-frontmcp-server", "--stdio"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+```json Cursor (.cursor/mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-frontmcp-server", "--stdio"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Using a Local Binary
+
+If you built your server with `frontmcp build --target cli`, point directly to the binary:
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/usr/local/bin/my-server",
+      "args": ["--stdio"]
+    }
+  }
+}
+```
+
+```json Claude Desktop (claude_desktop_config.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "/Users/you/.frontmcp/apps/my-server/my-server-bin",
+      "args": ["--stdio"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Using Node.js Directly
+
+Run the JS bundle directly with Node.js:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "node",
+      "args": ["/path/to/my-server.bundle.js", "--stdio"]
+    }
+  }
+}
+```
+
+### With Environment Variables
+
+Pass configuration via environment variables:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-frontmcp-server", "--stdio"],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/mydb",
+        "API_KEY": "sk-xxxxx",
+        "LOG_LEVEL": "warn"
+      }
+    }
+  }
+}
+```
+
+### Using the `serve` Subcommand
+
+The `--stdio` flag also works with the `serve` subcommand:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "my-server",
+      "args": ["serve", "--stdio"]
+    }
+  }
+}
+```
+
+<Tip>
+The `--stdio` flag is detected early, before any CLI framework initialization. Both `my-server --stdio` and `my-server serve --stdio` work identically.
+</Tip>
+
+---
+
+## Development with AI Coding Agents
+
+When building a FrontMCP server with an AI coding agent (Claude Code, Cursor, Windsurf, etc.), use **HTTP transport with `frontmcp dev`** for the best experience. The dev server watches your source files and auto-reloads on every change — your agent edits code, the server restarts instantly, and the MCP client reconnects automatically.
+
+<Info>
+This is the recommended workflow for "vibe coding" with FrontMCP. The agent has live access to the tools it's building — it can edit code, test the result immediately, and iterate without any manual restart.
+</Info>
+
+### Step 1: Start the Dev Server
+
+```bash
+npm run dev
+# or: frontmcp dev
+# or: frontmcp dev -e src/main.ts
+```
+
+This starts two parallel processes:
+- **`tsx --watch`** — runs your server and auto-reloads on file changes
+- **`tsc --watch`** — async type-checker running in the background
+
+The server URL is printed on startup (default: `http://localhost:3000`).
+
+### Step 2: Register as HTTP in Your MCP Client
+
+Add your dev server to `.mcp.json` so the coding agent can use it while building:
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+```json Cursor (.cursor/mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+```json VS Code (.vscode/mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Step 3: Code and Iterate
+
+The workflow is now fully live:
+
+1. **Agent edits** a tool, resource, or prompt in `src/`
+2. **`tsx --watch`** detects the change and restarts the server (~200ms)
+3. **MCP client** reconnects and sees the updated capabilities
+4. **Agent tests** the change by calling the tool directly
+5. **Repeat** — no manual restart needed
+
+### Why HTTP (Not Stdio) for Development
+
+| Aspect | HTTP + `frontmcp dev` | Stdio |
+| ------ | --------------------- | ----- |
+| **Hot reload** | Server restarts on file change, client reconnects | Must restart the entire process |
+| **Multiple clients** | Agent + Inspector + you can all connect simultaneously | One client per process |
+| **Debugging** | Logs visible in terminal, Inspector UI available | Logs mixed with protocol |
+| **Persistence** | Server stays running across edits | New process per connection |
+
+<Tip>
+Run `npm run inspect` in a separate terminal to launch the MCP Inspector alongside your dev server. This gives you a visual UI to test tools while your agent codes.
+</Tip>
+
+---
+
+## HTTP Transport
+
+Connect to a FrontMCP server running as an HTTP server. Use this for remote deployments, cloud servers, or when you need the server to persist independently.
+
+### Local Development
+
+Start your server, then point the client at it:
+
+```bash
+# Start the server
+my-server serve -p 3005
+```
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3005/mcp"
+    }
+  }
+}
+```
+
+```json Claude Desktop (claude_desktop_config.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:3005/mcp"
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Production Deployment
+
+For servers deployed to a public URL:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "https://my-server.example.com/mcp"
+    }
+  }
+}
+```
+
+### With Authentication Headers
+
+For servers that require authentication:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "https://my-server.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-token-here"
+      }
+    }
+  }
+}
+```
+
+### Background Daemon on Port
+
+Run your server as a background daemon on a TCP port:
+
+```bash
+# Start daemon on port 4000
+my-server daemon start -p 4000
+
+# Check status
+my-server daemon status
+# → Running (PID: 12345, started: 2025-01-01T00:00:00.000Z, port: 4000)
+```
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost:4000/mcp"
+    }
+  }
+}
+```
+
+---
+
+## Unix Socket Transport
+
+Connect via Unix socket for the lowest-latency local connections. The server runs as a background daemon.
+
+```bash
+# Start the daemon (creates socket at ~/.frontmcp/sockets/my-server.sock)
+my-server daemon start
+
+# Check status
+my-server daemon status
+# → Running (PID: 12345, started: 2025-01-01T00:00:00.000Z, socket: active)
+```
+
+<CodeGroup>
+```json Claude Code (.mcp.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost/mcp",
+      "socketPath": "/Users/you/.frontmcp/sockets/my-server.sock"
+    }
+  }
+}
+```
+
+```json Claude Desktop (claude_desktop_config.json)
+{
+  "mcpServers": {
+    "my-server": {
+      "type": "http",
+      "url": "http://localhost/mcp",
+      "socketPath": "/Users/you/.frontmcp/sockets/my-server.sock"
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Info>
+The `url` field is required even for Unix sockets — the hostname is ignored, but the path (`/mcp`) is used for HTTP routing.
+</Info>
+
+---
+
+## Publishing to npm
+
+Make your FrontMCP server installable via `npx`:
+
+### 1. Build the CLI Bundle
+
+```bash
+frontmcp build --target cli --js
+```
+
+### 2. Configure package.json
+
+```json
+{
+  "name": "my-frontmcp-server",
+  "version": "1.0.0",
+  "bin": {
+    "my-frontmcp-server": "./dist/my-frontmcp-server-cli.bundle.js"
+  },
+  "files": ["dist/"],
+  "dependencies": {
+    "@frontmcp/sdk": "^1.0.0"
+  }
+}
+```
+
+### 3. Publish
+
+```bash
+npm publish
+```
+
+Users can then use your server with:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "my-frontmcp-server", "--stdio"]
+    }
+  }
+}
+```
+
+---
+
+## Transport Comparison
+
+| Aspect | Stdio | HTTP | Unix Socket |
+| ------ | ----- | ---- | ----------- |
+| **Startup** | Per-connection (~1s) | Persistent server | Persistent daemon |
+| **Latency** | Lowest (in-process) | Network overhead | Very low (local) |
+| **Auth** | Via env vars | Via headers/tokens | Via socket permissions |
+| **Persistence** | None (ephemeral) | Full (sessions, SSE) | Full (sessions, SSE) |
+| **Multi-client** | One client per process | Multiple concurrent | Multiple concurrent |
+| **Best for** | npm packages, tools | Cloud, remote access | Local daemons, IDEs |
+
+---
+
+## Client Configuration File Locations
+
+| Client | Config File | Location |
+| ------ | ----------- | -------- |
+| **Claude Code** | `.mcp.json` | Project root (per-project) or `~/.claude/.mcp.json` (global) |
+| **Claude Desktop** | `claude_desktop_config.json` | `~/Library/Application Support/Claude/` (macOS) |
+| **Cursor** | `.cursor/mcp.json` | Project root |
+| **VS Code** | `.vscode/mcp.json` | Project root |
+| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` | Home directory |
+
+---
+
+## Troubleshooting
+
+| Problem | Cause | Solution |
+| ------- | ----- | -------- |
+| Client shows "connection failed" with stdio | Server crashing on startup | Check `~/.frontmcp/logs/` for error logs |
+| Garbled output in stdio mode | Log output on stdout | Ensure you're using `--stdio` flag (auto-redirects logs) |
+| "ENOENT" error for binary | Binary not in PATH | Use absolute path in `command` field |
+| "ECONNREFUSED" for HTTP | Server not running | Start with `my-server serve -p PORT` first |
+| Socket file not found | Daemon not started | Run `my-server daemon start` first |
+| Permission denied on socket | Socket owned by another user | Check file permissions: `ls -la ~/.frontmcp/sockets/` |
+| npx hangs on first run | Package not cached | First run downloads the package; subsequent runs are fast |

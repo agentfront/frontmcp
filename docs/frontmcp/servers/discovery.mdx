@@ -125,9 +125,9 @@ FrontMCP lets clients react to live changes:
 
 - `notifications/prompts/list_changed` fires whenever prompts are added or removed (adapters, hot reloads, plugin lifecycle).
 - `notifications/resources/list_changed` fires when static resources or templates change.
-- `notifications/resources/updated` fires when a subscribed resource changes content.
+- `notifications/resources/updated` fires when a subscribed resource changes content (triggered via `this.notifyUpdated()` or `scope.resources.notifyContentChanged(uri)`).
 
-Call `resources/subscribe` with a `uri` to start receiving `resources/updated` notifications.
+Call `resources/subscribe` with a `uri` to start receiving `resources/updated` notifications. Subscriptions work in-memory on single-server deployments (stdio, binary, single-instance HTTP) — no Redis required.
 
 <Tip>
 Clients can safely cache `prompts/list` and `resources/list` results. Listen for the `list_changed` notifications to know when to refresh your cache.

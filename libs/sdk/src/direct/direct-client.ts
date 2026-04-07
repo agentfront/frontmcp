@@ -349,6 +349,15 @@ export class DirectClientImpl implements DirectClient {
     } finally {
       // Ensure server cleanup runs even if mcpClient.close() throws
       await this.closeServer?.();
+      // Dispose scope to clean up providers, timers, and native resources.
+      // Prevents mutex crashes from addons (ONNX runtime, etc.) during process exit.
+      if (this.scopeRef) {
+        try {
+          await this.scopeRef.dispose();
+        } catch {
+          /* best-effort */
+        }
+      }
     }
   }
 

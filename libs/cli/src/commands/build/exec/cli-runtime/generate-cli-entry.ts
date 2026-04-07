@@ -127,19 +127,52 @@ ${selfContained ? `
 // using the inlined (bundled) server code — no external requires needed.
 if (process.env.__FRONTMCP_DAEMON_MODE === '1') {
   require('reflect-metadata');
+  // Suppress @FrontMcp decorator auto-bootstrap — daemon handles bootstrap explicitly below.
+  process.env.FRONTMCP_SCHEMA_EXTRACT = '1';
   var _dMod = require(${JSON.stringify('../' + serverBundleFilename)});
+  delete process.env.FRONTMCP_SCHEMA_EXTRACT;
   var _dSdk = require('@frontmcp/sdk');
   var _FMI = _dSdk.FrontMcpInstance || _dSdk.default.FrontMcpInstance;
   var _raw = _dMod.default || _dMod;
   var _cfg = (typeof _raw === 'function' && typeof Reflect !== 'undefined' && Reflect.getMetadata)
     ? (Reflect.getMetadata('__frontmcp:config', _raw) || _raw) : _raw;
-  var _sp = process.env.FRONTMCP_DAEMON_SOCKET;
-  _FMI.runUnixSocket(Object.assign({}, _cfg, { socketPath: _sp }))
-    .then(function() { console.log('Daemon listening on ' + _sp); })
-    .catch(function(e) { console.error('Daemon failed:', e); process.exit(1); });
+  var _dp = process.env.FRONTMCP_DAEMON_PORT;
+  if (_dp) {
+    var _port = parseInt(_dp, 10);
+    _cfg = Object.assign({}, _cfg, { http: Object.assign({}, _cfg.http || {}, { port: _port }) });
+    process.env.PORT = _dp;
+    _FMI.bootstrap(_cfg)
+      .then(function() { console.log('Daemon listening on port ' + _port); })
+      .catch(function(e) { console.error('Daemon failed:', e); process.exit(1); });
+  } else {
+    var _sp = process.env.FRONTMCP_DAEMON_SOCKET;
+    _FMI.runUnixSocket(Object.assign({}, _cfg, { socketPath: _sp }))
+      .then(function() { console.log('Daemon listening on ' + _sp); })
+      .catch(function(e) { console.error('Daemon failed:', e); process.exit(1); });
+  }
   return;
 }
 ` : ''}
+// Stdio mode: when --stdio is passed, run as an MCP stdio server (stdin/stdout JSON-RPC).
+// Detected early before commander to avoid overhead and ensure stdout stays clean for MCP protocol.
+// Logs go to ~/.frontmcp/logs/{appName}-*.log — stdout is reserved for MCP JSON-RPC only.
+if (process.argv.includes('--stdio')) {
+  // Set app name for file logging before any initialization
+  process.env.FRONTMCP_APP_NAME = process.env.FRONTMCP_APP_NAME || ${JSON.stringify(appName)};
+  require('reflect-metadata');
+  process.env.FRONTMCP_SCHEMA_EXTRACT = '1';
+  var _sMod = require(${selfContained ? `${JSON.stringify('../' + serverBundleFilename)}` : `require('path').join(__dirname, ${JSON.stringify(serverBundleFilename)})`});
+  delete process.env.FRONTMCP_SCHEMA_EXTRACT;
+  var _sSdk = require('@frontmcp/sdk');
+  var _sFMI = _sSdk.FrontMcpInstance || _sSdk.default.FrontMcpInstance;
+  var _sRaw = _sMod.default || _sMod;
+  var _sCfg = (typeof _sRaw === 'function' && typeof Reflect !== 'undefined' && Reflect.getMetadata)
+    ? (Reflect.getMetadata('__frontmcp:config', _sRaw) || _sRaw) : _sRaw;
+  _sFMI.runStdio(_sCfg)
+    .catch(function(e) { console.error('Stdio server failed:', e); process.exit(1); });
+  return;
+}
+
 var { Command, Option } = require('commander');
 var path = require('path');
 var fs = require('fs');
@@ -1136,11 +1169,31 @@ function generateServeCommand(serverBundleFilename: string, selfContained?: bool
 
   return `program
   .command('serve')
-  .description('Start the HTTP/SSE server')
+  .description('Start the MCP server')
   .option('-p, --port <port>', 'Port number', function(v) { return parseInt(v, 10); })
+  .option('--stdio', 'Run as stdio transport (stdin/stdout JSON-RPC) for use in .mcp.json')
   .action(async function(opts) {
+    if (opts.stdio) {
+      // --stdio on serve is handled by the early argv check at the top of the entry;
+      // this branch is a fallback in case commander parsed it first.
+      _isLongRunning = true;
+      process.env.FRONTMCP_SCHEMA_EXTRACT = '1';
+      var sMod = ${requireExpr};
+      delete process.env.FRONTMCP_SCHEMA_EXTRACT;
+      var sRaw = sMod.default || sMod;
+      var sSdk = require('@frontmcp/sdk');
+      var sFMI = sSdk.FrontMcpInstance || sSdk.default.FrontMcpInstance;
+      var sCfg = (typeof sRaw === 'function' && typeof Reflect !== 'undefined' && Reflect.getMetadata)
+        ? (Reflect.getMetadata('__frontmcp:config', sRaw) || sRaw) : sRaw;
+      await sFMI.runStdio(sCfg);
+      return;
+    }
     _isLongRunning = true;
+    // Suppress @FrontMcp decorator auto-bootstrap during require() — the CLI
+    // serve command handles bootstrap explicitly below with port/config overrides.
+    process.env.FRONTMCP_SCHEMA_EXTRACT = '1';
     var mod = ${requireExpr};
+    delete process.env.FRONTMCP_SCHEMA_EXTRACT;
     if (opts.port) process.env.PORT = String(opts.port);
     // If the bundle exports a start() function (@FrontMcp-decorated class auto-bootstraps), use it
     if (typeof mod.start === 'function') { await mod.start(); return; }
@@ -1367,7 +1420,8 @@ function generateDaemonCommands(appName: string, serverBundleFilename: string, s
 
 daemonCmd
   .command('start')
-  .description('Start as a background daemon (Unix socket)')
+  .description('Start as a background daemon')
+  .option('-p, --port <port>', 'Listen on a TCP port instead of a Unix socket', function(v) { return parseInt(v, 10); })
   .option('--idle-timeout <ms>', 'Auto-stop after idle period (ms, 0 to disable)', function(v) { return parseInt(v, 10); }, 300000)
   .action(async function(opts) {
     var { spawn } = require('child_process');
@@ -1379,10 +1433,11 @@ daemonCmd
     fs.mkdirSync(logDir, { recursive: true });
     fs.mkdirSync(socketDir, { recursive: true });
 
+    var usePort = !!opts.port;
     var socketPath = pathMod.join(socketDir, ${JSON.stringify(appName)} + '.sock');
 
-    // Clean up stale socket file
-    try { fs.unlinkSync(socketPath); } catch (_) { /* ok */ }
+    // Clean up stale socket file (only relevant in socket mode)
+    if (!usePort) { try { fs.unlinkSync(socketPath); } catch (_) { /* ok */ } }
 
     // Check if already running
     var pidPath = pathMod.join(pidDir, ${JSON.stringify(appName)} + '.pid');
@@ -1394,9 +1449,13 @@ daemonCmd
     } catch (_) { /* not running, proceed */ }
 
     var env = Object.assign({}, process.env, {
-      FRONTMCP_DAEMON_SOCKET: socketPath,
       FRONTMCP_DAEMON_IDLE_TIMEOUT: String(opts.idleTimeout)
     });
+    if (usePort) {
+      env.FRONTMCP_DAEMON_PORT = String(opts.port);
+    } else {
+      env.FRONTMCP_DAEMON_SOCKET = socketPath;
+    }
 
     var logPath = pathMod.join(logDir, ${JSON.stringify(appName)} + '.log');
     var out = fs.openSync(logPath, 'a');
@@ -1408,20 +1467,33 @@ ${selfContained ? `    // SEA mode: spawn the binary itself in daemon mode — a
       detached: true,
       stdio: ['ignore', out, err],
       env: env
-    });` : `    // Start the daemon using runUnixSocket via a small wrapper script
+    });` : `    // Start the daemon via a small wrapper script
     // Always use absolute path for the server bundle (SCRIPT_DIR resolves to __dirname at runtime)
     var serverBundlePath = pathMod.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});
     var daemonScript = 'require("reflect-metadata");' +
+      'process.env.FRONTMCP_SCHEMA_EXTRACT="1";' +
       'var mod = require(' + JSON.stringify(serverBundlePath) + ');' +
+      'delete process.env.FRONTMCP_SCHEMA_EXTRACT;' +
       'var sdk = require("@frontmcp/sdk");' +
       'var FrontMcpInstance = sdk.FrontMcpInstance || sdk.default.FrontMcpInstance;' +
       'var raw = mod.default || mod;' +
       ${'// If the export is a @FrontMcp-decorated class, extract config via Reflect metadata'}
       'var config = (typeof raw === "function" && typeof Reflect !== "undefined" && Reflect.getMetadata) ' +
-      '  ? (Reflect.getMetadata("__frontmcp:config", raw) || raw) : raw;' +
-      'FrontMcpInstance.runUnixSocket(Object.assign({}, config, { socketPath: ' + JSON.stringify(socketPath) + ' }))' +
-      '.then(function() { console.log("Daemon listening on " + ' + JSON.stringify(socketPath) + '); })' +
-      '.catch(function(e) { console.error("Daemon failed:", e); process.exit(1); });';
+      '  ? (Reflect.getMetadata("__frontmcp:config", raw) || raw) : raw;';
+
+    if (usePort) {
+      daemonScript +=
+        'config = Object.assign({}, config, { http: Object.assign({}, config.http || {}, { port: ' + opts.port + ' }) });' +
+        'process.env.PORT = ' + JSON.stringify(String(opts.port)) + ';' +
+        'FrontMcpInstance.bootstrap(config)' +
+        '.then(function() { console.log("Daemon listening on port ' + opts.port + '"); })' +
+        '.catch(function(e) { console.error("Daemon failed:", e); process.exit(1); });';
+    } else {
+      daemonScript +=
+        'FrontMcpInstance.runUnixSocket(Object.assign({}, config, { socketPath: ' + JSON.stringify(socketPath) + ' }))' +
+        '.then(function() { console.log("Daemon listening on " + ' + JSON.stringify(socketPath) + '); })' +
+        '.catch(function(e) { console.error("Daemon failed:", e); process.exit(1); });';
+    }
 
     var child = spawn('node', ['-e', daemonScript], {
       detached: true,
@@ -1433,26 +1505,40 @@ ${selfContained ? `    // SEA mode: spawn the binary itself in daemon mode — a
     fs.closeSync(out);
     fs.closeSync(err);
 
-    fs.writeFileSync(pidPath, JSON.stringify({
-      pid: child.pid,
-      socketPath: socketPath,
-      startedAt: new Date().toISOString()
-    }));
+    var pidData = { pid: child.pid, startedAt: new Date().toISOString() };
+    if (usePort) {
+      pidData.port = opts.port;
+    } else {
+      pidData.socketPath = socketPath;
+    }
+    fs.writeFileSync(pidPath, JSON.stringify(pidData));
     child.unref();
 
-    // Wait for socket file to appear (max 5s)
-    var waited = 0;
-    while (!fs.existsSync(socketPath) && waited < 5000) {
-      await new Promise(function(r) { setTimeout(r, 100); });
-      waited += 100;
-    }
-
-    if (fs.existsSync(socketPath)) {
-      console.log('Daemon started (PID: ' + child.pid + '). Socket: ' + socketPath);
-      console.log('Logs: ' + logPath);
+    if (usePort) {
+      // For port mode, wait briefly then check if process is still alive
+      await new Promise(function(r) { setTimeout(r, 1000); });
+      try {
+        process.kill(child.pid, 0);
+        console.log('Daemon started (PID: ' + child.pid + '). Port: ' + opts.port);
+        console.log('Logs: ' + logPath);
+      } catch (_) {
+        console.log('Daemon failed to start. Check logs: ' + logPath);
+      }
     } else {
-      console.log('Daemon started (PID: ' + child.pid + ') but socket not yet available.');
-      console.log('Check logs: ' + logPath);
+      // Wait for socket file to appear (max 5s)
+      var waited = 0;
+      while (!fs.existsSync(socketPath) && waited < 5000) {
+        await new Promise(function(r) { setTimeout(r, 100); });
+        waited += 100;
+      }
+
+      if (fs.existsSync(socketPath)) {
+        console.log('Daemon started (PID: ' + child.pid + '). Socket: ' + socketPath);
+        console.log('Logs: ' + logPath);
+      } else {
+        console.log('Daemon started (PID: ' + child.pid + ') but socket not yet available.');
+        console.log('Check logs: ' + logPath);
+      }
     }
   });
 
@@ -1486,8 +1572,8 @@ daemonCmd
       var data = JSON.parse(fs.readFileSync(pidPath, 'utf8'));
       try {
         process.kill(data.pid, 0);
-        var socketStatus = data.socketPath && fs.existsSync(data.socketPath) ? ', socket: active' : '';
-        console.log('Running (PID: ' + data.pid + ', started: ' + data.startedAt + socketStatus + ')');
+        var listenInfo = data.port ? ', port: ' + data.port : (data.socketPath && fs.existsSync(data.socketPath) ? ', socket: active' : '');
+        console.log('Running (PID: ' + data.pid + ', started: ' + data.startedAt + listenInfo + ')');
       } catch (_) {
         console.log('Not running (stale PID file).');
         fs.unlinkSync(pidPath);
@@ -1522,7 +1608,9 @@ program.parseAsync(process.argv).then(async function() {
   // on unclosed handles (file loggers, in-memory transport, etc.).
   if (_isLongRunning) return;
   await closeClient();
-  process.exit(process.exitCode || 0);
+  // Defer process.exit() by one event-loop tick so native addon destructors
+  // (ONNX runtime, etc.) can release mutexes before V8 tears down.
+  setImmediate(function() { process.exit(process.exitCode || 0); });
 }).catch(async function(err) {
   console.error('Fatal:', err.message || err);
   await closeClient();

@@ -984,4 +984,16 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = undefined;
     }
   }
+
+  /**
+   * Dispose of this scope, cleaning up all registries and native resources.
+   * Call before process exit to prevent native mutex crashes from addons
+   * (e.g., ONNX runtime) whose threads are still running during teardown.
+   */
+  async dispose(): Promise<void> {
+    this.scopeProviders.dispose();
+    if (this.notificationService) {
+      await this.notificationService.destroy();
+    }
+  }
 }

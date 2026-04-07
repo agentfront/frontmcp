@@ -488,6 +488,22 @@ export default class ResourceRegistry extends RegistryAbstract<
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
   }
 
+  /**
+   * Signal that a specific resource's content has changed without modifying the resource list.
+   * Emits an 'updated' event that NotificationService uses to notify subscribed sessions.
+   *
+   * @param uri - The URI of the resource whose content changed
+   */
+  notifyContentChanged(uri: string): void {
+    this.emitter.emit({
+      kind: 'updated',
+      changeScope: 'global',
+      version: this.version,
+      snapshot: this.listAllInstances(),
+      updatedUri: uri,
+    });
+  }
+
   private bump(kind: ResourceChangeEvent['kind']) {
     const version = ++this.version;
     this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });

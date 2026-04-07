@@ -382,14 +382,50 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   public static async runStdio(options: FrontMcpConfigInput): Promise<void> {
+    // ── Stdio stdout protection ──────────────────────────────────────────
+    // In stdio mode, stdout is the MCP JSON-RPC channel. ANY non-protocol
+    // output (logs, warnings, debug prints) on stdout corrupts the wire.
+    // Redirect all stdout-bound console methods to stderr BEFORE anything
+    // else runs — this catches direct console.log() calls in SDK code,
+    // plugins, adapters, and third-party dependencies.
+    const { Console } = require('node:console');
+    const stderrConsole = new Console({ stdout: process.stderr, stderr: process.stderr });
+    console.log = stderrConsole.log.bind(stderrConsole);
+    console.info = stderrConsole.info.bind(stderrConsole);
+    console.debug = stderrConsole.debug.bind(stderrConsole);
+    console.dir = stderrConsole.dir.bind(stderrConsole);
+    console.table = stderrConsole.table.bind(stderrConsole);
+    console.time = stderrConsole.time.bind(stderrConsole);
+    console.timeLog = stderrConsole.timeLog.bind(stderrConsole);
+    console.group = stderrConsole.group.bind(stderrConsole);
+    console.groupEnd = stderrConsole.groupEnd.bind(stderrConsole);
+    console.count = stderrConsole.count.bind(stderrConsole);
+    // console.warn and console.error already go to stderr — leave them.
+
     // Dynamically import to avoid bundling issues
     const { StdioServerTransport, McpServer } = await import('@frontmcp/protocol');
 
-    // Parse config through Zod to apply defaults, then disable HTTP server
+    // Parse config: disable HTTP server, disable console logging, enable file logging.
+    // All structured logs go to ~/.frontmcp/logs/ — stdout stays clean for MCP protocol.
     const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
       http: undefined,
     });
+    // Force console logging off and file transport on (same pattern as createForCli)
+    if (parsedConfig.logging) {
+      parsedConfig.logging.enableConsole = false;
+      const transports = parsedConfig.logging.transports ?? [];
+      if (!transports.includes(FileLogTransportInstance)) {
+        transports.push(FileLogTransportInstance);
+      }
+      parsedConfig.logging.transports = transports;
+    } else {
+      (parsedConfig as Record<string, unknown>)['logging'] = {
+        enableConsole: false,
+        transports: [FileLogTransportInstance],
+      };
+    }
+
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
@@ -487,14 +523,24 @@ export class FrontMcpInstance implements FrontMcpInterface {
       scope.notifications.subscribeAllChannels(sessionId, channelNames);
     }
 
-    // Handle graceful shutdown with cleanup
+    // Graceful shutdown: cleanup resources then exit with code 0.
+    // A ref'd timer keeps the event loop alive while async cleanup runs —
+    // without it, closing the transport removes the last ref (stdin) and the
+    // process exits via the raw signal before process.exit(0) is reached.
+    // This is the same pattern used by Express/Fastify for graceful shutdown.
+    let shuttingDown = false;
     const shutdownHandler = async () => {
+      if (shuttingDown) return; // prevent re-entry from second signal
+      shuttingDown = true;
+      const deadline = setTimeout(() => process.exit(1), 5000);
       try {
         scope.notifications.unregisterServer(sessionId);
         await scope.shutdown();
         await mcpServer.close();
       } catch (err) {
         console.error('Error closing MCP server:', err);
+      } finally {
+        clearTimeout(deadline);
       }
       process.exit(0);
     };
