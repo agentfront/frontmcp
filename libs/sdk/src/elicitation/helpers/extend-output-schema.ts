@@ -39,6 +39,7 @@ export function extendOutputSchemaForElicitation(
   // schemas can match objects, and oneOf requires exactly one match.
   if (!originalSchema) {
     return {
+      type: 'object',
       anyOf: [{ type: 'object', additionalProperties: true }, ELICITATION_FALLBACK_JSON_SCHEMA],
     };
   }
@@ -55,19 +56,22 @@ export function extendOutputSchemaForElicitation(
     );
 
     if (hasElicitationFallback) {
-      // Already has elicitation fallback, return as-is
-      return originalSchema;
+      // Already has elicitation fallback — ensure type: 'object' is present for MCP spec compliance
+      return { type: 'object', ...originalSchema };
     }
 
-    // Add elicitation fallback to existing oneOf
+    // Add elicitation fallback to existing oneOf — ensure type: 'object' for MCP spec compliance
     return {
+      type: 'object',
       ...originalSchema,
       oneOf: [...existingOneOf, ELICITATION_FALLBACK_JSON_SCHEMA],
     };
   }
 
   // Wrap in oneOf: either original output OR elicitation fallback
+  // type: 'object' is required by the MCP spec's ToolSchema for outputSchema
   return {
+    type: 'object',
     oneOf: [originalSchema, ELICITATION_FALLBACK_JSON_SCHEMA],
   };
 }
