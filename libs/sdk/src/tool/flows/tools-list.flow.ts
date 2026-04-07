@@ -414,9 +414,18 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
         // Note: When elicitation is enabled, getRawOutputSchema() transparently extends
         // the schema to include the elicitation fallback response type
-        const outputSchema = tool.getRawOutputSchema();
-        if (outputSchema) {
-          item.outputSchema = outputSchema as typeof item.outputSchema;
+        const rawOutput = tool.getRawOutputSchema();
+        if (rawOutput) {
+          // MCP spec requires outputSchema to have type: 'object' at the top level.
+          // Strip non-compliant schemas to prevent a single tool from breaking the entire tools/list response.
+          const schema = rawOutput as Record<string, unknown>;
+          if (schema['type'] === 'object') {
+            item.outputSchema = schema as typeof item.outputSchema;
+          } else {
+            this.logger.warn(
+              `parseTools: tool "${finalName}" has outputSchema without type: 'object' — stripping to maintain MCP compliance`,
+            );
+          }
         }
 
         // Add _meta for tools with UI configuration
