@@ -523,14 +523,24 @@ export class FrontMcpInstance implements FrontMcpInterface {
       scope.notifications.subscribeAllChannels(sessionId, channelNames);
     }
 
-    // Handle graceful shutdown with cleanup
+    // Graceful shutdown: cleanup resources then exit with code 0.
+    // A ref'd timer keeps the event loop alive while async cleanup runs —
+    // without it, closing the transport removes the last ref (stdin) and the
+    // process exits via the raw signal before process.exit(0) is reached.
+    // This is the same pattern used by Express/Fastify for graceful shutdown.
+    let shuttingDown = false;
     const shutdownHandler = async () => {
+      if (shuttingDown) return; // prevent re-entry from second signal
+      shuttingDown = true;
+      const deadline = setTimeout(() => process.exit(1), 5000);
       try {
         scope.notifications.unregisterServer(sessionId);
         await scope.shutdown();
         await mcpServer.close();
       } catch (err) {
         console.error('Error closing MCP server:', err);
+      } finally {
+        clearTimeout(deadline);
       }
       process.exit(0);
     };
