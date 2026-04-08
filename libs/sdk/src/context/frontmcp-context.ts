@@ -14,6 +14,7 @@
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 import type { AuthInfo } from '@frontmcp/protocol';
 import type { FetchCredentialMiddleware, FrontMcpFetchInit } from '@frontmcp/auth';
+import { isFrontMcpCredentials } from '@frontmcp/auth';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
 import type { SessionIdPayload } from '../common/types';
@@ -593,15 +594,21 @@ export class FrontMcpContext {
     let effectiveInput: RequestInfo | URL = input;
 
     // Apply credential middleware if provider-based credentials requested
-    if (this._credentialMiddleware && init) {
+    if (init) {
       const creds = (init as FrontMcpFetchInit).credentials;
-      if (creds && typeof creds === 'object' && 'provider' in creds) {
-        const result = await this._credentialMiddleware.applyCredentials(
-          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
-          init as FrontMcpFetchInit,
-        );
-        effectiveInit = result.init;
-        if (result.url) effectiveInput = result.url;
+      if (isFrontMcpCredentials(creds)) {
+        if (this._credentialMiddleware) {
+          const result = await this._credentialMiddleware.applyCredentials(
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
+            init as FrontMcpFetchInit,
+          );
+          effectiveInit = result.init;
+          if (result.url) effectiveInput = result.url;
+        } else {
+          // No middleware configured — strip non-standard credentials to prevent passing to native fetch
+          const { credentials: _removed, ...rest } = init as FrontMcpFetchInit;
+          effectiveInit = rest as RequestInit;
+        }
       }
     }
 

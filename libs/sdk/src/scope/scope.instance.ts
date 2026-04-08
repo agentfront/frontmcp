@@ -962,20 +962,34 @@ export class Scope extends ScopeEntry {
   getAllSupportedScopes(): string[] {
     const scopes = new Set<string>(['openid', 'profile', 'email']);
 
-    for (const tool of this.scopeTools.getTools(true)) {
-      const authProviders = (tool.metadata as unknown as Record<string, unknown>)['authProviders'];
-      if (Array.isArray(authProviders)) {
-        for (const ap of authProviders) {
-          if (typeof ap === 'object' && ap !== null && 'scopes' in ap) {
-            const apScopes = (ap as Record<string, unknown>)['scopes'];
-            if (Array.isArray(apScopes)) {
-              apScopes.forEach((s) => {
-                if (typeof s === 'string') scopes.add(s);
-              });
-            }
+    // Helper to extract scopes from any entry's authProviders metadata
+    const collectScopes = (metadata: unknown) => {
+      const authProviders = (metadata as Record<string, unknown>)?.['authProviders'];
+      if (!Array.isArray(authProviders)) return;
+      for (const ap of authProviders) {
+        if (typeof ap === 'object' && ap !== null && 'scopes' in ap) {
+          const apScopes = (ap as Record<string, unknown>)['scopes'];
+          if (Array.isArray(apScopes)) {
+            apScopes.forEach((s) => {
+              if (typeof s === 'string') scopes.add(s);
+            });
           }
         }
       }
+    };
+
+    // Collect from all entry types that can declare authProviders
+    for (const tool of this.scopeTools.getTools(true)) {
+      collectScopes(tool.metadata);
+    }
+    for (const resource of this.scopeResources.getResources()) {
+      collectScopes(resource.metadata);
+    }
+    for (const prompt of this.scopePrompts.getPrompts()) {
+      collectScopes(prompt.metadata);
+    }
+    for (const agent of this.scopeAgents.getAgents()) {
+      collectScopes((agent as unknown as Record<string, unknown>)['metadata']);
     }
 
     return [...scopes].sort();

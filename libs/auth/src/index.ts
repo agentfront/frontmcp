@@ -536,15 +536,8 @@ export {
 // ============================================
 // Auth Context Module
 // ============================================
-export {
-  FrontMcpAuthContextImpl,
-  buildAuthContext,
-} from './context';
-export type {
-  FrontMcpAuthContext,
-  FrontMcpAuthUser,
-  AuthContextSourceInfo,
-} from './context';
+export { FrontMcpAuthContextImpl, buildAuthContext } from './context';
+export type { FrontMcpAuthContext, FrontMcpAuthUser, AuthContextSourceInfo } from './context';
 
 // ============================================
 // Authorities Module (RBAC/ABAC/ReBAC)
@@ -554,5 +547,12 @@ export * from './authorities';
 // ============================================
 // Fetch Credential Middleware Module
 // ============================================
-export { FetchCredentialMiddleware, bearerApplier, basicApplier, headerApplier, queryApplier } from './fetch';
+export {
+  FetchCredentialMiddleware,
+  isFrontMcpCredentials,
+  bearerApplier,
+  basicApplier,
+  headerApplier,
+  queryApplier,
+} from './fetch';
 export type { TokenAccessor, CredentialApplier, FrontMcpCredentials, FrontMcpFetchInit } from './fetch';

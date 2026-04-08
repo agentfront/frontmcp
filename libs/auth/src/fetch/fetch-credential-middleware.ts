@@ -117,7 +117,7 @@ export type FrontMcpFetchInit = Omit<RequestInit, 'credentials'> & {
 // Type Guard
 // ---------------------------------------------------------------------------
 
-function isFrontMcpCredentials(creds: unknown): creds is FrontMcpCredentials {
+export function isFrontMcpCredentials(creds: unknown): creds is FrontMcpCredentials {
   return (
     typeof creds === 'object' &&
     creds !== null &&
@@ -170,7 +170,9 @@ export class FetchCredentialMiddleware {
     }
 
     if (!isFrontMcpCredentials(creds)) {
-      return { init: init as RequestInit };
+      // Strip non-standard credentials to prevent passing invalid object to native fetch
+      const { credentials: _removed, ...rest } = init;
+      return { init: rest };
     }
 
     // Resolve token from vault

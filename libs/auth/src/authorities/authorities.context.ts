@@ -129,6 +129,9 @@ export class AuthoritiesContextBuilder {
     const user = authInfo?.user ?? {};
     const authorization = authInfo?.extra?.['authorization'] as Record<string, unknown> | undefined;
     const authorizationClaims = (authorization?.['claims'] as Record<string, unknown>) ?? {};
+    // Merge precedence: user fields override authorizationClaims on conflict.
+    // This ensures IdP-provided user properties (sub, name, email) take precedence
+    // over server-side authorization claims when keys collide.
     const rawClaims: Record<string, unknown> = {
       ...authorizationClaims,
       ...user,
@@ -139,6 +142,10 @@ export class AuthoritiesContextBuilder {
     if (this.claimsMapping?.roles) {
       roles = toStringArray(resolveDotPath(rawClaims, this.claimsMapping.roles));
     } else {
+      // Fallback chain: user.roles → authorization.scopes → [].
+      // OAuth scopes are used as a roles fallback for OAuth integrations where
+      // scopes effectively serve as role assignments (e.g., 'admin', 'read').
+      // Configure explicit claimsMapping.roles to avoid this behavior.
       roles = toStringArray(
         (user as Record<string, unknown>)['roles'] ??
           (authorization as Record<string, unknown> | undefined)?.['scopes'] ??

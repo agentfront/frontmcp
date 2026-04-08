@@ -8,6 +8,7 @@
 
 export {
   FetchCredentialMiddleware,
+  isFrontMcpCredentials,
   bearerApplier,
   basicApplier,
   headerApplier,
