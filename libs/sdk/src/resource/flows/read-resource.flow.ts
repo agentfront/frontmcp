@@ -1,19 +1,28 @@
 // file: libs/sdk/src/resource/flows/read-resource.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceContext, ResourceEntry } from '../../common';
 import { z } from 'zod';
-import { ReadResourceRequestSchema, ReadResourceResultSchema } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
+
+import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
+import { randomBytes } from '@frontmcp/utils';
+
 import {
-  InvalidMethodError,
-  ResourceNotFoundError,
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ResourceContext,
+  type ResourceEntry,
+} from '../../common';
+import {
   InvalidInputError,
+  InvalidMethodError,
   InvalidOutputError,
+  ResourceNotFoundError,
   ResourceReadError,
 } from '../../errors';
-import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
-import { randomBytes } from '@frontmcp/utils';
+import { handleUIResourceRead, isUIResourceUri } from '../../tool/ui';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
@@ -251,7 +260,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
         const { resolveRequiredScopes } = await import('@frontmcp/auth');
-        requiredScopes = resolveRequiredScopes(result.denial, scopeMapping, authorities as import('@frontmcp/auth').AuthoritiesMetadata);
+        requiredScopes = resolveRequiredScopes(
+          result.denial,
+          scopeMapping,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+        );
       }
 
       const { AuthorityDeniedError } = await import('@frontmcp/auth');

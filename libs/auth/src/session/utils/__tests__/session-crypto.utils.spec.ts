@@ -1,3 +1,6 @@
+import { SessionSecretRequiredError } from '../../../errors/auth-internal.errors';
+import { decryptSessionJson, encryptJson, getKey, resetCachedKey, safeDecrypt } from '../session-crypto.utils';
+
 /**
  * Session Crypto Utils Tests
  */
@@ -5,14 +8,11 @@
 // We need to mock dependencies before imports
 const mockGetMachineId = jest.fn(() => 'test-machine-id-12345');
 
-jest.mock('../../../machine-id/machine-id', () => ({
-  getMachineId: mockGetMachineId,
-}));
-
-// Mock @frontmcp/utils with real-ish crypto implementations
+// Mock @frontmcp/utils with real-ish crypto implementations + getMachineId
 jest.mock('@frontmcp/utils', () => {
   const crypto = require('crypto');
   return {
+    getMachineId: mockGetMachineId,
     sha256: (data: Uint8Array) => {
       const hash = crypto.createHash('sha256').update(data);
       return new Uint8Array(hash.digest());
@@ -47,10 +47,6 @@ jest.mock('@frontmcp/utils', () => {
     isProduction: () => process.env['NODE_ENV'] === 'production',
   };
 });
-
-import { getKey, encryptJson, decryptSessionJson, safeDecrypt, resetCachedKey } from '../session-crypto.utils';
-
-import { SessionSecretRequiredError } from '../../../errors/auth-internal.errors';
 
 describe('session-crypto.utils', () => {
   const originalEnv = process.env;

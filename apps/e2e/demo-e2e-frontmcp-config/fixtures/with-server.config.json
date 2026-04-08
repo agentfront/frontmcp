@@ -1,0 +1,44 @@
+{
+  "name": "full-server",
+  "deployments": [
+    {
+      "target": "distributed",
+      "server": {
+        "http": {
+          "port": 9090,
+          "entryPath": "/mcp",
+          "cors": {
+            "origins": ["https://app.example.com", "https://admin.example.com"],
+            "credentials": true,
+            "maxAge": 3600
+          }
+        },
+        "csp": {
+          "enabled": true,
+          "directives": {
+            "default-src": "'self'",
+            "script-src": ["'self'", "https://cdn.example.com"]
+          },
+          "reportUri": "https://report.example.com/csp"
+        },
+        "cookies": {
+          "affinity": "__custom_node",
+          "domain": ".example.com",
+          "sameSite": "Lax"
+        },
+        "headers": {
+          "hsts": "max-age=31536000; includeSubDomains",
+          "contentTypeOptions": "nosniff",
+          "frameOptions": "DENY",
+          "custom": { "X-App-Version": "1.0.0" }
+        }
+      },
+      "ha": {
+        "heartbeatIntervalMs": 10000,
+        "heartbeatTtlMs": 30000,
+        "takeoverGracePeriodMs": 5000,
+        "redisKeyPrefix": "myapp:ha:"
+      }
+    }
+  ]
+}

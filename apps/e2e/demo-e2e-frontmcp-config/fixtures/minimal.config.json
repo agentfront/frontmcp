@@ -1,0 +1,5 @@
+{
+  "name": "test-server",
+  "version": "1.0.0",
+  "deployments": [{ "target": "node" }]
+}

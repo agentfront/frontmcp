@@ -1,71 +1,74 @@
 import 'reflect-metadata';
+
+import { createGuardManager, type GuardManager } from '@frontmcp/guard';
+import { type EventStore } from '@frontmcp/protocol';
+import { getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
+
+import AgentRegistry from '../agent/agent.registry';
+import CallAgentFlow from '../agent/flows/call-agent.flow';
+import AppRegistry from '../app/app.registry';
+import { AuthRegistry } from '../auth/auth.registry';
+import { type ChannelNotificationService } from '../channel/channel-notification.service';
+import { registerChannelCapabilities } from '../channel/channel-scope.helper';
+import type ChannelRegistry from '../channel/channel.registry';
+import { type ChannelEventBus } from '../channel/sources/app-event.source';
 // NOTE: @frontmcp/auth is imported via require() at runtime in initAuthoritiesFromConfig()
 // to avoid circular dependency issues with esbuild's __esm lazy initialization.
 // Type references use inline import('...') syntax to avoid creating bundler dependencies.
 import {
-  EntryOwnerRef,
-  FlowInputOf,
-  FlowName,
-  FlowOutputOf,
-  FlowType,
-  FrontMcpAuth,
   FrontMcpLogger,
   FrontMcpServer,
   ProviderScope,
   ScopeEntry,
-  ScopeRecord,
-  Token,
-  Type,
+  type EntryOwnerRef,
+  type FlowInputOf,
+  type FlowName,
+  type FlowOutputOf,
+  type FlowType,
+  type FrontMcpAuth,
+  type ScopeRecord,
+  type Token,
+  type Type,
 } from '../common';
-import { FrontMcpContextStorage, FrontMcpContextProvider } from '../context';
-import AppRegistry from '../app/app.registry';
-import ProviderRegistry from '../provider/provider.registry';
-import { AuthRegistry } from '../auth/auth.registry';
-import FlowRegistry from '../flows/flow.registry';
-import HttpRequestFlow from './flows/http.request.flow';
-import { TransportService } from '../transport/transport.registry';
-import ToolRegistry from '../tool/tool.registry';
-import ResourceRegistry from '../resource/resource.registry';
-import HookRegistry from '../hooks/hook.registry';
-import PromptRegistry from '../prompt/prompt.registry';
-import AgentRegistry from '../agent/agent.registry';
-import SkillRegistry from '../skill/skill.registry';
-import { SkillValidationError } from '../skill/errors/skill-validation.error';
-import { getEnvFlag, isEdgeRuntime } from '@frontmcp/utils';
-import { FlowExitedWithoutOutputError, AuthConfigurationError } from '../errors';
-import { registerSkillCapabilities } from '../skill/skill-scope.helper';
-import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
-import { createSkillToolGuardHook } from '../skill/hooks';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { NotificationService } from '../notification';
-import SetLevelFlow from '../logging/flows/set-level.flow';
+import { type ChannelType } from '../common/interfaces/channel.interface';
+import { type JobType } from '../common/interfaces/job.interface';
+import { type WorkflowType } from '../common/interfaces/workflow.interface';
+import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
 import CompleteFlow from '../completion/flows/complete.flow';
-import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
-import CallAgentFlow from '../agent/flows/call-agent.flow';
-import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
-import { ElicitationStore, createElicitationStore } from '../elicitation';
+import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
+import { createElicitationStore, type ElicitationStore } from '../elicitation';
 import { ElicitationRequestFlow, ElicitationResultFlow } from '../elicitation/flows';
 import { SendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
-import { normalizeTool } from '../tool/tool.utils';
-import { ToolInstance } from '../tool/tool.instance';
-import type { EventStore } from '@frontmcp/protocol';
-import { createEventStore } from '../transport/event-stores';
-import JobRegistry from '../job/job.registry';
-import WorkflowRegistry from '../workflow/workflow.registry';
-import { JobExecutionManager } from '../job/execution/job-execution.manager';
-import { registerJobCapabilities, JobsConfig } from '../job/job-scope.helper';
-import type { JobType } from '../common/interfaces/job.interface';
-import type { WorkflowType } from '../common/interfaces/workflow.interface';
-import type { JobStateStore } from '../job/store/job-state.interface';
-import type { JobDefinitionStore } from '../job/store/job-definition.interface';
-import { createGuardManager, type GuardManager } from '@frontmcp/guard';
+import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
+import FlowRegistry from '../flows/flow.registry';
+import { HaManager } from '../ha';
 import { HealthService } from '../health';
-import ChannelRegistry from '../channel/channel.registry';
-import { ChannelNotificationService } from '../channel/channel-notification.service';
-import { ChannelEventBus } from '../channel/sources/app-event.source';
-import { registerChannelCapabilities } from '../channel/channel-scope.helper';
-import type { ChannelType } from '../common/interfaces/channel.interface';
-import type { ChannelsConfigOptions } from '../common/metadata/channel.metadata';
+import HookRegistry from '../hooks/hook.registry';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { type JobExecutionManager } from '../job/execution/job-execution.manager';
+import { registerJobCapabilities, type JobsConfig } from '../job/job-scope.helper';
+import type JobRegistry from '../job/job.registry';
+import { type JobDefinitionStore } from '../job/store/job-definition.interface';
+import { type JobStateStore } from '../job/store/job-state.interface';
+import SetLevelFlow from '../logging/flows/set-level.flow';
+import { NotificationService } from '../notification';
+import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
+import PromptRegistry from '../prompt/prompt.registry';
+import ProviderRegistry from '../provider/provider.registry';
+import ResourceRegistry from '../resource/resource.registry';
+import { SkillValidationError } from '../skill/errors/skill-validation.error';
+import { createSkillToolGuardHook } from '../skill/hooks';
+import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
+import { registerSkillCapabilities } from '../skill/skill-scope.helper';
+import SkillRegistry from '../skill/skill.registry';
+import { ToolInstance } from '../tool/tool.instance';
+import ToolRegistry from '../tool/tool.registry';
+import { normalizeTool } from '../tool/tool.utils';
+import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
+import { createEventStore } from '../transport/event-stores';
+import { TransportService } from '../transport/transport.registry';
+import type WorkflowRegistry from '../workflow/workflow.registry';
+import HttpRequestFlow from './flows/http.request.flow';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -86,6 +89,7 @@ export class Scope extends ScopeEntry {
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
+  haManager?: HaManager;
   private toolUIRegistry: ToolUIRegistry;
   readonly entryPath: string;
   readonly routeBase: string;
@@ -178,6 +182,34 @@ export class Scope extends ScopeEntry {
     // TransportService is synchronous — no await needed
     const transportConfig = this.metadata.transport;
     this.transportService = new TransportService(this, transportConfig?.persistence);
+
+    // HA Manager (conditional — only in distributed deployment mode)
+    if (getRuntimeContext().deployment === 'distributed' && this.metadata.redis && !this.cliMode) {
+      try {
+        const haRedis = this.metadata.redis;
+        this.haManager = HaManager.create({
+          redis: haRedis as never,
+          nodeId: getMachineId(),
+          logger: this.logger,
+        });
+        await this.haManager.start();
+        this.logger.info('[HA] Manager started for distributed deployment');
+      } catch (err) {
+        this.logger.warn('[HA] Failed to start HA manager — running without HA', { error: err });
+      }
+    }
+
+    // Serverless SSE warning
+    if (getRuntimeContext().deployment === 'serverless') {
+      const protocolCfg = transportConfig?.protocol;
+      const hasSSE = typeof protocolCfg === 'string' ? protocolCfg !== 'stateless-api' : protocolCfg?.sse === true;
+      if (hasSSE) {
+        this.logger.warn(
+          '[Deployment] SSE transport is not supported in serverless deployments. ' +
+            'Consider using protocol: "stateless-api" for serverless targets.',
+        );
+      }
+    }
 
     // EventStore (conditional, skipped in CLI mode)
     const eventStoreConfig = transportConfig?.eventStore;
@@ -1020,7 +1052,6 @@ export class Scope extends ScopeEntry {
     if (!config) return;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const {
         AuthoritiesEngine,
         AuthoritiesContextBuilder,
@@ -1168,6 +1199,13 @@ export class Scope extends ScopeEntry {
    * and clears the channel event bus.
    */
   async shutdown(): Promise<void> {
+    if (this.haManager) {
+      try {
+        await this.haManager.stop();
+      } catch (err) {
+        this.logger.error('[HA] Manager shutdown failed', { error: err });
+      }
+    }
     if (this._channelTeardown) {
       try {
         await this._channelTeardown();

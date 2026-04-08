@@ -3,10 +3,11 @@
  * @description Core health and readiness orchestrator.
  */
 
-import { sha256Hex, getRuntimeContext } from '@frontmcp/utils';
-import type { HealthOptionsInterface, ServerInfoOptions, HealthProbeDefinition } from '../common';
-import type { HealthProbe, HealthzResponse, ReadyzResponse, CatalogInfo, HealthProbeResult } from './health.types';
-import { createTransportSessionProbe, createRemoteAppProbe, type HealthResultProvider } from './health.probes';
+import { getRuntimeContext, sha256Hex } from '@frontmcp/utils';
+
+import type { HealthOptionsInterface, HealthProbeDefinition, ServerInfoOptions } from '../common';
+import { createRemoteAppProbe, createTransportSessionProbe, type HealthResultProvider } from './health.probes';
+import type { CatalogInfo, HealthProbe, HealthProbeResult, HealthzResponse, ReadyzResponse } from './health.types';
 
 const processStartTime = Date.now();
 
@@ -39,6 +40,11 @@ export interface HealthScopeView {
       readonly isRemote: boolean;
       getMcpClient?(): { getHealthStatus(appId: string): unknown };
     }>;
+  };
+  readonly haManager?: {
+    isStarted(): boolean;
+    isNodeAlive(nodeId: string): Promise<boolean>;
+    getNodeId(): string;
   };
 }
 
@@ -88,6 +94,21 @@ export class HealthService {
           this.registerProbe(createRemoteAppProbe(app.id, client as HealthResultProvider));
         }
       }
+    }
+
+    // HA probe (distributed mode only)
+    if (scope.haManager?.isStarted()) {
+      const ha = scope.haManager;
+      this.registerProbe({
+        name: 'ha',
+        check: async () => {
+          const alive = await ha.isNodeAlive(ha.getNodeId());
+          return {
+            status: alive ? 'healthy' : 'unhealthy',
+            details: { nodeId: ha.getNodeId(), heartbeatActive: alive },
+          };
+        },
+      });
     }
 
     // User-defined probes

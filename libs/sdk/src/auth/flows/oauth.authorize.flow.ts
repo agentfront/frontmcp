@@ -16,37 +16,39 @@
  *
  * response_type=code, client_id, redirect_uri, scope, state, code_challenge, code_challenge_method=S256, (optionally request_uri from PAR)
  */
+import { z, type ZodError } from 'zod';
+
 import {
+  buildFederatedLoginPage,
+  buildIncrementalAuthPage,
+  buildLoginPage,
+  escapeHtml,
+  type AppAuthCard,
+  type AuthProviderDetectionResult,
+  type ConsentStateRecord,
+  type DetectedAuthProvider,
+  type FederatedLoginStateRecord,
+  type InMemoryAuthorizationStore,
+  type ProviderCard,
+} from '@frontmcp/auth';
+
+import {
+  computeResource,
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
+  HttpHtmlSchema,
   httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
-  HttpHtmlSchema,
   HttpTextSchema,
-  StageHookOf,
   isOrchestratedMode,
-  computeResource,
   resourceUriMatches,
+  StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z, ZodError } from 'zod';
-import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import {
-  InMemoryAuthorizationStore,
-  type FederatedLoginStateRecord,
-  type ConsentStateRecord,
-  type AuthProviderDetectionResult,
-  type DetectedAuthProvider,
-  buildLoginPage,
-  buildIncrementalAuthPage,
-  buildFederatedLoginPage,
-  escapeHtml,
-  type AppAuthCard,
-  type ProviderCard,
-} from '@frontmcp/auth';
 import { CimdService, clientMetadataDocumentSchema } from '../cimd';
+import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 /**
  * Quick checklist (security & correctness)

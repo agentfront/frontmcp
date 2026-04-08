@@ -25,8 +25,8 @@ import 'reflect-metadata';
 
 import type { FrontMcpConfigInput } from '../common';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
-import type { DirectMcpServer } from './direct.types';
 import type { CreateConfig } from './create.types';
+import type { DirectMcpServer } from './direct.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Instance cache (keyed by cacheKey)
@@ -143,7 +143,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
     try {
       // Apply machine ID override if provided
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await import('@frontmcp/auth');
+        const { setMachineIdOverride } = await import('@frontmcp/utils');
         setMachineIdOverride(config.machineId);
       }
 
@@ -160,7 +160,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
             instanceCache.delete(cacheKey);
           }
           if (machineIdWasSet) {
-            const { setMachineIdOverride } = await import('@frontmcp/auth');
+            const { setMachineIdOverride } = await import('@frontmcp/utils');
             setMachineIdOverride(undefined);
           }
           return originalDispose();
@@ -174,7 +174,7 @@ export async function create(config: CreateConfig): Promise<DirectMcpServer> {
         instanceCache.delete(cacheKey);
       }
       if (machineIdWasSet) {
-        const { setMachineIdOverride } = await import('@frontmcp/auth');
+        const { setMachineIdOverride } = await import('@frontmcp/utils');
         setMachineIdOverride(undefined);
       }
       throw error;

@@ -12,6 +12,21 @@
   "quoteProps": "as-needed",
   "endOfLine": "lf",
   "proseWrap": "preserve",
+  "plugins": ["@ianvs/prettier-plugin-sort-imports"],
+  "importOrder": [
+    "^reflect-metadata$",
+    "<BUILTIN_MODULES>",
+    "",
+    "<THIRD_PARTY_MODULES>",
+    "",
+    "^@frontmcp/(.*)$",
+    "",
+    "^#(.*)$",
+    "",
+    "^[./]"
+  ],
+  "importOrderTypeScriptVersion": "5.0.0",
+  "importOrderParserPlugins": ["typescript", "decorators-legacy", "jsx"],
   "overrides": [
     {
       "files": ["*.md"],

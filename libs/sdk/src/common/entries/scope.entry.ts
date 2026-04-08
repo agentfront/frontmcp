@@ -1,30 +1,31 @@
-import { Token, Type } from '@frontmcp/di';
-import { BaseEntry } from './base.entry';
-import { ScopeRecord } from '../records';
-import {
-  ProviderRegistryInterface,
-  FrontMcpAuth,
+import type { AuthoritiesContextBuilder, AuthoritiesEngine, AuthoritiesScopeMapping } from '@frontmcp/auth';
+import type { Token, Type } from '@frontmcp/di';
+import type { GuardManager } from '@frontmcp/guard';
+
+import type AgentRegistry from '../../agent/agent.registry';
+import type AppRegistry from '../../app/app.registry';
+import type { AuthRegistry } from '../../auth/auth.registry';
+import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
+import type HookRegistry from '../../hooks/hook.registry';
+import type { NotificationService } from '../../notification';
+import type PromptRegistry from '../../prompt/prompt.registry';
+import type ResourceRegistry from '../../resource/resource.registry';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import type ToolRegistry from '../../tool/tool.registry';
+import type { ToolUIRegistry } from '../../tool/ui/ui-shared';
+import type { TransportService } from '../../transport/transport.registry';
+import type {
   FlowInputOf,
   FlowOutputOf,
   FlowType,
+  FrontMcpAuth,
   FrontMcpLogger,
+  ProviderRegistryInterface,
 } from '../interfaces';
-import { FlowName, ScopeMetadata } from '../metadata';
+import type { FlowName, ScopeMetadata } from '../metadata';
+import type { ScopeRecord } from '../records';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
-import type { NotificationService } from '../../notification';
-import type { SkillRegistryInterface } from '../../skill/skill.registry';
-import type { ToolUIRegistry } from '../../tool/ui/ui-shared';
-import type { TransportService } from '../../transport/transport.registry';
-import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
-import type { GuardManager } from '@frontmcp/guard';
-import type { AuthoritiesEngine, AuthoritiesContextBuilder, AuthoritiesScopeMapping } from '@frontmcp/auth';
-import type HookRegistry from '../../hooks/hook.registry';
-import type { AuthRegistry } from '../../auth/auth.registry';
-import type AppRegistry from '../../app/app.registry';
-import type ToolRegistry from '../../tool/tool.registry';
-import type ResourceRegistry from '../../resource/resource.registry';
-import type PromptRegistry from '../../prompt/prompt.registry';
-import type AgentRegistry from '../../agent/agent.registry';
+import { BaseEntry } from './base.entry';
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMetadata> {
   abstract readonly id: string;

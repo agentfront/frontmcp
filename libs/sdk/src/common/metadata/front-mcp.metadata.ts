@@ -1,39 +1,8 @@
 import { z } from 'zod';
-import {
-  AuthOptions,
-  authOptionsSchema,
-  ServerInfoOptions,
-  serverInfoOptionsSchema,
-  httpOptionsSchema,
-  loggingOptionsSchema,
-  RawZodShape,
-  AuthOptionsInput,
-  RedisOptionsInput,
-  redisOptionsSchema,
-  PubsubOptionsInput,
-  pubsubOptionsSchema,
-  TransportOptionsInput,
-  transportOptionsSchema,
-  PaginationOptions,
-  paginationOptionsSchema,
-  HttpOptionsInput,
-  LoggingOptionsInput,
-  ElicitationOptionsInput,
-  elicitationOptionsSchema,
-  SkillsConfigOptionsInput,
-  skillsConfigOptionsSchema,
-  ExtAppsOptionsInput,
-  extAppsOptionsSchema,
-  SqliteOptionsInput,
-  sqliteOptionsSchema,
-  ObservabilityOptionsInterface,
-  observabilityOptionsSchema,
-  HealthOptionsInput,
-  healthOptionsSchema,
-} from '../types';
-import { packageLoaderSchema, type PackageLoader } from './app.metadata';
+
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
-import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+
+import type { AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpPluginsSchema,
@@ -42,7 +11,40 @@ import {
   annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
-import { AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
+import {
+  authOptionsSchema,
+  elicitationOptionsSchema,
+  extAppsOptionsSchema,
+  healthOptionsSchema,
+  httpOptionsSchema,
+  loggingOptionsSchema,
+  observabilityOptionsSchema,
+  paginationOptionsSchema,
+  pubsubOptionsSchema,
+  redisOptionsSchema,
+  serverInfoOptionsSchema,
+  skillsConfigOptionsSchema,
+  sqliteOptionsSchema,
+  transportOptionsSchema,
+  type AuthOptions,
+  type AuthOptionsInput,
+  type ElicitationOptionsInput,
+  type ExtAppsOptionsInput,
+  type HealthOptionsInput,
+  type HttpOptionsInput,
+  type LoggingOptionsInput,
+  type ObservabilityOptionsInterface,
+  type PaginationOptions,
+  type PubsubOptionsInput,
+  type RawZodShape,
+  type RedisOptionsInput,
+  type ServerInfoOptions,
+  type SkillsConfigOptionsInput,
+  type SqliteOptionsInput,
+  type TransportOptionsInput,
+} from '../types';
+import { packageLoaderSchema, type PackageLoader } from './app.metadata';
+import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;

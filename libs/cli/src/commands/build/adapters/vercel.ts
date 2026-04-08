@@ -2,7 +2,7 @@ import * as path from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { mkdir, readdir, stat, cp, copyFile, readFile, writeFile } from '@frontmcp/utils';
-import { AdapterTemplate } from '../types';
+import type { AdapterTemplate } from '../types';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
@@ -64,6 +64,7 @@ export const vercelAdapter: AdapterTemplate = {
 // This sets FRONTMCP_SERVERLESS before any decorators run
 // Required because ESM hoists imports before other statements
 process.env.FRONTMCP_SERVERLESS = '1';
+process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
 `,
 
   getEntryTemplate: (mainModulePath: string) => `// Auto-generated Vercel entry point

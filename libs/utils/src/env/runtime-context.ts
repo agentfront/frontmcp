@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod';
+
 import { isEdgeRuntime, isServerless } from '#env';
 
 // ============================================
@@ -24,7 +25,7 @@ export interface RuntimeContext {
   platform: string;
   /** JavaScript runtime: 'node', 'bun', 'deno', 'edge', 'browser' */
   runtime: string;
-  /** Deployment mode: 'serverless' or 'standalone' */
+  /** Deployment mode: 'distributed', 'serverless', 'standalone', or 'browser' */
   deployment: string;
   /** NODE_ENV value: 'production', 'development', 'test', etc. */
   env: string;
@@ -55,7 +56,7 @@ export interface EntryAvailability {
   platform?: string[];
   /** Runtime constraint: 'node', 'browser', 'edge', 'bun', 'deno' */
   runtime?: string[];
-  /** Deployment constraint: 'serverless', 'standalone' */
+  /** Deployment constraint: 'distributed', 'serverless', 'standalone', 'browser' */
   deployment?: string[];
   /** Environment constraint: 'production', 'development', 'test', etc. */
   env?: string[];
@@ -107,22 +108,39 @@ export function isEntryAvailable(availability: EntryAvailability | undefined, ct
 // ============================================
 
 function detectRuntime(): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (typeof globalThis !== 'undefined' && 'Bun' in (globalThis as any)) return 'bun';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   if (typeof globalThis !== 'undefined' && 'Deno' in (globalThis as any)) return 'deno';
   if (isEdgeRuntime()) return 'edge';
   return 'node';
 }
 
 /**
+ * Detect the deployment mode from build-injected env var or platform detection.
+ *
+ * Priority:
+ * 1. FRONTMCP_DEPLOYMENT_MODE env var (set by build adapters)
+ * 2. Platform-based detection (isServerless, isEdgeRuntime)
+ * 3. Default: 'standalone'
+ */
+function detectDeployment(runtime: string): string {
+  const explicit = process.env['FRONTMCP_DEPLOYMENT_MODE'];
+  if (explicit === 'distributed') return 'distributed';
+  if (explicit === 'serverless') return 'serverless';
+  if (runtime === 'browser') return 'browser';
+  if (isServerless()) return 'serverless';
+  return 'standalone';
+}
+
+/**
  * Detect the current runtime context from the environment.
  */
 export function detectRuntimeContext(): RuntimeContext {
+  const runtime = detectRuntime();
   return {
     platform: process.platform,
-    runtime: detectRuntime(),
-    deployment: isServerless() ? 'serverless' : 'standalone',
+    runtime,
+    deployment: detectDeployment(runtime),
     env: process.env['NODE_ENV'] || 'development',
   };
 }

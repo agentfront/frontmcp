@@ -22,11 +22,20 @@ export type Command =
   | 'uninstall'
   | 'configure';
 
-export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
-export type BuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda';
+export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'distributed';
+export type BuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda' | 'distributed';
 
-const DEPLOYMENT_ADAPTERS: readonly DeploymentAdapter[] = ['node', 'vercel', 'lambda', 'cloudflare'];
-const BUILD_TARGETS: readonly BuildTarget[] = ['cli', 'node', 'sdk', 'browser', 'cloudflare', 'vercel', 'lambda'];
+const DEPLOYMENT_ADAPTERS: readonly DeploymentAdapter[] = ['node', 'vercel', 'lambda', 'cloudflare', 'distributed'];
+const BUILD_TARGETS: readonly BuildTarget[] = [
+  'cli',
+  'node',
+  'sdk',
+  'browser',
+  'cloudflare',
+  'vercel',
+  'lambda',
+  'distributed',
+];
 
 export function isDeploymentAdapter(val: string): val is DeploymentAdapter {
   return (DEPLOYMENT_ADAPTERS as readonly string[]).includes(val);

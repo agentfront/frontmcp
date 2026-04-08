@@ -1,6 +1,13 @@
 // output-schemas.ts
 import { z } from 'zod';
-import { JSONRPCError, JSONRPCMessage, RequestId, JSONRPCResponseSchema, JSONRPCErrorSchema } from '@frontmcp/protocol';
+
+import {
+  JSONRPCErrorSchema,
+  JSONRPCResponseSchema,
+  type JSONRPCError,
+  type JSONRPCMessage,
+  type RequestId,
+} from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 /**

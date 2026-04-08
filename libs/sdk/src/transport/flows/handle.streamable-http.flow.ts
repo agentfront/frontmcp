@@ -1,25 +1,29 @@
+import { z } from 'zod';
+
+import type { StoredSession } from '@frontmcp/auth';
+import { CallToolResultSchema, ElicitResultSchema, RequestSchema } from '@frontmcp/protocol';
+import { buildSetCookie, getMachineId, getRuntimeContext } from '@frontmcp/utils';
+
+import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import {
   Flow,
-  httpInputSchema,
-  FlowRunOptions,
-  httpOutputSchema,
-  FlowPlan,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
+  httpInputSchema,
+  httpOutputSchema,
   httpRespond,
   ServerRequestTokens,
-  ServerResponse,
-  Authorization,
-  FlowControl,
   validateMcpSessionHeader,
+  type Authorization,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ServerResponse,
 } from '../../common';
 import { InternalMcpError, TransportServiceNotAvailableError } from '../../errors';
-import { z } from 'zod';
-import { ElicitResultSchema, RequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
-import type { StoredSession } from '@frontmcp/auth';
-import { createSessionId } from '../../auth/session/utils/session-id.utils';
+import { createExtAppsMessageHandler, type ExtAppsHostCapabilities, type ExtAppsJsonRpcRequest } from '../../ext-apps';
+import { DEFAULT_FRONTMCP_MACHINE_ID_HEADER, DEFAULT_FRONTMCP_NODE_COOKIE } from '../../ha/ha.constants';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
-import { createExtAppsMessageHandler, type ExtAppsJsonRpcRequest, type ExtAppsHostCapabilities } from '../../ext-apps';
 
 export const plan = {
   pre: ['parseInput', 'router'],
@@ -366,6 +370,16 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
         // server from the map. Without re-registering, setClientCapabilities,
         // setClientInfo, setLogLevel, and broadcast notifications would all fail.
         transport.reregisterServer();
+      }
+
+      // Set LB affinity headers in distributed mode
+      if (getRuntimeContext().deployment === 'distributed') {
+        const nodeId = getMachineId();
+        response.setHeader(DEFAULT_FRONTMCP_MACHINE_ID_HEADER, nodeId);
+        const cookie = buildSetCookie({ name: DEFAULT_FRONTMCP_NODE_COOKIE, value: nodeId }, request);
+        if (cookie) {
+          response.setHeader('Set-Cookie', cookie);
+        }
       }
 
       logger.info('onInitialize: transport created, calling initialize');

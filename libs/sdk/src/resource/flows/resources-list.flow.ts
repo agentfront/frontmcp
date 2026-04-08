@@ -1,10 +1,22 @@
 // file: libs/sdk/src/resource/flows/resources-list.flow.ts
 
-import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
+import {
+  Flow,
+  FlowBase,
+  FlowControl,
+  FlowHooksOf,
+  ResourceEntry,
+  type FlowPlan,
+  type FlowRunOptions,
+} from '../../common';
+
 import 'reflect-metadata';
+
 import { z } from 'zod';
-import { ListResourcesRequestSchema, ListResourcesResultSchema, Resource } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+
+import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } from '@frontmcp/protocol';
+
+import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
   request: ListResourcesRequestSchema,
@@ -191,7 +203,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
 
     const resources = this.state.required.resources;
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
-    const authInfo = ((ctx?.['authInfo']) ?? {}) as Record<string, unknown>;
+    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
 
     const filtered = await Promise.all(
       resources.map(async (item) => {
@@ -205,7 +217,10 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       }),
     );
 
-    this.state.set('resources', filtered.filter((item): item is (typeof resources)[number] => item !== null));
+    this.state.set(
+      'resources',
+      filtered.filter((item): item is (typeof resources)[number] => item !== null),
+    );
     this.logger.verbose('filterByAuthorities:done');
   }
 

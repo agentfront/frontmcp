@@ -5,23 +5,20 @@
  * built-in evaluators, custom evaluators, and combinators.
  */
 
+import { evaluateAbac, evaluateRbacPermissions, evaluateRbacRoles, evaluateRebac } from './authorities.evaluator';
+import type { AuthoritiesEvaluatorRegistry, AuthoritiesProfileRegistry } from './authorities.registry';
 import type {
+  AuthoritiesEvaluationContext,
   AuthoritiesMetadata,
   AuthoritiesPolicyMetadata,
   AuthoritiesResult,
-  AuthoritiesEvaluationContext,
   AuthorityGuardFn,
 } from './authorities.types';
-import { evaluateRbacRoles, evaluateRbacPermissions, evaluateAbac, evaluateRebac } from './authorities.evaluator';
-import { AuthoritiesProfileRegistry, AuthoritiesEvaluatorRegistry } from './authorities.registry';
 
 /**
  * Merges two AuthoritiesResult arrays, combining evaluatedPolicies.
  */
-function mergeResult(
-  base: AuthoritiesResult,
-  ...others: AuthoritiesResult[]
-): AuthoritiesResult {
+function mergeResult(base: AuthoritiesResult, ...others: AuthoritiesResult[]): AuthoritiesResult {
   const evaluatedPolicies = [...base.evaluatedPolicies];
   for (const other of others) {
     evaluatedPolicies.push(...other.evaluatedPolicies);
@@ -55,10 +52,7 @@ export class AuthoritiesEngine {
   /**
    * Evaluate an AuthoritiesMetadata value (string, string[], or policy object).
    */
-  async evaluate(
-    authorities: AuthoritiesMetadata,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  async evaluate(authorities: AuthoritiesMetadata, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     // String → single profile lookup
     if (typeof authorities === 'string') {
       return this.evaluateProfile(authorities, ctx);
@@ -76,10 +70,7 @@ export class AuthoritiesEngine {
   /**
    * Resolve and evaluate a single named profile.
    */
-  private async evaluateProfile(
-    name: string,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  private async evaluateProfile(name: string, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const policy = this.profiles.resolve(name);
     if (!policy) {
       return {
@@ -104,10 +95,7 @@ export class AuthoritiesEngine {
   /**
    * Evaluate an array of profile names (AND semantics).
    */
-  private async evaluateProfileArray(
-    names: string[],
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  private async evaluateProfileArray(names: string[], ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const allPolicies: string[] = [];
 
     for (const name of names) {
@@ -174,10 +162,7 @@ export class AuthoritiesEngine {
   /**
    * Combine results with AND or OR semantics.
    */
-  private combineResults(
-    results: AuthoritiesResult[],
-    operator: 'AND' | 'OR',
-  ): AuthoritiesResult {
+  private combineResults(results: AuthoritiesResult[], operator: 'AND' | 'OR'): AuthoritiesResult {
     const allPolicies = results.flatMap((r) => r.evaluatedPolicies);
 
     if (operator === 'AND') {

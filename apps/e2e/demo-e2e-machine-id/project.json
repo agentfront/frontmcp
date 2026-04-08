@@ -1,0 +1,17 @@
+{
+  "name": "demo-e2e-machine-id",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-machine-id/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:machine-id"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-machine-id"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-machine-id/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

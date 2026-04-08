@@ -1,0 +1,4 @@
+{
+  "name": "wrong-field",
+  "deployments": [{ "target": "node", "ha": { "heartbeatIntervalMs": 5000 } }]
+}

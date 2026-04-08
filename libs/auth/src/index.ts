@@ -316,7 +316,6 @@ export {
   progressiveAuthStateSchema,
   // Base class
   AuthorizationBase,
-  getMachineId,
   // Mode-specific implementations
   PublicAuthorization,
   type PublicAuthorizationCreateCtx,
@@ -407,9 +406,9 @@ export type {
 export * from './detection';
 
 // ============================================
-// Machine ID Module
+// Machine ID Module — MOVED to @frontmcp/utils
+// Import getMachineId/setMachineIdOverride from '@frontmcp/utils' directly.
 // ============================================
-export { setMachineIdOverride } from './machine-id';
 
 // ============================================
 // Utils Module

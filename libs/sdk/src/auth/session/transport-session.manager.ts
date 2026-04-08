@@ -1,25 +1,26 @@
 // auth/session/transport-session.manager.ts
 
 import {
-  randomUUID,
+  RedisSessionStore,
+  type SessionJwtPayload,
+  type SessionStorageConfig,
+  type SessionStore,
+  type StoredSession,
+  type TransportProtocol,
+  type TransportSession,
+  type TransportState,
+} from '@frontmcp/auth';
+import {
   decryptValue,
   encryptValue,
-  hkdfSha256,
   getEnv,
+  getMachineId,
+  hkdfSha256,
   isProduction,
+  randomUUID,
   type EncryptedBlob,
 } from '@frontmcp/utils';
-import type {
-  TransportSession,
-  TransportProtocol,
-  SessionJwtPayload,
-  StoredSession,
-  SessionStore,
-  SessionStorageConfig,
-  TransportState,
-} from '@frontmcp/auth';
-import { getMachineId } from '@frontmcp/auth';
-import { RedisSessionStore } from '@frontmcp/auth';
+
 import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
 
 /**
