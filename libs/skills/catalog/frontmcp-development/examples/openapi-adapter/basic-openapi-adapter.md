@@ -1,6 +1,6 @@
 ---
 name: basic-openapi-adapter
-reference: official-adapters
+reference: openapi-adapter
 level: basic
 description: 'Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.'
 tags: [development, openapi, adapters, adapter]
@@ -51,4 +51,4 @@ class MyServer {}
 
 ## Related
 
-- See `official-adapters` for authentication options, spec polling, and inline specs
+- See `openapi-adapter` for authentication, filtering, transforms, and security options

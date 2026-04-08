@@ -24,18 +24,31 @@ When reporting a vulnerability, please include:
 
 ## Supported Versions
 
-| Package            | Version | Supported |
-| ------------------ | ------- | --------- |
-| @frontmcp/sdk      | 0.7.x   | Yes       |
-| @frontmcp/auth     | 0.7.x   | Yes       |
-| @frontmcp/utils    | 0.7.x   | Yes       |
-| @frontmcp/adapters | 0.7.x   | Yes       |
-| @frontmcp/plugins  | 0.7.x   | Yes       |
-| frontmcp           | 0.7.x   | Yes       |
-| @frontmcp/di       | 0.7.x   | Yes       |
-| @frontmcp/testing  | 0.7.x   | Yes       |
-| @frontmcp/ui       | 0.7.x   | Yes       |
-| @frontmcp/uipack   | 0.7.x   | Yes       |
+| Package                        | Version | Supported |
+| ------------------------------ | ------- | --------- |
+| @frontmcp/sdk                  | 1.0.x   | Yes       |
+| @frontmcp/auth                 | 1.0.x   | Yes       |
+| @frontmcp/utils                | 1.0.x   | Yes       |
+| @frontmcp/adapters             | 1.0.x   | Yes       |
+| @frontmcp/plugins              | 1.0.x   | Yes       |
+| frontmcp                       | 1.0.x   | Yes       |
+| @frontmcp/di                   | 1.0.x   | Yes       |
+| @frontmcp/testing              | 1.0.x   | Yes       |
+| @frontmcp/ui                   | 1.0.x   | Yes       |
+| @frontmcp/uipack               | 1.0.x   | Yes       |
+| @frontmcp/guard                | 1.0.x   | Yes       |
+| @frontmcp/protocol             | 1.0.x   | Yes       |
+| @frontmcp/observability        | 1.0.x   | Yes       |
+| @frontmcp/storage-sqlite       | 1.0.x   | Yes       |
+| @frontmcp/skills               | 1.0.x   | Yes       |
+| @frontmcp/nx                   | 1.0.x   | Yes       |
+| @frontmcp/react                | 1.0.x   | Yes       |
+| @frontmcp/plugin-cache         | 1.0.x   | Yes       |
+| @frontmcp/plugin-codecall      | 1.0.x   | Yes       |
+| @frontmcp/plugin-dashboard     | 1.0.x   | Yes       |
+| @frontmcp/plugin-remember      | 1.0.x   | Yes       |
+| @frontmcp/plugin-feature-flags | 1.0.x   | Yes       |
+| @frontmcp/plugin-approval      | 1.0.x   | Yes       |
 
 **Policy**: Only the latest minor version receives security updates. We recommend always using the latest version.
 
