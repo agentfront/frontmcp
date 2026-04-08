@@ -590,15 +590,18 @@ export class FrontMcpContext {
    */
   async fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
     let effectiveInit: RequestInit = (init ?? {}) as RequestInit;
+    let effectiveInput: RequestInfo | URL = input;
 
     // Apply credential middleware if provider-based credentials requested
     if (this._credentialMiddleware && init) {
       const creds = (init as FrontMcpFetchInit).credentials;
       if (creds && typeof creds === 'object' && 'provider' in creds) {
-        effectiveInit = await this._credentialMiddleware.applyCredentials(
+        const result = await this._credentialMiddleware.applyCredentials(
           typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
           init as FrontMcpFetchInit,
         );
+        effectiveInit = result.init;
+        if (result.url) effectiveInput = result.url;
       }
     }
 
@@ -646,7 +649,7 @@ export class FrontMcpContext {
     const signal = userSignal ?? controller?.signal;
 
     try {
-      return await fetch(input, {
+      return await fetch(effectiveInput, {
         ...effectiveInit,
         headers,
         signal,

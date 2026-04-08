@@ -9,11 +9,11 @@ The FrontMCP authorities system supports three authorization models that can be 
 
 ## Model Comparison
 
-| Model | Based On | Strength | Weakness | Use When |
-| --- | --- | --- | --- | --- |
-| **RBAC** | User roles and permissions | Simple, well-understood, fast | No context awareness, role explosion at scale | Fixed role hierarchies (admin, editor, viewer) |
-| **ABAC** | Attributes of user, resource, environment | Flexible, context-aware, fine-grained | More complex to configure and debug | Tenant isolation, environment gates, dynamic conditions |
-| **ReBAC** | Relationships between users and resources | Models ownership and hierarchies naturally | Requires external relationship store | Document ownership, team membership, org hierarchies |
+| Model     | Based On                                  | Strength                                   | Weakness                                      | Use When                                                |
+| --------- | ----------------------------------------- | ------------------------------------------ | --------------------------------------------- | ------------------------------------------------------- |
+| **RBAC**  | User roles and permissions                | Simple, well-understood, fast              | No context awareness, role explosion at scale | Fixed role hierarchies (admin, editor, viewer)          |
+| **ABAC**  | Attributes of user, resource, environment | Flexible, context-aware, fine-grained      | More complex to configure and debug           | Tenant isolation, environment gates, dynamic conditions |
+| **ReBAC** | Relationships between users and resources | Models ownership and hierarchies naturally | Requires external relationship store          | Document ownership, team membership, org hierarchies    |
 
 ## RBAC -- Role-Based Access Control
 
@@ -109,12 +109,12 @@ ABAC evaluates conditions against a context envelope containing `user`, `claims`
 
 The evaluation context has four top-level namespaces:
 
-| Prefix | Content | Example Path |
-| --- | --- | --- |
-| `user.*` | Resolved user info (`sub`, `roles`, `permissions`, `claims`) | `user.sub`, `user.roles` |
-| `claims.*` | Raw JWT claims | `claims.org_id`, `claims.email` |
-| `input.*` | Tool/prompt input arguments | `input.tenantId`, `input.projectId` |
-| `env.*` | Runtime environment variables | `env.NODE_ENV`, `env.REGION` |
+| Prefix     | Content                                                      | Example Path                        |
+| ---------- | ------------------------------------------------------------ | ----------------------------------- |
+| `user.*`   | Resolved user info (`sub`, `roles`, `permissions`, `claims`) | `user.sub`, `user.roles`            |
+| `claims.*` | Raw JWT claims                                               | `claims.org_id`, `claims.email`     |
+| `input.*`  | Tool/prompt input arguments                                  | `input.tenantId`, `input.projectId` |
+| `env.*`    | Runtime environment variables                                | `env.NODE_ENV`, `env.REGION`        |
 
 ### Simple Match
 
@@ -137,29 +137,29 @@ The `conditions` array supports operators. All conditions must pass (AND semanti
 
 ```typescript
 interface AbacCondition {
-  path: string;       // Dot-path into context envelope
-  op: AbacOperator;   // Comparison operator
-  value: unknown;     // Literal or DynamicValueRef
+  path: string; // Dot-path into context envelope
+  op: AbacOperator; // Comparison operator
+  value: unknown; // Literal or DynamicValueRef
 }
 ```
 
 **Available operators:**
 
-| Operator | Description | Example |
-| --- | --- | --- |
-| `eq` | Strict equality | `{ path: 'claims.tier', op: 'eq', value: 'enterprise' }` |
-| `neq` | Not equal | `{ path: 'claims.status', op: 'neq', value: 'suspended' }` |
-| `in` | Value is in array | `{ path: 'env.REGION', op: 'in', value: ['us-east', 'eu-west'] }` |
-| `notIn` | Value is not in array | `{ path: 'claims.role', op: 'notIn', value: ['blocked'] }` |
-| `gt` | Greater than (number) | `{ path: 'claims.tokenVersion', op: 'gt', value: 2 }` |
-| `gte` | Greater than or equal | `{ path: 'claims.apiQuota', op: 'gte', value: 100 }` |
-| `lt` | Less than (number) | `{ path: 'claims.failCount', op: 'lt', value: 5 }` |
-| `lte` | Less than or equal | `{ path: 'claims.riskScore', op: 'lte', value: 50 }` |
-| `contains` | String contains or array includes | `{ path: 'claims.email', op: 'contains', value: '@corp.com' }` |
-| `startsWith` | String starts with | `{ path: 'user.sub', op: 'startsWith', value: 'service-' }` |
-| `endsWith` | String ends with | `{ path: 'claims.email', op: 'endsWith', value: '@acme.com' }` |
-| `exists` | Value exists (not null/undefined) | `{ path: 'user.sub', op: 'exists', value: true }` |
-| `matches` | Regex match | `{ path: 'claims.email', op: 'matches', value: '^.*@(acme\|corp)\\.com$' }` |
+| Operator     | Description                       | Example                                                                     |
+| ------------ | --------------------------------- | --------------------------------------------------------------------------- |
+| `eq`         | Strict equality                   | `{ path: 'claims.tier', op: 'eq', value: 'enterprise' }`                    |
+| `neq`        | Not equal                         | `{ path: 'claims.status', op: 'neq', value: 'suspended' }`                  |
+| `in`         | Value is in array                 | `{ path: 'env.REGION', op: 'in', value: ['us-east', 'eu-west'] }`           |
+| `notIn`      | Value is not in array             | `{ path: 'claims.role', op: 'notIn', value: ['blocked'] }`                  |
+| `gt`         | Greater than (number)             | `{ path: 'claims.tokenVersion', op: 'gt', value: 2 }`                       |
+| `gte`        | Greater than or equal             | `{ path: 'claims.apiQuota', op: 'gte', value: 100 }`                        |
+| `lt`         | Less than (number)                | `{ path: 'claims.failCount', op: 'lt', value: 5 }`                          |
+| `lte`        | Less than or equal                | `{ path: 'claims.riskScore', op: 'lte', value: 50 }`                        |
+| `contains`   | String contains or array includes | `{ path: 'claims.email', op: 'contains', value: '@corp.com' }`              |
+| `startsWith` | String starts with                | `{ path: 'user.sub', op: 'startsWith', value: 'service-' }`                 |
+| `endsWith`   | String ends with                  | `{ path: 'claims.email', op: 'endsWith', value: '@acme.com' }`              |
+| `exists`     | Value exists (not null/undefined) | `{ path: 'user.sub', op: 'exists', value: true }`                           |
+| `matches`    | Regex match                       | `{ path: 'claims.email', op: 'matches', value: '^.*@(acme\|corp)\\.com$' }` |
 
 ### Dynamic Value References
 
@@ -268,7 +268,7 @@ authorities: {
   claimsMapping: { roles: 'roles' },
   relationshipResolver: myRelationshipResolver,
   profiles: { ... },
-})
+}
 ```
 
 ### ReBAC Examples
@@ -375,13 +375,13 @@ authorities: {
 
 Use this guide to pick the right model for your use case:
 
-| Question | If Yes | If No |
-| --- | --- | --- |
-| Are roles/permissions defined in the IdP? | Start with RBAC | Consider ABAC or ReBAC |
-| Do you need tenant isolation? | Use ABAC with `{ fromInput: ... }` | RBAC may suffice |
-| Do you need per-resource ownership? | Use ReBAC with a relationship resolver | RBAC or ABAC |
-| Do you need environment-specific gates? | Use ABAC with `env.*` paths | Not needed |
-| Is the logic too complex for one model? | Combine with `allOf`/`anyOf` | Keep it simple |
+| Question                                  | If Yes                                 | If No                  |
+| ----------------------------------------- | -------------------------------------- | ---------------------- |
+| Are roles/permissions defined in the IdP? | Start with RBAC                        | Consider ABAC or ReBAC |
+| Do you need tenant isolation?             | Use ABAC with `{ fromInput: ... }`     | RBAC may suffice       |
+| Do you need per-resource ownership?       | Use ReBAC with a relationship resolver | RBAC or ABAC           |
+| Do you need environment-specific gates?   | Use ABAC with `env.*` paths            | Not needed             |
+| Is the logic too complex for one model?   | Combine with `allOf`/`anyOf`           | Keep it simple         |
 
 ## Reference
 

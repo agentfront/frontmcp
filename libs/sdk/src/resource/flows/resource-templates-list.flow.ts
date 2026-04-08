@@ -181,11 +181,14 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:start');
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
+    // Safe to skip: validateAuthoritiesConfig() at startup ensures that if any entry
+    // declares authorities, the engine is configured. This path only runs when no
+    // entries have authorities metadata (so nothing needs filtering).
     if (!engine || !ctxBuilder) return;
 
     const templates = this.state.required.templates;
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
-    const authInfo = ((ctx?.['authInfo']) ?? {}) as Record<string, unknown>;
+    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
 
     const filtered = await Promise.all(
       templates.map(async (item) => {
@@ -199,7 +202,10 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
       }),
     );
 
-    this.state.set('templates', filtered.filter((item): item is (typeof templates)[number] => item !== null));
+    this.state.set(
+      'templates',
+      filtered.filter((item): item is (typeof templates)[number] => item !== null),
+    );
     this.logger.verbose('filterByAuthorities:done');
   }
 

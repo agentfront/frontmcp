@@ -51,24 +51,6 @@ export interface AuthoritiesClaimsMapping {
 // ============================================
 
 /**
- * Server/app-level authorities configuration.
- * Registered in `@FrontMcp({ authorities: { ... } })` or `@App({ authorities: { ... } })`.
- *
- * @example
- * ```typescript
- * @FrontMcp({
- *   authorities: {
- *     claimsMapping: { roles: 'realm_access.roles', permissions: 'scope' },
- *     profiles: {
- *       admin: { roles: { any: ['admin', 'superadmin'] } },
- *       authenticated: { attributes: { conditions: [{ path: 'user.sub', op: 'exists', value: true }] } },
- *       matchTenant: { attributes: { conditions: [{ path: 'claims.org_id', op: 'eq', value: { fromInput: 'tenantId' } }] } },
- *     },
- *   },
- * })
- * ```
- */
-/**
  * Maps authority denials to OAuth scope challenges.
  * When an authority check fails and the denial matches a scopeMapping key,
  * the required scopes are included in the 403 insufficient_scope response.
@@ -83,6 +65,10 @@ export interface AuthoritiesScopeMapping {
   profiles?: Record<string, string[]>;
 }
 
+/**
+ * Server/app-level authorities configuration.
+ * Registered in `@FrontMcp({ authorities: { ... } })`.
+ */
 export interface AuthoritiesConfig {
   /** JWT claims mapping for your IdP */
   claimsMapping?: AuthoritiesClaimsMapping;

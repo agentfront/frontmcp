@@ -90,4 +90,8 @@ describe('resourceUriMatches', () => {
   it('should not match different hosts', () => {
     expect(resourceUriMatches('https://evil.com/mcp', 'https://api.example.com/mcp')).toBe(false);
   });
+
+  it('should not match different schemes', () => {
+    expect(resourceUriMatches('http://api.example.com/mcp', 'https://api.example.com/mcp')).toBe(false);
+  });
 });

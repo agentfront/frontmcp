@@ -24,10 +24,7 @@ import { resolveDotPath } from './authorities.context';
 /**
  * Evaluate RBAC roles policy against user roles.
  */
-export function evaluateRbacRoles(
-  policy: RbacRolesPolicy,
-  ctx: AuthoritiesEvaluationContext,
-): AuthoritiesResult {
+export function evaluateRbacRoles(policy: RbacRolesPolicy, ctx: AuthoritiesEvaluationContext): AuthoritiesResult {
   const userRoles = ctx.user.roles;
 
   if (policy.all) {
@@ -112,10 +109,7 @@ function buildContextEnvelope(ctx: AuthoritiesEvaluationContext): Record<string,
 /**
  * Resolve a value that may be a literal or a DynamicValueRef.
  */
-function resolveValue(
-  value: unknown,
-  ctx: AuthoritiesEvaluationContext,
-): unknown {
+function resolveValue(value: unknown, ctx: AuthoritiesEvaluationContext): unknown {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
     const obj = value as Record<string, unknown>;
     if ('fromInput' in obj && typeof obj['fromInput'] === 'string') {
@@ -161,6 +155,9 @@ function applyOperator(actual: unknown, op: string, expected: unknown): boolean 
       return expected ? actual !== undefined && actual !== null : actual === undefined || actual === null;
     case 'matches':
       if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+      // ReDoS mitigation: limit pattern size and reject dangerous constructs
+      if (expected.length > 256) return false;
+      if (/(\+\+|\*\*|\{\d+,\d*\}\{)/.test(expected)) return false;
       try {
         return new RegExp(expected).test(actual);
       } catch {
@@ -187,10 +184,7 @@ function evaluateCondition(
 /**
  * Evaluate ABAC policy.
  */
-export function evaluateAbac(
-  policy: AbacPolicy,
-  ctx: AuthoritiesEvaluationContext,
-): AuthoritiesResult {
+export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationContext): AuthoritiesResult {
   const envelope = buildContextEnvelope(ctx);
 
   // Evaluate match (simple equality checks)
@@ -236,10 +230,7 @@ export function evaluateAbac(
 /**
  * Resolve a ResourceIdRef to a concrete string.
  */
-export function resolveResourceId(
-  ref: ResourceIdRef,
-  ctx: AuthoritiesEvaluationContext,
-): string | undefined {
+export function resolveResourceId(ref: ResourceIdRef, ctx: AuthoritiesEvaluationContext): string | undefined {
   if (typeof ref === 'string') return ref;
 
   if ('fromInput' in ref) {
@@ -258,33 +249,33 @@ export function resolveResourceId(
 /**
  * Evaluate a single ReBAC policy.
  */
-async function evaluateSingleRebac(
-  policy: RebacPolicy,
-  ctx: AuthoritiesEvaluationContext,
-): Promise<AuthoritiesResult> {
+async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
   const resourceId = resolveResourceId(policy.resourceId, ctx);
   if (resourceId === undefined) {
     return {
       granted: false,
       deniedBy: `relationships: could not resolve resourceId for ${policy.resource}`,
-      denial: { kind: 'relationships', path: 'relationships', expected: `${policy.resource}:resourceId`, actual: undefined },
+      denial: {
+        kind: 'relationships',
+        path: 'relationships',
+        expected: `${policy.resource}:resourceId`,
+        actual: undefined,
+      },
       evaluatedPolicies: ['relationships'],
     };
   }
 
-  const hasRelationship = await ctx.relationships.check(
-    policy.type,
-    policy.resource,
-    resourceId,
-    ctx.user.sub,
-    ctx,
-  );
+  const hasRelationship = await ctx.relationships.check(policy.type, policy.resource, resourceId, ctx.user.sub, ctx);
 
   if (!hasRelationship) {
     return {
       granted: false,
       deniedBy: `relationships: user '${ctx.user.sub}' is not '${policy.type}' of ${policy.resource}:${resourceId}`,
-      denial: { kind: 'relationships', path: 'relationships', expected: `${policy.type}:${policy.resource}:${resourceId}` },
+      denial: {
+        kind: 'relationships',
+        path: 'relationships',
+        expected: `${policy.type}:${policy.resource}:${resourceId}`,
+      },
       evaluatedPolicies: ['relationships'],
     };
   }

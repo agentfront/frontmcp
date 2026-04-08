@@ -81,11 +81,11 @@ class GitHubApp {}
 @Tool({
   name: 'list_repos',
   description: 'List GitHub repositories',
-  inputSchema: z.object({ org: z.string() }),
+  inputSchema: { org: z.string() },
   authProviders: [{ name: 'github', scopes: ['repo'] }],
   authorities: 'authenticated',
 })
-class ListReposTool extends ToolContext<typeof inputSchema> {
+class ListReposTool extends ToolContext {
   async execute(input: { org: string }) {
     // Explicitly request credentials for the 'github' provider
     // this.fetch() resolves the token from the vault and injects the Authorization header
@@ -534,7 +534,7 @@ The three layers execute in order: authentication first, then app authorization,
 @Tool({ name: 'calculator' })
 class CalculatorTool extends ToolContext {
   async execute(input: { expression: string }) {
-    return { result: eval(input.expression) };
+    return { result: parseFloat(input.expression) };
   }
 }
 ```

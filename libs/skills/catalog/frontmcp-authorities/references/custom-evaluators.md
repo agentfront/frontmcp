@@ -18,10 +18,7 @@ interface AuthoritiesEvaluator {
   /** Evaluator name (must match the key under `custom.*` in policies) */
   name: string;
   /** Evaluate the policy against the context */
-  evaluate(
-    policy: unknown,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult>;
+  evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult>;
 }
 ```
 
@@ -128,11 +125,11 @@ const featureFlagGuard: AuthoritiesEvaluator = {
 
 ### When to Use Custom Evaluators vs Hooks
 
-| Approach | When to Use |
-| -------- | ----------- |
-| **Custom evaluator** | Reusable async check across many tools — register once, reference via `custom` field |
-| **`Will('checkEntryAuthorities')` hook** | One-off async check for a specific plugin/app, not tied to a specific tool |
-| **Static `authorities` policy** | Roles, permissions, attributes — no I/O needed |
+| Approach                                 | When to Use                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Custom evaluator**                     | Reusable async check across many tools — register once, reference via `custom` field |
+| **`Will('checkEntryAuthorities')` hook** | One-off async check for a specific plugin/app, not tied to a specific tool           |
+| **Static `authorities` policy**          | Roles, permissions, attributes — no I/O needed                                       |
 
 ## Using Custom Evaluators in Policies
 
@@ -175,10 +172,7 @@ function isInCidr(ip: string, cidr: string): boolean {
 
 export const ipAllowListEvaluator: AuthoritiesEvaluator = {
   name: 'ipAllowList',
-  async evaluate(
-    policy: unknown,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { cidr } = policy as IpAllowListPolicy;
     const remoteIp = ctx.env['remoteIp'] as string | undefined;
 
@@ -234,17 +228,16 @@ declare const featureFlags: { isEnabled(flag: string, userId: string): Promise<b
 
 export const featureFlagEvaluator: AuthoritiesEvaluator = {
   name: 'featureFlag',
-  async evaluate(
-    policy: unknown,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { flag, inverse } = policy as FeatureFlagPolicy;
     const enabled = await featureFlags.isEnabled(flag, ctx.user.sub);
     const granted = inverse ? !enabled : enabled;
 
     return {
       granted,
-      deniedBy: granted ? undefined : `custom.featureFlag: '${flag}' is ${enabled ? 'enabled' : 'disabled'} (inverse=${!!inverse})`,
+      deniedBy: granted
+        ? undefined
+        : `custom.featureFlag: '${flag}' is ${enabled ? 'enabled' : 'disabled'} (inverse=${!!inverse})`,
       evaluatedPolicies: ['custom.featureFlag'],
     };
   },
@@ -286,10 +279,7 @@ interface TimeWindowPolicy {
 
 export const timeWindowEvaluator: AuthoritiesEvaluator = {
   name: 'timeWindow',
-  async evaluate(
-    policy: unknown,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { days, startHour, endHour, timezone } = policy as TimeWindowPolicy;
     const now = new Date();
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -301,7 +291,9 @@ export const timeWindowEvaluator: AuthoritiesEvaluator = {
 
     const parts = formatter.formatToParts(now);
     const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
-    const dayIndex = now.getDay(); // 0=Sun in the configured timezone context
+    // Get day of week in the configured timezone (not local system timezone)
+    const dayName = new Intl.DateTimeFormat('en-US', { timeZone: timezone ?? 'UTC', weekday: 'long' }).format(now);
+    const dayIndex = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].indexOf(dayName);
 
     const dayAllowed = days.includes(dayIndex);
     const hourAllowed = hour >= startHour && hour < endHour;
@@ -356,10 +348,7 @@ const counters = new Map<string, { count: number; resetAt: number }>();
 
 export const rateLimitEvaluator: AuthoritiesEvaluator = {
   name: 'rateLimit',
-  async evaluate(
-    policy: unknown,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult> {
+  async evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
     const { max, windowSeconds } = policy as RateLimitPolicy;
     const key = `${ctx.user.sub}`;
     const now = Date.now();
@@ -413,15 +402,15 @@ authorities: {
 
 ## Best Practices
 
-| Practice | Description |
-| --- | --- |
-| Always return `evaluatedPolicies` | Include `custom.<name>` in the array for audit trail |
-| Provide descriptive `deniedBy` | Include the evaluator name, the failing condition, and relevant values |
+| Practice                                | Description                                                                         |
+| --------------------------------------- | ----------------------------------------------------------------------------------- |
+| Always return `evaluatedPolicies`       | Include `custom.<name>` in the array for audit trail                                |
+| Provide descriptive `deniedBy`          | Include the evaluator name, the failing condition, and relevant values              |
 | Keep evaluators stateless when possible | Use external stores (Redis, database) for state; avoid in-memory maps in production |
-| Type the policy parameter | Cast `policy as YourPolicyType` at the top of `evaluate()` |
-| Handle missing context gracefully | Return denial with a clear message if expected env/input values are absent |
-| Test evaluators in isolation | Each evaluator is a plain object; test `evaluate()` directly with mock contexts |
-| Name evaluators with camelCase | The name must match both the registered key and the `custom.*` policy key |
+| Type the policy parameter               | Cast `policy as YourPolicyType` at the top of `evaluate()`                          |
+| Handle missing context gracefully       | Return denial with a clear message if expected env/input values are absent          |
+| Test evaluators in isolation            | Each evaluator is a plain object; test `evaluate()` directly with mock contexts     |
+| Name evaluators with camelCase          | The name must match both the registered key and the `custom.*` policy key           |
 
 ## Reference
 

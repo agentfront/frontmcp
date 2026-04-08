@@ -152,9 +152,7 @@ export interface RebacPolicy {
  * };
  * ```
  */
-export type AuthorityGuardFn = (
-  ctx: AuthoritiesEvaluationContext,
-) => Promise<boolean | string>;
+export type AuthorityGuardFn = (ctx: AuthoritiesEvaluationContext) => boolean | string | Promise<boolean | string>;
 
 export interface AuthoritiesPolicyMetadata {
   /** RBAC: required roles */
@@ -240,10 +238,7 @@ export type AuthorityProfileName = string & keyof FrontMcpAuthorityProfiles;
  * @Tool({ authorities: { roles: { any: ['admin'] }, permissions: { all: ['users:delete'] } } })
  * ```
  */
-export type AuthoritiesMetadata =
-  | AuthorityProfileName
-  | AuthorityProfileName[]
-  | AuthoritiesPolicyMetadata;
+export type AuthoritiesMetadata = AuthorityProfileName | AuthorityProfileName[] | AuthoritiesPolicyMetadata;
 
 // ============================================
 // Evaluation Result
@@ -361,8 +356,5 @@ export interface AuthoritiesEvaluator {
   /** Evaluator name (must match the key under `custom.*` in policies) */
   name: string;
   /** Evaluate the policy against the context */
-  evaluate(
-    policy: unknown,
-    ctx: AuthoritiesEvaluationContext,
-  ): Promise<AuthoritiesResult>;
+  evaluate(policy: unknown, ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult>;
 }

@@ -1,4 +1,7 @@
 import 'reflect-metadata';
+// NOTE: @frontmcp/auth is imported via require() at runtime in initAuthoritiesFromConfig()
+// to avoid circular dependency issues with esbuild's __esm lazy initialization.
+// Type references use inline import('...') syntax to avoid creating bundler dependencies.
 import {
   EntryOwnerRef,
   FlowInputOf,
@@ -1003,6 +1006,7 @@ export class Scope extends ScopeEntry {
     if (!config) return;
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const {
         AuthoritiesEngine,
         AuthoritiesContextBuilder,
@@ -1011,29 +1015,26 @@ export class Scope extends ScopeEntry {
       } = require('@frontmcp/auth');
 
       const profileRegistry = new AuthoritiesProfileRegistry();
-      const profiles = config['profiles'] as Record<string, unknown> | undefined;
-      if (profiles) {
-        profileRegistry.registerAll(profiles);
-      }
+      if (config['profiles']) profileRegistry.registerAll(config['profiles']);
 
       const evaluatorRegistry = new AuthoritiesEvaluatorRegistry();
-      const evaluators = config['evaluators'] as Record<string, unknown> | undefined;
-      if (evaluators) {
-        evaluatorRegistry.registerAll(evaluators);
-      }
+      if (config['evaluators']) evaluatorRegistry.registerAll(config['evaluators']);
 
       this._authoritiesEngine = new AuthoritiesEngine(profileRegistry, evaluatorRegistry);
       this._authoritiesContextBuilder = new AuthoritiesContextBuilder({
-        claimsMapping: config['claimsMapping'] as Record<string, string | undefined> | undefined,
-        claimsResolver: config['claimsResolver'] as ((...args: unknown[]) => unknown) | undefined,
-        relationshipResolver: config['relationshipResolver'] as Record<string, unknown> | undefined,
+        claimsMapping: config['claimsMapping'],
+        claimsResolver: config['claimsResolver'],
+        relationshipResolver: config['relationshipResolver'],
       });
 
-      this._authoritiesScopeMapping = config['scopeMapping'] as import('@frontmcp/auth').AuthoritiesScopeMapping | undefined;
+      this._authoritiesScopeMapping = config['scopeMapping'] as
+        | import('@frontmcp/auth').AuthoritiesScopeMapping
+        | undefined;
 
       this.logger.verbose('Scope: authorities engine initialized from config');
-    } catch {
-      this.logger.warn('Scope: @frontmcp/auth not available — authorities config ignored');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Scope: authorities init failed — ${msg}`);
     }
   }
 
@@ -1074,9 +1075,7 @@ export class Scope extends ScopeEntry {
 
     // Check agents
     for (const agent of this.scopeAgents.getAgents()) {
-      const metadata = (agent as unknown as Record<string, unknown>)['metadata'] as
-        | Record<string, unknown>
-        | undefined;
+      const metadata = (agent as unknown as Record<string, unknown>)['metadata'] as Record<string, unknown> | undefined;
       if (metadata?.['authorities']) {
         entriesWithAuthorities.push(`Agent "${(agent as unknown as Record<string, unknown>)['name'] ?? 'unknown'}"`);
       }
@@ -1084,8 +1083,7 @@ export class Scope extends ScopeEntry {
 
     if (entriesWithAuthorities.length > 0) {
       const names = entriesWithAuthorities.slice(0, 5).join(', ');
-      const suffix =
-        entriesWithAuthorities.length > 5 ? ` and ${entriesWithAuthorities.length - 5} more` : '';
+      const suffix = entriesWithAuthorities.length > 5 ? ` and ${entriesWithAuthorities.length - 5} more` : '';
       throw new Error(
         `Authorities configuration required: ${names}${suffix} declare 'authorities' metadata ` +
           `but no authorities engine is configured. Add 'authorities: { claimsMapping: {...}, profiles: {...} }' ` +

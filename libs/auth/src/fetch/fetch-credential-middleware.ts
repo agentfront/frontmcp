@@ -24,6 +24,16 @@ export interface TokenAccessor {
  * Describes how to apply a credential to an outgoing request.
  * Each auth provider type can implement its own strategy.
  */
+/**
+ * Result of applying credentials to a request.
+ */
+export interface CredentialApplyResult {
+  /** Modified RequestInit (headers, etc.) */
+  init: RequestInit;
+  /** Modified URL (when credentials are injected as query params) */
+  url?: string;
+}
+
 export interface CredentialApplier {
   /**
    * Apply the credential to the request.
@@ -31,19 +41,19 @@ export interface CredentialApplier {
    * @param token - The credential value (token, API key, etc.)
    * @param url - The target URL
    * @param init - The current RequestInit (headers, etc.)
-   * @returns Modified RequestInit with credential applied
+   * @returns Modified init with credential applied, plus optional resolved URL
    */
-  apply(token: string, url: string, init: RequestInit): RequestInit;
+  apply(token: string, url: string, init: RequestInit): CredentialApplyResult;
 }
 
 /**
  * Built-in applier: injects `Authorization: Bearer <token>` header.
  */
 export const bearerApplier: CredentialApplier = {
-  apply(token: string, _url: string, init: RequestInit): RequestInit {
+  apply(token: string, _url: string, init: RequestInit): CredentialApplyResult {
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);
-    return { ...init, headers };
+    return { init: { ...init, headers } };
   },
 };
 
@@ -53,10 +63,10 @@ export const bearerApplier: CredentialApplier = {
  */
 export function headerApplier(headerName: string, prefix?: string): CredentialApplier {
   return {
-    apply(token: string, _url: string, init: RequestInit): RequestInit {
+    apply(token: string, _url: string, init: RequestInit): CredentialApplyResult {
       const headers = new Headers(init.headers);
       headers.set(headerName, prefix ? `${prefix} ${token}` : token);
-      return { ...init, headers };
+      return { init: { ...init, headers } };
     },
   };
 }
@@ -66,12 +76,10 @@ export function headerApplier(headerName: string, prefix?: string): CredentialAp
  */
 export function queryApplier(paramName: string): CredentialApplier {
   return {
-    apply(token: string, url: string, init: RequestInit): RequestInit {
+    apply(token: string, url: string, init: RequestInit): CredentialApplyResult {
       const urlObj = new URL(url);
       urlObj.searchParams.set(paramName, token);
-      // Return init unchanged — the caller must use the modified URL
-      // We store the modified URL in a custom field
-      return { ...init, _resolvedUrl: urlObj.toString() } as RequestInit;
+      return { init, url: urlObj.toString() };
     },
   };
 }
@@ -80,12 +88,12 @@ export function queryApplier(paramName: string): CredentialApplier {
  * Built-in applier: injects `Authorization: Basic <base64(user:pass)>` header.
  */
 export const basicApplier: CredentialApplier = {
-  apply(token: string, _url: string, init: RequestInit): RequestInit {
+  apply(token: string, _url: string, init: RequestInit): CredentialApplyResult {
     const headers = new Headers(init.headers);
     // Token is expected to be "user:password" format
     const encoded = typeof btoa === 'function' ? btoa(token) : Buffer.from(token).toString('base64');
     headers.set('Authorization', `Basic ${encoded}`);
-    return { ...init, headers };
+    return { init: { ...init, headers } };
   },
 };
 
@@ -109,10 +117,14 @@ export type FrontMcpFetchInit = Omit<RequestInit, 'credentials'> & {
 // Type Guard
 // ---------------------------------------------------------------------------
 
-function isFrontMcpCredentials(
-  creds: FrontMcpCredentials | RequestCredentials,
-): creds is FrontMcpCredentials {
-  return typeof creds === 'object' && creds !== null && 'provider' in creds;
+function isFrontMcpCredentials(creds: unknown): creds is FrontMcpCredentials {
+  return (
+    typeof creds === 'object' &&
+    creds !== null &&
+    'provider' in creds &&
+    typeof (creds as { provider?: unknown }).provider === 'string' &&
+    (creds as { provider: string }).provider.length > 0
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -149,23 +161,23 @@ export class FetchCredentialMiddleware {
    * Inspect the `credentials` field. If it references a named provider,
    * resolve the token and delegate to the provider's applier.
    */
-  async applyCredentials(url: string, init: FrontMcpFetchInit): Promise<RequestInit> {
+  async applyCredentials(url: string, init: FrontMcpFetchInit): Promise<CredentialApplyResult> {
     const creds = init.credentials;
 
     // No credentials or standard string → pass through
     if (!creds || typeof creds === 'string') {
-      return init as RequestInit;
+      return { init: init as RequestInit };
     }
 
     if (!isFrontMcpCredentials(creds)) {
-      return init as RequestInit;
+      return { init: init as RequestInit };
     }
 
     // Resolve token from vault
     const token = await this.tokenAccessor.getToken(creds.provider);
     if (!token) {
       const { credentials: _removed, ...rest } = init;
-      return rest;
+      return { init: rest };
     }
 
     // Get the provider's applier (default: Bearer header)

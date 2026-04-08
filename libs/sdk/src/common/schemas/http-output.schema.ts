@@ -275,7 +275,7 @@ export const httpRespond = {
 
   forbidden: (options?: {
     headers?: Record<string, string>;
-    body?: Record<string, string>;
+    body?: Record<string, unknown>;
   }): z.infer<typeof HttpJsonSchema> => ({
     kind: 'json',
     status: 403,

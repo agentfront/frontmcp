@@ -11,7 +11,6 @@ import { ScopeEntry } from '../entries';
 import { FrontMcpContext, FRONTMCP_CONTEXT } from '../../context';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { ConfigService } from '../../builtin/config/providers/config.service';
-import { buildAuthContext } from '@frontmcp/auth';
 import type { FrontMcpAuthContext, FrontMcpFetchInit } from '@frontmcp/auth';
 
 /**
@@ -90,7 +89,10 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   get auth(): FrontMcpAuthContext {
     if (this._authContext) return this._authContext;
-    this._authContext = buildAuthContext(this._authInfo);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rawAuth = require('@frontmcp/auth');
+    const auth = (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
+    this._authContext = auth.buildAuthContext(this._authInfo);
     return this._authContext;
   }
 

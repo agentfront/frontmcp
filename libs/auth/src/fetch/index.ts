@@ -17,6 +17,7 @@ export {
 export type {
   TokenAccessor,
   CredentialApplier,
+  CredentialApplyResult,
   FrontMcpCredentials,
   FrontMcpFetchInit,
 } from './fetch-credential-middleware';

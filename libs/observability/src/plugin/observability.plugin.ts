@@ -44,8 +44,8 @@ import {
   onToolWillParse,
   onToolWillFindTool,
   onToolWillCheckAuth as onToolCheckAuth,
-  onToolWillCheckEntryAuthorities,
-  onToolDidCheckEntryAuthorities,
+  onEntryWillCheckAuthorities,
+  onEntryDidCheckAuthorities,
   onToolWillCreateContext,
   onToolWillValidateInput,
   onToolWillExecute,
@@ -277,12 +277,12 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ToolHook.Will('checkEntryAuthorities', { priority: -1000 })
   _toolWillCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
   }
 
   @ToolHook.Did('checkEntryAuthorities', { priority: 1000 })
   _toolDidCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
   }
 
   @ToolHook.Will('createToolCallContext', { priority: -1000 })
@@ -336,12 +336,12 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ResourceHook.Will('checkEntryAuthorities', { priority: -1000 })
   _resourceWillCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
   }
 
   @ResourceHook.Did('checkEntryAuthorities', { priority: 1000 })
   _resourceDidCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
   }
 
   @ResourceHook.Will('execute', { priority: -1000 })
@@ -375,12 +375,12 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @PromptHook.Will('checkEntryAuthorities', { priority: -1000 })
   _promptWillCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
   }
 
   @PromptHook.Did('checkEntryAuthorities', { priority: 1000 })
   _promptDidCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
   }
 
   @PromptHook.Will('execute', { priority: -1000 })
@@ -414,12 +414,12 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @AgentCallHook.Will('checkEntryAuthorities', { priority: -1000 })
   _agentWillCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolWillCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
   }
 
   @AgentCallHook.Did('checkEntryAuthorities', { priority: 1000 })
   _agentDidCheckAuthorities(ctx: unknown): void {
-    if (this.tracingEnabled) onToolDidCheckEntryAuthorities(ctx);
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
   }
 
   @AgentCallHook.Will('execute', { priority: -1000 })

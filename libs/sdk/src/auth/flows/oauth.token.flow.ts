@@ -326,13 +326,11 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       const { request } = this.rawInput;
       const canonicalResource = computeResource(request, this.scope.entryPath, this.scope.routeBase);
       if (!resourceUriMatches(body.resource, canonicalResource)) {
-        this.logger.warn(
-          `OAuth token: resource mismatch. Provided: ${body.resource}, canonical: ${canonicalResource}`,
-        );
+        this.logger.warn(`OAuth token: resource mismatch. Provided: ${body.resource}, canonical: ${canonicalResource}`);
         this.respond(
           httpRespond.json(
             {
-              error: 'invalid_request',
+              error: 'invalid_target',
               error_description: 'Resource parameter does not match server URI',
             },
             { status: 400 },

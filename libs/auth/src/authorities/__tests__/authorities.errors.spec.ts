@@ -78,9 +78,10 @@ describe('AuthorityDeniedError', () => {
         entryType: 'Tool',
         entryName: 'deploy',
         deniedBy: 'permissions.all: missing deploy:execute',
-        denial: undefined,
-        requiredScopes: undefined,
       });
+      // undefined fields are omitted from JSON-RPC data
+      expect(rpc.data?.['denial']).toBeUndefined();
+      expect(rpc.data?.['requiredScopes']).toBeUndefined();
     });
 
     it('should include denial in JSON-RPC data', () => {

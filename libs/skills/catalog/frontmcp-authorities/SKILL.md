@@ -136,7 +136,7 @@ authorities: {
       permissions: { any: ['content:write', 'content:publish'] },
     },
   },
-})
+}
 ```
 
 For type-safe profile names, augment the global interface:
@@ -200,33 +200,33 @@ export default class SensitiveActionTool extends ToolContext { ... }
 
 ## Scenario Routing Table
 
-| Scenario | Approach | Reference |
-| --- | --- | --- |
-| Simple role gate (admin-only tool) | `authorities: 'admin'` profile | `references/authority-profiles.md` |
-| Permission-based access | `authorities: { permissions: { all: ['x'] } }` | `references/rbac-abac-rebac.md` |
-| Tenant isolation | ABAC with `{ fromInput: 'tenantId' }` | `references/rbac-abac-rebac.md` |
-| Resource ownership check | ReBAC with relationship resolver | `references/rbac-abac-rebac.md` |
-| IP allowlist or custom logic | Custom evaluator via `custom.*` | `references/custom-evaluators.md` |
-| Different IdP (Auth0/Keycloak/Okta) | Configure `claimsMapping` | `references/claims-mapping.md` |
-| Admin OR (editor AND same-tenant) | `anyOf` / `allOf` combinators | `references/authority-profiles.md` |
-| Custom pre/post authority logic | Hook with `Will`/`Did`/`Around` on `checkEntryAuthorities` stage | `references/custom-evaluators.md` |
-| Replace built-in check with OPA/Cedar | `Around('checkEntryAuthorities')` hook | `references/custom-evaluators.md` |
-| Audit authority decisions | `Did('checkEntryAuthorities')` hook for logging/metrics | `references/custom-evaluators.md` |
-| Tenant allowlist in Redis/DB | Async custom evaluator with `custom.*` field | `references/custom-evaluators.md` |
-| Subscription check before tool runs | Async custom evaluator or `Will('checkEntryAuthorities')` hook | `references/custom-evaluators.md` |
-| Feature flag gate on a tool | Async custom evaluator checking flag service | `references/custom-evaluators.md` |
+| Scenario                              | Approach                                                         | Reference                          |
+| ------------------------------------- | ---------------------------------------------------------------- | ---------------------------------- |
+| Simple role gate (admin-only tool)    | `authorities: 'admin'` profile                                   | `references/authority-profiles.md` |
+| Permission-based access               | `authorities: { permissions: { all: ['x'] } }`                   | `references/rbac-abac-rebac.md`    |
+| Tenant isolation                      | ABAC with `{ fromInput: 'tenantId' }`                            | `references/rbac-abac-rebac.md`    |
+| Resource ownership check              | ReBAC with relationship resolver                                 | `references/rbac-abac-rebac.md`    |
+| IP allowlist or custom logic          | Custom evaluator via `custom.*`                                  | `references/custom-evaluators.md`  |
+| Different IdP (Auth0/Keycloak/Okta)   | Configure `claimsMapping`                                        | `references/claims-mapping.md`     |
+| Admin OR (editor AND same-tenant)     | `anyOf` / `allOf` combinators                                    | `references/authority-profiles.md` |
+| Custom pre/post authority logic       | Hook with `Will`/`Did`/`Around` on `checkEntryAuthorities` stage | `references/custom-evaluators.md`  |
+| Replace built-in check with OPA/Cedar | `Around('checkEntryAuthorities')` hook                           | `references/custom-evaluators.md`  |
+| Audit authority decisions             | `Did('checkEntryAuthorities')` hook for logging/metrics          | `references/custom-evaluators.md`  |
+| Tenant allowlist in Redis/DB          | Async custom evaluator with `custom.*` field                     | `references/custom-evaluators.md`  |
+| Subscription check before tool runs   | Async custom evaluator or `Will('checkEntryAuthorities')` hook   | `references/custom-evaluators.md`  |
+| Feature flag gate on a tool           | Async custom evaluator checking flag service                     | `references/custom-evaluators.md`  |
 
 ## Common Patterns
 
-| Pattern | Correct | Incorrect | Why |
-| --- | --- | --- | --- |
-| Claims mapping | `claimsMapping: { roles: 'realm_access.roles' }` | `claimsMapping: { roles: 'roles' }` (for Keycloak) | Keycloak nests roles under `realm_access.roles`; using the wrong path silently resolves to `[]` |
-| Profile reference | `authorities: 'admin'` | `authorities: { profile: 'admin' }` | Profiles are referenced as plain strings, not nested objects |
-| Multiple profiles | `authorities: ['authenticated', 'matchTenant']` | `authorities: 'authenticated, matchTenant'` | Use an array, not a comma-separated string |
-| Inline RBAC | `{ roles: { any: ['admin'] } }` | `{ roles: ['admin'] }` | `roles` expects an object with `all` and/or `any` arrays |
-| Dynamic value ref | `{ fromInput: 'tenantId' }` | `'{{ tenantId }}'` | Use `DynamicValueRef` objects, not template strings |
-| OR combinator | `{ anyOf: [policy1, policy2] }` | `{ operator: 'OR', ...policy1, ...policy2 }` | Use `anyOf` for clarity; `operator` applies to top-level fields within a single policy |
-| ReBAC resolver | Register `relationshipResolver` in plugin options | Inline the DB query in the policy | The resolver is a separate interface; policies only declare the relationship to check |
+| Pattern           | Correct                                           | Incorrect                                          | Why                                                                                             |
+| ----------------- | ------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Claims mapping    | `claimsMapping: { roles: 'realm_access.roles' }`  | `claimsMapping: { roles: 'roles' }` (for Keycloak) | Keycloak nests roles under `realm_access.roles`; using the wrong path silently resolves to `[]` |
+| Profile reference | `authorities: 'admin'`                            | `authorities: { profile: 'admin' }`                | Profiles are referenced as plain strings, not nested objects                                    |
+| Multiple profiles | `authorities: ['authenticated', 'matchTenant']`   | `authorities: 'authenticated, matchTenant'`        | Use an array, not a comma-separated string                                                      |
+| Inline RBAC       | `{ roles: { any: ['admin'] } }`                   | `{ roles: ['admin'] }`                             | `roles` expects an object with `all` and/or `any` arrays                                        |
+| Dynamic value ref | `{ fromInput: 'tenantId' }`                       | `'{{ tenantId }}'`                                 | Use `DynamicValueRef` objects, not template strings                                             |
+| OR combinator     | `{ anyOf: [policy1, policy2] }`                   | `{ operator: 'OR', ...policy1, ...policy2 }`       | Use `anyOf` for clarity; `operator` applies to top-level fields within a single policy          |
+| ReBAC resolver    | Register `relationshipResolver` in plugin options | Inline the DB query in the policy                  | The resolver is a separate interface; policies only declare the relationship to check           |
 
 ## Verification Checklist
 
@@ -253,16 +253,16 @@ export default class SensitiveActionTool extends ToolContext { ... }
 
 ## Troubleshooting
 
-| Problem | Cause | Solution |
-| --- | --- | --- |
-| `profile 'admin' is not registered` | Profile used in decorator but not in `authorities.profiles` config | Add the profile to the `profiles` field in `@FrontMcp({ authorities })` |
-| All users denied despite correct roles | `claimsMapping.roles` path does not match the actual JWT claim path | Decode a real JWT and verify the dot-path resolves to the roles array |
-| `authorities` field not recognized on decorator | `@frontmcp/auth` not imported (metadata augmentation not active) | Add `import '@frontmcp/auth'` or import any type from `@frontmcp/auth/authorities` |
-| ABAC condition always fails | `{ fromInput: 'tenantId' }` but tool input field is named `tenant_id` | The `fromInput` key must exactly match the tool's input schema field name |
-| ReBAC always denies | No `relationshipResolver` provided | Implement `RelationshipResolver` and pass it to plugin options |
-| Custom evaluator not found | Key in `custom.*` policy does not match registered evaluator name | Ensure the evaluator is registered with the same key used in the policy |
-| List endpoints show all entries | No `authorities` config in `@FrontMcp()` or hook priority conflict | Verify `authorities: { ... }` is set on `@FrontMcp()` decorator |
-| `AuthorityDeniedError` has no detail | `deniedBy` field shows generic message | Check the `evaluatedPolicies` array on the error for which policy type failed |
+| Problem                                         | Cause                                                                 | Solution                                                                           |
+| ----------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `profile 'admin' is not registered`             | Profile used in decorator but not in `authorities.profiles` config    | Add the profile to the `profiles` field in `@FrontMcp({ authorities })`            |
+| All users denied despite correct roles          | `claimsMapping.roles` path does not match the actual JWT claim path   | Decode a real JWT and verify the dot-path resolves to the roles array              |
+| `authorities` field not recognized on decorator | `@frontmcp/auth` not imported (metadata augmentation not active)      | Add `import '@frontmcp/auth'` or import any type from `@frontmcp/auth/authorities` |
+| ABAC condition always fails                     | `{ fromInput: 'tenantId' }` but tool input field is named `tenant_id` | The `fromInput` key must exactly match the tool's input schema field name          |
+| ReBAC always denies                             | No `relationshipResolver` provided                                    | Implement `RelationshipResolver` and pass it to plugin options                     |
+| Custom evaluator not found                      | Key in `custom.*` policy does not match registered evaluator name     | Ensure the evaluator is registered with the same key used in the policy            |
+| List endpoints show all entries                 | No `authorities` config in `@FrontMcp()` or hook priority conflict    | Verify `authorities: { ... }` is set on `@FrontMcp()` decorator                    |
+| `AuthorityDeniedError` has no detail            | `deniedBy` field shows generic message                                | Check the `evaluatedPolicies` array on the error for which policy type failed      |
 
 ## Reference
 

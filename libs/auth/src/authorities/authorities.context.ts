@@ -5,10 +5,7 @@
  * Handles JWT shape differences across IdPs (Auth0, Keycloak, Okta, etc.).
  */
 
-import type {
-  AuthoritiesEvaluationContext,
-  RelationshipResolver,
-} from './authorities.types';
+import type { AuthoritiesEvaluationContext, RelationshipResolver } from './authorities.types';
 import type { AuthoritiesClaimsMapping } from './authorities.profiles';
 
 /**
@@ -144,8 +141,8 @@ export class AuthoritiesContextBuilder {
     } else {
       roles = toStringArray(
         (user as Record<string, unknown>)['roles'] ??
-        (authorization as Record<string, unknown> | undefined)?.['scopes'] ??
-        [],
+          (authorization as Record<string, unknown> | undefined)?.['scopes'] ??
+          [],
       );
     }
 
@@ -154,9 +151,7 @@ export class AuthoritiesContextBuilder {
     if (this.claimsMapping?.permissions) {
       permissions = toStringArray(resolveDotPath(rawClaims, this.claimsMapping.permissions));
     } else {
-      permissions = toStringArray(
-        (user as Record<string, unknown>)['permissions'] ?? [],
-      );
+      permissions = toStringArray((user as Record<string, unknown>)['permissions'] ?? []);
     }
 
     // Resolve user sub
@@ -166,7 +161,7 @@ export class AuthoritiesContextBuilder {
 
     return {
       user: {
-        sub: sub as string,
+        sub,
         roles,
         permissions,
         claims: rawClaims,

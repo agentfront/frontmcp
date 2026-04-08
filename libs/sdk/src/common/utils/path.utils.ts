@@ -45,8 +45,10 @@ export function normalizeResourceUri(uri: string): string {
     const url = new URL(uri);
     // Lowercase scheme and host (URL constructor does this automatically)
     let normalized = `${url.protocol}//${url.hostname}`;
-    // Include port only if non-standard
-    if (url.port && url.port !== '443' && url.port !== '80') {
+    // Include port only if non-standard for the scheme
+    const isDefaultPort =
+      (url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80');
+    if (url.port && !isDefaultPort) {
       normalized += `:${url.port}`;
     }
     // Normalize path: resolve dots (URL constructor does this), remove trailing slash (unless root)

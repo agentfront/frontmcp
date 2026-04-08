@@ -53,10 +53,11 @@ authorities: {
     permissions: 'permissions',
     tenantId: 'org_id',
   },
-})
+}
 ```
 
 **Notes:**
+
 - The roles claim namespace (`https://myapp.com/roles`) is configured in an Auth0 Action or Rule. It must be a fully qualified URL.
 - `resolveDotPath` handles the dotted namespace key via direct key lookup, so `https://myapp.com/roles` works correctly.
 - Permissions appear only if the API has RBAC enabled in Auth0 dashboard.
@@ -96,10 +97,11 @@ authorities: {
     roles: 'realm_access.roles',
     permissions: 'resource_access.my-client.roles',
   },
-})
+}
 ```
 
 **Notes:**
+
 - Replace `my-client` with your actual Keycloak client ID.
 - Keycloak adds system roles like `offline_access` and `uma_authorization` to `realm_access.roles`. You may want to use `all` instead of `any` in RBAC policies to avoid matching on these.
 - For multi-tenant Keycloak setups, tenant ID is often a custom claim added via a protocol mapper.
@@ -130,10 +132,11 @@ authorities: {
     roles: 'groups',
     permissions: 'scp',
   },
-})
+}
 ```
 
 **Notes:**
+
 - Groups must be added as a claim to the authorization server. Go to Security > API > Authorization Servers > Claims > Add Claim with value type "Groups" and filter "Matches regex `.*`".
 - `scp` is an array of scope strings. If your Okta config uses `scope` (singular), adjust the path accordingly.
 - Okta does not have a built-in org/tenant claim. For multi-tenant, add a custom claim via a token hook.
@@ -165,10 +168,11 @@ authorities: {
     permissions: 'scope',
     tenantId: 'custom:tenantId',
   },
-})
+}
 ```
 
 **Notes:**
+
 - `scope` in Cognito is a space-separated string, not an array. The authorities engine handles this automatically via `toStringArray()`, which splits space-separated strings.
 - `cognito:groups` contains dots in the key name. `resolveDotPath` handles this via direct key lookup.
 - Custom attributes require the `custom:` prefix in both the claim path and the User Pool schema.
@@ -201,10 +205,11 @@ authorities: {
     permissions: 'permissions',
     tenantId: 'tenantId',
   },
-})
+}
 ```
 
 **Notes:**
+
 - Frontegg tokens have the simplest structure since roles and permissions are flat top-level arrays.
 - The default fallback behavior (no `claimsMapping`) already looks for `roles` and `permissions` at the top level, so Frontegg often works without explicit mapping.
 - For cross-tenant operations, use `tenantIds` (array) instead of `tenantId` (single active tenant).
@@ -232,10 +237,11 @@ authorities: {
       claims: { ...claims, ...user },
     };
   },
-})
+}
 ```
 
 **When to use `claimsResolver`:**
+
 - The token has roles encoded as a comma-separated string or bitmask
 - Roles need to be derived from multiple claim fields
 - Permissions require runtime transformation (e.g., wildcard expansion)
@@ -245,13 +251,13 @@ authorities: {
 
 ## Quick Reference Table
 
-| IdP | Roles Path | Permissions Path | Tenant Path | Notes |
-| --- | --- | --- | --- | --- |
-| Auth0 | `https://myapp.com/roles` | `permissions` | `org_id` | Namespace is developer-defined |
-| Keycloak | `realm_access.roles` | `resource_access.<client>.roles` | Custom claim | Replace `<client>` with client ID |
-| Okta | `groups` | `scp` | Custom claim | Groups must be added as a claim |
-| Cognito | `cognito:groups` | `scope` | `custom:tenantId` | `scope` is space-separated |
-| Frontegg | `roles` | `permissions` | `tenantId` | Works with default fallback |
+| IdP      | Roles Path                | Permissions Path                 | Tenant Path       | Notes                             |
+| -------- | ------------------------- | -------------------------------- | ----------------- | --------------------------------- |
+| Auth0    | `https://myapp.com/roles` | `permissions`                    | `org_id`          | Namespace is developer-defined    |
+| Keycloak | `realm_access.roles`      | `resource_access.<client>.roles` | Custom claim      | Replace `<client>` with client ID |
+| Okta     | `groups`                  | `scp`                            | Custom claim      | Groups must be added as a claim   |
+| Cognito  | `cognito:groups`          | `scope`                          | `custom:tenantId` | `scope` is space-separated        |
+| Frontegg | `roles`                   | `permissions`                    | `tenantId`        | Works with default fallback       |
 
 ## Reference
 

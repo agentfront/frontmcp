@@ -57,9 +57,7 @@ export class AuthorityDeniedError extends Error {
   readonly requiredScopes?: string[];
 
   constructor(params: AuthorityDeniedErrorParams) {
-    const msg =
-      params.message ??
-      `Access denied to ${params.entryType} "${params.entryName}": ${params.deniedBy}`;
+    const msg = params.message ?? `Access denied to ${params.entryType} "${params.entryName}": ${params.deniedBy}`;
     super(msg);
     this.name = 'AuthorityDeniedError';
     this.entryType = params.entryType;
@@ -73,16 +71,17 @@ export class AuthorityDeniedError extends Error {
    * Convert to JSON-RPC error format.
    */
   toJsonRpcError(): { code: number; message: string; data?: Record<string, unknown> } {
+    const data: Record<string, unknown> = {
+      entryType: this.entryType,
+      entryName: this.entryName,
+      deniedBy: this.deniedBy,
+    };
+    if (this.denial !== undefined) data['denial'] = this.denial;
+    if (this.requiredScopes !== undefined) data['requiredScopes'] = this.requiredScopes;
     return {
       code: this.mcpErrorCode,
       message: this.message,
-      data: {
-        entryType: this.entryType,
-        entryName: this.entryName,
-        deniedBy: this.deniedBy,
-        denial: this.denial,
-        requiredScopes: this.requiredScopes,
-      },
+      data,
     };
   }
 }

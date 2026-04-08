@@ -1,5 +1,4 @@
 import { AuthoritiesContextBuilder, resolveDotPath } from '../authorities.context';
-import type { RelationshipResolver } from '../authorities.types';
 
 describe('resolveDotPath', () => {
   it('should resolve a simple key', () => {
@@ -24,8 +23,6 @@ describe('resolveDotPath', () => {
 });
 
 describe('AuthoritiesContextBuilder', () => {
-  const noopResolver: RelationshipResolver = { check: async () => false };
-
   describe('default (no claimsMapping)', () => {
     it('should extract roles from user.roles', () => {
       const builder = new AuthoritiesContextBuilder();
