@@ -48,7 +48,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'createResourceContext'],
+  pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'checkEntryAuthorities', 'createResourceContext'],
   execute: ['execute', 'validateOutput'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -219,6 +219,51 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.state.set('params', match.params);
     this.logger.info(`findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`);
     this.logger.verbose('findResource:done');
+  }
+
+  /**
+   * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in resource metadata.
+   * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   */
+  @Stage('checkEntryAuthorities')
+  async checkEntryAuthorities() {
+    this.logger.verbose('checkEntryAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) return;
+
+    const resource = this.state.resource;
+    if (!resource) return;
+
+    const metadata = resource.metadata as unknown as Record<string, unknown>;
+    const authorities = metadata['authorities'];
+    if (!authorities) {
+      this.logger.verbose('checkEntryAuthorities:skip (no authorities)');
+      return;
+    }
+
+    const authInfo = (this.state.authInfo ?? {}) as Record<string, unknown>;
+    const evalCtx = ctxBuilder.build(authInfo);
+    const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+
+    if (!result.granted) {
+      let requiredScopes: string[] | undefined;
+      const scopeMapping = this.scope.authoritiesScopeMapping;
+      if (scopeMapping && result.denial) {
+        const { resolveRequiredScopes } = await import('@frontmcp/auth');
+        requiredScopes = resolveRequiredScopes(result.denial, scopeMapping, authorities as import('@frontmcp/auth').AuthoritiesMetadata);
+      }
+
+      const { AuthorityDeniedError } = await import('@frontmcp/auth');
+      throw new AuthorityDeniedError({
+        entryType: 'Resource',
+        entryName: resource.fullName || resource.name,
+        deniedBy: result.deniedBy ?? 'policy denied',
+        denial: result.denial,
+        requiredScopes,
+      });
+    }
+    this.logger.verbose('checkEntryAuthorities:done');
   }
 
   @Stage('createResourceContext')

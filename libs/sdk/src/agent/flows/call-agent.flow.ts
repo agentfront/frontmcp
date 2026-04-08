@@ -67,7 +67,7 @@ const stateSchema = z.object({
 // ============================================================================
 
 const plan = {
-  pre: ['parseInput', 'findAgent', 'checkAgentAuthorization', 'createAgentContext', 'acquireQuota', 'acquireSemaphore'],
+  pre: ['parseInput', 'findAgent', 'checkEntryAuthorities', 'checkAgentAuthorization', 'createAgentContext', 'acquireQuota', 'acquireSemaphore'],
   execute: ['validateInput', 'execute', 'validateOutput'],
   finalize: ['releaseSemaphore', 'releaseQuota', 'finalize'],
 } as const satisfies FlowPlan<string>;
@@ -204,6 +204,63 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.state.set('agent', agent);
     this.logger.info(`findAgent: agent "${agent.name}" found`);
     this.logger.verbose('findAgent:done');
+  }
+
+  /**
+   * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in agent metadata.
+   * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   * Skips silently if no authorities engine is configured or no authorities on the agent.
+   */
+  @Stage('checkEntryAuthorities')
+  async checkEntryAuthorities() {
+    this.logger.verbose('checkEntryAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      this.logger.verbose('checkEntryAuthorities:skip (no engine configured)');
+      return;
+    }
+
+    const agent = this.state.agent;
+    if (!agent) return;
+
+    const metadata = agent.metadata as unknown as Record<string, unknown>;
+    const authorities = metadata['authorities'];
+    if (!authorities) {
+      this.logger.verbose('checkEntryAuthorities:skip (no authorities on agent)');
+      return;
+    }
+
+    const authInfo = this.state.authInfo ?? {};
+    const stateInput = this.state.input;
+    const input = ((stateInput as Record<string, unknown>)?.['arguments'] ?? stateInput ?? {}) as Record<string, unknown>;
+
+    const evalCtx = ctxBuilder.build(authInfo as Record<string, unknown>, input);
+    const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+
+    if (!result.granted) {
+      let requiredScopes: string[] | undefined;
+      const scopeMapping = this.scope.authoritiesScopeMapping;
+      if (scopeMapping && result.denial) {
+        const { resolveRequiredScopes } = await import('@frontmcp/auth');
+        requiredScopes = resolveRequiredScopes(
+          result.denial,
+          scopeMapping,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+        );
+      }
+
+      const { AuthorityDeniedError } = await import('@frontmcp/auth');
+      throw new AuthorityDeniedError({
+        entryType: 'Agent',
+        entryName: agent.fullName || agent.name,
+        deniedBy: result.deniedBy ?? 'policy denied',
+        denial: result.denial,
+        requiredScopes,
+      });
+    }
+
+    this.logger.verbose('checkEntryAuthorities:done');
   }
 
   /**

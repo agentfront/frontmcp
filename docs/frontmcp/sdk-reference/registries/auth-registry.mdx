@@ -250,9 +250,64 @@ const detection = scope.authProviders.detection;
 // detection.modes = ['public', 'orchestrated']
 ```
 
+## FrontMcpAuthContext
+
+The `FrontMcpAuthContext` is a request-scoped auth identity object available inside tool, resource, and prompt execution. It provides role, permission, and scope checks extracted from JWT claims.
+
+```typescript
+import type { FrontMcpAuthContext } from '@frontmcp/auth';
+```
+
+### Properties
+
+| Property        | Type                                  | Description                                                  |
+| --------------- | ------------------------------------- | ------------------------------------------------------------ |
+| `user`          | `FrontMcpAuthUser`                    | Resolved user identity (`sub`, `name`, `email`, `picture`)   |
+| `isAnonymous`   | `boolean`                             | True when `sub` starts with `anon:` or is empty              |
+| `mode`          | `string`                              | Authentication mode (`public`, `transparent`, `orchestrated`) |
+| `sessionId`     | `string`                              | Session identifier (empty string if no session)              |
+| `scopes`        | `readonly string[]`                   | OAuth scopes granted to this session                         |
+| `claims`        | `Readonly<Record<string, unknown>>`   | Raw JWT claims                                               |
+| `roles`         | `readonly string[]`                   | Resolved roles (via `claimsMapping` or direct extraction)    |
+| `permissions`   | `readonly string[]`                   | Resolved permissions (via `claimsMapping` or direct)         |
+
+### Methods
+
+| Method               | Signature                                      | Description                                  |
+| -------------------- | ---------------------------------------------- | -------------------------------------------- |
+| `hasRole`            | `(role: string) => boolean`                    | Check if user has a specific role             |
+| `hasAllRoles`        | `(roles: readonly string[]) => boolean`        | Check if user has ALL specified roles         |
+| `hasAnyRole`         | `(roles: readonly string[]) => boolean`        | Check if user has at least one role           |
+| `hasPermission`      | `(permission: string) => boolean`              | Check if user has a specific permission       |
+| `hasAllPermissions`  | `(permissions: readonly string[]) => boolean`  | Check if user has ALL specified permissions   |
+| `hasAnyPermission`   | `(permissions: readonly string[]) => boolean`  | Check if user has at least one permission     |
+| `hasScope`           | `(scope: string) => boolean`                   | Check if session has a specific OAuth scope   |
+| `hasAllScopes`       | `(scopes: readonly string[]) => boolean`       | Check if session has ALL specified scopes     |
+| `hasAnyScope`        | `(scopes: readonly string[]) => boolean`       | Check if session has at least one scope       |
+
+### Extension
+
+Add custom typed fields via global interface augmentation:
+
+```typescript
+declare global {
+  interface ExtendFrontMcpAuthContext {
+    tenantId: string;
+    orgName: string;
+  }
+}
+```
+
+Custom fields are populated by `AuthContextPipe` functions registered in your server config.
+
+<Info>
+  **FrontMcpAuthContext vs Authorization**: `FrontMcpAuthContext` is request-scoped and provides roles, permissions, and scopes from JWT claims. The `Authorization` interface is transport-scoped and tracks authorized tools, prompts, apps, and provider tokens. Use `FrontMcpAuthContext` for role/permission checks; use `Authorization` for tool/app access control.
+</Info>
+
 ## Related
 
 - [Authentication Overview](/frontmcp/authentication/overview)
 - [Auth Modes](/frontmcp/authentication/modes)
+- [Authorities](/frontmcp/authentication/authorities)
 - [Production Auth](/frontmcp/authentication/production)
 - [Registries Overview](/frontmcp/sdk-reference/registries/overview)

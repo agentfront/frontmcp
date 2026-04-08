@@ -65,6 +65,8 @@ import {
   HttpJsonSchema,
   httpRespond,
   StageHookOf,
+  computeResource,
+  resourceUriMatches,
 } from '../../common';
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
@@ -317,6 +319,27 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     filter: ({ state }) => state.grantType === 'anonymous',
   })
   async handleAnonymousGrant() {
+    const { body } = this.state.required;
+
+    // Validate resource parameter against server's canonical URI (RFC 8707)
+    if (body?.grant_type === 'anonymous' && body.resource) {
+      const { request } = this.rawInput;
+      const canonicalResource = computeResource(request, this.scope.entryPath, this.scope.routeBase);
+      if (!resourceUriMatches(body.resource, canonicalResource)) {
+        this.logger.warn(`OAuth token: resource mismatch. Provided: ${body.resource}, canonical: ${canonicalResource}`);
+        this.respond(
+          httpRespond.json(
+            {
+              error: 'invalid_target',
+              error_description: 'Resource parameter does not match server URI',
+            },
+            { status: 400 },
+          ),
+        );
+        return;
+      }
+    }
+
     const localAuth = this.scope.auth as LocalPrimaryAuth;
     const accessToken = await localAuth.signAnonymousJwt();
 

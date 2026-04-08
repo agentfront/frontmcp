@@ -273,6 +273,17 @@ export const httpRespond = {
     contentType: 'application/json; charset=utf-8',
   }),
 
+  forbidden: (options?: {
+    headers?: Record<string, string>;
+    body?: Record<string, unknown>;
+  }): z.infer<typeof HttpJsonSchema> => ({
+    kind: 'json',
+    status: 403,
+    body: options?.body ?? { error: 'Forbidden' },
+    headers: options?.headers,
+    contentType: 'application/json; charset=utf-8',
+  }),
+
   html: (markup: string, status = 200): z.infer<typeof HttpHtmlSchema> => ({
     kind: 'html',
     status,

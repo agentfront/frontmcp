@@ -38,7 +38,7 @@ type ResponseTemplateItem = ResourceTemplate;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTemplates', 'resolveConflicts'],
+  execute: ['findTemplates', 'filterByAuthorities', 'resolveConflicts'],
   post: ['parseTemplates'],
 } as const satisfies FlowPlan<string>;
 
@@ -170,6 +170,43 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
       this.logger.error('findTemplates: failed to collect templates', error);
       throw error;
     }
+  }
+
+  /**
+   * Filter resource templates by entry-level authorities.
+   * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
+   */
+  @Stage('filterByAuthorities')
+  async filterByAuthorities() {
+    this.logger.verbose('filterByAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    // Safe to skip: validateAuthoritiesConfig() at startup ensures that if any entry
+    // declares authorities, the engine is configured. This path only runs when no
+    // entries have authorities metadata (so nothing needs filtering).
+    if (!engine || !ctxBuilder) return;
+
+    const templates = this.state.required.templates;
+    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
+    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
+
+    const filtered = await Promise.all(
+      templates.map(async (item) => {
+        const metadata = item.template.metadata as unknown as Record<string, unknown>;
+        const authorities = metadata['authorities'];
+        if (!authorities) return item;
+
+        const evalCtx = ctxBuilder.build(authInfo);
+        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+        return result.granted ? item : null;
+      }),
+    );
+
+    this.state.set(
+      'templates',
+      filtered.filter((item): item is (typeof templates)[number] => item !== null),
+    );
+    this.logger.verbose('filterByAuthorities:done');
   }
 
   @Stage('resolveConflicts')

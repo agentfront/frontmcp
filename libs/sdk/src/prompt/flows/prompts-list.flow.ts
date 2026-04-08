@@ -36,7 +36,7 @@ type ResponsePromptItem = Prompt;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findPrompts', 'resolveConflicts'],
+  execute: ['findPrompts', 'filterByAuthorities', 'resolveConflicts'],
   post: ['parsePrompts'],
 } as const satisfies FlowPlan<string>;
 
@@ -176,6 +176,38 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       this.logger.error('findPrompts: failed to collect prompts', error);
       throw error;
     }
+  }
+
+  /**
+   * Filter prompts by entry-level authorities.
+   * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
+   */
+  @Stage('filterByAuthorities')
+  async filterByAuthorities() {
+    this.logger.verbose('filterByAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) return;
+
+    const prompts = this.state.required.prompts;
+    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
+    const authInfo = ((ctx?.['authInfo']) ?? {}) as Record<string, unknown>;
+
+    const filtered = await Promise.all(
+      prompts.map(async (item) => {
+        const prompt = (item as Record<string, unknown>)['prompt'] as Record<string, unknown> | undefined;
+        const metadata = prompt?.['metadata'] as Record<string, unknown> | undefined;
+        const authorities = metadata?.['authorities'];
+        if (!authorities) return item;
+
+        const evalCtx = ctxBuilder.build(authInfo);
+        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+        return result.granted ? item : null;
+      }),
+    );
+
+    this.state.set('prompts', filtered.filter((item): item is (typeof prompts)[number] => item !== null));
+    this.logger.verbose('filterByAuthorities:done');
   }
 
   @Stage('resolveConflicts')

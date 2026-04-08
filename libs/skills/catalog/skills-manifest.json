@@ -3077,6 +3077,41 @@
           ]
         }
       ]
+    },
+    {
+      "name": "frontmcp-authorities",
+      "category": "development",
+      "description": "Use when implementing authorization, access control, RBAC, ABAC, or ReBAC for tools, resources, or prompts. Covers JWT claims mapping, authority profiles, and policy enforcement.",
+      "path": "frontmcp-authorities",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": ["authorization", "rbac", "abac", "rebac", "security", "permissions", "roles", "access-control", "authorities", "jwt"],
+      "bundle": ["full"],
+      "priority": 9,
+      "visibility": "both",
+      "license": "Apache-2.0",
+      "references": [
+        {
+          "name": "claims-mapping",
+          "description": "JWT claims mapping per identity provider (Auth0, Keycloak, Okta, Cognito, Frontegg)",
+          "examples": []
+        },
+        {
+          "name": "authority-profiles",
+          "description": "Registering and using named authority profiles for reusable access patterns",
+          "examples": []
+        },
+        {
+          "name": "rbac-abac-rebac",
+          "description": "Comparison of RBAC, ABAC, and ReBAC authorization models with usage guidance",
+          "examples": []
+        },
+        {
+          "name": "custom-evaluators",
+          "description": "Creating custom authority evaluators for domain-specific access control",
+          "examples": []
+        }
+      ]
     }
   ]
 }

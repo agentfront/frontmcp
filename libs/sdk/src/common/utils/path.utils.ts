@@ -36,6 +36,41 @@ export function computeResource(req: ServerRequest, entryPath: string, scopeBase
   return `${getRequestBaseUrl(req)}${entryPrefix}${scope}`;
 }
 
+/**
+ * Normalize a resource URI for comparison (RFC 8707).
+ * Handles: trailing slash, default ports (443/80), case, path dots, fragments, query strings.
+ */
+export function normalizeResourceUri(uri: string): string {
+  try {
+    const url = new URL(uri);
+    // Lowercase scheme and host (URL constructor does this automatically)
+    let normalized = `${url.protocol}//${url.hostname}`;
+    // Include port only if non-standard for the scheme
+    const isDefaultPort =
+      (url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80');
+    if (url.port && !isDefaultPort) {
+      normalized += `:${url.port}`;
+    }
+    // Normalize path: resolve dots (URL constructor does this), remove trailing slash (unless root)
+    let path = url.pathname;
+    if (path.length > 1 && path.endsWith('/')) {
+      path = path.slice(0, -1);
+    }
+    normalized += path;
+    // Strip query and fragment
+    return normalized;
+  } catch {
+    return uri; // Return as-is if not a valid URL
+  }
+}
+
+/**
+ * Compare two resource URIs after normalization (RFC 8707).
+ */
+export function resourceUriMatches(provided: string, canonical: string): boolean {
+  return normalizeResourceUri(provided) === normalizeResourceUri(canonical);
+}
+
 /** Derive a safe provider id from a URL when no id is provided. */
 export function urlToSafeId(url: string): string {
   const u = new URL(url);

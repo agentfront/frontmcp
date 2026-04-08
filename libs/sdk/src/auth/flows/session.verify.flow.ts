@@ -20,6 +20,7 @@ import 'reflect-metadata';
 import { z } from 'zod';
 import { deriveTypedUser, extractBearerToken, isJwt } from '@frontmcp/auth';
 import { JwksService, ProviderVerifyRef, VerifyResult } from '@frontmcp/auth';
+import { buildUnauthorizedHeader, buildInvalidTokenHeader, buildInsufficientScopeHeader } from '@frontmcp/auth';
 import { parseSessionHeader, decryptPublicSession } from '../session/utils/session-id.utils';
 import { encryptJson } from '@frontmcp/auth';
 import { getMachineId } from '@frontmcp/auth';
@@ -37,6 +38,7 @@ const stateSchema = z.object({
   userAgent: z.string().optional(), // User-Agent header for platform detection
   prmMetadataPath: z.string().optional(),
   prmMetadataHeader: z.string().optional(),
+  prmUrl: z.string().optional(), // Full PRM URL for header builder functions
   jwtPayload: z.object({}).passthrough().optional(),
   user: userClaimSchema.optional(),
   session: sessionIdSchema.optional(),
@@ -56,7 +58,14 @@ const AuthorizedSchema = z
   })
   .describe('Authorized session information');
 
-export const sessionVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema]);
+const ForbiddenSchema = z
+  .object({
+    kind: z.literal('forbidden'),
+    prmMetadataHeader: z.string().describe('WWW-Authenticate header with insufficient_scope error'),
+  })
+  .describe('403 Forbidden — token valid but insufficient scope');
+
+export const sessionVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema, ForbiddenSchema]);
 
 const plan = {
   pre: ['parseInput', 'handlePublicMode', 'handleAnonymousFallback', 'requireAuthorizationHeader', 'verifyIfJwt'],
@@ -207,7 +216,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const userAgent = (request.headers?.['user-agent'] as string | undefined) ?? undefined;
 
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
-    const prmMetadataHeader = `Bearer resource_metadata="${baseUrl}${prmMetadataPath}"`;
+    const prmUrl = `${baseUrl}${prmMetadataPath}`;
+    const prmMetadataHeader = buildUnauthorizedHeader(prmUrl);
 
     this.logger.verbose('parseInput', {
       hasAuthHeader: !!authorizationHeader,
@@ -225,6 +235,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       userAgent,
       prmMetadataPath,
       prmMetadataHeader,
+      prmUrl,
     });
   }
 
@@ -340,7 +351,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.logger.warn('verifyIfJwt: token is not a JWT, returning 401');
       this.respond({
         kind: 'unauthorized',
-        prmMetadataHeader: this.state.required.prmMetadataHeader,
+        prmMetadataHeader: buildInvalidTokenHeader(
+          this.state.required.prmUrl,
+          'Token is not a valid JWT',
+        ),
       });
       return;
     }
@@ -384,12 +398,45 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     if (result.ok) {
       this.state.set({ jwtPayload: result.payload });
+
+      // Check required scopes (RFC 6750 §3.1 — insufficient_scope → 403)
+      const requiredScopes = (authOptions as Record<string, unknown> | undefined)?.['requiredScopes'] as
+        | string[]
+        | undefined;
+      if (requiredScopes && requiredScopes.length > 0) {
+        const scopeClaim = result.payload?.['scope'];
+        const tokenScopes =
+          typeof scopeClaim === 'string'
+            ? scopeClaim.split(/\s+/).filter(Boolean)
+            : Array.isArray(scopeClaim)
+              ? (scopeClaim as string[])
+              : [];
+        const hasAll = requiredScopes.every((s: string) => tokenScopes.includes(s));
+        if (!hasAll) {
+          this.logger.warn('verifyIfJwt: insufficient scopes', {
+            required: requiredScopes,
+            actual: tokenScopes,
+          });
+          this.respond({
+            kind: 'forbidden',
+            prmMetadataHeader: buildInsufficientScopeHeader(
+              this.state.required.prmUrl,
+              requiredScopes,
+            ),
+          });
+          return;
+        }
+      }
+
       return;
     }
     this.logger.warn('verifyIfJwt: JWT verification failed', { error: result.error });
     this.respond({
       kind: 'unauthorized',
-      prmMetadataHeader: this.state.required.prmMetadataHeader,
+      prmMetadataHeader: buildInvalidTokenHeader(
+        this.state.required.prmUrl,
+        result.error ?? 'Token verification failed',
+      ),
     });
   }
 

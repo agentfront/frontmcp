@@ -90,6 +90,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 
 ### Recommended
 
+<Check>**Machine ID** - Set `MACHINE_ID` env var for multi-instance session portability</Check>
 <Check>**Rate limiting** - Protect token endpoints from brute force</Check>
 <Check>**Monitoring** - Alert on auth failures, unusual patterns</Check>
 <Check>**Key rotation** - Rotate signing keys periodically (30-90 days)</Check>
@@ -356,6 +357,20 @@ add_header Content-Security-Policy "default-src 'self'" always;
 
 ### Rate Limiting
 
+FrontMCP includes a built-in **session rate limiter** with a sliding window algorithm:
+
+| Setting | Default | Description |
+| ------- | ------- | ----------- |
+| Window | 60 seconds | Sliding window duration |
+| Max requests | 100 | Maximum requests per window per key |
+| Cleanup interval | Configurable | Auto-cleanup of expired entries |
+
+The rate limiter tracks requests per key (typically client IP) and provides:
+- `wouldAllow(key)` — pre-check without consuming quota
+- `getStats()` — monitoring statistics
+
+For external rate limiting on the token endpoint:
+
 ```nginx
 # Rate limit token endpoint
 location /oauth/token {
@@ -399,6 +414,10 @@ location /oauth/token {
     ```
 
     All instances must share the same Redis and signing keys.
+
+    <Info>
+      **Machine ID**: Set the `MACHINE_ID` environment variable to the same value on all instances. Without it, sessions encrypted on one instance cannot be decrypted on another. See [Auth Architecture - Machine ID](/frontmcp/authentication/architecture#14-machine-id).
+    </Info>
 
   </Tab>
 

@@ -44,6 +44,8 @@ import {
   onToolWillParse,
   onToolWillFindTool,
   onToolWillCheckAuth as onToolCheckAuth,
+  onEntryWillCheckAuthorities,
+  onEntryDidCheckAuthorities,
   onToolWillCreateContext,
   onToolWillValidateInput,
   onToolWillExecute,
@@ -273,6 +275,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onToolCheckAuth(ctx);
   }
 
+  @ToolHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _toolWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
+  }
+
+  @ToolHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _toolDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
+  }
+
   @ToolHook.Will('createToolCallContext', { priority: -1000 })
   _toolWillCreateCtx(ctx: unknown): void {
     if (this.tracingEnabled) onToolWillCreateContext(ctx);
@@ -322,6 +334,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onResourceWillFind(ctx);
   }
 
+  @ResourceHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _resourceWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
+  }
+
+  @ResourceHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _resourceDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
+  }
+
   @ResourceHook.Will('execute', { priority: -1000 })
   _resourceWillExecute(ctx: unknown): void {
     if (this.tracingEnabled) onResourceWillExecute(this.tracingOpts, ctx);
@@ -349,6 +371,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @PromptHook.Will('findPrompt', { priority: -1000 })
   _promptWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onPromptWillFind(ctx);
+  }
+
+  @PromptHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _promptWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
+  }
+
+  @PromptHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _promptDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
   }
 
   @PromptHook.Will('execute', { priority: -1000 })
@@ -380,6 +412,16 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onAgentWillFind(ctx);
   }
 
+  @AgentCallHook.Will('checkEntryAuthorities', { priority: -1000 })
+  _agentWillCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryWillCheckAuthorities(ctx);
+  }
+
+  @AgentCallHook.Did('checkEntryAuthorities', { priority: 1000 })
+  _agentDidCheckAuthorities(ctx: unknown): void {
+    if (this.tracingEnabled) onEntryDidCheckAuthorities(ctx);
+  }
+
   @AgentCallHook.Will('execute', { priority: -1000 })
   _agentWillExecute(ctx: unknown): void {
     if (this.tracingEnabled) onAgentWillExecute(this.tracingOpts, ctx);
@@ -409,6 +451,11 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowStage('findTools', ctx);
   }
 
+  @ListToolsHook.Did('filterByAuthorities', { priority: 1000 })
+  _listToolsDidFilter(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
+  }
+
   @ListToolsHook.Did('parseTools', { priority: 1000 })
   _listToolsDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
@@ -417,6 +464,11 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ListResourcesHook.Will('parseInput', { priority: -1000 })
   _listResourcesWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('resources/list', this.tracingOpts, ctx);
+  }
+
+  @ListResourcesHook.Did('filterByAuthorities', { priority: 1000 })
+  _listResourcesDidFilter(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
   }
 
   @ListResourcesHook.Did('parseResources', { priority: 1000 })
@@ -429,6 +481,11 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('resources/listTemplates', this.tracingOpts, ctx);
   }
 
+  @ListResourceTemplatesHook.Did('filterByAuthorities', { priority: 1000 })
+  _listTemplatesDidFilter(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
+  }
+
   @ListResourceTemplatesHook.Did('parseTemplates', { priority: 1000 })
   _listTemplatesDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
@@ -437,6 +494,11 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ListPromptsHook.Will('parseInput', { priority: -1000 })
   _listPromptsWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('prompts/list', this.tracingOpts, ctx);
+  }
+
+  @ListPromptsHook.Did('filterByAuthorities', { priority: 1000 })
+  _listPromptsDidFilter(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
   }
 
   @ListPromptsHook.Did('parsePrompts', { priority: 1000 })

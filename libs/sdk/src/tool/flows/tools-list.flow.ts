@@ -52,7 +52,7 @@ type ResponseToolItem = BaseResponseToolItem & {
 // TODO: add support for session based tools
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTools', 'resolveConflicts'],
+  execute: ['findTools', 'filterByAuthorities', 'resolveConflicts'],
   post: ['parseTools'],
 } as const satisfies FlowPlan<string>;
 
@@ -290,6 +290,42 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.logger.error('findTools: failed to collect tools', error);
       throw error;
     }
+  }
+
+  /**
+   * Filter tools by entry-level authorities (RBAC/ABAC/ReBAC).
+   * Removes tools the current user is not authorized to see.
+   * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
+   */
+  @Stage('filterByAuthorities')
+  async filterByAuthorities() {
+    this.logger.verbose('filterByAuthorities:start');
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      this.logger.verbose('filterByAuthorities:skip (no engine configured)');
+      return;
+    }
+
+    const tools = this.state.required.tools;
+    const authInfo = (this.state.authInfo ?? {}) as Record<string, unknown>;
+
+    const filtered = await Promise.all(
+      tools.map(async (item) => {
+        const metadata = item.tool.metadata as unknown as Record<string, unknown>;
+        const authorities = metadata['authorities'];
+        if (!authorities) return item;
+
+        const evalCtx = ctxBuilder.build(authInfo);
+        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
+        return result.granted ? item : null;
+      }),
+    );
+
+    const authorized = filtered.filter((item): item is (typeof tools)[number] => item !== null);
+    this.logger.verbose(`filterByAuthorities: ${tools.length} → ${authorized.length} tools`);
+    this.state.set('tools', authorized);
+    this.logger.verbose('filterByAuthorities:done');
   }
 
   @Stage('resolveConflicts')

@@ -1,0 +1,176 @@
+---
+title: Skills HTTP Authentication
+sidebarTitle: Skills Auth
+slug: authentication/skills-auth
+icon: key
+description: HTTP authentication for skill endpoints — API key, JWT bearer, and public modes
+---
+
+When skills are exposed over HTTP (via `skillsConfig.enabled`), FrontMCP supports three authentication modes to protect skill endpoints.
+
+## Auth Modes
+
+| Mode | Header | Validation | Use Case |
+| ---- | ------ | ---------- | -------- |
+| `public` | None | None | Development, internal networks |
+| `api-key` | `X-API-Key` or `Authorization: ApiKey <key>` | Timing-safe equality | Machine-to-machine, server-to-server |
+| `bearer` | `Authorization: Bearer <jwt>` | JWT signature via JWKS | User-scoped access, IdP integration |
+
+## Configuration
+
+### Public Mode (Default)
+
+```typescript
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'public',
+  },
+})
+class Server {}
+```
+
+### API Key Mode
+
+```typescript
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'api-key',
+    apiKeys: [
+      process.env.SKILL_API_KEY_1,
+      process.env.SKILL_API_KEY_2,
+    ],
+  },
+})
+class Server {}
+```
+
+Clients authenticate with either header format:
+
+```
+X-API-Key: sk-your-api-key
+```
+
+```
+Authorization: ApiKey sk-your-api-key
+```
+
+<Info>
+  API key comparison uses **timing-safe equality** to prevent timing attacks. All configured keys are checked even after a match is found to maintain constant-time behavior.
+</Info>
+
+### JWT Bearer Mode
+
+```typescript
+@FrontMcp({
+  skillsConfig: {
+    enabled: true,
+    auth: 'bearer',
+    jwt: {
+      issuer: 'https://auth.example.com',
+      audience: 'skills-api',           // Optional audience claim validation
+    },
+  },
+})
+class Server {}
+```
+
+JWT tokens are validated against the issuer's JWKS endpoint (auto-discovered from `{issuer}/.well-known/jwks.json`).
+
+## Validation Result
+
+The validator returns a structured result:
+
+```typescript
+interface SkillHttpAuthResult {
+  authorized: boolean;
+  error?: string;       // Human-readable error message
+  statusCode?: number;  // HTTP status code (401, 403)
+}
+```
+
+## Factory Function
+
+Use `createSkillHttpAuthValidator()` to create a validator from skill config:
+
+```typescript
+import { createSkillHttpAuthValidator } from '@frontmcp/sdk';
+
+const validator = createSkillHttpAuthValidator(skillsConfig, logger);
+// Returns null if no validation needed (public mode)
+
+if (validator) {
+  const result = await validator.validate({ headers: request.headers });
+  if (!result.authorized) {
+    return new Response(result.error, { status: result.statusCode });
+  }
+}
+```
+
+---
+
+## Tool Authorization Guard
+
+When a skill session is active, the **Tool Authorization Guard** enforces which tools the skill is allowed to call. This prevents skill sessions from accessing tools outside their declared allowlist.
+
+### Policy Modes
+
+| Mode | Behavior |
+| ---- | -------- |
+| `strict` | Tool must be in the skill's allowlist. Denied tools throw `ToolNotAllowedError`. |
+| `approval` | Unlisted tools trigger an approval flow. Throws `ToolApprovalRequiredError` until approved. |
+| `open` | All tools are allowed (no enforcement). |
+
+### Usage
+
+```typescript
+import { ToolAuthorizationGuard } from '@frontmcp/sdk';
+
+const guard = new ToolAuthorizationGuard(sessionManager, logger, {
+  throwOnDenied: true,
+  onApprovalRequired: async (toolName, skillId) => {
+    // Custom approval logic (e.g., prompt user)
+    return true; // or false to deny
+  },
+});
+
+// Check if tool is allowed
+const result = await guard.check('my_tool');
+
+// Simple boolean check (never throws)
+const allowed = await guard.isAllowed('my_tool');
+
+// Manual approval/denial
+guard.approveTool('my_tool');
+guard.denyTool('dangerous_tool');
+
+// Inspect current state
+const mode = guard.getPolicyMode();      // 'strict' | 'approval' | 'open'
+const tools = guard.getAllowlist();       // ['tool_a', 'tool_b']
+const hasSkill = guard.hasActiveSkill(); // true/false
+```
+
+### Error Types
+
+#### ToolNotAllowedError
+
+Thrown when a tool is not in the skill's allowlist (strict mode).
+
+| Property | Type | Description |
+| -------- | ---- | ----------- |
+| `toolName` | `string` | The denied tool name |
+| `skillId` | `string \| undefined` | Active skill session ID |
+| `reason` | `string` | One of: `not_in_allowlist`, `denied`, `rate_limited`, `no_active_skill` |
+| `allowedTools` | `string[]` | List of allowed tool names |
+| `mcpErrorCode` | `number` | MCP error code (`INVALID_REQUEST`) |
+
+#### ToolApprovalRequiredError
+
+Thrown when a tool requires approval but has not been approved yet.
+
+| Property | Type | Description |
+| -------- | ---- | ----------- |
+| `toolName` | `string` | The tool requiring approval |
+| `skillId` | `string \| undefined` | Active skill session ID |
+| `mcpErrorCode` | `number` | MCP error code (`INVALID_REQUEST`) |

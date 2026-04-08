@@ -345,6 +345,23 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         // and move to next stage
         this.logger.verbose(`[${this.requestId}] decision is request info: ${decision.intent}`);
         this.state.set('intent', decision.intent);
+      } else if (verifyResult.kind === 'forbidden') {
+        if (decision.intent === 'unknown') {
+          this.logger.verbose(
+            `[${this.requestId}] forbidden with unknown intent, continue to other public http middleware`,
+          );
+          this.next();
+          return;
+        }
+        // Token is valid but has insufficient scopes (RFC 6750 §3.1 → 403)
+        this.logger.warn(`[${this.requestId}] forbidden: insufficient scope`);
+        this.respond(
+          httpRespond.forbidden({
+            headers: {
+              'WWW-Authenticate': verifyResult.prmMetadataHeader,
+            },
+          }),
+        );
       } else {
         this.logger.verbose(`[${this.requestId}] not authorized request, check decision intent: ${decision.intent}`);
         if (decision.intent === 'unknown') {

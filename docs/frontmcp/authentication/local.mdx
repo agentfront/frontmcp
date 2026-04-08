@@ -343,6 +343,42 @@ export class Server {}
 
 ---
 
+## Auth UI Template Builders
+
+FrontMCP provides server-side HTML template builders for all authentication UI pages. These render with Tailwind CSS and require no build step.
+
+| Builder | Purpose |
+| ------- | ------- |
+| `buildLoginPage()` | Email/password login form |
+| `buildConsentPage()` | Multi-app tool authorization with Authorize/Skip buttons |
+| `buildIncrementalAuthPage()` | Single-app auth for previously skipped apps |
+| `buildFederatedLoginPage()` | Multi-provider selection UI with optional skip |
+| `buildToolConsentPage()` | Tool-level consent within an app |
+| `buildErrorPage()` | Error display with description |
+
+### Customization
+
+Templates accept a `ThemeConfig` for visual customization:
+
+```typescript
+import type { ThemeConfig, ThemeColors, ThemeFonts } from '@frontmcp/auth';
+```
+
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `colors` | `ThemeColors` | Primary, background, text, border colors |
+| `fonts` | `ThemeFonts` | Heading and body font families |
+
+### Layout Variants
+
+| Layout | Function | Use Case |
+| ------ | -------- | -------- |
+| `centeredCardLayout()` | Small centered card | Login, error pages |
+| `wideLayout()` | Full-width card | Consent with many tools |
+| `extraWideLayout()` | Extra-wide card | Federated login with many providers |
+
+---
+
 ## Troubleshooting
 
 <AccordionGroup>

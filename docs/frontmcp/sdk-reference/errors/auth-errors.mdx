@@ -187,3 +187,41 @@ throw new AuthorizationRequiredError({
   sessionMode: 'stateless',
 });
 ```
+
+---
+
+### ToolNotAllowedError
+
+Thrown when a tool is not in the active skill session's allowlist. Used by the [Tool Authorization Guard](/frontmcp/authentication/skills-auth#tool-authorization-guard).
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `TOOL_NOT_ALLOWED` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+| `toolName` | `string` | The denied tool name |
+| `skillId` | `string \| undefined` | Active skill session ID |
+| `reason` | `string` | `not_in_allowlist`, `denied`, `rate_limited`, or `no_active_skill` |
+| `allowedTools` | `string[]` | List of allowed tool names |
+
+```typescript
+import { ToolNotAllowedError } from '@frontmcp/sdk';
+```
+
+---
+
+### ToolApprovalRequiredError
+
+Thrown when a tool requires explicit approval before use within a skill session (approval policy mode).
+
+| Property | Type | Value |
+| -------- | ---- | ----- |
+| `code` | `string` | `TOOL_APPROVAL_REQUIRED` |
+| `statusCode` | `number` | `400` |
+| `isPublic` | `boolean` | `true` |
+| `toolName` | `string` | Tool requiring approval |
+| `skillId` | `string \| undefined` | Active skill session ID |
+
+```typescript
+import { ToolApprovalRequiredError } from '@frontmcp/sdk';
+```

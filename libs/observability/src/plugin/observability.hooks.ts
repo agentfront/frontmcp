@@ -272,6 +272,18 @@ export function onToolWillCheckAuth(flowCtx: any): void {
   if (span) recordStageEvent(span, 'checkToolAuthorization', flowCtx.state);
 }
 
+export function onEntryWillCheckAuthorities(flowCtx: any): void {
+  const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
+  if (span) recordStageEvent(span, 'checkEntryAuthorities', flowCtx.state);
+}
+
+export function onEntryDidCheckAuthorities(flowCtx: any): void {
+  const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
+  if (!span) return;
+  recordStageEvent(span, 'checkEntryAuthorities.done', flowCtx.state);
+  span.setAttribute('auth.authorities.result', 'granted');
+}
+
 export function onToolWillCreateContext(flowCtx: any): void {
   const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
   if (span) recordStageEvent(span, 'createToolCallContext', flowCtx.state);

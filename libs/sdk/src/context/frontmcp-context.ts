@@ -13,6 +13,8 @@
 
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 import type { AuthInfo } from '@frontmcp/protocol';
+import type { FetchCredentialMiddleware, FrontMcpFetchInit } from '@frontmcp/auth';
+import { isFrontMcpCredentials } from '@frontmcp/auth';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
 import type { SessionIdPayload } from '../common/types';
@@ -210,6 +212,7 @@ export class FrontMcpContext {
 
   private _authInfo: Partial<AuthInfo>;
   private _sessionMetadata?: SessionIdPayload;
+  private _credentialMiddleware?: FetchCredentialMiddleware;
 
   // =====================
   // References (pointers)
@@ -304,6 +307,14 @@ export class FrontMcpContext {
    */
   updateSessionMetadata(metadata: SessionIdPayload): void {
     this._sessionMetadata = metadata;
+  }
+
+  /**
+   * Set the credential middleware for `this.fetch()` provider-based credential injection.
+   * @internal Called by scope initialization when auth providers are configured.
+   */
+  setCredentialMiddleware(middleware: FetchCredentialMiddleware): void {
+    this._credentialMiddleware = middleware;
   }
 
   // =====================
@@ -578,11 +589,49 @@ export class FrontMcpContext {
    * @param init - Request options
    * @returns Fetch response
    */
-  async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const headers = new Headers(init?.headers);
+  async fetch(input: RequestInfo | URL, init?: FrontMcpFetchInit | RequestInit): Promise<Response> {
+    let effectiveInit: RequestInit = (init ?? {}) as RequestInit;
+    let effectiveInput: RequestInfo | URL = input;
 
-    // Auto-inject auth headers
-    if (this.config.autoInjectAuthHeaders && this._authInfo.token) {
+    // Apply credential middleware if provider-based credentials requested
+    let providerCredentialsUsed = false;
+    if (init) {
+      const creds = (init as FrontMcpFetchInit).credentials;
+      if (isFrontMcpCredentials(creds)) {
+        providerCredentialsUsed = true;
+        if (this._credentialMiddleware) {
+          const result = await this._credentialMiddleware.applyCredentials(
+            typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
+            init as FrontMcpFetchInit,
+          );
+          effectiveInit = result.init;
+          // Preserve Request method/body when URL changes (e.g., queryApplier)
+          if (result.url) {
+            if (input instanceof Request) {
+              effectiveInput = new Request(result.url, {
+                method: input.method,
+                headers: input.headers,
+                body: input.body,
+                signal: input.signal,
+              });
+            } else {
+              effectiveInput = result.url;
+            }
+          }
+        } else {
+          // No middleware configured — strip non-standard credentials to prevent passing to native fetch
+          const { credentials: _removed, ...rest } = init as FrontMcpFetchInit;
+          effectiveInit = rest as RequestInit;
+        }
+      }
+    }
+
+    const headers = new Headers(effectiveInit.headers);
+
+    // Auto-inject MCP session token ONLY for non-provider requests.
+    // When provider credentials are used, the provider's applier handles auth —
+    // never leak the MCP session token to upstream services.
+    if (this.config.autoInjectAuthHeaders && this._authInfo.token && !providerCredentialsUsed) {
       if (!headers.has('Authorization')) {
         headers.set('Authorization', `Bearer ${this._authInfo.token}`);
       }
@@ -608,7 +657,7 @@ export class FrontMcpContext {
     // Use a manual AbortController + setTimeout instead of AbortSignal.timeout()
     // to avoid listener leaks under high concurrency (AbortSignal.timeout() creates
     // fire-and-forget signals whose internal abort listeners are never cleaned up).
-    const userSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const userSignal = effectiveInit.signal ?? (input instanceof Request ? input.signal : undefined);
     let controller: AbortController | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -623,8 +672,8 @@ export class FrontMcpContext {
     const signal = userSignal ?? controller?.signal;
 
     try {
-      return await fetch(input, {
-        ...init,
+      return await fetch(effectiveInput, {
+        ...effectiveInit,
         headers,
         signal,
       });

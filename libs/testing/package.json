@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/testing",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "E2E testing framework for FrontMCP servers - MCP client, auth mocks, Playwright integration",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -92,8 +92,8 @@
     "./esm": null
   },
   "peerDependencies": {
-    "@frontmcp/sdk": "1.0.2",
-    "@frontmcp/ui": "1.0.2",
+    "@frontmcp/sdk": "1.0.4",
+    "@frontmcp/ui": "1.0.4",
     "@playwright/test": "^1.40.0",
     "jest": "^29.0.0 || ^30.0.0",
     "@jest/globals": "^29.0.0 || ^30.0.0"
@@ -116,8 +116,8 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "1.0.2",
-    "@frontmcp/protocol": "1.0.2",
+    "@frontmcp/utils": "1.0.4",
+    "@frontmcp/protocol": "1.0.4",
     "jose": "^6.0.11",
     "tslib": "^2.3.0"
   },

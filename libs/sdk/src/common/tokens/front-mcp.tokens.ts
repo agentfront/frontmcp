@@ -49,4 +49,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   health: tokenFactory.meta('health'),
   // channels configuration (Claude Code notifications)
   channels: tokenFactory.meta('channels'),
+  // authorities configuration (RBAC/ABAC/ReBAC)
+  authorities: tokenFactory.meta('authorities'),
 };
