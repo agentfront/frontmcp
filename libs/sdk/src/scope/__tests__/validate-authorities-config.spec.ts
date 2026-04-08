@@ -23,17 +23,21 @@ interface MockEntry {
 
 interface MockScope {
   _authoritiesEngine: unknown;
+  _authoritiesContextBuilder: unknown;
   scopeTools: { getTools(includeHidden: boolean): MockEntry[] };
   scopeResources: { getResources(): MockEntry[] };
   scopePrompts: { getPrompts(): MockEntry[] };
+  scopeAgents: { getAgents(): Array<Record<string, unknown>> };
 }
 
 function createMockScope(overrides: Partial<MockScope> = {}): MockScope {
   return {
     _authoritiesEngine: undefined,
+    _authoritiesContextBuilder: undefined,
     scopeTools: { getTools: () => [] },
     scopeResources: { getResources: () => [] },
     scopePrompts: { getPrompts: () => [] },
+    scopeAgents: { getAgents: () => [] },
     ...overrides,
   };
 }
@@ -46,7 +50,8 @@ describe('validateAuthoritiesConfig', () => {
 
   it('should not throw when engine is configured even if entries have authorities', () => {
     const scope = createMockScope({
-      _authoritiesEngine: { evaluate: jest.fn() }, // truthy engine
+      _authoritiesEngine: { evaluate: jest.fn() },
+      _authoritiesContextBuilder: { build: jest.fn() },
       scopeTools: {
         getTools: () => [{ name: 'admin-tool', metadata: { name: 'admin-tool', authorities: 'admin' } }],
       },
@@ -67,7 +72,7 @@ describe('validateAuthoritiesConfig', () => {
     });
 
     expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
-      /Authorities configuration required.*Tool "admin-tool".*but no authorities engine is configured/,
+      /Authorities configuration required.*Tool "admin-tool".*but authorities enforcement is not fully configured/,
     );
   });
 
@@ -84,7 +89,7 @@ describe('validateAuthoritiesConfig', () => {
     });
 
     expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
-      /Authorities configuration required.*Resource "secret-resource".*but no authorities engine is configured/,
+      /Authorities configuration required.*Resource "secret-resource".*but authorities enforcement is not fully configured/,
     );
   });
 
@@ -101,7 +106,7 @@ describe('validateAuthoritiesConfig', () => {
     });
 
     expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
-      /Authorities configuration required.*Prompt "protected-prompt".*but no authorities engine is configured/,
+      /Authorities configuration required.*Prompt "protected-prompt".*but authorities enforcement is not fully configured/,
     );
   });
 
@@ -114,15 +119,11 @@ describe('validateAuthoritiesConfig', () => {
         ],
       },
       scopeResources: {
-        getResources: () => [
-          { name: 'res-a', metadata: { name: 'res-a', authorities: 'admin' } },
-        ],
+        getResources: () => [{ name: 'res-a', metadata: { name: 'res-a', authorities: 'admin' } }],
       },
     });
 
-    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
-      /Tool "tool-a".*Tool "tool-b".*Resource "res-a"/,
-    );
+    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(/Tool "tool-a".*Tool "tool-b".*Resource "res-a"/);
   });
 
   it('should truncate to first 5 entries and show overflow count', () => {
@@ -160,9 +161,9 @@ describe('validateAuthoritiesConfig', () => {
   });
 
   it('should pass getTools(true) to include hidden tools in the check', () => {
-    const getToolsSpy = jest.fn().mockReturnValue([
-      { name: 'hidden-admin', metadata: { name: 'hidden-admin', authorities: 'admin' } },
-    ]);
+    const getToolsSpy = jest
+      .fn()
+      .mockReturnValue([{ name: 'hidden-admin', metadata: { name: 'hidden-admin', authorities: 'admin' } }]);
 
     const scope = createMockScope({
       scopeTools: { getTools: getToolsSpy },
@@ -181,14 +182,10 @@ describe('validateAuthoritiesConfig', () => {
         ],
       },
       scopeResources: {
-        getResources: () => [
-          { name: 'open-resource', metadata: { name: 'open-resource' } },
-        ],
+        getResources: () => [{ name: 'open-resource', metadata: { name: 'open-resource' } }],
       },
       scopePrompts: {
-        getPrompts: () => [
-          { name: 'open-prompt', metadata: { name: 'open-prompt' } },
-        ],
+        getPrompts: () => [{ name: 'open-prompt', metadata: { name: 'open-prompt' } }],
       },
     });
 
@@ -198,9 +195,7 @@ describe('validateAuthoritiesConfig', () => {
   it('should include suggestion to add authorities config in error message', () => {
     const scope = createMockScope({
       scopeTools: {
-        getTools: () => [
-          { name: 'my-tool', metadata: { name: 'my-tool', authorities: 'admin' } },
-        ],
+        getTools: () => [{ name: 'my-tool', metadata: { name: 'my-tool', authorities: 'admin' } }],
       },
     });
 
@@ -212,14 +207,10 @@ describe('validateAuthoritiesConfig', () => {
   it('should include suggestion to remove authorities in error message', () => {
     const scope = createMockScope({
       scopeTools: {
-        getTools: () => [
-          { name: 'my-tool', metadata: { name: 'my-tool', authorities: 'admin' } },
-        ],
+        getTools: () => [{ name: 'my-tool', metadata: { name: 'my-tool', authorities: 'admin' } }],
       },
     });
 
-    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(
-      /or remove 'authorities' from entry metadata/,
-    );
+    expect(() => validateAuthoritiesConfig.call(scope)).toThrow(/or remove 'authorities' from entry metadata/);
   });
 });

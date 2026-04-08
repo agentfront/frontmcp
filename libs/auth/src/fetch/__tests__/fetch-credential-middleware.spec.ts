@@ -29,7 +29,7 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      const headers = new Headers(result.headers);
+      const headers = new Headers(result.init.headers);
       expect(headers.get('Authorization')).toBe(`Bearer ${TEST_TOKEN}`);
       expect(accessor.getToken).toHaveBeenCalledWith('github');
     });
@@ -46,9 +46,9 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result.credentials).toBeUndefined();
-      expect(result.method).toBe('POST');
-      expect(result.body).toBe(JSON.stringify({ query: 'test' }));
+      expect(result.init.credentials).toBeUndefined();
+      expect(result.init.method).toBe('POST');
+      expect(result.init.body).toBe(JSON.stringify({ query: 'test' }));
     });
 
     it('should resolve the correct provider token', async () => {
@@ -65,7 +65,7 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials('https://jira.example.com/api', init);
 
-      const headers = new Headers(result.headers);
+      const headers = new Headers(result.init.headers);
       expect(headers.get('Authorization')).toBe('Bearer jira-token');
       expect(accessor.getToken).toHaveBeenCalledWith('jira');
     });
@@ -83,7 +83,7 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result).toBe(init);
+      expect(result.init).toBe(init as RequestInit);
       expect(accessor.getToken).not.toHaveBeenCalled();
     });
   });
@@ -100,8 +100,8 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result).toBe(init);
-      expect(result.credentials).toBe('include');
+      expect(result.init).toBe(init as RequestInit);
+      expect(result.init.credentials).toBe('include');
       expect(accessor.getToken).not.toHaveBeenCalled();
     });
 
@@ -116,8 +116,8 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result).toBe(init);
-      expect(result.credentials).toBe('same-origin');
+      expect(result.init).toBe(init as RequestInit);
+      expect(result.init.credentials).toBe('same-origin');
       expect(accessor.getToken).not.toHaveBeenCalled();
     });
 
@@ -132,8 +132,8 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result).toBe(init);
-      expect(result.credentials).toBe('omit');
+      expect(result.init).toBe(init as RequestInit);
+      expect(result.init.credentials).toBe('omit');
       expect(accessor.getToken).not.toHaveBeenCalled();
     });
   });
@@ -150,9 +150,9 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result.headers).toBeUndefined();
-      expect(result.credentials).toBeUndefined();
-      expect(result.method).toBe('GET');
+      expect(result.init.headers).toBeUndefined();
+      expect(result.init.credentials).toBeUndefined();
+      expect(result.init.method).toBe('GET');
       expect(accessor.getToken).toHaveBeenCalledWith('github');
     });
 
@@ -167,8 +167,8 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result.headers).toBeUndefined();
-      expect(result.credentials).toBeUndefined();
+      expect(result.init.headers).toBeUndefined();
+      expect(result.init.credentials).toBeUndefined();
       expect(accessor.getToken).toHaveBeenCalledWith('unknown-provider');
     });
 
@@ -184,9 +184,9 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result.credentials).toBeUndefined();
-      expect(result.body).toBe('payload');
-      expect(result.method).toBe('POST');
+      expect(result.init.credentials).toBeUndefined();
+      expect(result.init.body).toBe('payload');
+      expect(result.init.method).toBe('POST');
     });
   });
 
@@ -207,7 +207,7 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      const headers = new Headers(result.headers);
+      const headers = new Headers(result.init.headers);
       expect(headers.get('Authorization')).toBe(`Bearer ${TEST_TOKEN}`);
       expect(headers.get('Content-Type')).toBe('application/json');
       expect(headers.get('Accept')).toBe('application/vnd.github.v3+json');
@@ -229,7 +229,7 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      const headers = new Headers(result.headers);
+      const headers = new Headers(result.init.headers);
       expect(headers.get('Authorization')).toBe(`Bearer ${TEST_TOKEN}`);
       expect(headers.get('X-Request-Id')).toBe('12345');
     });
@@ -248,7 +248,7 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      const headers = new Headers(result.headers);
+      const headers = new Headers(result.init.headers);
       expect(headers.get('Authorization')).toBe(`Bearer ${TEST_TOKEN}`);
     });
   });
@@ -268,10 +268,10 @@ describe('FetchCredentialMiddleware', () => {
 
       const result = await middleware.applyCredentials(TEST_URL, init);
 
-      expect(result.method).toBe('POST');
-      expect(result.body).toBe(JSON.stringify({ data: 'test' }));
-      expect(result.signal).toBe(signal);
-      expect(result.credentials).toBeUndefined();
+      expect(result.init.method).toBe('POST');
+      expect(result.init.body).toBe(JSON.stringify({ data: 'test' }));
+      expect(result.init.signal).toBe(signal);
+      expect(result.init.credentials).toBeUndefined();
     });
   });
 });

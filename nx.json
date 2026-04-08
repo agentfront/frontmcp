@@ -90,7 +90,7 @@
     }
   },
   "release": {
-    "projects": ["libs/*", "apps/*", "plugins/*"],
+    "projects": ["libs/*", "plugins/*"],
     "version": {
       "updateDependents": "always"
     }

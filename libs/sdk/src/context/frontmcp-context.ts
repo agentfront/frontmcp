@@ -594,16 +594,30 @@ export class FrontMcpContext {
     let effectiveInput: RequestInfo | URL = input;
 
     // Apply credential middleware if provider-based credentials requested
+    let providerCredentialsUsed = false;
     if (init) {
       const creds = (init as FrontMcpFetchInit).credentials;
       if (isFrontMcpCredentials(creds)) {
+        providerCredentialsUsed = true;
         if (this._credentialMiddleware) {
           const result = await this._credentialMiddleware.applyCredentials(
             typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
             init as FrontMcpFetchInit,
           );
           effectiveInit = result.init;
-          if (result.url) effectiveInput = result.url;
+          // Preserve Request method/body when URL changes (e.g., queryApplier)
+          if (result.url) {
+            if (input instanceof Request) {
+              effectiveInput = new Request(result.url, {
+                method: input.method,
+                headers: input.headers,
+                body: input.body,
+                signal: input.signal,
+              });
+            } else {
+              effectiveInput = result.url;
+            }
+          }
         } else {
           // No middleware configured — strip non-standard credentials to prevent passing to native fetch
           const { credentials: _removed, ...rest } = init as FrontMcpFetchInit;
@@ -614,8 +628,10 @@ export class FrontMcpContext {
 
     const headers = new Headers(effectiveInit.headers);
 
-    // Auto-inject auth headers (MCP session token, not upstream provider tokens)
-    if (this.config.autoInjectAuthHeaders && this._authInfo.token) {
+    // Auto-inject MCP session token ONLY for non-provider requests.
+    // When provider credentials are used, the provider's applier handles auth —
+    // never leak the MCP session token to upstream services.
+    if (this.config.autoInjectAuthHeaders && this._authInfo.token && !providerCredentialsUsed) {
       if (!headers.has('Authorization')) {
         headers.set('Authorization', `Bearer ${this._authInfo.token}`);
       }

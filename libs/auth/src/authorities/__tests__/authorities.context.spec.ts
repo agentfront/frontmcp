@@ -1,4 +1,5 @@
 import { AuthoritiesContextBuilder, resolveDotPath } from '../authorities.context';
+import type { RelationshipResolver } from '../authorities.types';
 
 describe('resolveDotPath', () => {
   it('should resolve a simple key', () => {

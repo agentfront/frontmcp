@@ -32,7 +32,7 @@ import AgentRegistry from '../agent/agent.registry';
 import SkillRegistry from '../skill/skill.registry';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import { getEnvFlag, isEdgeRuntime } from '@frontmcp/utils';
-import { FlowExitedWithoutOutputError } from '../errors';
+import { FlowExitedWithoutOutputError, AuthConfigurationError } from '../errors';
 import { registerSkillCapabilities } from '../skill/skill-scope.helper';
 import { SkillSessionManager, createSkillSessionStore } from '../skill/session';
 import { createSkillToolGuardHook } from '../skill/hooks';
@@ -1059,7 +1059,7 @@ export class Scope extends ScopeEntry {
    * @internal
    */
   private validateAuthoritiesConfig(): void {
-    if (this._authoritiesEngine) return; // Engine configured — all good
+    if (this._authoritiesEngine && this._authoritiesContextBuilder) return; // Enforcement fully configured
 
     const entriesWithAuthorities: string[] = [];
 
@@ -1098,10 +1098,12 @@ export class Scope extends ScopeEntry {
     if (entriesWithAuthorities.length > 0) {
       const names = entriesWithAuthorities.slice(0, 5).join(', ');
       const suffix = entriesWithAuthorities.length > 5 ? ` and ${entriesWithAuthorities.length - 5} more` : '';
-      throw new Error(
+      throw new AuthConfigurationError(
         `Authorities configuration required: ${names}${suffix} declare 'authorities' metadata ` +
-          `but no authorities engine is configured. Add 'authorities: { claimsMapping: {...}, profiles: {...} }' ` +
+          `but authorities enforcement is not fully configured (engine/context builder missing). ` +
+          `Add 'authorities: { claimsMapping: {...}, profiles: {...} }' ` +
           `to your @FrontMcp() decorator to enable enforcement, or remove 'authorities' from entry metadata.`,
+        { suggestion: 'Add authorities config to @FrontMcp() or remove authorities from entry metadata' },
       );
     }
   }
