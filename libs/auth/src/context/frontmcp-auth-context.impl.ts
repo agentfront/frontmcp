@@ -72,10 +72,7 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
   readonly roles: readonly string[];
   readonly permissions: readonly string[];
 
-  constructor(
-    source: AuthContextSourceInfo,
-    claimsMapping?: AuthoritiesClaimsMapping,
-  ) {
+  constructor(source: AuthContextSourceInfo, claimsMapping?: AuthoritiesClaimsMapping) {
     // -- User identity -------------------------------------------------
     const rawUser = source.user ?? {};
     const sub = claimsMapping?.userId
@@ -96,14 +93,14 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;
     this.mode = String(
       source.extra?.['authMode'] ??
-      extraAuth?.['mode'] ??
-      (source.extra?.['isPublic'] === true || (rawUser as Record<string, unknown>)['anonymous'] === true ? 'public' : 'authenticated'),
+        extraAuth?.['mode'] ??
+        (source.extra?.['isPublic'] === true || (rawUser as Record<string, unknown>)['anonymous'] === true
+          ? 'public'
+          : 'authenticated'),
     );
 
     // -- Session ID ----------------------------------------------------
-    this.sessionId = typeof source.sessionId === 'string'
-      ? source.sessionId
-      : '';
+    this.sessionId = typeof source.sessionId === 'string' ? source.sessionId : '';
 
     // -- Scopes --------------------------------------------------------
     this.scopes = Object.freeze(
@@ -118,20 +115,16 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
     if (claimsMapping?.roles) {
       this.roles = Object.freeze([...toStringArray(resolveDotPath(rawClaims, claimsMapping.roles))]);
     } else {
-      this.roles = Object.freeze([...toStringArray(
-        (rawUser as Record<string, unknown>)['roles'] ??
-        (extraAuth?.['scopes'] as unknown) ??
-        [],
-      )]);
+      this.roles = Object.freeze([
+        ...toStringArray((rawUser as Record<string, unknown>)['roles'] ?? (extraAuth?.['scopes'] as unknown) ?? []),
+      ]);
     }
 
     // -- Permissions ---------------------------------------------------
     if (claimsMapping?.permissions) {
       this.permissions = Object.freeze([...toStringArray(resolveDotPath(rawClaims, claimsMapping.permissions))]);
     } else {
-      this.permissions = Object.freeze([...toStringArray(
-        (rawUser as Record<string, unknown>)['permissions'] ?? [],
-      )]);
+      this.permissions = Object.freeze([...toStringArray((rawUser as Record<string, unknown>)['permissions'] ?? [])]);
     }
   }
 
@@ -141,8 +134,24 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
     return this.roles.includes(role);
   }
 
+  hasAllRoles(roles: readonly string[]): boolean {
+    return roles.every((r) => this.roles.includes(r));
+  }
+
+  hasAnyRole(roles: readonly string[]): boolean {
+    return roles.some((r) => this.roles.includes(r));
+  }
+
   hasPermission(permission: string): boolean {
     return this.permissions.includes(permission);
+  }
+
+  hasAllPermissions(permissions: readonly string[]): boolean {
+    return permissions.every((p) => this.permissions.includes(p));
+  }
+
+  hasAnyPermission(permissions: readonly string[]): boolean {
+    return permissions.some((p) => this.permissions.includes(p));
   }
 
   hasScope(scope: string): boolean {
@@ -151,6 +160,10 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
 
   hasAllScopes(scopes: readonly string[]): boolean {
     return scopes.every((s) => this.scopes.includes(s));
+  }
+
+  hasAnyScope(scopes: readonly string[]): boolean {
+    return scopes.some((s) => this.scopes.includes(s));
   }
 
   // -- Internal helpers ----------------------------------------------

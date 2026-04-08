@@ -360,6 +360,56 @@ Tools from each adapter are grouped by their auth configuration and appear in th
 
 ---
 
+## Tool Consent Types
+
+When consent is enabled, FrontMCP tracks granular tool-level authorization using these types:
+
+### ConsentToolItem
+
+Represents a tool in the consent UI:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `id` | `string` | Tool identifier |
+| `name` | `string` | Display name |
+| `description` | `string` | Tool description |
+| `appId` | `string` | Parent app ID |
+| `requiredScopes` | `string[]` | OAuth scopes needed |
+| `category` | `string` | Grouping category |
+
+### ConsentSelection
+
+Captures the user's tool selection:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `selectedTools` | `string[]` | Tool IDs the user authorized |
+| `allSelected` | `boolean` | Whether all tools were selected |
+| `consentedAt` | `number` | Timestamp of consent |
+| `consentVersion` | `string` | Schema version for migration |
+
+### ConsentState
+
+Full consent flow state passed to the consent UI:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `availableTools` | `ConsentToolItem[]` | All tools requiring consent |
+| `preSelected` | `string[]` | Tools pre-selected by default |
+| `groupBy` | `string` | Grouping field (e.g., `appId`, `category`) |
+
+### FederatedLoginState
+
+For multi-provider consent where users select which IdPs to authenticate with:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `providers` | `FederatedProviderItem[]` | Available identity providers |
+| `required` | `string[]` | Providers that cannot be skipped |
+| `optional` | `string[]` | Providers the user can skip |
+
+---
+
 ## Best Practices
 
 <Check>**Request minimal scopes** - Only ask for what each tool needs</Check>

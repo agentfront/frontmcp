@@ -86,6 +86,22 @@ describe('FetchCredentialMiddleware', () => {
       expect(result.init).toBe(init as RequestInit);
       expect(accessor.getToken).not.toHaveBeenCalled();
     });
+
+    it('should strip invalid object credentials without provider field', async () => {
+      const accessor = createMockAccessor();
+      const middleware = new FetchCredentialMiddleware(accessor);
+
+      const init: FrontMcpFetchInit = {
+        method: 'GET',
+        credentials: { foo: 'bar' } as unknown as FrontMcpFetchInit['credentials'],
+      };
+
+      const result = await middleware.applyCredentials(TEST_URL, init);
+
+      expect(result.init.credentials).toBeUndefined();
+      expect(result.init.method).toBe('GET');
+      expect(accessor.getToken).not.toHaveBeenCalled();
+    });
   });
 
   describe('standard string credentials', () => {

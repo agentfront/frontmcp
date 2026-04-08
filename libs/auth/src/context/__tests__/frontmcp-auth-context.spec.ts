@@ -268,8 +268,116 @@ describe('FrontMcpAuthContextImpl', () => {
     });
   });
 
+  describe('hasAllRoles', () => {
+    it('should return true when user has all specified roles', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', roles: ['admin', 'editor', 'viewer'] },
+      });
+      expect(ctx.hasAllRoles(['admin', 'editor'])).toBe(true);
+    });
+
+    it('should return false when some roles are missing', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', roles: ['editor'] },
+      });
+      expect(ctx.hasAllRoles(['admin', 'editor'])).toBe(false);
+    });
+
+    it('should return true for an empty roles list', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAllRoles([])).toBe(true);
+    });
+
+    it('should return false when user has no roles but list is non-empty', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAllRoles(['admin'])).toBe(false);
+    });
+  });
+
+  describe('hasAnyRole', () => {
+    it('should return true when user has at least one specified role', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', roles: ['editor'] },
+      });
+      expect(ctx.hasAnyRole(['admin', 'editor'])).toBe(true);
+    });
+
+    it('should return false when user has none of the specified roles', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', roles: ['viewer'] },
+      });
+      expect(ctx.hasAnyRole(['admin', 'editor'])).toBe(false);
+    });
+
+    it('should return false for an empty roles list', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', roles: ['admin'] },
+      });
+      expect(ctx.hasAnyRole([])).toBe(false);
+    });
+
+    it('should return false when user has no roles', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAnyRole(['admin'])).toBe(false);
+    });
+  });
+
+  describe('hasAllPermissions', () => {
+    it('should return true when user has all specified permissions', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', permissions: ['read', 'write', 'delete'] },
+      });
+      expect(ctx.hasAllPermissions(['read', 'write'])).toBe(true);
+    });
+
+    it('should return false when some permissions are missing', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', permissions: ['read'] },
+      });
+      expect(ctx.hasAllPermissions(['read', 'write'])).toBe(false);
+    });
+
+    it('should return true for an empty permissions list', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAllPermissions([])).toBe(true);
+    });
+
+    it('should return false when user has no permissions but list is non-empty', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAllPermissions(['read'])).toBe(false);
+    });
+  });
+
+  describe('hasAnyPermission', () => {
+    it('should return true when user has at least one specified permission', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', permissions: ['write'] },
+      });
+      expect(ctx.hasAnyPermission(['read', 'write'])).toBe(true);
+    });
+
+    it('should return false when user has none of the specified permissions', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', permissions: ['delete'] },
+      });
+      expect(ctx.hasAnyPermission(['read', 'write'])).toBe(false);
+    });
+
+    it('should return false for an empty permissions list', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1', permissions: ['read'] },
+      });
+      expect(ctx.hasAnyPermission([])).toBe(false);
+    });
+
+    it('should return false when user has no permissions', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAnyPermission(['read'])).toBe(false);
+    });
+  });
+
   // =========================================================================
-  // hasScope / hasAllScopes
+  // hasScope / hasAllScopes / hasAnyScope
   // =========================================================================
 
   describe('hasScope', () => {
@@ -324,6 +432,37 @@ describe('FrontMcpAuthContextImpl', () => {
     });
   });
 
+  describe('hasAnyScope', () => {
+    it('should return true when at least one scope is present', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1' },
+        scopes: ['openid', 'profile'],
+      });
+      expect(ctx.hasAnyScope(['profile', 'admin'])).toBe(true);
+    });
+
+    it('should return false when no scopes match', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1' },
+        scopes: ['openid'],
+      });
+      expect(ctx.hasAnyScope(['profile', 'admin'])).toBe(false);
+    });
+
+    it('should return false for an empty scopes list', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'u1' },
+        scopes: ['openid'],
+      });
+      expect(ctx.hasAnyScope([])).toBe(false);
+    });
+
+    it('should return false when session has no scopes', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } });
+      expect(ctx.hasAnyScope(['openid'])).toBe(false);
+    });
+  });
+
   // =========================================================================
   // Claims mapping — IdP-specific JWT shapes
   // =========================================================================
@@ -351,10 +490,7 @@ describe('FrontMcpAuthContextImpl', () => {
 
     it('should extract roles via Auth0 namespaced claims', () => {
       const mapping: AuthoritiesClaimsMapping = { roles: 'https://myapp.com/roles' };
-      const ctx = new FrontMcpAuthContextImpl(
-        { user: { sub: 'u1', 'https://myapp.com/roles': ['admin'] } },
-        mapping,
-      );
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1', 'https://myapp.com/roles': ['admin'] } }, mapping);
       expect(ctx.roles).toEqual(['admin']);
     });
 
@@ -379,10 +515,7 @@ describe('FrontMcpAuthContextImpl', () => {
 
     it('should extract roles via Cognito groups', () => {
       const mapping: AuthoritiesClaimsMapping = { roles: 'cognito:groups' };
-      const ctx = new FrontMcpAuthContextImpl(
-        { user: { sub: 'u1', 'cognito:groups': ['Admins', 'Users'] } },
-        mapping,
-      );
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1', 'cognito:groups': ['Admins', 'Users'] } }, mapping);
       expect(ctx.roles).toEqual(['Admins', 'Users']);
     });
 
@@ -403,37 +536,25 @@ describe('FrontMcpAuthContextImpl', () => {
 
     it('should resolve userId from custom path', () => {
       const mapping: AuthoritiesClaimsMapping = { userId: 'custom_uid' };
-      const ctx = new FrontMcpAuthContextImpl(
-        { user: { sub: 'fallback-sub', custom_uid: 'uid-42' } },
-        mapping,
-      );
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'fallback-sub', custom_uid: 'uid-42' } }, mapping);
       expect(ctx.user.sub).toBe('uid-42');
     });
 
     it('should fall back to user.sub when userId path resolves to undefined', () => {
       const mapping: AuthoritiesClaimsMapping = { userId: 'nonexistent.path' };
-      const ctx = new FrontMcpAuthContextImpl(
-        { user: { sub: 'fallback-sub' } },
-        mapping,
-      );
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'fallback-sub' } }, mapping);
       expect(ctx.user.sub).toBe('fallback-sub');
     });
 
     it('should return empty arrays when mapped path resolves to nothing', () => {
       const mapping: AuthoritiesClaimsMapping = { roles: 'nonexistent.path' };
-      const ctx = new FrontMcpAuthContextImpl(
-        { user: { sub: 'u1' } },
-        mapping,
-      );
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1' } }, mapping);
       expect(ctx.roles).toEqual([]);
     });
 
     it('should handle space-separated string scopes (Okta scp format)', () => {
       const mapping: AuthoritiesClaimsMapping = { permissions: 'scope' };
-      const ctx = new FrontMcpAuthContextImpl(
-        { user: { sub: 'u1', scope: 'read write delete' } },
-        mapping,
-      );
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'u1', scope: 'read write delete' } }, mapping);
       expect(ctx.permissions).toEqual(['read', 'write', 'delete']);
     });
 
@@ -560,23 +681,17 @@ describe('Auth Context Pipes', () => {
   });
 
   it('should run async pipe', async () => {
-    const ctx = await buildAuthContext(
-      { user: { sub: 'user-1' } },
-      undefined,
-      [async () => ({ asyncField: 'resolved' })],
-    );
+    const ctx = await buildAuthContext({ user: { sub: 'user-1' } }, undefined, [
+      async () => ({ asyncField: 'resolved' }),
+    ]);
     expect((ctx as unknown as Record<string, unknown>)['asyncField']).toBe('resolved');
   });
 
   it('should merge multiple pipes in order', async () => {
-    const ctx = await buildAuthContext(
-      { user: { sub: 'user-1' } },
-      undefined,
-      [
-        () => ({ fieldA: 'from-pipe-1', shared: 'first' }),
-        () => ({ fieldB: 'from-pipe-2', shared: 'second' }),
-      ],
-    );
+    const ctx = await buildAuthContext({ user: { sub: 'user-1' } }, undefined, [
+      () => ({ fieldA: 'from-pipe-1', shared: 'first' }),
+      () => ({ fieldB: 'from-pipe-2', shared: 'second' }),
+    ]);
     const record = ctx as unknown as Record<string, unknown>;
     expect(record['fieldA']).toBe('from-pipe-1');
     expect(record['fieldB']).toBe('from-pipe-2');
@@ -585,25 +700,21 @@ describe('Auth Context Pipes', () => {
 
   it('should not crash when a pipe throws', async () => {
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const ctx = await buildAuthContext(
-      { user: { sub: 'user-1' } },
-      undefined,
-      [
-        () => { throw new Error('pipe failed'); },
-        () => ({ survived: true }),
-      ],
-    );
+    const ctx = await buildAuthContext({ user: { sub: 'user-1' } }, undefined, [
+      () => {
+        throw new Error('pipe failed');
+      },
+      () => ({ survived: true }),
+    ]);
     expect((ctx as unknown as Record<string, unknown>)['survived']).toBe(true);
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pipe failed'));
     consoleSpy.mockRestore();
   });
 
   it('should preserve base context fields alongside pipe extensions', async () => {
-    const ctx = await buildAuthContext(
-      { user: { sub: 'admin-user' } },
-      { roles: 'roles' },
-      [() => ({ customField: 'hello' })],
-    );
+    const ctx = await buildAuthContext({ user: { sub: 'admin-user' } }, { roles: 'roles' }, [
+      () => ({ customField: 'hello' }),
+    ]);
     expect(ctx.user.sub).toBe('admin-user');
     expect(ctx.hasRole).toBeDefined();
     expect((ctx as unknown as Record<string, unknown>)['customField']).toBe('hello');

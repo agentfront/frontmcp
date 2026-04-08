@@ -117,12 +117,27 @@ export interface FrontMcpAuthContext extends ExtendFrontMcpAuthContext {
   /** Check whether the user has a specific role */
   hasRole(role: string): boolean;
 
+  /** Check whether the user has ALL of the specified roles */
+  hasAllRoles(roles: readonly string[]): boolean;
+
+  /** Check whether the user has at least one of the specified roles */
+  hasAnyRole(roles: readonly string[]): boolean;
+
   /** Check whether the user has a specific permission */
   hasPermission(permission: string): boolean;
+
+  /** Check whether the user has ALL of the specified permissions */
+  hasAllPermissions(permissions: readonly string[]): boolean;
+
+  /** Check whether the user has at least one of the specified permissions */
+  hasAnyPermission(permissions: readonly string[]): boolean;
 
   /** Check whether the session has a specific OAuth scope */
   hasScope(scope: string): boolean;
 
   /** Check whether the session has ALL of the specified OAuth scopes */
   hasAllScopes(scopes: readonly string[]): boolean;
+
+  /** Check whether the session has at least one of the specified OAuth scopes */
+  hasAnyScope(scopes: readonly string[]): boolean;
 }

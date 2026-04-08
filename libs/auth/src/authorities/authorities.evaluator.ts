@@ -13,7 +13,6 @@ import type {
   ResourceIdRef,
   AuthoritiesResult,
   AuthoritiesEvaluationContext,
-  DynamicValueRef,
 } from './authorities.types';
 import { resolveDotPath } from './authorities.context';
 

@@ -822,3 +822,147 @@ buildInvalidRequestHeader(prmUrl, 'Missing Authorization header');
 | **Hookable auth stages** | N/A | N/A | N/A | `Will` / `Did` / `Around` on `checkEntryAuthorities` and `checkToolAuthorization` |
 | **PRM endpoint** | RFC 9728 | N/A | N/A | Dynamic `scopes_supported` from tool declarations |
 | **Token isolation** | No passthrough | N/A | N/A | By design -- vault provides tokens via `this.fetch()` middleware |
+
+## 11. Credential Loading Strategies
+
+When tools require upstream provider credentials, the vault loads them using one of two strategies:
+
+| Strategy | When Loaded | Best For |
+| -------- | ----------- | -------- |
+| **Eager** | Parallel load at session initialization | Low-latency first tool call, few providers |
+| **Lazy** | On-demand when first requested | Fast startup, many providers |
+
+### Eager Loading
+
+All configured credentials are loaded in parallel when the session starts. Failed loads are collected and reported. Credentials marked `required: true` that fail to load cause an error.
+
+```typescript
+// Eager loading result
+interface EagerLoadResult {
+  loaded: Map<string, ResolvedCredential>;  // Successfully loaded
+  failed: Map<string, Error>;               // Failed providers
+  duration: number;                          // Total load time (ms)
+}
+```
+
+### Lazy Loading
+
+Credentials are loaded on first access with automatic deduplication — concurrent requests for the same provider share a single in-flight promise.
+
+Lazy loading also supports credential refresh: if a provider defines a `refresh()` function, it is used; otherwise the factory is called again.
+
+### Resolved Credentials
+
+Both strategies produce a `ResolvedCredential` with metadata:
+
+| Field | Description |
+| ----- | ----------- |
+| `acquiredAt` | Timestamp when credential was loaded |
+| `expiresAt` | Computed expiration time |
+| `isValid` | Whether credential is still valid |
+| `scope` | Credential scope (session, user, global) |
+
+## 12. Token Leak Detection
+
+FrontMCP includes built-in token leak detection to prevent credentials from being accidentally exposed to LLM context.
+
+The `validateNoTokenLeakage()` method on `AuthorizationBase` scans data for:
+
+- **JWT patterns**: Three-segment base64url strings with a valid JWT header (contains `"alg"` claim)
+- **Sensitive field names**: `access_token`, `refresh_token`, `id_token`, `tokenEnc`, `secretRefId`
+
+If a token is detected in data that would be returned to the LLM, a `TokenLeakDetectedError` is thrown, preventing the leak.
+
+<Warning>
+  Token leak detection runs automatically when building LLM-safe auth context. If you're constructing custom tool responses that include auth-related data, ensure sensitive fields are stripped before returning.
+</Warning>
+
+## 13. Encrypted Vault (Zero-Knowledge)
+
+For deployments requiring the highest credential security, FrontMCP provides a zero-knowledge encrypted vault backed by Redis.
+
+### How It Works
+
+- Credentials are encrypted with **AES-256-GCM**
+- The encryption key is **derived from the client's JWT** — the server cannot decrypt credentials without the client's token
+- Each vault instance has a unique encryption key derived from the JWT + a server-side pepper
+- Concurrent requests are safely isolated via `AsyncLocalStorage` encryption contexts
+
+### Configuration
+
+```typescript
+import { createEncryptedVault } from '@frontmcp/auth';
+
+const vault = createEncryptedVault({
+  pepper: process.env.VAULT_PEPPER,   // Server-side pepper for key derivation
+  namespace: 'myapp',                  // Namespace for Redis key isolation
+  redis: { provider: 'redis', host: 'localhost' },
+});
+```
+
+### Security Properties
+
+| Property | Description |
+| -------- | ----------- |
+| Zero-knowledge | Server stores encrypted blobs; cannot decrypt without client JWT |
+| Per-vault keys | Each user/session gets a unique derived encryption key |
+| Concurrent safety | `AsyncLocalStorage` ensures encryption context isolation |
+| Metadata access | Authorized app IDs and skipped app IDs are stored unencrypted for quick auth checks |
+
+## 14. Machine ID
+
+FrontMCP uses a per-node machine identifier for session encryption key derivation and distributed session affinity.
+
+### Resolution Priority
+
+1. `MACHINE_ID` environment variable (highest priority)
+2. File persistence at `.frontmcp/machine-id` (development mode)
+3. Random UUID (ephemeral — sessions become non-portable across restarts)
+
+### Production Configuration
+
+For distributed deployments with Redis session storage, set `MACHINE_ID` to ensure session portability:
+
+```bash
+# Each instance should use the same MACHINE_ID for shared sessions
+export MACHINE_ID="prod-cluster-shared-key"
+```
+
+<Warning>
+  Without a stable `MACHINE_ID`, sessions encrypted on one instance cannot be decrypted on another. Always set `MACHINE_ID` in multi-instance deployments.
+</Warning>
+
+### Override
+
+For testing or dynamic environments, use the programmatic override:
+
+```typescript
+import { setMachineIdOverride } from '@frontmcp/auth';
+
+setMachineIdOverride('test-machine-id');
+```
+
+## 15. Auth Provider Detection
+
+When configuring multi-app servers with mixed auth modes, FrontMCP automatically validates provider configurations at startup.
+
+The detection system:
+
+- Scans all apps and their auth providers
+- Validates mode compatibility (e.g., transparent mode is incompatible with multiple providers)
+- Detects whether orchestration is required
+- Reports warnings (e.g., public parent with auth-configured children)
+
+Detection results are available via `scope.authProviders.detection`:
+
+```typescript
+const detection = scope.authProviders.detection;
+// {
+//   hasAuth: true,
+//   modes: ['public', 'orchestrated'],
+//   providers: ['github', 'jira'],
+//   requiresOrchestration: true,
+//   warnings: [],
+//   errors: [],
+// }
+```
