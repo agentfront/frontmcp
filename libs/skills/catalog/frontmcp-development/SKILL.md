@@ -52,7 +52,8 @@ Entry point for building MCP server components. This skill helps you find the ri
 | Write instruction-only AI guidance (no code execution)   | `create-skill`                    | Skill entries with markdown instructions from files, strings, or URLs                         |
 | Write AI guidance that also orchestrates tools           | `create-skill-with-tools`         | Skill entries that combine instructions with registered tools                                 |
 | Look up any decorator signature or option                | `decorators-guide`                | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more           |
-| Integrate an external API via OpenAPI spec               | `official-adapters`               | OpenapiAdapter with auth, polling, inline specs, and multiple API composition                 |
+| Overview of all official adapters                        | `official-adapters`               | Router to all adapter types; adapter vs plugin comparison                                     |
+| Integrate an external API via OpenAPI spec               | `openapi-adapter`                 | OpenapiAdapter with auth, polling, filtering, transforms, format resolution, $ref security    |
 | Use official plugins (caching, remember, feature flags)  | `official-plugins`                | Built-in plugins for caching, session memory, approval, and feature flags (dashboard is beta) |
 | Connect to an external data source via a custom adapter  | `create-adapter`                  | Create custom adapters for external data sources                                              |
 | Configure LLM settings for an agent component            | `create-agent-llm-config`         | Configure LLM settings for agent components                                                   |
@@ -70,7 +71,7 @@ Entry point for building MCP server components. This skill helps you find the ri
 6. **`create-agent`** — Build autonomous AI loops (advanced)
 7. **`create-job`** / **`create-workflow`** — Background processing (advanced)
 8. **`create-skill`** / **`create-skill-with-tools`** — Author your own skills (meta)
-9. **`official-adapters`** — Integrate external APIs via OpenAPI specs
+9. **`official-adapters`** / **`openapi-adapter`** — Integrate external APIs via OpenAPI specs
 10. **`official-plugins`** — Add caching, session memory, feature flags, and more
 
 ## Cross-Cutting Patterns
@@ -123,4 +124,4 @@ Entry point for building MCP server components. This skill helps you find the ri
 ## Reference
 
 - [FrontMCP Overview](https://docs.agentfront.dev/frontmcp/fundamentals/overview)
-- Related skills: `create-tool`, `create-resource`, `create-prompt`, `create-agent`, `create-provider`, `create-job`, `create-workflow`, `create-skill`, `create-skill-with-tools`, `decorators-guide`, `official-adapters`, `official-plugins`
+- Related skills: `create-tool`, `create-resource`, `create-prompt`, `create-agent`, `create-provider`, `create-job`, `create-workflow`, `create-skill`, `create-skill-with-tools`, `decorators-guide`, `official-adapters`, `openapi-adapter`, `official-plugins`

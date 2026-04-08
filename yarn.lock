@@ -49,6 +49,13 @@
     "@types/json-schema" "^7.0.15"
     js-yaml "^4.1.0"
 
+"@apidevtools/json-schema-ref-parser@^15.3.5":
+  version "15.3.5"
+  resolved "https://registry.yarnpkg.com/@apidevtools/json-schema-ref-parser/-/json-schema-ref-parser-15.3.5.tgz#503726178d8d792eea7b195566272aaee6837e2f"
+  integrity sha512-orNOYXw3hYXxxisXMldjzjBzqqTLBPbwOtHg7ovBPvfBHDue1qM9YJENZ3W2BQuS+7z4ThogMbEzEsov57Itkg==
+  dependencies:
+    js-yaml "^4.1.1"
+
 "@asamuzakjp/css-color@^3.2.0":
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/@asamuzakjp/css-color/-/css-color-3.2.0.tgz#cc42f5b85c593f79f1fa4f25d2b9b321e61d1794"
@@ -1517,6 +1524,72 @@
   dependencies:
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
+
+"@frontmcp/auth@1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@frontmcp/auth/-/auth-1.0.3.tgz#3a802abe1b6ee31c394091d931cbb719d41bef53"
+  integrity sha512-Wb9aWTttlY0zZikTc+YM7rfPy1gKfov+jTxxXqQGj0TCtsltobDVkgCu5F1nWBhGoNeX1+PBIFaR3yoSYH43Ag==
+  dependencies:
+    "@frontmcp/di" "1.0.3"
+    "@frontmcp/utils" "1.0.3"
+    jose "^6.0.0"
+
+"@frontmcp/di@1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@frontmcp/di/-/di-1.0.3.tgz#d4de9a0c193d64c28740860735bd361f42d7d147"
+  integrity sha512-eDndcCNKEdvFy1IDV9GcpRZ+jO+RgrtZfn5FJ9r2sD1hwxM0Rks7OGilGeshihSJVsDE/J7TDyWpCUJV99OLEg==
+  dependencies:
+    mitt "^3.0.1"
+
+"@frontmcp/guard@1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@frontmcp/guard/-/guard-1.0.3.tgz#bd55c89d99fe3a386981316a1d183e671ebfc239"
+  integrity sha512-nh3j0PT08K/VkEMN+5f1K3lCfcn1eRQ6u4D2sL1J2fhQl+IMm1mxVntzr2LmIX3D6CBKGIJNIGo+yLx+iLcHAw==
+  dependencies:
+    "@frontmcp/utils" "1.0.3"
+
+"@frontmcp/protocol@1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@frontmcp/protocol/-/protocol-1.0.3.tgz#e89a2cf5982a03ed76521284650d3e654b5cf430"
+  integrity sha512-yo4XQl4abEVtju2//ovqtSUtaa34xbJhLKGKMC92l3N6kp3K9jZ5iEXf8a/woTk+v9uYSrmo7JEOqWVGw4P5bQ==
+  dependencies:
+    "@modelcontextprotocol/sdk" "1.27.1"
+
+"@frontmcp/sdk@1.0.2":
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/@frontmcp/sdk/-/sdk-1.0.2.tgz#87461ca8fc1b3c0585b389dfd08e0260f3177662"
+  integrity sha512-kC6GiGEEXA2El51N+/7JpV+AY6sJnvMVFZCC5jpQhZFKB85LSaNux3DdKMTWvB+ejs8kKy13meOS4ffDyLDB9g==
+  dependencies:
+    "@frontmcp/auth" "1.0.2"
+    "@frontmcp/di" "1.0.2"
+    "@frontmcp/guard" "1.0.2"
+    "@frontmcp/protocol" "1.0.2"
+    "@frontmcp/uipack" "1.0.2"
+    "@frontmcp/utils" "1.0.2"
+    "@types/cors" "^2.8.17"
+    ioredis "^5.8.0"
+    jose "^6.1.3"
+    js-yaml "^4.1.1"
+    reflect-metadata "^0.2.2"
+    semver "^7.6.0"
+    vectoriadb "^2.1.3"
+
+"@frontmcp/uipack@1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@frontmcp/uipack/-/uipack-1.0.3.tgz#8d403106c842e662ebecf23ed46768d6fbd10907"
+  integrity sha512-1gXU03YJMc46PkbbrRitPmsGsiG6Zi1NCLkHqcAE765T1TFXqt9pV/BmNm9DGYE//PUWl/Ayl3e47ezTUdJHaA==
+  dependencies:
+    zod "^4.0.0"
+
+"@frontmcp/utils@1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@frontmcp/utils/-/utils-1.0.3.tgz#89b5ee8187aa0e0dd617a84289a6608bc9ee8db6"
+  integrity sha512-ev08jTqIjyTxV64RpkmGfDIx4FCJwWmNPL+z6ACUz1p30iqfupb+nfzFeXpSNPn2GZCM/H9WzUH9PGrVnE3FtQ==
+  dependencies:
+    "@enclave-vm/ast" "^2.13.0"
+    "@noble/ciphers" "^2.1.1"
+    "@noble/hashes" "^2.0.1"
+    zod "^4.0.0"
 
 "@hono/node-server@^1.19.9":
   version "1.19.9"
@@ -9885,14 +9958,14 @@ math-intrinsics@^1.1.0:
   resolved "https://registry.yarnpkg.com/math-intrinsics/-/math-intrinsics-1.1.0.tgz#a0dd74be81e2aa5c2f27e65ce283605ee4e2b7f9"
   integrity sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==
 
-mcp-from-openapi@2.1.2:
-  version "2.1.2"
-  resolved "https://registry.yarnpkg.com/mcp-from-openapi/-/mcp-from-openapi-2.1.2.tgz#7623fb60f278f00464256f15765f46b6103d4afc"
-  integrity sha512-CTIKWPXIPmgvKEpfAQejXXD2MWzK6pTZnW5RAlgKl4+MEc/bI2TGYTAX6v28a3prRAvdycFnyr+ew6ZLxkmLcQ==
+mcp-from-openapi@2.3.0:
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/mcp-from-openapi/-/mcp-from-openapi-2.3.0.tgz#70830ad29730391d782556b2523a3851da02e49f"
+  integrity sha512-13uM4BBy3GDWReyO7ktYnMjvLteDvpX58WW9FVK4J8dc5TgOW89AUVrQiHEPbPJvycAJ5lz6OWLGJdguzHkwmQ==
   dependencies:
-    "@apidevtools/json-schema-ref-parser" "^11.9.3"
+    "@apidevtools/json-schema-ref-parser" "^15.3.5"
     openapi-types "^12.1.3"
-    yaml "^2.8.1"
+    yaml "^2.8.3"
 
 mdast-util-find-and-replace@^3.0.0:
   version "3.0.2"
@@ -14169,7 +14242,7 @@ vary@^1, vary@^1.1.2, vary@~1.1.2:
   resolved "https://registry.yarnpkg.com/vary/-/vary-1.1.2.tgz#2299f02c6ded30d4a5961b0b9f74524a18f634fc"
   integrity sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==
 
-vectoriadb@^2.2.0:
+vectoriadb@^2.1.3, vectoriadb@^2.2.0:
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/vectoriadb/-/vectoriadb-2.2.0.tgz#bdbb6b64ec3dae99612d9a4cd18b7e42b743e90c"
   integrity sha512-OzynU27Z6klSKetMQBn6/dahXx0KANFr+GmDwzblvsPCNnT31v53Sgs1/9JKyn/C1PGNY6FfwkxStde4snqjWQ==
@@ -14716,6 +14789,11 @@ yaml@^2.6.0, yaml@^2.8.1:
   version "2.8.2"
   resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.8.2.tgz#5694f25eca0ce9c3e7a9d9e00ce0ddabbd9e35c5"
   integrity sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A==
+
+yaml@^2.8.3:
+  version "2.8.3"
+  resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.8.3.tgz#a0d6bd2efb3dd03c59370223701834e60409bd7d"
+  integrity sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==
 
 yargs-parser@21.1.1, yargs-parser@^21.1.1:
   version "21.1.1"

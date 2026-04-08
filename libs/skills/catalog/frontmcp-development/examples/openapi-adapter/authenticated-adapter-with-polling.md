@@ -1,6 +1,6 @@
 ---
 name: authenticated-adapter-with-polling
-reference: official-adapters
+reference: openapi-adapter
 level: intermediate
 description: 'Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.'
 tags: [development, auth, openapi, security, adapters, authenticated]
@@ -80,5 +80,5 @@ class MyServer {}
 
 ## Related
 
-- See `official-adapters` for inline specs, multiple adapter registration, and troubleshooting
+- See `openapi-adapter` for all five auth strategies, format resolution, and $ref security
 - See `decorators-guide` for the full `@App` and `@FrontMcp` field reference

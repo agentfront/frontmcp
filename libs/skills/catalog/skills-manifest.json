@@ -1390,8 +1390,25 @@
         },
         {
           "name": "official-adapters",
-          "description": "Convert OpenAPI specs and external definitions into MCP tools automatically",
+          "description": "Overview of all official FrontMCP adapters that convert external definitions into MCP primitives",
+          "examples": []
+        },
+        {
+          "name": "openapi-adapter",
+          "description": "Convert OpenAPI 3.x specifications into MCP tools with authentication, polling, transforms, format resolution, and $ref security",
           "examples": [
+            {
+              "name": "basic-openapi-adapter",
+              "description": "Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.",
+              "level": "basic",
+              "tags": ["development", "openapi", "adapters", "adapter"],
+              "features": [
+                "Using `OpenapiAdapter.init()` with just `name` and `url` to auto-generate MCP tools",
+                "Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`",
+                "The adapter is registered in the `adapters` array of `@App`, not in `plugins`",
+                "The `name` field serves as the namespace prefix to prevent tool name collisions"
+              ]
+            },
             {
               "name": "authenticated-adapter-with-polling",
               "description": "Demonstrates configuring authentication (API key and bearer token) and automatic spec polling for OpenAPI adapters.",
@@ -1406,15 +1423,28 @@
               ]
             },
             {
-              "name": "basic-openapi-adapter",
-              "description": "Demonstrates converting an OpenAPI specification into MCP tools automatically using `OpenapiAdapter` with minimal configuration.",
-              "level": "basic",
-              "tags": ["development", "openapi", "adapters", "adapter"],
+              "name": "format-resolution-and-custom-resolvers",
+              "description": "Demonstrates using built-in and custom format resolvers to enrich tool input schemas with concrete constraints from OpenAPI format values.",
+              "level": "intermediate",
+              "tags": ["development", "openapi", "adapters", "format", "schema", "validation"],
               "features": [
-                "Using `OpenapiAdapter.init()` with just `name` and `url` to auto-generate MCP tools",
-                "Each OpenAPI operation becomes a tool named `<adapter-name>:<operationId>`",
-                "The adapter is registered in the `adapters` array of `@App`, not in `plugins`",
-                "The `name` field serves as the namespace prefix to prevent tool name collisions"
+                "Enabling built-in format resolvers with `resolveFormats: true` for uuid, date-time, email, int32, etc.",
+                "Adding custom format resolvers for domain-specific formats (phone, currency)",
+                "Merging custom resolvers with built-ins where custom takes precedence",
+                "Using custom-only resolvers without built-ins for full control"
+              ]
+            },
+            {
+              "name": "ref-security-and-filtering",
+              "description": "Demonstrates configuring $ref resolution security to prevent SSRF attacks and filtering which API operations become MCP tools.",
+              "level": "intermediate",
+              "tags": ["development", "openapi", "adapters", "security", "ssrf", "filtering"],
+              "features": [
+                "Configuring `refResolution` to restrict which hosts and protocols are allowed for external `$ref` pointers",
+                "Using `allowedHosts` to restrict $refs to trusted schema servers",
+                "Using `allowedProtocols` to enable or disable file://, http://, https://, and other protocols",
+                "Filtering operations with `includeOperations`, `excludeOperations`, and `filterFn`",
+                "Combining security hardening with operation filtering for a production-ready setup"
               ]
             },
             {
