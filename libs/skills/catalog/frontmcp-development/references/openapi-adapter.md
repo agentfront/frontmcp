@@ -131,6 +131,7 @@ OpenapiAdapter.init({
   name: 'evolving-api',
   url: 'https://api.example.com/openapi.json',
   polling: {
+    enabled: true,
     intervalMs: 300000, // Re-fetch every 5 minutes
   },
 });
