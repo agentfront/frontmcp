@@ -29,7 +29,7 @@ module.exports = {
       },
     ],
   },
-  transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(jose|mcp-from-openapi|@apidevtools/json-schema-ref-parser)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/adapters',
   collectCoverageFrom: [

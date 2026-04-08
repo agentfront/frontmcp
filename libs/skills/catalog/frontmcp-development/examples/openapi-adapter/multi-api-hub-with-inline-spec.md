@@ -1,6 +1,6 @@
 ---
 name: multi-api-hub-with-inline-spec
-reference: official-adapters
+reference: openapi-adapter
 level: advanced
 description: 'Demonstrates registering multiple OpenAPI adapters from different APIs in a single app, including one with an inline spec definition instead of a remote URL.'
 tags: [development, openapi, remote, adapters, multi, api]
@@ -126,5 +126,5 @@ class MyServer {}
 
 ## Related
 
-- See `official-adapters` for spec polling, `securityResolver`, and the adapter vs plugin comparison
+- See `openapi-adapter` for spec polling, `securityResolver`, and filtering operations
 - See `decorators-guide` for the `@Adapter` decorator and how adapters fit in the hierarchy

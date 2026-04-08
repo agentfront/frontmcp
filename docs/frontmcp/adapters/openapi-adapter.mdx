@@ -103,12 +103,11 @@ export default class MyApiApp {}
 </ParamField>
 
 <ParamField path="loadOptions" type="LoadOptions">
-  Options for loading the OpenAPI specification (headers, timeout, etc.). See
-  [mcp-from-openapi](https://www.npmjs.com/package/mcp-from-openapi) for details.
+  Options for loading the OpenAPI specification — headers, timeout, validation, and `$ref` resolution security. See [`refResolution`](#ref-resolution-security) for controlling how external `$ref` pointers are resolved.
 </ParamField>
 
 <ParamField path="generateOptions" type="GenerateOptions">
-  Options for tool generation. See [Advanced Features](#advanced-features) for details.
+  Options for tool generation — filtering, naming, schema depth, format resolution, and more. See [Advanced Features](#advanced-features) and [Format Resolution](#format-resolution) for details.
 </ParamField>
 
 <ParamField path="inputTransforms" type="InputTransformOptions">
@@ -785,6 +784,76 @@ OpenapiAdapter.init({
 | `'combined'`        | Summary followed by description             |
 | `'full'`            | Summary, description, and operation details |
 
+### Format Resolution
+
+Enrich generated tool schemas with concrete constraints derived from OpenAPI `format` values. When enabled, formats like `uuid`, `date-time`, `email`, `int32`, etc. are expanded into patterns, descriptions, and min/max constraints.
+
+<CodeGroup>
+```ts Enable Built-in Resolvers
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    resolveFormats: true,
+  },
+});
+// A field with format: "uuid" gets pattern: "^[0-9a-f]{8}-..." added
+// A field with format: "int32" gets minimum/maximum constraints
+// A field with format: "email" gets a pattern and description
+```
+
+```ts Custom Format Resolvers
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    resolveFormats: true, // Include built-in resolvers
+    formatResolvers: {
+      // Add or override format resolvers
+      'phone': (schema) => ({
+        ...schema,
+        pattern: '^\\+[1-9]\\d{1,14}$',
+        description: 'E.164 phone number',
+      }),
+      'currency': (schema) => ({
+        ...schema,
+        pattern: '^[A-Z]{3}$',
+        description: 'ISO 4217 currency code',
+      }),
+    },
+  },
+});
+```
+
+```ts Custom Resolvers Only
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    // Without resolveFormats, only custom resolvers are applied
+    formatResolvers: {
+      'phone': (schema) => ({
+        ...schema,
+        pattern: '^\\+[1-9]\\d{1,14}$',
+      }),
+    },
+  },
+});
+```
+</CodeGroup>
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `resolveFormats` | `boolean` | `false` | Enable built-in format resolvers (uuid, date-time, email, int32, etc.) |
+| `formatResolvers` | `Record<string, FormatResolver>` | `undefined` | Custom format resolvers. When used with `resolveFormats: true`, custom resolvers are merged with built-ins (custom takes precedence). |
+
+<Tip>
+  Format resolution improves tool input validation by giving AI models concrete constraints. For example, a `uuid` field gets a regex pattern, helping the model generate valid values.
+</Tip>
+
 ### Load Options
 
 Configure how the OpenAPI spec is loaded.
@@ -802,6 +871,94 @@ OpenapiAdapter.init({
   },
 });
 ```
+
+### $ref Resolution Security
+
+<Warning>
+  **Security Advisory (GHSA-v6ph-xcq9-qxxj):** In `mcp-from-openapi` versions &le; 2.1.2, external `$ref` pointers in OpenAPI specs were resolved without restrictions, enabling SSRF attacks (cloud metadata theft, internal network scanning, local file reads). Upgrade to `mcp-from-openapi` &ge; 2.2.0 for built-in protection.
+</Warning>
+
+When the adapter dereferences `$ref` pointers in your OpenAPI spec, it enforces security restrictions by default:
+
+- **`file://` protocol is blocked** — prevents local file reads (e.g., `$ref: "file:///etc/passwd"`)
+- **Internal/private IPs are blocked** — prevents SSRF to cloud metadata endpoints and internal services
+- **`http://` and `https://` to public hosts are allowed** — external schema references work normally
+
+The blocked IP ranges include: `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` (cloud metadata), `::1`, `fd00::/8`, and hostnames `localhost`, `metadata.google.internal`.
+
+Configure via `loadOptions.refResolution`:
+
+<CodeGroup>
+```ts Default (Secure)
+// Default behavior — no configuration needed.
+// file:// blocked, internal IPs blocked, http/https to public hosts allowed.
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+});
+```
+
+```ts Restrict to Specific Hosts
+// Only allow $refs pointing to your own schema servers
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  loadOptions: {
+    refResolution: {
+      allowedHosts: ['schemas.example.com', 'api.example.com'],
+    },
+  },
+});
+```
+
+```ts Allow file:// Protocol
+// Enable file:// for specs that reference local schema files
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  loadOptions: {
+    refResolution: {
+      allowedProtocols: ['http', 'https', 'file'],
+    },
+  },
+});
+```
+
+```ts Allow Internal IPs
+// WARNING: Only use in trusted environments (e.g., internal APIs)
+OpenapiAdapter.init({
+  name: 'internal-api',
+  url: 'http://10.0.0.5:8080/openapi.json',
+  loadOptions: {
+    refResolution: {
+      allowInternalIPs: true,
+    },
+  },
+});
+```
+
+```ts Block All External Refs
+// Only resolve local #/ JSON pointer refs, block everything external
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  loadOptions: {
+    refResolution: {
+      allowedProtocols: [], // No external protocols
+    },
+  },
+});
+```
+</CodeGroup>
+
+#### `refResolution` Options Reference
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `allowedProtocols` | `string[]` | `['http', 'https']` | Protocols allowed for external `$ref` resolution. Supports any protocol (http, https, ftp, ws, wss, etc.). Set to `[]` to block all external refs. |
+| `allowedHosts` | `string[]` | `undefined` | When set, only `$ref` URLs pointing to these hostnames are resolved. All other hosts are blocked. |
+| `blockedHosts` | `string[]` | `undefined` | Additional hostnames/IPs to block, on top of the built-in internal IP block list. |
+| `allowInternalIPs` | `boolean` | `false` | Set to `true` to disable the built-in internal/private IP block list. **Warning:** may expose to SSRF. |
 
 ## Polling & Live Updates
 
@@ -1003,6 +1160,7 @@ Beyond authentication, the adapter includes defense-in-depth protections:
 
 | Protection                | Description                                                                             |
 | ------------------------- | --------------------------------------------------------------------------------------- |
+| **$ref SSRF Prevention**  | Blocks `file://` protocol and internal/private IPs during `$ref` dereferencing. Configurable via [`refResolution`](#ref-resolution-security). |
 | **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
 | **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values            |
 | **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms   |
