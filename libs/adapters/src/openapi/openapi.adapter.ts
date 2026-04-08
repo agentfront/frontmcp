@@ -92,6 +92,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       includeSecurityInInput: includeSecurityInInput,
       maxSchemaDepth: this.options.generateOptions?.maxSchemaDepth,
       includeExamples: this.options.generateOptions?.includeExamples,
+      resolveFormats: this.options.generateOptions?.resolveFormats,
+      formatResolvers: this.options.generateOptions?.formatResolvers,
     });
 
     // If per-scheme control is enabled, filter security inputs
@@ -214,12 +216,14 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         headers: this.options.loadOptions?.headers,
         timeout: this.options.loadOptions?.timeout,
         followRedirects: this.options.loadOptions?.followRedirects,
+        refResolution: this.options.loadOptions?.refResolution,
       });
     } else if ('spec' in this.options) {
       return await OpenAPIToolGenerator.fromJSON(this.options.spec, {
         baseUrl: this.options.baseUrl,
         validate: this.options.loadOptions?.validate ?? true,
         dereference: this.options.loadOptions?.dereference ?? true,
+        refResolution: this.options.loadOptions?.refResolution,
       });
     } else {
       throw new Error('Either url or spec must be provided in OpenApiAdapterOptions');
