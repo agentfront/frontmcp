@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/guard",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Rate limiting, concurrency control, timeout, IP filtering, and traffic guard utilities for FrontMCP",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -49,7 +49,7 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "1.0.3"
+    "@frontmcp/utils": "1.0.4"
   },
   "peerDependencies": {
     "zod": "^4.0.0"
