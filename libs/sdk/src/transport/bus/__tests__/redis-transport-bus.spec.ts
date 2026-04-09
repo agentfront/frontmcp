@@ -146,7 +146,8 @@ describe('RedisTransportBus', () => {
         'mcp:ha:notify:node-2',
         expect.stringContaining('"kind":"destroy-session"'),
       );
-      expect(redis.del).toHaveBeenCalled();
+      // Should NOT call del — let the owning node revoke after destroy
+      expect(redis.del).not.toHaveBeenCalled();
     });
 
     it('does nothing when session is owned by this node', async () => {

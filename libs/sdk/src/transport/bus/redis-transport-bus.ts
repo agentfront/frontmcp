@@ -177,8 +177,8 @@ export class RedisTransportBus implements TransportBus {
 
     await this.redis.publish(channel, message);
 
-    // Also clean up the bus entry
-    await this.redis.del(redisKey);
+    // Let the owning node revoke after it destroys the transport.
+    // Don't blindly delete — another node may have already taken ownership.
 
     this.logger?.info('[TransportBus] Sent destroy-remote', {
       sessionId: key.sessionId.slice(0, 20),

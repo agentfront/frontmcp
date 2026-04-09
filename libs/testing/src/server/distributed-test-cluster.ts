@@ -6,7 +6,6 @@
  * Used for E2E testing of session scaling, SSE routing, and takeover.
  */
 
-import { reservePort } from './port-registry';
 import { TestServer, type TestServerInfo } from './test-server';
 
 export interface ClusterNode {
@@ -53,7 +52,7 @@ export interface DistributedClusterOptions {
  * ```
  */
 export class DistributedTestCluster {
-  private nodes: Map<number, { server: TestServer; machineId: string; portRelease?: () => Promise<void> }> = new Map();
+  private nodes: Map<number, { server: TestServer; machineId: string }> = new Map();
   private readonly options: DistributedClusterOptions;
 
   constructor(options: DistributedClusterOptions) {
@@ -86,30 +85,20 @@ export class DistributedTestCluster {
     const machineId = `node-${index}`;
     const project = this.options.project ?? 'demo-e2e-distributed';
 
-    const { port, release } = await reservePort(project);
+    // Let TestServer.start handle port reservation via reservePort(project)
+    const server = await TestServer.start({
+      command: `npx ts-node --swc -P apps/e2e/demo-e2e-distributed/tsconfig.app.json ${this.options.serverEntry}`,
+      project,
+      startupTimeout: this.options.startupTimeout ?? 45_000,
+      env: {
+        MACHINE_ID: machineId,
+        REDIS_URL: this.options.redisUrl,
+        NODE_ENV: 'test',
+        ...this.options.env,
+      },
+    });
 
-    let server: TestServer;
-    try {
-      server = await TestServer.start({
-        command: `npx ts-node --swc -P apps/e2e/demo-e2e-distributed/tsconfig.app.json ${this.options.serverEntry}`,
-        port,
-        project,
-        startupTimeout: this.options.startupTimeout ?? 45_000,
-        env: {
-          FRONTMCP_DEPLOYMENT_MODE: 'distributed',
-          MACHINE_ID: machineId,
-          REDIS_URL: this.options.redisUrl,
-          PORT: String(port),
-          NODE_ENV: 'test',
-          ...this.options.env,
-        },
-      });
-    } catch (error) {
-      await release();
-      throw error;
-    }
-
-    this.nodes.set(index, { server, machineId, portRelease: release });
+    this.nodes.set(index, { server, machineId });
 
     return {
       index,
@@ -152,9 +141,6 @@ export class DistributedTestCluster {
         await node.server.stop();
       } catch {
         // Best effort
-      }
-      if (node.portRelease) {
-        await node.portRelease();
       }
     });
     await Promise.all(stops);

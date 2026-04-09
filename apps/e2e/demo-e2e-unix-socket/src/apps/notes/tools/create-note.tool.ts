@@ -1,8 +1,7 @@
-import { randomUUID } from 'crypto';
-
 import { z } from 'zod';
 
 import { Tool, ToolContext } from '@frontmcp/sdk';
+import { randomUUID } from '@frontmcp/utils';
 
 import { notesStore } from '../data/notes.store';
 
