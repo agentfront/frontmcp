@@ -5,14 +5,13 @@ import { decryptSessionJson, encryptJson, getKey, resetCachedKey, safeDecrypt } 
  * Session Crypto Utils Tests
  */
 
-// We need to mock dependencies before imports
-const mockGetMachineId = jest.fn(() => 'test-machine-id-12345');
-
-// Mock @frontmcp/utils with real-ish crypto implementations + getMachineId
+// Mock @frontmcp/utils with real-ish crypto implementations + getMachineId.
+// jest.mock() is hoisted, so the factory cannot reference outer `const`/`let`
+// (TDZ). Define jest.fn() inline and grab the reference via jest.requireMock() below.
 jest.mock('@frontmcp/utils', () => {
   const crypto = require('crypto');
   return {
-    getMachineId: mockGetMachineId,
+    getMachineId: jest.fn(() => 'test-machine-id-12345'),
     sha256: (data: Uint8Array) => {
       const hash = crypto.createHash('sha256').update(data);
       return new Uint8Array(hash.digest());
@@ -47,6 +46,9 @@ jest.mock('@frontmcp/utils', () => {
     isProduction: () => process.env['NODE_ENV'] === 'production',
   };
 });
+
+// Get reference to the mocked getMachineId after the mock is set up
+const mockGetMachineId = jest.requireMock('@frontmcp/utils').getMachineId as jest.Mock;
 
 describe('session-crypto.utils', () => {
   const originalEnv = process.env;

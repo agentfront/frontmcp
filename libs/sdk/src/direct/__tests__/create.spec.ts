@@ -3,9 +3,10 @@
  */
 
 import 'reflect-metadata';
-import type { DirectMcpServer } from '../direct.types';
+
 import type { DirectClient } from '../client.types';
 import type { CreateConfig } from '../create.types';
+import type { DirectMcpServer } from '../direct.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mocks
@@ -38,8 +39,8 @@ jest.mock('../../front-mcp/front-mcp', () => ({
 
 const mockSetMachineIdOverride = jest.fn();
 
-jest.mock('@frontmcp/auth', () => {
-  const actual = jest.requireActual('@frontmcp/auth');
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
   return {
     ...actual,
     setMachineIdOverride: (...args: unknown[]) => mockSetMachineIdOverride(...args),

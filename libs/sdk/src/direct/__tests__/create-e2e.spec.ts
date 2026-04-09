@@ -5,11 +5,14 @@
  */
 
 import 'reflect-metadata';
+
 import { z } from 'zod';
+
 import type { CallToolResult } from '@frontmcp/protocol';
+
 import { Tool, ToolContext } from '../../common';
-import type { DirectMcpServer } from '../direct.types';
 import type { DirectClient } from '../client.types';
+import type { DirectMcpServer } from '../direct.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test Fixtures
@@ -55,7 +58,7 @@ describe('create() E2E', () => {
 
     // Reset caches and machine ID override
     const { clearCreateCache } = await import('../create');
-    const { setMachineIdOverride } = await import('@frontmcp/auth');
+    const { setMachineIdOverride } = await import('@frontmcp/utils');
     clearCreateCache();
     setMachineIdOverride(undefined);
   });
@@ -145,7 +148,7 @@ describe('create() E2E', () => {
 
   it('should support dispose and recreate with stable machineId', async () => {
     const { create } = await import('../create');
-    const { getMachineId } = await import('@frontmcp/auth');
+    const { getMachineId } = await import('@frontmcp/utils');
 
     // Create first server
     const srv1 = await create({
