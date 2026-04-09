@@ -1,14 +1,26 @@
 // file: libs/sdk/src/resource/flows/resource-templates-list.flow.ts
 
-import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
+import {
+  Flow,
+  FlowBase,
+  FlowControl,
+  FlowHooksOf,
+  ResourceEntry,
+  type FlowPlan,
+  type FlowRunOptions,
+} from '../../common';
+
 import 'reflect-metadata';
+
 import { z } from 'zod';
+
 import {
   ListResourceTemplatesRequestSchema,
   ListResourceTemplatesResultSchema,
-  ResourceTemplate,
+  type ResourceTemplate,
 } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+
+import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
   request: ListResourceTemplatesRequestSchema,

@@ -1,12 +1,13 @@
 import * as path from 'path';
-import { ParsedArgs } from '../../core/args';
+import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { ensureDir, fileExists, runCmd, writeJSON } from '@frontmcp/utils';
 import { fsp, resolveEntry } from '../../shared/fs';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
-import { AdapterName } from './types';
+import { type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
+import { findDeployment, type FrontMcpConfigParsed, getDeploymentTargets, loadFrontMcpConfig } from '../../config';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);
@@ -84,6 +85,7 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
   'vercel': 'vercel',
   'lambda': 'lambda',
   'cloudflare': 'cloudflare',
+  'distributed': 'distributed',
 };
 
 /**
@@ -102,12 +104,53 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
  * ```
  */
 export async function runBuild(opts: ParsedArgs): Promise<void> {
-  const target = opts.buildTarget ?? 'node';
+  const cwd = process.cwd();
 
-  // Each target outputs to dist/{target}/ for clean separation
+  // Try loading frontmcp.config for multi-target support
+  let config: FrontMcpConfigParsed | undefined;
+  try {
+    config = await loadFrontMcpConfig(cwd);
+  } catch {
+    // No config file — fall back to CLI flags only
+  }
+
+  // If no -t flag and config has deployments, build all targets from config
+  if (!opts.buildTarget && config && config.deployments.length > 0) {
+    const targets = getDeploymentTargets(config);
+    console.log(c('cyan', `[build] Building ${targets.length} target(s) from frontmcp.config: ${targets.join(', ')}`));
+
+    for (const targetName of targets) {
+      console.log(c('cyan', `\n[build] ═══ ${targetName} ═══`));
+      await buildSingleTarget(targetName, opts, config);
+    }
+    return;
+  }
+
+  // Single target build (from -t flag or default 'node')
+  const target = opts.buildTarget ?? 'node';
+  await buildSingleTarget(target, opts, config);
+}
+
+/**
+ * Build a single deployment target.
+ * Merges per-target config (from frontmcp.config) with CLI opts.
+ */
+async function buildSingleTarget(
+  target: string,
+  opts: ParsedArgs,
+  config?: FrontMcpConfigParsed,
+): Promise<void> {
+  const deployment = config ? findDeployment(config, target) : undefined;
+
+  // Resolve output directory: deployment.outDir > CLI --out-dir > dist/{target}
   const baseOutDir = path.resolve(process.cwd(), opts.outDir || 'dist');
-  const targetOutDir = path.join(baseOutDir, target);
-  const targetOpts = { ...opts, outDir: targetOutDir };
+  const targetOutDir = deployment?.outDir
+    ? path.resolve(process.cwd(), deployment.outDir)
+    : path.join(baseOutDir, target);
+
+  // Merge entry from config if not provided via CLI
+  const entry = opts.entry || config?.entry;
+  const targetOpts = { ...opts, outDir: targetOutDir, entry };
 
   switch (target) {
     case 'cli': {
@@ -128,12 +171,13 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
     }
     case 'vercel':
     case 'lambda':
-    case 'cloudflare': {
+    case 'cloudflare':
+    case 'distributed': {
       const adapter = TARGET_TO_ADAPTER[target];
       return runAdapterBuild(targetOpts, adapter);
     }
     default:
-      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda`);
+      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda, distributed`);
   }
 }
 

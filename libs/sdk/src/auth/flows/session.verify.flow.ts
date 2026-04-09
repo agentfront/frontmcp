@@ -3,29 +3,40 @@ import {
   authorizationSchema,
   Flow,
   FlowBase,
-  FlowRunOptions,
-  StageHookOf,
-  userClaimSchema,
-  sessionIdSchema,
-  httpRequestInputSchema,
-  FlowPlan,
-  isTransparentMode,
-  isPublicMode,
-  TransparentAuthOptions,
   getRequestBaseUrl,
+  httpRequestInputSchema,
+  isPublicMode,
+  isTransparentMode,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  sessionIdSchema,
+  StageHookOf,
+  userClaimSchema,
+  type FlowPlan,
+  type FlowRunOptions,
+  type TransparentAuthOptions,
 } from '../../common';
+
 import 'reflect-metadata';
+
 import { z } from 'zod';
-import { deriveTypedUser, extractBearerToken, isJwt } from '@frontmcp/auth';
-import { JwksService, ProviderVerifyRef, VerifyResult } from '@frontmcp/auth';
-import { buildUnauthorizedHeader, buildInvalidTokenHeader, buildInsufficientScopeHeader } from '@frontmcp/auth';
-import { parseSessionHeader, decryptPublicSession } from '../session/utils/session-id.utils';
-import { encryptJson } from '@frontmcp/auth';
-import { getMachineId } from '@frontmcp/auth';
-import { randomUUID } from '@frontmcp/utils';
+
+import {
+  buildInsufficientScopeHeader,
+  buildInvalidTokenHeader,
+  buildUnauthorizedHeader,
+  deriveTypedUser,
+  encryptJson,
+  extractBearerToken,
+  isJwt,
+  JwksService,
+  type ProviderVerifyRef,
+  type VerifyResult,
+} from '@frontmcp/auth';
+import { getMachineId, randomUUID } from '@frontmcp/utils';
+
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
+import { decryptPublicSession, parseSessionHeader } from '../session/utils/session-id.utils';
 
 const inputSchema = httpRequestInputSchema;
 
@@ -351,10 +362,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       this.logger.warn('verifyIfJwt: token is not a JWT, returning 401');
       this.respond({
         kind: 'unauthorized',
-        prmMetadataHeader: buildInvalidTokenHeader(
-          this.state.required.prmUrl,
-          'Token is not a valid JWT',
-        ),
+        prmMetadataHeader: buildInvalidTokenHeader(this.state.required.prmUrl, 'Token is not a valid JWT'),
       });
       return;
     }
@@ -419,10 +427,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
           });
           this.respond({
             kind: 'forbidden',
-            prmMetadataHeader: buildInsufficientScopeHeader(
-              this.state.required.prmUrl,
-              requiredScopes,
-            ),
+            prmMetadataHeader: buildInsufficientScopeHeader(this.state.required.prmUrl, requiredScopes),
           });
           return;
         }

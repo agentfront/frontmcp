@@ -1,4 +1,4 @@
-import { AdapterTemplate } from '../types';
+import type { AdapterTemplate } from '../types';
 
 /**
  * AWS Lambda adapter - serverless deployment on AWS Lambda.
@@ -24,6 +24,7 @@ export const lambdaAdapter: AdapterTemplate = {
 // This sets FRONTMCP_SERVERLESS before any decorators run
 // Required because ESM hoists imports before other statements
 process.env.FRONTMCP_SERVERLESS = '1';
+process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
 `,
 
   getEntryTemplate: (mainModulePath: string) => `// Auto-generated AWS Lambda entry point

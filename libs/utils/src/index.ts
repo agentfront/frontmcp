@@ -30,7 +30,8 @@ export { trimSlashes, joinPath, pathResolve, pathJoin, basename, dirname, extnam
 export { sanitizeToJson, inferMimeType } from './content';
 
 // HTTP utilities
-export { validateBaseUrl } from './http';
+export { validateBaseUrl, buildSetCookie, parseCookies, getCookie, isLocalhost, isSecureRequest } from './http';
+export type { CookieOptions, SecureDetectionRequest } from './http';
 
 // File system utilities (Node.js only)
 export {
@@ -300,3 +301,6 @@ export type {
   PlatformToolCallsOutput,
   SupportedPlatform,
 } from './llm';
+
+// Machine ID (deployment-aware node identity)
+export { getMachineId, setMachineIdOverride } from './machine-id';

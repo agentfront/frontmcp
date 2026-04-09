@@ -168,6 +168,7 @@ export {
   TransportAlreadyStartedError,
   UnsupportedContentTypeError,
   TransportServiceNotAvailableError,
+  SessionClaimConflictError,
 } from './transport.errors';
 
 // Export auth internal errors
@@ -217,6 +218,7 @@ export {
   SessionVerificationFailedError,
   ContextExtensionNotAvailableError,
   ScopeConfigurationError,
+  HaConfigurationError,
   InvokeStateMissingKeyError,
   SkillSessionError,
   InvalidSkillError,

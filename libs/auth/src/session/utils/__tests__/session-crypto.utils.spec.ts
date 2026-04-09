@@ -1,56 +1,23 @@
+import { SessionSecretRequiredError } from '../../../errors/auth-internal.errors';
+import { decryptSessionJson, encryptJson, getKey, resetCachedKey, safeDecrypt } from '../session-crypto.utils';
+
 /**
  * Session Crypto Utils Tests
  */
 
-// We need to mock dependencies before imports
-const mockGetMachineId = jest.fn(() => 'test-machine-id-12345');
-
-jest.mock('../../../machine-id/machine-id', () => ({
-  getMachineId: mockGetMachineId,
+// Mock @frontmcp/utils — delegate all crypto to the real implementations and
+// only override test-specific helpers (getMachineId, getEnv, isProduction).
+// Per CLAUDE.md, tests must use the canonical crypto from @frontmcp/utils
+// rather than reimplementing them with node:crypto.
+jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
+  getMachineId: jest.fn(() => 'test-machine-id-12345'),
+  getEnv: (key: string) => process.env[key],
+  isProduction: () => process.env['NODE_ENV'] === 'production',
 }));
 
-// Mock @frontmcp/utils with real-ish crypto implementations
-jest.mock('@frontmcp/utils', () => {
-  const crypto = require('crypto');
-  return {
-    sha256: (data: Uint8Array) => {
-      const hash = crypto.createHash('sha256').update(data);
-      return new Uint8Array(hash.digest());
-    },
-    encryptValue: jest.fn((obj: unknown, key: Uint8Array) => {
-      // Simplified AES-256-GCM encryption for testing
-      const iv = crypto.randomBytes(12);
-      const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(key), iv);
-      const plaintext = JSON.stringify(obj);
-      let encrypted = cipher.update(plaintext, 'utf8', 'base64');
-      encrypted += cipher.final('base64');
-      const tag = cipher.getAuthTag();
-      return {
-        iv: iv.toString('base64'),
-        tag: tag.toString('base64'),
-        data: encrypted,
-      };
-    }),
-    decryptValue: jest.fn((envelope: { iv: string; tag: string; data: string; alg: string }, key: Uint8Array) => {
-      const iv = Buffer.from(envelope.iv, 'base64');
-      const tag = Buffer.from(envelope.tag, 'base64');
-      const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(key), iv);
-      decipher.setAuthTag(tag);
-      let decrypted = decipher.update(envelope.data, 'base64', 'utf8');
-      decrypted += decipher.final('utf8');
-      return JSON.parse(decrypted);
-    }),
-    // Required by AuthInternalError base class for errorId generation
-    randomBytes: (n: number) => crypto.randomBytes(n),
-    bytesToHex: (bytes: Uint8Array) => Buffer.from(bytes).toString('hex'),
-    getEnv: (key: string) => process.env[key],
-    isProduction: () => process.env['NODE_ENV'] === 'production',
-  };
-});
-
-import { getKey, encryptJson, decryptSessionJson, safeDecrypt, resetCachedKey } from '../session-crypto.utils';
-
-import { SessionSecretRequiredError } from '../../../errors/auth-internal.errors';
+// Get reference to the mocked getMachineId after the mock is set up
+const mockGetMachineId = jest.requireMock('@frontmcp/utils').getMachineId as jest.Mock;
 
 describe('session-crypto.utils', () => {
   const originalEnv = process.env;

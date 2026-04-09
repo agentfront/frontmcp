@@ -140,6 +140,10 @@
                   "frontmcp/deployment/mcp-clients",
                   "frontmcp/deployment/serverless",
                   "frontmcp/deployment/health-checks",
+                  "frontmcp/deployment/high-availability",
+                  "frontmcp/deployment/frontmcp-config",
+                  "frontmcp/deployment/machine-id",
+                  "frontmcp/deployment/security-headers",
                   "frontmcp/deployment/browser-compatibility",
                   {
                     "group": "Storage",

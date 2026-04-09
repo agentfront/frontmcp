@@ -1,27 +1,29 @@
+import { z } from 'zod';
+
+import { randomUUID } from '@frontmcp/utils';
+
+import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 import {
-  Flow,
-  httpInputSchema,
-  FlowRunOptions,
-  httpOutputSchema,
-  FlowPlan,
-  FlowBase,
-  ScopeEntry,
-  FlowHooksOf,
-  ServerRequest,
-  ServerRequestTokens,
-  httpRespond,
   decideIntent,
   decisionSchema,
+  Flow,
+  FlowBase,
+  FlowControl,
+  FlowHooksOf,
+  httpInputSchema,
+  httpOutputSchema,
+  httpRespond,
   intentSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
-  FlowControl,
+  ServerRequestTokens,
   toLegacyProtocolFlags,
-  Authorization,
+  type Authorization,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ScopeEntry,
+  type ServerRequest,
 } from '../../common';
-import { z } from 'zod';
-import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
-import { randomUUID } from '@frontmcp/utils';
 import { SessionVerificationFailedError } from '../../errors';
 
 const plan = {

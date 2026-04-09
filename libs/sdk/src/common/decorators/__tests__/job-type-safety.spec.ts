@@ -1,5 +1,7 @@
 import 'reflect-metadata';
+
 import { z } from 'zod';
+
 import { Job, JobContext } from '../../';
 
 // ════════════════════════════════════════════════════════════════
@@ -25,6 +27,36 @@ class ValidJob extends JobContext {
   async execute(input: { data: string }) {
     return { result: input.data };
   }
+}
+
+// ── Valid: empty inputSchema with no execute parameter ──────
+
+@Job({
+  name: 'valid-empty-job',
+  inputSchema: {},
+  outputSchema: { ok: z.boolean() },
+})
+class ValidEmptyJobSchema extends JobContext {
+  async execute() {
+    return { ok: true };
+  }
+}
+
+// ── Invalid: execute(input: never) is NOT the same as execute() ──
+
+function _testJobExecuteWithNeverParam() {
+  // @ts-expect-error - execute(input: never) must not be accepted as zero-arg execute()
+  @Job({
+    name: 'never-param-job',
+    inputSchema: {},
+    outputSchema: { ok: z.boolean() },
+  })
+  class NeverParamJob extends JobContext {
+    async execute(_input: never) {
+      return { ok: true };
+    }
+  }
+  void NeverParamJob;
 }
 
 // ── Invalid: wrong execute() param type ─────────────────────
@@ -80,6 +112,8 @@ function _testNotJobContext() {
 
 // Suppress unused variable/function warnings
 void ValidJob;
+void ValidEmptyJobSchema;
+void _testJobExecuteWithNeverParam;
 void _testWrongParamType;
 void _testWrongReturnType;
 void _testNotJobContext;

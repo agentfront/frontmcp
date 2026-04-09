@@ -3,8 +3,8 @@
 // Core session encryption/decryption utilities extracted from SDK's session-id.utils.ts.
 // These are pure crypto operations that don't depend on SDK framework primitives.
 
-import { sha256, encryptValue, decryptValue, getEnv, isProduction } from '@frontmcp/utils';
-import { getMachineId } from '../../machine-id/machine-id';
+import { decryptValue, encryptValue, getEnv, getMachineId, isProduction, sha256 } from '@frontmcp/utils';
+
 import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
 
 // Cached encryption key (derived once per process)

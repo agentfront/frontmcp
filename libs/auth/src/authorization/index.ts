@@ -33,7 +33,7 @@ export {
 } from './authorization.types';
 
 // Base class
-export { AuthorizationBase, getMachineId } from './authorization.class';
+export { AuthorizationBase } from './authorization.class';
 
 // Mode-specific implementations
 export { PublicAuthorization } from './public.authorization';

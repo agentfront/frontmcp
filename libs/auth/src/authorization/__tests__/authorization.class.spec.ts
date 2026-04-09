@@ -6,17 +6,22 @@
  * progressive auth URL, expiry logic, session JWT, LLM-safe context, and token leak validation.
  */
 
-import type { TransportSession } from '../../session/transport-session.types';
-import type { AuthMode, AuthorizationCreateCtx } from '../authorization.types';
 import { TokenLeakDetectedError } from '../../errors/auth-internal.errors';
+import type { TransportSession } from '../../session/transport-session.types';
+import { encryptJson } from '../../session/utils/session-crypto.utils';
+import { AuthorizationBase } from '../authorization.class';
+import type { AuthMode, AuthorizationCreateCtx } from '../authorization.types';
 
 // ---- Mocks ----
 
 const MOCK_UUID = 'test-uuid-1234-5678-abcdef';
+
+const MOCK_MACHINE_ID = 'machine-id-abc';
 jest.mock('@frontmcp/utils', () => ({
   randomUUID: jest.fn(() => MOCK_UUID),
   randomBytes: jest.fn(() => new Uint8Array(8)),
   bytesToHex: jest.fn(() => 'deadbeef01234567'),
+  getMachineId: jest.fn(() => MOCK_MACHINE_ID),
   base64urlDecode: jest.fn((input: string) => {
     // Real base64url decode for JWT header validation
     const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -32,14 +37,6 @@ const MOCK_ENCRYPTED = 'iv123.tag456.ct789';
 jest.mock('../../session/utils/session-crypto.utils', () => ({
   encryptJson: jest.fn(() => MOCK_ENCRYPTED),
 }));
-
-const MOCK_MACHINE_ID = 'machine-id-abc';
-jest.mock('../../machine-id', () => ({
-  getMachineId: jest.fn(() => MOCK_MACHINE_ID),
-}));
-
-import { AuthorizationBase } from '../authorization.class';
-import { encryptJson } from '../../session/utils/session-crypto.utils';
 
 // ---- Concrete subclass for testing ----
 

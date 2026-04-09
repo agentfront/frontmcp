@@ -4,7 +4,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import { SetupDefinition } from './setup';
+import type { SetupDefinition } from './setup';
 
 export interface OAuthConfig {
   serverUrl?: string;
@@ -29,7 +29,7 @@ export interface CliConfig {
   oauth?: OAuthConfig;
 }
 
-export type ConfigBuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda';
+export type ConfigBuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda' | 'distributed';
 
 export interface FrontmcpExecConfig {
   name: string;

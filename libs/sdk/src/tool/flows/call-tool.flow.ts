@@ -1,42 +1,43 @@
 // tools/flows/call-tool.flow.ts
-import { randomUUID, isDebug, isDevelopment, getRuntimeContext } from '@frontmcp/utils';
+import { z } from 'zod';
+
+import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
+import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
+import {
+  buildToolResponseContent,
+  isUIRenderFailure,
+  MCP_APPS_MIME_TYPE,
+  resolveServingMode,
+  type ToolResponseContent,
+} from '@frontmcp/uipack/adapters';
+import { getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
+
 import {
   Flow,
   FlowBase,
   FlowHooksOf,
-  FlowPlan,
-  FlowRunOptions,
+  isOrchestratedMode,
   ToolContext,
   ToolEntry,
-  isOrchestratedMode,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
-import { CallToolRequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
+import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
 import {
-  InvalidMethodError,
-  ToolNotFoundError,
-  EntryUnavailableError,
-  InvalidInputError,
-  InvalidOutputError,
-  ToolExecutionError,
   AuthorizationRequiredError,
   ElicitationFallbackRequired,
-  RateLimitError,
+  EntryUnavailableError,
   InternalMcpError,
+  InvalidInputError,
+  InvalidMethodError,
+  InvalidOutputError,
+  RateLimitError,
+  ToolExecutionError,
+  ToolNotFoundError,
 } from '../../errors';
-import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
-import { canDeliverNotifications, handleWaitingFallback, type FallbackHandlerDeps } from '../../elicitation/helpers';
-import { hasUIConfig } from '../ui';
-import { Scope } from '../../scope';
-import {
-  resolveServingMode,
-  buildToolResponseContent,
-  isUIRenderFailure,
-  MCP_APPS_MIME_TYPE,
-  type ToolResponseContent,
-} from '@frontmcp/uipack/adapters';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { type Scope } from '../../scope';
+import { hasUIConfig } from '../ui';
 
 /**
  * Type for transport extension on AuthInfo.
@@ -429,7 +430,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const authInfo = this.state.authInfo ?? {};
     const stateInput = this.state.input;
-    const input = ((stateInput as Record<string, unknown>)?.['arguments'] ?? stateInput ?? {}) as Record<string, unknown>;
+    const input = ((stateInput as Record<string, unknown>)?.['arguments'] ?? stateInput ?? {}) as Record<
+      string,
+      unknown
+    >;
 
     const evalCtx = ctxBuilder.build(authInfo as Record<string, unknown>, input);
     const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);

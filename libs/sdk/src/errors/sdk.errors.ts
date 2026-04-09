@@ -61,6 +61,15 @@ export class ScopeConfigurationError extends InternalMcpError {
 }
 
 /**
+ * Thrown when HA (High Availability) configuration is invalid or missing.
+ */
+export class HaConfigurationError extends InternalMcpError {
+  constructor(message: string) {
+    super(message, 'HA_CONFIGURATION_ERROR');
+  }
+}
+
+/**
  * Thrown when an invoke state key is missing.
  */
 export class InvokeStateMissingKeyError extends InternalMcpError {

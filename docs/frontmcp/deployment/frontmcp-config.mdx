@@ -1,0 +1,230 @@
+---
+title: Configuration File
+description: Configure FrontMCP projects with frontmcp.config.ts for multi-target builds, server settings, security headers, and HA
+---
+
+FrontMCP uses a typed configuration file to define project settings, deployment targets, server configuration, and security policies. The file supports TypeScript, JavaScript, and JSON formats with full IDE autocomplete.
+
+## Quick Start
+
+Create `frontmcp.config.ts` in your project root:
+
+```typescript
+import { defineConfig } from '@frontmcp/cli';
+
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{ target: 'node' }],
+});
+```
+
+The `defineConfig()` helper is a pass-through that enables IDE type hints and autocomplete.
+
+## File Resolution Order
+
+FrontMCP searches for configuration files in this order:
+
+1. `frontmcp.config.ts`
+2. `frontmcp.config.js`
+3. `frontmcp.config.json`
+4. `frontmcp.config.mjs`
+5. `frontmcp.config.cjs`
+6. Fallback: derives minimal config from `package.json` (name, default node target)
+
+<Note>
+  When using JSON format, add `"$schema"` for autocomplete in VS Code and WebStorm:
+  ```json
+  {
+    "$schema": "./node_modules/@frontmcp/cli/frontmcp.schema.json",
+    "name": "my-server",
+    "deployments": [{ "target": "node" }]
+  }
+  ```
+</Note>
+
+## Top-Level Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Server name (kebab-case, no spaces) |
+| `version` | string | No | Server version |
+| `entry` | string | No | Custom entry file path |
+| `nodeVersion` | string | No | Target Node.js version |
+| `deployments` | DeploymentTarget[] | Yes | One or more deployment targets |
+| `build` | object | No | Build-specific options (esbuild config, dependencies) |
+
+## Deployment Targets
+
+Each entry in `deployments` defines a build target with independent settings:
+
+| Target | Description | Transport | Storage |
+| --- | --- | --- | --- |
+| `node` | Standalone Node.js server | Streamable HTTP, SSE, stdio | Redis, SQLite, memory |
+| `distributed` | Multi-pod with HA | Streamable HTTP | Redis (required) |
+| `vercel` | Vercel Functions | Streamable HTTP | Vercel KV |
+| `lambda` | AWS Lambda | Streamable HTTP | DynamoDB, ElastiCache |
+| `cloudflare` | Cloudflare Workers | Streamable HTTP | KV, Durable Objects |
+| `browser` | Browser bundle | In-memory | Memory only |
+| `cli` | Standalone binary | stdio | SQLite, memory |
+| `sdk` | Library for embedding | Direct (in-process) | Configurable |
+
+### Deployment Target Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `target` | string | One of the 8 target types above |
+| `server` | ServerConfig | HTTP, CORS, CSP, and security header settings |
+| `ha` | HaConfig | HA settings (distributed target only) |
+| `cli` | CliConfig | CLI-specific settings (cli target only) |
+| `js` | boolean | Generate .js bundle instead of native binary (cli target) |
+| `env` | Record | Per-target environment variables |
+
+## Server Configuration
+
+```typescript
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{
+    target: 'node',
+    server: {
+      http: {
+        port: 3000,
+        socketPath: '/tmp/mcp.sock',  // Unix socket (mutually exclusive with port)
+        entryPath: '/',
+        cors: {
+          origin: 'https://app.example.com',
+          credentials: true,
+        },
+        portRange: [3000, 3010],  // Auto-find available port in range
+      },
+      csp: {
+        enabled: true,
+        directives: {
+          'default-src': "'self'",
+          'script-src': "'self' https://cdn.example.com",
+        },
+        reportUri: 'https://report.example.com/csp',
+        reportOnly: false,
+      },
+      headers: {
+        hsts: 'max-age=31536000; includeSubDomains',
+        contentTypeOptions: 'nosniff',
+        frameOptions: 'DENY',
+      },
+      cookies: {
+        secure: true,
+        sameSite: 'Lax',
+      },
+    },
+  }],
+});
+```
+
+### HTTP Options
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `port` | number | 3000 | HTTP listen port |
+| `socketPath` | string | --- | Unix socket path (overrides port) |
+| `entryPath` | string | `/` | Base path for all endpoints |
+| `cors` | object | --- | CORS configuration (origin, credentials) |
+| `portRange` | [number, number] | --- | Auto-find available port in range |
+
+### CSP Options
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | false | Enable CSP headers |
+| `directives` | Record | --- | Directive name to value(s) map (e.g., `{ 'default-src': "'self'" }`) |
+| `reportUri` | string | --- | URI for CSP violation reports |
+| `reportOnly` | boolean | false | Use `Content-Security-Policy-Report-Only` header |
+
+### Security Headers
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `hsts` | string | --- | `Strict-Transport-Security` value |
+| `contentTypeOptions` | string | `nosniff` | `X-Content-Type-Options` value |
+| `frameOptions` | string | `DENY` | `X-Frame-Options` value |
+
+### HA Configuration
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `heartbeatIntervalMs` | number | 10000 | Heartbeat write interval |
+| `heartbeatTtlMs` | number | 30000 | Heartbeat TTL (2-3x interval) |
+| `takeoverGracePeriodMs` | number | 5000 | Grace period before takeover |
+| `redisKeyPrefix` | string | `mcp:ha:` | Redis key prefix |
+
+## Multi-Target Example
+
+Deploy the same server to Node.js, distributed, and Vercel:
+
+```typescript
+import { defineConfig } from '@frontmcp/cli';
+
+export default defineConfig({
+  name: 'my-server',
+  version: '1.0.0',
+  deployments: [
+    {
+      target: 'node',
+      server: { http: { port: 3000 } },
+    },
+    {
+      target: 'distributed',
+      ha: { heartbeatIntervalMs: 5000 },
+      server: {
+        csp: {
+          enabled: true,
+          directives: { 'default-src': "'self'", 'upgrade-insecure-requests': '' },
+        },
+        headers: { hsts: 'max-age=31536000; includeSubDomains' },
+      },
+    },
+    {
+      target: 'vercel',
+    },
+  ],
+});
+```
+
+Build each target independently:
+
+```bash
+frontmcp build --target node
+frontmcp build --target distributed
+frontmcp build --target vercel
+```
+
+## Helper Functions
+
+```typescript
+import { defineConfig, loadFrontMcpConfig, findDeployment, getDeploymentTargets } from '@frontmcp/cli';
+
+// Load config from a directory
+const config = await loadFrontMcpConfig(process.cwd());
+
+// Find a specific deployment target
+const distributed = findDeployment(config, 'distributed');
+
+// List all configured targets
+const targets = getDeploymentTargets(config); // ['node', 'distributed', 'vercel']
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Production Build" icon="rocket" href="/frontmcp/deployment/production-build">
+    Build and deploy guide
+  </Card>
+  <Card title="High Availability" icon="server" href="/frontmcp/deployment/high-availability">
+    Multi-pod deployment with session failover
+  </Card>
+  <Card title="Security Headers" icon="shield-halved" href="/frontmcp/deployment/security-headers">
+    CSP and security header configuration
+  </Card>
+  <Card title="Runtime Modes" icon="layer-group" href="/frontmcp/deployment/runtime-modes">
+    Standalone, distributed, and serverless modes
+  </Card>
+</CardGroup>

@@ -1,19 +1,15 @@
 // file: libs/sdk/src/notification/notification.service.ts
 
-import type { McpServer } from '@frontmcp/protocol';
 import {
   ListRootsResultSchema,
   type LoggingLevel,
+  type McpServer,
   type ProgressNotificationParams,
   type ProgressToken,
   type Root,
 } from '@frontmcp/protocol';
-import {
-  FrontMcpLogger,
-  type AIPlatformType,
-  type PlatformDetectionConfig,
-  type PlatformMappingEntry,
-} from '../common';
+
+import type { AIPlatformType, FrontMcpLogger, PlatformDetectionConfig, PlatformMappingEntry } from '../common';
 import type { Scope } from '../scope';
 
 /**
@@ -562,6 +558,16 @@ export class NotificationService {
   sendNotificationToSession(sessionId: string, method: McpNotificationMethod, params?: Record<string, unknown>): void {
     const registered = this.servers.get(sessionId);
     if (!registered) {
+      // HA: If session is not local, try relaying via pub/sub to the owning pod
+      const relay = this.scope.haManager?.getRelay();
+      if (relay) {
+        this.logger.debug(`[HA] Relaying notification ${method} for non-local session ${sessionId.slice(0, 20)}...`);
+        // Fire-and-forget relay — best effort for cross-pod delivery
+        relay.publish(sessionId, sessionId, { method, params }).catch(() => {
+          this.logger.warn(`[HA] Failed to relay notification ${method} to session ${sessionId.slice(0, 20)}...`);
+        });
+        return;
+      }
       this.logger.warn(`Cannot send notification to unregistered session: ${sessionId.slice(0, 20)}...`);
       return;
     }

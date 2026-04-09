@@ -1,8 +1,7 @@
-import { FrontMcpAuthContextImpl } from '../frontmcp-auth-context.impl';
+import { type AuthoritiesClaimsMapping } from '../../authorities/authorities.profiles';
+import { type FrontMcpAuthContext } from '../frontmcp-auth-context';
 import { buildAuthContext } from '../frontmcp-auth-context.factory';
-import type { FrontMcpAuthContext } from '../frontmcp-auth-context';
-import type { AuthContextSourceInfo } from '../frontmcp-auth-context.impl';
-import type { AuthoritiesClaimsMapping } from '../../authorities/authorities.profiles';
+import { FrontMcpAuthContextImpl, type AuthContextSourceInfo } from '../frontmcp-auth-context.impl';
 
 // ---------------------------------------------------------------------------
 // Helpers

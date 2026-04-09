@@ -1,10 +1,19 @@
 import 'reflect-metadata';
+
+import type z from 'zod';
+
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { type JobContext } from '../interfaces';
+import { type EsmOptions, type RemoteOptions, type ToolInputType, type ToolOutputType } from '../metadata';
+import { frontMcpJobMetadataSchema, type JobMetadata } from '../metadata/job.metadata';
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Job.esm() and Job.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import { JobKind, type JobEsmTargetRecord, type JobRemoteRecord } from '../records/job.record';
 import { extendedJobMetadata, FrontMcpJobTokens } from '../tokens';
-import { JobMetadata, frontMcpJobMetadataSchema } from '../metadata/job.metadata';
-import { ToolInputType, ToolOutputType } from '../metadata';
-import { JobContext } from '../interfaces';
-import { ToolInputOf, ToolOutputOf } from './tool.decorator';
-import z from 'zod';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
+import { type ToolInputOf, type ToolOutputOf } from './tool.decorator';
 
 /**
  * Decorator that marks a class as a Job and provides metadata.
@@ -54,16 +63,6 @@ function frontMcpJob<
     return jobFunction;
   };
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// STATIC METHODS: Job.esm() and Job.remote()
-// ═══════════════════════════════════════════════════════════════════
-
-import type { EsmOptions, RemoteOptions } from '../metadata';
-import { JobKind } from '../records/job.record';
-import type { JobEsmTargetRecord, JobRemoteRecord } from '../records/job.record';
-import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
-import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function jobEsm(specifier: string, targetName: string, options?: EsmOptions<JobMetadata>): JobEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);
@@ -147,7 +146,11 @@ type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
   : C extends abstract new (...a: any[]) => infer R
     ? R
     : never;
-type __Param<C extends __Ctor> = __R<C> extends { execute: (arg: infer P, ...r: any) => any } ? P : never;
+// Tuple-based parameter inference. See tool.decorator.ts for full rationale.
+type __ExecParams<C extends __Ctor> = __R<C> extends { execute: (...args: infer P) => unknown } ? P : never;
+// True only when the parameter tuple is exactly `[]` (zero-arg execute).
+type __HasNoParam<C extends __Ctor> = [__ExecParams<C>] extends [readonly []] ? true : false;
+type __Param<C extends __Ctor> = __ExecParams<C> extends readonly [infer P, ...unknown[]] ? P : never;
 type __Return<C extends __Ctor> = __R<C> extends { execute: (...a: any) => infer R } ? R : never;
 type __Unwrap<T> = T extends Promise<infer U> ? U : T;
 type __IsAny<T> = 0 extends 1 & T ? true : false;
@@ -158,25 +161,35 @@ type __IsAny<T> = 0 extends 1 & T ? true : false;
 type __MustExtendCtx<C extends __Ctor> =
   __R<C> extends JobContext ? unknown : { 'Job class error': 'Class must extend JobContext' };
 
-// execute param must exactly match In (and not be any)
+// execute param must exactly match In (and not be any).
 type __MustParam<C extends __Ctor, In> =
   __IsAny<In> extends true
     ? unknown
     : __IsAny<__Param<C>> extends true
       ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
-      : __Param<C> extends In
-        ? In extends __Param<C>
+      : // Truly no parameter (execute()) — allow only when In accepts an empty object.
+        //    Uses __HasNoParam (tuple-shape check) so `execute(input: never)` is NOT
+        //    confused with `execute()`.
+        __HasNoParam<C> extends true
+        ? In extends Record<string, never>
           ? unknown
           : {
-              'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
+              'execute() parameter error': 'execute() requires a parameter matching the input schema.';
+              expected_input_type: In;
+            }
+        : __Param<C> extends In
+          ? In extends __Param<C>
+            ? unknown
+            : {
+                'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
+                expected_input_type: In;
+                actual_parameter_type: __Param<C>;
+              }
+          : {
+              'execute() parameter error': 'Parameter type does not match the input schema.';
               expected_input_type: In;
               actual_parameter_type: __Param<C>;
-            }
-        : {
-            'execute() parameter error': 'Parameter type does not match the input schema.';
-            expected_input_type: In;
-            actual_parameter_type: __Param<C>;
-          };
+            };
 
 // execute return must be Out or Promise<Out> (and not be any)
 type __MustReturn<C extends __Ctor, Out> =

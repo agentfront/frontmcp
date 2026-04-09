@@ -1,17 +1,17 @@
 // file: libs/sdk/src/common/interfaces/execution-context.interface.ts
 
-import { randomUUID, getRuntimeContext } from '@frontmcp/utils';
-import type { RuntimeContext } from '@frontmcp/utils';
-import { Token } from '@frontmcp/di';
-import { ProviderRegistryInterface } from './internal';
-import { FrontMcpLogger } from './logger.interface';
-import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@frontmcp/protocol';
-import { ScopeEntry } from '../entries';
-import { FrontMcpContext, FRONTMCP_CONTEXT } from '../../context';
-import { RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
+import { type Token } from '@frontmcp/di';
+import { type AuthInfo } from '@frontmcp/protocol';
+import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
+
 import { ConfigService } from '../../builtin/config/providers/config.service';
-import type { FrontMcpAuthContext, FrontMcpFetchInit } from '@frontmcp/auth';
+import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
+import { RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { type ScopeEntry } from '../entries';
+import { FlowControl } from './flow.interface';
+import { type ProviderRegistryInterface } from './internal';
+import { type FrontMcpLogger } from './logger.interface';
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -89,7 +89,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   get auth(): FrontMcpAuthContext {
     if (this._authContext) return this._authContext;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const rawAuth = require('@frontmcp/auth');
     const auth = (rawAuth.default ?? rawAuth) as typeof import('@frontmcp/auth');
     this._authContext = auth.buildAuthContext(this._authInfo);

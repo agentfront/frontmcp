@@ -19,29 +19,29 @@
  * - Error status propagated to parent spans
  */
 
-import { sha256Hex } from '@frontmcp/utils';
 import {
-  type Tracer,
-  type Span,
-  type Context as OTelContext,
+  context as otelContext,
   SpanKind,
   trace,
-  context as otelContext,
+  type Context as OTelContext,
+  type Span,
+  type Tracer,
 } from '@opentelemetry/api';
 
-import { createOTelContextFromTrace, type TraceContextLike } from '../otel/trace-context-bridge';
-import { startHttpServerSpan, setHttpResponseStatus } from '../otel/spans/http-server.span';
-import { startRpcSpan } from '../otel/spans/rpc.span';
-import { startToolSpan } from '../otel/spans/tool.span';
-import { startResourceSpan } from '../otel/spans/resource.span';
+import { sha256Hex } from '@frontmcp/utils';
+
+import { FrontMcpAttributes, McpAttributes, type TracingOptions } from '../otel/otel.types';
+import { setAuthMode, setAuthResult, startAuthSpan } from '../otel/spans/auth.span';
+import { setFetchResponseStatus, startFetchSpan } from '../otel/spans/fetch.span';
+import { setHttpResponseStatus, startHttpServerSpan } from '../otel/spans/http-server.span';
 import { startPromptSpan } from '../otel/spans/prompt.span';
-import { startSpan, endSpanOk, endSpanError } from '../otel/spans/span.utils';
-import { FrontMcpAttributes, McpAttributes } from '../otel/otel.types';
-import type { TracingOptions } from '../otel/otel.types';
-import { startTransportSpan, setTransportRequestType } from '../otel/spans/transport.span';
-import { startAuthSpan, setAuthMode, setAuthResult } from '../otel/spans/auth.span';
-import { startFetchSpan, setFetchResponseStatus } from '../otel/spans/fetch.span';
+import { startResourceSpan } from '../otel/spans/resource.span';
+import { startRpcSpan } from '../otel/spans/rpc.span';
+import { endSpanError, endSpanOk, startSpan } from '../otel/spans/span.utils';
 import { emitStartupReport, type StartupTelemetryData } from '../otel/spans/startup.span';
+import { startToolSpan } from '../otel/spans/tool.span';
+import { setTransportRequestType, startTransportSpan } from '../otel/spans/transport.span';
+import { createOTelContextFromTrace, type TraceContextLike } from '../otel/trace-context-bridge';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Span storage keys (symbols to avoid user-state collision)
@@ -96,7 +96,7 @@ interface FlowRequestContext {
 /** Minimal interface for flow context objects passed to hooks. */
 export interface FlowContextLike {
   get?(key: symbol): unknown;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   state?: Record<symbol | string, any>;
 }
 

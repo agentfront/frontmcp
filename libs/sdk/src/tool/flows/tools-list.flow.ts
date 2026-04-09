@@ -1,17 +1,19 @@
 // tools/flows/list-tools.flow.ts
-import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ToolEntry } from '../../common';
+import { Flow, FlowBase, FlowControl, FlowHooksOf, ToolEntry, type FlowPlan, type FlowRunOptions } from '../../common';
+
 import 'reflect-metadata';
+
 import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
-import { ListToolsRequestSchema, ListToolsResultSchema } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError, InternalMcpError } from '../../errors';
-import { hasUIConfig } from '../ui';
+
+import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
-import type { Scope } from '../../scope/scope.instance';
-import type { AuthInfo } from '@frontmcp/protocol';
-import type { ToolPaginationOptions } from '../../common/types/options/pagination';
-import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination';
+
+import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
+import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
+import { type Scope } from '../../scope/scope.instance';
+import { hasUIConfig } from '../ui';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,

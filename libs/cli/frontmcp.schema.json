@@ -1,0 +1,380 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://frontmcp.dev/schemas/frontmcp.config.json",
+  "title": "FrontMCP Configuration",
+  "description": "Configuration for FrontMCP deployment targets, server defaults, and build settings.",
+  "type": "object",
+  "required": ["name", "deployments"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema pointer for IDE autocomplete."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9._-]+$",
+      "description": "Server name (alphanumeric with .-_ only)."
+    },
+    "version": {
+      "type": "string",
+      "description": "Server version (semver).",
+      "default": "1.0.0"
+    },
+    "entry": {
+      "type": "string",
+      "description": "Entry point file path."
+    },
+    "nodeVersion": {
+      "type": "string",
+      "description": "Node.js version requirement.",
+      "default": ">=22.0.0"
+    },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/DeploymentTarget" },
+      "description": "Build targets — each can override server defaults."
+    },
+    "build": {
+      "$ref": "#/definitions/BuildOptions",
+      "description": "Build/bundler options."
+    }
+  },
+  "definitions": {
+    "HttpConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "HTTP configuration — aligns with @FrontMcp({ http }).",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 3000,
+          "description": "HTTP port. Only for node/distributed targets."
+        },
+        "socketPath": {
+          "type": "string",
+          "description": "Unix socket path (alternative to port). Only for node/distributed."
+        },
+        "entryPath": {
+          "type": "string",
+          "description": "MCP entry path ('' or '/mcp')."
+        },
+        "cors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "origins": { "type": "array", "items": { "type": "string" }, "description": "Allowed origins." },
+            "credentials": { "type": "boolean", "description": "Allow credentials." },
+            "maxAge": { "type": "integer", "description": "Preflight cache (seconds)." }
+          }
+        }
+      }
+    },
+    "ServerDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Server-level config for HTTP-capable targets.",
+      "properties": {
+        "http": {
+          "$ref": "#/definitions/HttpConfig"
+        },
+        "csp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable CSP headers."
+            },
+            "directives": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+              },
+              "description": "CSP directives (e.g., 'default-src': \"'self'\")."
+            },
+            "reportUri": {
+              "type": "string",
+              "description": "Report URI for CSP violations."
+            },
+            "reportOnly": {
+              "type": "boolean",
+              "description": "Use Content-Security-Policy-Report-Only."
+            }
+          }
+        },
+        "cookies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "affinity": {
+              "type": "string",
+              "default": "__frontmcp_node",
+              "description": "LB affinity cookie name."
+            },
+            "domain": {
+              "type": "string",
+              "description": "Cookie domain."
+            },
+            "sameSite": {
+              "type": "string",
+              "enum": ["Strict", "Lax", "None"],
+              "default": "Strict",
+              "description": "SameSite policy."
+            }
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hsts": {
+              "oneOf": [{ "type": "string" }, { "const": false }],
+              "description": "Strict-Transport-Security. Set to false to disable."
+            },
+            "contentTypeOptions": {
+              "oneOf": [{ "type": "string" }, { "const": false }],
+              "description": "X-Content-Type-Options. Set to false to disable."
+            },
+            "frameOptions": {
+              "oneOf": [{ "type": "string" }, { "const": false }],
+              "description": "X-Frame-Options. Set to false to disable."
+            },
+            "custom": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Custom response headers."
+            }
+          }
+        }
+      }
+    },
+    "DeploymentBase": {
+      "type": "object",
+      "properties": {
+        "outDir": {
+          "type": "string",
+          "description": "Output directory override."
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Environment variables injected at build time."
+        }
+      }
+    },
+    "DeploymentTarget": {
+      "oneOf": [
+        { "$ref": "#/definitions/NodeDeployment" },
+        { "$ref": "#/definitions/DistributedDeployment" },
+        { "$ref": "#/definitions/CliDeployment" },
+        { "$ref": "#/definitions/VercelDeployment" },
+        { "$ref": "#/definitions/LambdaDeployment" },
+        { "$ref": "#/definitions/CloudflareDeployment" },
+        { "$ref": "#/definitions/BrowserDeployment" },
+        { "$ref": "#/definitions/SdkDeployment" }
+      ]
+    },
+    "NodeDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "node" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "server": { "$ref": "#/definitions/ServerDefaults" }
+      }
+    },
+    "DistributedDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "distributed" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "server": { "$ref": "#/definitions/ServerDefaults" },
+        "ha": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "heartbeatIntervalMs": {
+              "type": "integer",
+              "minimum": 1000,
+              "default": 10000,
+              "description": "Heartbeat interval in milliseconds."
+            },
+            "heartbeatTtlMs": {
+              "type": "integer",
+              "minimum": 2000,
+              "default": 30000,
+              "description": "Heartbeat TTL in milliseconds (should be 2-3x interval)."
+            },
+            "takeoverGracePeriodMs": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 5000,
+              "description": "Grace period before claiming orphaned sessions."
+            },
+            "redisKeyPrefix": {
+              "type": "string",
+              "default": "mcp:ha:",
+              "description": "Redis key prefix for HA keys."
+            }
+          }
+        }
+      }
+    },
+    "CliDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "cli" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "js": {
+          "type": "boolean",
+          "description": "Output JS bundle instead of native binary."
+        },
+        "cli": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": { "type": "string" },
+            "outputDefault": { "type": "string", "enum": ["text", "json"] },
+            "authRequired": { "type": "boolean" },
+            "excludeTools": { "type": "array", "items": { "type": "string" } },
+            "oauth": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "serverUrl": { "type": "string" },
+                "clientId": { "type": "string" },
+                "defaultScope": { "type": "string" },
+                "portRange": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
+            }
+          }
+        },
+        "sea": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "VercelDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "vercel" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "server": { "$ref": "#/definitions/ServerDefaults" }
+      }
+    },
+    "LambdaDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "lambda" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "server": { "$ref": "#/definitions/ServerDefaults" }
+      }
+    },
+    "CloudflareDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "cloudflare" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "server": { "$ref": "#/definitions/ServerDefaults" },
+        "wrangler": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "description": "Worker name." },
+            "compatibilityDate": { "type": "string", "description": "Compatibility date." }
+          }
+        }
+      }
+    },
+    "BrowserDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "browser" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "SdkDeployment": {
+      "type": "object",
+      "required": ["target"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "const": "sdk" },
+        "outDir": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "BuildOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "esbuild": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "external": { "type": "array", "items": { "type": "string" } },
+            "define": { "type": "object", "additionalProperties": { "type": "string" } },
+            "target": { "type": "string" },
+            "minify": { "type": "boolean" }
+          }
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "system": { "type": "array", "items": { "type": "string" } },
+            "nativeAddons": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "enum": ["sqlite", "redis", "none"] },
+            "required": { "type": "boolean" }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultPort": { "type": "integer" },
+            "supportsSocket": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -3,12 +3,24 @@
  *
  * Tests for session ID creation, encryption, decryption, and payload updates.
  */
-import { SessionIdPayload, TransportProtocolType, PlatformDetectionConfig } from '../../../common';
+import { type PlatformDetectionConfig, type SessionIdPayload, type TransportProtocolType } from '../../../common';
+// jest.mock() calls below are hoisted by Jest above this import, so the
+// session-id.utils module sees the mocked dependencies when it loads.
+import {
+  createSessionId,
+  decryptPublicSession,
+  extractSessionFromCookie,
+  generateSessionCookie,
+  getSessionClientInfo,
+  parseSessionHeader,
+  updateSessionPayload,
+} from '../utils/session-id.utils';
 
 // Mock factories use jest.fn() directly — no TDZ-vulnerable variable refs
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
   randomUUID: jest.fn(() => 'default-uuid'),
+  getMachineId: jest.fn(() => 'default-machine-id'),
 }));
 
 jest.mock('@frontmcp/auth', () => {
@@ -17,7 +29,6 @@ jest.mock('@frontmcp/auth', () => {
     ...actual,
     encryptJson: jest.fn(() => 'test-iv.test-tag.test-data'),
     safeDecrypt: jest.fn(() => null),
-    getMachineId: jest.fn(() => 'default-machine-id'),
     getTokenSignatureFingerprint: jest.fn(() => 'default-sig'),
   };
 });
@@ -27,26 +38,17 @@ jest.mock('../../../notification/notification.service', () => ({
 }));
 
 // Get references via require() (not hoisted, runs after mocks are set up)
-const { randomUUID: mockRandomUUID } = require('@frontmcp/utils') as { randomUUID: jest.Mock };
+const { randomUUID: mockRandomUUID, getMachineId: mockGetMachineId } = require('@frontmcp/utils') as {
+  randomUUID: jest.Mock;
+  getMachineId: jest.Mock;
+};
 const {
   encryptJson: mockEncryptJson,
   safeDecrypt: mockSafeDecrypt,
-  getMachineId: mockGetMachineId,
   getTokenSignatureFingerprint: mockGetTokenSignatureFingerprint,
 } = require('@frontmcp/auth') as Record<string, jest.Mock>;
 const { detectPlatformFromUserAgent: mockDetectPlatformFromUserAgent } =
   require('../../../notification/notification.service') as { detectPlatformFromUserAgent: jest.Mock };
-
-// Import after mocking
-import {
-  createSessionId,
-  updateSessionPayload,
-  parseSessionHeader,
-  decryptPublicSession,
-  generateSessionCookie,
-  extractSessionFromCookie,
-  getSessionClientInfo,
-} from '../utils/session-id.utils';
 
 describe('session-id.utils', () => {
   const TEST_NODE_ID = 'test-node-id-123';

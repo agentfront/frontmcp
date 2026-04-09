@@ -3,44 +3,46 @@
 import {
   Flow,
   FlowBase,
-  FlowRunOptions,
-  StageHookOf,
-  httpRequestInputSchema,
   getRequestBaseUrl,
+  httpRequestInputSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
-  FlowPlan,
-  AuthMode,
+  StageHookOf,
+  type AuthMode,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
+
 import 'reflect-metadata';
+
+import type { JSONWebKeySet } from 'jose';
 import { z } from 'zod';
+
 import {
+  authUserSchema,
+  buildInsufficientScopeHeader,
+  buildInvalidTokenHeader,
+  buildPrmUrl,
+  buildUnauthorizedHeader,
+  deriveAuthorizationId,
+  deriveExpectedAudience,
   deriveTypedUser,
   extractBearerToken,
   isJwt,
   JwksService,
-  ProviderVerifyRef,
-  VerifyResult,
-  buildPrmUrl,
-  buildUnauthorizedHeader,
-  buildInvalidTokenHeader,
-  buildInsufficientScopeHeader,
-  validateAudience,
-  deriveExpectedAudience,
-  deriveAuthorizationId,
+  llmSafeAuthContextSchema,
+  OrchestratedAuthorization,
   PublicAuthorization,
   TransparentAuthorization,
-  OrchestratedAuthorization,
-  authUserSchema,
-  llmSafeAuthContextSchema,
+  validateAudience,
+  type Authorization,
+  type OrchestratedProviderState,
+  type ProviderVerifyRef,
+  type OrchestratedTokenStore as TokenStore,
+  type TransparentVerifiedPayload,
+  type VerifyResult,
 } from '@frontmcp/auth';
-import type {
-  OrchestratedProviderState,
-  Authorization,
-  TransparentVerifiedPayload,
-  OrchestratedTokenStore as TokenStore,
-} from '@frontmcp/auth';
-import type { JSONWebKeySet } from 'jose';
+
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 // Input schema

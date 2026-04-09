@@ -1,10 +1,22 @@
 // file: libs/sdk/src/prompt/flows/prompts-list.flow.ts
 
-import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, PromptEntry } from '../../common';
+import {
+  Flow,
+  FlowBase,
+  FlowControl,
+  FlowHooksOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type PromptEntry,
+} from '../../common';
+
 import 'reflect-metadata';
+
 import { z } from 'zod';
+
 import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+
+import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
   request: ListPromptsRequestSchema,
@@ -191,7 +203,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
 
     const prompts = this.state.required.prompts;
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
-    const authInfo = ((ctx?.['authInfo']) ?? {}) as Record<string, unknown>;
+    const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
 
     const filtered = await Promise.all(
       prompts.map(async (item) => {
@@ -206,7 +218,10 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       }),
     );
 
-    this.state.set('prompts', filtered.filter((item): item is (typeof prompts)[number] => item !== null));
+    this.state.set(
+      'prompts',
+      filtered.filter((item): item is (typeof prompts)[number] => item !== null),
+    );
     this.logger.verbose('filterByAuthorities:done');
   }
 

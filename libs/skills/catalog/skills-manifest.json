@@ -364,6 +364,77 @@
           "name": "setup-sqlite",
           "description": "Cross-reference to the full SQLite configuration guide in frontmcp-setup",
           "examples": []
+        },
+        {
+          "name": "configure-deployment-targets",
+          "description": "Configure multi-target builds with frontmcp.config.ts for node, distributed, vercel, lambda, cloudflare, browser, cli, and sdk targets",
+          "examples": [
+            {
+              "name": "multi-target-with-security",
+              "description": "Configure a FrontMCP project with node + distributed targets, CSP headers, and HSTS",
+              "level": "intermediate",
+              "tags": ["config", "deployment", "csp", "security", "distributed", "hsts", "multi-target"],
+              "features": [
+                "Using defineConfig() for typed configuration with IDE autocomplete",
+                "Multi-target deployments with per-target server settings",
+                "CSP directives including value-less directives like upgrade-insecure-requests",
+                "Security headers (HSTS, X-Frame-Options, X-Content-Type-Options)",
+                "HA configuration for the distributed target"
+              ]
+            },
+            {
+              "name": "distributed-ha-config",
+              "description": "Configure a distributed deployment target with HA settings for heartbeat, session takeover, and Redis-backed session persistence",
+              "level": "advanced",
+              "tags": ["config", "deployment", "distributed", "ha", "redis", "heartbeat", "session-takeover"],
+              "features": [
+                "Configuring the distributed deployment target with HA options",
+                "Setting custom heartbeat intervals and TTL for pod liveness detection",
+                "Combining server config (CSP, cookies) with HA config in the same target",
+                "Using per-target environment variables for Redis connection"
+              ]
+            },
+            {
+              "name": "json-schema-ide-support",
+              "description": "Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete",
+              "level": "basic",
+              "tags": ["config", "deployment", "json", "schema", "ide", "autocomplete"],
+              "features": [
+                "Adding $schema field for IDE autocomplete in JSON config files",
+                "Configuring multiple deployment targets in JSON format",
+                "Using the frontmcp.schema.json for property validation and hover docs"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "configure-security-headers",
+          "description": "Configure CSP, HSTS, X-Frame-Options, and X-Content-Type-Options via frontmcp.config server settings",
+          "examples": [
+            {
+              "name": "csp-report-only",
+              "description": "Test CSP policies in report-only mode to identify violations before enforcement",
+              "level": "basic",
+              "tags": ["config", "csp", "security", "report-only", "headers"],
+              "features": [
+                "Enabling CSP in report-only mode with reportUri for violation monitoring",
+                "Using the object-format directives in frontmcp.config",
+                "Verifying report-only header is emitted instead of enforcement header"
+              ]
+            },
+            {
+              "name": "full-production-headers",
+              "description": "Complete security headers configuration for production with CSP enforcement, HSTS preload, and clickjacking protection",
+              "level": "intermediate",
+              "tags": ["config", "csp", "security", "hsts", "production", "headers", "frame-options"],
+              "features": [
+                "Full CSP enforcement with multiple directive types including value-less directives",
+                "HSTS with preload and includeSubDomains for HTTPS enforcement",
+                "X-Frame-Options DENY for clickjacking protection",
+                "Custom headers for additional security controls"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -2139,6 +2210,24 @@
               ]
             }
           ]
+        },
+        {
+          "name": "distributed-ha",
+          "description": "Deploy FrontMCP across multiple pods with heartbeat, session takeover, and notification relay for zero-downtime failover",
+          "examples": [
+            {
+              "name": "ha-kubernetes-3-replicas",
+              "description": "Deploy FrontMCP with 3 replicas, Redis, and automatic session failover on Kubernetes",
+              "level": "intermediate",
+              "tags": ["ha", "kubernetes", "redis", "distributed", "session-takeover", "heartbeat"],
+              "features": [
+                "Configuring @FrontMcp with Redis for distributed deployment",
+                "Kubernetes Deployment YAML with 3 replicas and readiness probes",
+                "Verifying heartbeat keys and session takeover via redis-cli",
+                "NGINX sticky sessions for session affinity"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -3085,7 +3174,18 @@
       "path": "frontmcp-authorities",
       "targets": ["all"],
       "hasResources": true,
-      "tags": ["authorization", "rbac", "abac", "rebac", "security", "permissions", "roles", "access-control", "authorities", "jwt"],
+      "tags": [
+        "authorization",
+        "rbac",
+        "abac",
+        "rebac",
+        "security",
+        "permissions",
+        "roles",
+        "access-control",
+        "authorities",
+        "jwt"
+      ],
       "bundle": ["full"],
       "priority": 9,
       "visibility": "both",

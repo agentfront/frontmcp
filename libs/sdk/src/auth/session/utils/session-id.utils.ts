@@ -4,12 +4,19 @@
 // detectPlatformFromUserAgent and PlatformDetectionConfig.
 // Crypto utils (encryptJson, decryptSessionJson, etc.) are now in @frontmcp/auth.
 
-import { randomUUID } from '@frontmcp/utils';
-import { TinyTtlCache, getTokenSignatureFingerprint, encryptJson, safeDecrypt } from '@frontmcp/auth';
-import type { SessionIdPayload, TransportProtocolType, AIPlatformType } from '@frontmcp/auth';
+import {
+  encryptJson,
+  getTokenSignatureFingerprint,
+  safeDecrypt,
+  TinyTtlCache,
+  type AIPlatformType,
+  type SessionIdPayload,
+  type TransportProtocolType,
+} from '@frontmcp/auth';
+import { getMachineId, randomUUID } from '@frontmcp/utils';
+
+import { type PlatformDetectionConfig } from '../../../common/types/options/session';
 import { detectPlatformFromUserAgent } from '../../../notification/notification.service';
-import type { PlatformDetectionConfig } from '../../../common/types/options/session';
-import { getMachineId } from '@frontmcp/auth';
 
 // 5s TTL cache for decrypted headers
 const cache = new TinyTtlCache<string, SessionIdPayload>(5000);

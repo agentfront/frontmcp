@@ -1,5 +1,7 @@
 import 'reflect-metadata';
+
 import { z } from 'zod';
+
 import { Tool, ToolContext } from '../../';
 
 // ════════════════════════════════════════════════════════════════
@@ -36,6 +38,30 @@ class ValidWithOutput extends ToolContext {
   }
 }
 
+// ── Valid: empty inputSchema with no execute parameter ──────
+
+@Tool({ name: 'valid-empty-schema', inputSchema: {} })
+class ValidEmptySchema extends ToolContext {
+  async execute() {
+    return { ok: true };
+  }
+}
+
+// ── Invalid: execute(input: never) is NOT the same as execute() ──
+// Regression guard: an explicit `never` parameter must not be silently
+// accepted as "no parameter" for an empty input schema.
+
+function _testExecuteWithNeverParam() {
+  // @ts-expect-error - execute(input: never) must not be accepted as zero-arg execute()
+  @Tool({ name: 'never-param', inputSchema: {} })
+  class NeverParamTool extends ToolContext {
+    async execute(_input: never) {
+      return { ok: true };
+    }
+  }
+  void NeverParamTool;
+}
+
 // ── Valid: with guard configs ────────────────────────────────
 
 @Tool({
@@ -54,12 +80,11 @@ class ValidWithGuards extends ToolContext {
 // ── Invalid: concurrency typo ───────────────────────────────
 
 function _testInvalidConcurrency() {
-  // @ts-expect-error - decorator fails: invalid concurrency property cascades to unresolvable signature
   @Tool({
     name: 'bad-concurrency',
     inputSchema: { query: z.string() },
     concurrency: {
-      // @ts-expect-error - 'maxConcurrensst' does not exist on ConcurrencyConfigInput
+      // @ts-expect-error - 'maxConcurrensst' typo: TS reports TS2769 (No overload matches) at this line
       maxConcurrensst: 5,
     },
   })
@@ -74,12 +99,11 @@ function _testInvalidConcurrency() {
 // ── Invalid: rateLimit typo ─────────────────────────────────
 
 function _testInvalidRateLimit() {
-  // @ts-expect-error - decorator fails: invalid rateLimit property cascades to unresolvable signature
   @Tool({
     name: 'bad-rate-limit',
     inputSchema: { query: z.string() },
     rateLimit: {
-      // @ts-expect-error - 'maxRequestss' does not exist on RateLimitConfigInput
+      // @ts-expect-error - 'maxRequestss' typo: TS reports TS2769 (No overload matches) at this line
       maxRequestss: 100,
     },
   })
@@ -143,6 +167,8 @@ function _testNotToolContext() {
 // Suppress unused variable/function warnings
 void ValidInputOnly;
 void ValidWithOutput;
+void ValidEmptySchema;
+void _testExecuteWithNeverParam;
 void ValidWithGuards;
 void _testInvalidConcurrency;
 void _testInvalidRateLimit;

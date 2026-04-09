@@ -1,7 +1,8 @@
 // auth/path.utils.ts
 
-import { ServerRequest } from '../interfaces';
-import { trimSlashes, joinPath } from '@frontmcp/utils';
+import { joinPath, trimSlashes } from '@frontmcp/utils';
+
+import type { ServerRequest } from '../interfaces';
 
 // Re-export for backwards compatibility
 export { trimSlashes, joinPath } from '@frontmcp/utils';

@@ -1,0 +1,29 @@
+{
+  "name": "multi-server",
+  "version": "2.0.0",
+  "deployments": [
+    {
+      "target": "distributed",
+      "server": {
+        "http": { "port": 8080 },
+        "cookies": { "affinity": "__myapp_node" }
+      },
+      "ha": { "heartbeatIntervalMs": 5000, "heartbeatTtlMs": 15000 }
+    },
+    {
+      "target": "cli",
+      "js": true,
+      "cli": { "description": "Test CLI", "outputDefault": "text" }
+    },
+    {
+      "target": "cloudflare",
+      "server": {
+        "http": { "cors": { "origins": ["https://app.example.com"] } },
+        "cookies": { "affinity": "__cf_node" }
+      }
+    },
+    {
+      "target": "browser"
+    }
+  ]
+}

@@ -81,3 +81,12 @@ export class TransportServiceNotAvailableError extends InternalMcpError {
     super('Transport service not available', 'TRANSPORT_SERVICE_NOT_AVAILABLE');
   }
 }
+
+/**
+ * Thrown when an HA session takeover fails because the session is already claimed by another pod.
+ */
+export class SessionClaimConflictError extends InternalMcpError {
+  constructor(sessionId: string) {
+    super(`Session ${sessionId} claimed by another pod`, 'SESSION_CLAIM_CONFLICT');
+  }
+}

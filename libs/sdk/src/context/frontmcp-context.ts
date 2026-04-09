@@ -11,16 +11,17 @@
  * ```
  */
 
+import { type ZodType } from 'zod';
+
+import { isFrontMcpCredentials, type FetchCredentialMiddleware, type FrontMcpFetchInit } from '@frontmcp/auth';
+import { type AuthInfo } from '@frontmcp/protocol';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
-import type { AuthInfo } from '@frontmcp/protocol';
-import type { FetchCredentialMiddleware, FrontMcpFetchInit } from '@frontmcp/auth';
-import { isFrontMcpCredentials } from '@frontmcp/auth';
-import { FrontMcpLogger } from '../common/interfaces/logger.interface';
-import { TraceContext, generateTraceContext } from './trace-context';
-import type { SessionIdPayload } from '../common/types';
+
+import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
+import { type SessionIdPayload } from '../common/types';
+import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { InvalidInputError } from '../errors/mcp.error';
-import { ElicitResult, ElicitOptions } from '../elicitation';
-import { ZodType } from 'zod';
+import { generateTraceContext, type TraceContext } from './trace-context';
 
 /** Symbol key for storing pre-resolved elicit result in context store */
 const PRE_RESOLVED_ELICIT_KEY = Symbol.for('frontmcp:pre-resolved-elicit');

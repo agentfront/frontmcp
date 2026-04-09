@@ -1,0 +1,4 @@
+{
+  "name": "invalid name with spaces",
+  "deployments": [{ "target": "node" }]
+}

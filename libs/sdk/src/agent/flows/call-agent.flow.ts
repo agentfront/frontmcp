@@ -1,19 +1,28 @@
 // file: libs/sdk/src/agent/flows/call-agent.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, AgentContext, AgentEntry } from '../../common';
 import { z } from 'zod';
-import { CallToolRequestSchema, CallToolResultSchema } from '@frontmcp/protocol';
-import type { AuthInfo } from '@frontmcp/protocol';
-import type { SdkAuthInfo } from '../../server/server.types';
+
+import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
+import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
+
 import {
-  InvalidMethodError,
-  InvalidInputError,
-  InvalidOutputError,
-  AgentNotFoundError,
+  AgentContext,
+  AgentEntry,
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  type FlowPlan,
+  type FlowRunOptions,
+} from '../../common';
+import {
   AgentExecutionError,
+  AgentNotFoundError,
+  InvalidInputError,
+  InvalidMethodError,
+  InvalidOutputError,
   RateLimitError,
 } from '../../errors';
-import { ExecutionTimeoutError, ConcurrencyLimitError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
+import { type SdkAuthInfo } from '../../server/server.types';
 
 // ============================================================================
 // Schemas
@@ -67,7 +76,15 @@ const stateSchema = z.object({
 // ============================================================================
 
 const plan = {
-  pre: ['parseInput', 'findAgent', 'checkEntryAuthorities', 'checkAgentAuthorization', 'createAgentContext', 'acquireQuota', 'acquireSemaphore'],
+  pre: [
+    'parseInput',
+    'findAgent',
+    'checkEntryAuthorities',
+    'checkAgentAuthorization',
+    'createAgentContext',
+    'acquireQuota',
+    'acquireSemaphore',
+  ],
   execute: ['validateInput', 'execute', 'validateOutput'],
   finalize: ['releaseSemaphore', 'releaseQuota', 'finalize'],
 } as const satisfies FlowPlan<string>;
@@ -233,7 +250,10 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     const authInfo = this.state.authInfo ?? {};
     const stateInput = this.state.input;
-    const input = ((stateInput as Record<string, unknown>)?.['arguments'] ?? stateInput ?? {}) as Record<string, unknown>;
+    const input = ((stateInput as Record<string, unknown>)?.['arguments'] ?? stateInput ?? {}) as Record<
+      string,
+      unknown
+    >;
 
     const evalCtx = ctxBuilder.build(authInfo as Record<string, unknown>, input);
     const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);

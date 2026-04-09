@@ -1,6 +1,23 @@
 // server/transport/transport.registry.ts
-import { sha256Hex } from '@frontmcp/utils';
+import type { SessionStore, StoredSession } from '@frontmcp/auth';
+import { getMachineId, sha256Hex } from '@frontmcp/utils';
+
+import { createSessionStore } from '../auth/session/session-store.factory';
+import type { ServerResponse, TransportPersistenceConfigInput } from '../common';
+import type { RedisOptions } from '../common/types/options/redis';
 import {
+  InvalidTransportSessionError,
+  SessionClaimConflictError,
+  TransportBusRequiredError,
+} from '../errors/transport.errors';
+import type { ClientCapabilities } from '../notification/notification.service';
+import type { Scope } from '../scope';
+import HandleSseFlow from './flows/handle.sse.flow';
+import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
+import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
+import { LocalTransporter } from './transport.local';
+import { RemoteTransporter } from './transport.remote';
+import type {
   TransportBus,
   Transporter,
   TransportKey,
@@ -9,20 +26,6 @@ import {
   TransportType,
   TransportTypeBucket,
 } from './transport.types';
-import { RemoteTransporter } from './transport.remote';
-import { LocalTransporter } from './transport.local';
-import { ServerResponse, TransportPersistenceConfigInput } from '../common';
-import { Scope } from '../scope';
-import { TransportBusRequiredError, InvalidTransportSessionError } from '../errors/transport.errors';
-import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
-import HandleSseFlow from './flows/handle.sse.flow';
-import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
-import type { StoredSession } from '@frontmcp/auth';
-import { createSessionStore } from '../auth/session/session-store.factory';
-import type { SessionStore } from '@frontmcp/auth';
-import type { RedisOptions } from '../common/types/options/redis';
-import { getMachineId } from '@frontmcp/auth';
-import type { ClientCapabilities } from '../notification/notification.service';
 
 export class TransportService {
   readonly ready: Promise<void>;
@@ -60,6 +63,12 @@ export class TransportService {
    * Pending store configuration for async initialization
    */
   private pendingStoreConfig?: RedisOptions;
+
+  /**
+   * Stable key prefix for transport session keys, persisted from config at construction time.
+   * Unlike pendingStoreConfig (cleared after init), this remains available for HA takeover lookups.
+   */
+  private transportKeyPrefix = 'mcp:transport:';
 
   /**
    * Whether a session store backend was configured (regardless of current connection state).
@@ -102,9 +111,10 @@ export class TransportService {
 
       // Override keyPrefix for transport persistence (separate from auth sessions)
       // Cast to RedisOptions since we're modifying the config
+      this.transportKeyPrefix = redisConfig.keyPrefix ?? 'mcp:transport:';
       this.pendingStoreConfig = {
         ...redisConfig,
-        keyPrefix: redisConfig.keyPrefix ?? 'mcp:transport:',
+        keyPrefix: this.transportKeyPrefix,
         defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000, // 1 hour default
       } as RedisOptions;
 
@@ -335,6 +345,17 @@ export class TransportService {
       protocol: storedSession.session.protocol,
       createdAt: storedSession.createdAt,
     });
+
+    // HA: If session belongs to a different node, attempt atomic takeover
+    const currentNodeId = getMachineId();
+    if (this.scope.haManager && storedSession.session.nodeId && storedSession.session.nodeId !== currentNodeId) {
+      const sessionKey = `${this.transportKeyPrefix}${sessionId}`;
+      const result = await this.scope.haManager.attemptTakeover(sessionKey, storedSession.session.nodeId);
+      if (!result.claimed) {
+        this.scope.logger.debug('[HA] Session already claimed by another pod', { sessionId: sessionId.slice(0, 20) });
+        throw new SessionClaimConflictError(sessionId);
+      }
+    }
 
     // Mark session as recreated in history
     const historyKey = this.makeHistoryKey(key.type, key.tokenHash, sessionId);

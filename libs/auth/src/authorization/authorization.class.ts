@@ -1,23 +1,20 @@
 // auth/authorization/authorization.class.ts
 
-import { randomUUID, base64urlDecode } from '@frontmcp/utils';
-import {
+import { base64urlDecode, getMachineId, randomUUID } from '@frontmcp/utils';
+
+import { TokenLeakDetectedError } from '../errors/auth-internal.errors';
+import type { ProviderSnapshot } from '../session/session.types';
+import type { SessionJwtPayload, TransportProtocol, TransportSession } from '../session/transport-session.types';
+import { encryptJson } from '../session/utils/session-crypto.utils';
+import type {
+  AuthMode,
   Authorization,
   AuthorizationCreateCtx,
   AuthorizedPrompt,
   AuthorizedTool,
   AuthUser,
   LLMSafeAuthContext,
-  AuthMode,
 } from './authorization.types';
-import type { TransportSession, TransportProtocol, SessionJwtPayload } from '../session/transport-session.types';
-import type { ProviderSnapshot } from '../session/session.types';
-import { encryptJson } from '../session/utils/session-crypto.utils';
-import { getMachineId } from '../machine-id';
-import { TokenLeakDetectedError } from '../errors/auth-internal.errors';
-
-// Re-export getMachineId for backwards compatibility
-export { getMachineId } from '../machine-id';
 
 /**
  * Base Authorization class - represents authenticated user context

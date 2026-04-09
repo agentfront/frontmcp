@@ -270,11 +270,11 @@ if (invalidHooks.length > 0) {
 **Centralize record types in common/records:**
 
 ```typescript
-// In libs/sdk/src/common/records/resource.record.ts
-export type AnyResourceRecord = ResourceRecord | ResourceTemplateRecord;
-
 // Import from common, not from module-specific files
 import { AnyResourceRecord } from '../common/records';
+
+// In libs/sdk/src/common/records/resource.record.ts
+export type AnyResourceRecord = ResourceRecord | ResourceTemplateRecord;
 ```
 
 ## Git Operations
@@ -347,28 +347,24 @@ See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete e
 
 ```typescript
 import {
+  base64urlDecode, // Base64url decoding
+  // Encoding
+  base64urlEncode, // Base64url encoding
+  decryptAesGcm, // AES-256-GCM decryption
+  encryptAesGcm, // AES-256-GCM encryption
+  generateCodeChallenge, // PKCE code challenge (S256)
   // PKCE (RFC 7636)
   generateCodeVerifier, // PKCE code verifier (43-128 chars)
-  generateCodeChallenge, // PKCE code challenge (S256)
   generatePkcePair, // Generate both verifier and challenge
-
-  // Hashing
-  sha256, // SHA-256 hash (Uint8Array)
-  sha256Hex, // SHA-256 hash (hex string)
-  sha256Base64url, // SHA-256 hash (base64url string)
-
   // Encryption
   hkdfSha256, // HKDF-SHA256 key derivation (RFC 5869)
-  encryptAesGcm, // AES-256-GCM encryption
-  decryptAesGcm, // AES-256-GCM decryption
-
   // Random generation
   randomBytes, // Cryptographic random bytes
   randomUUID, // UUID v4 generation
-
-  // Encoding
-  base64urlEncode, // Base64url encoding
-  base64urlDecode, // Base64url decoding
+  // Hashing
+  sha256, // SHA-256 hash (Uint8Array)
+  sha256Base64url, // SHA-256 hash (base64url string)
+  sha256Hex, // SHA-256 hash (hex string)
 } from '@frontmcp/utils';
 ```
 
@@ -393,25 +389,25 @@ private generatePkceVerifier(): string {
 
 ```typescript
 import {
-  readFile, // Read file as string
-  readFileBuffer, // Read file as Buffer
-  writeFile, // Write content to file
-  mkdir, // Create directory
-  rename, // Rename/move file or directory
-  unlink, // Delete file
-  stat, // Get file/directory stats
+  access, // Check file accessibility
   copyFile, // Copy file
   cp, // Copy file or directory recursively
-  readdir, // List directory contents
-  rm, // Remove file or directory
-  mkdtemp, // Create temporary directory
-  access, // Check file accessibility
-  fileExists, // Check if file exists (returns boolean)
-  readJSON, // Read and parse JSON file
-  writeJSON, // Write object as JSON
   ensureDir, // Ensure directory exists
+  fileExists, // Check if file exists (returns boolean)
   isDirEmpty, // Check if directory is empty
+  mkdir, // Create directory
+  mkdtemp, // Create temporary directory
+  readdir, // List directory contents
+  readFile, // Read file as string
+  readFileBuffer, // Read file as Buffer
+  readJSON, // Read and parse JSON file
+  rename, // Rename/move file or directory
+  rm, // Remove file or directory
   runCmd, // Run command as child process
+  stat, // Get file/directory stats
+  unlink, // Delete file
+  writeFile, // Write content to file
+  writeJSON, // Write object as JSON
 } from '@frontmcp/utils';
 ```
 
@@ -517,6 +513,7 @@ Use the utility from skill module instead of inline detection:
 ```typescript
 // ✅ Good - use utility
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
+
 const skillsOnlyMode = detectSkillsOnlyMode(query);
 
 // ❌ Bad - duplicated inline logic

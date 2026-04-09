@@ -56,21 +56,23 @@
  * That's it. No pages with complex consent screens are required; reuse your normal /oauth/authorize
  */
 
+import { z } from 'zod';
+
+import { randomUUID } from '@frontmcp/utils';
+
 import {
+  computeResource,
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
-  StageHookOf,
-  computeResource,
   resourceUriMatches,
+  StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
-import { randomUUID } from '@frontmcp/utils';
-import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import type { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
 

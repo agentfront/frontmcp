@@ -1,15 +1,24 @@
 // file: libs/sdk/src/prompt/flows/get-prompt.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, PromptContext, PromptEntry } from '../../common';
 import { z } from 'zod';
-import { GetPromptRequestSchema, GetPromptResultSchema } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
+
+import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
+
 import {
-  InvalidMethodError,
-  PromptNotFoundError,
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type PromptContext,
+  type PromptEntry,
+} from '../../common';
+import {
   InvalidInputError,
+  InvalidMethodError,
   InvalidOutputError,
   PromptExecutionError,
+  PromptNotFoundError,
 } from '../../errors';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 
@@ -205,7 +214,11 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       const scopeMapping = this.scope.authoritiesScopeMapping;
       if (scopeMapping && result.denial) {
         const { resolveRequiredScopes } = await import('@frontmcp/auth');
-        requiredScopes = resolveRequiredScopes(result.denial, scopeMapping, authorities as import('@frontmcp/auth').AuthoritiesMetadata);
+        requiredScopes = resolveRequiredScopes(
+          result.denial,
+          scopeMapping,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+        );
       }
 
       const { AuthorityDeniedError } = await import('@frontmcp/auth');

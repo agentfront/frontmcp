@@ -1,99 +1,99 @@
+import { trace } from '@opentelemetry/api';
+
 import {
+  AgentCallHook,
   DynamicPlugin,
-  Plugin,
-  ProviderType,
-  ProviderScope,
+  FlowHooksOf,
   FRONTMCP_CONTEXT,
-  ToolHook,
-  ResourceHook,
   HttpHook,
-  ListToolsHook,
   ListResourcesHook,
   ListResourceTemplatesHook,
-  AgentCallHook,
-  FlowHooksOf,
+  ListToolsHook,
+  Plugin,
+  ProviderScope,
+  ResourceHook,
+  ToolHook,
+  type ProviderType,
 } from '@frontmcp/sdk';
-import { trace } from '@opentelemetry/api';
-import type {
-  ObservabilityPluginOptions,
-  ObservabilityPluginOptionsInput,
-  ObservabilityLoggingOptions,
-} from './observability.plugin.types';
-import type { TracingOptions } from '../otel/otel.types';
-import type { RequestLogCollectorOptions } from '../request-log/request-log.types';
-import { OTEL_TRACER, OTEL_CONFIG } from '../otel/otel.tokens';
-import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
-import { RequestLogCollector } from '../request-log/request-log.collector';
-import { StructuredLogTransport } from '../logging/structured-log-transport';
-import { createSinks } from '../logging/sink.factory';
 
+import { createSinks } from '../logging/sink.factory';
+import { StructuredLogTransport } from '../logging/structured-log-transport';
+import { OTEL_CONFIG, OTEL_TRACER } from '../otel/otel.tokens';
+import type { TracingOptions } from '../otel/otel.types';
+import type { StartupTelemetryData } from '../otel/spans/startup.span';
+import { RequestLogCollector } from '../request-log/request-log.collector';
+import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
+import type { RequestLogCollectorOptions } from '../request-log/request-log.types';
 import { TelemetryAccessor } from '../telemetry/telemetry.accessor';
 import { TELEMETRY_ACCESSOR } from '../telemetry/telemetry.tokens';
-
 import {
-  // HTTP flow
-  onHttpWillTrace,
-  onHttpWillAcquireQuota,
-  onHttpDidAcquireQuota,
-  onHttpWillCheckAuth,
-  onHttpDidCheckAuth,
-  onHttpWillRoute,
-  onHttpDidRoute,
-  onHttpDidFinalize,
-  // Tool flow
-  onToolWillParse,
-  onToolWillFindTool,
-  onToolWillCheckAuth as onToolCheckAuth,
-  onEntryWillCheckAuthorities,
-  onEntryDidCheckAuthorities,
-  onToolWillCreateContext,
-  onToolWillValidateInput,
-  onToolWillExecute,
-  onToolDidExecute,
-  onToolWillValidateOutput,
-  onToolWillApplyUI,
-  onToolDidFinalize,
-  // Resource flow
-  onResourceWillParse,
-  onResourceWillFind,
-  onResourceWillExecute,
-  onResourceDidExecute,
-  onResourceDidFinalize,
-  // Prompt flow
-  onPromptWillParse,
-  onPromptWillFind,
-  onPromptWillExecute,
-  onPromptDidExecute,
-  onPromptDidFinalize,
+  onAgentDidExecute,
+  onAgentDidExecuteEnrich,
+  onAgentDidFinalize,
+  onAgentWillExecute,
+  onAgentWillFind,
   // Agent flow
   onAgentWillParse,
-  onAgentWillFind,
-  onAgentWillExecute,
-  onAgentDidExecute,
-  onAgentDidFinalize,
-  onAgentDidExecuteEnrich,
-  // Generic flow helpers
-  onGenericFlowWillStart,
-  onGenericFlowStage,
-  onGenericFlowDidFinalize,
-  // Transport flows
-  onTransportWillStart,
-  onTransportDidRoute,
-  onTransportStage,
-  onTransportDidFinalize,
+  onAuthDidDetermineMode,
+  onAuthDidFinalize,
+  onAuthStage,
   // Auth flows
   onAuthWillStart,
-  onAuthDidDetermineMode,
-  onAuthStage,
-  onAuthDidFinalize,
-  // Fetch wrapping
-  wrapContextFetch,
+  onEntryDidCheckAuthorities,
+  onEntryWillCheckAuthorities,
+  onGenericFlowDidFinalize,
+  onGenericFlowStage,
+  // Generic flow helpers
+  onGenericFlowWillStart,
+  onHttpDidAcquireQuota,
+  onHttpDidCheckAuth,
+  onHttpDidFinalize,
+  onHttpDidRoute,
+  onHttpWillAcquireQuota,
+  onHttpWillCheckAuth,
+  onHttpWillRoute,
+  // HTTP flow
+  onHttpWillTrace,
+  onPromptDidExecute,
+  onPromptDidFinalize,
+  onPromptWillExecute,
+  onPromptWillFind,
+  // Prompt flow
+  onPromptWillParse,
+  onResourceDidExecute,
+  onResourceDidFinalize,
+  onResourceWillExecute,
+  onResourceWillFind,
+  // Resource flow
+  onResourceWillParse,
+  onToolWillCheckAuth as onToolCheckAuth,
+  onToolDidExecute,
+  onToolDidFinalize,
+  onToolWillApplyUI,
+  onToolWillCreateContext,
+  onToolWillExecute,
+  onToolWillFindTool,
+  // Tool flow
+  onToolWillParse,
+  onToolWillValidateInput,
+  onToolWillValidateOutput,
+  onTransportDidFinalize,
+  onTransportDidRoute,
+  onTransportStage,
+  // Transport flows
+  onTransportWillStart,
   // Startup report
   reportStartup,
   // Session tracing ID
   sessionTracingId,
+  // Fetch wrapping
+  wrapContextFetch,
 } from './observability.hooks';
-import type { StartupTelemetryData } from '../otel/spans/startup.span';
+import type {
+  ObservabilityLoggingOptions,
+  ObservabilityPluginOptions,
+  ObservabilityPluginOptionsInput,
+} from './observability.plugin.types';
 
 // Hook decorators for flows without SDK-exported constants
 const PromptHook = FlowHooksOf('prompts:get-prompt' as any);

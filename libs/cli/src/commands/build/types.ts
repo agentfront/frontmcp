@@ -53,4 +53,4 @@ export type AdapterTemplate = {
   postBundle?: (outDir: string, cwd: string, bundleOutput: string) => Promise<void>;
 };
 
-export type AdapterName = 'node' | 'vercel' | 'lambda' | 'cloudflare';
+export type AdapterName = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'distributed';

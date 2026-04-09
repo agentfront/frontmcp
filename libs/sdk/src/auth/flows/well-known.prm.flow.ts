@@ -1,19 +1,21 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
+
 import { z } from 'zod';
+
 import {
+  computeResource,
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
+  getRequestBaseUrl,
   httpInputSchema,
   HttpJsonSchema,
-  ScopeEntry,
-  ServerRequest,
-  StageHookOf,
-  computeResource,
-  getRequestBaseUrl,
   makeWellKnownPaths,
+  StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ScopeEntry,
+  type ServerRequest,
 } from '../../common';
 import { FlowInputMissingError } from '../../errors/sdk.errors';
 

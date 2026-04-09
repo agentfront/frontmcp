@@ -1,23 +1,26 @@
 import 'reflect-metadata';
-import { extendedToolMetadata, FrontMcpToolTokens } from '../tokens';
-import {
-  ToolMetadata,
-  frontMcpToolMetadataSchema,
-  ImageOutputSchema,
-  AudioOutputSchema,
-  ResourceOutputSchema,
-  ResourceLinkOutputSchema,
-  ToolInputType,
-  ToolOutputType,
-} from '../metadata';
-import type { ToolUIConfig } from '../metadata/tool-ui.metadata';
-import type { EsmOptions, RemoteOptions } from '../metadata';
-import type { ConcurrencyConfigInput, RateLimitConfigInput, TimeoutConfigInput } from '@frontmcp/guard';
-import z from 'zod';
-import { ToolContext } from '../interfaces';
-import { ToolKind } from '../records/tool.record';
-import type { ToolEsmTargetRecord, ToolRemoteRecord } from '../records/tool.record';
+
+import type z from 'zod';
+
+import { type ConcurrencyConfigInput, type RateLimitConfigInput, type TimeoutConfigInput } from '@frontmcp/guard';
+
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { type ToolContext } from '../interfaces';
+import {
+  frontMcpToolMetadataSchema,
+  type AudioOutputSchema,
+  type EsmOptions,
+  type ImageOutputSchema,
+  type RemoteOptions,
+  type ResourceLinkOutputSchema,
+  type ResourceOutputSchema,
+  type ToolInputType,
+  type ToolMetadata,
+  type ToolOutputType,
+} from '../metadata';
+import { type ToolUIConfig } from '../metadata/tool-ui.metadata';
+import { ToolKind, type ToolEsmTargetRecord, type ToolRemoteRecord } from '../records/tool.record';
+import { extendedToolMetadata, FrontMcpToolTokens } from '../tokens';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
@@ -258,7 +261,15 @@ type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
   : C extends abstract new (...a: any[]) => infer R
     ? R
     : never;
-type __Param<C extends __Ctor> = __R<C> extends { execute: (arg: infer P, ...r: any) => any } ? P : never;
+// Tuple-based parameter inference. Detect "no parameter" by inspecting the
+// __ExecParams tuple shape directly (via __HasNoParam) rather than relying on
+// __Param collapsing to `never`, which would conflate `execute()` with the
+// logically broken `execute(input: never)`.
+type __ExecParams<C extends __Ctor> = __R<C> extends { execute: (...args: infer P) => unknown } ? P : never;
+// True only when the parameter tuple is exactly `[]`. The outer `[...]` wrap
+// prevents distribution and handles the corner case where __ExecParams<C> = never.
+type __HasNoParam<C extends __Ctor> = [__ExecParams<C>] extends [readonly []] ? true : false;
+type __Param<C extends __Ctor> = __ExecParams<C> extends readonly [infer P, ...unknown[]] ? P : never;
 type __Return<C extends __Ctor> = __R<C> extends { execute: (...a: any) => infer R } ? R : never;
 type __Unwrap<T> = T extends Promise<infer U> ? U : T;
 type __IsAny<T> = 0 extends 1 & T ? true : false;
@@ -269,7 +280,7 @@ type __IsAny<T> = 0 extends 1 & T ? true : false;
 type __MustExtendCtx<C extends __Ctor> =
   __R<C> extends ToolContext ? unknown : { 'Tool class error': 'Class must extend ToolContext' };
 
-// execute param must exactly match In (and not be any)
+// execute param must exactly match In (and not be any).
 type __MustParam<C extends __Ctor, In> =
   // 1. If 'In' (from schema) is 'any', we can't check, so allow.
   __IsAny<In> extends true
@@ -277,20 +288,30 @@ type __MustParam<C extends __Ctor, In> =
     : // 2. Check if the actual param type is 'any'. This is an error.
       __IsAny<__Param<C>> extends true
       ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
-      : // 3. Check for the exact match: Param extends In AND In extends Param
-        __Param<C> extends In
-        ? In extends __Param<C>
-          ? unknown // OK, exact match
+      : // 3. Truly no parameter (execute()) — allow only when In accepts an empty object.
+        //    Uses __HasNoParam (tuple-shape check) so `execute(input: never)` is NOT
+        //    confused with `execute()` and falls through to the strict bidirectional check below.
+        __HasNoParam<C> extends true
+        ? In extends Record<string, never>
+          ? unknown
           : {
-              'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
+              'execute() parameter error': 'execute() requires a parameter matching the input schema.';
+              expected_input_type: In;
+            }
+        : // 4. Check for the exact match: Param extends In AND In extends Param
+          __Param<C> extends In
+          ? In extends __Param<C>
+            ? unknown // OK, exact match
+            : {
+                'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
+                expected_input_type: In;
+                actual_parameter_type: __Param<C>;
+              }
+          : {
+              'execute() parameter error': 'Parameter type does not match the input schema.';
               expected_input_type: In;
               actual_parameter_type: __Param<C>;
-            }
-        : {
-            'execute() parameter error': 'Parameter type does not match the input schema.';
-            expected_input_type: In;
-            actual_parameter_type: __Param<C>;
-          };
+            };
 
 // execute return must be Out or Promise<Out> (and not be any)
 type __MustReturn<C extends __Ctor, Out> =

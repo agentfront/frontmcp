@@ -30,7 +30,12 @@
     "publish:ui": "nx run-many -t publish --projects='@frontmcp/ui'"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": "prettier --write"
+    "*.{ts,tsx}": [
+      "eslint --fix --no-warn-ignored --config eslint.imports.mjs",
+      "npx tsx scripts/merge-imports.ts",
+      "prettier --write"
+    ],
+    "*.{js,jsx,json,css,scss,md,html,yml,yaml}": "prettier --write"
   },
   "private": true,
   "dependencies": {
@@ -61,6 +66,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@eslint/js": "^9.8.0",
+    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@mdx-js/mdx": "^3.1.1",
     "@mui/material": "^7.3.8",
     "@nx/esbuild": "22.6.4",
