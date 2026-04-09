@@ -10,7 +10,7 @@
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-machine-id"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-machine-id/jest.e2e.config.ts",
-        "passWithNoTests": true
+        "passWithNoTests": false
       }
     }
   }

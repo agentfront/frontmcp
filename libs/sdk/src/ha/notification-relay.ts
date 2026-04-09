@@ -40,6 +40,7 @@ export interface RelayRedisClient {
   publish(channel: string, message: string): Promise<number>;
   on(event: 'message', handler: (channel: string, message: string) => void): void;
   removeAllListeners(event: 'message'): void;
+  removeListener(event: 'message', handler: (channel: string, message: string) => void): void;
 }
 
 export class NotificationRelay {
@@ -67,7 +68,7 @@ export class NotificationRelay {
   /** Stop listening and clean up. */
   async unsubscribe(): Promise<void> {
     this.handler = undefined;
-    this.subscriber.removeAllListeners('message');
+    this.subscriber.removeListener('message', this.onMessage);
     try {
       await this.subscriber.unsubscribe(this.channel);
     } catch {

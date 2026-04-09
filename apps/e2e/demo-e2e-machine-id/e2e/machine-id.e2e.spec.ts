@@ -49,7 +49,7 @@ describe('Machine ID E2E', () => {
     expect(getMachineId()).toBe(original);
   });
 
-  it('should respect MACHINE_ID env var (highest priority)', () => {
+  it('should respect machine id override via setMachineIdOverride', () => {
     // getMachineId() is resolved at module load, so we test the override mechanism
     // which mirrors the MACHINE_ID env var behavior
     setMachineIdOverride('env-machine-id-123');

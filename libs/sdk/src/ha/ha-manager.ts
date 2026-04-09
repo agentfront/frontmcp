@@ -73,7 +73,7 @@ export class HaManager {
     this.logger?.info(`[HA] Heartbeat started for node ${this.nodeId}`);
 
     if (this.relay) {
-      this.logger?.info(`[HA] Notification relay started`);
+      this.logger?.info(`[HA] Notification relay available`);
     }
   }
 

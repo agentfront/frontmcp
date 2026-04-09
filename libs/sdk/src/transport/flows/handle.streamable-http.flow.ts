@@ -378,7 +378,9 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
         response.setHeader(DEFAULT_FRONTMCP_MACHINE_ID_HEADER, nodeId);
         const cookie = buildSetCookie({ name: DEFAULT_FRONTMCP_NODE_COOKIE, value: nodeId }, request);
         if (cookie) {
-          response.setHeader('Set-Cookie', cookie);
+          const existing = response.getHeader('Set-Cookie');
+          const existingArr = Array.isArray(existing) ? existing : existing ? [String(existing)] : [];
+          response.setHeader('Set-Cookie', [...existingArr, cookie]);
         }
       }
 

@@ -168,6 +168,7 @@ export {
   TransportAlreadyStartedError,
   UnsupportedContentTypeError,
   TransportServiceNotAvailableError,
+  SessionClaimConflictError,
 } from './transport.errors';
 
 // Export auth internal errors

@@ -44,6 +44,8 @@ export function readCspFromEnv(): CspOptions | undefined {
     const spaceIdx = trimmed.indexOf(' ');
     if (spaceIdx > 0) {
       directives[trimmed.slice(0, spaceIdx)] = trimmed.slice(spaceIdx + 1);
+    } else {
+      directives[trimmed] = '';
     }
   }
 
@@ -62,7 +64,7 @@ export function buildCspHeaderValue(options: CspOptions): string {
   const parts: string[] = [];
 
   for (const [directive, value] of Object.entries(options.directives)) {
-    parts.push(`${directive} ${value}`);
+    parts.push(value ? `${directive} ${value}` : directive);
   }
 
   if (options.reportUri) {

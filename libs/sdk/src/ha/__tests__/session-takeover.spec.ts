@@ -53,7 +53,9 @@ describe('attemptSessionTakeover', () => {
     expect(result.claimed).toBe(true);
     expect(result.previousNodeId).toBe('dead-pod');
 
-    const updated = JSON.parse(redis.store.get('mcp:transport:sess1')!);
+    const updatedRaw = redis.store.get('mcp:transport:sess1');
+    if (!updatedRaw) throw new Error('Expected session key "mcp:transport:sess1" to exist in store');
+    const updated = JSON.parse(updatedRaw);
     expect(updated.session.nodeId).toBe('my-pod');
     expect(updated.reassignedFrom).toBe('dead-pod');
     expect(updated.reassignedAt).toBeGreaterThan(0);
@@ -73,7 +75,9 @@ describe('attemptSessionTakeover', () => {
     expect(result.claimed).toBe(false);
     expect(result.previousNodeId).toBeUndefined();
 
-    const unchanged = JSON.parse(redis.store.get('mcp:transport:sess1')!);
+    const unchangedRaw = redis.store.get('mcp:transport:sess1');
+    if (!unchangedRaw) throw new Error('Expected session key "mcp:transport:sess1" to exist in store');
+    const unchanged = JSON.parse(unchangedRaw);
     expect(unchanged.session.nodeId).toBe('other-pod');
   });
 
@@ -98,8 +102,10 @@ describe('attemptSessionTakeover', () => {
     const result = await attemptSessionTakeover(redis, 'mcp:transport:sess2', 'dead-pod', 'my-pod');
 
     expect(result.claimed).toBe(true);
-    const updated = JSON.parse(redis.store.get('mcp:transport:sess2')!);
-    expect(updated.nodeId).toBe('my-pod');
+    const updatedRaw2 = redis.store.get('mcp:transport:sess2');
+    if (!updatedRaw2) throw new Error('Expected session key "mcp:transport:sess2" to exist in store');
+    const updated2 = JSON.parse(updatedRaw2);
+    expect(updated2.nodeId).toBe('my-pod');
   });
 
   it('should be race-safe: first pod wins, second loses', async () => {
@@ -120,11 +126,13 @@ describe('attemptSessionTakeover', () => {
     // Second loses (nodeId is now 'pod-b', not 'dead-pod')
     expect(result2.claimed).toBe(false);
 
-    const final = JSON.parse(redis.store.get('mcp:transport:sess1')!);
+    const finalRaw = redis.store.get('mcp:transport:sess1');
+    if (!finalRaw) throw new Error('Expected session key "mcp:transport:sess1" to exist in store');
+    const final = JSON.parse(finalRaw);
     expect(final.session.nodeId).toBe('pod-b');
   });
 
-  it('should allow retaking if session was already ours', async () => {
+  it('should NOT allow retaking when expectedOldNodeId mismatches stored nodeId', async () => {
     const redis = createMockRedis();
     redis.store.set(
       'mcp:transport:sess1',

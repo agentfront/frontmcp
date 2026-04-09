@@ -59,7 +59,7 @@ function processFile(filePath: string): void {
   }
 
   let needsMerge = false;
-  // @ts-ignore
+  // @ts-expect-error -- unused key from Map.entries()
   for (const [, g] of byModule) {
     if (g.length > 1) {
       needsMerge = true;

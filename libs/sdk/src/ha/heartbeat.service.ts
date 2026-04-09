@@ -75,7 +75,11 @@ export class HeartbeatService {
   async getHeartbeat(nodeId: string): Promise<HeartbeatValue | null> {
     const raw = await this.redis.get(`${this.keyPrefix}heartbeat:${nodeId}`);
     if (!raw) return null;
-    return JSON.parse(raw) as HeartbeatValue;
+    try {
+      return JSON.parse(raw) as HeartbeatValue;
+    } catch {
+      return null;
+    }
   }
 
   /** Get all alive node IDs by scanning heartbeat keys. */

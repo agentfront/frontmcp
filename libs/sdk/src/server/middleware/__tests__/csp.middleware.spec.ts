@@ -142,6 +142,19 @@ describe('readCspFromEnv', () => {
     expect(readCspFromEnv()).toBeUndefined();
   });
 
+  it('should parse directives without values', () => {
+    process.env['FRONTMCP_CSP_ENABLED'] = '1';
+    process.env['FRONTMCP_CSP_DIRECTIVES'] = "default-src 'self'; upgrade-insecure-requests";
+
+    const csp = readCspFromEnv();
+    expect(csp).toBeDefined();
+    expect(csp!.directives['default-src']).toBe("'self'");
+    expect(csp!.directives['upgrade-insecure-requests']).toBe('');
+
+    const header = buildCspHeaderValue(csp!);
+    expect(header).toBe("default-src 'self'; upgrade-insecure-requests");
+  });
+
   it('should parse CSP from env vars', () => {
     process.env['FRONTMCP_CSP_ENABLED'] = '1';
     process.env['FRONTMCP_CSP_DIRECTIVES'] = "default-src 'self'; script-src 'self' https://cdn.example.com";

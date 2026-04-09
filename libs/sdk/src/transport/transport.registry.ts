@@ -5,7 +5,11 @@ import { getMachineId, sha256Hex } from '@frontmcp/utils';
 import { createSessionStore } from '../auth/session/session-store.factory';
 import type { ServerResponse, TransportPersistenceConfigInput } from '../common';
 import type { RedisOptions } from '../common/types/options/redis';
-import { InvalidTransportSessionError, TransportBusRequiredError } from '../errors/transport.errors';
+import {
+  InvalidTransportSessionError,
+  SessionClaimConflictError,
+  TransportBusRequiredError,
+} from '../errors/transport.errors';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
 import HandleSseFlow from './flows/handle.sse.flow';
@@ -61,6 +65,12 @@ export class TransportService {
   private pendingStoreConfig?: RedisOptions;
 
   /**
+   * Stable key prefix for transport session keys, persisted from config at construction time.
+   * Unlike pendingStoreConfig (cleared after init), this remains available for HA takeover lookups.
+   */
+  private transportKeyPrefix = 'mcp:transport:';
+
+  /**
    * Whether a session store backend was configured (regardless of current connection state).
    * Set once during constructor when persistence config has redis.
    * Used by pingSessionStore() to distinguish "not configured" from "configured but unavailable".
@@ -101,9 +111,10 @@ export class TransportService {
 
       // Override keyPrefix for transport persistence (separate from auth sessions)
       // Cast to RedisOptions since we're modifying the config
+      this.transportKeyPrefix = redisConfig.keyPrefix ?? 'mcp:transport:';
       this.pendingStoreConfig = {
         ...redisConfig,
-        keyPrefix: redisConfig.keyPrefix ?? 'mcp:transport:',
+        keyPrefix: this.transportKeyPrefix,
         defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000, // 1 hour default
       } as RedisOptions;
 
@@ -338,11 +349,11 @@ export class TransportService {
     // HA: If session belongs to a different node, attempt atomic takeover
     const currentNodeId = getMachineId();
     if (this.scope.haManager && storedSession.session.nodeId && storedSession.session.nodeId !== currentNodeId) {
-      const sessionKey = `${this.pendingStoreConfig?.keyPrefix ?? 'mcp:transport:'}${sessionId}`;
+      const sessionKey = `${this.transportKeyPrefix}${sessionId}`;
       const result = await this.scope.haManager.attemptTakeover(sessionKey, storedSession.session.nodeId);
       if (!result.claimed) {
         this.scope.logger.debug('[HA] Session already claimed by another pod', { sessionId: sessionId.slice(0, 20) });
-        throw new Error(`Session ${sessionId} claimed by another pod`);
+        throw new SessionClaimConflictError(sessionId);
       }
     }
 

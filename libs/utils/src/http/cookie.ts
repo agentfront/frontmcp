@@ -166,9 +166,13 @@ export function parseCookies(cookieHeader: string): Record<string, string> {
   for (const pair of pairs) {
     const eqIdx = pair.indexOf('=');
     if (eqIdx < 0) continue;
-    const name = decodeURIComponent(pair.slice(0, eqIdx).trim());
-    const value = decodeURIComponent(pair.slice(eqIdx + 1).trim());
-    if (name) cookies[name] = value;
+    try {
+      const name = decodeURIComponent(pair.slice(0, eqIdx).trim());
+      const value = decodeURIComponent(pair.slice(eqIdx + 1).trim());
+      if (name) cookies[name] = value;
+    } catch {
+      continue;
+    }
   }
 
   return cookies;

@@ -57,8 +57,8 @@ describe('HeartbeatService', () => {
     service.start();
 
     const stored = redis.store.get('mcp:ha:heartbeat:pod-a');
-    expect(stored).toBeDefined();
-    const parsed = JSON.parse(stored!.value);
+    if (!stored) throw new Error('Expected heartbeat key "mcp:ha:heartbeat:pod-a" to exist in store');
+    const parsed = JSON.parse(stored.value);
     expect(parsed.nodeId).toBe('pod-a');
     expect(parsed.startedAt).toBeGreaterThan(0);
     expect(parsed.lastBeat).toBeGreaterThan(0);
@@ -74,7 +74,8 @@ describe('HeartbeatService', () => {
     service.start();
 
     const stored = redis.store.get('mcp:ha:heartbeat:pod-a');
-    const parsed = JSON.parse(stored!.value);
+    if (!stored) throw new Error('Expected heartbeat key "mcp:ha:heartbeat:pod-a" to exist in store');
+    const parsed = JSON.parse(stored.value);
     expect(parsed.sessionCount).toBe(5);
 
     await service.stop();
@@ -122,8 +123,8 @@ describe('HeartbeatService', () => {
     service.start();
 
     const hb = await service.getHeartbeat('pod-a');
-    expect(hb).toBeDefined();
-    expect(hb!.nodeId).toBe('pod-a');
+    if (!hb) throw new Error('Expected heartbeat for "pod-a" to be defined');
+    expect(hb.nodeId).toBe('pod-a');
 
     expect(await service.getHeartbeat('nonexistent')).toBeNull();
 
