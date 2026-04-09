@@ -101,7 +101,7 @@ RUN FRONTMCP_DEPLOYMENT_MODE=distributed npx frontmcp build --target distributed
 FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist/distributed ./dist
 COPY --from=builder /app/package.json ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 EXPOSE 3000

@@ -92,7 +92,7 @@ redis-cli KEYS "mcp:ha:heartbeat:*"
 
 # Inspect a heartbeat value
 redis-cli GET "mcp:ha:heartbeat:mcp-server-7b8f9-abc12"
-# Returns: {"nodeId":"mcp-server-7b8f9-abc12","startedAt":1712620800,"lastBeat":1712620810,"sessionCount":5}
+# Returns: {"nodeId":"mcp-server-7b8f9-abc12","startedAt":1712620800000,"lastBeat":1712620810000,"sessionCount":5}
 ```
 
 ## Configuration
@@ -173,12 +173,12 @@ upstream mcp_backend {
 
 ## Troubleshooting
 
-| Problem                                  | Cause                                  | Solution                               |
-| ---------------------------------------- | -------------------------------------- | -------------------------------------- |
-| Sessions not transferred after pod death | `heartbeatTtlMs` too high              | Lower to 15-20 seconds                 |
-| `HaConfigurationError` on startup        | Missing Redis config                   | Add `redis` to `@FrontMcp()` decorator |
-| Duplicate notifications                  | Shared Redis subscriber connection     | Use dedicated connections per relay    |
-| Session takeover race failures           | High pod count + simultaneous restarts | Increase `takeoverGracePeriodMs`       |
+| Problem                                  | Cause                                  | Solution                                                                 |
+| ---------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------ |
+| Sessions not transferred after pod death | `heartbeatTtlMs` too high              | Lower TTL while keeping >= 2x interval (e.g., 20-30s for a 10s interval) |
+| `HaConfigurationError` on startup        | Missing Redis config                   | Add `redis` to `@FrontMcp()` decorator                                   |
+| Duplicate notifications                  | Shared Redis subscriber connection     | Use dedicated connections per relay                                      |
+| Session takeover race failures           | High pod count + simultaneous restarts | Increase `takeoverGracePeriodMs`                                         |
 
 ## Examples
 

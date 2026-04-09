@@ -93,10 +93,10 @@ describe('frontmcp.config loader (E2E)', () => {
   // JavaScript (CJS) format
   // ─────────────────────────────────────────────────────────────────
 
-  // NOTE: JS/CJS/MJS format tests are skipped in Jest because Jest intercepts
-  // require() and tries to transform temp-directory files through ts-jest, which
-  // fails looking for tsconfig.spec.json. JS config loading is verified by the
-  // CLI binary directly (outside Jest). See: frontmcp build --target node.
+  // NOTE: Standalone CJS/MJS temp-file tests are skipped because Jest's require()
+  // intercepts transform temp-directory files through ts-jest, which fails looking
+  // for tsconfig.spec.json. The .js precedence test below works because it only
+  // checks which file the loader selects, not the require() transform of JS content.
 
   // ─────────────────────────────────────────────────────────────────
   // package.json fallback
