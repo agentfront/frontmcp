@@ -6,7 +6,8 @@
 import os from 'os';
 import path from 'path';
 
-import { loadFrontMcpConfig } from '@frontmcp/cli';
+import { loadFrontMcpConfig } from 'frontmcp';
+
 import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 describe('frontmcp.config loader (E2E)', () => {
@@ -17,7 +18,11 @@ describe('frontmcp.config loader (E2E)', () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true });
+    try {
+      await rm(tmpDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors (e.g., if beforeEach failed before assigning tmpDir)
+    }
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -166,7 +171,9 @@ describe('frontmcp.config loader (E2E)', () => {
 
   describe('error cases', () => {
     it('should throw when no config file and no package.json', async () => {
-      await expect(loadFrontMcpConfig(tmpDir)).rejects.toThrow('No frontmcp.config found');
+      const promise = loadFrontMcpConfig(tmpDir);
+      await expect(promise).rejects.toBeInstanceOf(Error);
+      await expect(promise).rejects.toThrow('No frontmcp.config found');
     });
 
     it('should throw for schema-invalid config (name with spaces)', async () => {
@@ -175,7 +182,9 @@ describe('frontmcp.config loader (E2E)', () => {
         JSON.stringify({ name: 'invalid name with spaces', deployments: [{ target: 'node' }] }),
       );
 
-      await expect(loadFrontMcpConfig(tmpDir)).rejects.toThrow('Invalid frontmcp.config');
+      const promise = loadFrontMcpConfig(tmpDir);
+      await expect(promise).rejects.toBeInstanceOf(Error);
+      await expect(promise).rejects.toThrow('Invalid frontmcp.config');
     });
 
     it('should throw for config with no deployments', async () => {
@@ -184,7 +193,9 @@ describe('frontmcp.config loader (E2E)', () => {
         JSON.stringify({ name: 'no-deploys', deployments: [] }),
       );
 
-      await expect(loadFrontMcpConfig(tmpDir)).rejects.toThrow('Invalid frontmcp.config');
+      const promise = loadFrontMcpConfig(tmpDir);
+      await expect(promise).rejects.toBeInstanceOf(Error);
+      await expect(promise).rejects.toThrow('Invalid frontmcp.config');
     });
   });
 });

@@ -180,7 +180,7 @@ The build adapter converts config to these env vars (can also be overridden at r
 | ------------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
 | CSP header missing                    | `csp.enabled` not set or build not rebuilt    | Set `enabled: true` and rebuild                         |
 | Assets blocked by CSP                 | Missing directive for CDN/external source     | Add the source to the appropriate directive             |
-| HSTS locked to HTTP                   | HSTS set before HTTPS configured              | Clear browser HSTS cache or use `max-age=0` temporarily |
+| Browser forced to HTTPS unexpectedly  | HSTS set before HTTPS configured              | Clear browser HSTS cache or use `max-age=0` temporarily |
 | `Invalid frontmcp.config: directives` | Using string instead of record for directives | Change to `{ 'directive-name': 'value' }` object format |
 
 ## Examples
