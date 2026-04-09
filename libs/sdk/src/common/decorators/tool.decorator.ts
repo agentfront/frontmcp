@@ -261,10 +261,15 @@ type __R<C extends __Ctor> = C extends new (...a: any[]) => infer R
   : C extends abstract new (...a: any[]) => infer R
     ? R
     : never;
-// Tuple-based parameter inference: yields `never` (not `unknown`) when execute() takes no parameter.
-// This lets __MustParam distinguish "no parameter provided" from "parameter explicitly typed as something".
-type __ExecParams<C extends __Ctor> = __R<C> extends { execute: (...args: infer P) => any } ? P : never;
-type __Param<C extends __Ctor> = __ExecParams<C> extends readonly [infer P, ...any[]] ? P : never;
+// Tuple-based parameter inference. Detect "no parameter" by inspecting the
+// __ExecParams tuple shape directly (via __HasNoParam) rather than relying on
+// __Param collapsing to `never`, which would conflate `execute()` with the
+// logically broken `execute(input: never)`.
+type __ExecParams<C extends __Ctor> = __R<C> extends { execute: (...args: infer P) => unknown } ? P : never;
+// True only when the parameter tuple is exactly `[]`. The outer `[...]` wrap
+// prevents distribution and handles the corner case where __ExecParams<C> = never.
+type __HasNoParam<C extends __Ctor> = [__ExecParams<C>] extends [readonly []] ? true : false;
+type __Param<C extends __Ctor> = __ExecParams<C> extends readonly [infer P, ...unknown[]] ? P : never;
 type __Return<C extends __Ctor> = __R<C> extends { execute: (...a: any) => infer R } ? R : never;
 type __Unwrap<T> = T extends Promise<infer U> ? U : T;
 type __IsAny<T> = 0 extends 1 & T ? true : false;
@@ -283,9 +288,10 @@ type __MustParam<C extends __Ctor, In> =
     : // 2. Check if the actual param type is 'any'. This is an error.
       __IsAny<__Param<C>> extends true
       ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
-      : // 3. No parameter provided — allow only when In accepts an empty object.
-        // [__Param<C>] extends [never] is the non-distributive form so `never` is matched as a type.
-        [__Param<C>] extends [never]
+      : // 3. Truly no parameter (execute()) — allow only when In accepts an empty object.
+        //    Uses __HasNoParam (tuple-shape check) so `execute(input: never)` is NOT
+        //    confused with `execute()` and falls through to the strict bidirectional check below.
+        __HasNoParam<C> extends true
         ? In extends Record<string, never>
           ? unknown
           : {

@@ -47,6 +47,21 @@ class ValidEmptySchema extends ToolContext {
   }
 }
 
+// ── Invalid: execute(input: never) is NOT the same as execute() ──
+// Regression guard: an explicit `never` parameter must not be silently
+// accepted as "no parameter" for an empty input schema.
+
+function _testExecuteWithNeverParam() {
+  // @ts-expect-error - execute(input: never) must not be accepted as zero-arg execute()
+  @Tool({ name: 'never-param', inputSchema: {} })
+  class NeverParamTool extends ToolContext {
+    async execute(_input: never) {
+      return { ok: true };
+    }
+  }
+  void NeverParamTool;
+}
+
 // ── Valid: with guard configs ────────────────────────────────
 
 @Tool({
@@ -153,6 +168,7 @@ function _testNotToolContext() {
 void ValidInputOnly;
 void ValidWithOutput;
 void ValidEmptySchema;
+void _testExecuteWithNeverParam;
 void ValidWithGuards;
 void _testInvalidConcurrency;
 void _testInvalidRateLimit;

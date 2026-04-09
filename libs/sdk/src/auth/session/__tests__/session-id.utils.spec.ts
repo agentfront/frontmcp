@@ -4,7 +4,8 @@
  * Tests for session ID creation, encryption, decryption, and payload updates.
  */
 import { type PlatformDetectionConfig, type SessionIdPayload, type TransportProtocolType } from '../../../common';
-// Import after mocking
+// jest.mock() calls below are hoisted by Jest above this import, so the
+// session-id.utils module sees the mocked dependencies when it loads.
 import {
   createSessionId,
   decryptPublicSession,
