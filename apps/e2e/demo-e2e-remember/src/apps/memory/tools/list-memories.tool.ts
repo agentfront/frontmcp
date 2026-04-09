@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import '@frontmcp/plugin-remember'; // Import for this.remember types
 
 const inputSchema = {
@@ -26,7 +28,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ListMemoriesTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ListMemoriesTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const keys = await this.remember.list({
       scope: input.scope,

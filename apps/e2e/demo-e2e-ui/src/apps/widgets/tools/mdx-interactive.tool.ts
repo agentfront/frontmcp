@@ -1,6 +1,7 @@
 import React from 'react';
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   topic: z.string().describe('Interactive topic'),
@@ -131,7 +132,7 @@ ${codeExample}
     },
   },
 })
-export default class MdxInteractiveTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class MdxInteractiveTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       uiType: 'mdx',

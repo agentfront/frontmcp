@@ -1,6 +1,8 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { REQUEST_LOGGER_TOKEN, RequestLogger } from '../providers/request-logger.provider';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import { REQUEST_LOGGER_TOKEN, type RequestLogger } from '../providers/request-logger.provider';
 
 const inputSchema = {
   logMessage: z.string().optional().describe('Optional message to log'),
@@ -24,7 +26,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetRequestInfoTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetRequestInfoTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Get the CONTEXT scope provider - new instance per request
     const logger = this.get<RequestLogger>(REQUEST_LOGGER_TOKEN);

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   title: z.string().describe('Note title'),
@@ -22,7 +23,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CreateNoteTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class CreateNoteTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       id: `note-${Date.now()}`,

@@ -1,6 +1,8 @@
 import 'reflect-metadata';
-import { LogLevel, Tool, ToolContext, App } from '@frontmcp/sdk';
+
 import { z } from 'zod';
+
+import { App, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
 
 const messageSchema = { message: z.string().default('hello') };
 const delaySchema = { delayMs: z.number().default(0) };
@@ -12,7 +14,7 @@ const valueSchema = { value: z.string().default('test') };
   inputSchema: messageSchema,
   rateLimit: { maxRequests: 3, windowMs: 5000, partitionBy: 'global' },
 })
-class RateLimitedTool extends ToolContext<typeof messageSchema> {
+class RateLimitedTool extends ToolContext {
   async execute(input: { message: string }) {
     return { echo: input.message };
   }
@@ -24,7 +26,7 @@ class RateLimitedTool extends ToolContext<typeof messageSchema> {
   inputSchema: delaySchema,
   timeout: { executeMs: 500 },
 })
-class TimeoutTool extends ToolContext<typeof delaySchema> {
+class TimeoutTool extends ToolContext {
   async execute(input: { delayMs: number }) {
     if (input.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, input.delayMs));
@@ -38,7 +40,7 @@ class TimeoutTool extends ToolContext<typeof delaySchema> {
   description: 'An unguarded echo tool',
   inputSchema: valueSchema,
 })
-class UnguardedTool extends ToolContext<typeof valueSchema> {
+class UnguardedTool extends ToolContext {
   async execute(input: { value: string }) {
     return { echo: input.value };
   }
@@ -50,7 +52,7 @@ class UnguardedTool extends ToolContext<typeof valueSchema> {
   inputSchema: delaySchema,
   concurrency: { maxConcurrent: 1, queueTimeoutMs: 0 },
 })
-class ConcurrencyMutexTool extends ToolContext<typeof delaySchema> {
+class ConcurrencyMutexTool extends ToolContext {
   async execute(input: { delayMs: number }) {
     if (input.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, input.delayMs));
@@ -65,7 +67,7 @@ class ConcurrencyMutexTool extends ToolContext<typeof delaySchema> {
   inputSchema: delaySchema,
   concurrency: { maxConcurrent: 1, queueTimeoutMs: 3000 },
 })
-class ConcurrencyQueuedTool extends ToolContext<typeof delaySchema> {
+class ConcurrencyQueuedTool extends ToolContext {
   async execute(input: { delayMs: number }) {
     if (input.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, input.delayMs));
@@ -82,7 +84,7 @@ class ConcurrencyQueuedTool extends ToolContext<typeof delaySchema> {
   concurrency: { maxConcurrent: 2, queueTimeoutMs: 1000 },
   timeout: { executeMs: 2000 },
 })
-class CombinedGuardTool extends ToolContext<typeof delaySchema> {
+class CombinedGuardTool extends ToolContext {
   async execute(input: { delayMs: number }) {
     if (input.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, input.delayMs));
@@ -96,7 +98,7 @@ class CombinedGuardTool extends ToolContext<typeof delaySchema> {
   description: 'A slow tool',
   inputSchema: delaySchema,
 })
-class SlowTool extends ToolContext<typeof delaySchema> {
+class SlowTool extends ToolContext {
   async execute(input: { delayMs: number }) {
     if (input.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, input.delayMs));

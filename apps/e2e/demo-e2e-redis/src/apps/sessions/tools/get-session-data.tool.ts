@@ -1,7 +1,9 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { getSessionStore } from '../data/session.store';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { resolveDemoSessionId } from '../../resolve-session-id';
+import { getSessionStore } from '../data/session.store';
 
 const inputSchema = {
   key: z.string().describe('Key to retrieve'),
@@ -19,7 +21,7 @@ const outputSchema = z.object({
   inputSchema,
   outputSchema,
 })
-export default class GetSessionDataTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetSessionDataTool extends ToolContext {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     // Prefer FrontMcpContext.sessionId (always available in public mode) over authInfo.sessionId
     const ctx = this.tryGetContext();

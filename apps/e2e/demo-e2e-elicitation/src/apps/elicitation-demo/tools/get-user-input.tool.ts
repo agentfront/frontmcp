@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   prompt: z.string().describe('Prompt to show user'),
@@ -20,7 +21,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetUserInputTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetUserInputTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const result = await this.elicit(
       input.prompt,

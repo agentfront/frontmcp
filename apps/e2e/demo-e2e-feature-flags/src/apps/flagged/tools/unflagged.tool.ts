@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {};
 
@@ -16,7 +17,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class UnflaggedTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class UnflaggedTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     return {
       status: 'always available',

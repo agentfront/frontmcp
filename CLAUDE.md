@@ -625,6 +625,7 @@ Configure via `skillsConfig.auth` option:
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
 ❌ **Don't**: Put auth-related code in libs/sdk/src/auth (use libs/auth instead)
 ❌ **Don't**: Name test files with `.test.ts` extension (use `.spec.ts` instead)
+❌ **Don't**: Use `ToolContext<typeof inputSchema>` — types are auto-inferred from the `@Tool` decorator; use plain `ToolContext`
 
 ✅ **Do**: Use clean, descriptive names for everything
 ✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations

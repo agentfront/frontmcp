@@ -15,7 +15,7 @@
  *   description: BASIC_UI_TOOL_CONFIG.description,
  *   ui: BASIC_UI_TOOL_CONFIG.ui,
  * })
- * export class BasicUITool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+ * export class BasicUITool extends ToolContext {
  *   async execute(input) {
  *     return { message: `Hello, ${input.name}!`, timestamp: Date.now() };
  *   }

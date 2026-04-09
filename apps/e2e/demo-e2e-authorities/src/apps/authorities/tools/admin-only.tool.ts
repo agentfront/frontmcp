@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = { action: z.string().default('admin-action') };
 type Input = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -12,7 +13,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
     roles: { any: ['admin', 'superadmin'] },
   },
 })
-export default class AdminOnlyTool extends ToolContext<typeof inputSchema> {
+export default class AdminOnlyTool extends ToolContext {
   async execute(input: Input) {
     return { result: `admin action: ${input.action}` };
   }

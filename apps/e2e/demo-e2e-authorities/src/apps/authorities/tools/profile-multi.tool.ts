@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   tenantId: z.string(),
@@ -13,7 +14,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
   inputSchema,
   authorities: ['authenticated', 'matchTenant'],
 })
-export default class ProfileMultiTool extends ToolContext<typeof inputSchema> {
+export default class ProfileMultiTool extends ToolContext {
   async execute(input: Input) {
     return { tenant: input.tenantId, value: input.value };
   }

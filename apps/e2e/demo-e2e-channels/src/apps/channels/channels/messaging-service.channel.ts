@@ -11,9 +11,9 @@
  * 2. Recipient replies → onEvent() triggered → notification to Claude
  */
 
-import { Channel, ChannelContext, Tool, ToolContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Channel, ChannelContext, Tool, ToolContext, type ChannelNotification } from '@frontmcp/sdk';
 
 // ─── Simulated Service State ────────────────────────────────────
 
@@ -52,7 +52,7 @@ const sendInputSchema = {
     openWorldHint: true,
   },
 })
-export class SendMessageTool extends ToolContext<typeof sendInputSchema> {
+export class SendMessageTool extends ToolContext {
   async execute(input: { to: string; text: string }) {
     sentMessages.push({ to: input.to, text: input.text, timestamp: Date.now() });
     return {

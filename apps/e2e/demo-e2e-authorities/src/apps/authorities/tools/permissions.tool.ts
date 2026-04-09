@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = { resource: z.string().default('users') };
 type Input = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -12,7 +13,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
     permissions: { all: ['users:read', 'users:write'] },
   },
 })
-export default class PermissionsTool extends ToolContext<typeof inputSchema> {
+export default class PermissionsTool extends ToolContext {
   async execute(input: Input) {
     return { access: 'granted', resource: input.resource };
   }

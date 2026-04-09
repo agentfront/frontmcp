@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   key: z.string().describe('Environment variable key to retrieve'),
@@ -22,7 +23,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetConfigTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetConfigTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const found = this.config.has(input.key);
     // Use default value only if provided, otherwise get raw value

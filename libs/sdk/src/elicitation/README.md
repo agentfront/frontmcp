@@ -16,8 +16,9 @@ Elicitation allows tools and agents to pause execution and request structured in
 ### Basic Usage in Tools
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   action: z.string(),
@@ -28,7 +29,7 @@ const inputSchema = {
   description: 'Delete a file with user confirmation',
   inputSchema,
 })
-class DeleteFileTool extends ToolContext<typeof inputSchema> {
+class DeleteFileTool extends ToolContext {
   async execute(input: { action: string }) {
     // Request user confirmation before deleting
     const result = await this.elicit(
@@ -173,7 +174,7 @@ You can chain multiple elicitations for complex workflows:
 
 ```typescript
 @Tool({ name: 'multi-step-wizard', inputSchema, description: '...' })
-class MultiStepWizardTool extends ToolContext<typeof inputSchema> {
+class MultiStepWizardTool extends ToolContext {
   async execute(input: { topic: string }) {
     // Step 1: Get basic info
     const step1 = await this.elicit('Step 1: Enter your name', z.object({ name: z.string() }));
@@ -310,8 +311,12 @@ const result = await this.elicit(message, schema, { ttl: 60000 }); // 1 minute
 DirectClient supports elicitation handling for programmatic MCP access:
 
 ```typescript
-import { connect } from '@frontmcp/sdk/direct';
-import type { ElicitationHandler, ElicitationRequest, ElicitationResponse } from '@frontmcp/sdk/direct';
+import {
+  connect,
+  type ElicitationHandler,
+  type ElicitationRequest,
+  type ElicitationResponse,
+} from '@frontmcp/sdk/direct';
 
 const client = await connect(scope);
 

@@ -27,7 +27,9 @@ setupOTel({ serviceName: 'my-server', exporter: 'console' });
 ```typescript
 // src/server.ts
 import './setup-otel'; // Must be first import
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './apps/my-app';
 
 @FrontMcp({
@@ -40,15 +42,16 @@ export default class Server {}
 
 ```typescript
 // src/apps/my-app/tools/hello.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({
   name: 'hello',
   description: 'Say hello',
   inputSchema: { name: z.string() },
 })
-export class HelloTool extends ToolContext<typeof HelloTool> {
+export class HelloTool extends ToolContext {
   async execute({ name }: { name: string }) {
     return { greeting: `Hello, ${name}!` };
   }

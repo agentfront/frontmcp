@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {};
 
@@ -18,7 +19,7 @@ type PingOutput = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class PingTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class PingTool extends ToolContext {
   async execute(_input: PingInput): Promise<PingOutput> {
     return {
       pong: true,

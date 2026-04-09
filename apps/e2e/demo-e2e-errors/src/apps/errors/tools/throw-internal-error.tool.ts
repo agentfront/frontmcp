@@ -1,5 +1,6 @@
-import { Tool, ToolContext, InternalMcpError } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { InternalMcpError, Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   trigger: z.boolean().default(true).describe('Whether to trigger the internal error'),
@@ -20,7 +21,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ThrowInternalErrorTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ThrowInternalErrorTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     if (input.trigger) {
       throw new InternalMcpError('Simulated internal server error', 'SIMULATED_INTERNAL_ERROR');

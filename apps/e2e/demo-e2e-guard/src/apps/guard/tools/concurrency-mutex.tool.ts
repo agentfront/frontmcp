@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   delayMs: z.number().default(0),
@@ -16,7 +17,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
     queueTimeoutMs: 0,
   },
 })
-export default class ConcurrencyMutexTool extends ToolContext<typeof inputSchema> {
+export default class ConcurrencyMutexTool extends ToolContext {
   async execute(input: Input) {
     if (input.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, input.delayMs));

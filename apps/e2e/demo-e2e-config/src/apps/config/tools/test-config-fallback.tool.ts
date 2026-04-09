@@ -1,11 +1,13 @@
 import { z } from 'zod';
-import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import {
-  generateFallbacks,
   generateEnvFallbacks,
+  generateFallbacks,
   normalizeNameForEnv,
   normalizePathSegment,
-  ConfigEntityType,
+  Tool,
+  ToolContext,
+  type ConfigEntityType,
 } from '@frontmcp/sdk';
 
 const inputSchema = {
@@ -43,7 +45,7 @@ interface FallbackResult {
   description: 'Test config fallback resolution with entity context',
   inputSchema,
 })
-export default class TestConfigFallbackTool extends ToolContext<typeof inputSchema> {
+export default class TestConfigFallbackTool extends ToolContext {
   async execute(input: Input): Promise<FallbackResult> {
     const { key, entityType, entityName, customFallbacks, disableFallbacks } = input;
 

@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { eventStore } from '../data/event.store';
 
 const inputSchema = {
@@ -29,7 +31,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ListEventsTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ListEventsTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const store = eventStore;
     const events = input.upcomingOnly ? store.getUpcoming() : store.getAll();

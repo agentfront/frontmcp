@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   task: z.string().describe('Task to perform'),
@@ -20,7 +21,7 @@ type Output = z.infer<typeof outputSchema>;
   outputSchema,
   featureFlag: 'experimental-agent',
 })
-export default class ExperimentalAgentTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ExperimentalAgentTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       result: `Executed: ${input.task}`,

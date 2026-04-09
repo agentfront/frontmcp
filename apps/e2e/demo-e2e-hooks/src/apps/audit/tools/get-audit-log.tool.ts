@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { auditLog } from '../data/audit-log';
 
 const inputSchema = {
@@ -36,7 +38,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetAuditLogTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetAuditLogTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const entries = input.toolName ? auditLog.getEntriesForTool(input.toolName) : auditLog.getEntries();
 

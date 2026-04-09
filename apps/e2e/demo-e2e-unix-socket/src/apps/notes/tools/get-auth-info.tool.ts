@@ -1,5 +1,6 @@
-import { Tool, ToolContext, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { FRONTMCP_CONTEXT, Tool, ToolContext } from '@frontmcp/sdk';
 
 interface DirectAuthInfo {
   token?: string;
@@ -32,7 +33,7 @@ type GetAuthInfoOutput = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetAuthInfoTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetAuthInfoTool extends ToolContext {
   async execute(_input: GetAuthInfoInput): Promise<GetAuthInfoOutput> {
     const ctx = this.tryGet(FRONTMCP_CONTEXT);
 

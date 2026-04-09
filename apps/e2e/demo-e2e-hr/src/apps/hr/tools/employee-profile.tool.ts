@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { EMPLOYEES, SALARY_BANDS } from '../data/employees';
 
 const inputSchema = {
@@ -47,7 +49,7 @@ type Output = z.infer<typeof outputSchema>;
     resourceMode: 'cdn',
   },
 })
-export default class EmployeeProfileTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class EmployeeProfileTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const emp = EMPLOYEES.find((e) => e.id === input.employeeId);
     if (!emp) {

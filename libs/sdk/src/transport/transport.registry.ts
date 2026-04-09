@@ -5,11 +5,7 @@ import { getMachineId, sha256Hex } from '@frontmcp/utils';
 import { createSessionStore } from '../auth/session/session-store.factory';
 import type { ServerResponse, TransportPersistenceConfigInput } from '../common';
 import type { RedisOptions } from '../common/types/options/redis';
-import {
-  InvalidTransportSessionError,
-  SessionClaimConflictError,
-  TransportBusRequiredError,
-} from '../errors/transport.errors';
+import { InvalidTransportSessionError, SessionClaimConflictError } from '../errors/transport.errors';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
 import HandleSseFlow from './flows/handle.sse.flow';
@@ -91,14 +87,11 @@ export class TransportService {
     return typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
   }
 
-  constructor(scope: Scope, persistenceConfig?: false | TransportPersistenceConfigInput) {
+  constructor(scope: Scope, persistenceConfig?: false | TransportPersistenceConfigInput, bus?: TransportBus) {
     this.scope = scope;
     this.persistenceConfig = persistenceConfig;
-    this.distributed = false; // get from scope metadata
-    this.bus = undefined; // get from scope metadata
-    if (this.distributed && !this.bus) {
-      throw new TransportBusRequiredError();
-    }
+    this.distributed = !!bus;
+    this.bus = bus;
 
     // Initialize session store if persistence is enabled (Redis or Vercel KV)
     // Simplified format: false = disabled, object with redis = enabled, undefined = not configured
@@ -242,7 +235,7 @@ export class TransportService {
       warnOnFingerprintMismatch?: boolean;
     },
   ): Promise<StoredSession | undefined> {
-    if (!this.sessionStore || type !== 'streamable-http') return undefined;
+    if (!this.sessionStore || (type !== 'streamable-http' && type !== 'sse')) return undefined;
 
     const tokenHash = this.sha256(token);
     const stored = await this.sessionStore.get(sessionId);
@@ -483,13 +476,13 @@ export class TransportService {
 
     this.insertLocal(key, transporter);
 
-    // Persist session to Redis (streamable-http only for now)
-    if (sessionStore && type === 'streamable-http') {
+    // Persist session to Redis (streamable-http and sse)
+    if (sessionStore && (type === 'streamable-http' || type === 'sse')) {
       const storedSession: StoredSession = {
         session: {
           id: sessionId,
           authorizationId: key.tokenHash,
-          protocol: 'streamable-http',
+          protocol: type === 'sse' ? 'sse' : 'streamable-http',
           createdAt: Date.now(),
           nodeId: getMachineId(),
         },
@@ -661,7 +654,7 @@ export class TransportService {
 
     // Check Redis if available - use getStoredSession() to verify token hash
     // (sessionStore.exists() would leak session existence to unauthorized callers)
-    if (this.sessionStore && type === 'streamable-http') {
+    if (this.sessionStore && (type === 'streamable-http' || type === 'sse')) {
       const stored = await this.getStoredSession(type, token, sessionId);
       return stored !== undefined;
     }

@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import '@frontmcp/plugin-remember'; // Import for this.remember types
 
 const inputSchema = {
@@ -27,7 +29,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ForgetValueTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ForgetValueTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     await this.remember.forget(input.key, {
       scope: input.scope,

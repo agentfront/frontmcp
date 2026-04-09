@@ -1,5 +1,6 @@
-import { Tool, ToolContext, InvalidInputError } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { InvalidInputError, Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   value: z.string().describe('Value to validate'),
@@ -22,7 +23,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ThrowValidationErrorTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ThrowValidationErrorTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     if (input.value.length < input.minLength) {
       throw new InvalidInputError(`Value must be at least ${input.minLength} characters`, {

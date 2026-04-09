@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   channel: z.string().describe('The Slack channel to send the message to'),
@@ -22,7 +23,7 @@ type Output = z.infer<z.ZodObject<typeof outputSchema>>;
   outputSchema,
   tags: ['slack', 'notification'],
 })
-export class SlackNotifyTool extends ToolContext<typeof inputSchema, typeof outputSchema, Input, Output> {
+export class SlackNotifyTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Mock implementation for testing
     return {

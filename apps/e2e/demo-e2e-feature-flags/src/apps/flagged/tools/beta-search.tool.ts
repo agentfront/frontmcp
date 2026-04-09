@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   query: z.string().describe('Search query'),
@@ -20,7 +21,7 @@ type Output = z.infer<typeof outputSchema>;
   outputSchema,
   featureFlag: 'beta-search',
 })
-export default class BetaSearchTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class BetaSearchTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       results: [`Result for: ${input.query}`],

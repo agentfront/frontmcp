@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   headers: z.array(z.string()).describe('Table column headers'),
@@ -56,7 +57,7 @@ type Output = z.infer<typeof outputSchema>;
     },
   },
 })
-export default class HtmlTableTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class HtmlTableTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       uiType: 'html',

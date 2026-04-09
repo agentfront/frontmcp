@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   steps: z.number().int().min(1).max(10).describe('Number of progress steps to send'),
@@ -28,7 +29,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class TestProgressMethodTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class TestProgressMethodTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     let progressSent = 0;
     const total = input.includeTotal ? input.steps : undefined;

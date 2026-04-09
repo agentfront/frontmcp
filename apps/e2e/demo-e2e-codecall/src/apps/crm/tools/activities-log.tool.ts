@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { crmStore } from '../data/crm.store';
 
 const inputSchema = {
@@ -24,7 +26,7 @@ const outputSchema = z.object({
   inputSchema,
   outputSchema,
 })
-export default class ActivitiesLogTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ActivitiesLogTool extends ToolContext {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const activity = crmStore.logActivity(input);
     return { activity };

@@ -1,7 +1,9 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { getSessionStore } from '../../sessions/data/session.store';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { resolveDemoSessionId } from '../../resolve-session-id';
+import { getSessionStore } from '../../sessions/data/session.store';
 
 const inputSchema = {
   action: z.enum(['set', 'get']).describe('Action to perform'),
@@ -26,7 +28,7 @@ const outputSchema = z
   inputSchema,
   outputSchema,
 })
-export default class SessionIsolationTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class SessionIsolationTool extends ToolContext {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const ctx = this.tryGetContext();
     const sessionId = resolveDemoSessionId(ctx?.sessionId, this.getAuthInfo().sessionId);

@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { tasksStore } from '../data/tasks.store';
 
 const inputSchema = {
@@ -27,7 +29,7 @@ type CreateTaskOutput = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CreateTaskTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class CreateTaskTool extends ToolContext {
   async execute(input: CreateTaskInput): Promise<CreateTaskOutput> {
     const authInfo = this.getAuthInfo();
     const userId = authInfo?.user?.sub || 'anonymous';

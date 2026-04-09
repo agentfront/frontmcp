@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import { buildShell } from '@frontmcp/uipack';
 
 const inputSchema = {
@@ -28,7 +29,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class BuildShellTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class BuildShellTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const result = buildShell(input.content, {
       toolName: input.toolName,

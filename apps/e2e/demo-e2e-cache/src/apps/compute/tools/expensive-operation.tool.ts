@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { executionTracker } from '../data/execution-tracker';
 
 const inputSchema = {
@@ -26,7 +28,7 @@ type Output = z.infer<typeof outputSchema>;
     ttl: 30, // 30 second TTL
   },
 })
-export default class ExpensiveOperationTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ExpensiveOperationTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Track actual execution
     const executionCount = executionTracker.increment('expensive-operation');

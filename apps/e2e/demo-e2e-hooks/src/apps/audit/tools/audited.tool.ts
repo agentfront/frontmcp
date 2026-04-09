@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   message: z.string().describe('Message to process'),
@@ -23,7 +24,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class AuditedTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class AuditedTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Simulate work
     if (input.delay > 0) {

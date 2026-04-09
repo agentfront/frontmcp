@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   title: z.string().describe('Document title'),
@@ -51,7 +52,7 @@ ${mdxContent}
     },
   },
 })
-export default class MdxDocTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class MdxDocTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const mdxContent = input.sections.map((section) => `## ${section.heading}\n\n${section.content}`).join('\n\n');
 

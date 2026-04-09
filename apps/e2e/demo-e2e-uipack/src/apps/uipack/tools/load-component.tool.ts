@@ -1,7 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { resolveUISource } from '@frontmcp/uipack';
-import type { UISource } from '@frontmcp/uipack';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { resolveUISource, type UISource } from '@frontmcp/uipack';
 
 const inputSchema = {
   sourceType: z.enum(['npm', 'import', 'function']).describe('Type of UI source'),
@@ -27,7 +27,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class LoadComponentTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class LoadComponentTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     let source: UISource;
 

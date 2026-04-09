@@ -1,21 +1,25 @@
+import { z } from 'zod';
+
+import { buildSetCookie, getMachineId, getRuntimeContext } from '@frontmcp/utils';
+
+import { createSessionId } from '../../auth/session/utils/session-id.utils';
 import {
   Flow,
-  httpInputSchema,
-  FlowRunOptions,
-  httpOutputSchema,
-  FlowPlan,
   FlowBase,
   FlowHooksOf,
+  httpInputSchema,
+  httpOutputSchema,
   httpRespond,
-  ServerRequestTokens,
-  Authorization,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  ServerRequestTokens,
   validateMcpSessionHeader,
+  type Authorization,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
 import { TransportServiceNotAvailableError } from '../../errors';
-import { createSessionId } from '../../auth/session/utils/session-id.utils';
+import { DEFAULT_FRONTMCP_MACHINE_ID_HEADER, DEFAULT_FRONTMCP_NODE_COOKIE } from '../../ha/ha.constants';
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 
 export const plan = {
@@ -180,6 +184,19 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
     const transport = await transportService.createTransporter('sse', token, session.id, response);
+
+    // Set LB affinity headers in distributed mode
+    if (getRuntimeContext().deployment === 'distributed') {
+      const nodeId = getMachineId();
+      response.setHeader(DEFAULT_FRONTMCP_MACHINE_ID_HEADER, nodeId);
+      const cookie = buildSetCookie({ name: DEFAULT_FRONTMCP_NODE_COOKIE, value: nodeId }, request);
+      if (cookie) {
+        const existing = response.getHeader('Set-Cookie');
+        const existingArr = Array.isArray(existing) ? existing : existing ? [String(existing)] : [];
+        response.setHeader('Set-Cookie', [...existingArr, cookie]);
+      }
+    }
+
     await transport.initialize(request, response);
     this.handled();
   }
@@ -209,10 +226,49 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
+
+    // 1. Check local memory first
     const transport = await transportService.getTransporter('sse', token, session.id);
+
+    // 2. If not in memory but in distributed mode, check if the session exists on another pod
+    //    SSE sessions can't be "recreated" like streamable-http (the SSE response stream is
+    //    tied to the original HTTP connection), but we can relay the message to the owning pod.
+    if (!transport && getRuntimeContext().deployment === 'distributed') {
+      const storedSession = await transportService.getStoredSession('sse', token, session.id);
+      if (storedSession) {
+        // Session exists on another pod — relay via notification relay if available
+        const haManager = this.scope.haManager;
+        const relay = haManager?.getRelay();
+        if (relay && storedSession.session.nodeId && storedSession.session.nodeId !== getMachineId()) {
+          const isAlive = await haManager!.isNodeAlive(storedSession.session.nodeId);
+          if (isAlive) {
+            try {
+              const body = request.body as Record<string, unknown> | undefined;
+              await relay.publish(storedSession.session.nodeId, session.id, {
+                method: 'sse:relay-message',
+                params: { jsonRpcMessage: body },
+              });
+              logger.info('Relayed SSE message to owning pod', {
+                sessionId: session.id?.slice(0, 20),
+                targetNodeId: storedSession.session.nodeId,
+              });
+              response.status(202).json({ jsonrpc: '2.0', result: {} });
+              this.handled();
+              return;
+            } catch (err) {
+              logger.warn('Failed to relay SSE message', {
+                sessionId: session.id?.slice(0, 20),
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        }
+      }
+    }
+
     if (!transport) {
       // Check if session was ever created to differentiate error types per MCP Spec 2025-11-25
-      const wasCreated = transportService.wasSessionCreated('sse', token, session.id);
+      const wasCreated = await transportService.wasSessionCreatedAsync('sse', token, session.id);
       const body = request.body as Record<string, unknown> | undefined;
 
       if (wasCreated) {

@@ -1,6 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import type { ChannelRegistry } from '@frontmcp/sdk';
+
+import { Tool, ToolContext, type ChannelRegistry } from '@frontmcp/sdk';
 
 const getBufferSchema = {
   channelName: z.string().describe('Channel name to get buffer for'),
@@ -11,7 +11,7 @@ const getBufferSchema = {
   description: 'Get the replay buffer contents for a channel',
   inputSchema: getBufferSchema,
 })
-export class GetReplayBufferTool extends ToolContext<typeof getBufferSchema> {
+export class GetReplayBufferTool extends ToolContext {
   async execute(input: { channelName: string }) {
     const scope = this.scope as unknown as { channels?: ChannelRegistry };
     const registry = scope.channels;
@@ -38,7 +38,7 @@ const clearBufferSchema = {
   description: 'Clear the replay buffer for a channel',
   inputSchema: clearBufferSchema,
 })
-export class ClearReplayBufferTool extends ToolContext<typeof clearBufferSchema> {
+export class ClearReplayBufferTool extends ToolContext {
   async execute(input: { channelName: string }) {
     const scope = this.scope as unknown as { channels?: ChannelRegistry };
     const registry = scope.channels;

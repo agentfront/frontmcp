@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { deploymentTracker } from '../data/deployment-tracker';
 
 const inputSchema = {
@@ -31,7 +33,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ColdStartTestTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ColdStartTestTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const tracker = deploymentTracker;
     const start = Date.now();

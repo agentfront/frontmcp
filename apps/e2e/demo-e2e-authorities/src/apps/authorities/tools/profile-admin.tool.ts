@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = { query: z.string().default('status') };
 type Input = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -10,7 +11,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
   inputSchema,
   authorities: 'admin',
 })
-export default class ProfileAdminTool extends ToolContext<typeof inputSchema> {
+export default class ProfileAdminTool extends ToolContext {
   async execute(input: Input) {
     return { admin: true, query: input.query };
   }

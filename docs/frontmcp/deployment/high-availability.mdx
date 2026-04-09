@@ -106,9 +106,20 @@ export default defineConfig({
   Set `heartbeatTtlMs` to at least 2x `heartbeatIntervalMs` to avoid false positives from network jitter.
 </Tip>
 
+## Orphan Session Scanner
+
+In addition to on-demand session takeover (when a request arrives for a dead pod's session), FrontMCP runs a periodic **orphan scanner** that proactively detects and claims sessions from dead pods:
+
+1. Runs every heartbeat interval (default: 10s)
+2. Compares all session `nodeId` values against alive heartbeat keys
+3. Claims orphaned sessions via the same atomic Lua CAS script
+4. Fires a callback for each claimed session (logged at INFO level)
+
+The scanner starts automatically in distributed mode — no configuration needed. The first scan runs after one full heartbeat interval plus the grace period to allow the cluster to stabilize.
+
 ## Load Balancer Affinity
 
-FrontMCP sets two identifiers on Streamable HTTP responses for load balancer routing:
+FrontMCP sets two identifiers on both Streamable HTTP and SSE responses for load balancer routing:
 
 - **Cookie**: `__frontmcp_node` --- set during the initialize handshake
 - **Header**: `X-FrontMCP-Machine-Id` --- set on every response in distributed mode
@@ -135,6 +146,34 @@ server {
 <Note>
   The affinity cookie ensures subsequent requests from the same MCP client hit the same pod. If the pod dies, the load balancer routes to a different pod, which triggers session takeover.
 </Note>
+
+### SSE-Specific Routing
+
+SSE (Server-Sent Events) requires special attention because the `/sse` endpoint creates a long-lived connection. POST requests to `/message` **must** reach the pod with the active SSE stream.
+
+FrontMCP handles this in two layers:
+
+1. **LB Affinity (primary)**: The `__frontmcp_node` cookie is set during SSE initialization, so the load balancer routes subsequent POST requests to the correct pod.
+2. **Notification Relay (fallback)**: If a POST arrives at the wrong pod, FrontMCP detects that the session exists on another node and relays the message via Redis Pub/Sub to the owning pod, which delivers it through the active SSE stream.
+
+<Warning>
+  Unlike Streamable HTTP sessions, SSE sessions **cannot be recreated** on a different pod because the SSE response stream is tied to the original HTTP connection. If the owning pod dies, the client must re-establish the SSE connection on a new pod.
+</Warning>
+
+For NGINX, enable sticky sessions via the affinity cookie and ensure long-lived connections are supported:
+
+```nginx
+server {
+    location /sse {
+        proxy_pass http://mcp_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;
+    }
+}
+```
 
 ## Kubernetes
 
@@ -216,6 +255,9 @@ redis-cli MONITOR | grep "EVAL"
 ## Related
 
 <CardGroup cols={2}>
+  <Card title="Transport Security" icon="shield-halved" href="/frontmcp/deployment/transport-security">
+    CORS, bind address, DNS rebinding, and host validation
+  </Card>
   <Card title="Health Checks" icon="heart-pulse" href="/frontmcp/deployment/health-checks">
     Configure /healthz and /readyz probes
   </Card>
@@ -224,8 +266,5 @@ redis-cli MONITOR | grep "EVAL"
   </Card>
   <Card title="Runtime Modes" icon="layer-group" href="/frontmcp/deployment/runtime-modes">
     Standalone, distributed, and serverless modes
-  </Card>
-  <Card title="Configuration File" icon="file-code" href="/frontmcp/deployment/frontmcp-config">
-    frontmcp.config.ts reference
   </Card>
 </CardGroup>

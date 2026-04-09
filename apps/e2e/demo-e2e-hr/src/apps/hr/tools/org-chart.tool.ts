@@ -1,6 +1,8 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { EMPLOYEES, DEPARTMENTS } from '../data/employees';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import { DEPARTMENTS, EMPLOYEES } from '../data/employees';
 
 const inputSchema = {
   department: z.enum(DEPARTMENTS).optional().describe('Filter org chart to a specific department'),
@@ -28,7 +30,7 @@ type Output = z.infer<typeof outputSchema>;
     template: (ctx) => (ctx.output as Output).mermaid,
   },
 })
-export default class OrgChartTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class OrgChartTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     let filtered = EMPLOYEES;
     if (input.department) {

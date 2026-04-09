@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   channelName: z.string().describe('Channel name to send notification through'),
@@ -12,7 +13,7 @@ const inputSchema = {
   description: 'Manually send a notification through the channel system',
   inputSchema,
 })
-export default class SendChannelNotificationTool extends ToolContext<typeof inputSchema> {
+export default class SendChannelNotificationTool extends ToolContext {
   async execute(input: { channelName: string; content: string; meta?: Record<string, string> }) {
     const scope = this.scope as unknown as {
       channelNotifications?: { send: (name: string, content: string, meta?: Record<string, string>) => void };

@@ -1,5 +1,6 @@
-import { IncomingMessage, HttpServerResponse } from '@frontmcp/protocol';
-import { Authorization } from '../types'; // TODO: move to internal
+import { HttpServerResponse, IncomingMessage } from '@frontmcp/protocol';
+
+import { type Authorization } from '../types'; // TODO: move to internal
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
 
@@ -70,5 +71,7 @@ export abstract class FrontMcpServer {
    * When a string is provided, the server listens on a Unix socket.
    * When a number is provided, the server listens on a TCP port.
    */
-  abstract start(portOrSocketPath?: number | string): Promise<void> | void;
+  abstract start(port: number, bindAddress?: string): Promise<void> | void;
+  abstract start(socketPath: string): Promise<void> | void;
+  abstract start(portOrSocketPath?: number | string, bindAddress?: string): Promise<void> | void;
 }

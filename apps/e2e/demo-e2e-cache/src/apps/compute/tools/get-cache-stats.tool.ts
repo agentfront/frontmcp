@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { executionTracker } from '../data/execution-tracker';
 
 const inputSchema = {};
@@ -18,7 +20,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetCacheStatsTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetCacheStatsTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     const counts = executionTracker.getAll();
 

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   tenantId: z.string(),
@@ -13,13 +14,11 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
   inputSchema,
   authorities: {
     attributes: {
-      conditions: [
-        { path: 'claims.tenantId', op: 'eq', value: { fromInput: 'tenantId' } },
-      ],
+      conditions: [{ path: 'claims.tenantId', op: 'eq', value: { fromInput: 'tenantId' } }],
     },
   },
 })
-export default class TenantScopedTool extends ToolContext<typeof inputSchema> {
+export default class TenantScopedTool extends ToolContext {
   async execute(input: Input) {
     return { tenant: input.tenantId, data: input.data };
   }

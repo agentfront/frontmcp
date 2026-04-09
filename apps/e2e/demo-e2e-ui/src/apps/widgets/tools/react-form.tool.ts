@@ -5,8 +5,10 @@
  * The UI is defined as a React component and rendered via the React renderer.
  */
 
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import FormCard from './form-ui';
 
 // Define input/output schemas
@@ -59,7 +61,7 @@ type FormOutput = z.infer<typeof outputSchema>;
     resourceMode: 'cdn',
   },
 })
-export default class ReactFormTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ReactFormTool extends ToolContext {
   async execute(input: FormInput): Promise<FormOutput> {
     return {
       fields: input.fields,

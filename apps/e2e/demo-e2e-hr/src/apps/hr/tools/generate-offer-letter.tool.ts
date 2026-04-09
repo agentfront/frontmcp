@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { SALARY_BANDS } from '../data/employees';
 
 const inputSchema = {
@@ -127,7 +129,7 @@ function buildPdf(name: string, role: string, department: string, salaryRange: s
     },
   },
 })
-export default class GenerateOfferLetterTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GenerateOfferLetterTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const band = SALARY_BANDS[input.salaryBand];
     const salaryRange = band ? `$${(band.min / 1000).toFixed(0)}K - $${(band.max / 1000).toFixed(0)}K` : 'Competitive';

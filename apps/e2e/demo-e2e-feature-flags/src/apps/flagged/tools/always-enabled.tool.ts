@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   message: z.string().describe('Message to echo'),
@@ -20,7 +21,7 @@ type Output = z.infer<typeof outputSchema>;
   outputSchema,
   featureFlag: 'always-on',
 })
-export default class AlwaysEnabledTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class AlwaysEnabledTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       message: `[always-enabled] ${input.message}`,

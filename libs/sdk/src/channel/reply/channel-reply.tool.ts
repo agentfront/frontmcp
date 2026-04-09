@@ -10,9 +10,10 @@
  */
 
 import type { CallToolResult } from '@frontmcp/protocol';
+
 import { Tool, ToolContext } from '../../common';
-import { channelReplyInputSchema, type ChannelReplyInput } from './reply.types';
 import type ChannelRegistry from '../channel.registry';
+import { channelReplyInputSchema, type ChannelReplyInput } from './reply.types';
 
 @Tool({
   name: 'channel-reply',
@@ -25,7 +26,7 @@ import type ChannelRegistry from '../channel.registry';
     openWorldHint: true,
   },
 })
-export class ChannelReplyTool extends ToolContext<typeof channelReplyInputSchema> {
+export class ChannelReplyTool extends ToolContext {
   async execute(input: ChannelReplyInput): Promise<CallToolResult> {
     const { channel_name, text, meta } = input;
 

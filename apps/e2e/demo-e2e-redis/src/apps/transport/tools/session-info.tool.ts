@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {};
 
@@ -23,7 +24,7 @@ const outputSchema = z
   inputSchema,
   outputSchema,
 })
-export default class SessionInfoTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class SessionInfoTool extends ToolContext {
   async execute(_input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const authInfo = this.getAuthInfo() as Record<string, unknown>;
     const sessionId = authInfo.sessionId as string | undefined;

@@ -1,6 +1,8 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { taskStore, TaskPriority } from '../data/task.store';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import { taskStore, type TaskPriority } from '../data/task.store';
 
 const inputSchema = {
   priority: z.enum(['low', 'medium', 'high', 'all']).default('all').describe('Filter by priority'),
@@ -29,7 +31,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ListTasksTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ListTasksTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const tasks =
       input.priority === 'all' ? taskStore.getAll() : taskStore.getByPriority(input.priority as TaskPriority);

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   message: z.string().default('Success').describe('Success message'),
@@ -21,7 +22,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class SuccessfulTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class SuccessfulTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       success: true,

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   message: z.string().describe('The message to send'),
@@ -28,7 +29,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class TestNotifyMethodTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class TestNotifyMethodTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     let sent: boolean;
 
