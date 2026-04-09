@@ -378,7 +378,8 @@
                 "Using defineConfig() for typed configuration with IDE autocomplete",
                 "Multi-target deployments with per-target server settings",
                 "CSP directives including value-less directives like upgrade-insecure-requests",
-                "Security headers (HSTS, X-Frame-Options, X-Content-Type-Options)"
+                "Security headers (HSTS, X-Frame-Options, X-Content-Type-Options)",
+                "HA configuration for the distributed target"
               ]
             },
             {

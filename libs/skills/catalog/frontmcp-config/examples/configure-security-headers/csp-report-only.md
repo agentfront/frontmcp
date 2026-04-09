@@ -12,7 +12,7 @@ features:
 
 # CSP Report-Only Mode
 
-Test your Content Security Policy by running it in report-only mode first. Violations are logged to a reporting endpoint without blocking any content.
+Test CSP policies in report-only mode to identify violations before enforcement
 
 ## Code
 
@@ -59,9 +59,9 @@ curl -sI http://localhost:3000/healthz | grep -i content-security-policy
 
 ## What This Demonstrates
 
-- `reportOnly: true` emits `Content-Security-Policy-Report-Only` instead of `Content-Security-Policy`
-- The `reportUri` receives JSON violation reports from browsers
-- You can monitor violations in production before enforcing the policy
+- Enabling CSP in report-only mode with reportUri for violation monitoring
+- Using the object-format directives in frontmcp.config
+- Verifying report-only header is emitted instead of enforcement header
 
 ## Related
 

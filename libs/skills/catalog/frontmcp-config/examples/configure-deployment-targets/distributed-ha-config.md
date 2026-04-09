@@ -13,7 +13,7 @@ features:
 
 # Distributed Deployment with HA Configuration
 
-Configure a `distributed` deployment target with custom HA settings for multi-pod Kubernetes deployments with Redis-backed session persistence and failover.
+Configure a distributed deployment target with HA settings for heartbeat, session takeover, and Redis-backed session persistence
 
 ## Code
 
@@ -111,11 +111,10 @@ class Server {}
 
 ## What This Demonstrates
 
-- Dual deployment targets (node for dev, distributed for prod) in one config file
-- HA configuration with tuned heartbeat intervals for fast failure detection
-- Custom affinity cookie name for load balancer routing
-- Per-target environment variables (`env` field) for Redis connection
-- CSP headers enabled only on the distributed target
+- Configuring the distributed deployment target with HA options
+- Setting custom heartbeat intervals and TTL for pod liveness detection
+- Combining server config (CSP, cookies) with HA config in the same target
+- Using per-target environment variables for Redis connection
 
 ## Related
 

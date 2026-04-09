@@ -13,7 +13,7 @@ features:
 
 # Full Production Security Headers
 
-Configure a complete security headers setup for a production FrontMCP deployment with CSP enforcement, HSTS preload, and all standard security headers.
+Complete security headers configuration for production with CSP enforcement, HSTS preload, and clickjacking protection
 
 ## Code
 
@@ -79,11 +79,10 @@ curl -sI http://localhost:3000/healthz
 
 ## What This Demonstrates
 
-- Full CSP enforcement with directives for scripts, styles, images, fonts, connections, frames, base-uri, and form-action
-- Value-less CSP directives (`upgrade-insecure-requests`) using empty string values
-- HSTS with `preload` flag (suitable for HSTS preload list submission)
-- Combined with distributed deployment HA configuration
-- All standard security headers applied to every response
+- Full CSP enforcement with multiple directive types including value-less directives
+- HSTS with preload and includeSubDomains for HTTPS enforcement
+- X-Frame-Options DENY for clickjacking protection
+- Custom headers for additional security controls
 
 ## Related
 

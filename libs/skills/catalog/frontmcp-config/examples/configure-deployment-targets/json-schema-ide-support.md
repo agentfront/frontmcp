@@ -12,7 +12,7 @@ features:
 
 # JSON Config with IDE Autocomplete
 
-When using `frontmcp.config.json` instead of TypeScript, add the `$schema` field to get property autocomplete, validation, and hover documentation in VS Code and WebStorm.
+Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete
 
 ## Code
 
@@ -54,10 +54,9 @@ frontmcp build
 
 ## What This Demonstrates
 
-- The `$schema` field provides autocomplete for all config properties in JSON editors
-- Property validation catches typos and wrong types before build
-- The schema supports all 8 deployment targets and their nested options
-- Running `frontmcp build` without `-t` builds all targets defined in the config
+- Adding $schema field for IDE autocomplete in JSON config files
+- Configuring multiple deployment targets in JSON format
+- Using the frontmcp.schema.json for property validation and hover docs
 
 ## Related
 

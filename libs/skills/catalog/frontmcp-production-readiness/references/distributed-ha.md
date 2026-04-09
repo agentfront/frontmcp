@@ -182,9 +182,9 @@ upstream mcp_backend {
 
 ## Examples
 
-| Example                                                                              | Level        | Description                                                                 |
-| ------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------- |
-| [`ha-kubernetes-3-replicas`](../examples/distributed-ha/ha-kubernetes-3-replicas.md) | Intermediate | Deploy with 3 replicas, Redis, and automatic session failover on Kubernetes |
+| Example                                                                              | Level        | Description                                                                          |
+| ------------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
+| [`ha-kubernetes-3-replicas`](../examples/distributed-ha/ha-kubernetes-3-replicas.md) | Intermediate | Deploy FrontMCP with 3 replicas, Redis, and automatic session failover on Kubernetes |
 
 > See all examples in [`examples/distributed-ha/`](../examples/distributed-ha/)
 

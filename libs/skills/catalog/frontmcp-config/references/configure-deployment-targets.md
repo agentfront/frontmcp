@@ -200,9 +200,11 @@ For JSON configs, add `$schema` for autocomplete:
 
 ## Examples
 
-| Example                                                                                                | Level        | Description                                  |
-| ------------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------- |
-| [`multi-target-with-security`](../examples/configure-deployment-targets/multi-target-with-security.md) | Intermediate | Node + distributed targets with CSP and HSTS |
+| Example                                                                                                | Level        | Description                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| [`multi-target-with-security`](../examples/configure-deployment-targets/multi-target-with-security.md) | Intermediate | Configure a FrontMCP project with node + distributed targets, CSP headers, and HSTS                                              |
+| [`distributed-ha-config`](../examples/configure-deployment-targets/distributed-ha-config.md)           | Advanced     | Configure a distributed deployment target with HA settings for heartbeat, session takeover, and Redis-backed session persistence |
+| [`json-schema-ide-support`](../examples/configure-deployment-targets/json-schema-ide-support.md)       | Basic        | Use frontmcp.config.json with JSON Schema for VS Code and WebStorm autocomplete                                                  |
 
 > See all examples in [`examples/configure-deployment-targets/`](../examples/configure-deployment-targets/)
 

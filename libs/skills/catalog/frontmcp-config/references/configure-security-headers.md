@@ -183,10 +183,10 @@ The build adapter converts config to these env vars (can also be overridden at r
 
 ## Examples
 
-| Example                                                                                        | Level        | Description                                         |
-| ---------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------- |
-| [`csp-report-only`](../examples/configure-security-headers/csp-report-only.md)                 | Basic        | Test CSP in report-only mode before enforcing       |
-| [`full-production-headers`](../examples/configure-security-headers/full-production-headers.md) | Intermediate | Complete security headers for production deployment |
+| Example                                                                                        | Level        | Description                                                                                                            |
+| ---------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| [`csp-report-only`](../examples/configure-security-headers/csp-report-only.md)                 | Basic        | Test CSP policies in report-only mode to identify violations before enforcement                                        |
+| [`full-production-headers`](../examples/configure-security-headers/full-production-headers.md) | Intermediate | Complete security headers configuration for production with CSP enforcement, HSTS preload, and clickjacking protection |
 
 > See all examples in [`examples/configure-security-headers/`](../examples/configure-security-headers/)
 

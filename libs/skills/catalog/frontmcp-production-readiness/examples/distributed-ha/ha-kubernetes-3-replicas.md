@@ -13,7 +13,7 @@ features:
 
 # HA Kubernetes Deployment with 3 Replicas
 
-Deploy a FrontMCP server across 3 Kubernetes pods with Redis-backed session persistence and automatic failover.
+Deploy FrontMCP with 3 replicas, Redis, and automatic session failover on Kubernetes
 
 ## Code
 
@@ -219,10 +219,10 @@ kubectl delete pod mcp-server-7b8f9-abc12
 
 ## What This Demonstrates
 
-- Configuring `@FrontMcp` with Redis for distributed deployment
-- Kubernetes Deployment with 3 replicas and health/readiness probes
-- Automatic heartbeat registration and session takeover on pod failure
-- Redis as the coordination layer for session persistence and HA
+- Configuring @FrontMcp with Redis for distributed deployment
+- Kubernetes Deployment YAML with 3 replicas and readiness probes
+- Verifying heartbeat keys and session takeover via redis-cli
+- NGINX sticky sessions for session affinity
 
 ## Related
 
