@@ -1,9 +1,18 @@
-import { FrontMcpServer, HttpOptions, HttpMethod, ServerRequestHandler, CorsOptions } from '../common';
+import { getRuntimeContext } from '@frontmcp/utils';
+
 import { ExpressHostAdapter } from '#express-host';
-import { HostServerAdapter } from './adapters/base.host.adapter';
-import type { HealthService } from '../health';
-import type { HealthOptionsInterface } from '../common/types/options/health';
-import { registerHealthRoutes } from '../health';
+
+import {
+  FrontMcpServer,
+  type CorsOptions,
+  type HttpMethod,
+  type HttpOptions,
+  type ServerRequestHandler,
+} from '../common';
+import { type HealthOptionsInterface } from '../common/types/options/health';
+import { registerHealthRoutes, type HealthService } from '../health';
+import { type HostServerAdapter } from './adapters/base.host.adapter';
+import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from './security/security-audit';
 
 const DEFAULT_CORS: CorsOptions = { origin: true, credentials: false };
 
@@ -28,7 +37,10 @@ export class FrontMcpServerInstance extends FrontMcpServer {
       this.host = this.config.hostFactory;
     } else {
       const corsConfig = this.config.cors === false ? undefined : (this.config.cors ?? DEFAULT_CORS);
-      this.host = new ExpressHostAdapter(corsConfig ? { cors: corsConfig } : undefined);
+      this.host = new ExpressHostAdapter({
+        ...(corsConfig ? { cors: corsConfig } : {}),
+        ...(this.config.security ? { security: this.config.security } : {}),
+      });
     }
   }
 
@@ -85,6 +97,23 @@ export class FrontMcpServerInstance extends FrontMcpServer {
 
   async start() {
     this.prepare();
-    await this.host.start(this.config.socketPath ?? this.config.port);
+
+    const deploymentMode = getRuntimeContext().deployment;
+    const bindAddress = resolveBindAddress(this.config.security, deploymentMode);
+
+    // Run security audit (warns in production/distributed mode)
+    const isProduction = process.env['NODE_ENV'] === 'production';
+    const findings = auditSecurityDefaults(
+      {
+        cors: this.config.cors,
+        security: this.config.security,
+        resolvedBindAddress: bindAddress,
+        deploymentMode,
+      },
+      isProduction,
+    );
+    logSecurityFindings(findings, console);
+
+    await this.host.start(this.config.socketPath ?? this.config.port, bindAddress);
   }
 }

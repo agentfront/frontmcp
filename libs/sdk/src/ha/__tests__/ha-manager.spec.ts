@@ -127,4 +127,129 @@ describe('HaManager', () => {
     await manager.stop();
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Services stopped'));
   });
+
+  describe('orphan scanner', () => {
+    it('should start the scanner without error', async () => {
+      const redis = createMockRedis();
+      const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+      const manager = HaManager.create({ redis: redis as never, nodeId: 'pod-a', logger });
+      await manager.start();
+
+      const onOrphan = jest.fn();
+      manager.startOrphanScanner({
+        sessionKeyPrefix: 'mcp:transport:',
+        onOrphan,
+      });
+
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Orphan scanner started'));
+
+      await manager.stop();
+    });
+
+    it('should not start the scanner twice', async () => {
+      const redis = createMockRedis();
+      const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+      const manager = HaManager.create({ redis: redis as never, nodeId: 'pod-a', logger });
+      await manager.start();
+
+      const onOrphan = jest.fn();
+      manager.startOrphanScanner({ sessionKeyPrefix: 'mcp:transport:', onOrphan });
+      manager.startOrphanScanner({ sessionKeyPrefix: 'mcp:transport:', onOrphan });
+
+      // Should only log once
+      const scannerLogs = (logger.info as jest.Mock).mock.calls.filter(
+        (c: string[]) => typeof c[0] === 'string' && c[0].includes('Orphan scanner started'),
+      );
+      expect(scannerLogs).toHaveLength(1);
+
+      await manager.stop();
+    });
+
+    it('should stop scanner when manager stops', async () => {
+      const redis = createMockRedis();
+      const manager = HaManager.create({ redis: redis as never, nodeId: 'pod-a' });
+      await manager.start();
+
+      manager.startOrphanScanner({
+        sessionKeyPrefix: 'mcp:transport:',
+        onOrphan: jest.fn(),
+      });
+
+      await manager.stop();
+      expect(manager.isStarted()).toBe(false);
+    });
+
+    it('should claim orphaned sessions via atomic takeover', async () => {
+      const redis = createMockRedis();
+      const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+      const manager = HaManager.create({
+        redis: redis as never,
+        nodeId: 'pod-b',
+        logger,
+        config: {
+          heartbeatIntervalMs: 50,
+          heartbeatTtlMs: 200,
+          takeoverGracePeriodMs: 0,
+        },
+      });
+      await manager.start();
+
+      // Simulate an orphaned session owned by dead pod-a
+      const sessionData = JSON.stringify({
+        session: { id: 'sess-1', nodeId: 'pod-a', protocol: 'streamable-http' },
+        authorizationId: 'hash123',
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      });
+      redis.store.set('mcp:transport:sess-1', { value: sessionData, expiresAt: Date.now() + 60_000 });
+
+      // Mock eval to simulate successful CAS takeover
+      redis.eval.mockResolvedValueOnce(1);
+
+      const onOrphan = jest.fn();
+      manager.startOrphanScanner({
+        sessionKeyPrefix: 'mcp:transport:',
+        onOrphan,
+      });
+
+      // Wait for initial delay (intervalMs + gracePeriodMs) + scan to run
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(onOrphan).toHaveBeenCalledWith('sess-1', 'pod-a');
+
+      await manager.stop();
+    });
+
+    it('should not claim sessions owned by alive nodes', async () => {
+      const redis = createMockRedis();
+      const manager = HaManager.create({
+        redis: redis as never,
+        nodeId: 'pod-b',
+        config: {
+          heartbeatIntervalMs: 50,
+          heartbeatTtlMs: 200,
+          takeoverGracePeriodMs: 0,
+        },
+      });
+      await manager.start();
+
+      // Simulate a session owned by pod-b (ourselves — alive)
+      const sessionData = JSON.stringify({
+        session: { id: 'sess-2', nodeId: 'pod-b', protocol: 'streamable-http' },
+      });
+      redis.store.set('mcp:transport:sess-2', { value: sessionData, expiresAt: Date.now() + 60_000 });
+
+      const onOrphan = jest.fn();
+      manager.startOrphanScanner({
+        sessionKeyPrefix: 'mcp:transport:',
+        onOrphan,
+      });
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(onOrphan).not.toHaveBeenCalled();
+
+      await manager.stop();
+    });
+  });
 });

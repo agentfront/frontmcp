@@ -1,0 +1,192 @@
+---
+title: Transport Security
+description: Configure CORS, bind address, DNS rebinding protection, and host validation for production deployments
+---
+
+FrontMCP provides transport-level security controls for CORS, network binding, DNS rebinding protection, and host header validation. In development, defaults are permissive for ease of use. In production, FrontMCP logs security warnings and offers a **strict mode** that enables all protections at once.
+
+## Quick Start
+
+Enable strict security mode for production:
+
+```typescript
+@FrontMcp({
+  http: {
+    port: 3000,
+    cors: {
+      origin: ['https://app.example.com'],
+      credentials: false,
+    },
+    security: {
+      strict: true,
+      dnsRebindingProtection: {
+        enabled: true,
+        allowedHosts: ['api.example.com', 'api.example.com:3000'],
+        allowedOrigins: ['https://app.example.com'],
+      },
+    },
+  },
+})
+```
+
+## Security Options
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `security.strict` | boolean | `false` | Enable all security features at once |
+| `security.bindAddress` | `'loopback'` \| `'all'` \| string | `'0.0.0.0'` | Network bind address |
+| `security.dnsRebindingProtection.enabled` | boolean | `false` | Validate Host and Origin headers |
+| `security.dnsRebindingProtection.allowedHosts` | string[] | --- | Allowed Host header values |
+| `security.dnsRebindingProtection.allowedOrigins` | string[] | --- | Allowed Origin header values |
+
+## CORS Configuration
+
+By default, FrontMCP uses permissive CORS (`origin: true`) for development convenience. In production, you should restrict origins explicitly:
+
+```typescript
+@FrontMcp({
+  http: {
+    cors: {
+      origin: ['https://app.example.com', 'https://admin.example.com'],
+      credentials: false,
+      maxAge: 600,
+    },
+  },
+})
+```
+
+To disable CORS entirely (same-origin only):
+
+```typescript
+@FrontMcp({
+  http: {
+    cors: false,
+  },
+})
+```
+
+<Warning>
+  `origin: true` reflects the request origin header, effectively allowing **any** website to make cross-origin requests. This is safe for local development but should never be used in production.
+</Warning>
+
+## Bind Address
+
+Controls which network interface the server listens on:
+
+| Value | Binds To | Use Case |
+| --- | --- | --- |
+| `'loopback'` | `127.0.0.1` | Local-only access (development, reverse proxy) |
+| `'all'` | `0.0.0.0` | All interfaces (distributed pods, direct access) |
+| IP string | Specific IP | Custom network binding |
+
+### Strict Mode Behavior
+
+When `security.strict: true`:
+- **Standalone mode**: binds to `127.0.0.1` (loopback only)
+- **Distributed mode**: binds to `0.0.0.0` (pods need external access)
+
+### Explicit Override
+
+```typescript
+security: {
+  bindAddress: 'loopback', // Always 127.0.0.1, regardless of deployment mode
+}
+```
+
+<Tip>
+  When running behind a reverse proxy (NGINX, Traefik, Envoy), bind to loopback and let the proxy handle external traffic.
+</Tip>
+
+## DNS Rebinding Protection
+
+Validates the HTTP `Host` and `Origin` headers against an allowlist. When a request arrives with an unrecognized host, the server responds with `403 Forbidden`.
+
+```typescript
+security: {
+  dnsRebindingProtection: {
+    enabled: true,
+    allowedHosts: ['localhost:3000', 'api.example.com'],
+    allowedOrigins: ['https://app.example.com'],
+  },
+}
+```
+
+- **`allowedHosts`**: Matches the `Host` header exactly (include port if non-standard)
+- **`allowedOrigins`**: Matches the `Origin` header exactly (include scheme)
+- If `allowedOrigins` is set, requests **without** an `Origin` header are allowed through (non-browser clients)
+
+<Note>
+  DNS rebinding attacks use a malicious domain that resolves to `127.0.0.1`, tricking a browser into making requests to your local server. Host validation blocks these requests.
+</Note>
+
+## Security Audit Warnings
+
+In production (`NODE_ENV=production`) or distributed mode, FrontMCP logs security warnings at startup:
+
+```
+[Security] CORS_PERMISSIVE_DEFAULT: CORS is using the permissive default (origin: true).
+[Security] BIND_ALL_INTERFACES: Server bound to 0.0.0.0 — accessible from all network interfaces.
+[Security] DNS_REBINDING_UNPROTECTED: DNS rebinding protection is disabled.
+[Security] STRICT_MODE_HINT: To enable strict security defaults, set security.strict = true.
+```
+
+These are warnings only — no defaults are changed. Use them to audit your configuration before going to production.
+
+## Production Checklist
+
+- [ ] Set explicit `cors.origin` (not `true`)
+- [ ] Enable `security.dnsRebindingProtection` with `allowedHosts`
+- [ ] Set `security.bindAddress` to `'loopback'` if behind a reverse proxy
+- [ ] Configure TLS termination at the reverse proxy layer
+- [ ] Set `NODE_ENV=production` for security audit warnings
+- [ ] Review startup logs for `[Security]` warnings
+
+## Example: Full Production Config
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  http: {
+    port: 3000,
+    cors: {
+      origin: ['https://app.example.com'],
+      credentials: false,
+      maxAge: 600,
+    },
+    security: {
+      strict: true,
+      bindAddress: 'loopback',
+      dnsRebindingProtection: {
+        enabled: true,
+        allowedHosts: ['localhost:3000'],
+        allowedOrigins: ['https://app.example.com'],
+      },
+    },
+  },
+  redis: { provider: 'redis', host: 'redis', port: 6379 },
+  transport: {
+    protocol: 'modern',
+    persistence: {
+      redis: { provider: 'redis', host: 'redis', port: 6379 },
+    },
+  },
+})
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Security Headers & CSP" icon="shield-halved" href="/frontmcp/deployment/security-headers">
+    Content Security Policy, HSTS, and X-Frame-Options
+  </Card>
+  <Card title="High Availability" icon="server" href="/frontmcp/deployment/high-availability">
+    Distributed sessions, heartbeat, and session takeover
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/frontmcp/deployment/redis-setup">
+    Redis connection and session store configuration
+  </Card>
+  <Card title="Production Build" icon="rocket" href="/frontmcp/deployment/production-build">
+    Build and deploy for production
+  </Card>
+</CardGroup>

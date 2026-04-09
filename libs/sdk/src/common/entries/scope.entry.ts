@@ -6,6 +6,7 @@ import type AgentRegistry from '../../agent/agent.registry';
 import type AppRegistry from '../../app/app.registry';
 import type { AuthRegistry } from '../../auth/auth.registry';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
+import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
 import type { NotificationService } from '../../notification';
 import type PromptRegistry from '../../prompt/prompt.registry';
@@ -64,6 +65,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get toolUI(): ToolUIRegistry | undefined;
 
   abstract get transportService(): TransportService | undefined;
+
+  abstract haManager?: HaManager;
 
   abstract get rateLimitManager(): GuardManager | undefined;
 

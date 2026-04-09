@@ -1,10 +1,21 @@
 // server/adapters/express.host.adapter.ts
 import * as http from 'node:http';
-import express from 'express';
+
 import cors from 'cors';
-import { HostServerAdapter } from './base.host.adapter';
-import { CorsOptions, HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from '../../common';
+import express from 'express';
+
 import { fileExists, unlink } from '@frontmcp/utils';
+
+import {
+  type CorsOptions,
+  type HttpMethod,
+  type ServerRequest,
+  type ServerRequestHandler,
+  type ServerResponse,
+} from '../../common';
+import type { SecurityOptions } from '../../common/types/options/http/interfaces';
+import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
+import { HostServerAdapter } from './base.host.adapter';
 
 /**
  * Options for ExpressHostAdapter.
@@ -16,6 +27,12 @@ export interface ExpressHostAdapterOptions {
    * Note: FrontMcpServerInstance provides a permissive default when `cors` is omitted.
    */
   cors?: CorsOptions;
+
+  /**
+   * Security options for transport hardening.
+   * Includes bind address and DNS rebinding protection.
+   */
+  security?: SecurityOptions;
 }
 
 export class ExpressHostAdapter extends HostServerAdapter {
@@ -41,6 +58,17 @@ export class ExpressHostAdapter extends HostServerAdapter {
           maxAge: corsOptions.maxAge ?? 300,
         }),
       );
+    }
+
+    // Host validation middleware (DNS rebinding protection)
+    const securityOpts = options?.security;
+    if (securityOpts?.dnsRebindingProtection?.enabled || securityOpts?.strict) {
+      const hostValidation = createHostValidationMiddleware({
+        enabled: true,
+        allowedHosts: securityOpts.dnsRebindingProtection?.allowedHosts,
+        allowedOrigins: securityOpts.dnsRebindingProtection?.allowedOrigins,
+      });
+      this.app.use(hostValidation as express.RequestHandler);
     }
 
     // When creating the HTTP(S) server that hosts /mcp:
@@ -92,7 +120,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
     return this.app;
   }
 
-  async start(portOrSocketPath: number | string) {
+  async start(portOrSocketPath: number | string, bindAddress?: string) {
     this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
@@ -118,10 +146,11 @@ export class ExpressHostAdapter extends HostServerAdapter {
         });
       });
     } else {
+      const host = bindAddress ?? '0.0.0.0';
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
-        server.listen(portOrSocketPath, () => {
-          console.log(`MCP HTTP (Express) on ${portOrSocketPath}`);
+        server.listen(portOrSocketPath, host, () => {
+          console.log(`MCP HTTP (Express) on ${host}:${portOrSocketPath}`);
           resolve();
         });
       });

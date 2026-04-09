@@ -65,6 +65,7 @@ import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
 import { hasUIConfig, StaticWidgetResourceTemplate, ToolUIRegistry } from '../tool/ui';
+import { RedisTransportBus } from '../transport/bus';
 import { createEventStore } from '../transport/event-stores';
 import { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
@@ -179,12 +180,11 @@ export class Scope extends ScopeEntry {
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
     this.logger.info(`Initializing ${this.metadata.apps.length} app(s)...`);
 
-    // TransportService is synchronous — no await needed
-    const transportConfig = this.metadata.transport;
-    this.transportService = new TransportService(this, transportConfig?.persistence);
-
     // HA Manager (conditional — only in distributed deployment mode)
-    if (getRuntimeContext().deployment === 'distributed' && this.metadata.redis && !this.cliMode) {
+    // Must be created before TransportService so the bus can be passed to it.
+    const transportConfig = this.metadata.transport;
+    const isDistributed = getRuntimeContext().deployment === 'distributed';
+    if (isDistributed && this.metadata.redis && !this.cliMode) {
       try {
         const haRedis = this.metadata.redis;
         this.haManager = HaManager.create({
@@ -197,6 +197,35 @@ export class Scope extends ScopeEntry {
       } catch (err) {
         this.logger.warn('[HA] Failed to start HA manager — running without HA', { error: err });
       }
+    }
+
+    // Transport bus (distributed mode only — requires HA Manager + Redis)
+    let transportBus: InstanceType<typeof RedisTransportBus> | undefined;
+    if (this.haManager && isDistributed && this.metadata.redis) {
+      transportBus = new RedisTransportBus(this.metadata.redis as never, getMachineId(), {
+        logger: this.logger,
+      });
+      this.logger.info('[HA] Transport bus created for distributed session routing');
+    }
+
+    // TransportService — pass the bus for distributed mode
+    this.transportService = new TransportService(this, transportConfig?.persistence, transportBus);
+
+    // Orphan session scanner (distributed mode only — scans for dead-pod sessions)
+    if (this.haManager && isDistributed) {
+      const persistCfg = transportConfig?.persistence;
+      const resolvedPrefix =
+        persistCfg && typeof persistCfg === 'object' && persistCfg.redis?.keyPrefix
+          ? persistCfg.redis.keyPrefix
+          : 'mcp:transport:';
+      this.haManager.startOrphanScanner({
+        sessionKeyPrefix: resolvedPrefix,
+        onOrphan: (sessionId, previousNodeId) => {
+          this.logger.info(
+            `[HA] Orphaned session ${sessionId.slice(0, 20)} from ${previousNodeId} — available for recreation`,
+          );
+        },
+      });
     }
 
     // Serverless SSE warning
@@ -212,12 +241,18 @@ export class Scope extends ScopeEntry {
     }
 
     // EventStore (conditional, skipped in CLI mode)
-    const eventStoreConfig = transportConfig?.eventStore;
-    if (eventStoreConfig?.enabled && !this.cliMode) {
-      const { eventStore } = createEventStore(eventStoreConfig, this.logger);
+    // In distributed mode, auto-enable Redis event store for cross-pod SSE resumability
+    const effectiveEventStoreConfig =
+      transportConfig?.eventStore ??
+      (isDistributed && this.metadata.redis && !this.cliMode
+        ? { enabled: true, provider: 'redis' as const, redis: this.metadata.redis }
+        : undefined);
+    if (effectiveEventStoreConfig?.enabled && !this.cliMode) {
+      const { eventStore } = createEventStore(effectiveEventStoreConfig, this.logger);
       this._eventStore = eventStore;
       this.logger.info('EventStore initialized for SSE resumability', {
-        provider: eventStoreConfig.provider ?? 'memory',
+        provider: effectiveEventStoreConfig.provider ?? 'memory',
+        autoEnabled: !transportConfig?.eventStore && isDistributed,
       });
     }
 

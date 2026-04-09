@@ -8,7 +8,7 @@
  * 3. Verification that ports are actually available before assignment
  */
 
-import { createServer, Server } from 'net';
+import { createServer, type Server } from 'net';
 
 // ═══════════════════════════════════════════════════════════════════
 // PORT RANGE CONFIGURATION
@@ -63,7 +63,10 @@ export const E2E_PORT_RANGES = {
   'demo-e2e-feature-flags': { start: 50380, size: 10 },
   'demo-e2e-resource-providers': { start: 50390, size: 10 },
 
-  // ESM E2E tests (50400-50449)
+  // Distributed E2E tests (50440-50459)
+  'demo-e2e-distributed': { start: 50440, size: 20 },
+
+  // ESM E2E tests (50400-50439)
   'esm-package-server': { start: 50400, size: 10 },
   'esm-package-server-hot-reload': { start: 50410, size: 10 },
   'esm-package-server-cli': { start: 50420, size: 10 },

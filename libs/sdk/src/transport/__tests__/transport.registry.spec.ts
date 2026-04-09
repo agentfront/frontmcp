@@ -4,6 +4,7 @@
  * Tests for the TransportService which manages transport sessions and their lifecycle.
  */
 import { createHash } from 'crypto';
+
 import { TransportService } from '../transport.registry';
 
 // Mock dependencies
@@ -309,8 +310,8 @@ describe('TransportService', () => {
       );
     });
 
-    it('should return undefined for non-streamable-http types', async () => {
-      const session = await service.getStoredSession('sse', 'test-token', 'session-123');
+    it('should return undefined for non-streamable-http/sse types', async () => {
+      const session = await service.getStoredSession('stdio', 'test-token', 'session-123');
       expect(session).toBeUndefined();
       expect(mockRedisSessionStore.get).not.toHaveBeenCalled();
     });

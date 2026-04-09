@@ -2,6 +2,7 @@
 // Zod schema for HTTP configuration
 
 import { z } from 'zod';
+
 import type { RawZodShape } from '../../common.types';
 import type { CorsOptions, HttpOptionsInterface } from './interfaces';
 
@@ -49,6 +50,23 @@ export const httpOptionsSchema = z.object({
    * - CorsOptions object: custom CORS config
    */
   cors: z.union([z.literal(false), corsOptionsSchema]).optional(),
+  /**
+   * Security configuration for transport hardening.
+   * Opt-in — defaults remain backwards-compatible.
+   */
+  security: z
+    .object({
+      strict: z.boolean().optional(),
+      bindAddress: z.union([z.literal('loopback'), z.literal('all'), z.string()]).optional(),
+      dnsRebindingProtection: z
+        .object({
+          enabled: z.boolean().optional(),
+          allowedHosts: z.array(z.string()).optional(),
+          allowedOrigins: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**

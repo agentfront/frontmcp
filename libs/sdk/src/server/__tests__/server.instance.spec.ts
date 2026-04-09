@@ -1,7 +1,7 @@
 // server/__tests__/server.instance.spec.ts
 
+import { type FrontMcpServer } from '../../common';
 import { FrontMcpServerInstance } from '../server.instance';
-import { FrontMcpServer } from '../../common';
 
 // Capture constructor args passed to ExpressHostAdapter
 let capturedAdapterArgs: unknown[] = [];
@@ -41,11 +41,11 @@ describe('FrontMcpServerInstance', () => {
       });
     });
 
-    it('should pass no options when cors is false', () => {
+    it('should pass empty options when cors is false', () => {
       new FrontMcpServerInstance({ port: 3001, entryPath: '', cors: false });
 
       expect(capturedAdapterArgs).toHaveLength(1);
-      expect(capturedAdapterArgs[0]).toBeUndefined();
+      expect(capturedAdapterArgs[0]).toEqual({});
     });
 
     it('should pass custom cors config through to adapter', () => {
