@@ -88,7 +88,7 @@ Deploy with Docker or Kubernetes (see example below).
 
 ```bash
 # Check heartbeat keys exist for each pod
-redis-cli KEYS "mcp:ha:heartbeat:*"
+redis-cli --scan --pattern "mcp:ha:heartbeat:*"
 
 # Inspect a heartbeat value
 redis-cli GET "mcp:ha:heartbeat:mcp-server-7b8f9-abc12"
@@ -166,7 +166,7 @@ upstream mcp_backend {
 
 ### Runtime
 
-- [ ] `redis-cli KEYS "mcp:ha:heartbeat:*"` shows entries for each pod
+- [ ] `redis-cli --scan --pattern "mcp:ha:heartbeat:*"` shows entries for each pod
 - [ ] Killing a pod results in its heartbeat expiring within TTL
 - [ ] Surviving pods claim orphaned sessions after takeover grace period
 - [ ] `/healthz` and `/readyz` return healthy on all pods

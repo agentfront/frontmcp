@@ -1,6 +1,6 @@
 /**
  * E2E Tests for frontmcp.config file loading.
- * Tests multi-format config loading (JSON, JS, CJS, TS) and resolution order.
+ * Tests config loading for JSON/JS, package.json fallback, resolution order, and validation errors.
  */
 
 import os from 'os';
@@ -169,7 +169,7 @@ describe('frontmcp.config loader (E2E)', () => {
       await expect(loadFrontMcpConfig(tmpDir)).rejects.toThrow('No frontmcp.config found');
     });
 
-    it('should throw for invalid JSON config', async () => {
+    it('should throw for schema-invalid config (name with spaces)', async () => {
       await writeFile(
         path.join(tmpDir, 'frontmcp.config.json'),
         JSON.stringify({ name: 'invalid name with spaces', deployments: [{ target: 'node' }] }),

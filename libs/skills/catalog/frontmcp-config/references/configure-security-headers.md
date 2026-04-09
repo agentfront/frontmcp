@@ -102,12 +102,14 @@ curl -I http://localhost:3000/healthz
 
 ### Security Headers (`server.headers`)
 
-| Field                | Default   | Header                                         |
-| -------------------- | --------- | ---------------------------------------------- |
-| `hsts`               | ---       | `Strict-Transport-Security`                    |
-| `contentTypeOptions` | `nosniff` | `X-Content-Type-Options`                       |
-| `frameOptions`       | `DENY`    | `X-Frame-Options`                              |
-| `custom`             | ---       | Any custom headers as `Record<string, string>` |
+| Field                | Type                    | Default   | Header                      |
+| -------------------- | ----------------------- | --------- | --------------------------- |
+| `hsts`               | `string \| false`       | ---       | `Strict-Transport-Security` |
+| `contentTypeOptions` | `string \| false`       | `nosniff` | `X-Content-Type-Options`    |
+| `frameOptions`       | `string \| false`       | `DENY`    | `X-Frame-Options`           |
+| `custom`             | `Record<string,string>` | ---       | Any custom headers          |
+
+Set any of the first three fields to `false` to explicitly disable that header.
 
 ### Value-Less CSP Directives
 
