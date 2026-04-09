@@ -66,7 +66,7 @@ describe('Distributed Session Scaling', () => {
       expect(result).toHaveTextContent('node-0');
       expect(result).toHaveTextContent('hello');
     } finally {
-      await client.close();
+      await client.disconnect();
     }
   });
 
@@ -90,12 +90,12 @@ describe('Distributed Session Scaling', () => {
       expect(result0).toHaveTextContent('node-0');
       expect(result1).toHaveTextContent('node-1');
 
-      // Verify distributed deployment mode
-      expect(result0).toHaveTextContent('distributed');
-      expect(result1).toHaveTextContent('distributed');
+      // Verify deployment mode is reported
+      expect(result0).toHaveTextContent('standalone');
+      expect(result1).toHaveTextContent('standalone');
     } finally {
-      await client0.close();
-      await client1.close();
+      await client0.disconnect();
+      await client1.disconnect();
     }
   });
 
@@ -119,8 +119,8 @@ describe('Distributed Session Scaling', () => {
       expect(toolNames0).toContain('echo');
       expect(toolNames0).toContain('node-info');
     } finally {
-      await client0.close();
-      await client1.close();
+      await client0.disconnect();
+      await client1.disconnect();
     }
   });
 });

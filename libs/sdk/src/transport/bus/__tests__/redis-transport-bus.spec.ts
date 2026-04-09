@@ -1,5 +1,5 @@
 import { MethodNotImplementedError } from '../../../errors/transport.errors';
-import type { TransportKey } from '../../transport.types';
+import type { TransportBus, TransportKey } from '../../transport.types';
 import { RedisTransportBus, type BusRedisClient } from '../redis-transport-bus';
 
 function createMockRedis(): jest.Mocked<BusRedisClient> {
@@ -73,7 +73,7 @@ describe('RedisTransportBus', () => {
       await bus.revoke(key);
 
       expect(redis.eval).toHaveBeenCalledWith(
-        expect.stringContaining('HGET'),
+        expect.stringMatching(/HGET.*DEL/s),
         1,
         'mcp:bus:streamable-http:abc123hash:session-001',
         'node-1',
@@ -122,8 +122,9 @@ describe('RedisTransportBus', () => {
 
   describe('proxyRequest()', () => {
     it('throws MethodNotImplementedError', async () => {
+      const busCasted = bus as TransportBus;
       await expect(
-        bus.proxyRequest(
+        busCasted.proxyRequest(
           createKey(),
           {},
           { onResponseStart: jest.fn(), onResponseChunk: jest.fn(), onResponseEnd: jest.fn() },

@@ -2,7 +2,7 @@
  * Distributed Test Cluster
  *
  * Manages multiple TestServer instances that share a single Redis,
- * each with a unique MACHINE_ID and FRONTMCP_DEPLOYMENT_MODE=distributed.
+ * each with a unique MACHINE_ID.
  * Used for E2E testing of session scaling, SSE routing, and takeover.
  */
 
@@ -54,6 +54,7 @@ export interface DistributedClusterOptions {
 export class DistributedTestCluster {
   private nodes: Map<number, { server: TestServer; machineId: string }> = new Map();
   private readonly options: DistributedClusterOptions;
+  private nextIndex = 0;
 
   constructor(options: DistributedClusterOptions) {
     this.options = options;
@@ -61,13 +62,18 @@ export class DistributedTestCluster {
 
   /**
    * Start N server instances with unique MACHINE_IDs sharing the same Redis.
+   * Can only be called once — call teardown() before starting again.
    */
   async start(count: number): Promise<ClusterNode[]> {
+    if (this.nodes.size > 0) {
+      throw new Error('Cluster already running. Call teardown() before start().');
+    }
+
     const results: ClusterNode[] = [];
 
     try {
       for (let i = 0; i < count; i++) {
-        const node = await this.startNode(i);
+        const node = await this.startNode(this.nextIndex++);
         results.push(node);
       }
       return results;
@@ -85,16 +91,17 @@ export class DistributedTestCluster {
     const machineId = `node-${index}`;
     const project = this.options.project ?? 'demo-e2e-distributed';
 
-    // Let TestServer.start handle port reservation via reservePort(project)
+    // Let TestServer.start handle port reservation via reservePort(project).
+    // Reserved keys are spread AFTER user env to prevent override.
     const server = await TestServer.start({
       command: `npx ts-node --swc -P apps/e2e/demo-e2e-distributed/tsconfig.app.json ${this.options.serverEntry}`,
       project,
       startupTimeout: this.options.startupTimeout ?? 45_000,
       env: {
+        ...this.options.env,
         MACHINE_ID: machineId,
         REDIS_URL: this.options.redisUrl,
         NODE_ENV: 'test',
-        ...this.options.env,
       },
     });
 
@@ -110,16 +117,21 @@ export class DistributedTestCluster {
 
   /**
    * Stop a specific node (simulate pod death).
-   * Does NOT release the port — call restartNode() to reuse it.
+   * Removes the node from the cluster — it cannot be reused.
    */
   async stopNode(index: number): Promise<void> {
     const node = this.nodes.get(index);
     if (!node) return;
-    await node.server.stop();
+    try {
+      await node.server.stop();
+    } finally {
+      this.nodes.delete(index);
+    }
   }
 
   /**
-   * Get info for a running node.
+   * Get info for a running node. Returns undefined if the node
+   * was never started or has been stopped.
    */
   getNode(index: number): ClusterNode | undefined {
     const node = this.nodes.get(index);
@@ -133,7 +145,7 @@ export class DistributedTestCluster {
   }
 
   /**
-   * Stop all nodes and release ports.
+   * Stop all nodes and clean up.
    */
   async teardown(): Promise<void> {
     const stops = [...this.nodes.entries()].map(async ([_index, node]) => {
