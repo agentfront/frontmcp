@@ -1,7 +1,7 @@
 import { App } from '@frontmcp/sdk';
 
-import { EchoTool } from './tools/echo.tool';
-import { NodeInfoTool } from './tools/node-info.tool';
+import EchoTool from './tools/echo.tool';
+import NodeInfoTool from './tools/node-info.tool';
 
 @App({
   name: 'distributed',
