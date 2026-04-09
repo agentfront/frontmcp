@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   action: z.string().describe('The admin action to perform'),
@@ -24,7 +25,7 @@ type Output = z.infer<z.ZodObject<typeof outputSchema>>;
   outputSchema,
   tags: ['admin', 'test'],
 })
-export class AdminActionTool extends ToolContext<typeof inputSchema, typeof outputSchema, Input, Output> {
+export class AdminActionTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Mock implementation for testing
     return {

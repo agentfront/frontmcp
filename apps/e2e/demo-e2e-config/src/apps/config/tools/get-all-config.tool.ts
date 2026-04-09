@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {};
 
@@ -18,7 +19,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class GetAllConfigTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetAllConfigTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     const all = this.config.getAll();
     const keys = Object.keys(all);

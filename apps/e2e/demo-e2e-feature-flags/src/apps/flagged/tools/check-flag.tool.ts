@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   flagKey: z.string().describe('Feature flag key to check programmatically'),
@@ -19,7 +20,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CheckFlagTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class CheckFlagTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const isEnabled = await this.featureFlags.isEnabled(input.flagKey);
     return {

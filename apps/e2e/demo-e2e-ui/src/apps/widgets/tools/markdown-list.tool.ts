@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   title: z.string().describe('List title'),
@@ -47,7 +48,7 @@ ${markdown}
     },
   },
 })
-export default class MarkdownListTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class MarkdownListTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const completedCount = input.items.filter((i) => i.completed).length;
 

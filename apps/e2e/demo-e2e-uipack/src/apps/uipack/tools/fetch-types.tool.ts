@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import { createTypeFetcher } from '@frontmcp/uipack';
 
 const inputSchema = {
@@ -44,7 +45,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class FetchTypesTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class FetchTypesTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const fetcher = createTypeFetcher({
       maxDepth: input.maxDepth,

@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { AppConfigProvider } from '../providers/app-config.provider';
 
 const inputSchema = {};
@@ -25,7 +27,7 @@ let appConfigProviderInstance: AppConfigProvider | null = null;
   inputSchema,
   outputSchema,
 })
-export default class GetAppInfoTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetAppInfoTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Get the GLOBAL scope provider - use singleton pattern
     if (!appConfigProviderInstance) {

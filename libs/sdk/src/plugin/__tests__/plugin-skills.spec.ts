@@ -6,12 +6,14 @@
  */
 
 import 'reflect-metadata';
-import PluginRegistry from '../plugin.registry';
-import SkillRegistry from '../../skill/skill.registry';
-import { Plugin, Skill, SkillContext, SkillContent, Tool, ToolContext } from '../../common';
-import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
-import { skill } from '../../common/decorators/skill.decorator';
+
 import { z } from 'zod';
+
+import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
+import { Plugin, Skill, SkillContext, Tool, ToolContext, type SkillContent } from '../../common';
+import { skill } from '../../common/decorators/skill.decorator';
+import type SkillRegistry from '../../skill/skill.registry';
+import PluginRegistry from '../plugin.registry';
 
 // Mock SkillContext for class-based skills
 class MockSkillContext extends SkillContext {
@@ -429,7 +431,7 @@ describe('Plugin Skills', () => {
         description: 'A tool from plugin',
         inputSchema,
       })
-      class PluginTool extends ToolContext<typeof inputSchema> {
+      class PluginTool extends ToolContext {
         async execute() {
           return { success: true };
         }

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   message: z.string().default('hello'),
@@ -17,7 +18,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
     partitionBy: 'global',
   },
 })
-export default class RateLimitedTool extends ToolContext<typeof inputSchema> {
+export default class RateLimitedTool extends ToolContext {
   async execute(input: Input) {
     return { echo: input.message };
   }

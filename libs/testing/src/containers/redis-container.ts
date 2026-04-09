@@ -41,7 +41,7 @@ export async function startRedisContainer(): Promise<RedisContainerInfo> {
     port,
     url: `redis://${host}:${port}`,
     stop: async () => {
-      await container.stop();
+      await container.stop({ timeout: 30_000 });
     },
   };
 }

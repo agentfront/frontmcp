@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 /**
  * Escape HTML special characters to prevent XSS
@@ -59,7 +60,7 @@ type Output = z.infer<typeof outputSchema>;
     },
   },
 })
-export default class HtmlCardTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class HtmlCardTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       uiType: 'html',

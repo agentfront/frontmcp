@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { auditLog } from '../data/audit-log';
 
 const inputSchema = {};
@@ -18,7 +20,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ClearAuditLogTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ClearAuditLogTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     auditLog.clear();
 

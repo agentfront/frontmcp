@@ -4,8 +4,9 @@
  * Uses `template: { file: '...' }` which bundles the React component at
  * server startup via esbuild, producing inline HTML with esm.sh import maps.
  */
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   location: z.string().describe('City name'),
@@ -35,7 +36,7 @@ type Output = z.infer<typeof outputSchema>;
     template: { file: 'apps/e2e/demo-e2e-ui/src/apps/widgets/tools/react-weather.ui.tsx' },
   },
 })
-export default class ReactWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ReactWeatherTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const data: Record<string, Partial<Output>> = {
       london: { temperature: 14, conditions: 'rainy', icon: 'rainy' },

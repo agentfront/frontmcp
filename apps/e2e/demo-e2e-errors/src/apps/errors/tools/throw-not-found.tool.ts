@@ -1,5 +1,6 @@
-import { Tool, ToolContext, ResourceNotFoundError } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { ResourceNotFoundError, Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   resourceId: z.string().describe('Resource ID to look up'),
@@ -24,7 +25,7 @@ const existingResources = new Set(['resource-1', 'resource-2', 'resource-3']);
   inputSchema,
   outputSchema,
 })
-export default class ThrowNotFoundTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ThrowNotFoundTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     if (!existingResources.has(input.resourceId)) {
       throw new ResourceNotFoundError(`resource://${input.resourceId}`);

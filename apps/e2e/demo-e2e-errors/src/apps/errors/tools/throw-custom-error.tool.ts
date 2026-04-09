@@ -1,5 +1,6 @@
-import { Tool, ToolContext, PublicMcpError } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { PublicMcpError, Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   errorCode: z.string().describe('Custom error code'),
@@ -23,7 +24,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ThrowCustomErrorTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ThrowCustomErrorTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     if (input.trigger) {
       throw new PublicMcpError(input.errorMessage, input.errorCode, input.statusCode);

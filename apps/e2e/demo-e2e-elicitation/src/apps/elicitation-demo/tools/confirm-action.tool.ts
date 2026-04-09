@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   action: z.string().describe('Action to confirm'),
@@ -19,7 +20,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ConfirmActionTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ConfirmActionTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const result = await this.elicit(
       `Do you want to proceed with: ${input.action}?`,

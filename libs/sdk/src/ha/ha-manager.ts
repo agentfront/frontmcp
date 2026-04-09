@@ -25,6 +25,13 @@ export interface OrphanScannerOptions {
   sessionKeyPrefix: string;
   /** Callback when a session is successfully claimed. */
   onOrphan: OrphanHandler;
+  /**
+   * Protocols that can be recreated after takeover.
+   * Sessions with protocols NOT in this list are skipped (e.g., SSE sessions
+   * cannot be recreated because the SSE stream is tied to the original connection).
+   * @default ['streamable-http']
+   */
+  recreatableProtocols?: string[];
 }
 
 /**
@@ -51,7 +58,8 @@ export class HaManager {
   private readonly config: HaConfig;
   private readonly logger: HaManagerOptions['logger'];
   private started = false;
-  private scannerTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | undefined;
+  private scannerBootstrapTimer: ReturnType<typeof setTimeout> | undefined;
+  private scannerTimer: ReturnType<typeof setInterval> | undefined;
   private scannerOptions: OrphanScannerOptions | undefined;
   private scanning = false;
   private scannerStarted = false;
@@ -116,11 +124,13 @@ export class HaManager {
     // (allow heartbeats to stabilize before scanning)
     const delay = this.config.heartbeatIntervalMs + this.config.takeoverGracePeriodMs;
 
-    setTimeout(() => {
-      this.runOrphanScan();
-      this.scannerTimer = setInterval(() => this.runOrphanScan(), this.config.heartbeatIntervalMs);
-      if (this.scannerTimer.unref) this.scannerTimer.unref();
-    }, delay).unref?.();
+    this.scannerBootstrapTimer = setTimeout(() => {
+      if (!this.started || !this.scannerStarted) return;
+      void this.runOrphanScan();
+      this.scannerTimer = setInterval(() => void this.runOrphanScan(), this.config.heartbeatIntervalMs);
+      this.scannerTimer.unref?.();
+    }, delay);
+    this.scannerBootstrapTimer.unref?.();
 
     this.logger?.info(`[HA] Orphan scanner started (interval: ${this.config.heartbeatIntervalMs}ms)`);
   }
@@ -130,6 +140,10 @@ export class HaManager {
     if (!this.started) return;
     this.started = false;
 
+    if (this.scannerBootstrapTimer) {
+      clearTimeout(this.scannerBootstrapTimer);
+      this.scannerBootstrapTimer = undefined;
+    }
     if (this.scannerTimer) {
       clearInterval(this.scannerTimer);
       this.scannerTimer = undefined;
@@ -221,7 +235,8 @@ export class HaManager {
         return;
       }
 
-      const { sessionKeyPrefix, onOrphan } = this.scannerOptions;
+      const { sessionKeyPrefix, onOrphan, recreatableProtocols } = this.scannerOptions;
+      const allowedProtocols = new Set(recreatableProtocols ?? ['streamable-http']);
       const sessionKeys = await this.redis.keys(`${sessionKeyPrefix}*`);
 
       let claimed = 0;
@@ -236,6 +251,10 @@ export class HaManager {
           const data = JSON.parse(raw);
           const sessionNodeId = data?.session?.nodeId ?? data?.nodeId;
           if (!sessionNodeId) continue;
+
+          // Skip sessions with non-recreatable protocols (e.g., SSE)
+          const protocol = data?.session?.protocol;
+          if (protocol && !allowedProtocols.has(protocol)) continue;
 
           // Skip sessions owned by alive nodes (including ourselves)
           if (aliveNodes.has(sessionNodeId)) continue;

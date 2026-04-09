@@ -1,6 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { rewriteImports, createEsmShResolver } from '@frontmcp/uipack';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { createEsmShResolver, rewriteImports } from '@frontmcp/uipack';
 
 const inputSchema = {
   source: z.string().describe('Source code containing import statements'),
@@ -22,7 +23,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class ResolveImportsTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ResolveImportsTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const resolver = createEsmShResolver();
     const result = rewriteImports(input.source, {

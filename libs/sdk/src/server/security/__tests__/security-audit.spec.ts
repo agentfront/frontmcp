@@ -107,6 +107,21 @@ describe('auditSecurityDefaults()', () => {
       const hintFinding = findings.find((f) => f.code === 'STRICT_MODE_HINT');
       expect(hintFinding).toBeDefined();
     });
+
+    it('does not emit CORS or DNS warnings when strict mode is enabled', () => {
+      const config: SecurityAuditConfig = {
+        security: { strict: true },
+      };
+      const findings = auditSecurityDefaults(config, true);
+
+      const corsWarn = findings.find((f) => f.code === 'CORS_PERMISSIVE_DEFAULT');
+      const dnsWarn = findings.find((f) => f.code === 'DNS_REBINDING_UNPROTECTED');
+      expect(corsWarn).toBeUndefined();
+      expect(dnsWarn).toBeUndefined();
+
+      const strictEnabled = findings.find((f) => f.code === 'STRICT_MODE_ENABLED');
+      expect(strictEnabled).toBeDefined();
+    });
   });
 });
 

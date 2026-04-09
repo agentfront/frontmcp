@@ -5,8 +5,10 @@
  * The UI is defined as a React component and rendered via the React renderer.
  */
 
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import ChartCard from './chart-ui';
 
 // Define input/output schemas
@@ -54,7 +56,7 @@ type ChartOutput = z.infer<typeof outputSchema>;
     resourceMode: 'cdn',
   },
 })
-export default class ReactChartTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ReactChartTool extends ToolContext {
   async execute(input: ChartInput): Promise<ChartOutput> {
     const maxValue = Math.max(...input.data.map((d) => d.value), 1);
 

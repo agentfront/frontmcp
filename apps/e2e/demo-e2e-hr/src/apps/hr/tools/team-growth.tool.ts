@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { QUARTERLY_HIRING } from '../data/employees';
 
 const inputSchema = {
@@ -45,7 +47,7 @@ type Output = z.infer<typeof outputSchema>;
     },
   },
 })
-export default class TeamGrowthTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class TeamGrowthTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const totalHires = QUARTERLY_HIRING.reduce((sum, q) => sum + q.hires, 0);
 

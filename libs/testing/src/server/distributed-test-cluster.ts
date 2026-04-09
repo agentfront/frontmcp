@@ -66,12 +66,17 @@ export class DistributedTestCluster {
   async start(count: number): Promise<ClusterNode[]> {
     const results: ClusterNode[] = [];
 
-    for (let i = 0; i < count; i++) {
-      const node = await this.startNode(i);
-      results.push(node);
+    try {
+      for (let i = 0; i < count; i++) {
+        const node = await this.startNode(i);
+        results.push(node);
+      }
+      return results;
+    } catch (error) {
+      // Tear down any nodes that started before the failure
+      await this.teardown();
+      throw error;
     }
-
-    return results;
   }
 
   /**
@@ -83,20 +88,26 @@ export class DistributedTestCluster {
 
     const { port, release } = await reservePort(project);
 
-    const server = await TestServer.start({
-      command: `npx ts-node --swc -P apps/e2e/demo-e2e-distributed/tsconfig.app.json ${this.options.serverEntry}`,
-      port,
-      project,
-      startupTimeout: this.options.startupTimeout ?? 45_000,
-      env: {
-        FRONTMCP_DEPLOYMENT_MODE: 'distributed',
-        MACHINE_ID: machineId,
-        REDIS_URL: this.options.redisUrl,
-        PORT: String(port),
-        NODE_ENV: 'test',
-        ...this.options.env,
-      },
-    });
+    let server: TestServer;
+    try {
+      server = await TestServer.start({
+        command: `npx ts-node --swc -P apps/e2e/demo-e2e-distributed/tsconfig.app.json ${this.options.serverEntry}`,
+        port,
+        project,
+        startupTimeout: this.options.startupTimeout ?? 45_000,
+        env: {
+          FRONTMCP_DEPLOYMENT_MODE: 'distributed',
+          MACHINE_ID: machineId,
+          REDIS_URL: this.options.redisUrl,
+          PORT: String(port),
+          NODE_ENV: 'test',
+          ...this.options.env,
+        },
+      });
+    } catch (error) {
+      await release();
+      throw error;
+    }
 
     this.nodes.set(index, { server, machineId, portRelease: release });
 

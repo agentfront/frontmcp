@@ -13,7 +13,9 @@
  */
 
 import { z } from 'zod';
+
 import type { CallToolResult } from '@frontmcp/protocol';
+
 import { Tool, ToolContext } from '../common';
 import type { ElicitResult, ElicitStatus } from './elicitation.types';
 
@@ -46,7 +48,7 @@ type SendElicitationResultInput = z.infer<z.ZodObject<typeof inputSchema>>;
   // Hidden by default, only shown to clients that don't support elicitation
   hideFromDiscovery: true,
 })
-export class SendElicitationResultTool extends ToolContext<typeof inputSchema> {
+export class SendElicitationResultTool extends ToolContext {
   async execute(input: SendElicitationResultInput): Promise<CallToolResult> {
     const { elicitId, action, content } = input;
 

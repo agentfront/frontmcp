@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {};
 
@@ -18,7 +19,7 @@ type Output = z.infer<typeof outputSchema>;
   outputSchema,
   featureFlag: { key: 'nonexistent-flag', defaultValue: true },
 })
-export default class DefaultTrueTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class DefaultTrueTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     return {
       status: 'accessible via defaultValue',

@@ -66,7 +66,7 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   abstract get transportService(): TransportService | undefined;
 
-  abstract haManager?: HaManager;
+  haManager?: HaManager;
 
   abstract get rateLimitManager(): GuardManager | undefined;
 

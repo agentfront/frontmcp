@@ -1,6 +1,8 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { simulateIncomingMessage, sentMessages } from '../channels/messaging-service.channel';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import { sentMessages, simulateIncomingMessage } from '../channels/messaging-service.channel';
 
 const inputSchema = {
   from: z.string().describe('Sender name/ID'),
@@ -13,7 +15,7 @@ const inputSchema = {
   description: 'Simulate an incoming message from the messaging service (for testing)',
   inputSchema,
 })
-export default class SimulateIncomingTool extends ToolContext<typeof inputSchema> {
+export default class SimulateIncomingTool extends ToolContext {
   async execute(input: { from: string; text: string; chatId: string }) {
     simulateIncomingMessage(input.from, input.text, input.chatId);
     return { simulated: true, from: input.from };

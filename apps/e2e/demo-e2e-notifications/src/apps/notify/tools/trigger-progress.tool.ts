@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { notificationLogStore } from '../data/notification-log.store';
 
 const inputSchema = {
@@ -23,7 +25,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class TriggerProgressTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class TriggerProgressTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Send log message notification
     this.scope.notifications.sendLogMessage(input.level ?? 'info', 'notify-app', {

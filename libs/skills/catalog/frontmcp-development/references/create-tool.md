@@ -34,8 +34,9 @@ Tools are the primary way to expose executable actions to AI clients in the MCP 
 Create a class extending `ToolContext<In, Out>` and implement the `execute(input: In): Promise<Out>` method. The `@Tool` decorator requires at minimum a `name` and an `inputSchema`.
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet_user',
@@ -177,9 +178,8 @@ const outputSchema = {
   inputSchema,
   outputSchema,
 })
-// Wire generics: ToolContext<typeof inputSchema, typeof outputSchema>
-// This makes execute() return type and respond() argument fully typed
-class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+// No generics needed — ToolContext infers types from the @Tool decorator
+class GetWeatherTool extends ToolContext {
   async execute(input: { city: string }) {
     // Return type is inferred as { temperature: number; unit: 'celsius' | 'fahrenheit' }
     // TypeScript will error if you return the wrong shape
@@ -323,7 +323,7 @@ class DeleteRecordTool extends ToolContext {
 For MCP-specific errors, use error classes with JSON-RPC codes:
 
 ```typescript
-import { ResourceNotFoundError, PublicMcpError, MCP_ERROR_CODES } from '@frontmcp/sdk';
+import { MCP_ERROR_CODES, PublicMcpError, ResourceNotFoundError } from '@frontmcp/sdk';
 
 this.fail(new ResourceNotFoundError(`Record ${input.id}`));
 ```
@@ -408,8 +408,9 @@ Annotation fields:
 For simple tools that do not need a class, use the `tool()` function builder. It returns a value you register the same way as a class tool.
 
 ```typescript
-import { tool } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { tool } from '@frontmcp/sdk';
 
 const AddNumbers = tool({
   name: 'add_numbers',
@@ -455,7 +456,7 @@ Both return values that can be registered in `tools: [RemoteTool, CloudTool]`.
 Add tool classes (or function-style tools) to the `tools` array in `@FrontMcp` or `@App`.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'my-app',
@@ -678,13 +679,14 @@ class ConvertCurrencyTool extends ToolContext {
 
 ## Common Patterns
 
-| Pattern        | Correct                                         | Incorrect                                     | Why                                                           |
-| -------------- | ----------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
-| Input schema   | `inputSchema: { name: z.string() }` (raw shape) | `inputSchema: z.object({ name: z.string() })` | Framework wraps in `z.object()` internally                    |
-| Output schema  | Always define `outputSchema`                    | Omit `outputSchema`                           | Prevents data leaks and enables CodeCall chaining             |
-| DI resolution  | `this.get(TOKEN)` with proper error handling    | `this.tryGet(TOKEN)!` with non-null assertion | `get` throws a clear error; non-null assertions mask failures |
-| Error handling | `this.fail(new ResourceNotFoundError(...))`     | `throw new Error(...)`                        | `this.fail` triggers the error flow with MCP error codes      |
-| Tool naming    | `snake_case` names: `get_weather`               | `camelCase` or `PascalCase`: `getWeather`     | MCP protocol convention for tool names                        |
+| Pattern              | Correct                                         | Incorrect                                              | Why                                                                              |
+| -------------------- | ----------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Input schema         | `inputSchema: { name: z.string() }` (raw shape) | `inputSchema: z.object({ name: z.string() })`          | Framework wraps in `z.object()` internally                                       |
+| Output schema        | Always define `outputSchema`                    | Omit `outputSchema`                                    | Prevents data leaks and enables CodeCall chaining                                |
+| DI resolution        | `this.get(TOKEN)` with proper error handling    | `this.tryGet(TOKEN)!` with non-null assertion          | `get` throws a clear error; non-null assertions mask failures                    |
+| Error handling       | `this.fail(new ResourceNotFoundError(...))`     | `throw new Error(...)`                                 | `this.fail` triggers the error flow with MCP error codes                         |
+| Tool naming          | `snake_case` names: `get_weather`               | `camelCase` or `PascalCase`: `getWeather`              | MCP protocol convention for tool names                                           |
+| ToolContext generics | `class MyTool extends ToolContext`              | `class MyTool extends ToolContext<typeof inputSchema>` | Types are auto-inferred from `@Tool` decorator — explicit generics are redundant |
 
 ## Verification Checklist
 

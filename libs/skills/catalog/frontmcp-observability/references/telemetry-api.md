@@ -22,15 +22,16 @@ Every execution context (tools, resources, prompts, agents) gets a `this.telemet
 ## Usage in Tools
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({
   name: 'analyze_data',
   description: 'Analyze dataset with custom telemetry',
   inputSchema: { datasetId: z.string() },
 })
-class AnalyzeDataTool extends ToolContext<typeof AnalyzeDataTool> {
+class AnalyzeDataTool extends ToolContext {
   async execute({ datasetId }: { datasetId: string }) {
     // Events go on the "tool analyze_data" span
     this.telemetry.addEvent('analysis-started', { datasetId });

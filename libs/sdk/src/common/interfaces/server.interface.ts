@@ -71,5 +71,7 @@ export abstract class FrontMcpServer {
    * When a string is provided, the server listens on a Unix socket.
    * When a number is provided, the server listens on a TCP port.
    */
+  abstract start(port: number, bindAddress?: string): Promise<void> | void;
+  abstract start(socketPath: string): Promise<void> | void;
   abstract start(portOrSocketPath?: number | string, bindAddress?: string): Promise<void> | void;
 }

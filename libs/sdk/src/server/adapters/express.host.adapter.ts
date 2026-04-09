@@ -63,10 +63,23 @@ export class ExpressHostAdapter extends HostServerAdapter {
     // Host validation middleware (DNS rebinding protection)
     const securityOpts = options?.security;
     if (securityOpts?.dnsRebindingProtection?.enabled || securityOpts?.strict) {
+      const allowedHosts = securityOpts.dnsRebindingProtection?.allowedHosts;
+      const allowedOrigins = securityOpts.dnsRebindingProtection?.allowedOrigins;
+
+      // In strict mode without explicit allowedHosts, derive from localhost
+      const effectiveHosts = allowedHosts ?? (securityOpts.strict ? ['localhost', '127.0.0.1'] : undefined);
+
+      if (!effectiveHosts?.length && !allowedOrigins?.length) {
+        throw new Error(
+          'security.dnsRebindingProtection is enabled but no allowedHosts or allowedOrigins are configured. ' +
+            'Provide at least one allowedHosts entry or disable dnsRebindingProtection.',
+        );
+      }
+
       const hostValidation = createHostValidationMiddleware({
         enabled: true,
-        allowedHosts: securityOpts.dnsRebindingProtection?.allowedHosts,
-        allowedOrigins: securityOpts.dnsRebindingProtection?.allowedOrigins,
+        allowedHosts: effectiveHosts,
+        allowedOrigins,
       });
       this.app.use(hostValidation as express.RequestHandler);
     }

@@ -90,7 +90,7 @@ export class Scope extends ScopeEntry {
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
-  haManager?: HaManager;
+  declare haManager?: HaManager;
   private toolUIRegistry: ToolUIRegistry;
   readonly entryPath: string;
   readonly routeBase: string;

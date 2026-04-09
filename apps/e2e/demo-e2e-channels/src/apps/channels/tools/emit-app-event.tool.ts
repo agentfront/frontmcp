@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   event: z.string().describe('Event name to emit (e.g., "app:error")'),
@@ -11,7 +12,7 @@ const inputSchema = {
   description: 'Emit an app event to the ChannelEventBus for testing channel sources',
   inputSchema,
 })
-export default class EmitAppEventTool extends ToolContext<typeof inputSchema> {
+export default class EmitAppEventTool extends ToolContext {
   async execute(input: { event: string; payload: Record<string, unknown> }) {
     const scope = this.scope as unknown as { channelEventBus?: { emit: (event: string, payload: unknown) => void } };
     const eventBus = scope.channelEventBus;

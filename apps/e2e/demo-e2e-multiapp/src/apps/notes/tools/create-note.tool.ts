@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { noteStore } from '../data/note.store';
 
 const inputSchema = {
@@ -23,7 +25,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CreateNoteTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class CreateNoteTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const store = noteStore;
     const note = store.create(input.title, input.content);

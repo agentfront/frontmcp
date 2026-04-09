@@ -482,7 +482,7 @@ export class TransportService {
         session: {
           id: sessionId,
           authorizationId: key.tokenHash,
-          protocol: 'streamable-http',
+          protocol: type === 'sse' ? 'sse' : 'streamable-http',
           createdAt: Date.now(),
           nodeId: getMachineId(),
         },

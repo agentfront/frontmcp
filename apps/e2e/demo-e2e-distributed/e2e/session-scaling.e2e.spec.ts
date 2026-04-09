@@ -112,8 +112,8 @@ describe('Distributed Session Scaling', () => {
       const tools0 = await client0.tools.list();
       const tools1 = await client1.tools.list();
 
-      const toolNames0 = tools0.tools.map((t: { name: string }) => t.name).sort();
-      const toolNames1 = tools1.tools.map((t: { name: string }) => t.name).sort();
+      const toolNames0 = tools0.map((t) => t.name).sort();
+      const toolNames1 = tools1.map((t) => t.name).sort();
 
       expect(toolNames0).toEqual(toolNames1);
       expect(toolNames0).toContain('echo');

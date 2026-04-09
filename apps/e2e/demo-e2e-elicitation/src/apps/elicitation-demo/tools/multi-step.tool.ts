@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {};
 
@@ -20,7 +21,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class MultiStepWizardTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class MultiStepWizardTool extends ToolContext {
   async execute(_input: Input): Promise<Output> {
     // Step 1: Get name
     const step1 = await this.elicit(

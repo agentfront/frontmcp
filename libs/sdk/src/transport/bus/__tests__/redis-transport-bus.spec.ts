@@ -10,6 +10,7 @@ function createMockRedis(): jest.Mocked<BusRedisClient> {
     expire: jest.fn().mockResolvedValue(1),
     del: jest.fn().mockResolvedValue(1),
     publish: jest.fn().mockResolvedValue(1),
+    eval: jest.fn().mockResolvedValue(1),
   };
 }
 
@@ -67,11 +68,16 @@ describe('RedisTransportBus', () => {
   });
 
   describe('revoke()', () => {
-    it('deletes the bus key from Redis', async () => {
+    it('uses atomic CAS to delete only if we own the key', async () => {
       const key = createKey();
       await bus.revoke(key);
 
-      expect(redis.del).toHaveBeenCalledWith('mcp:bus:streamable-http:abc123hash:session-001');
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.stringContaining('HGET'),
+        1,
+        'mcp:bus:streamable-http:abc123hash:session-001',
+        'node-1',
+      );
     });
   });
 

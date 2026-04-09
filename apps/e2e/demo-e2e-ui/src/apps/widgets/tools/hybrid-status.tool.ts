@@ -5,8 +5,9 @@
  * Supported by: OpenAI, ext-apps, Cursor
  * NOT supported by: Claude, Continue, Cody, generic-mcp (will skip UI)
  */
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   serviceName: z.string().describe('Name of the service'),
@@ -82,7 +83,7 @@ type Output = z.infer<typeof outputSchema>;
     },
   },
 })
-export default class HybridStatusTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class HybridStatusTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const statusColors: Record<string, string> = {
       healthy: 'green',

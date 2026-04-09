@@ -8,7 +8,7 @@ const inputSchema = {};
   description: 'Returns information about the current node',
   inputSchema,
 })
-export default class NodeInfoTool extends ToolContext<typeof inputSchema> {
+export default class NodeInfoTool extends ToolContext {
   async execute() {
     const machineId = getMachineId();
     const pid = process.pid;

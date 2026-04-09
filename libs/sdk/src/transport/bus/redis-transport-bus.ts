@@ -20,6 +20,7 @@ export interface BusRedisClient {
   expire(key: string, seconds: number): Promise<number>;
   del(key: string): Promise<number>;
   publish(channel: string, message: string): Promise<number>;
+  eval(script: string, numkeys: number, ...args: (string | number)[]): Promise<unknown>;
 }
 
 /** Default key prefix for bus keys. */
@@ -27,6 +28,20 @@ const DEFAULT_BUS_PREFIX = 'mcp:bus:';
 
 /** Default TTL for bus entries (seconds). Matches session default of 1 hour. */
 const DEFAULT_BUS_TTL_SECONDS = 3600;
+
+/**
+ * Lua CAS script for atomic revoke: only delete if nodeId still matches.
+ * KEYS[1] = bus key, ARGV[1] = expected nodeId
+ * Returns 1 if deleted, 0 if owned by another node or not found.
+ */
+const REVOKE_LUA = `
+local nodeId = redis.call('HGET', KEYS[1], 'nodeId')
+if nodeId == ARGV[1] then
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+return 0
+`;
 
 /**
  * Configuration options for RedisTransportBus.
@@ -97,13 +112,17 @@ export class RedisTransportBus implements TransportBus {
 
   /**
    * Revoke ownership of a session (e.g., on transport dispose).
+   * Uses atomic compare-and-delete to avoid removing a newer owner's registration.
    */
   async revoke(key: TransportKey): Promise<void> {
     const redisKey = this.busKey(key);
-    await this.redis.del(redisKey);
+
+    // Atomic CAS: only delete if we still own this session
+    const result = await this.redis.eval(REVOKE_LUA, 1, redisKey, this.machineId);
 
     this.logger?.debug('[TransportBus] Revoked session', {
       sessionId: key.sessionId.slice(0, 20),
+      deleted: result === 1,
     });
   }
 

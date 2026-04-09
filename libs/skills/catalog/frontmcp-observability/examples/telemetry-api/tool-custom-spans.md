@@ -19,15 +19,16 @@ Create child spans, events, and attributes inside a tool's execute method using 
 
 ```typescript
 // src/apps/my-app/tools/weather.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_weather',
   description: 'Get weather for a city',
   inputSchema: { city: z.string() },
 })
-export class GetWeatherTool extends ToolContext<typeof GetWeatherTool> {
+export class GetWeatherTool extends ToolContext {
   async execute({ city }: { city: string }) {
     // Event on the "tool get_weather" span
     this.telemetry.addEvent('request-received', { city });

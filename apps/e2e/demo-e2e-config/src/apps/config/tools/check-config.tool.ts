@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   key: z.string().describe('Environment variable key to check'),
@@ -24,7 +25,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CheckConfigTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class CheckConfigTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const exists = this.config.has(input.key);
     const numberValue = this.config.getNumber(input.key);

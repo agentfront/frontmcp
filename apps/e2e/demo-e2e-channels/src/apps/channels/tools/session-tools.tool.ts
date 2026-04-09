@@ -5,8 +5,10 @@
  * sessions with the NotificationService and managing channel subscriptions.
  */
 
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 // Use structural types instead of deep internal SDK imports
 interface NotificationServiceLike {
   registerServer(sessionId: string, server: unknown): void;
@@ -171,7 +173,7 @@ const manageSubSchema = {
   description: 'Subscribe or unsubscribe a session from a specific channel',
   inputSchema: manageSubSchema,
 })
-export class ManageChannelSubscriptionTool extends ToolContext<typeof manageSubSchema> {
+export class ManageChannelSubscriptionTool extends ToolContext {
   async execute(input: { sessionId: string; channelName: string; action: 'subscribe' | 'unsubscribe' }) {
     const notifications = this.scope.notifications as NotificationServiceLike;
 

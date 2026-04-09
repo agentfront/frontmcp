@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   value: z.string().default('test'),
@@ -12,7 +13,7 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
   description: 'An unguarded echo tool (no rate limit, no concurrency, no timeout)',
   inputSchema,
 })
-export default class UnguardedTool extends ToolContext<typeof inputSchema> {
+export default class UnguardedTool extends ToolContext {
   async execute(input: Input) {
     return { echo: input.value };
   }

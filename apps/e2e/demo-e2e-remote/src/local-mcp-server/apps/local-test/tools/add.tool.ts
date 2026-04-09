@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   a: z.number().describe('First number to add'),
@@ -20,7 +21,7 @@ type AddOutput = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class AddTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class AddTool extends ToolContext {
   async execute(input: AddInput): Promise<AddOutput> {
     return {
       result: input.a + input.b,

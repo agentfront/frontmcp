@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   query: z.string().describe('Search query for Mintlify documentation'),
@@ -58,7 +59,7 @@ const MOCK_DOCS = [
   inputSchema,
   outputSchema,
 })
-export default class SearchMintlifyTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class SearchMintlifyTool extends ToolContext {
   async execute(input: SearchInput): Promise<SearchOutput> {
     const query = input.query.toLowerCase();
 

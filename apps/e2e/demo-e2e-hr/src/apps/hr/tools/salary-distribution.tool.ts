@@ -1,6 +1,8 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { EMPLOYEES, SALARY_BANDS, DEPARTMENTS } from '../data/employees';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+import { DEPARTMENTS, EMPLOYEES, SALARY_BANDS } from '../data/employees';
 
 const inputSchema = {
   department: z.enum(DEPARTMENTS).optional().describe('Filter by department (all departments if omitted)'),
@@ -42,7 +44,7 @@ type Output = z.infer<typeof outputSchema>;
     },
   },
 })
-export default class SalaryDistributionTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class SalaryDistributionTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     let filtered = EMPLOYEES;
     if (input.department) filtered = filtered.filter((e) => e.department === input.department);

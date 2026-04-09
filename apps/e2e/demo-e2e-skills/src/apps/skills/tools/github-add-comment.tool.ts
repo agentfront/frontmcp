@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   prNumber: z.number().describe('The pull request number'),
@@ -21,7 +22,7 @@ type Output = z.infer<z.ZodObject<typeof outputSchema>>;
   outputSchema,
   tags: ['github', 'pr', 'comment'],
 })
-export class GitHubAddCommentTool extends ToolContext<typeof inputSchema, typeof outputSchema, Input, Output> {
+export class GitHubAddCommentTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Mock implementation for testing
     return {

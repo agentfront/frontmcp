@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = { action: z.string().default('combined') };
 type Input = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -12,15 +13,12 @@ type Input = z.infer<z.ZodObject<typeof inputSchema>>;
     anyOf: [
       { roles: { any: ['superadmin'] } },
       {
-        allOf: [
-          { roles: { any: ['admin', 'manager'] } },
-          { not: { roles: { any: ['suspended'] } } },
-        ],
+        allOf: [{ roles: { any: ['admin', 'manager'] } }, { not: { roles: { any: ['suspended'] } } }],
       },
     ],
   },
 })
-export default class CombinatorTool extends ToolContext<typeof inputSchema> {
+export default class CombinatorTool extends ToolContext {
   async execute(input: Input) {
     return { result: input.action };
   }

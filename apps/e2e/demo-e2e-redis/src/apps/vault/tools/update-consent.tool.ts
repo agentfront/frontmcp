@@ -1,8 +1,10 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { getVault } from '../data/vault.store';
+
 import type { VaultConsentRecord } from '@frontmcp/auth';
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { resolveDemoSessionId } from '../../resolve-session-id';
+import { getVault } from '../data/vault.store';
 
 const inputSchema = {
   entryId: z.string().describe('Vault entry ID'),
@@ -24,7 +26,7 @@ const outputSchema = z
   inputSchema,
   outputSchema,
 })
-export default class UpdateConsentTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class UpdateConsentTool extends ToolContext {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
     const ctx = this.tryGetContext();
     const sessionId = resolveDemoSessionId(ctx?.sessionId, this.getAuthInfo().sessionId);

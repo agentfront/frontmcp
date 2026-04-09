@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { executionTracker } from '../data/execution-tracker';
 
 const inputSchema = {
@@ -23,7 +25,7 @@ type Output = z.infer<typeof outputSchema>;
   outputSchema,
   // No cache configuration - every call executes
 })
-export default class NonCachedTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class NonCachedTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Track actual execution
     const executionCount = executionTracker.increment('non-cached');

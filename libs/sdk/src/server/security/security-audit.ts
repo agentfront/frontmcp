@@ -56,15 +56,17 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     return findings;
   }
 
-  // CORS audit
-  if (config.cors === undefined) {
+  const strict = config.security?.strict === true;
+
+  // CORS audit — suppress raw-config warnings when strict mode handles it
+  if (config.cors === undefined && !strict) {
     findings.push({
       level: 'warn',
       code: 'CORS_PERMISSIVE_DEFAULT',
       message: 'CORS is using the permissive default (origin: true), which allows all origins.',
       recommendation: 'Set explicit cors.origin to restrict allowed origins in production.',
     });
-  } else if (config.cors !== false && config.cors?.origin === true) {
+  } else if (config.cors !== false && config.cors?.origin === true && !strict) {
     findings.push({
       level: 'warn',
       code: 'CORS_ORIGIN_TRUE',
@@ -112,9 +114,9 @@ export function auditSecurityDefaults(config: SecurityAuditConfig, isProduction:
     });
   }
 
-  // DNS rebinding protection audit
-  const dnsProtection = config.security?.dnsRebindingProtection;
-  if (!dnsProtection?.enabled) {
+  // DNS rebinding protection audit — strict mode implies protection is enabled
+  const dnsProtectionEnabled = config.security?.dnsRebindingProtection?.enabled ?? strict;
+  if (!dnsProtectionEnabled) {
     findings.push({
       level: 'warn',
       code: 'DNS_REBINDING_UNPROTECTED',

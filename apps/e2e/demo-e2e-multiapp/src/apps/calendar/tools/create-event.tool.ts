@@ -1,5 +1,7 @@
-import { Tool, ToolContext, InvalidInputError } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { InvalidInputError, Tool, ToolContext } from '@frontmcp/sdk';
+
 import { eventStore } from '../data/event.store';
 
 const inputSchema = {
@@ -29,7 +31,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CreateEventTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class CreateEventTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Validate time range
     if (input.startTime >= input.endTime) {

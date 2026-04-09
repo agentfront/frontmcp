@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   message: z.string().describe('The message to echo back'),
@@ -19,7 +20,7 @@ type EchoOutput = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class EchoTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class EchoTool extends ToolContext {
   async execute(input: EchoInput): Promise<EchoOutput> {
     return {
       echo: input.message,

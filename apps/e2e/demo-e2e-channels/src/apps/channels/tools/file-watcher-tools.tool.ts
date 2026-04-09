@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { simulateFileEvent } from '../channels/file-watcher.channel';
 
 const inputSchema = {
@@ -13,7 +15,7 @@ const inputSchema = {
   description: 'Simulate a file system event for the file-watcher channel',
   inputSchema,
 })
-export default class SimulateFileEventTool extends ToolContext<typeof inputSchema> {
+export default class SimulateFileEventTool extends ToolContext {
   async execute(input: { file: string; event: string; content?: string }) {
     simulateFileEvent(input.file, input.event, input.content);
     return { simulated: true, file: input.file, event: input.event };

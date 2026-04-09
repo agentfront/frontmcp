@@ -1,5 +1,7 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { notificationLogStore } from '../data/notification-log.store';
 
 const inputSchema = {
@@ -21,7 +23,7 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class TriggerResourceChangeTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class TriggerResourceChangeTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     // Broadcast resource list changed notification
     this.scope.notifications.broadcastNotification('notifications/resources/list_changed');

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   title: z.string().describe('Report title'),
@@ -53,7 +54,7 @@ ${markdown}
     },
   },
 })
-export default class MarkdownReportTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class MarkdownReportTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     const severityEmoji = {
       low: '🟢',

@@ -1,5 +1,6 @@
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   delayMs: z.number().min(0).max(100000).describe('Delay in milliseconds (max ~100s to fit E2E timeout)'),
@@ -21,7 +22,7 @@ type SlowOperationOutput = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class SlowOperationTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class SlowOperationTool extends ToolContext {
   async execute(input: SlowOperationInput): Promise<SlowOperationOutput> {
     const startedAt = new Date();
 

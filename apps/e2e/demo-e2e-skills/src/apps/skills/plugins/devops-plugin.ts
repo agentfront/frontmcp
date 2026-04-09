@@ -1,5 +1,6 @@
-import { Plugin, Skill, Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Plugin, Skill, Tool, ToolContext } from '@frontmcp/sdk';
 
 // =============================================================================
 // Plugin Tools
@@ -27,7 +28,7 @@ type DeployOutput = z.infer<z.ZodObject<typeof deployOutputSchema>>;
   outputSchema: deployOutputSchema,
   tags: ['devops', 'deployment'],
 })
-class DeployTool extends ToolContext<typeof deployInputSchema, typeof deployOutputSchema, DeployInput, DeployOutput> {
+class DeployTool extends ToolContext {
   async execute(input: DeployInput): Promise<DeployOutput> {
     return {
       success: true,

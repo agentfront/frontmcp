@@ -5,8 +5,9 @@
  * Supported by: OpenAI, ext-apps, Cursor, generic-mcp
  * NOT supported by: Claude, Continue, Cody (will skip UI)
  */
-import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {
   label: z.string().describe('Badge label text'),
@@ -51,7 +52,7 @@ type Output = z.infer<typeof outputSchema>;
     `.trim(),
   },
 })
-export default class StaticBadgeTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class StaticBadgeTool extends ToolContext {
   async execute(input: Input): Promise<Output> {
     return {
       label: input.label,
