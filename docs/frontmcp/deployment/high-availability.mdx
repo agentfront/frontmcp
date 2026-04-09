@@ -1,0 +1,231 @@
+---
+title: High Availability & Distributed Sessions
+description: Deploy FrontMCP across multiple pods with heartbeat monitoring, atomic session takeover, and cross-pod notification relay
+---
+
+FrontMCP supports multi-pod deployments with automatic session failover. When a pod dies, surviving pods detect the failure via Redis heartbeat keys and atomically claim orphaned sessions using a Lua CAS (compare-and-swap) script.
+
+## Quick Start
+
+Enable distributed mode with Redis:
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [MyApp],
+  redis: { provider: 'redis', host: 'redis', port: 6379 },
+  transport: {
+    persistence: {
+      redis: { provider: 'redis', host: 'redis', port: 6379 },
+    },
+  },
+})
+```
+
+Set the deployment mode and build:
+
+```bash
+export FRONTMCP_DEPLOYMENT_MODE=distributed
+frontmcp build --target distributed
+```
+
+## Architecture
+
+The HA module has three components that work together:
+
+### Heartbeat Service
+
+Each pod writes a heartbeat key to Redis every 10 seconds with a 30-second TTL. When a pod dies, its key expires automatically.
+
+```
+Key:   mcp:ha:heartbeat:{nodeId}
+TTL:   30,000ms (PX)
+Value: { nodeId, startedAt, lastBeat, sessionCount }
+```
+
+Other pods check for heartbeat presence before attempting session takeover. If a heartbeat key is missing, the owning pod is presumed dead.
+
+### Session Takeover
+
+When a request arrives for a session owned by a dead pod, the receiving pod runs an atomic Lua script against Redis:
+
+1. Read the session data
+2. Verify the current `nodeId` matches `expectedOldNodeId` (the dead pod)
+3. Atomically update `nodeId` to the new pod and set `reassignedAt` / `reassignedFrom`
+4. Return success or failure
+
+This CAS operation prevents two pods from claiming the same session simultaneously.
+
+### Notification Relay
+
+MCP notifications (progress updates, resource changes) targeting sessions on other pods are relayed via Redis Pub/Sub:
+
+- Each pod subscribes to `mcp:ha:notify:{nodeId}`
+- When a notification targets a session on another pod, it is published to that pod's channel
+- The receiving pod delivers the notification to the local transport
+
+```typescript
+// RelayMessage format
+{
+  sessionId: string;
+  notification: { method: string; params?: Record<string, unknown> };
+  sourceNodeId: string;
+  timestamp: number;
+}
+```
+
+## Configuration
+
+Configure HA settings via `frontmcp.config.ts`:
+
+```typescript
+import { defineConfig } from '@frontmcp/cli';
+
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{
+    target: 'distributed',
+    ha: {
+      heartbeatIntervalMs: 5000,
+      heartbeatTtlMs: 15000,
+      takeoverGracePeriodMs: 3000,
+      redisKeyPrefix: 'mcp:ha:',
+    },
+  }],
+});
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `heartbeatIntervalMs` | number | 10000 | How often each pod writes its heartbeat |
+| `heartbeatTtlMs` | number | 30000 | TTL for heartbeat key (should be 2-3x interval) |
+| `takeoverGracePeriodMs` | number | 5000 | Wait time before claiming orphaned sessions |
+| `redisKeyPrefix` | string | `mcp:ha:` | Redis key prefix for all HA keys |
+
+<Tip>
+  Set `heartbeatTtlMs` to at least 2x `heartbeatIntervalMs` to avoid false positives from network jitter.
+</Tip>
+
+## Load Balancer Affinity
+
+FrontMCP sets two identifiers on Streamable HTTP responses for load balancer routing:
+
+- **Cookie**: `__frontmcp_node` --- set during the initialize handshake
+- **Header**: `X-FrontMCP-Machine-Id` --- set on every response in distributed mode
+
+### NGINX Sticky Sessions
+
+```nginx
+upstream mcp_backend {
+    hash $cookie___frontmcp_node consistent;
+    server pod-1:3000;
+    server pod-2:3000;
+    server pod-3:3000;
+}
+
+server {
+    location / {
+        proxy_pass http://mcp_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+<Note>
+  The affinity cookie ensures subsequent requests from the same MCP client hit the same pod. If the pod dies, the load balancer routes to a different pod, which triggers session takeover.
+</Note>
+
+## Kubernetes
+
+Deploy with 3 replicas and a Redis instance:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: my-registry/mcp-server:latest
+          env:
+            - name: FRONTMCP_DEPLOYMENT_MODE
+              value: distributed
+            - name: REDIS_HOST
+              value: redis
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+```
+
+<Warning>
+  Each pod gets its machine ID from the Kubernetes `HOSTNAME` environment variable (set to the pod name automatically). Do not override `HOSTNAME` in your deployment spec.
+</Warning>
+
+## Errors
+
+| Error | When | Action |
+| --- | --- | --- |
+| `SessionClaimConflictError` | Another pod already claimed the session | Retry the request --- the load balancer will route to the new owner |
+| `HaConfigurationError` | Redis not configured but `FRONTMCP_DEPLOYMENT_MODE=distributed` | Add `redis` configuration to `@FrontMcp()` decorator |
+
+## Verifying HA
+
+```bash
+# Check heartbeat keys
+redis-cli KEYS "mcp:ha:heartbeat:*"
+
+# Inspect a heartbeat value
+redis-cli GET "mcp:ha:heartbeat:mcp-server-7b8f9-abc12"
+
+# Watch session takeover in real time
+redis-cli MONITOR | grep "EVAL"
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Health Checks" icon="heart-pulse" href="/frontmcp/deployment/health-checks">
+    Configure /healthz and /readyz probes
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/frontmcp/deployment/redis-setup">
+    Redis connection and session store configuration
+  </Card>
+  <Card title="Runtime Modes" icon="layer-group" href="/frontmcp/deployment/runtime-modes">
+    Standalone, distributed, and serverless modes
+  </Card>
+  <Card title="Configuration File" icon="file-code" href="/frontmcp/deployment/frontmcp-config">
+    frontmcp.config.ts reference
+  </Card>
+</CardGroup>

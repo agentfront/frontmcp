@@ -1,0 +1,104 @@
+---
+title: Machine ID
+description: Deployment-aware machine identity for session affinity, HA takeover, and distributed tracing
+---
+
+Every FrontMCP instance has a stable machine ID used for session ownership, HA heartbeats, load balancer affinity, and distributed tracing. The ID is resolved differently based on deployment mode.
+
+## Resolution Order
+
+| Priority | Source | When Used |
+| --- | --- | --- |
+| 1 | `MACHINE_ID` env var | Always (explicit override, highest priority) |
+| 2 | `setMachineIdOverride()` | Programmatic override (testing, direct API) |
+| 3 | `HOSTNAME` env var | Distributed mode (Kubernetes pod name) |
+| 4 | `os.hostname()` | Distributed mode fallback |
+| 5 | Random UUID | Serverless mode (ephemeral, per-invocation) |
+| 6 | `.frontmcp/machine-id` file | Development only (persisted across restarts) |
+| 7 | Random UUID | Production fallback |
+
+<Note>
+  The `.frontmcp/machine-id` file is only created in development (`NODE_ENV !== 'production'`). In production without an env var, a random UUID is generated on each startup.
+</Note>
+
+## Usage
+
+```typescript
+import { getMachineId, setMachineIdOverride } from '@frontmcp/utils';
+
+// Read the current machine ID
+const id = getMachineId(); // e.g., "mcp-server-7b8f9-abc12"
+
+// Override for testing
+setMachineIdOverride('test-stable-id');
+expect(getMachineId()).toBe('test-stable-id');
+
+// Clear override
+setMachineIdOverride(undefined);
+```
+
+## Distributed Deployment
+
+In Kubernetes, each pod automatically gets its machine ID from the `HOSTNAME` environment variable, which Kubernetes sets to the pod name (e.g., `mcp-server-7b8f9-abc12`). This ensures:
+
+- **Session affinity**: the `__frontmcp_node` cookie and `X-FrontMCP-Machine-Id` header are tied to the actual pod
+- **Heartbeat identity**: each pod's heartbeat key (`mcp:ha:heartbeat:{nodeId}`) maps to its pod name
+- **Takeover correctness**: session ownership references the real pod, not a random ID
+
+```yaml
+# Kubernetes sets HOSTNAME automatically --- no config needed
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          env:
+            - name: FRONTMCP_DEPLOYMENT_MODE
+              value: distributed
+            # HOSTNAME is set by Kubernetes to the pod name
+```
+
+## Direct API
+
+The `create()` factory function accepts a `machineId` option for stable identity in tests and embedded usage:
+
+```typescript
+import { create } from '@frontmcp/sdk';
+
+const server = await create({
+  info: { name: 'test-server', version: '1.0.0' },
+  tools: [MyTool],
+  machineId: 'stable-test-id', // Override machine ID for this instance
+});
+```
+
+This calls `setMachineIdOverride()` internally before initializing the server.
+
+## Environment Variables
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `MACHINE_ID` | Explicit machine ID override (highest priority) | --- |
+| `MACHINE_ID_PATH` | Custom path for the machine-id file | `.frontmcp/machine-id` |
+| `FRONTMCP_DEPLOYMENT_MODE` | Affects resolution strategy (`distributed` / `serverless` / `standalone`) | `standalone` |
+| `HOSTNAME` | Kubernetes pod name (used in distributed mode) | Set by K8s |
+
+<Tip>
+  For local development with multiple instances, set `MACHINE_ID` to different values for each process to simulate multi-pod behavior.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="High Availability" icon="server" href="/frontmcp/deployment/high-availability">
+    Multi-pod deployment with session failover
+  </Card>
+  <Card title="Runtime Modes" icon="layer-group" href="/frontmcp/deployment/runtime-modes">
+    Standalone, distributed, and serverless modes
+  </Card>
+  <Card title="Direct Client" icon="plug" href="/frontmcp/deployment/direct-client">
+    In-process MCP server for testing and embedding
+  </Card>
+</CardGroup>

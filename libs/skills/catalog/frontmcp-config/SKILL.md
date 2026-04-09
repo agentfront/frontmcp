@@ -52,24 +52,26 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 
 ## Scenario Routing Table
 
-| Scenario                                                       | Skill                                  | Description                                                      |
-| -------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
-| Choose between SSE, Streamable HTTP, or stdio                  | `configure-transport`                  | Transport protocol selection with distributed session options    |
-| Set up CORS, port, base path, or request limits                | `configure-http`                       | HTTP server options for Streamable HTTP and SSE transports       |
-| Add rate limiting, concurrency, or IP filtering                | `configure-throttle`                   | Server-level and per-tool throttle configuration                 |
-| Enable tools to ask users for input                            | `configure-elicitation`                | Elicitation schemas, stores, and multi-step flows                |
-| Set up authentication (public, transparent, local, remote)     | `configure-auth`                       | OAuth flows, credential vault, multi-app auth                    |
-| Configure session storage backends                             | `configure-session`                    | Memory, Redis, Vercel KV, and custom session stores              |
-| Add Redis for production storage                               | `setup-redis`                          | Docker Redis, Vercel KV, pub/sub for distributed subscriptions   |
-| Add SQLite for local development                               | `setup-sqlite`                         | SQLite with WAL mode, migration helpers                          |
-| Understand auth mode details (public/transparent/local/remote) | `configure-auth-modes`                 | Authentication mode details (public, transparent, local, remote) |
-| Fine-tune guard configuration for throttling                   | `configure-throttle-guard-config`      | Advanced guard configuration for throttling                      |
-| Use transport protocol presets                                 | `configure-transport-protocol-presets` | Transport protocol preset configurations                         |
-| Split apps into separate scopes (`splitByApp`)                 | `decorators-guide`                     | Per-app scope and basePath isolation on `@FrontMcp`              |
-| Enable widget-to-host communication (ext-apps)                 | `decorators-guide`                     | `extApps` host capabilities, session validation, widget comms    |
-| Enable background jobs and workflows                           | `decorators-guide`                     | `jobs: { enabled: true, store? }` on `@FrontMcp`                 |
-| Configure pagination for list operations                       | `decorators-guide`                     | `pagination` defaults for `tools/list` endpoint                  |
-| Configure npm/ESM package loader for remote apps               | `decorators-guide`                     | `loader` config for `App.esm()` / `App.remote()` resolution      |
+| Scenario                                                       | Skill                                  | Description                                                         |
+| -------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- |
+| Choose between SSE, Streamable HTTP, or stdio                  | `configure-transport`                  | Transport protocol selection with distributed session options       |
+| Set up CORS, port, base path, or request limits                | `configure-http`                       | HTTP server options for Streamable HTTP and SSE transports          |
+| Add rate limiting, concurrency, or IP filtering                | `configure-throttle`                   | Server-level and per-tool throttle configuration                    |
+| Enable tools to ask users for input                            | `configure-elicitation`                | Elicitation schemas, stores, and multi-step flows                   |
+| Set up authentication (public, transparent, local, remote)     | `configure-auth`                       | OAuth flows, credential vault, multi-app auth                       |
+| Configure session storage backends                             | `configure-session`                    | Memory, Redis, Vercel KV, and custom session stores                 |
+| Add Redis for production storage                               | `setup-redis`                          | Docker Redis, Vercel KV, pub/sub for distributed subscriptions      |
+| Add SQLite for local development                               | `setup-sqlite`                         | SQLite with WAL mode, migration helpers                             |
+| Understand auth mode details (public/transparent/local/remote) | `configure-auth-modes`                 | Authentication mode details (public, transparent, local, remote)    |
+| Fine-tune guard configuration for throttling                   | `configure-throttle-guard-config`      | Advanced guard configuration for throttling                         |
+| Use transport protocol presets                                 | `configure-transport-protocol-presets` | Transport protocol preset configurations                            |
+| Configure multi-target deployments and frontmcp.config.ts      | `configure-deployment-targets`         | Typed config with defineConfig(), 8 deployment targets, JSON schema |
+| Add CSP, HSTS, X-Frame-Options, and other security headers     | `configure-security-headers`           | CSP directives, report-only mode, HSTS preload, custom headers      |
+| Split apps into separate scopes (`splitByApp`)                 | `decorators-guide`                     | Per-app scope and basePath isolation on `@FrontMcp`                 |
+| Enable widget-to-host communication (ext-apps)                 | `decorators-guide`                     | `extApps` host capabilities, session validation, widget comms       |
+| Enable background jobs and workflows                           | `decorators-guide`                     | `jobs: { enabled: true, store? }` on `@FrontMcp`                    |
+| Configure pagination for list operations                       | `decorators-guide`                     | `pagination` defaults for `tools/list` endpoint                     |
+| Configure npm/ESM package loader for remote apps               | `decorators-guide`                     | `loader` config for `App.esm()` / `App.remote()` resolution         |
 
 ## Configuration Layers
 

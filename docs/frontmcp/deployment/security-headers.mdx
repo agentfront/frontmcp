@@ -1,0 +1,146 @@
+---
+title: Security Headers & CSP
+description: Configure Content Security Policy, HSTS, and other security headers via frontmcp.config or environment variables
+---
+
+FrontMCP applies security headers to every HTTP response, including Content Security Policy (CSP), Strict-Transport-Security (HSTS), X-Frame-Options, and X-Content-Type-Options. Configure them via `frontmcp.config` server settings --- they are injected as environment variables at build time and read by the built-in middleware.
+
+## Quick Start
+
+Add security headers to `frontmcp.config.ts`:
+
+```typescript
+import { defineConfig } from '@frontmcp/cli';
+
+export default defineConfig({
+  name: 'my-server',
+  deployments: [{
+    target: 'node',
+    server: {
+      csp: {
+        enabled: true,
+        directives: "default-src 'self'; script-src 'self' https://cdn.example.com; upgrade-insecure-requests",
+        reportOnly: false,
+      },
+      headers: {
+        hsts: 'max-age=31536000; includeSubDomains',
+        contentTypeOptions: 'nosniff',
+        frameOptions: 'DENY',
+      },
+    },
+  }],
+});
+```
+
+Build and deploy --- headers are applied automatically on every response.
+
+## CSP Configuration
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Enable CSP headers |
+| `directives` | string | --- | Semicolon-separated CSP directives |
+| `reportUri` | string | --- | URI for CSP violation reports |
+| `reportOnly` | boolean | `false` | Use `Content-Security-Policy-Report-Only` instead of enforcement |
+
+<Tip>
+  Value-less CSP directives like `upgrade-insecure-requests` and `block-all-mixed-content` are supported. Separate them with semicolons like any other directive.
+</Tip>
+
+### Example Directives
+
+```
+default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' 'unsafe-inline'; img-src *; upgrade-insecure-requests
+```
+
+## Security Headers
+
+| Header | Config Field | Default | Description |
+| --- | --- | --- | --- |
+| `Strict-Transport-Security` | `headers.hsts` | --- | HSTS policy for HTTPS enforcement |
+| `X-Content-Type-Options` | `headers.contentTypeOptions` | `nosniff` | Prevent MIME type sniffing |
+| `X-Frame-Options` | `headers.frameOptions` | `DENY` | Clickjacking protection |
+| Custom headers | `headers.custom` | --- | Record of additional header name-value pairs |
+
+<Note>
+  `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are applied by default even without explicit configuration. Set them to empty strings to disable.
+</Note>
+
+## Environment Variables
+
+All settings are injected as environment variables at build time by the deployment adapter:
+
+| Variable | Maps To |
+| --- | --- |
+| `FRONTMCP_CSP_ENABLED` | `server.csp.enabled` |
+| `FRONTMCP_CSP_DIRECTIVES` | `server.csp.directives` |
+| `FRONTMCP_CSP_REPORT_URI` | `server.csp.reportUri` |
+| `FRONTMCP_CSP_REPORT_ONLY` | `server.csp.reportOnly` |
+| `FRONTMCP_HSTS` | `server.headers.hsts` |
+| `FRONTMCP_CONTENT_TYPE_OPTIONS` | `server.headers.contentTypeOptions` |
+| `FRONTMCP_FRAME_OPTIONS` | `server.headers.frameOptions` |
+
+You can override these at runtime without rebuilding:
+
+```bash
+FRONTMCP_CSP_ENABLED=1 \
+FRONTMCP_CSP_DIRECTIVES="default-src 'none'" \
+FRONTMCP_HSTS="max-age=0" \
+node dist/main.js
+```
+
+## Programmatic Access
+
+For custom middleware or adapters, use the security header functions directly:
+
+```typescript
+import {
+  readCspFromEnv,
+  buildCspHeaderValue,
+  getCspHeaderName,
+  readSecurityHeadersFromEnv,
+  applySecurityHeaders,
+} from '@frontmcp/sdk';
+
+// Read configuration from environment
+const csp = readCspFromEnv();
+const headers = readSecurityHeadersFromEnv();
+
+// Apply to a response
+applySecurityHeaders(res, headers, csp);
+
+// Or build the CSP header value manually
+if (csp?.enabled) {
+  const headerName = getCspHeaderName(csp.reportOnly); // 'Content-Security-Policy' or '...-Report-Only'
+  const headerValue = buildCspHeaderValue(csp);
+  res.setHeader(headerName, headerValue);
+}
+```
+
+## Report-Only Mode
+
+Use `reportOnly: true` to test CSP rules without blocking content:
+
+```typescript
+server: {
+  csp: {
+    enabled: true,
+    directives: "default-src 'self'",
+    reportUri: 'https://report.example.com/csp',
+    reportOnly: true,  // violations are reported, not blocked
+  },
+}
+```
+
+This sets the `Content-Security-Policy-Report-Only` header instead of `Content-Security-Policy`, allowing you to monitor violations before enforcing the policy.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Configuration File" icon="file-code" href="/frontmcp/deployment/frontmcp-config">
+    Full configuration reference
+  </Card>
+  <Card title="Production Build" icon="rocket" href="/frontmcp/deployment/production-build">
+    Build and deploy for production
+  </Card>
+</CardGroup>
