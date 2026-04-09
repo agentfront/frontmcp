@@ -7,7 +7,7 @@ import { getMachineId } from '@frontmcp/utils';
   inputSchema: {},
 })
 export default class GetMachineIdTool extends ToolContext {
-  async execute(_input: Record<string, never>) {
+  async execute() {
     return { machineId: getMachineId() };
   }
 }
