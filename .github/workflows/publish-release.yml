@@ -386,7 +386,7 @@ jobs:
               "messages": [
                 {
                   "role": "system",
-                  "content": "You are a technical writer creating professional release notes for FrontMCP, a TypeScript SDK for building Model Context Protocol (MCP) servers. Write in a clear, professional marketing tone.\n\nOutput TWO sections separated by '\''---CARD_MDX---'\'':\n\n1. CHANGELOG: A markdown changelog with categorized sections:\n   - **Features** (new capabilities)\n   - **Improvements** (enhancements to existing features)\n   - **Bug Fixes** (if any)\n   - **Breaking Changes** (if any, highlight clearly)\n\n   Use bullet points. Be specific but concise.\n\n2. CARD_MDX: A Mintlify Card component for the docs updates page. Format exactly like this:\n\n<Card\n  title=\"FrontMCP vX.Y.Z: [2-5 word headline]\"\n  href=\"https://github.com/agentfront/frontmcp/releases/tag/vX.Y.Z\"\n  cta=\"View full changelog\"\n>\n  [One paragraph (2-3 sentences) summarizing what this release is about and its main theme.]\n\n  🔌 **Feature Name** short description of what it does.\n  🔄 **Feature Name** short description of what it does.\n  📋 **Feature Name** short description of what it does.\n  ⚡ **Feature Name** short description of what it does.\n</Card>\n\nRules for CARD_MDX:\n- Use relevant emojis for each bullet (🔌🔄📋⚡💾🔐🎨☁️🌐📦🔧🪝🔑 etc.)\n- Max 4 bullet points, focus on most impactful changes\n- Each bullet: emoji + **Bold Name** + short description (no dash, no hyphen)\n- Replace X.Y.Z with actual version number in title and href"
+                  "content": "You are a technical writer creating professional release notes for FrontMCP, a TypeScript SDK for building Model Context Protocol (MCP) servers. Write in a clear, professional, benefit-focused tone.\n\nOutput TWO sections separated by '\''---CARD_MDX---'\'':\n\n1. CHANGELOG: A markdown changelog with categorized sections:\n   - **Features** (new capabilities)\n   - **Improvements** (enhancements to existing features)\n   - **Bug Fixes** (if any)\n   - **Breaking Changes** (if any, highlight clearly)\n\n   Rules for CHANGELOG:\n   - Only include sections that have actual content. Do NOT include empty sections (e.g., never write '\''No bug fixes in this release'\'' or '\''No breaking changes'\''). Simply omit the section entirely.\n   - Use bullet points. Be specific but concise — one to two sentences per bullet.\n   - Focus on what users gain, not just what changed internally. Describe benefits and practical impact.\n   - If a security fix is included, write with appropriate gravity and credit the reporter if known from the diff.\n\n2. CARD_MDX: A Mintlify Card component for the docs updates page. Format exactly like this:\n\n<Card\n  title=\"FrontMCP vX.Y.Z: [2-5 word headline]\"\n  href=\"https://github.com/agentfront/frontmcp/releases/tag/vX.Y.Z\"\n  cta=\"View full changelog\"\n>\n  [One paragraph (2-3 sentences) summarizing what this release is about and its main theme.]\n\n  🔌 **Feature Name** – Short description of what it does.\n\n  🔄 **Feature Name** – Short description of what it does.\n\n  📋 **Feature Name** – Short description of what it does.\n\n  ⚡ **Feature Name** – Short description of what it does.\n\n</Card>\n\nRules for CARD_MDX:\n- Use relevant emojis for each bullet (🔌🔄📋⚡💾🔐🎨☁️🌐📦🔧🪝🔑🚀🛡️ etc.)\n- Max 4 bullet points, focus on most impactful changes\n- Each bullet: emoji + **Bold Name** + en dash (–) + short description\n- CRITICAL: Each bullet MUST be separated by a blank line (double newline) for proper MDX rendering. Do NOT put bullets on consecutive lines.\n- Replace X.Y.Z with actual version number in title and href"
                 },
                 {
                   "role": "user",
@@ -468,6 +468,16 @@ jobs:
 
           # Add Card MDX as hidden comment for docs sync
           if [ -f /tmp/card-mdx.txt ] && [ -s /tmp/card-mdx.txt ]; then
+            # Ensure double newlines between emoji bullet lines for proper MDX rendering
+            awk '
+              /^[[:space:]]*(🔌|🔄|📋|⚡|💾|🔐|🎨|☁️|🌐|📦|🔧|🪝|🔑|🚀|🛡️|✨|🔍|🧩|🔒|🔥|🎯|⚙️|📝)/ {
+                if (prev_was_bullet) print ""
+                prev_was_bullet = 1
+                print; next
+              }
+              { prev_was_bullet = 0; print }
+            ' /tmp/card-mdx.txt > /tmp/card-mdx-fixed.txt && mv /tmp/card-mdx-fixed.txt /tmp/card-mdx.txt
+
             echo "" >> /tmp/release-body.md
             echo "<!--" >> /tmp/release-body.md
             echo "CARD_MDX_START" >> /tmp/release-body.md
