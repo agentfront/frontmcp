@@ -86,7 +86,7 @@ export function isSecureRequest(req?: SecureDetectionRequest): boolean {
   if (req.protocol === 'https') return true;
 
   const forwarded = req.headers?.['x-forwarded-proto'];
-  const forwardedStr = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const forwardedStr = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim()?.toLowerCase();
   if (forwardedStr === 'https') return true;
 
   if (req.socket?.encrypted) return true;
@@ -132,6 +132,11 @@ export function buildSetCookie(options: CookieOptions, req?: SecureDetectionRequ
       // No request context — default to Secure in production
       secure = process.env['NODE_ENV'] === 'production';
     }
+  }
+
+  // Browser requirement: SameSite=None must be paired with Secure
+  if (sameSite === 'None' && !secure) {
+    secure = true;
   }
 
   // Build cookie string

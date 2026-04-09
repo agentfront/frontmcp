@@ -7,7 +7,7 @@ import { getRuntimeContext } from '@frontmcp/utils';
   inputSchema: {},
 })
 export default class GetDeploymentModeTool extends ToolContext {
-  async execute() {
+  async execute(_input: Record<string, never>) {
     const ctx = getRuntimeContext();
     return { deployment: ctx.deployment };
   }

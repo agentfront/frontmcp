@@ -5,6 +5,7 @@
  * Created by Scope when deployment mode is 'distributed'.
  */
 
+import { HaConfigurationError } from '../errors';
 import { DEFAULT_HA_CONFIG, type HaConfig, type TakeoverResult } from './ha.types';
 import { HeartbeatService, type HeartbeatRedisClient } from './heartbeat.service';
 import { NotificationRelay, type RelayHandler, type RelayRedisClient } from './notification-relay';
@@ -56,7 +57,7 @@ export class HaManager {
    */
   static create(options: HaManagerOptions): HaManager {
     if (!options.redis) {
-      throw new Error(
+      throw new HaConfigurationError(
         'Distributed mode requires Redis configuration. ' +
           'Add redis: { host: "...", port: 6379 } to your @FrontMcp() config.',
       );

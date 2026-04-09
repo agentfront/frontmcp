@@ -218,6 +218,7 @@ export {
   SessionVerificationFailedError,
   ContextExtensionNotAvailableError,
   ScopeConfigurationError,
+  HaConfigurationError,
   InvokeStateMissingKeyError,
   SkillSessionError,
   InvalidSkillError,

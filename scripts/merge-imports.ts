@@ -54,8 +54,12 @@ function processFile(filePath: string): void {
 
   const byModule = new Map<string, typeof imports>();
   for (const imp of imports) {
-    if (!byModule.has(imp.parsed.module)) byModule.set(imp.parsed.module, []);
-    byModule.get(imp.parsed.module)!.push(imp);
+    let group = byModule.get(imp.parsed.module);
+    if (!group) {
+      group = [];
+      byModule.set(imp.parsed.module, group);
+    }
+    group.push(imp);
   }
 
   let needsMerge = false;
@@ -79,17 +83,22 @@ function processFile(filePath: string): void {
     const imp = imports.find((x) => x.idx === i);
     if (!imp || done.has(imp.parsed.module)) continue;
     done.add(imp.parsed.module);
-    const group = byModule.get(imp.parsed.module)!;
+    const group = byModule.get(imp.parsed.module);
+    if (!group) throw new Error(`Missing grouped imports for module: ${imp.parsed.module}`);
 
-    const seen = new Set<string>();
-    const specs: ImportSpec[] = [];
-    for (const g of group)
+    const specsByName = new Map<string, ImportSpec>();
+    for (const g of group) {
       for (const s of g.parsed.specifiers) {
-        if (!seen.has(s.name)) {
-          seen.add(s.name);
-          specs.push(s);
+        const prev = specsByName.get(s.name);
+        if (!prev) {
+          specsByName.set(s.name, s);
+        } else if (prev.isType && !s.isType) {
+          // Value import wins over type-only import for same symbol
+          specsByName.set(s.name, s);
         }
       }
+    }
+    const specs = Array.from(specsByName.values());
 
     const indent = lines[i].match(/^(\s*)/)?.[1] ?? '';
     const parts = specs.sort((a, b) => a.name.localeCompare(b.name)).map((s) => (s.isType ? `type ${s.name}` : s.name));
@@ -104,7 +113,7 @@ const files = process.argv.slice(2).filter((f) => f.endsWith('.ts') || f.endsWit
 for (const f of files) {
   try {
     processFile(f);
-  } catch {
-    /* skip errors */
+  } catch (err) {
+    console.error(`merge-imports: failed to process ${f}:`, err);
   }
 }
