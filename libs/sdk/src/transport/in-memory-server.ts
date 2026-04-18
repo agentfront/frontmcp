@@ -5,10 +5,11 @@
  * Useful for testing, embedding in applications, and LangChain integration.
  */
 
-import type { Transport } from '@frontmcp/protocol';
-import type { AuthInfo } from '@frontmcp/protocol';
-import type { Scope } from '../scope/scope.instance';
+import { type AuthInfo, type Transport } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
+
+import { type Scope } from '../scope/scope.instance';
+import { computeTaskCapabilities } from '../task';
 
 /**
  * Options for creating an in-memory MCP server.
@@ -127,6 +128,7 @@ export async function createInMemoryServer(
       ...scope.prompts.getCapabilities(),
       ...scope.agents.getCapabilities(),
       ...completionsCapability,
+      ...computeTaskCapabilities(scope),
       logging: {},
     },
     serverInfo: scope.metadata.info,
@@ -140,7 +142,7 @@ export async function createInMemoryServer(
   for (const handler of handlers) {
     // Wrap handler to inject auth context
     const originalHandler = handler.handler;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const wrappedHandler = async (request: any, ctx: any) => {
       // Inject auth info into context while preserving MCP SDK context properties
       const enrichedCtx = {
@@ -152,12 +154,12 @@ export async function createInMemoryServer(
       };
       return originalHandler(request, enrichedCtx);
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
   }
 
   // Register server with notification service
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   scope.notifications.registerServer(sessionId, mcpServer as any);
 
   // Connect server to transport

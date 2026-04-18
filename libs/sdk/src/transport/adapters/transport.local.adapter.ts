@@ -1,16 +1,31 @@
-import { AuthenticatedServerRequest, SdkAuthInfo } from '../../server/server.types';
-import { TransportKey, TransportType } from '../transport.types';
-import { McpServer, StreamableHTTPServerTransport } from '@frontmcp/protocol';
-import { EmptyResultSchema, RequestId, ElicitResultSchema } from '@frontmcp/protocol';
-import { SSEServerTransport } from '#sse-transport';
-import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
-import { RecreateableSSEServerTransport } from './sse-transport';
-import { ZodType } from 'zod';
-import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
-import { Scope } from '../../scope';
-import { createMcpHandlers } from '../mcp-handlers';
-import { ElicitResult, ElicitOptions, PendingElicit, ElicitationStore, McpElicitResult } from '../../elicitation';
+import { type ZodType } from 'zod';
+
+import {
+  ElicitResultSchema,
+  EmptyResultSchema,
+  McpServer,
+  type RequestId,
+  type StreamableHTTPServerTransport,
+} from '@frontmcp/protocol';
+
+import { type SSEServerTransport } from '#sse-transport';
+
+import { ServerRequestTokens, type FrontMcpLogger, type ServerResponse } from '../../common';
+import {
+  type ElicitationStore,
+  type ElicitOptions,
+  type ElicitResult,
+  type McpElicitResult,
+  type PendingElicit,
+} from '../../elicitation';
 import { ElicitationNotSupportedError } from '../../errors';
+import { type Scope } from '../../scope';
+import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
+import { computeTaskCapabilities } from '../../task';
+import { createMcpHandlers } from '../mcp-handlers';
+import { type TransportKey, type TransportType } from '../transport.types';
+import { type RecreateableSSEServerTransport } from './sse-transport';
+import { type RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 
 /**
  * Base transport type that includes all supported transports.
@@ -166,6 +181,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
         ...this.scope.agents.getCapabilities(), // Include agent capabilities (agents as tools)
         ...channelCapabilities, // Channel capabilities (claude/channel extension)
         ...completionsCapability,
+        ...computeTaskCapabilities(this.scope),
         // MCP logging protocol support - allows clients to set log level via logging/setLevel
         logging: {},
         ...elicitationCapability,

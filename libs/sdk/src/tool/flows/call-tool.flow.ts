@@ -32,11 +32,17 @@ import {
   InvalidMethodError,
   InvalidOutputError,
   RateLimitError,
+  TaskAugmentationNotSupportedError,
+  TaskAugmentationRequiredError,
+  TaskStoreNotInitializedError,
   ToolExecutionError,
   ToolNotFoundError,
 } from '../../errors';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
+import { generateTaskId } from '../../task/helpers/task-id';
+import { TaskNotifier } from '../../task/helpers/task-notifier';
+import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { hasUIConfig } from '../ui';
 
 /**
@@ -110,6 +116,14 @@ const stateSchema = z.object({
   jsonRpcRequestId: z.union([z.string(), z.number()]).optional(),
   // Semaphore ticket for concurrency control (set by acquireSemaphore, used by releaseSemaphore)
   semaphoreTicket: z.any().optional(),
+  // Task augmentation request (MCP 2025-11-25 tasks spec). Present when the
+  // client sent `params.task`.
+  taskRequest: z
+    .object({
+      ttl: z.number().nullish(),
+    })
+    .passthrough()
+    .optional(),
 });
 
 const plan = {
@@ -117,6 +131,7 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findTool',
+    'createTaskIfRequested',
     'checkToolAuthorization',
     'checkEntryAuthorities',
     'createToolCallContext',
@@ -191,12 +206,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Extract JSON-RPC request ID for elicitation routing
     const jsonRpcRequestId = ctx.requestId;
 
+    // MCP 2025-11-25 tasks spec: capture `params.task` if present. The tool-level
+    // taskSupport check happens in `createTaskIfRequested` after the tool is found.
+    const taskRequest =
+      params.task && typeof params.task === 'object' ? (params.task as Record<string, unknown>) : undefined;
+
     this.state.set({
       input: params,
       authInfo: ctx.authInfo,
       _toolOwnerId: toolOwnerId,
       progressToken,
       jsonRpcRequestId,
+      taskRequest,
     });
     this.logger.verbose('parseInput:done');
   }
@@ -310,6 +331,141 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set('tool', tool);
     this.logger.info(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  /**
+   * MCP 2025-11-25 tasks spec: handle `params.task` on `tools/call`.
+   *
+   * Enforces the tool-level `execution.taskSupport` contract:
+   *  - `'required'` + no `task`  → -32601 (TaskAugmentationRequiredError)
+   *  - (absent | `'forbidden'`) + `task` → -32601 (TaskAugmentationNotSupportedError)
+   *  - otherwise pass through: task path creates a record and responds with
+   *    `CreateTaskResult`, non-task path continues the existing flow.
+   */
+  @Stage('createTaskIfRequested')
+  async createTaskIfRequested() {
+    this.logger.verbose('createTaskIfRequested:start');
+    const { tool } = this.state.required;
+    const taskRequest = this.state.taskRequest;
+    const taskSupport = tool.metadata.execution?.taskSupport;
+    const toolName = tool.fullName || tool.metadata.name;
+
+    // When the background task-runner re-dispatches the underlying tools/call,
+    // it strips `params.task` but sets `ctx.taskId`. Treat that re-dispatch as a
+    // trusted internal call: skip all tool-level taskSupport enforcement so a
+    // `'required'` tool can actually execute.
+    const ctx = this.input.ctx as { taskId?: string } | undefined;
+    if (ctx?.taskId) {
+      this.logger.verbose('createTaskIfRequested:skip (internal task re-dispatch)');
+      return;
+    }
+
+    if (taskRequest && (!taskSupport || taskSupport === 'forbidden')) {
+      throw new TaskAugmentationNotSupportedError(toolName);
+    }
+    if (!taskRequest && taskSupport === 'required') {
+      throw new TaskAugmentationRequiredError(toolName);
+    }
+    if (!taskRequest) {
+      // Plain call — continue the existing pipeline.
+      this.logger.verbose('createTaskIfRequested:skip (non-task call)');
+      return;
+    }
+
+    const store = this.scope.taskStore;
+    const registry = this.scope.tasks;
+    if (!store || !registry) {
+      throw new TaskStoreNotInitializedError();
+    }
+
+    const authInfo = this.state.authInfo;
+    const sessionId = authInfo?.sessionId;
+    if (!sessionId) {
+      // Anonymous callers cannot be safely bound — task records must be session-scoped.
+      throw new InternalMcpError('Task-augmented tools/call requires an identified session', 'TASK_SESSION_REQUIRED');
+    }
+
+    // Clamp the requested TTL against server policy.
+    const config = registry.getConfig();
+    const rawTtl = typeof taskRequest['ttl'] === 'number' ? (taskRequest['ttl'] as number) : undefined;
+    const maxTtl = config.maxTtlMs ?? TASK_DEFAULTS.maxTtlMs;
+    const defaultTtl = config.defaultTtlMs ?? TASK_DEFAULTS.defaultTtlMs;
+    const ttlMs = rawTtl === null ? null : Math.min(rawTtl ?? defaultTtl, maxTtl);
+    const pollIntervalMs = config.defaultPollIntervalMs ?? TASK_DEFAULTS.defaultPollIntervalMs;
+
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    const taskId = generateTaskId();
+    const expiresAt = ttlMs === null ? now + maxTtl : now + ttlMs;
+
+    // Strip the `task` field before re-dispatching — the background flow must
+    // execute the tool normally, not loop back into task creation.
+    const cleanedParams: Record<string, unknown> = { ...this.state.required.input };
+    delete cleanedParams['task'];
+
+    const record: TaskRecord = {
+      taskId,
+      sessionId,
+      status: 'working',
+      statusMessage: 'The operation is now in progress.',
+      createdAt: nowIso,
+      lastUpdatedAt: nowIso,
+      ttlMs,
+      pollIntervalMs,
+      expiresAt,
+      request: { method: 'tools/call', params: cleanedParams },
+    };
+    if (this.state.progressToken !== undefined) {
+      record.progressToken = this.state.progressToken;
+    }
+
+    await store.create(record);
+
+    const notifier = new TaskNotifier(this.scope.notifications, this.logger);
+    // Emit the initial `working` status notification on the same SSE stream as
+    // the CreateTaskResult response so clients that don't maintain a long-lived
+    // GET stream still observe the task coming to life. Best-effort per spec.
+    notifier.sendStatus(record);
+
+    // Delegate execution to the configured runner (in-process for long-lived
+    // Node servers, CLI-spawned child for `__cliMode`). The runner handles
+    // persisting `executor.{host,pid,spawnedAt}` as part of scheduling.
+    const runner = registry.runner;
+    if (!runner) {
+      throw new InternalMcpError(
+        'Task runner is not configured — scope initialization did not set one',
+        'TASK_RUNNER_MISSING',
+      );
+    }
+    try {
+      await runner.run(record, { cleanedRequestParams: cleanedParams, ctx: this.input.ctx });
+    } catch (err) {
+      this.logger.error('createTaskIfRequested: runner.run threw', {
+        taskId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Best-effort: mark the task failed so the client doesn't poll forever.
+      await store.update(taskId, sessionId, {
+        status: 'failed',
+        statusMessage: 'Task runner failed to schedule execution',
+      });
+      throw err;
+    }
+
+    // Respond with a CreateTaskResult — a CallToolResult-shaped object carrying
+    // a `task` field and the related-task _meta per spec.
+    const createTaskResult = {
+      task: toWireShape(record),
+      _meta: {
+        'io.modelcontextprotocol/related-task': { taskId },
+      },
+    };
+
+    this.logger.info('createTaskIfRequested: task created, responding with CreateTaskResult', {
+      taskId,
+      tool: toolName,
+    });
+    this.respond(createTaskResult as unknown as Parameters<typeof this.respond>[0]);
   }
 
   /**

@@ -173,6 +173,7 @@
               "frontmcp/features/testing-framework",
               "frontmcp/features/skill-based-workflows",
               "frontmcp/features/channels",
+              "frontmcp/features/background-tasks",
               "frontmcp/features/esm-dynamic-loading"
             ]
           },

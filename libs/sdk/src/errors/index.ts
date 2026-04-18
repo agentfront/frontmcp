@@ -78,6 +78,15 @@ export {
   AgentToolNotFoundError,
 } from './agent.errors';
 
+// Export task errors (MCP 2025-11-25 background tasks)
+export {
+  TaskNotFoundError,
+  TaskAlreadyTerminalError,
+  TaskAugmentationNotSupportedError,
+  TaskAugmentationRequiredError,
+  TaskStoreNotInitializedError,
+} from './task.error';
+
 // Export elicitation errors
 export {
   ElicitationNotSupportedError,

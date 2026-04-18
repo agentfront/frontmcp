@@ -12,6 +12,8 @@ import type { NotificationService } from '../../notification';
 import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import type { TaskStore } from '../../task/store/task.store';
+import type { TaskRegistry } from '../../task/task.registry';
 import type ToolRegistry from '../../tool/tool.registry';
 import type { ToolUIRegistry } from '../../tool/ui/ui-shared';
 import type { TransportService } from '../../transport/transport.registry';
@@ -71,6 +73,12 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get rateLimitManager(): GuardManager | undefined;
 
   abstract get elicitationStore(): ElicitationStore | undefined;
+
+  /** Persistent store for MCP 2025-11-25 background task records. */
+  abstract get taskStore(): TaskStore | undefined;
+
+  /** Per-process task registry (AbortControllers + capability projection). */
+  abstract get tasks(): TaskRegistry | undefined;
 
   abstract get authoritiesEngine(): AuthoritiesEngine | undefined;
 

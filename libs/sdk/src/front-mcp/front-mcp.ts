@@ -1,26 +1,27 @@
+import { fileExists, randomUUID, unlink } from '@frontmcp/utils';
+
 import {
-  FrontMcpConfigInput,
-  FrontMcpConfigType,
-  FrontMcpInterface,
   FrontMcpLogger,
-  FrontMcpServer,
-  ScopeEntry,
   frontMcpMetadataSchema,
+  FrontMcpServer,
   parseFrontMcpConfigLite,
+  type FrontMcpConfigInput,
+  type FrontMcpConfigType,
+  type FrontMcpInterface,
+  type ScopeEntry,
 } from '../common';
-import { ScopeRegistry } from '../scope/scope.registry';
-import ProviderRegistry from '../provider/provider.registry';
-import { createMcpGlobalProviders } from './front-mcp.providers';
-import LoggerRegistry from '../logger/logger.registry';
-import { DirectMcpServerImpl } from '../direct';
-import type { DirectMcpServer } from '../direct';
-import type { Scope } from '../scope/scope.instance';
+import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
+import { DirectMcpServerImpl, type DirectMcpServer } from '../direct';
 import { InternalMcpError, ServerNotFoundError } from '../errors';
-import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
-import { randomUUID, fileExists, unlink } from '@frontmcp/utils';
-import type { SqliteOptionsInput } from '../common/types/options/sqlite/schema';
-import type { FrontMcpServerInstance } from '../server/server.instance';
 import { HealthService } from '../health';
+import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
+import LoggerRegistry from '../logger/logger.registry';
+import ProviderRegistry from '../provider/provider.registry';
+import { type Scope } from '../scope/scope.instance';
+import { ScopeRegistry } from '../scope/scope.registry';
+import { type FrontMcpServerInstance } from '../server/server.instance';
+import { computeTaskCapabilities } from '../task';
+import { createMcpGlobalProviders } from './front-mcp.providers';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -477,6 +478,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         ...scope.agents.getCapabilities(),
         ...channelCapabilities,
         ...completionsCapability,
+        ...computeTaskCapabilities(scope),
         logging: {},
       },
       serverInfo: scope.metadata.info,
@@ -502,12 +504,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
           authInfo: { ...existingAuthInfo, sessionId },
         };
         // The cast is safe: request type matches handler.requestSchema
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         return originalHandler(request as any, enrichedCtx as any);
       };
       // Cast required: MCP SDK's handler type expects specific context shape,
       // but our wrapped handlers preserve all context properties via pass-through
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
     }
 

@@ -1,12 +1,19 @@
 import { z } from 'zod';
-import { RawZodShape } from '../types';
-import { ImageContentSchema, AudioContentSchema, ResourceLinkSchema, EmbeddedResourceSchema } from '@frontmcp/protocol';
-import { ToolUIConfig } from './tool-ui.metadata';
-import { ToolInputOf, ToolOutputOf } from '../decorators';
-import type { RateLimitConfig, ConcurrencyConfig, TimeoutConfig } from '@frontmcp/guard';
-import { rateLimitConfigSchema, concurrencyConfigSchema, timeoutConfigSchema } from '@frontmcp/guard';
-import type { EntryAvailability } from '@frontmcp/utils';
-import { entryAvailabilitySchema } from '@frontmcp/utils';
+
+import {
+  concurrencyConfigSchema,
+  rateLimitConfigSchema,
+  timeoutConfigSchema,
+  type ConcurrencyConfig,
+  type RateLimitConfig,
+  type TimeoutConfig,
+} from '@frontmcp/guard';
+import { AudioContentSchema, EmbeddedResourceSchema, ImageContentSchema, ResourceLinkSchema } from '@frontmcp/protocol';
+import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
+
+import { type ToolInputOf, type ToolOutputOf } from '../decorators';
+import { type RawZodShape } from '../types';
+import { type ToolUIConfig } from './tool-ui.metadata';
 
 // ============================================
 // Auth Provider Mapping for Tools
@@ -348,6 +355,25 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * ```
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Execution hints reported in `tools/list` items per MCP 2025-11-25.
+   *
+   * `taskSupport` controls whether clients may invoke this tool as a background task
+   * (see https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks):
+   * - `'required'`: clients MUST invoke the tool as a task (the server will reject
+   *   non-task-augmented calls with `-32601`).
+   * - `'optional'`: clients MAY invoke the tool as a task or as a normal request.
+   * - `'forbidden'` or absent (default): clients MUST NOT task-augment the call.
+   *
+   * @example
+   * ```typescript
+   * @Tool({ name: 'long_report', execution: { taskSupport: 'optional' } })
+   * ```
+   */
+  execution?: {
+    taskSupport?: 'required' | 'optional' | 'forbidden';
+  };
 }
 
 /**
@@ -395,5 +421,10 @@ export const frontMcpToolMetadataSchema = z
     concurrency: concurrencyConfigSchema.optional(),
     timeout: timeoutConfigSchema.optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    execution: z
+      .object({
+        taskSupport: z.enum(['required', 'optional', 'forbidden']).optional(),
+      })
+      .optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

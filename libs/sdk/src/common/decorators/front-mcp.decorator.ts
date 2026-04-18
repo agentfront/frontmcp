@@ -1,9 +1,11 @@
 import 'reflect-metadata';
-import { FrontMcpTokens } from '../tokens';
-import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
+
 import { getEnvFlag } from '@frontmcp/utils';
-import { InternalMcpError } from '../../errors/mcp.error';
+
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
+import { InternalMcpError } from '../../errors/mcp.error';
+import { frontMcpMetadataSchema, type FrontMcpMetadata } from '../metadata';
+import { FrontMcpTokens } from '../tokens';
 
 // Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
 // Uses direct relative paths instead of require('@frontmcp/sdk') which would create
@@ -73,6 +75,24 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     const isServerless = getEnvFlag('FRONTMCP_SERVERLESS');
     const isSchemaExtract = getEnvFlag('FRONTMCP_SCHEMA_EXTRACT');
+    const taskWorkerId = typeof process !== 'undefined' ? process.env?.['FRONTMCP_RUN_TASK_ID'] : undefined;
+
+    if (taskWorkerId && metadata.serve !== false) {
+      // Task-worker mode: the parent CliTaskRunner re-invoked us with
+      // FRONTMCP_RUN_TASK_ID set. Skip the normal server bootstrap and run
+      // the task to completion, then exit.
+      void (async () => {
+        try {
+          const { executeTaskWorker } = await import('../../task/runtime/execute-task.js');
+          const code = await executeTaskWorker(metadata, taskWorkerId);
+          process.exit(code);
+        } catch (err) {
+          console.error('[FrontMCP] task worker failed:', err);
+          process.exit(2);
+        }
+      })();
+      return;
+    }
 
     if (isSchemaExtract) {
       // Schema extraction mode — metadata already stored above, skip bootstrap

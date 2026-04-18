@@ -1,11 +1,13 @@
-import { FuncType, Type } from '@frontmcp/di';
-import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
-import { FlowControl } from './flow.interface';
-import { ToolInputOf, ToolOutputOf } from '../decorators';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
+import { type ZodType } from 'zod';
+
+import { type FuncType, type Type } from '@frontmcp/di';
+
+import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
-import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
-import { ZodType } from 'zod';
+import { type ToolInputOf, type ToolOutputOf } from '../decorators';
+import { type ToolInputType, type ToolMetadata, type ToolOutputType } from '../metadata';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
+import { FlowControl } from './flow.interface';
 
 export type ToolType<T = unknown> = Type<T> | FuncType<T> | string;
 
@@ -21,6 +23,13 @@ export type ToolCtorArgs<In> = ExecutionContextBaseArgs & {
   input: In;
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
+  /**
+   * AbortSignal that fires when the enclosing request is cancelled.
+   * Populated for task-augmented `tools/call` invocations so long-running work
+   * can observe `tasks/cancel` promptly (MCP 2025-11-25 tasks spec).
+   * Non-task invocations leave this unset.
+   */
+  signal?: AbortSignal;
 };
 
 export abstract class ToolContext<
@@ -54,8 +63,14 @@ export abstract class ToolContext<
   // ---- Progress token from request's _meta (for progress notifications)
   private readonly _progressToken?: string | number;
 
+  /**
+   * AbortSignal exposed to tool authors. Fires when a task-augmented call is
+   * cancelled via `tasks/cancel` (MCP 2025-11-25). Undefined for non-task calls.
+   */
+  readonly signal?: AbortSignal;
+
   constructor(args: ToolCtorArgs<In>) {
-    const { metadata, input, providers, logger, progressToken } = args;
+    const { metadata, input, providers, logger, progressToken, signal } = args;
     super({
       providers,
       logger: logger.child(`tool:${metadata.id ?? metadata.name}`),
@@ -66,6 +81,7 @@ export abstract class ToolContext<
     this.metadata = metadata;
     this._input = input;
     this._progressToken = progressToken;
+    this.signal = signal;
   }
 
   abstract execute(input: In): Promise<Out>;
