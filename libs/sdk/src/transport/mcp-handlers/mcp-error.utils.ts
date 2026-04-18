@@ -1,15 +1,18 @@
 /**
- * Translate thrown FrontMCP errors into MCP SDK `McpError` instances so the
- * transport layer emits the correct JSON-RPC code (e.g. -32602, -32601)
+ * Translate thrown FrontMCP errors into protocol-level `McpError` instances so
+ * the transport layer emits the correct JSON-RPC code (e.g. -32602, -32601)
  * instead of the default -32603.
  *
  * Errors that already expose a `toJsonRpcError()` method (e.g. TaskNotFoundError)
  * are converted verbatim. Everything else falls through unchanged.
  *
+ * Imports go through `@frontmcp/protocol` so we can later drop the direct
+ * dependency on the upstream MCP SDK package without touching call sites.
+ *
  * @module transport/mcp-handlers/mcp-error.utils
  */
 
-import { McpError } from '@modelcontextprotocol/sdk/types.js';
+import { McpError } from '@frontmcp/protocol';
 
 export function toSdkMcpError(err: unknown): Error {
   if (err && typeof err === 'object') {

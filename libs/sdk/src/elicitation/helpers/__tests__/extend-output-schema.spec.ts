@@ -4,9 +4,10 @@
  * Verifies that extended schemas always have type: 'object' at the top level,
  * which is required by the MCP spec's ToolSchema for outputSchema.
  */
-import { extendOutputSchemaForElicitation } from '../extend-output-schema';
+import { ToolSchema } from '@frontmcp/protocol';
+
 import { ELICITATION_FALLBACK_JSON_SCHEMA } from '../../elicitation-fallback.schema';
-import { ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+import { extendOutputSchemaForElicitation } from '../extend-output-schema';
 
 describe('extendOutputSchemaForElicitation', () => {
   const standardSchema: Record<string, unknown> = {

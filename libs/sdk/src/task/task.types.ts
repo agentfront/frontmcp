@@ -3,9 +3,10 @@
  *
  * See: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks
  *
- * All protocol-facing Zod schemas are re-exported from `@frontmcp/protocol` (which
- * re-exports them from `@modelcontextprotocol/sdk`). This module defines the
- * server-side record shape used by the TaskStore and runtime.
+ * All protocol-facing Zod schemas are re-exported from `@frontmcp/protocol`,
+ * which is the single boundary between FrontMCP internals and the upstream
+ * MCP protocol package. This module defines the server-side record shape
+ * used by the TaskStore and runtime.
  *
  * @module task/task.types
  */
