@@ -13,6 +13,8 @@
 
 import type { CallToolResult, TaskStatus } from '@frontmcp/protocol';
 
+import type { RedisOptionsInput } from '../common';
+
 /**
  * Default task configuration values, used when the server doesn't set them
  * and clients don't request specific values.
@@ -173,6 +175,13 @@ export interface TasksConfig {
 
   /** Key prefix for the store. Default: 'mcp:task:'. */
   keyPrefix?: string;
+
+  /**
+   * Redis/Upstash backend options. When set, the task store is backed by the
+   * `@frontmcp/utils` storage abstraction in pub/sub-capable mode, suitable for
+   * multi-node HA deployments. Mutually exclusive with `sqlite`.
+   */
+  redis?: RedisOptionsInput;
 
   /**
    * Throw at startup instead of warning when the runtime cannot run tasks

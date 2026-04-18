@@ -266,7 +266,12 @@ export class SqliteTaskStore implements TaskStoreInterface {
         status: 'failed',
         statusMessage: 'Task runner exited before completing the task',
       });
-      if (patched) return patched;
+      if (patched) {
+        // Publish the synthetic terminal event so `tasks/result` waiters
+        // already blocked on `subscribeTerminal` get unblocked immediately.
+        await this.publishTerminal(patched);
+        return patched;
+      }
     }
     return record;
   }
@@ -329,7 +334,11 @@ export class SqliteTaskStore implements TaskStoreInterface {
           status: 'failed',
           statusMessage: 'Task runner exited before completing the task',
         });
-        if (patched) record = patched;
+        if (patched) {
+          // Publish so any blocked `tasks/result` subscriber wakes up now.
+          await this.publishTerminal(patched);
+          record = patched;
+        }
       }
       tasks.push(record);
     }

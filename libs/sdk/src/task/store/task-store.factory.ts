@@ -66,6 +66,14 @@ function detectStorageType(_storage: RootStorage): 'memory' | 'redis' | 'upstash
 export async function createTaskStore(options: TaskStoreOptions = {}): Promise<TaskStoreResult> {
   const { storage: storageConfig, redis, keyPrefix = 'mcp:task:', logger, isEdgeRuntime = false, sqlite } = options;
 
+  // Edge-runtime guard runs FIRST so SQLite (better-sqlite3 is a native module
+  // and can't be loaded on Workers/Edge anyway) doesn't silently slip through.
+  if (isEdgeRuntime && sqlite) {
+    throw new TaskStoreNotSupportedError(
+      'SQLite task store is not supported on Edge runtime (better-sqlite3 is a native module). Use Redis or Upstash.',
+    );
+  }
+
   // SQLite takes priority when configured — same pattern as the elicitation store.
   if (sqlite) {
     // Lazy-require so we don't bundle @frontmcp/storage-sqlite (and better-sqlite3)

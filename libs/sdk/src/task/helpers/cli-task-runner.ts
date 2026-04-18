@@ -56,11 +56,26 @@ export class CliTaskRunner implements TaskRunner {
       stdio: 'ignore',
       env: { ...process.env, [RUN_TASK_ENV_VAR]: record.taskId },
     });
+
+    // Node emits 'error' on ENOENT / EACCES etc. Without a listener this becomes
+    // an uncaught exception. Mark the task failed so a polling client sees a
+    // terminal state instead of a record stuck in `working`.
+    child.on('error', (err) => {
+      this.deps.logger?.error('[CliTaskRunner] worker spawn failed', {
+        taskId: record.taskId,
+        exe,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      void this.markBootstrapFailure(record, err instanceof Error ? err.message : String(err));
+    });
+
     // Let the parent exit independently of the child.
     child.unref();
 
     if (typeof child.pid !== 'number') {
-      this.deps.logger?.error('[CliTaskRunner] spawn produced no PID', { taskId: record.taskId });
+      const reason = 'spawn produced no PID';
+      this.deps.logger?.error('[CliTaskRunner] worker spawn failed', { taskId: record.taskId, reason });
+      await this.markBootstrapFailure(record, reason);
       return;
     }
 
@@ -71,6 +86,33 @@ export class CliTaskRunner implements TaskRunner {
         spawnedAt: new Date().toISOString(),
       },
     });
+  }
+
+  /**
+   * Transition a task to `failed` when we couldn't even get a worker off the
+   * ground. Publishes the terminal event so any `tasks/result` waiter is
+   * unblocked, and is best-effort (a failing store write is only logged).
+   */
+  private async markBootstrapFailure(record: TaskRecord, reason: string): Promise<void> {
+    try {
+      const failed = await this.deps.store.update(record.taskId, record.sessionId, {
+        status: 'failed',
+        statusMessage: `Task runner failed to start worker: ${reason}`,
+        outcome: { kind: 'error', error: { code: -32603, message: reason } },
+      });
+      if (failed) {
+        try {
+          await this.deps.store.publishTerminal(failed);
+        } catch {
+          // best effort — already logged by the store
+        }
+      }
+    } catch (err) {
+      this.deps.logger?.warn?.('[CliTaskRunner] bootstrap-failure bookkeeping write failed', {
+        taskId: record.taskId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async cancel(record: TaskRecord): Promise<void> {

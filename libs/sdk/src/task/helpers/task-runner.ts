@@ -59,19 +59,26 @@ async function executeTask(params: RunTaskParams): Promise<void> {
   const { record, cleanedRequestParams, ctx, scope, store, registry, notifier, logger } = params;
   const { taskId, sessionId } = record;
 
+  // Bootstrap runs inside the try/finally guard so a failing subscribeCancel()
+  // still releases the registry slot and we can record a terminal failure.
   const controller = registry.trackRunning(taskId);
+  let unsubscribeCancel: (() => Promise<void>) | undefined;
 
-  // Subscribe for cross-node cancel signals.
-  const unsubscribeCancel = await store.subscribeCancel(taskId, sessionId, () => {
-    if (!controller.signal.aborted) {
-      controller.abort('tasks/cancel');
-    }
-  });
-
-  // Annotate ctx with the AbortSignal + related-task meta so tools can observe.
-  const taskCtx = { ...(ctx as object), signal: controller.signal, taskId };
+  // Preserve the original context INSTANCE (not a plain-object spread) so
+  // prototype-backed behavior — e.g. plugins that attach `this.remember` to
+  // ExecutionContextBase — remains observable in background runs. We mutate
+  // two new fields onto it; they're read-only from the tool's POV.
+  const taskCtx = ctx as { signal?: AbortSignal; taskId?: string };
+  taskCtx.signal = controller.signal;
+  taskCtx.taskId = taskId;
 
   try {
+    unsubscribeCancel = await store.subscribeCancel(taskId, sessionId, () => {
+      if (!controller.signal.aborted) {
+        controller.abort('tasks/cancel');
+      }
+    });
+
     // Re-dispatch the underlying tools/call through the same flow, minus the
     // `task` param so we execute the tool normally this time.
     const innerRequest = {
@@ -127,12 +134,44 @@ async function executeTask(params: RunTaskParams): Promise<void> {
       await store.publishTerminal(updated);
       notifier.sendStatus(updated);
     }
+  } catch (err) {
+    // Any failure below the inner try/catch (store.get/update/publishTerminal,
+    // subscribeCancel bootstrap, notifier) lands here. Log, then best-effort
+    // mark the task as failed so a client polling tasks/get doesn't spin
+    // forever. Uncaught rejections would otherwise escape into the Node event
+    // loop since this runs fire-and-forget.
+    logger?.error('[task-runner] unhandled error in task lifecycle', {
+      taskId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    if (!controller.signal.aborted) controller.abort('task-runner error');
+    try {
+      const failed = await store.update(taskId, sessionId, {
+        status: 'failed',
+        statusMessage: err instanceof Error ? err.message : 'Task runner failed',
+        outcome: { kind: 'error', error: toJsonRpcError(err) },
+      });
+      if (failed) {
+        try {
+          await store.publishTerminal(failed);
+        } catch {
+          // best effort — publish failure is already logged by the store
+        }
+        notifier.sendStatus(failed);
+      }
+    } catch {
+      // If even the bookkeeping write fails, there's nothing more we can do.
+      // The orphan-detection path on the next tasks/get will eventually mark
+      // the record failed when the PID probe shows us as gone.
+    }
   } finally {
     registry.untrack(taskId);
-    try {
-      await unsubscribeCancel();
-    } catch {
-      // best effort
+    if (unsubscribeCancel) {
+      try {
+        await unsubscribeCancel();
+      } catch {
+        // best effort
+      }
     }
   }
 }

@@ -189,26 +189,30 @@ export class StorageTaskStore implements TaskStore {
 
   async publishTerminal(record: TaskRecord): Promise<void> {
     const channel = TERMINAL_CHANNEL_PREFIX + record.taskId;
+    const fanOutLocal = () => {
+      const subs = this.terminalCallbacks.get(record.taskId);
+      if (!subs) return;
+      for (const cb of subs) {
+        try {
+          cb(record);
+        } catch {
+          // best effort — one failing subscriber mustn't starve the others
+        }
+      }
+    };
     if (this.storage.supportsPubSub()) {
       try {
         await this.storage.publish(channel, JSON.stringify(record));
       } catch (err) {
-        this.logger?.error('[StorageTaskStore] failed to publish terminal', {
+        this.logger?.error('[StorageTaskStore] failed to publish terminal; falling back to local callbacks', {
           taskId: record.taskId,
           error: err instanceof Error ? err.message : String(err),
         });
+        // Same-process waiters must still be unblocked even if pub/sub fails.
+        fanOutLocal();
       }
     } else {
-      const subs = this.terminalCallbacks.get(record.taskId);
-      if (subs) {
-        for (const cb of subs) {
-          try {
-            cb(record);
-          } catch {
-            // best effort
-          }
-        }
-      }
+      fanOutLocal();
     }
   }
 
@@ -257,14 +261,28 @@ export class StorageTaskStore implements TaskStore {
 
   async publishCancel(taskId: string, _sessionId: string): Promise<void> {
     const channel = CANCEL_CHANNEL_PREFIX + taskId;
+    const fanOutLocal = () => {
+      const subs = this.cancelCallbacks.get(taskId);
+      if (!subs) return;
+      for (const fn of subs) {
+        try {
+          fn();
+        } catch {
+          // best effort
+        }
+      }
+    };
     if (this.storage.supportsPubSub()) {
       try {
         await this.storage.publish(channel, '1');
       } catch (err) {
-        this.logger?.error('[StorageTaskStore] failed to publish cancel', {
+        this.logger?.error('[StorageTaskStore] failed to publish cancel; falling back to local callbacks', {
           taskId,
           error: err instanceof Error ? err.message : String(err),
         });
+        // Same-process cancel subscribers still need to fire when pub/sub fails.
+        fanOutLocal();
+        return;
       }
     } else {
       const subs = this.cancelCallbacks.get(taskId);

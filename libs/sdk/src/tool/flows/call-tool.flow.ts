@@ -117,10 +117,13 @@ const stateSchema = z.object({
   // Semaphore ticket for concurrency control (set by acquireSemaphore, used by releaseSemaphore)
   semaphoreTicket: z.any().optional(),
   // Task augmentation request (MCP 2025-11-25 tasks spec). Present when the
-  // client sent `params.task`.
+  // client sent `params.task`. `ttl` MUST be positive — 0 or negative values
+  // create a task that expires the instant it's persisted, which looks to the
+  // client like a silent drop. Reject them at the validation boundary so the
+  // client gets an InvalidInputError instead.
   taskRequest: z
     .object({
-      ttl: z.number().nullish(),
+      ttl: z.number().int().positive().nullish(),
     })
     .passthrough()
     .optional(),

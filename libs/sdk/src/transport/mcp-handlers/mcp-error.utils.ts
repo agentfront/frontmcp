@@ -23,5 +23,9 @@ export function toSdkMcpError(err: unknown): Error {
       return new McpError(j.code, j.message, j.data);
     }
   }
-  return err instanceof Error ? err : new Error(String(err));
+  // Preserve existing McpError instances verbatim; wrap everything else as an
+  // Internal Error (-32603) so the transport layer still emits a well-formed
+  // JSON-RPC error instead of falling back to a generic Error.
+  if (err instanceof McpError) return err;
+  return new McpError(-32603, err instanceof Error ? err.message : String(err));
 }

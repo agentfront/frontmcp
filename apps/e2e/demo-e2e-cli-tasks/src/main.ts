@@ -2,7 +2,9 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 import { CliTasksDemoApp } from './apps/cli-tasks-demo';
 
-const port = parseInt(process.env['PORT'] ?? '3131', 10);
+const DEFAULT_PORT = 3131;
+const parsedPort = Number.parseInt(process.env['PORT'] ?? '', 10);
+const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
 const dbPath = process.env['FRONTMCP_TASKS_DB'] ?? '/tmp/frontmcp-cli-tasks.sqlite';
 
 @FrontMcp({

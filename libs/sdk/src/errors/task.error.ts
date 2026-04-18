@@ -7,8 +7,9 @@
  *                                attempting to cancel a terminal task,
  *                                invalid cursor on list.
  *  - `-32601` (Method not found): tool-level `taskSupport` violation on
- *                                  a task-augmented `tools/call`.
- *  - `-32600` (Invalid request): non-task-augmented call when augmentation is required.
+ *                                  a task-augmented `tools/call`, or a
+ *                                  non-task-augmented call against a tool
+ *                                  whose `taskSupport` is `'required'`.
  *  - `-32603` (Internal error): task subsystem misconfigured (store missing).
  *
  * @module errors/task.error
