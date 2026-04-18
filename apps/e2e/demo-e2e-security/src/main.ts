@@ -20,7 +20,9 @@ import { SecurityApp } from './apps/security';
 
 const DEFAULT_PORT = 3150;
 const parsedPort = Number.parseInt(process.env['PORT'] ?? '', 10);
-const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
+// Clamp to a valid TCP port range — out-of-range values would otherwise fail
+// opaquely at bind time. Anything invalid falls back to DEFAULT_PORT.
+const port = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65_535 ? parsedPort : DEFAULT_PORT;
 
 const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://mock-idp.local';
 const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;

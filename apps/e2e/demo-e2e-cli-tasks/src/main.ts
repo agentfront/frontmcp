@@ -4,7 +4,9 @@ import { CliTasksDemoApp } from './apps/cli-tasks-demo';
 
 const DEFAULT_PORT = 3131;
 const parsedPort = Number.parseInt(process.env['PORT'] ?? '', 10);
-const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
+// Clamp to a valid TCP port range — out-of-range values would otherwise fail
+// opaquely at bind time.
+const port = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65_535 ? parsedPort : DEFAULT_PORT;
 const dbPath = process.env['FRONTMCP_TASKS_DB'] ?? '/tmp/frontmcp-cli-tasks.sqlite';
 
 @FrontMcp({

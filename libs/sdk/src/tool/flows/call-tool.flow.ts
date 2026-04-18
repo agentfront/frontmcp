@@ -466,10 +466,20 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         error: err instanceof Error ? err.message : String(err),
       });
       // Best-effort: mark the task failed so the client doesn't poll forever.
-      await store.update(taskId, sessionId, {
-        status: 'failed',
-        statusMessage: 'Task runner failed to schedule execution',
-      });
+      // Wrap in its own try/catch so a bookkeeping write failure doesn't mask
+      // the original runner error that caused us to get here in the first place.
+      try {
+        await store.update(taskId, sessionId, {
+          status: 'failed',
+          statusMessage: 'Task runner failed to schedule execution',
+        });
+      } catch (bookkeepingErr) {
+        this.logger.warn('createTaskIfRequested: failed to mark task failed after runner error', {
+          taskId,
+          sessionId,
+          error: bookkeepingErr instanceof Error ? bookkeepingErr.message : String(bookkeepingErr),
+        });
+      }
       throw err;
     }
 

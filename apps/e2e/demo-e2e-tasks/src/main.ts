@@ -4,7 +4,9 @@ import { TasksDemoApp } from './apps/tasks-demo';
 
 const DEFAULT_PORT = 3130;
 const parsedPort = Number.parseInt(process.env['PORT'] ?? '', 10);
-const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
+// Clamp to a valid TCP port range — out-of-range values would otherwise fail
+// opaquely at bind time.
+const port = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65_535 ? parsedPort : DEFAULT_PORT;
 
 @FrontMcp({
   info: { name: 'Demo E2E Tasks', version: '0.1.0' },

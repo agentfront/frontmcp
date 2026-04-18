@@ -33,7 +33,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-security"],
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-security"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-security/jest.e2e.config.ts",
         "passWithNoTests": true
@@ -41,11 +41,11 @@
     },
     "test:e2e": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-security-e2e"],
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-security"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-security/jest.e2e.config.ts",
         "runInBand": true,
-        "passWithNoTests": true
+        "passWithNoTests": false
       }
     }
   }

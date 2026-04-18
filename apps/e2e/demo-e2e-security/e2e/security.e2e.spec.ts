@@ -72,6 +72,23 @@ describe('Security E2E', () => {
     }).buildAndConnect();
   }
 
+  /**
+   * Guarantee that every client created inside a test body is disconnected,
+   * even when assertions throw. Without this, a failing test would leak an
+   * open MCP session and tie up a slot on the shared test server.
+   */
+  async function withClient<T>(
+    claims: Record<string, unknown>,
+    body: (client: McpTestClientType) => Promise<T>,
+  ): Promise<T> {
+    const client = await connectWithClaims(claims);
+    try {
+      return await body(client);
+    } finally {
+      await client.disconnect().catch(() => undefined);
+    }
+  }
+
   type RpcResponse<T = unknown> = {
     jsonrpc: '2.0';
     id: string | number;
@@ -209,101 +226,100 @@ describe('Security E2E', () => {
 
   describe('authority enforcement on tools/call', () => {
     test('authenticated caller without authorities can invoke a public (unguarded) tool', async () => {
-      const client = await connectWithClaims({ sub: 'viewer', roles: [] });
-      const res = await client.tools.call('public-note', { message: 'hello' });
-      expect(res).toBeSuccessful();
-      await client.disconnect();
+      await withClient({ sub: 'viewer', roles: [] }, async (client) => {
+        const res = await client.tools.call('public-note', { message: 'hello' });
+        expect(res).toBeSuccessful();
+      });
     });
 
     test('non-admin is DENIED on admin-memo (RBAC)', async () => {
-      const client = await connectWithClaims({ sub: 'viewer', roles: ['viewer'] });
-      const res = await client.tools.call('admin-memo', { subject: 'Q4 layoffs' });
-      expect(res).toBeError();
-      await client.disconnect();
+      await withClient({ sub: 'viewer', roles: ['viewer'] }, async (client) => {
+        const res = await client.tools.call('admin-memo', { subject: 'Q4 layoffs' });
+        expect(res).toBeError();
+      });
     });
 
     test('admin is ALLOWED on admin-memo', async () => {
-      const client = await connectWithClaims({ sub: 'chief', roles: ['admin'] });
-      const res = await client.tools.call('admin-memo', { subject: 'Q4 layoffs' });
-      expect(res).toBeSuccessful();
-      await client.disconnect();
+      await withClient({ sub: 'chief', roles: ['admin'] }, async (client) => {
+        const res = await client.tools.call('admin-memo', { subject: 'Q4 layoffs' });
+        expect(res).toBeSuccessful();
+      });
     });
 
     test('tenant-read — same-tenant caller allowed', async () => {
-      const client = await connectWithClaims({ sub: 'u1', tenantId: 'tenant-alpha' });
-      const res = await client.tools.call('tenant-read', { tenantId: 'tenant-alpha' });
-      expect(res).toBeSuccessful();
-      await client.disconnect();
+      await withClient({ sub: 'u1', tenantId: 'tenant-alpha' }, async (client) => {
+        const res = await client.tools.call('tenant-read', { tenantId: 'tenant-alpha' });
+        expect(res).toBeSuccessful();
+      });
     });
 
     test('tenant-read — cross-tenant IDOR attempt denied (ABAC)', async () => {
-      const client = await connectWithClaims({ sub: 'u1', tenantId: 'tenant-alpha' });
-      const res = await client.tools.call('tenant-read', { tenantId: 'tenant-beta' });
-      expect(res).toBeError();
-      await client.disconnect();
+      await withClient({ sub: 'u1', tenantId: 'tenant-alpha' }, async (client) => {
+        const res = await client.tools.call('tenant-read', { tenantId: 'tenant-beta' });
+        expect(res).toBeError();
+      });
     });
   });
 
   describe('tools/list filtering', () => {
     test('non-admin does not see admin-guarded tools on tools/list', async () => {
-      const client = await connectWithClaims({ sub: 'viewer', roles: ['viewer'] });
-      const tools = await client.tools.list();
-      const names = tools.map((t) => t.name);
-      expect(names).toContain('public-note');
-      expect(names).not.toContain('admin-memo');
-      expect(names).not.toContain('admin-background-job');
-      await client.disconnect();
+      await withClient({ sub: 'viewer', roles: ['viewer'] }, async (client) => {
+        const tools = await client.tools.list();
+        const names = tools.map((t) => t.name);
+        expect(names).toContain('public-note');
+        expect(names).not.toContain('admin-memo');
+        expect(names).not.toContain('admin-background-job');
+      });
     });
 
     test('admin sees the admin-guarded tools', async () => {
-      const client = await connectWithClaims({ sub: 'chief', roles: ['admin'] });
-      const tools = await client.tools.list();
-      const names = tools.map((t) => t.name);
-      expect(names).toContain('admin-memo');
-      expect(names).toContain('admin-background-job');
-      await client.disconnect();
+      await withClient({ sub: 'chief', roles: ['admin'] }, async (client) => {
+        const tools = await client.tools.list();
+        const names = tools.map((t) => t.name);
+        expect(names).toContain('admin-memo');
+        expect(names).toContain('admin-background-job');
+      });
     });
   });
 
   describe('task-augmented calls — authority enforced BEFORE task creation', () => {
     test('non-admin task-augmented call on admin-background-job is denied synchronously', async () => {
-      const client = await connectWithClaims({ sub: 'viewer', roles: ['viewer'] });
-      const res = await taskAugmentedCall(client, 'admin-background-job', { label: 'nightly' });
-      // Two acceptable shapes: a JSON-RPC protocol error (ideal), OR a
-      // CallToolResult with isError: true. Both MUST lack a taskId.
-      expect(res.result?.task?.taskId).toBeUndefined();
-      if (!res.error) {
-        // fallback: CallToolResult form
-        expect((res.result as unknown as { isError?: boolean })?.isError).toBeTruthy();
-      }
-      // And nothing should leak into tasks/list — neither the caller's own
-      // session nor any other session should observe a task record.
-      const list = await tasksList(client);
-      const taskIds = (list.result?.tasks ?? []).map((t) => t.taskId);
-      expect(taskIds).toEqual([]);
-      await client.disconnect();
+      await withClient({ sub: 'viewer', roles: ['viewer'] }, async (client) => {
+        const res = await taskAugmentedCall(client, 'admin-background-job', { label: 'nightly' });
+        // Two acceptable shapes: a JSON-RPC protocol error (ideal), OR a
+        // CallToolResult with isError: true. Both MUST lack a taskId.
+        expect(res.result?.task?.taskId).toBeUndefined();
+        if (!res.error) {
+          // fallback: CallToolResult form
+          expect((res.result as unknown as { isError?: boolean })?.isError).toBeTruthy();
+        }
+        // And nothing should leak into tasks/list — neither the caller's own
+        // session nor any other session should observe a task record.
+        const list = await tasksList(client);
+        const taskIds = (list.result?.tasks ?? []).map((t) => t.taskId);
+        expect(taskIds).toEqual([]);
+      });
     });
 
     test('admin task-augmented call on admin-background-job succeeds and returns a taskId', async () => {
-      const client = await connectWithClaims({ sub: 'chief', roles: ['admin'] });
-      const res = await taskAugmentedCall(client, 'admin-background-job', { label: 'nightly' });
-      expect(res.result?.task?.taskId).toMatch(/.+/);
-      await client.disconnect();
+      await withClient({ sub: 'chief', roles: ['admin'] }, async (client) => {
+        const res = await taskAugmentedCall(client, 'admin-background-job', { label: 'nightly' });
+        expect(res.result?.task?.taskId).toMatch(/.+/);
+      });
     });
 
     test('non-admin cannot enumerate admin tasks via tasks/list', async () => {
-      const admin = await connectWithClaims({ sub: 'chief', roles: ['admin'] });
-      const created = await taskAugmentedCall(admin, 'admin-background-job', { label: 'enumeration-probe' });
-      const adminTaskId = created.result?.task?.taskId;
-      expect(adminTaskId).toBeDefined();
+      await withClient({ sub: 'chief', roles: ['admin'] }, async (admin) => {
+        const created = await taskAugmentedCall(admin, 'admin-background-job', { label: 'enumeration-probe' });
+        const adminTaskId = created.result?.task?.taskId;
+        expect(adminTaskId).toBeDefined();
 
-      const viewer = await connectWithClaims({ sub: 'viewer', roles: ['viewer'] });
-      const list = await tasksList(viewer);
-      const ids = (list.result?.tasks ?? []).map((t) => t.taskId);
-      expect(ids).not.toContain(adminTaskId);
-
-      await admin.disconnect();
-      await viewer.disconnect();
+        await withClient({ sub: 'viewer', roles: ['viewer'] }, async (viewer) => {
+          const list = await tasksList(viewer);
+          const ids = (list.result?.tasks ?? []).map((t) => t.taskId);
+          expect(ids).not.toContain(adminTaskId);
+        });
+      });
     });
   });
 
