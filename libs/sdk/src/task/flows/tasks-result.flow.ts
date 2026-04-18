@@ -112,6 +112,18 @@ export default class TasksResultFlow extends FlowBase<typeof name> {
     this.respondWithOutcome(finalRecord);
   }
 
+  /**
+   * Block until the task reaches a terminal state.
+   *
+   * Two wake-up paths:
+   *  1. `subscribeTerminal` — instant for backends whose pub/sub reaches this
+   *     process (memory, Redis/Upstash, SQLite within the same process).
+   *  2. Periodic `store.get` polling — the only path that works for the
+   *     SQLite backend when the caller and the runner live in different
+   *     processes (CLI runner + future stdio invocation). Without this, those
+   *     callers would block forever since the child's EventEmitter never
+   *     reaches the parent.
+   */
   private async waitForTerminal(
     taskId: string,
     sessionId: string,
@@ -120,10 +132,12 @@ export default class TasksResultFlow extends FlowBase<typeof name> {
     return new Promise<TaskRecord | null>((resolve, reject) => {
       let settled = false;
       let unsubscribe: (() => Promise<void>) | undefined;
+      let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
       const finalize = async (result: TaskRecord | null, err?: unknown) => {
         if (settled) return;
         settled = true;
+        if (pollTimer) clearTimeout(pollTimer);
         if (unsubscribe) {
           try {
             await unsubscribe();
@@ -133,6 +147,21 @@ export default class TasksResultFlow extends FlowBase<typeof name> {
         }
         if (err) reject(err);
         else resolve(result);
+      };
+
+      // Cross-process safety net: tick at the task's suggested poll interval
+      // (falling back to 500ms) so SQLite-backed waiters don't hang when the
+      // terminal transition happened in another process.
+      const poll = async () => {
+        if (settled) return;
+        try {
+          const latest = await store.get(taskId, sessionId);
+          if (!latest) return void finalize(null);
+          if (isTerminal(latest.status)) return void finalize(latest);
+        } catch (err) {
+          return void finalize(null, err);
+        }
+        pollTimer = setTimeout(() => void poll(), this.pollDelayMs());
       };
 
       store
@@ -147,13 +176,23 @@ export default class TasksResultFlow extends FlowBase<typeof name> {
           // terminal between our initial `get` and `subscribeTerminal`.
           const latest = await store.get(taskId, sessionId);
           if (!latest) {
-            void finalize(null);
-          } else if (isTerminal(latest.status)) {
-            void finalize(latest);
+            return void finalize(null);
           }
+          if (isTerminal(latest.status)) {
+            return void finalize(latest);
+          }
+          // Arm the polling fallback for same-backend-different-process hosts.
+          pollTimer = setTimeout(() => void poll(), this.pollDelayMs(latest.pollIntervalMs));
         })
         .catch((err) => void finalize(null, err));
     });
+  }
+
+  private pollDelayMs(hint?: number): number {
+    const min = 200;
+    const max = 5_000;
+    if (typeof hint === 'number' && hint > 0) return Math.max(min, Math.min(hint, max));
+    return 500;
   }
 
   private respondWithOutcome(record: TaskRecord): void {

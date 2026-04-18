@@ -28,6 +28,7 @@ import { EventEmitter } from 'node:events';
 
 import type Database from 'better-sqlite3';
 
+import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 // ───────────────────────────────────────────────────────────────
@@ -154,6 +155,13 @@ export class SqliteTaskStore implements TaskStoreInterface {
   private readonly logger?: SqliteTaskLogger;
   private readonly liveness: ProcessLivenessProbe;
   private readonly cleanupTimer: ReturnType<typeof setInterval> | null;
+  /**
+   * AES-256-GCM key derived from `options.encryption.secret`, applied to the
+   * `record_json` column on write and reversed on read. Other columns
+   * (`task_id`, `session_id`, `status`, `expires_at`, `executor_pid`) are kept
+   * in plaintext so the indexes remain usable.
+   */
+  private readonly encryptionKey: Uint8Array | null = null;
   private stmts: Prepared | null = null;
 
   constructor(options: SqliteTaskStoreOptions) {
@@ -171,6 +179,9 @@ export class SqliteTaskStore implements TaskStoreInterface {
 
     this.logger = options.logger;
     this.liveness = options.livenessProbe ?? defaultLivenessProbe;
+    if (options.encryption?.secret) {
+      this.encryptionKey = deriveEncryptionKey(options.encryption.secret);
+    }
     this.emitter.setMaxListeners(200);
 
     this.initSchema();
@@ -241,7 +252,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
       new Date(record.createdAt).getTime(),
       new Date(record.lastUpdatedAt).getTime(),
       record.executor?.pid ?? null,
-      JSON.stringify(record),
+      this.serializeRecord(record),
     );
   }
 
@@ -302,7 +313,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
       merged.expiresAt,
       new Date(merged.lastUpdatedAt).getTime(),
       merged.executor?.pid ?? null,
-      JSON.stringify(merged),
+      this.serializeRecord(merged),
       taskId,
       sessionId,
     );
@@ -407,7 +418,17 @@ export class SqliteTaskStore implements TaskStoreInterface {
   }
 
   private rowToRecord(row: TaskRow): TaskRecord {
-    return JSON.parse(row.record_json) as TaskRecord;
+    const plaintext = this.encryptionKey ? decryptValue(this.encryptionKey, row.record_json) : row.record_json;
+    return JSON.parse(plaintext) as TaskRecord;
+  }
+
+  /**
+   * Serialize + optionally encrypt a TaskRecord before it lands in the DB.
+   * Only the `record_json` column is encrypted; indexed columns stay plaintext.
+   */
+  private serializeRecord(record: TaskRecord): string {
+    const json = JSON.stringify(record);
+    return this.encryptionKey ? encryptValue(this.encryptionKey, json) : json;
   }
 }
 

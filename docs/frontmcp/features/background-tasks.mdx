@@ -369,10 +369,24 @@ All errors are thrown from the flow layer and translated to MCP SDK `McpError` i
 
 ## Security
 
-- **Session binding** — task records are keyed by `sessionId`. A `tasks/get`/`result`/`cancel` from a different session returns `-32602` (identical to an unknown taskId, to avoid information leaks).
+- **Session binding** — task records are keyed by `sessionId`. A `tasks/get`/`result`/`cancel` from a different session returns `-32602` with the *same* message as an unknown taskId, so attackers cannot enumerate valid task IDs via disambiguating errors.
+- **Authorities enforced before task creation** — task-augmented `tools/call` runs the tool's `authorities` check synchronously, BEFORE any `CreateTaskResult` is returned. Unauthorized callers never see a taskId and no record is written. The `createTaskIfRequested` stage sits between `checkEntryAuthorities` and `createToolCallContext` in the `tools:call-tool` flow plan.
 - **Cryptographic task IDs** — generated via `randomUUID()` from `@frontmcp/utils` (≥ 122 bits of entropy). Guessing another session's taskId is not a viable attack even before the session binding check.
-- **TTL discipline** — clamp client-requested `ttl` via `maxTtlMs` so a misbehaving client can't pin resources indefinitely.
+- **SQLite store encryption** — when `tasks.sqlite.encryption.secret` is configured, the `record_json` column is encrypted at rest with AES-256-GCM (indexed columns stay plaintext so `list`/`get` queries remain fast).
+- **TTL discipline** — clamp client-requested `ttl` via `maxTtlMs` so a misbehaving client can't pin resources indefinitely. Zero / negative TTL values are rejected at the schema layer.
 - **Rate limiting** — use FrontMCP's existing tool-level `rateLimit` config to throttle task creation if untrusted clients can reach the tool.
+
+All of the above are exercised by the **`apps/e2e/demo-e2e-security`** smoke suite — **24 tests** covering every MCP auth boundary that FrontMCP enforces:
+
+- anonymous / malformed / expired / wrong-issuer JWT rejection at the transport,
+- tool-level RBAC and input-bound ABAC on `tools/call` + `tools/list` filtering,
+- resource-level authorities on `resources/read` + `resources/list` filtering,
+- prompt-level authorities on `prompts/get` + `prompts/list` filtering,
+- synchronous task-auth denial (no taskId handed back to unauthorized callers),
+- cross-session task access — `tasks/get`/`result`/`cancel`/`list` all refuse another session's taskId with uniform `-32602` error messages so attackers can't enumerate valid IDs,
+- elicitation cross-session isolation — a second session posting `elicitation/result` for a victim's pending elicit cannot hijack the response.
+
+Run it locally with `yarn nx test:e2e demo-e2e-security` — a failure there means an auth boundary has regressed.
 
 ## Runtime support matrix
 

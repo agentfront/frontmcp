@@ -57,7 +57,24 @@ export interface TaskStoreResult {
   storage?: RootStorage;
 }
 
-function detectStorageType(_storage: RootStorage): 'memory' | 'redis' | 'upstash' | 'auto' {
+/**
+ * Report the actual backend of a resolved storage. The explicit config wins —
+ * env-var probing is only a last-ditch guess when neither the config nor the
+ * storage object carries a discriminator (e.g. an auto-detecting storage).
+ */
+function detectStorageType(
+  storage: RootStorage,
+  configuredType?: StorageConfig['type'],
+): 'memory' | 'redis' | 'upstash' | 'auto' {
+  if (configuredType === 'redis') return 'redis';
+  if (configuredType === 'upstash') return 'upstash';
+  if (configuredType === 'memory') return 'memory';
+  const storageBackend =
+    (storage as unknown as { type?: string; backendName?: string }).type ??
+    (storage as unknown as { backendName?: string }).backendName;
+  if (storageBackend === 'redis' || storageBackend === 'upstash' || storageBackend === 'memory') {
+    return storageBackend;
+  }
   if (getEnv('UPSTASH_REDIS_REST_URL')) return 'upstash';
   if (getEnv('REDIS_URL') || getEnv('REDIS_HOST')) return 'redis';
   return 'memory';
@@ -146,7 +163,7 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
   });
 
   const store: TaskStore = new StorageTaskStore(storage, logger);
-  const type = detectStorageType(storage);
+  const type = detectStorageType(storage, finalStorageConfig?.type);
 
   logger?.info('[TaskStoreFactory] Created task store', {
     type,

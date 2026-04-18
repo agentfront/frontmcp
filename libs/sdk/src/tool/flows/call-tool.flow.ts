@@ -134,9 +134,13 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findTool',
-    'createTaskIfRequested',
+    // Auth checks run BEFORE task creation so unauthorized callers cannot
+    // materialize a task record (which would leak tool existence + hand back a
+    // valid taskId). Quota/semaphore are NOT acquired here; the background
+    // re-dispatch pays that cost once, not twice.
     'checkToolAuthorization',
     'checkEntryAuthorities',
+    'createTaskIfRequested',
     'createToolCallContext',
     'acquireQuota',
     'acquireSemaphore',
@@ -388,18 +392,32 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new InternalMcpError('Task-augmented tools/call requires an identified session', 'TASK_SESSION_REQUIRED');
     }
 
-    // Clamp the requested TTL against server policy.
+    // Clamp the requested TTL against server policy. Spec §TTL: the server
+    // MAY override any requested ttl, including `null` ("unlimited"). We do
+    // clamp unlimited to `maxTtlMs` so a misbehaving client can't pin resources
+    // forever — this is spec-compliant, and the wire shape reports the actual
+    // clamped value so clients aren't lied to about when the task will expire.
     const config = registry.getConfig();
-    const rawTtl = typeof taskRequest['ttl'] === 'number' ? (taskRequest['ttl'] as number) : undefined;
+    const rawTtlValue = taskRequest['ttl'];
+    // Preserve the explicit-null distinction from omitted/number values so the
+    // three cases (number → clamp, null → use server cap, undefined → default)
+    // are all handled cleanly.
+    const rawTtl: number | null | undefined =
+      rawTtlValue === null ? null : typeof rawTtlValue === 'number' ? rawTtlValue : undefined;
     const maxTtl = config.maxTtlMs ?? TASK_DEFAULTS.maxTtlMs;
     const defaultTtl = config.defaultTtlMs ?? TASK_DEFAULTS.defaultTtlMs;
-    const ttlMs = rawTtl === null ? null : Math.min(rawTtl ?? defaultTtl, maxTtl);
+    const ttlMs =
+      rawTtl === null
+        ? maxTtl // client requested unlimited — server caps at maxTtl
+        : rawTtl === undefined
+          ? defaultTtl
+          : Math.min(rawTtl, maxTtl);
     const pollIntervalMs = config.defaultPollIntervalMs ?? TASK_DEFAULTS.defaultPollIntervalMs;
 
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
     const taskId = generateTaskId();
-    const expiresAt = ttlMs === null ? now + maxTtl : now + ttlMs;
+    const expiresAt = now + ttlMs;
 
     // Strip the `task` field before re-dispatching — the background flow must
     // execute the tool normally, not loop back into task creation.
