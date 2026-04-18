@@ -393,6 +393,63 @@ export interface FrontMcpBaseMetadata {
    * ```
    */
   authorities?: import('@frontmcp/auth').AuthoritiesConfig;
+
+  /**
+   * Background tasks configuration per MCP 2025-11-25 tasks spec.
+   *
+   * Enabled automatically when any tool declares `execution.taskSupport` other
+   * than `'forbidden'`. Explicitly set `enabled: false` to disable, or provide
+   * custom defaults / a Redis-backed store for multi-node deployments.
+   *
+   * @example Default (memory, single-node)
+   * ```typescript
+   * tasks: { enabled: true }
+   * ```
+   *
+   * @example Distributed with Redis
+   * ```typescript
+   * tasks: {
+   *   enabled: true,
+   *   redis: { provider: 'redis', host: 'localhost' },
+   *   defaultTtlMs: 300_000,
+   *   maxTtlMs: 3_600_000,
+   * }
+   * ```
+   */
+  tasks?: {
+    enabled?: boolean;
+    redis?: RedisOptionsInput;
+    keyPrefix?: string;
+    defaultTtlMs?: number;
+    maxTtlMs?: number;
+    defaultPollIntervalMs?: number;
+    maxConcurrentPerSession?: number;
+    /**
+     * Throw at startup instead of warning when the runtime cannot run tasks
+     * reliably (edge/serverless). Default: `false`.
+     */
+    strict?: boolean;
+    /** Runner selection — see `TasksConfig.runner`. */
+    runner?: 'in-process' | 'cli';
+    /**
+     * Back the task store with a SQLite database (single-file, local, no Redis
+     * needed). Required for cross-invocation persistence in CLI mode.
+     */
+    sqlite?: {
+      path: string;
+      encryption?: { secret: string };
+      walMode?: boolean;
+      ttlCleanupIntervalMs?: number;
+    };
+    /**
+     * Command used by the CLI task runner to spawn detached worker processes.
+     * When unset, the runner re-invokes the currently-running executable.
+     */
+    cliRunnerCommand?: {
+      exe: string;
+      args?: string[];
+    };
+  };
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -450,6 +507,33 @@ export const frontMcpBaseSchema = z.object({
         })
         .optional(),
       pipes: z.array(z.any()).optional(),
+    })
+    .optional(),
+  tasks: z
+    .object({
+      enabled: z.boolean().optional(),
+      redis: redisOptionsSchema.optional(),
+      keyPrefix: z.string().optional(),
+      defaultTtlMs: z.number().int().positive().optional(),
+      maxTtlMs: z.number().int().positive().optional(),
+      defaultPollIntervalMs: z.number().int().positive().optional(),
+      maxConcurrentPerSession: z.number().int().positive().optional(),
+      strict: z.boolean().optional(),
+      runner: z.enum(['in-process', 'cli']).optional(),
+      sqlite: z
+        .object({
+          path: z.string().min(1),
+          encryption: z.object({ secret: z.string().min(1) }).optional(),
+          walMode: z.boolean().optional(),
+          ttlCleanupIntervalMs: z.number().int().positive().optional(),
+        })
+        .optional(),
+      cliRunnerCommand: z
+        .object({
+          exe: z.string().min(1),
+          args: z.array(z.string()).optional(),
+        })
+        .optional(),
     })
     .optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);

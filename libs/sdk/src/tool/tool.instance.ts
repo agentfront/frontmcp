@@ -1,32 +1,34 @@
 // file: libs/sdk/src/tool/tool.instance.ts
 
-import {
-  EntryOwnerRef,
-  ToolCallArgs,
-  ToolCallExtra,
-  ToolContext,
-  ToolCtorArgs,
-  ToolEntry,
-  ToolFunctionTokenRecord,
-  ToolInputType,
-  ToolKind,
-  ToolOutputType,
-  ToolRecord,
-  ParsedToolResult,
-  ToolInputOf,
-  ToolOutputOf,
-  SafeTransformResult,
-} from '../common';
-import ProviderRegistry from '../provider/provider.registry';
 import { z } from 'zod';
-import HookRegistry from '../hooks/hook.registry';
-import { ScopeEntry } from '../common';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+
 import type { CallToolRequest } from '@frontmcp/protocol';
-import { buildParsedToolResult } from './tool.utils';
-import { InvalidHookFlowError } from '../errors/mcp.error';
-import { InvalidRegistryKindError } from '../errors';
+
+import {
+  ToolContext,
+  ToolEntry,
+  ToolKind,
+  type EntryOwnerRef,
+  type ParsedToolResult,
+  type SafeTransformResult,
+  type ScopeEntry,
+  type ToolCallArgs,
+  type ToolCallExtra,
+  type ToolCtorArgs,
+  type ToolFunctionTokenRecord,
+  type ToolInputOf,
+  type ToolInputType,
+  type ToolOutputOf,
+  type ToolOutputType,
+  type ToolRecord,
+} from '../common';
 import { extendOutputSchemaForElicitation } from '../elicitation/helpers';
+import { InvalidRegistryKindError } from '../errors';
+import { InvalidHookFlowError } from '../errors/mcp.error';
+import type HookRegistry from '../hooks/hook.registry';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import type ProviderRegistry from '../provider/provider.registry';
+import { buildParsedToolResult } from './tool.utils';
 
 /**
  * Concrete implementation of a tool that can be executed.
@@ -155,6 +157,7 @@ export class ToolInstance<
       logger,
       authInfo,
       progressToken,
+      signal: ctx.signal,
     };
     switch (this.record.kind) {
       case ToolKind.CLASS_TOKEN:

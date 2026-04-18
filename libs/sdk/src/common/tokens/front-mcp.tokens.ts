@@ -51,4 +51,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   channels: tokenFactory.meta('channels'),
   // authorities configuration (RBAC/ABAC/ReBAC)
   authorities: tokenFactory.meta('authorities'),
+  // background tasks configuration (MCP 2025-11-25 tasks spec)
+  tasks: tokenFactory.meta('tasks'),
 };

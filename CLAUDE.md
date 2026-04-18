@@ -341,6 +341,27 @@ export function installMyContextExtension(): void {
 
 See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete example.
 
+### Protocol Package Boundary
+
+**IMPORTANT**: Never import from `@modelcontextprotocol/sdk` (or any `@modelcontextprotocol/*` subpath) directly from `libs/sdk`, `libs/adapters`, `libs/plugins`, `libs/auth`, `libs/storage-sqlite`, tests, or any app. All MCP protocol types, schemas, error classes (e.g. `McpError`), transports, and client/server bindings must be imported from `@frontmcp/protocol`, which is the single, replaceable boundary between FrontMCP and the upstream MCP package.
+
+```typescript
+// ✅ Good — routes through the boundary
+
+// ❌ Bad — locks us into @modelcontextprotocol/sdk at every call site
+import { McpError, ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+
+import { CallToolRequestSchema, McpError, type ServerCapabilities, type Tool } from '@frontmcp/protocol';
+```
+
+Why this matters:
+
+- `libs/protocol/src/types.ts` is the ONLY file that transitively imports from `@modelcontextprotocol/sdk`. Every other import must go through `@frontmcp/protocol` so that dropping or swapping the upstream package is a single-file change.
+- The `@nx/dependency-checks` lint rule in `nx run sdk:lint` enforces this implicitly — adding a direct import to `libs/sdk/src/**` will fail the build until the dep is declared on `libs/sdk/package.json`, which we explicitly do NOT want to do.
+- If a type or schema you need isn't reachable via `@frontmcp/protocol`, re-export it from `libs/protocol/src/types.ts` rather than reaching around the boundary.
+
+Tests in `libs/sdk/src/**/__tests__/*.spec.ts` follow the same rule — lint treats them as part of the SDK package.
+
 ### Crypto Utilities
 
 **IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly or implement custom crypto functions.
@@ -611,6 +632,7 @@ Configure via `skillsConfig.auth` option:
 
 ## Anti-Patterns to Avoid
 
+❌ **Don't**: Import from `@modelcontextprotocol/sdk` directly (use `@frontmcp/protocol` — that's the only place allowed to touch the upstream package)
 ❌ **Don't**: Use `node:crypto` directly (use `@frontmcp/utils` for cross-platform support)
 ❌ **Don't**: Use `fs/promises` or `node:fs` directly (use `@frontmcp/utils` for consistent file ops)
 ❌ **Don't**: Add backwards compatibility exports in new libraries
@@ -628,6 +650,7 @@ Configure via `skillsConfig.auth` option:
 ❌ **Don't**: Use `ToolContext<typeof inputSchema>` — types are auto-inferred from the `@Tool` decorator; use plain `ToolContext`
 
 ✅ **Do**: Use clean, descriptive names for everything
+✅ **Do**: Import all MCP protocol types, schemas, and `McpError` from `@frontmcp/protocol`
 ✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations
 ✅ **Do**: Test all code paths including errors
 ✅ **Do**: Document known limitations clearly

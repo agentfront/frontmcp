@@ -1,0 +1,52 @@
+{
+  "name": "demo-e2e-cli-tasks",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-cli-tasks/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:tasks", "feature:cli"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-cli-tasks",
+        "main": "apps/e2e/demo-e2e-cli-tasks/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-cli-tasks/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-cli-tasks/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": { "optimization": true }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-cli-tasks/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cli-tasks"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-cli-tasks/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cli-tasks-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-cli-tasks/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

@@ -1,16 +1,22 @@
 // file: libs/sdk/src/common/entries/tool.entry.ts
 
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { ToolRecord } from '../records';
-import { ToolContext } from '../interfaces';
-import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
-import { Request, Notification, CallToolRequest, CallToolResult } from '@frontmcp/protocol';
-import { RequestHandlerExtra } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
-import { ToolInputOf, ToolOutputOf } from '../decorators';
-import { ProviderRegistryInterface } from '../interfaces/internal';
+import {
+  type AuthInfo,
+  type CallToolRequest,
+  type CallToolResult,
+  type Notification,
+  type Request,
+  type RequestHandlerExtra,
+} from '@frontmcp/protocol';
 import { isDebug, isDevelopment } from '@frontmcp/utils';
+
 import type ProviderRegistry from '../../provider/provider.registry';
+import { type ToolInputOf, type ToolOutputOf } from '../decorators';
+import { type ToolContext } from '../interfaces';
+import { type ProviderRegistryInterface } from '../interfaces/internal';
+import { type ToolInputType, type ToolMetadata, type ToolOutputType } from '../metadata';
+import { type ToolRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 export type ToolCallArgs = CallToolRequest['params']['arguments'];
 export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
@@ -24,6 +30,12 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
    * @internal
    */
   contextProviders?: ProviderRegistryInterface;
+  /**
+   * AbortSignal provided by the task runner for task-augmented calls
+   * (MCP 2025-11-25 tasks spec). Fires on `tasks/cancel`. Absent for non-task
+   * invocations.
+   */
+  signal?: AbortSignal;
 };
 
 export type ParsedToolResult = CallToolResult;

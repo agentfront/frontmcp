@@ -1,6 +1,6 @@
+import { type ToolMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { ToolMetadata } from '../metadata';
 
 export const FrontMcpToolTokens = {
   type: tokenFactory.type('tool'),
@@ -20,6 +20,7 @@ export const FrontMcpToolTokens = {
   concurrency: tokenFactory.meta('concurrency'), // Concurrency control configuration
   timeout: tokenFactory.meta('timeout'), // Timeout configuration
   availableWhen: tokenFactory.meta('availableWhen'), // Environment availability constraint
+  execution: tokenFactory.meta('execution'), // Execution hints (taskSupport, etc.)
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
 export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');

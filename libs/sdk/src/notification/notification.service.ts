@@ -300,7 +300,8 @@ export type McpNotificationMethod =
   | 'notifications/prompts/list_changed'
   | 'notifications/resources/updated'
   | 'notifications/message'
-  | 'notifications/progress';
+  | 'notifications/progress'
+  | 'notifications/tasks/status';
 
 /**
  * Information about a registered MCP server/transport connection.

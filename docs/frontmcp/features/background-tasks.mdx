@@ -1,0 +1,482 @@
+---
+title: Background Tasks
+slug: features/background-tasks
+icon: clock
+description: Durable, pollable state machines for long-running tool calls (MCP 2025-11-25 tasks spec)
+---
+
+FrontMCP implements the [MCP 2025-11-25 tasks spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) so clients can invoke long-running tools as **durable, requestor-polled tasks** instead of holding a request open for minutes. The client adds a `task` field to `tools/call`, gets back a `CreateTaskResult` containing a `taskId`, then polls `tasks/get` / blocks on `tasks/result` / can `tasks/cancel` at its leisure.
+
+<Note>
+  Tasks are marked **experimental** in the MCP 2025-11-25 spec. Field names and behavior may evolve. FrontMCP implements the receiver side for `tools/call` today; client-side task augmentation of `sampling/createMessage` and `elicitation/create` is tracked as a follow-up.
+</Note>
+
+## Why tasks
+
+Without tasks, a slow tool call ties up the HTTP request until the tool returns — which breaks LLM flow-control, can exceed proxy/gateway timeouts, and can't survive a connection blip. Tasks let the server:
+
+- Return control to the model immediately with a stable `taskId`
+- Allow the client to poll (or block) whenever it's actually ready for the result
+- Deliver `notifications/tasks/status` updates on state transitions
+- Signal cancellation mid-flight with the standard `tasks/cancel` RPC
+
+## Quick start
+
+### 1. Opt a tool into task invocation
+
+```ts tool.ts
+import { z } from 'zod';
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+@Tool({
+  name: 'big-report',
+  description: 'Expensive report generator',
+  inputSchema: { topic: z.string() },
+  outputSchema: z.object({ topic: z.string(), pages: z.number() }),
+  execution: {
+    taskSupport: 'optional', // 'optional' | 'required' | 'forbidden' (default)
+  },
+})
+export default class BigReportTool extends ToolContext {
+  async execute(input) {
+    // Observe the AbortSignal so `tasks/cancel` stops work promptly.
+    for (let i = 0; i < 100; i++) {
+      if (this.signal?.aborted) break;
+      await doWork();
+    }
+    return { topic: input.topic, pages: 42 };
+  }
+}
+```
+
+`execution.taskSupport` is surfaced on `tools/list` items so clients know which code path to use:
+
+| Value         | Semantics                                                                 | Default |
+|---------------|---------------------------------------------------------------------------|---------|
+| `'forbidden'` | Task-augmented calls rejected with `-32601` (spec-mandated default)       | ✓       |
+| `'optional'`  | Client MAY augment — synchronous calls still work                          |         |
+| `'required'`  | Synchronous calls rejected with `-32601` — task invocation is mandatory    |         |
+
+### 2. Enable the task subsystem
+
+```ts main.ts
+import { FrontMcp } from '@frontmcp/sdk';
+import { BigReportApp } from './apps/big-report';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [BigReportApp],
+  tasks: {
+    enabled: true,              // auto-enables when any tool declares taskSupport
+    defaultTtlMs: 3_600_000,    // 1h
+    maxTtlMs: 86_400_000,       // clamps client-requested TTL
+    defaultPollIntervalMs: 2_000,
+    // Memory store is fine for single-node. Point at Redis/Upstash for HA:
+    // redis: { provider: 'redis', host: 'localhost' },
+  },
+})
+export default class Server {}
+```
+
+The `tasks` capability is advertised to clients during `initialize`:
+
+```json
+{
+  "capabilities": {
+    "tasks": {
+      "cancel": {},
+      "list": {},
+      "requests": { "tools": { "call": {} } }
+    }
+  }
+}
+```
+
+### 3. Invoke from the client
+
+```ts
+// Task-augmented tools/call → returns CreateTaskResult
+const createResponse = await mcp.raw.request({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/call',
+  params: {
+    name: 'big-report',
+    arguments: { topic: 'Q4 revenue' },
+    task: { ttl: 60_000 },
+  },
+});
+// { result: { task: { taskId: '...', status: 'working', ttl: 60000, ... } } }
+
+const taskId = createResponse.result.task.taskId;
+
+// Poll until terminal
+while (true) {
+  const r = await mcp.raw.request({
+    jsonrpc: '2.0', id: 2, method: 'tasks/get', params: { taskId },
+  });
+  if (['completed', 'failed', 'cancelled'].includes(r.result.status)) break;
+  await sleep(r.result.pollInterval ?? 2000);
+}
+
+// Retrieve the actual CallToolResult
+const result = await mcp.raw.request({
+  jsonrpc: '2.0', id: 3, method: 'tasks/result', params: { taskId },
+});
+// result.result.structuredContent = { topic: 'Q4 revenue', pages: 42 }
+// result.result._meta['io.modelcontextprotocol/related-task'] = { taskId }
+```
+
+## Lifecycle
+
+```
+          ┌──────────────┐
+   create │   working    │ → completed
+ ─────────┤              │ → failed
+          │              │ → cancelled
+          └──────┬───────┘
+                 │ ↕
+          ┌──────▼───────┐
+          │input_required│ (tool emits elicitation)
+          └──────────────┘
+```
+
+- Tasks begin in `working`.
+- From `working` they may move to `input_required`, `completed`, `failed`, or `cancelled`.
+- From `input_required` they may move back to `working`, or to a terminal state.
+- **Terminal is final** — a task that becomes `cancelled` stays `cancelled` even if the underlying code keeps running.
+
+A tool call that returns `{ isError: true }` lands the task in `failed`. A tool that throws a JSON-RPC error (e.g. `ToolNotFoundError`) lands it in `failed` with the original error code/message replayed verbatim by `tasks/result`.
+
+## Cancellation
+
+```ts
+await mcp.raw.request({
+  jsonrpc: '2.0', id: 4, method: 'tasks/cancel', params: { taskId },
+});
+```
+
+FrontMCP guarantees:
+
+1. The task record transitions to `cancelled` **before** the `tasks/cancel` response is sent.
+2. The runner's cancellation hook fires, routing through one of three mechanisms depending on how the task is executing:
+   - **In-process runner** — `AbortController.abort()` on the controller tracked in the `TaskRegistry` for the taskId. Tools observe it via `this.signal` on `ToolContext`.
+   - **In-process runner on a different node** — the store publishes on the `{keyPrefix}cancel:{taskId}` channel (Redis/Upstash only). The node actually running the task subscribes and fires its local `AbortController`.
+   - **CLI runner** — `process.kill(executor.pid, 'SIGTERM')` sent to the detached worker. The worker's own `SIGTERM` handler calls `AbortController.abort()` so `this.signal` fires in the tool exactly as it would for in-process execution.
+3. A second `tasks/cancel` on a terminal task returns `-32602` (Invalid params) per spec — this is checked in `TasksCancelFlow` before any runner work happens.
+
+Writing a cancel-aware tool is just observing the signal:
+
+```ts
+@Tool({
+  name: 'cancellable-wait',
+  inputSchema: { maxMs: z.number() },
+  outputSchema: z.object({ cancelled: z.boolean() }),
+  execution: { taskSupport: 'optional' },
+})
+export default class CancellableWaitTool extends ToolContext {
+  async execute(input) {
+    return await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve({ cancelled: false }), input.maxMs);
+      this.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        resolve({ cancelled: true });
+      });
+    });
+  }
+}
+```
+
+## Blocking on the result
+
+`tasks/result` blocks until the task reaches a terminal state, then replays exactly the response the underlying request would have produced. This is the spec-mandated "block-until-ready" pattern for clients that don't want to poll.
+
+```ts
+const response = await mcp.raw.request({
+  jsonrpc: '2.0', id: 5, method: 'tasks/result', params: { taskId },
+});
+// response.result matches CallToolResult (or response.error if the task failed).
+// response.result._meta['io.modelcontextprotocol/related-task'] carries the taskId.
+```
+
+Internally the flow subscribes to the store's pub/sub terminal channel. With **Redis / Upstash**, a `tasks/result` issued on node A is unblocked as soon as the task finishes on node B. With **SQLite** the pub/sub is same-process only — if the reader is a different process than the worker, the blocking call relies on the post-subscribe re-check plus periodic `tasks/get`-style polling. When in doubt across processes, poll `tasks/get` explicitly; `tasks/result` then returns instantly once the record is terminal.
+
+## Listing tasks
+
+```ts
+const page = await mcp.raw.request({
+  jsonrpc: '2.0', id: 6, method: 'tasks/list', params: { cursor: undefined },
+});
+// { tasks: [...], nextCursor: '...' }
+```
+
+The list is **scoped to the calling session**. Tasks created by a different session are invisible (`tasks/get`, `tasks/result`, and `tasks/cancel` all return `-32602` Invalid params for foreign taskIds — matching spec §Security).
+
+The `tasks.list` capability is only advertised when requestors can be identified. Servers that run without any auth / session binding SHOULD set `tasks.enabled: true` but expect their clients to treat `tasks.list` as best-effort.
+
+## Notifications
+
+Servers MAY push `notifications/tasks/status` when a task's state changes. The message carries the full task wire shape:
+
+```json
+{
+  "method": "notifications/tasks/status",
+  "params": {
+    "taskId": "786512e2-9e0d-44bd-8f29-789f320fe840",
+    "status": "completed",
+    "createdAt": "2025-11-25T10:30:00Z",
+    "lastUpdatedAt": "2025-11-25T10:50:00Z",
+    "ttl": 60000,
+    "pollInterval": 5000
+  }
+}
+```
+
+FrontMCP emits one on initial creation (on the same SSE stream as the `CreateTaskResult` response) and on every transition to a terminal state. **Clients MUST NOT rely on notifications arriving**; per spec they are optional. Keep polling `tasks/get` as the source of truth.
+
+## Storage & distribution
+
+The task store ships with three backends. Pick based on your deployment topology:
+
+| Backend        | Config field                 | Pub/sub mechanism                              | Use when…                                                                      |
+|----------------|------------------------------|------------------------------------------------|-------------------------------------------------------------------------------|
+| **Memory**     | (default, no config)         | In-process `EventEmitter`                      | Single-node dev / test. Tasks are ephemeral — a server restart wipes them.    |
+| **Redis / Upstash** | `tasks.redis: {...}`     | Native `PUBLISH`/`SUBSCRIBE`                   | Multi-node deployments that need `tasks/cancel` and blocking `tasks/result` to route to whichever node is running the task. |
+| **SQLite**     | `tasks.sqlite: { path }`     | In-process `EventEmitter` (same-process only)  | Single-host persistence across invocations. **Required** for `runner: 'cli'` — the detached worker and the host share a database file. |
+
+### Redis / Upstash example
+
+```ts
+@FrontMcp({
+  tasks: {
+    enabled: true,
+    redis: {
+      provider: 'redis',
+      host: process.env.REDIS_HOST!,
+      port: 6379,
+    },
+    keyPrefix: 'my-app:task:',
+  },
+})
+```
+
+Key layout (memory / Redis / Upstash):
+
+- `{keyPrefix}records:{sessionId}:{taskId}` — the TaskRecord (auto-expires at `ttl`).
+- Pub/sub channel `{keyPrefix}terminal:{taskId}` — fires on terminal transitions; used by `tasks/result` waiters.
+- Pub/sub channel `{keyPrefix}cancel:{taskId}` — fires when `tasks/cancel` lands on a different node than the executor.
+
+### SQLite example
+
+```ts
+@FrontMcp({
+  tasks: {
+    enabled: true,
+    runner: 'cli',                        // required for cross-invocation CLI use
+    sqlite: { path: '/var/lib/myapp/tasks.db', walMode: true },
+  },
+})
+```
+
+Schema (from `SqliteTaskStore`):
+
+```sql
+CREATE TABLE mcp_tasks (
+  task_id       TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  expires_at    INTEGER NOT NULL,     -- epoch ms, enforces TTL
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  executor_pid  INTEGER,              -- populated by CliTaskRunner
+  record_json   TEXT NOT NULL         -- full TaskRecord as JSON
+);
+CREATE INDEX idx_mcp_tasks_session ON mcp_tasks (session_id);
+CREATE INDEX idx_mcp_tasks_status  ON mcp_tasks (status);
+CREATE INDEX idx_mcp_tasks_expires ON mcp_tasks (expires_at);
+```
+
+Pub/sub on SQLite is a **Node `EventEmitter` scoped to the process that opened the file** — not a SQLite feature. In practice:
+
+- When the same process creates the task, runs the worker, and reads the result, `tasks/result` unblocks via the EventEmitter immediately. ✅
+- When a *different* process reads the same database (a later CLI invocation, a sibling host), there's no cross-process notification — that caller's `tasks/result` falls back to polling the record via `tasks/get`. The built-in re-check after `subscribeTerminal` catches the terminal state on the next tick.
+
+For truly cross-process blocking across a fleet, use Redis/Upstash.
+
+<Warning>
+  Vercel KV is **not supported** for the task store — it lacks pub/sub, which is required for cross-node cancel signalling and for `tasks/result` to unblock on a different node than the one that finished the work.
+</Warning>
+
+## `@FrontMcp` configuration reference
+
+```ts
+interface TasksConfig {
+  /** Explicitly disable with `false`. Auto-enabled when any tool declares taskSupport. */
+  enabled?: boolean;
+
+  /** Redis backend (for multi-node deployments). */
+  redis?: RedisOptionsInput;
+
+  /** SQLite backend (single-file, local, cross-invocation). Required for `runner: 'cli'`. */
+  sqlite?: {
+    path: string;
+    encryption?: { secret: string };
+    walMode?: boolean;
+    ttlCleanupIntervalMs?: number;
+  };
+
+  /**
+   * Runner selection.
+   *  - `'in-process'` (default) — tasks run on the current event loop.
+   *  - `'cli'` — each task runs in a detached child process (see CLI runner section).
+   */
+  runner?: 'in-process' | 'cli';
+
+  /** Override the command used to spawn detached task workers (CLI runner only). */
+  cliRunnerCommand?: { exe: string; args?: string[] };
+
+  /** Throw at startup when the runtime cannot run tasks reliably. Default `false`. */
+  strict?: boolean;
+
+  /** Store key prefix. Default `'mcp:task:'`. */
+  keyPrefix?: string;
+
+  /** Default TTL applied when the client doesn't request one. Default `3_600_000` (1h). */
+  defaultTtlMs?: number;
+
+  /** Hard cap on client-requested TTL. Default `86_400_000` (24h). */
+  maxTtlMs?: number;
+
+  /** Suggested poll interval advertised to clients. Default `2_000` (2s). */
+  defaultPollIntervalMs?: number;
+
+  /** Maximum concurrent `working` tasks per session. Default `16`. */
+  maxConcurrentPerSession?: number;
+}
+```
+
+## Error reference
+
+| Scenario                                                           | JSON-RPC code | Error name                         |
+|--------------------------------------------------------------------|---------------|------------------------------------|
+| `tools/call` with `task` field on a tool with `taskSupport: 'forbidden'` or unset | `-32601` | `TaskAugmentationNotSupportedError` |
+| `tools/call` without `task` field on a tool with `taskSupport: 'required'`        | `-32601` | `TaskAugmentationRequiredError`     |
+| `tasks/get` / `tasks/result` / `tasks/cancel` with unknown or foreign `taskId`    | `-32602` | `TaskNotFoundError`                 |
+| `tasks/cancel` on a task already in a terminal state                              | `-32602` | `TaskAlreadyTerminalError`          |
+| `tasks` subsystem not initialized (misconfiguration)                              | `-32603` | `TaskStoreNotInitializedError`      |
+
+All errors are thrown from the flow layer and translated to MCP SDK `McpError` instances in the transport handlers — consumers see the exact codes above on the wire.
+
+## Security
+
+- **Session binding** — task records are keyed by `sessionId`. A `tasks/get`/`result`/`cancel` from a different session returns `-32602` with the *same* message as an unknown taskId, so attackers cannot enumerate valid task IDs via disambiguating errors.
+- **Authorities enforced before task creation** — task-augmented `tools/call` runs the tool's `authorities` check synchronously, BEFORE any `CreateTaskResult` is returned. Unauthorized callers never see a taskId and no record is written. The `createTaskIfRequested` stage sits between `checkEntryAuthorities` and `createToolCallContext` in the `tools:call-tool` flow plan.
+- **Cryptographic task IDs** — generated via `randomUUID()` from `@frontmcp/utils` (≥ 122 bits of entropy). Guessing another session's taskId is not a viable attack even before the session binding check.
+- **SQLite store encryption** — when `tasks.sqlite.encryption.secret` is configured, the `record_json` column is encrypted at rest with AES-256-GCM (indexed columns stay plaintext so `list`/`get` queries remain fast).
+- **TTL discipline** — clamp client-requested `ttl` via `maxTtlMs` so a misbehaving client can't pin resources indefinitely. Zero / negative TTL values are rejected at the schema layer.
+- **Rate limiting** — use FrontMCP's existing tool-level `rateLimit` config to throttle task creation if untrusted clients can reach the tool.
+
+All of the above are exercised by the **`apps/e2e/demo-e2e-security`** smoke suite — **24 tests** covering every MCP auth boundary that FrontMCP enforces:
+
+- anonymous / malformed / expired / wrong-issuer JWT rejection at the transport,
+- tool-level RBAC and input-bound ABAC on `tools/call` + `tools/list` filtering,
+- resource-level authorities on `resources/read` + `resources/list` filtering,
+- prompt-level authorities on `prompts/get` + `prompts/list` filtering,
+- synchronous task-auth denial (no taskId handed back to unauthorized callers),
+- cross-session task access — `tasks/get`/`result`/`cancel`/`list` all refuse another session's taskId with uniform `-32602` error messages so attackers can't enumerate valid IDs,
+- elicitation cross-session isolation — a second session posting `elicitation/result` for a victim's pending elicit cannot hijack the response.
+
+Run it locally with `yarn nx test:e2e demo-e2e-security` — a failure there means an auth boundary has regressed.
+
+## Runtime support matrix
+
+FrontMCP ships **two runners** for task execution: an in-process runner (default, for long-lived servers) and a CLI runner that spawns **detached child processes** backed by a shared SQLite database. Pick whichever matches the process lifecycle guarantees of your target.
+
+| Runtime                                        | Status           | Runner                | Notes                                                                                                                                                               |
+|------------------------------------------------|------------------|-----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Node.js (streamable-http server, Bun, Deno)    | ✅ Fully supported | `in-process` (default) | Primary target. Covered by `demo-e2e-tasks`.                                                                                                                        |
+| Node.js (stdio)                                 | ✅ Supported       | `in-process` or `cli`  | For stdio hosts that want tasks to survive session disconnect, switch to `runner: 'cli'` + `tasks.sqlite`.                                                           |
+| CLI hosts (short-lived MCP endpoints)           | ✅ Fully supported | `cli`                  | Each task runs in a detached worker process that writes its outcome to SQLite. `tasks/cancel` sends SIGTERM to the worker. Covered by `demo-e2e-cli-tasks`.          |
+| Browser bundle                                   | ✅ Supported        | `in-process` (memory)  | SQLite and detached spawn aren't available in the browser. Use the default in-process runner with the memory store.                                                   |
+| Serverless (AWS Lambda, Vercel Node functions)  | ❌ Not supported     | —                      | The `in-process` runner is killed when the Lambda returns; the `cli` runner can't spawn detached processes from most serverless sandboxes. Set `tasks.strict: true` to fail startup instead of silently accepting tasks that will never run. Move long work to a queue worker. |
+| Edge runtime (Vercel Edge, Cloudflare Workers)   | ❌ Not supported     | —                      | No spawn; no long-lived runtime. FrontMCP logs a warning at startup (throws when `tasks.strict: true`).                                                              |
+
+### Why the CLI runner exists
+
+Serverless-style short-lived hosts have the same fundamental problem: when the HTTP response flushes, the process freezes, and an in-process `Promise` the task runner scheduled never resumes. For CLI-style hosts (typically a stdio MCP endpoint or a one-shot HTTP handler) the fix is different from serverless: we can fork a **detached OS process** that survives the parent, runs the tool, writes its terminal outcome to SQLite, and exits.
+
+```
+┌────────────────────────────────┐                      ┌──────────────────────────────┐
+│ CLI host (parent)              │                      │ Detached worker (child)      │
+│                                │                      │                              │
+│  tools/call { task: {ttl} }    │                      │  reads task from SQLite      │
+│   └ createTaskIfRequested      │                      │  re-dispatches tools/call    │
+│      └ SqliteTaskStore.create  │                      │  writes outcome + status     │
+│      └ CliTaskRunner.run       │──spawn detached────▶│  process.exit(0)             │
+│         (pid, FRONTMCP_RUN_*)  │   stdio: 'ignore'    │                              │
+│      └ respond CreateTaskResult│   FRONTMCP_RUN_TASK_ID=…                           │
+│  (parent may exit / move on)   │                      │                              │
+└──────────────┬─────────────────┘                      └──────────────┬───────────────┘
+               │             shared SQLite database                     │
+               └─────────────────────────────────────────────────────────┘
+
+Later: tasks/get / tasks/result / tasks/cancel on ANY subsequent process — parent
+or a future sibling — reads the SQLite file. tasks/cancel sends SIGTERM to the
+worker's PID (persisted on the record).
+```
+
+### Enabling the CLI runner
+
+```ts
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+@FrontMcp({
+  info: { name: 'My CLI Host', version: '1.0.0' },
+  apps: [MyApp],
+  tasks: {
+    enabled: true,
+    runner: 'cli',                                              // switch from in-process
+    sqlite: { path: join(homedir(), '.myapp', 'tasks.db') },    // REQUIRED for cli runner — resolve `~` yourself; better-sqlite3 does not expand it.
+    // Optional — override the spawn command (default: re-invoke argv[0]+argv[1];
+    // auto-wraps with `npx tsx` when the entrypoint is a .ts/.tsx file).
+    cliRunnerCommand: { exe: 'node', args: ['./dist/server.js'] },
+  },
+})
+export default class Server {}
+```
+
+What the runner takes care of automatically:
+
+- **PID tracking** — every task record gets `executor.pid` stamped on the store so cancellation knows which OS process to signal.
+- **SIGTERM on `tasks/cancel`** — the worker's existing `AbortController` plumbing (`this.signal` on `ToolContext`) fires exactly as for an in-process task, so the same tool code works for both runners.
+- **Orphan detection** — every `tasks/get` or `tasks/list` read probes `process.kill(pid, 0)` on any non-terminal record. A dead PID transitions the record to `failed` with `statusMessage: 'Task runner exited before completing the task'`.
+- **Persistence across invocations** — SQLite is a single file; any FrontMCP process that opens the same path (future CLI invocations, a sibling HTTP server, etc.) sees the same tasks.
+
+### Serverless / edge
+
+Serverless and edge runtimes are still **not supported** for task execution — the in-process runner can't survive a frozen isolate, and most sandboxes won't let you spawn a detached child process either. FrontMCP handles these cleanly:
+
+- **Warn (default)** — log a startup warning, accept task-augmented requests, never execute them. Unhealthy silence.
+- **Throw (`tasks.strict: true`)** — refuse to start when the runtime can't run tasks. Recommended for production.
+
+```ts
+@FrontMcp({
+  tasks: { enabled: true, strict: true },  // bail out instead of silently half-working
+})
+```
+
+**Mitigation:** move long-running work to a dedicated queue/worker (SQS, Cloudflare Queues, BullMQ) and expose only the "collect result" tools through FrontMCP.
+
+## Limitations (current iteration)
+
+- **Server-side receiver only.** Task augmentation of server→client requests (`sampling/createMessage`, `elicitation/create`) is not yet implemented.
+- **CLI runner: single-host SQLite.** Detached workers are spawned on the same machine as the host. Cross-machine task dispatch requires Redis (and a traditional long-lived host, not the CLI runner).
+- **Serverless/edge not supported.** See [runtime support matrix](#runtime-support-matrix). No generic `waitUntil()` integration yet.
+- **No queue backend.** Tasks execute in a flow pipeline — either in-process or one-process-per-task. For high fan-out, pair with the `concurrency` and `rateLimit` tool metadata; a proper queue integration is a separate follow-up.
+
+## Related
+
+- [Elicitation](/frontmcp/servers/elicitation) — the `input_required` task status integrates with the existing elicitation flow.
+- [Observability](/frontmcp/features/observability) — each task flow stage is instrumented; traces surface `tasks:get`, `tasks:result`, `tasks:cancel`, `tasks:list` spans.
+- [Testing framework](/frontmcp/features/testing-framework) — `mcp.raw.request(...)` in `@frontmcp/testing` lets you drive the full `tasks/*` protocol from tests. See `apps/e2e/demo-e2e-tasks` for the HTTP + in-process runner suite, and `apps/e2e/demo-e2e-cli-tasks` for the CLI runner suite (detached workers, SIGTERM cancellation, SIGKILL orphan detection, SQLite persistence).

@@ -1,7 +1,19 @@
-import { CallToolRequest, CallToolRequestSchema, CallToolResult, CallToolResultSchema } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import { formatMcpErrorResponse, InternalMcpError } from '../../errors';
+import {
+  CallToolRequestSchema,
+  CallToolResultSchema,
+  type CallToolRequest,
+  type CallToolResult,
+} from '@frontmcp/protocol';
+
 import { FlowControl } from '../../common';
+import {
+  formatMcpErrorResponse,
+  InternalMcpError,
+  TaskAugmentationNotSupportedError,
+  TaskAugmentationRequiredError,
+} from '../../errors';
+import { toSdkMcpError } from './mcp-error.utils';
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function callToolRequestHandler({
   scope,
@@ -39,6 +51,12 @@ export default function callToolRequestHandler({
           // For handled, next, abort, fail - return appropriate response
           logger.warn(`FlowControl ended with type: ${e.type}`, { tool: toolName, type: e.type, output: e.output });
           return formatMcpErrorResponse(new InternalMcpError(`Flow ended with: ${e.type}`));
+        }
+
+        // Task augmentation rejections are protocol-level errors per MCP spec §Tool-Level
+        // Negotiation — emit them as JSON-RPC errors (not CallToolResult with isError).
+        if (e instanceof TaskAugmentationNotSupportedError || e instanceof TaskAugmentationRequiredError) {
+          throw toSdkMcpError(e);
         }
 
         // Log detailed error info

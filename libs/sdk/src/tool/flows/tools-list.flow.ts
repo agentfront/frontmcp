@@ -49,6 +49,13 @@ type BaseResponseToolItem = z.infer<typeof outputSchema>['tools'][number];
 /** Extended response tool item that includes outputSchema (MCP spec supports this) */
 type ResponseToolItem = BaseResponseToolItem & {
   outputSchema?: Record<string, unknown>;
+  /**
+   * Execution hints per MCP 2025-11-25 tasks spec.
+   * Absence or `'forbidden'` means the tool MUST NOT be task-augmented.
+   */
+  execution?: {
+    taskSupport?: 'required' | 'optional' | 'forbidden';
+  };
 };
 
 // TODO: add support for session based tools
@@ -448,6 +455,13 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           annotations: tool.metadata.annotations,
           inputSchema,
         };
+
+        // Expose execution.taskSupport per MCP 2025-11-25 tasks spec so clients
+        // know whether the tool may/must/must-not be invoked as a task.
+        const taskSupport = tool.metadata.execution?.taskSupport;
+        if (taskSupport) {
+          item.execution = { taskSupport };
+        }
 
         // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
         // Note: When elicitation is enabled, getRawOutputSchema() transparently extends

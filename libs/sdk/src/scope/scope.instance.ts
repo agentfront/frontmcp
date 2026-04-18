@@ -61,6 +61,18 @@ import { createSkillToolGuardHook } from '../skill/hooks';
 import { createSkillSessionStore, SkillSessionManager } from '../skill/session';
 import { registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
+import {
+  CliTaskRunner,
+  createTaskStore,
+  InProcessTaskRunner,
+  TaskNotifier,
+  TaskRegistry,
+  TasksCancelFlow,
+  TasksGetFlow,
+  TasksListFlow,
+  TasksResultFlow,
+  type TaskStore,
+} from '../task';
 import { ToolInstance } from '../tool/tool.instance';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
@@ -100,6 +112,12 @@ export class Scope extends ScopeEntry {
 
   /** Lazy-initialized elicitation store for distributed elicitation support */
   private _elicitationStore?: ElicitationStore;
+
+  /** Task store for MCP 2025-11-25 background tasks (optional). */
+  private _taskStore?: TaskStore;
+
+  /** Per-process task registry (AbortControllers + capability projection). */
+  private _taskRegistry?: TaskRegistry;
 
   /** Optional skill session manager for tool authorization enforcement */
   private _skillSession?: SkillSessionManager;
@@ -271,6 +289,100 @@ export class Scope extends ScopeEntry {
         })()
       : undefined;
 
+    // Tasks store + registry (MCP 2025-11-25 background tasks).
+    //
+    // Mode selection:
+    //  - Long-lived Node server: always allocate. Runner = InProcessTaskRunner.
+    //  - CLI host: allocate only when a persistent backend is configured
+    //    (tasks.sqlite or tasks.redis) — tasks MUST outlive a single CLI
+    //    invocation. Runner = CliTaskRunner (spawns detached workers).
+    //  - Task worker (re-invoked by CliTaskRunner): allocate store, use
+    //    InProcessTaskRunner because we ARE the worker now.
+    //  - Edge runtime: warn (or throw when tasks.strict: true).
+    const tasksConfig = this.metadata.tasks;
+    const tasksExplicitlyDisabled = tasksConfig?.enabled === false;
+    const isTaskWorker = !!(this.metadata as unknown as Record<string, unknown>)['__taskWorkerMode'];
+    const hasPersistentBackend = Boolean(tasksConfig?.sqlite || tasksConfig?.redis || this.metadata.redis);
+    const tasksEnabledForCli = this.cliMode && hasPersistentBackend;
+    const shouldInitTasks = !tasksExplicitlyDisabled && (!this.cliMode || tasksEnabledForCli || isTaskWorker);
+
+    const tasksPromise = shouldInitTasks
+      ? (async () => {
+          const tasksRedis = tasksConfig?.redis ?? this.metadata.redis;
+          const onEdge = isEdgeRuntime();
+          if (onEdge) {
+            const msg =
+              '[tasks] Background tasks are enabled on an edge/serverless runtime. ' +
+              'The in-process runner cannot continue past the HTTP response on this platform — ' +
+              'task bodies will not execute. Run on a long-lived Node process, or set `tasks.enabled: false`.';
+            if (tasksConfig?.strict) {
+              throw new Error(msg + ' (tasks.strict: true refuses startup)');
+            }
+            this.logger.warn(msg);
+          }
+          const { store: taskStore } = await createTaskStore({
+            redis: tasksRedis,
+            sqlite: tasksConfig?.sqlite,
+            keyPrefix: tasksConfig?.keyPrefix ?? 'mcp:task:',
+            logger: this.logger,
+            isEdgeRuntime: onEdge,
+          });
+          this._taskStore = taskStore;
+          this._taskRegistry = new TaskRegistry(
+            {
+              enabled: tasksConfig?.enabled,
+              defaultTtlMs: tasksConfig?.defaultTtlMs,
+              maxTtlMs: tasksConfig?.maxTtlMs,
+              defaultPollIntervalMs: tasksConfig?.defaultPollIntervalMs,
+              maxConcurrentPerSession: tasksConfig?.maxConcurrentPerSession,
+              keyPrefix: tasksConfig?.keyPrefix,
+              strict: tasksConfig?.strict,
+              sqlite: tasksConfig?.sqlite,
+              cliRunnerCommand: tasksConfig?.cliRunnerCommand,
+            },
+            this.logger,
+          );
+          // Runner is attached AFTER the NotificationService is ready — see
+          // the install step below (it needs access to `this.notificationService`).
+        })()
+      : undefined;
+    // Remember whether to install a CLI runner vs in-process, deferred until
+    // after the NotificationService is initialized in batch3.
+    const installTaskRunner = shouldInitTasks
+      ? () => {
+          if (!this._taskStore || !this._taskRegistry) return;
+          // Runner selection: explicit `tasks.runner` wins; a task worker is
+          // ALWAYS in-process regardless of config (it's the worker itself).
+          const explicit = tasksConfig?.runner;
+          const useCliRunner = !isTaskWorker && explicit === 'cli';
+          if (useCliRunner && !tasksConfig?.sqlite && !tasksConfig?.redis && !this.metadata.redis) {
+            // The CLI runner spawns a detached worker that HAS to read task state
+            // from a shared backend. Memory-backed storage can't be shared across
+            // processes, so accepting this config silently would guarantee broken
+            // tasks at runtime. Refuse at startup.
+            throw new Error(
+              '[tasks] runner: "cli" requires a persistent backend (`tasks.sqlite` or ' +
+                '`tasks.redis`) — the detached worker cannot share an in-memory store with this host.',
+            );
+          }
+          const runner = useCliRunner
+            ? new CliTaskRunner({
+                store: this._taskStore,
+                command: tasksConfig?.cliRunnerCommand,
+                logger: this.logger,
+              })
+            : new InProcessTaskRunner({
+                scope: this as unknown as ConstructorParameters<typeof InProcessTaskRunner>[0]['scope'],
+                store: this._taskStore,
+                registry: this._taskRegistry,
+                notifier: new TaskNotifier(this.notificationService, this.logger),
+                logger: this.logger,
+              });
+          this._taskRegistry.setRunner(runner);
+          this.logger.info(`[tasks] runner installed: ${runner.kind}`);
+        }
+      : undefined;
+
     // Guard manager (rate limiting, concurrency, IP filter) — conditional, skipped in CLI mode
     const throttleConfig = this.metadata.throttle;
     const rateLimitPromise =
@@ -291,6 +403,7 @@ export class Scope extends ScopeEntry {
       this.scopeApps.ready,
     ];
     if (elicitationPromise) batch1.push(elicitationPromise);
+    if (tasksPromise) batch1.push(tasksPromise);
     if (rateLimitPromise) batch1.push(rateLimitPromise);
     await Promise.all(batch1);
     this.logger.verbose('HookRegistry initialized');
@@ -633,13 +746,21 @@ export class Scope extends ScopeEntry {
     await this.notificationService.initialize();
     this.logger.verbose('NotificationService initialized');
 
-    // Register logging, completion, agent, and elicitation flows
+    // Install the task runner now that the notification service is available.
+    // The runner needs it to deliver `notifications/tasks/status` events.
+    installTaskRunner?.();
+
+    // Register logging, completion, agent, elicitation, and task flows.
     await this.scopeFlows.registryFlows([
       SetLevelFlow,
       CompleteFlow,
       CallAgentFlow,
       ElicitationRequestFlow,
       ElicitationResultFlow,
+      TasksGetFlow,
+      TasksResultFlow,
+      TasksCancelFlow,
+      TasksListFlow,
     ]);
 
     await this.auth.ready;
@@ -957,6 +1078,22 @@ export class Scope extends ScopeEntry {
    */
   get elicitationStore(): ElicitationStore | undefined {
     return this._elicitationStore;
+  }
+
+  /**
+   * Background-tasks record store (MCP 2025-11-25).
+   * Returns `undefined` if tasks are not enabled for this scope.
+   */
+  get taskStore(): TaskStore | undefined {
+    return this._taskStore;
+  }
+
+  /**
+   * Per-process task registry (AbortControllers + capability projection).
+   * Returns `undefined` if tasks are not enabled for this scope.
+   */
+  get tasks(): TaskRegistry | undefined {
+    return this._taskRegistry;
   }
 
   /**
