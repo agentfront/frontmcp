@@ -4,20 +4,21 @@
  * Runtime validation for authorities metadata, profiles, and claims mapping.
  */
 
-import { z } from 'zod';
-import type {
-  RbacRolesPolicy,
-  RbacPermissionsPolicy,
-  AbacOperator,
-  AbacCondition,
-  AbacPolicy,
-  ResourceIdRef,
-  RebacPolicy,
-  AuthoritiesPolicyMetadata,
-  AuthoritiesMetadata,
-  AuthorityGuardFn,
-} from './authorities.types';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { AuthoritiesClaimsMapping, AuthoritiesConfig } from './authorities.profiles';
+import type {
+  AbacCondition,
+  AbacOperator,
+  AbacPolicy,
+  AuthoritiesMetadata,
+  AuthoritiesPolicyMetadata,
+  AuthorityGuardFn,
+  RbacPermissionsPolicy,
+  RbacRolesPolicy,
+  RebacPolicy,
+  ResourceIdRef,
+} from './authorities.types';
 
 // ============================================
 // RBAC Schemas
@@ -135,10 +136,9 @@ export const authoritiesMetadataSchema: z.ZodType<AuthoritiesMetadata> = z.union
 
 export const authoritiesClaimsMappingSchema: z.ZodType<AuthoritiesClaimsMapping> = z
   .record(z.string(), z.string().optional())
-  .refine(
-    (data) => Object.values(data).some((v) => v !== undefined),
-    { message: 'Claims mapping must have at least one mapping' },
-  );
+  .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    message: 'Claims mapping must have at least one mapping',
+  });
 
 // ============================================
 // AuthoritiesConfig Schema

@@ -1,7 +1,8 @@
 // common/types/options/http/schema.ts
-// Zod schema for HTTP configuration
+// Zod schema for HTTP configuration. Uses lazy-zod so the schema tree is
+// not constructed at module load when nothing parses it.
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 import type { RawZodShape } from '../../common.types';
 import type { CorsOptions, HttpOptionsInterface } from './interfaces';
