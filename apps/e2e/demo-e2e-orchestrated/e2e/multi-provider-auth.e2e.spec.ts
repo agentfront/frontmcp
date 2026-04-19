@@ -7,7 +7,7 @@
  * - Upstream token access via `this.orchestration.getToken()`
  * - Progressive authorization (skipped providers)
  */
-import { test, expect, MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+import { expect, MockOAuthServer, test, TestTokenFactory } from '@frontmcp/testing';
 
 // Create separate token factories for each mock provider
 let githubTokenFactory: TestTokenFactory;
@@ -269,8 +269,13 @@ test.describe('Multi-Provider Orchestrated Auth E2E', () => {
   });
 });
 
+// These tests only exercise the mock OAuth servers via `fetch` — no MCP
+// client is needed. Use plain jest `it(...)` to bypass the `test(...)`
+// fixture wrapper which would try to create an authenticated MCP
+// connection against the (auth-required) multi-provider server and fail
+// with HTTP 401.
 test.describe('Mock OAuth Server Integration', () => {
-  test('mock github server should serve JWKS', async () => {
+  it('mock github server should serve JWKS', async () => {
     const response = await fetch(`${githubServer.info.baseUrl}/.well-known/jwks.json`);
     expect(response.ok).toBe(true);
 
@@ -279,7 +284,7 @@ test.describe('Mock OAuth Server Integration', () => {
     expect(jwks.keys.length).toBeGreaterThan(0);
   });
 
-  test('mock github server should auto-approve authorization', async () => {
+  it('mock github server should auto-approve authorization', async () => {
     const authorizeUrl = new URL(`${githubServer.info.baseUrl}/oauth/authorize`);
     authorizeUrl.searchParams.set('client_id', 'github-client');
     authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/oauth/provider/github/callback');
@@ -293,7 +298,7 @@ test.describe('Mock OAuth Server Integration', () => {
     expect(location).toContain('code=');
   });
 
-  test('mock slack server should auto-approve authorization', async () => {
+  it('mock slack server should auto-approve authorization', async () => {
     const authorizeUrl = new URL(`${slackServer.info.baseUrl}/oauth/authorize`);
     authorizeUrl.searchParams.set('client_id', 'slack-client');
     authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/oauth/provider/slack/callback');
