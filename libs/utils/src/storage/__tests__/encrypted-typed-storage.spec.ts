@@ -5,12 +5,13 @@
  * encryption/decryption with key rotation support.
  */
 
-import { z } from 'zod';
-import { MemoryStorageAdapter } from '../adapters';
+import { z } from '@frontmcp/lazy-zod';
+
 import { randomBytes } from '../../crypto';
+import { MemoryStorageAdapter } from '../adapters';
 import { EncryptedTypedStorage } from '../encrypted-typed-storage';
-import { EncryptedStorageError } from '../errors';
 import type { EncryptionKey } from '../encrypted-typed-storage.types';
+import { EncryptedStorageError } from '../errors';
 
 interface TestSecret {
   apiKey: string;

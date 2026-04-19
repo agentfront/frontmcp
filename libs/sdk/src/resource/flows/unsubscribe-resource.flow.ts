@@ -1,9 +1,10 @@
 // file: libs/sdk/src/resource/flows/unsubscribe-resource.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
-import { UnsubscribeRequestSchema, EmptyResultSchema } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+import { z } from '@frontmcp/lazy-zod';
+import { EmptyResultSchema, UnsubscribeRequestSchema } from '@frontmcp/protocol';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
   request: UnsubscribeRequestSchema,

@@ -13,12 +13,13 @@
  * - Table mode (columns option with null component)
  */
 
-import React, { useState, useCallback, Suspense } from 'react';
-import type { ReactNode, ReactElement, ComponentType } from 'react';
+import React, { Suspense, useCallback, useState, type ComponentType, type ReactElement, type ReactNode } from 'react';
+
+import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/sdk';
-import { z } from 'zod';
-import type { McpColumnDef } from '../types';
+
 import { useDynamicTool } from '../hooks/useDynamicTool';
+import type { McpColumnDef } from '../types';
 
 // ─── Lazy branding ──────────────────────────────────────────────────────────
 

@@ -3,7 +3,7 @@
  * @description Authentication configuration for private npm registries and esm.sh CDN.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 /**
  * Authentication configuration for accessing private npm registries.

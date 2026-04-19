@@ -4,7 +4,8 @@
  * Zod schema for SQLite storage options used in FrontMCP config.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { RawZodShape } from '../../common.types';
 import type { SqliteOptionsInterface } from './interfaces';
 

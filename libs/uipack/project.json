@@ -31,8 +31,11 @@
           "libs/uipack/src/adapters/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/utils",
             "onnxruntime-*",
             "esbuild",
@@ -69,8 +72,11 @@
           "libs/uipack/src/adapters/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/utils",
             "onnxruntime-*",
             "esbuild",

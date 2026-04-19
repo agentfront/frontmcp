@@ -39,6 +39,9 @@ export * from './esm-loader';
 // Lazy-zod: `z` is lazy by default for cold-start wins, `eagerZ` is the
 // straight zod pass-through, `lazyZ` is the explicit factory form.
 // See libs/lazy-zod/README.md for the rationale and POC numbers.
+// Also mirror zod's `export default z` so `import z from '@frontmcp/lazy-zod'`
+// (the namespace-default form) keeps working after migration.
+export { default } from '@frontmcp/lazy-zod';
 export {
   z,
   eagerZ,

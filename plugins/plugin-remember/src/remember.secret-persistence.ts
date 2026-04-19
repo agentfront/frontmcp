@@ -9,8 +9,9 @@
  * without requiring manual configuration (for development/testing).
  */
 import * as path from 'path';
-import { z } from 'zod';
-import { randomBytes, base64urlEncode, readFile, mkdir, writeFile, rename, unlink } from '@frontmcp/utils';
+
+import { z } from '@frontmcp/lazy-zod';
+import { base64urlEncode, mkdir, randomBytes, readFile, rename, unlink, writeFile } from '@frontmcp/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

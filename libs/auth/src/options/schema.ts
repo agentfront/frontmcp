@@ -1,11 +1,12 @@
 // options/schema.ts
 // Unified auth options schema combining all modes
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
+import type { AuthOptionsInterface } from './interfaces';
+import { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
 import { publicAuthOptionsSchema } from './public.schema';
 import { transparentAuthOptionsSchema } from './transparent.schema';
-import { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
-import type { AuthOptionsInterface } from './interfaces';
 
 // ============================================
 // UNIFIED AUTH OPTIONS

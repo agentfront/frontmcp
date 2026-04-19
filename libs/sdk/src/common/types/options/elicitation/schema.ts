@@ -3,10 +3,11 @@
 // Elicitation configuration schema for @FrontMcp decorator.
 // Uses explicit interfaces from interfaces.ts for IDE autocomplete.
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { RawZodShape } from '../../common.types';
-import type { ElicitationOptionsInterface } from './interfaces';
 import { redisOptionsSchema } from '../redis';
+import type { ElicitationOptionsInterface } from './interfaces';
 
 // Re-export interface type for convenience
 export type { ElicitationOptionsInterface };

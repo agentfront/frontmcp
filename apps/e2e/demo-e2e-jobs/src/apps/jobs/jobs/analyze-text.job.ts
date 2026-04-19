@@ -1,5 +1,5 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 @Job({
   name: 'analyze-text',

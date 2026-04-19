@@ -7,15 +7,13 @@
  * @module elicitation/helpers/elicit.helper
  */
 
-import { ZodType, z } from 'zod';
-import { toJSONSchema } from 'zod/v4';
+import { toJSONSchema, z, type ZodType } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
-import type { ClientCapabilities } from '../../notification';
-import { supportsElicitation } from '../../notification';
-import type { ElicitResult, ElicitOptions } from '../elicitation.types';
-import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
-import { ElicitationNotSupportedError, ElicitationFallbackRequired, ElicitationDisabledError } from '../../errors';
-import type { FrontMcpContext } from '../../context';
+
+import { type FrontMcpContext } from '../../context';
+import { ElicitationDisabledError, ElicitationFallbackRequired, ElicitationNotSupportedError } from '../../errors';
+import { supportsElicitation, type ClientCapabilities } from '../../notification';
+import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation.types';
 
 /**
  * Transport interface for elicitation.

@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 // ============================================
 // Error Code Schema

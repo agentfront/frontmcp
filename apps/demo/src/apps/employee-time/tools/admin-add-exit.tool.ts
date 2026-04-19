@@ -1,9 +1,10 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import EmployeeRedisProvider from '../providers/redis.provider';
+
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
+import EmployeeRedisProvider from '../providers/redis.provider';
+import { hoursKey, sessionsKey, openKey as siteOpenKey } from '../utils/keys';
 import { splitSessionByDay, toMs } from '../utils/time';
-import { openKey as siteOpenKey, hoursKey, sessionsKey } from '../utils/keys';
 
 @Tool({
   name: 'admin-add-exit',

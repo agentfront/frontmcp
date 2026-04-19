@@ -1,8 +1,9 @@
 // file: libs/plugins/src/codecall/__tests__/describe.tool.spec.ts
 
-import { z } from 'zod';
-import DescribeTool from '../tools/describe.tool';
+import { z } from '@frontmcp/lazy-zod';
+
 import { describeToolInputSchema } from '../tools/describe.schema';
+import DescribeTool from '../tools/describe.tool';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({

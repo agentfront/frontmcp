@@ -1,6 +1,5 @@
-import { z } from 'zod';
-
 import type { AppCredential, Credential } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { resolveDemoSessionId } from '../../resolve-session-id';

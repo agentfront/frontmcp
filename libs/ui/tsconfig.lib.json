@@ -7,6 +7,7 @@
     "declarationMap": true,
     "types": ["node"],
     "paths": {
+      "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"],
       "@frontmcp/uipack": ["../uipack/dist/index.d.ts"],
       "@frontmcp/uipack/utils": ["../uipack/dist/utils/index.d.ts"],
       "@frontmcp/uipack/types": ["../uipack/dist/types/index.d.ts"],

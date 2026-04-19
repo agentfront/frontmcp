@@ -1,6 +1,7 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../common';
-import { WorkflowEntry } from '../../common/entries/workflow.entry';
+import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
 
 @Tool({

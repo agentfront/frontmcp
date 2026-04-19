@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { tasksStore } from '../data/tasks.store';
 
 const outputSchema = z.object({

@@ -2,7 +2,7 @@
  * Zod validation schemas for guard configuration.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 // ============================================
 // Partition Key Schema

@@ -1,7 +1,8 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../common';
-import type { JobExecutionManager } from '../execution/job-execution.manager';
 import { GenericServerError, InvalidInputError } from '../../errors';
+import type { JobExecutionManager } from '../execution/job-execution.manager';
 
 @Tool({
   name: 'get-job-status',

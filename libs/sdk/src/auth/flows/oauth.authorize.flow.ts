@@ -16,8 +16,6 @@
  *
  * response_type=code, client_id, redirect_uri, scope, state, code_challenge, code_challenge_method=S256, (optionally request_uri from PAR)
  */
-import { z, type ZodError } from 'zod';
-
 import {
   buildFederatedLoginPage,
   buildIncrementalAuthPage,
@@ -31,6 +29,7 @@ import {
   type InMemoryAuthorizationStore,
   type ProviderCard,
 } from '@frontmcp/auth';
+import { z, type ZodError } from '@frontmcp/lazy-zod';
 
 import {
   computeResource,

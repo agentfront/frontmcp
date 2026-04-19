@@ -8,7 +8,7 @@
  * - `isEntryAvailable()` — pure matcher: does the constraint match the context?
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 import { isEdgeRuntime, isServerless } from '#env';
 

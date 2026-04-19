@@ -1,7 +1,8 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import EmployeeRedisProvider from '../providers/redis.provider';
+
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
+import EmployeeRedisProvider from '../providers/redis.provider';
 import { openKey as siteOpenKey } from '../utils/keys';
 
 function nowMs() {

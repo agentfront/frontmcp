@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import '@frontmcp/plugin-remember'; // Import for this.remember types

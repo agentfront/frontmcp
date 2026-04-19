@@ -1,6 +1,7 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { CrmStore, Activity } from '../data/store';
+
+import { CrmStore, type Activity } from '../data/store';
 
 @Tool({
   name: 'activities:list',

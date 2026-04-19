@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { zodToJsonSchema } from '../zodToJsonSchema';
 
 describe('zodToJsonSchema', () => {

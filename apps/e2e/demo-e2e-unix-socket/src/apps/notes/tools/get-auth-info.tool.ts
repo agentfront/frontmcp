@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { FRONTMCP_CONTEXT, Tool, ToolContext } from '@frontmcp/sdk';
 
 interface DirectAuthInfo {

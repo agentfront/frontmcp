@@ -1,27 +1,26 @@
 import 'reflect-metadata';
 
+import { z } from '@frontmcp/lazy-zod';
+// ── @frontmcp/sdk imports (decorators, types, core) ──
+import { FrontMcp, Prompt, PromptContext, Resource, ResourceContext, Tool, ToolContext } from '@frontmcp/sdk';
 // ── @frontmcp/utils imports ──
 import {
-  getEnv,
+  AsyncLocalStorage,
+  base64urlDecode,
+  base64urlEncode,
+  EventEmitter,
   getCwd,
-  isProduction,
-  isDevelopment,
+  getEnv,
   getEnvFlag,
   isDebug,
+  isDevelopment,
   isEdgeRuntime,
+  isProduction,
   isServerless,
-  supportsAnsi,
   randomUUID,
   sha256Hex,
-  base64urlEncode,
-  base64urlDecode,
-  AsyncLocalStorage,
-  EventEmitter,
+  supportsAnsi,
 } from '@frontmcp/utils';
-
-// ── @frontmcp/sdk imports (decorators, types, core) ──
-import { FrontMcp, Tool, ToolContext, Resource, ResourceContext, Prompt, PromptContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 // ── Test results container ──
 const results: Record<string, { pass: boolean; value: string }> = {};

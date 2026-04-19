@@ -1,6 +1,5 @@
-import { z } from 'zod';
-import { Tool, ToolContext } from '@frontmcp/react';
-import type { CallToolResult } from '@frontmcp/react';
+import { z } from '@frontmcp/lazy-zod';
+import { Tool, ToolContext, type CallToolResult } from '@frontmcp/react';
 
 @Tool({
   name: 'greet',

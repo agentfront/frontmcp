@@ -1,6 +1,5 @@
-import { z } from 'zod';
-
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
+import { z } from '@frontmcp/lazy-zod';
 
 import type { AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {

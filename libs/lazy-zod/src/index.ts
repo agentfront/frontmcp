@@ -9,6 +9,12 @@
  */
 
 export { z } from './lazy-z';
+// Default export mirrors zod's own `export default z` so existing code
+// like `import type z from 'zod'` (namespace-default import) keeps working
+// when the source is flipped to `'@frontmcp/lazy-zod'` / `'@frontmcp/sdk'`.
+// Without this, consumers who use the default import get `any`, which
+// cascades into `any.ZodObject<T>` etc. and breaks decorator inference.
+export { z as default } from './lazy-z';
 export { eagerZ } from './eager-z';
 export { lazyZ, LazyZodSchema, LAZY_BRAND, LAZY_TARGET, type InferLazy } from './lazy-schema';
 export { isLazy, forceMaterialize } from './utils';

@@ -1,9 +1,10 @@
 // file: libs/sdk/src/logging/flows/set-level.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
-import { SetLevelRequestSchema, EmptyResultSchema, LoggingLevelSchema } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError, GenericServerError } from '../../errors';
+import { z } from '@frontmcp/lazy-zod';
+import { EmptyResultSchema, LoggingLevelSchema, SetLevelRequestSchema } from '@frontmcp/protocol';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { GenericServerError, InvalidInputError, InvalidMethodError } from '../../errors';
 
 const inputSchema = z.object({
   request: SetLevelRequestSchema,

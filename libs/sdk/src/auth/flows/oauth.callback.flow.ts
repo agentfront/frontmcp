@@ -11,21 +11,22 @@
  * with a real identity provider or user database.
  */
 
+import { createFederatedAuthSession, escapeHtml, startNextProvider, type ProviderPkce } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
+import { generateCodeVerifier, randomUUID, sha256Base64url, sha256Hex } from '@frontmcp/utils';
+
 import {
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
+  HttpHtmlSchema,
   httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
-  HttpHtmlSchema,
   StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
-import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { randomUUID, sha256Hex, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
-import { escapeHtml, startNextProvider, createFederatedAuthSession, type ProviderPkce } from '@frontmcp/auth';
+import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
 

@@ -5,8 +5,9 @@
  * transparent encryption/decryption with key rotation support.
  */
 
+import type { z } from '@frontmcp/lazy-zod';
+
 import type { SetOptions } from './types';
-import type { z } from 'zod';
 
 /**
  * Encryption key with identifier for key rotation support.

@@ -1,5 +1,5 @@
-import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { Prompt, PromptContext, type GetPromptResult } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'ui-showcase',

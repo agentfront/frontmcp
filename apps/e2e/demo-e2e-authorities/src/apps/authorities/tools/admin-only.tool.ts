@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = { action: z.string().default('admin-action') };

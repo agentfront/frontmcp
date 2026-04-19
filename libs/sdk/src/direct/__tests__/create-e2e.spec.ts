@@ -6,8 +6,7 @@
 
 import 'reflect-metadata';
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../../common';

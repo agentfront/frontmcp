@@ -5,25 +5,26 @@
  * Returns compact skill summaries in plain text format.
  */
 
+import { z } from '@frontmcp/lazy-zod';
+
 import {
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
-  httpInputSchema,
-  HttpTextSchema,
-  httpRespond,
-  ScopeEntry,
-  ServerRequest,
   FlowHooksOf,
+  httpInputSchema,
+  httpRespond,
+  HttpTextSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ScopeEntry,
+  type ServerRequest,
 } from '../../../common';
-import { z } from 'zod';
-import { formatSkillsForLlmCompact } from '../../skill-http.utils';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import { createSkillHttpAuthValidator } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
+import { formatSkillsForLlmCompact } from '../../skill-http.utils';
 
 const inputSchema = httpInputSchema;
 

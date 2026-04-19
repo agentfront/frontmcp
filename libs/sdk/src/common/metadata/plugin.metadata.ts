@@ -1,7 +1,15 @@
-import { RawZodShape } from '../types';
-import { z } from 'zod';
-import { Token } from '@frontmcp/di';
-import { ProviderType, PluginType, AdapterType, ToolType, ResourceType, PromptType, SkillType } from '../interfaces';
+import { type Token } from '@frontmcp/di';
+import { z } from '@frontmcp/lazy-zod';
+
+import {
+  type AdapterType,
+  type PluginType,
+  type PromptType,
+  type ProviderType,
+  type ResourceType,
+  type SkillType,
+  type ToolType,
+} from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
   annotatedFrontMcpPluginsSchema,
@@ -11,6 +19,7 @@ import {
   annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
+import { type RawZodShape } from '../types';
 
 /**
  * Context extension declaration for plugins.

@@ -1,14 +1,15 @@
 // common/types/options/redis/typecheck.ts
 // Compile-time type sync checks between interfaces and Zod schemas
 
-import type { z } from 'zod';
-import type { redisProviderSchema, vercelKvProviderSchema, redisOptionsSchema, pubsubOptionsSchema } from './schema';
+import type { z } from '@frontmcp/lazy-zod';
+
 import type {
+  PubsubOptionsInterface,
+  RedisOptionsInterface,
   RedisProviderOptionsInterface,
   VercelKvProviderOptionsInterface,
-  RedisOptionsInterface,
-  PubsubOptionsInterface,
 } from './interfaces';
+import type { pubsubOptionsSchema, redisOptionsSchema, redisProviderSchema, vercelKvProviderSchema } from './schema';
 
 type IsAssignable<T, U> = T extends U ? true : false;
 type AssertTrue<T extends true> = T;

@@ -11,9 +11,8 @@
  * ```
  */
 
-import { type ZodType } from 'zod';
-
 import { isFrontMcpCredentials, type FetchCredentialMiddleware, type FrontMcpFetchInit } from '@frontmcp/auth';
+import { type ZodType } from '@frontmcp/lazy-zod';
 import { type AuthInfo } from '@frontmcp/protocol';
 import { randomUUID, sha256Hex } from '@frontmcp/utils';
 

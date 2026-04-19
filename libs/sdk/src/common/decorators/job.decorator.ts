@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import type z from 'zod';
+import type z from '@frontmcp/lazy-zod';
 
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
 import { type JobContext } from '../interfaces';

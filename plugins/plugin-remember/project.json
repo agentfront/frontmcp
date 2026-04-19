@@ -26,8 +26,18 @@
           "plugins/plugin-remember/package.json"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["ioredis", "@frontmcp/sdk", "@frontmcp/utils", "@vercel/kv", "zod", "reflect-metadata"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": [
+            "@frontmcp/lazy-zod",
+            "ioredis",
+            "@frontmcp/sdk",
+            "@frontmcp/utils",
+            "@vercel/kv",
+            "zod",
+            "reflect-metadata"
+          ]
         }
       }
     },
@@ -45,8 +55,18 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["ioredis", "@frontmcp/sdk", "@frontmcp/utils", "@vercel/kv", "zod", "reflect-metadata"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": [
+            "@frontmcp/lazy-zod",
+            "ioredis",
+            "@frontmcp/sdk",
+            "@frontmcp/utils",
+            "@vercel/kv",
+            "zod",
+            "reflect-metadata"
+          ]
         }
       }
     },

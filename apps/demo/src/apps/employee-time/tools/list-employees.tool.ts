@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
 
 @Tool({

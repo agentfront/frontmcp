@@ -1,10 +1,11 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import EmployeeRedisProvider from '../providers/redis.provider';
+
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
-import { eachDayRange, endOfMonthMs, endOfWeekMs, formatDay, startOfMonthMs, startOfWeekMs } from '../utils/time';
+import EmployeeRedisProvider from '../providers/redis.provider';
 import { getEmployeeDayMsForSite } from '../utils/hours';
 import { openKey as siteOpenKey } from '../utils/keys';
+import { eachDayRange, endOfMonthMs, endOfWeekMs, formatDay, startOfMonthMs, startOfWeekMs } from '../utils/time';
 
 @Tool({
   name: 'get-employee-details',

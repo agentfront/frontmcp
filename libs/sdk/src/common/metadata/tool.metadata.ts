@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import {
   concurrencyConfigSchema,
   rateLimitConfigSchema,
@@ -8,6 +6,7 @@ import {
   type RateLimitConfig,
   type TimeoutConfig,
 } from '@frontmcp/guard';
+import { z } from '@frontmcp/lazy-zod';
 import { AudioContentSchema, EmbeddedResourceSchema, ImageContentSchema, ResourceLinkSchema } from '@frontmcp/protocol';
 import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
 

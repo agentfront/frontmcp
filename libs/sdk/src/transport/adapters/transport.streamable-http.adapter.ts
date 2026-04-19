@@ -1,14 +1,14 @@
-import { TransportType } from '../transport.types';
-import { AuthenticatedServerRequest } from '../../server/server.types';
-import { LocalTransportAdapter } from './transport.local.adapter';
-import { RequestId } from '@frontmcp/protocol';
-import { ZodType } from 'zod';
-import { toJSONSchema } from 'zod/v4';
-import { rpcRequest } from '../transport.error';
-import { ServerResponse } from '../../common';
-import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
-import { ElicitResult, ElicitOptions } from '../../elicitation';
+import { toJSONSchema, type ZodType } from '@frontmcp/lazy-zod';
+import { type RequestId } from '@frontmcp/protocol';
+
+import { type ServerResponse } from '../../common';
+import { type ElicitOptions, type ElicitResult } from '../../elicitation';
 import { ElicitationTimeoutError } from '../../errors';
+import { type AuthenticatedServerRequest } from '../../server/server.types';
+import { rpcRequest } from '../transport.error';
+import { type TransportType } from '../transport.types';
+import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
+import { LocalTransportAdapter } from './transport.local.adapter';
 
 /**
  * Resolves the session ID generator for the transport.
@@ -77,13 +77,13 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     // Debug: log transport state
     this.logger.info('[StreamableHttpAdapter] transport state before handleRequest', {
       isRecreatable: this.transport instanceof RecreateableStreamableHTTPServerTransport,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       hasWebTransport: !!(this.transport as any)._webStandardTransport,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       webTransportInitialized: (this.transport as any)._webStandardTransport?._initialized,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       webTransportStarted: (this.transport as any)._webStandardTransport?._started,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       hasSessionIdGenerator: (this.transport as any)._webStandardTransport?.sessionIdGenerator !== undefined,
     });
 
@@ -92,7 +92,6 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     const originalEnd = res.end.bind(res) as typeof res.end;
     let responseBody = '';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     res.write = function (this: ServerResponse, chunk: any, encodingOrCb?: any, cb?: any): boolean {
       if (chunk) {
         responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
@@ -102,7 +101,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const adapter = this;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     res.end = function (this: ServerResponse, chunk?: any, encodingOrCb?: any, cb?: any): ServerResponse {
       if (chunk) {
         responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);

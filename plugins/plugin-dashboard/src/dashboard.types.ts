@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 /**
  * CDN configuration for loading dashboard UI from external sources.

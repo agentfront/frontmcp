@@ -1,7 +1,6 @@
 // tools/flows/call-tool.flow.ts
-import { z } from 'zod';
-
 import { ConcurrencyLimitError, ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@frontmcp/guard';
+import { z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import {
   buildToolResponseContent,

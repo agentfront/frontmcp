@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Agent, AgentContext, OpenAIAdapter } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { createErrorOpenAIMock } from '../mocks/error-openai-mock';
 import { FailingTool } from '../tools/failing.tool';
 

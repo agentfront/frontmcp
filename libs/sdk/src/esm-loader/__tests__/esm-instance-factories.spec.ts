@@ -1,7 +1,8 @@
-import { z } from 'zod';
-import { createEsmToolInstance } from '../factories/esm-instance-factories';
+import { z } from '@frontmcp/lazy-zod';
+
 import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
 import type { ToolCallExtra } from '../../common/entries/tool.entry';
+import { createEsmToolInstance } from '../factories/esm-instance-factories';
 
 describe('esm-instance-factories', () => {
   describe('createEsmToolInstance()', () => {

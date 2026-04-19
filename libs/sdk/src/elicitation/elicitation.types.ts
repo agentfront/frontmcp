@@ -5,8 +5,9 @@
  * tool or agent execution.
  */
 
-import { ZodType } from 'zod';
-import { Infer } from '../types/zod.types';
+import { type ZodType } from '@frontmcp/lazy-zod';
+
+import { type Infer } from '../types/zod.types';
 
 /**
  * Default timeout for elicitation requests (5 minutes).

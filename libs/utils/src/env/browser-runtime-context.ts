@@ -5,7 +5,7 @@
  * The isEntryAvailable matcher works identically to the Node version.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 // ============================================
 // Types (identical to Node version)

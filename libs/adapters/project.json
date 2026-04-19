@@ -29,8 +29,11 @@
         "assets": ["libs/adapters/README.md", "LICENSE", "libs/adapters/package.json"],
         "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/utils",
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
@@ -59,8 +62,11 @@
         "platform": "node",
         "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/utils",
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",

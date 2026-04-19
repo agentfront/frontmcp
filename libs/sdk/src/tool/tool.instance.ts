@@ -1,7 +1,6 @@
 // file: libs/sdk/src/tool/tool.instance.ts
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import type { CallToolRequest } from '@frontmcp/protocol';
 
 import {

@@ -1,6 +1,7 @@
-import { z } from 'zod';
+import { type z } from '@frontmcp/lazy-zod';
+
 import { Provider, ProviderScope } from '../../../common';
-import { DottedPath, PathValue } from '../../../common/providers/base-config.provider';
+import { type DottedPath, type PathValue } from '../../../common/providers/base-config.provider';
 
 /**
  * Error thrown when a required config key is missing.

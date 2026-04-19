@@ -6,6 +6,7 @@
     "declaration": true,
     "types": ["node"],
     "paths": {
+      "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"],
       "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"],
       "@frontmcp/utils": ["libs/utils/dist/index.d.ts"],
       "@frontmcp/di": ["libs/di/dist/index.d.ts"]

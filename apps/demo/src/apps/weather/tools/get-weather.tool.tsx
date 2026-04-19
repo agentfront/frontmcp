@@ -7,8 +7,8 @@
  * and other UI-capable hosts.
  */
 
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 // Define input/output schemas
 const inputSchema = {

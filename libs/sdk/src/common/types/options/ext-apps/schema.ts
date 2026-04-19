@@ -1,7 +1,8 @@
 // common/types/options/ext-apps/schema.ts
 // Zod schema for ext-apps configuration
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { RawZodShape } from '../../common.types';
 import type { ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from './interfaces';
 

@@ -5,27 +5,28 @@
  * Provides JSON API for listing, searching, and loading skills.
  */
 
+import { z } from '@frontmcp/lazy-zod';
+
 import {
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
+  FlowHooksOf,
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
-  ScopeEntry,
-  ServerRequest,
-  FlowHooksOf,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ScopeEntry,
+  type ServerRequest,
 } from '../../../common';
-import type ToolRegistry from '../../../tool/tool.registry';
-import { z } from 'zod';
-import { skillToApiResponse, formatSkillForLLMWithSchemas } from '../../skill-http.utils';
-import { formatSkillForLLM } from '../../skill.utils';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
+import type ToolRegistry from '../../../tool/tool.registry';
 import { createSkillHttpAuthValidator } from '../../auth';
+import { formatSkillForLLMWithSchemas, skillToApiResponse } from '../../skill-http.utils';
 import type { SkillRegistryInterface } from '../../skill.registry';
+import { formatSkillForLLM } from '../../skill.utils';
 
 const inputSchema = httpInputSchema;
 

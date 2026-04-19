@@ -1,7 +1,8 @@
 // common/types/options/pagination/schema.ts
 // Zod schema for pagination configuration
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { RawZodShape } from '../../common.types';
 import type { PaginationOptionsInterface, ToolPaginationOptionsInterface } from './interfaces';
 

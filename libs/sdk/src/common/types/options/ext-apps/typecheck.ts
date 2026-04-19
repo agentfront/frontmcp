@@ -1,9 +1,10 @@
 // common/types/options/ext-apps/typecheck.ts
 // Compile-time type sync checks between interfaces and Zod schemas
 
-import type { z } from 'zod';
-import type { extAppsOptionsSchema, extAppsHostCapabilitiesSchema } from './schema';
-import type { ExtAppsOptionsInterface, ExtAppsHostCapabilitiesInterface } from './interfaces';
+import type { z } from '@frontmcp/lazy-zod';
+
+import type { ExtAppsHostCapabilitiesInterface, ExtAppsOptionsInterface } from './interfaces';
+import type { extAppsHostCapabilitiesSchema, extAppsOptionsSchema } from './schema';
 
 type IsAssignable<T, U> = T extends U ? true : false;
 type AssertTrue<T extends true> = T;

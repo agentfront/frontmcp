@@ -7,12 +7,13 @@
  * @module elicitation/flows/elicitation-result.flow
  */
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { ElicitationStoreNotInitializedError, InvalidInputError } from '../../errors';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
-import type { PendingElicitRecord } from '../store';
-import { InvalidInputError, ElicitationStoreNotInitializedError } from '../../errors';
 import { validateElicitationContent } from '../helpers';
+import type { PendingElicitRecord } from '../store';
 
 const inputSchema = z.object({
   /** Session ID for the elicitation */

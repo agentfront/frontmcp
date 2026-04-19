@@ -2,7 +2,8 @@
  * Zod schema for provider metadata validation.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { ProviderScope, type ProviderMetadata } from './provider.metadata.js';
 
 /**

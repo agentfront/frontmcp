@@ -1,9 +1,10 @@
 // file: libs/sdk/src/completion/flows/complete.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 import { CompleteRequestSchema, CompleteResultSchema } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { hasUIConfig } from '../../tool/ui';
 
 const inputSchema = z.object({

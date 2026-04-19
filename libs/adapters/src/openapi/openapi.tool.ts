@@ -1,21 +1,22 @@
-import { z } from 'zod';
-import { tool, FrontMcpLogger } from '@frontmcp/sdk';
+import { type McpOpenAPITool } from 'mcp-from-openapi';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { z, type JSONSchema } from '@frontmcp/lazy-zod';
+import { tool, type FrontMcpLogger } from '@frontmcp/sdk';
+
+import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
+import { resolveToolSecurity } from './openapi.security';
 import type {
-  OpenApiAdapterOptions,
-  InputTransformContext,
   ExtendedToolMetadata,
   InputTransform,
+  InputTransformContext,
+  OpenApiAdapterOptions,
   PostToolTransformContext,
 } from './openapi.types';
-import type { JSONSchema } from 'zod/v4/core';
+import { applyAdditionalHeaders, buildRequest, parseResponse } from './openapi.utils';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
-import { buildRequest, applyAdditionalHeaders, parseResponse } from './openapi.utils';
-import { resolveToolSecurity } from './openapi.security';
-import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
 
 /**
  * Create a FrontMCP tool from an OpenAPI tool definition

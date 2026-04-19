@@ -1,51 +1,49 @@
 // file: libs/sdk/src/agent/agent.instance.ts
 
-import { z } from 'zod';
-import { toJSONSchema } from 'zod/v4';
-import { Token } from '@frontmcp/di';
+import { type Token } from '@frontmcp/di';
+import { toJSONSchema, z } from '@frontmcp/lazy-zod';
+import { type CallToolRequest, type CallToolResult, type TextContent, type Tool } from '@frontmcp/protocol';
+
+import { ConfigService } from '../builtin/config';
 import {
-  EntryOwnerRef,
-  AgentCallArgs,
-  AgentCallExtra,
   AgentContext,
-  AgentCtorArgs,
   AgentEntry,
-  AgentRecord,
   AgentKind,
-  AgentFunctionTokenRecord,
-  ParsedAgentResult,
-  SafeTransformResult,
-  ToolInputType,
-  ToolOutputType,
-  AgentInputOf,
-  AgentOutputOf,
-  AgentLlmAdapter,
-  AgentToolDefinition,
-  ToolEntry,
-  ToolMetadata,
+  type AgentCallArgs,
+  type AgentCallExtra,
+  type AgentCtorArgs,
+  type AgentFunctionTokenRecord,
+  type AgentInputOf,
+  type AgentLlmAdapter,
+  type AgentOutputOf,
+  type AgentRecord,
+  type AgentToolDefinition,
+  type EntryOwnerRef,
+  type ParsedAgentResult,
+  type SafeTransformResult,
+  type ScopeEntry,
+  type ToolEntry,
+  type ToolInputType,
+  type ToolMetadata,
+  type ToolOutputType,
 } from '../common';
 import { tool as toolDecorator } from '../common/decorators/tool.decorator';
-import { ToolInstance } from '../tool/tool.instance';
-import { normalizeTool } from '../tool/tool.utils';
-import ProviderRegistry from '../provider/provider.registry';
-import HookRegistry from '../hooks/hook.registry';
-import { ScopeEntry } from '../common';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { createAdapter, CreateAdapterOptions, ConfigResolver } from './adapters';
-import { ConfigService } from '../builtin/config';
-import type { CallToolRequest, Tool } from '@frontmcp/protocol';
 import {
-  InvalidHookFlowError,
-  AgentNotConfiguredError,
-  AgentToolNotFoundError,
   AgentConfigKeyNotFoundError,
+  AgentNotConfiguredError,
   AgentToolExecutionError,
+  AgentToolNotFoundError,
+  InvalidHookFlowError,
 } from '../errors';
-import { agentToolName, isAgentVisibleToSwarm, canAgentSeeSwarm, getVisibleAgentIds } from './agent.utils';
-import { buildParsedToolResult, buildAgentToolDefinitions } from '../tool/tool.utils';
-import { ToolExecutor } from './agent-execution-loop';
+import type HookRegistry from '../hooks/hook.registry';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import type ProviderRegistry from '../provider/provider.registry';
+import { ToolInstance } from '../tool/tool.instance';
+import { buildAgentToolDefinitions, buildParsedToolResult, normalizeTool } from '../tool/tool.utils';
+import { createAdapter, type ConfigResolver, type CreateAdapterOptions } from './adapters';
+import { type ToolExecutor } from './agent-execution-loop';
 import { AgentScope } from './agent.scope';
-import type { CallToolResult, TextContent } from '@frontmcp/protocol';
+import { agentToolName, canAgentSeeSwarm, getVisibleAgentIds, isAgentVisibleToSwarm } from './agent.utils';
 
 // ============================================================================
 // Constants
@@ -251,7 +249,7 @@ export class AgentInstance<
    * Create a ConfigResolver from the ConfigService.
    * Uses getAll() and manual path traversal to avoid DottedPath type complexity.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private createConfigResolver(configService: ConfigService<any>): ConfigResolver {
     // Get the raw config object to avoid DottedPath type complexity
     const config = configService.getAll();

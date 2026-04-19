@@ -1,12 +1,14 @@
-import React from 'react';
 import { renderHook } from '@testing-library/react';
-import { z } from 'zod';
-import { useDynamicTool } from '../useDynamicTool';
+import React from 'react';
+
+import { z } from '@frontmcp/lazy-zod';
+import type { CallToolResult } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
-import type { CallToolResult } from '@frontmcp/sdk';
+import { useDynamicTool } from '../useDynamicTool';
 
 // ---------------------------------------------------------------------------
 // Helpers

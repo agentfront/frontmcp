@@ -2,22 +2,25 @@
 import {
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
   httpInputSchema,
   HttpJsonSchema,
   HttpRedirectSchema,
   httpRespond,
   HttpTextSchema,
-  ScopeEntry,
-  ServerRequest,
-  StageHookOf,
   isTransparentMode,
   makeWellKnownPaths,
+  StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ScopeEntry,
+  type ServerRequest,
 } from '../../common';
+
 import 'reflect-metadata';
-import { z } from 'zod';
+
 import { JwksService } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
+
 import { OrchestratorJwksNotAvailableError } from '../../errors/auth-internal.errors';
 
 const inputSchema = httpInputSchema;
