@@ -13,6 +13,8 @@
 
 export const HEAVY_FACTORIES: ReadonlySet<string> = new Set([
   'object',
+  'strictObject',
+  'looseObject',
   'union',
   'discriminatedUnion',
   'intersection',
@@ -26,6 +28,7 @@ export const CHAIN_METHODS: ReadonlySet<string> = new Set([
   'nullable',
   'nullish',
   'default',
+  'prefault',
   'describe',
   'refine',
   'superRefine',

@@ -58,6 +58,14 @@ function main() {
   const eager = runs.filter((r) => r.variant === 'eager');
   const lazy = runs.filter((r) => r.variant === 'lazy');
 
+  if (eager.length === 0 || lazy.length === 0) {
+    console.error(
+      `[report] results.json missing one variant's measurements — ` +
+        `eager=${eager.length}, lazy=${lazy.length}. Re-run bench.`,
+    );
+    process.exit(1);
+  }
+
   const coldEager = agg(eager, 'coldStartMs');
   const coldLazy = agg(lazy, 'coldStartMs');
   const firstEager = agg(eager, 'firstParseMs');

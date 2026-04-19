@@ -37,7 +37,16 @@ function runOne(bundle: string): Measurement {
   }
   const line = r.stdout.trim().split('\n').pop();
   if (!line) throw new Error('no stdout line from bundle');
-  return JSON.parse(line);
+  try {
+    return JSON.parse(line);
+  } catch (e) {
+    // Include the raw stdout + stderr so a malformed measurement line
+    // (e.g. an unexpected log line leaking into stdout) is diagnosable.
+    throw new Error(
+      `failed to parse measurement line from ${bundle}: ${(e as Error).message}\n` +
+        `stdout: ${r.stdout}\nstderr: ${r.stderr}`,
+    );
+  }
 }
 
 function main() {

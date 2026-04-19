@@ -177,6 +177,33 @@ function genAll(total: number): SchemaDescriptor[] {
 }
 
 // ---------- descriptor -> Zod expression string ----------
+//
+// safeCodeString — wraps JSON.stringify with extra escaping for characters
+// that have special meaning inside JS source (closing HTML-script tags,
+// forward-slash that could terminate a regex/comment, U+2028/U+2029 line
+// separators that some parsers treat as newlines). Any value interpolated
+// into the generated TS source MUST go through this helper, not plain
+// JSON.stringify — CodeQL flags otherwise-sanitized strings when they're
+// used for code construction.
+function safeCodeString(value: string): string {
+  return JSON.stringify(value).replace(/[<>/\u2028\u2029]/g, (ch) => {
+    switch (ch) {
+      case '<':
+        return '\\u003C';
+      case '>':
+        return '\\u003E';
+      case '/':
+        return '\\u002F';
+      case '\u2028':
+        return '\\u2028';
+      case '\u2029':
+        return '\\u2029';
+      default:
+        return ch;
+    }
+  });
+}
+
 function fieldToZodExpr(f: FieldDescriptor): string {
   let expr: string;
   switch (f.type) {
@@ -190,16 +217,16 @@ function fieldToZodExpr(f: FieldDescriptor): string {
       expr = 'z.boolean()';
       break;
     case 'enum':
-      expr = `z.enum([${f.values.map((v) => JSON.stringify(v)).join(', ')}])`;
+      expr = `z.enum([${f.values.map((v) => safeCodeString(v)).join(', ')}])`;
       break;
     case 'array':
       expr = `z.array(${f.items === 'string' ? 'z.string()' : 'z.number()'})`;
       break;
     case 'record':
-      expr = `z.record(z.enum([${f.keys.map((k) => JSON.stringify(k)).join(', ')}]), z.string())`;
+      expr = `z.record(z.enum([${f.keys.map((k) => safeCodeString(k)).join(', ')}]), z.string())`;
       break;
     case 'object': {
-      const children = f.children.map((c) => `${JSON.stringify(c.name)}: ${fieldToZodExpr(c)}`).join(', ');
+      const children = f.children.map((c) => `${safeCodeString(c.name)}: ${fieldToZodExpr(c)}`).join(', ');
       expr = `z.object({ ${children} })`;
       break;
     }
@@ -208,7 +235,7 @@ function fieldToZodExpr(f: FieldDescriptor): string {
 }
 
 function objectExpr(fields: FieldDescriptor[]): string {
-  const entries = fields.map((f) => `${JSON.stringify(f.name)}: ${fieldToZodExpr(f)}`).join(', ');
+  const entries = fields.map((f) => `${safeCodeString(f.name)}: ${fieldToZodExpr(f)}`).join(', ');
   return `z.object({ ${entries} })`;
 }
 
@@ -225,13 +252,13 @@ function descriptorToZodExpr(d: SchemaDescriptor): string {
       const variants = d.variants
         .map((v) => {
           const entries = [
-            `${JSON.stringify(d.discriminator)}: z.literal(${JSON.stringify(v.tag)})`,
-            ...v.fields.map((f) => `${JSON.stringify(f.name)}: ${fieldToZodExpr(f)}`),
+            `${safeCodeString(d.discriminator)}: z.literal(${safeCodeString(v.tag)})`,
+            ...v.fields.map((f) => `${safeCodeString(f.name)}: ${fieldToZodExpr(f)}`),
           ].join(', ');
           return `z.object({ ${entries} })`;
         })
         .join(', ');
-      return `z.discriminatedUnion(${JSON.stringify(d.discriminator)}, [${variants}])`;
+      return `z.discriminatedUnion(${safeCodeString(d.discriminator)}, [${variants}])`;
     }
     case 'union': {
       const members = d.members.map(descriptorToZodExpr).join(', ');
@@ -324,7 +351,7 @@ function emit(variant: 'eager' | 'lazy', descriptors: SchemaDescriptor[]): strin
     const expr = descriptorToZodExpr(d);
     const sample = JSON.stringify(descriptorToSample(d));
     const schemaExpr = variant === 'lazy' ? `lazyZ(() => ${expr})` : expr;
-    lines.push(`  { name: ${JSON.stringify(d.name)}, schema: ${schemaExpr}, sample: ${sample} },`);
+    lines.push(`  { name: ${safeCodeString(d.name)}, schema: ${schemaExpr}, sample: ${sample} },`);
   }
 
   return [header, ...lines, '];', ''].join('\n');

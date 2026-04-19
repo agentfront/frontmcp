@@ -84,6 +84,10 @@ export {
   ZodVoid,
   type ZodTypeAny,
   type ZodRawShape,
+  // Utility type aliases (z.infer / z.input / z.output)
+  type infer,
+  type input,
+  type output,
 } from '@frontmcp/lazy-zod';
 
 // Re-export MCP types commonly needed by consumers

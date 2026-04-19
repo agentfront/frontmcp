@@ -72,18 +72,21 @@ export function wrapLazy(schema: LazyZodSchema): unknown {
         return (target as unknown as Record<string, unknown>)[key as string];
       }
 
-      // Hot path — materialize, bind, self-patch, call
+      // Hot path — materialize, bind, self-patch, call.
+      // Forward ALL arguments (zod's `parse` / `safeParse` accept optional
+      // params objects like error maps); taking only `data` would drop them
+      // on the cold path and make cold/warm calls behave differently.
       if (typeof key === 'string' && HOT_PATH_METHODS.has(key)) {
-        return (data: unknown) => {
+        return (...args: unknown[]) => {
           const real = target.materialize();
-          const bound = (real as unknown as Record<string, (d: unknown) => unknown>)[key].bind(real);
+          const bound = (real as unknown as Record<string, (...a: unknown[]) => unknown>)[key].bind(real);
           Object.defineProperty(target, key, {
             value: bound,
             writable: true,
             configurable: true,
             enumerable: false,
           });
-          return bound(data);
+          return bound(...args);
         };
       }
 

@@ -65,9 +65,18 @@ directly — it's re-exported as `z` from `@frontmcp/sdk`.
 
 ## Status
 
-Scaffold. The Proxy-based lazy implementation lands in PR 2. Until then,
-`z` and `eagerZ` both point at real zod (so early adopters can start
-importing without breakage).
+Implemented. `z` is lazy by default — heavy compound factories (`z.object`,
+`z.union`, `z.discriminatedUnion`, `z.intersection`, `z.record`, `z.tuple`,
+plus `z.strictObject` / `z.looseObject`) return a `Proxy` over a
+`LazyZodSchema` that materializes the real zod schema on first
+`.parse()` / `.safeParse()` / `.parseAsync()` / `.safeParseAsync()` call
+and self-patches the hot-path methods onto the instance so subsequent
+parses run at native zod speed (measured at +0.2% steady-state overhead
+in the POC). Light factories (`z.string`, `z.number`, `z.enum`,
+`z.literal`, `z.lazy`, etc.) pass straight through to real zod. See
+`src/lazy-z.ts` for the Proxy and `src/lazy-schema.ts` for the wrapper.
+Use `eagerZ` when a consumer needs a fully-constructed schema at
+import time (e.g. immediate introspection).
 
 ## License
 
