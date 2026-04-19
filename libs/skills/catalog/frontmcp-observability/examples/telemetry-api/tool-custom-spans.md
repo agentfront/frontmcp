@@ -19,9 +19,7 @@ Create child spans, events, and attributes inside a tool's execute method using 
 
 ```typescript
 // src/apps/my-app/tools/weather.tool.ts
-import { z } from 'zod';
-
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_weather',

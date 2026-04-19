@@ -44,6 +44,7 @@ A complete beginner MCP server that exposes a weather lookup tool and a static r
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { WeatherApp } from './weather.app';
 
 @FrontMcp({
@@ -60,8 +61,9 @@ export default class WeatherServer {}
 ```typescript
 // src/weather.app.ts
 import { App } from '@frontmcp/sdk';
-import { GetWeatherTool } from './tools/get-weather.tool';
+
 import { CitiesResource } from './resources/cities.resource';
+import { GetWeatherTool } from './tools/get-weather.tool';
 
 @App({
   name: 'Weather',
@@ -78,8 +80,7 @@ export class WeatherApp {}
 
 ```typescript
 // src/tools/get-weather.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_weather',
@@ -149,6 +150,7 @@ export class CitiesResource extends ResourceContext {
 ```typescript
 // test/get-weather.tool.spec.ts
 import { ToolContext } from '@frontmcp/sdk';
+
 import { GetWeatherTool } from '../src/tools/get-weather.tool';
 
 describe('GetWeatherTool', () => {
@@ -239,6 +241,7 @@ describe('GetWeatherTool', () => {
 ```typescript
 // test/weather.e2e.spec.ts
 import { McpTestClient, TestServer } from '@frontmcp/testing';
+
 import Server from '../src/main';
 
 describe('Weather Server E2E', () => {

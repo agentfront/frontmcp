@@ -80,7 +80,7 @@ export const echoTool = {
 ```ts Decorated Class
 // src/tools/echo.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const Input = z.object({
   message: z.string().describe('Message to echo'),

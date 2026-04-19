@@ -56,7 +56,7 @@ debug: false
 ### 3. Define your schema
 
 ```ts
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const configSchema = z.object({
   database: z.object({
@@ -81,7 +81,7 @@ For programmatic configuration loading outside of plugins:
 
 ```ts
 import { loadConfig } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const schema = z.object({
   database: z.object({
@@ -210,7 +210,7 @@ Version 4.1.1+ is required to address CVE-2025-64718. Earlier versions should no
 
 ```ts
 import { FrontMcp, App, Tool, ToolContext, ConfigPlugin } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Define typed schema
 const configSchema = z.object({

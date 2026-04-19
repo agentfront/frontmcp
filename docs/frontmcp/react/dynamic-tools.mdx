@@ -15,7 +15,7 @@ Registers an MCP tool for the lifetime of the component. Supports both **zod sch
 
 ```tsx
 import { useDynamicTool } from '@frontmcp/react';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 function CartControls() {
   const { addToCart } = useCart();

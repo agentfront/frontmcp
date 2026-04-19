@@ -18,8 +18,7 @@ Build a FrontMCP server as a standalone binary using Node.js Single Executable A
 
 ```typescript
 // src/main.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet',

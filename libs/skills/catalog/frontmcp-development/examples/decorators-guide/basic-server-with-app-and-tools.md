@@ -20,8 +20,7 @@ Demonstrates the minimal decorator hierarchy to create a working FrontMCP server
 
 ```typescript
 // src/tools/search-users.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'search_users',
@@ -88,10 +87,11 @@ class CodeReviewPrompt extends PromptContext {
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
-import { SearchUsersTool } from './tools/search-users.tool';
-import { AppConfigResource } from './resources/app-config.resource';
+import { App, FrontMcp } from '@frontmcp/sdk';
+
 import { CodeReviewPrompt } from './prompts/code-review.prompt';
+import { AppConfigResource } from './resources/app-config.resource';
+import { SearchUsersTool } from './tools/search-users.tool';
 
 @App({
   name: 'analytics',

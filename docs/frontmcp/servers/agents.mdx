@@ -47,7 +47,7 @@ The simplest agent requires **no `execute()` method**. The default behavior auto
 
 ```ts
 import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'research-agent',
@@ -104,7 +104,7 @@ For simpler agents, use the functional builder:
 
 ```ts
 import { agent } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const EchoAgent = agent({
   name: 'echo-agent',

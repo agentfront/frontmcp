@@ -120,6 +120,7 @@ weather-api/
 
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { WeatherApp } from './weather.app';
 
 @FrontMcp({
@@ -132,8 +133,7 @@ export default class WeatherServer {}
 **Tool** (`create-tool`):
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_weather',
@@ -225,8 +225,8 @@ export default class TaskManagerServer {}
 **Provider for shared storage** (`create-provider`):
 
 ```typescript
-import { Provider } from '@frontmcp/sdk';
 import type { Token } from '@frontmcp/di';
+import { Provider } from '@frontmcp/sdk';
 
 export interface TaskStore {
   create(task: Task): Promise<Task>;

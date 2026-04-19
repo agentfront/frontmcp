@@ -8,7 +8,7 @@ icon: "briefcase"
 
 ```typescript
 import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Job({
   name: 'send-email',
@@ -167,7 +167,7 @@ For simpler jobs, use the `job()` function:
 
 ```typescript
 import { job } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const GreetJob = job({
   name: 'greet',

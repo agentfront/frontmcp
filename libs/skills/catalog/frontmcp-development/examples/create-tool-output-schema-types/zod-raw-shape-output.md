@@ -19,8 +19,7 @@ Demonstrates the recommended approach of using a Zod raw shape as `outputSchema`
 
 ```typescript
 // src/tools/get-user-profile.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_user_profile',

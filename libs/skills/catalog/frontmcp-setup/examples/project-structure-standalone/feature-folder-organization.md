@@ -19,8 +19,7 @@ Organize a growing standalone project into domain-specific feature folders inste
 
 ```typescript
 // src/billing/create-invoice.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'create_invoice',
@@ -71,9 +70,10 @@ export class BillingProvider {
 ```typescript
 // src/my-app.app.ts
 import { App } from '@frontmcp/sdk';
+
+import { BillingProvider } from './billing/billing.provider';
 import CreateInvoiceTool from './billing/create-invoice.tool';
 import InvoiceResource from './billing/invoice.resource';
-import { BillingProvider } from './billing/billing.provider';
 
 @App({
   name: 'my-app',
@@ -87,7 +87,9 @@ export class MyApp {}
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my-app.app';
 
 @FrontMcp({

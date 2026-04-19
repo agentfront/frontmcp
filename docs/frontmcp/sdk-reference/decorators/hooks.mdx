@@ -247,7 +247,7 @@ async errorHandler(ctx, next) {
 
 ```typescript
 import { FlowHooksOf, Provider, Plugin, App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const { Will, Did, Around } = FlowHooksOf('tools:call-tool');
 

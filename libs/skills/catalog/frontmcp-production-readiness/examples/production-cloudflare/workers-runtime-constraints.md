@@ -20,10 +20,9 @@ Shows how to write tools that are compatible with the Cloudflare Workers runtime
 
 ```typescript
 // src/tools/worker-safe.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 // Use @frontmcp/utils — wraps Web Crypto API, works in Workers
-import { sha256Hex, randomUUID, base64urlEncode } from '@frontmcp/utils';
+import { base64urlEncode, randomUUID, sha256Hex } from '@frontmcp/utils';
 
 @Tool({
   name: 'transform_data',

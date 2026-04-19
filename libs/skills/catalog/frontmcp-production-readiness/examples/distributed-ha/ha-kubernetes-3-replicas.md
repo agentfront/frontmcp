@@ -21,9 +21,7 @@ Deploy FrontMCP with 3 replicas, Redis, and automatic session failover on Kubern
 
 ```typescript
 // src/main.ts
-import { z } from 'zod';
-
-import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'echo',

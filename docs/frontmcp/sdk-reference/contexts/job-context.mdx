@@ -177,7 +177,7 @@ From `ExecutionContextBase`:
 
 ```typescript
 import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   urls: z.array(z.string().url()).describe('URLs to fetch'),

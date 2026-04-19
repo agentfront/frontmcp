@@ -18,8 +18,7 @@ Connect the same FrontMCP server to multiple LLM platforms using platform-specif
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'translate',
@@ -49,7 +48,8 @@ export default TranslateSDK;
 
 ```typescript
 // src/connect-all-platforms.ts
-import { connectOpenAI, connectClaude, connectLangChain, connectVercelAI } from '@frontmcp/sdk';
+import { connectClaude, connectLangChain, connectOpenAI, connectVercelAI } from '@frontmcp/sdk';
+
 import TranslateSDK from './server';
 
 async function main() {

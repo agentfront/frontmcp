@@ -19,8 +19,7 @@ Build a persistent service connector that lets Claude send and receive messages 
 
 ```typescript
 // src/apps/messaging/tools/send-whatsapp.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'send-whatsapp',
@@ -52,8 +51,8 @@ export class SendWhatsAppTool extends ToolContext {
 
 ```typescript
 // src/apps/messaging/channels/whatsapp.channel.ts
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
+
 import { SendWhatsAppTool } from '../tools/send-whatsapp.tool';
 
 const ALLOWED = new Set(process.env['WA_ALLOWED']?.split(',') ?? []);

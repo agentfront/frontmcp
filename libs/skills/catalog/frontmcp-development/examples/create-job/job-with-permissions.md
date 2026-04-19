@@ -19,8 +19,7 @@ A data export job with declarative permission controls, plus a function-style jo
 
 ```typescript
 // src/jobs/data-export.job.ts
-import { Job, JobContext, job } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Job, job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'data-export',
@@ -79,7 +78,7 @@ const CleanupTempFiles = job({
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'data-app',

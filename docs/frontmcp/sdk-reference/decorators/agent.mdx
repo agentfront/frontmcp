@@ -8,7 +8,7 @@ icon: "robot"
 
 ```typescript
 import { Agent, AgentContext, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'search_web',
@@ -250,7 +250,7 @@ class CustomAgent extends AgentContext {
 
 ```typescript
 import { agent } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const researchAgent = agent({
   name: 'research',
@@ -341,7 +341,7 @@ class OrchestratorAgent extends AgentContext {
 
 ```typescript
 import { Agent, AgentContext, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Tools for the agent
 @Tool({

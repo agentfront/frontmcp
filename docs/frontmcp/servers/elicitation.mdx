@@ -39,7 +39,7 @@ Use `this.elicit()` within any tool that extends `ToolContext`:
 
 ```ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'delete-account',
@@ -81,7 +81,7 @@ Agents are LLM-powered autonomous units that can also use elicitation. Override 
 
 ```ts
 import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'expense-processor',

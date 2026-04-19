@@ -31,8 +31,9 @@ export const DB_TOKEN: Token<DatabaseService> = Symbol('DatabaseService');
 
 ```typescript
 // src/apps/main/providers/database.provider.ts
-import { Provider } from '@frontmcp/sdk';
 import { createPool, Pool } from 'your-db-driver';
+
+import { Provider } from '@frontmcp/sdk';
 
 @Provider({ name: 'DatabaseProvider' })
 class DatabaseProvider implements DatabaseService {
@@ -61,8 +62,8 @@ class DatabaseProvider implements DatabaseService {
 
 ```typescript
 // src/apps/main/tools/query-users.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { DB_TOKEN } from '../tokens';
 
 @Tool({

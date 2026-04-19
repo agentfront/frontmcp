@@ -16,10 +16,11 @@ A multi-app knowledge base MCP server with three composed apps: document ingesti
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { IngestionApp } from './ingestion/ingestion.app';
-import { SearchApp } from './search/search.app';
-import { ResearchApp } from './research/research.app';
 import { AuditLogPlugin } from './plugins/audit-log.plugin';
+import { ResearchApp } from './research/research.app';
+import { SearchApp } from './search/search.app';
 
 @FrontMcp({
   info: { name: 'knowledge-base', version: '1.0.0' },
@@ -40,6 +41,7 @@ export default class KnowledgeBaseServer {}
 ```typescript
 // src/ingestion/ingestion.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { VectorStoreProvider } from './providers/vector-store.provider';
 import { IngestDocumentTool } from './tools/ingest-document.tool';
 
@@ -56,8 +58,8 @@ export class IngestionApp {}
 
 ```typescript
 // src/ingestion/providers/vector-store.provider.ts
-import { Provider } from '@frontmcp/sdk';
 import type { Token } from '@frontmcp/di';
+import { Provider } from '@frontmcp/sdk';
 
 export interface DocumentChunk {
   id: string;
@@ -142,10 +144,9 @@ export class VectorStoreProvider implements VectorStore {
 
 ```typescript
 // src/ingestion/tools/ingest-document.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { VECTOR_STORE } from '../providers/vector-store.provider';
-import type { DocumentChunk } from '../providers/vector-store.provider';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+import { VECTOR_STORE, type DocumentChunk } from '../providers/vector-store.provider';
 
 @Tool({
   name: 'ingest_document',
@@ -238,9 +239,10 @@ export class IngestDocumentTool extends ToolContext {
 ```typescript
 // src/search/search.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { VectorStoreProvider } from '../ingestion/providers/vector-store.provider';
-import { SearchDocsTool } from './tools/search-docs.tool';
 import { DocResource } from './resources/doc.resource';
+import { SearchDocsTool } from './tools/search-docs.tool';
 
 @App({
   name: 'Search',
@@ -256,8 +258,8 @@ export class SearchApp {}
 
 ```typescript
 // src/search/tools/search-docs.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 
 @Tool({
@@ -318,8 +320,9 @@ export class SearchDocsTool extends ToolContext {
 
 ```typescript
 // src/search/resources/doc.resource.ts
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
 import type { ReadResourceResult } from '@frontmcp/protocol';
+import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
+
 import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 
 @ResourceTemplate({
@@ -368,6 +371,7 @@ export class DocResource extends ResourceContext<{ documentId: string }> {
 ```typescript
 // src/research/research.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { ResearcherAgent } from './agents/researcher.agent';
 
 @App({
@@ -382,10 +386,10 @@ export class ResearchApp {}
 
 ```typescript
 // src/research/agents/researcher.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { SearchDocsTool } from '../../search/tools/search-docs.tool';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
+
 import { IngestDocumentTool } from '../../ingestion/tools/ingest-document.tool';
+import { SearchDocsTool } from '../../search/tools/search-docs.tool';
 
 @Agent({
   name: 'research_topic',
@@ -442,8 +446,7 @@ export class ResearcherAgent extends AgentContext {
 
 ```typescript
 // src/plugins/audit-log.plugin.ts
-import { Plugin } from '@frontmcp/sdk';
-import type { PluginHookContext } from '@frontmcp/sdk';
+import { Plugin, type PluginHookContext } from '@frontmcp/sdk';
 
 @Plugin({
   name: 'AuditLog',
@@ -515,6 +518,7 @@ export class AuditLogPlugin {
 ```typescript
 // test/researcher.agent.spec.ts
 import { AgentContext } from '@frontmcp/sdk';
+
 import { ResearcherAgent } from '../src/research/agents/researcher.agent';
 
 describe('ResearcherAgent', () => {
@@ -590,8 +594,9 @@ describe('ResearcherAgent', () => {
 
 ```typescript
 // test/audit-log.plugin.spec.ts
-import { AuditLogPlugin } from '../src/plugins/audit-log.plugin';
 import type { PluginHookContext } from '@frontmcp/sdk';
+
+import { AuditLogPlugin } from '../src/plugins/audit-log.plugin';
 
 describe('AuditLogPlugin', () => {
   let plugin: AuditLogPlugin;

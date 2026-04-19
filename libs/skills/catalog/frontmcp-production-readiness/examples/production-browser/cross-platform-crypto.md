@@ -20,10 +20,9 @@ Shows how to use `@frontmcp/utils` for cross-platform crypto operations that wor
 
 ```typescript
 // src/tools/browser-safe-hash.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 // @frontmcp/utils wraps Web Crypto API — works in browsers
-import { sha256Hex, sha256Base64url, randomUUID } from '@frontmcp/utils';
+import { randomUUID, sha256Base64url, sha256Hex } from '@frontmcp/utils';
 
 @Tool({
   name: 'hash_data',

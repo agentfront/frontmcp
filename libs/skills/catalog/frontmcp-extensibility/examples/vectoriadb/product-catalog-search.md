@@ -21,9 +21,9 @@ Shows advanced VectoriaDB usage with typed document metadata, batch operations, 
 
 ```typescript
 // src/providers/product-search.provider.ts
+import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
+
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
-import type { DocumentMetadata } from 'vectoriadb';
 
 export const ProductSearch = Symbol('ProductSearch');
 
@@ -104,8 +104,8 @@ export class ProductSearchProvider {
 
 ```typescript
 // src/tools/find-products.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { ProductSearch } from '../providers/product-search.provider';
 
 @Tool({

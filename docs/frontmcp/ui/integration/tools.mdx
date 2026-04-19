@@ -11,7 +11,7 @@ Add a `ui` property to your `@Tool` decorator:
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'my_tool',
@@ -248,7 +248,7 @@ ui: {
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { card, badge, button, descriptionList } from '@frontmcp/ui/components';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   orderId: z.string().describe('Order ID to look up'),
@@ -375,7 +375,7 @@ export class GetOrderTool extends ToolContext<typeof inputSchema, typeof outputS
 Use Zod schema inference for typed templates:
 
 ```typescript
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 import type { TemplateContext } from '@frontmcp/uipack/types';
 
 const inputSchema = {

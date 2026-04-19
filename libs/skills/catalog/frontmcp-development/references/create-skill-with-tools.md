@@ -431,7 +431,7 @@ Both return values that can be registered in `skills: [ExternalSkill, CloudSkill
 Add skill classes (or function-style skills) to the `skills` array in `@FrontMcp` or `@App`.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'devops-app',
@@ -505,8 +505,7 @@ GET /skills
 ## Complete Example: Multi-Tool Orchestration Skill
 
 ```typescript
-import { Skill, SkillContext, Tool, ToolContext, FrontMcp, App } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Skill, SkillContext, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Define the tools that the skill references
 

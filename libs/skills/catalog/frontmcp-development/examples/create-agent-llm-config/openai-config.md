@@ -19,8 +19,7 @@ Configuring an agent with the OpenAI provider and different model options.
 
 ```typescript
 // src/apps/main/agents/data-pipeline.agent.ts
-import { Agent, AgentContext, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'extract_data',

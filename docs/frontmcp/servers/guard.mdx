@@ -29,7 +29,7 @@ Add rate limiting and a timeout to any tool with decorator options:
 <CodeGroup>
 ```typescript Class Style
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'search',
@@ -47,7 +47,7 @@ class SearchTool extends ToolContext<typeof SearchTool> {
 
 ```typescript Function Style
 import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const SearchTool = tool({
   name: 'search',

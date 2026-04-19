@@ -19,8 +19,8 @@ Validate that a tool's Zod input schema rejects invalid data before `execute()` 
 
 ```typescript
 // src/tools/__tests__/add.tool.schema.spec.ts
-import { z } from 'zod';
-import { ToolContext } from '@frontmcp/sdk';
+import { ToolContext, z } from '@frontmcp/sdk';
+
 import { AddTool } from '../add.tool';
 
 describe('AddTool schema validation', () => {
