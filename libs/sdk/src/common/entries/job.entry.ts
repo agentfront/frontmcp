@@ -1,13 +1,13 @@
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { JobRecord, JobKind } from '../records';
-import { JobContext } from '../interfaces';
-import { ToolInputType, ToolOutputType } from '../metadata';
-import { JobMetadata } from '../metadata/job.metadata';
-import { ToolInputOf, ToolOutputOf } from '../decorators';
+import { toJSONSchema, z } from '@frontmcp/lazy-zod';
+
 import type ProviderRegistry from '../../provider/provider.registry';
-import { z } from 'zod';
-import { toJSONSchema } from 'zod/v4';
-import type { SafeTransformResult } from './tool.entry';
+import { type ToolInputOf, type ToolOutputOf } from '../decorators';
+import { type JobContext } from '../interfaces';
+import { type ToolInputType, type ToolOutputType } from '../metadata';
+import { type JobMetadata } from '../metadata/job.metadata';
+import { JobKind, type JobRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
+import { type SafeTransformResult } from './tool.entry';
 
 export abstract class JobEntry<
   InSchema extends ToolInputType = ToolInputType,

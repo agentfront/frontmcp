@@ -41,7 +41,7 @@ Most entry decorators support both patterns:
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_user',
@@ -60,7 +60,7 @@ class GetUserTool extends ToolContext {
 
 ```typescript
 import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const getUserTool = tool({
   name: 'get_user',
@@ -78,7 +78,7 @@ FrontMCP provides full type inference for inputs and outputs:
 
 ```typescript
 import { Tool, ToolContext, ToolInputOf, ToolOutputOf } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const metadata = {
   name: 'calculate',

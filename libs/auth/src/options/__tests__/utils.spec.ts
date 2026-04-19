@@ -3,19 +3,20 @@
  *
  * Tests for parsing, type guards, and access helpers for auth options.
  */
-import { ZodError } from 'zod';
-import {
-  parseAuthOptions,
-  isPublicMode,
-  isTransparentMode,
-  isOrchestratedMode,
-  isOrchestratedLocal,
-  isOrchestratedRemote,
-  isLocalMode,
-  isRemoteMode,
-  allowsPublicAccess,
-} from '../utils';
+import { ZodError } from '@frontmcp/lazy-zod';
+
 import type { AuthOptions } from '../schema';
+import {
+  allowsPublicAccess,
+  isLocalMode,
+  isOrchestratedLocal,
+  isOrchestratedMode,
+  isOrchestratedRemote,
+  isPublicMode,
+  isRemoteMode,
+  isTransparentMode,
+  parseAuthOptions,
+} from '../utils';
 
 describe('parseAuthOptions', () => {
   describe('public mode', () => {

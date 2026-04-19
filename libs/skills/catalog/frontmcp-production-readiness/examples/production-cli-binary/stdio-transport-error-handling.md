@@ -81,8 +81,7 @@ main();
 
 ```typescript
 // src/tools/safe-tool.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'process_file',

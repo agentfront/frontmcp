@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { REQUEST_LOGGER_TOKEN, type RequestLogger } from '../providers/request-logger.provider';

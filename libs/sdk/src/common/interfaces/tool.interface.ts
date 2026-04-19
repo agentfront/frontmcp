@@ -1,6 +1,5 @@
-import { type ZodType } from 'zod';
-
 import { type FuncType, type Type } from '@frontmcp/di';
+import { type ZodType } from '@frontmcp/lazy-zod';
 
 import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
 import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';

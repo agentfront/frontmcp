@@ -1,10 +1,10 @@
 // file: libs/plugins/src/codecall/__tests__/search.tool.spec.ts
 
-import { z } from 'zod';
-import SearchTool from '../tools/search.tool';
-import type { SearchToolOutput } from '../tools/search.schema';
-import { searchToolInputSchema } from '../tools/search.schema';
+import { z } from '@frontmcp/lazy-zod';
+
 import { ToolSearchService } from '../services';
+import { searchToolInputSchema, type SearchToolOutput } from '../tools/search.schema';
+import SearchTool from '../tools/search.tool';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({

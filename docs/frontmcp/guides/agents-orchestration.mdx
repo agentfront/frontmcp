@@ -43,7 +43,7 @@ First, create a tool that the agent can use:
 ```typescript
 // tools/get-weather.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   location: z.string().describe('City name or location'),
@@ -90,7 +90,7 @@ export default class GetWeatherTool extends ToolContext<typeof inputSchema, type
 ```typescript
 // agents/summary.agent.ts
 import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 import GetWeatherTool from '../tools/get-weather.tool';
 
 @Agent({
@@ -242,7 +242,7 @@ Create an agent that uses multiple tools:
 
 ```typescript
 import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 import GetWeatherTool from '../tools/get-weather.tool';
 import GetForecastTool from '../tools/get-forecast.tool';
 import GetAlertsTool from '../tools/get-alerts.tool';

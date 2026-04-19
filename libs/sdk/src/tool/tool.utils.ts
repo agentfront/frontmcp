@@ -1,30 +1,30 @@
 // file: libs/sdk/src/tool/tool.utils.ts
-import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
-import { InvalidEntityError } from '../errors';
-import { parsePackageSpecifier, isPackageSpecifier } from '../esm-loader/package-specifier';
+import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
+import { toJSONSchema, z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
 import {
-  ToolMetadata,
-  FrontMcpToolTokens,
-  ToolType,
-  ToolRecord,
-  ToolKind,
-  ToolContext,
-  ToolEntry,
-  extendedToolMetadata,
-  ParsedToolResult,
-  AgentToolDefinition,
-} from '../common';
-import { toStructuredContent } from '../utils/content.utils';
-import {
-  AudioContent,
-  ContentBlock,
-  EmbeddedResource,
-  ImageContent,
-  ResourceLink,
-  TextContent,
+  type AudioContent,
+  type ContentBlock,
+  type EmbeddedResource,
+  type ImageContent,
+  type ResourceLink,
+  type TextContent,
 } from '@frontmcp/protocol';
-import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from 'zod';
-import { toJSONSchema } from 'zod/v4';
+
+import {
+  extendedToolMetadata,
+  FrontMcpToolTokens,
+  ToolKind,
+  type AgentToolDefinition,
+  type ParsedToolResult,
+  type ToolContext,
+  type ToolEntry,
+  type ToolMetadata,
+  type ToolRecord,
+  type ToolType,
+} from '../common';
+import { InvalidEntityError } from '../errors';
+import { isPackageSpecifier, parsePackageSpecifier } from '../esm-loader/package-specifier';
+import { toStructuredContent } from '../utils/content.utils';
 
 // Import utilities from @frontmcp/utils
 

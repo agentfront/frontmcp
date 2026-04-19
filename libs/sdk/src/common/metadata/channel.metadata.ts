@@ -1,8 +1,8 @@
-import { z } from 'zod';
-import { RawZodShape } from '../types';
-import type { EntryAvailability } from '@frontmcp/utils';
-import { entryAvailabilitySchema } from '@frontmcp/utils';
-import type { ToolType } from '../interfaces/tool.interface';
+import { z } from '@frontmcp/lazy-zod';
+import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
+
+import { type ToolType } from '../interfaces/tool.interface';
+import { type RawZodShape } from '../types';
 
 // ============================================
 // Channel Source Configuration

@@ -1,5 +1,5 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 const outputSchema = z.object({
   runtime: z.string(),

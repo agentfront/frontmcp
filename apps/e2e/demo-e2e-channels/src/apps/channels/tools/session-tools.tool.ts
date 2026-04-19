@@ -5,8 +5,7 @@
  * sessions with the NotificationService and managing channel subscriptions.
  */
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 // Use structural types instead of deep internal SDK imports

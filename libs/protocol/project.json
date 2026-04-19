@@ -28,10 +28,19 @@
         ],
         "assets": ["libs/protocol/README.md", "libs/protocol/CHANGELOG.md", "LICENSE", "libs/protocol/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["@modelcontextprotocol/sdk", "#mcp-streamable-http", "#mcp-server", "#server-types"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": [
+            "@frontmcp/lazy-zod",
+            "@modelcontextprotocol/sdk",
+            "#mcp-streamable-http",
+            "#mcp-server",
+            "#server-types"
+          ]
         }
-      }
+      },
+      "dependsOn": ["^build"]
     },
     "build-esm": {
       "executor": "@nx/esbuild:esbuild",
@@ -55,8 +64,16 @@
           "libs/protocol/src/browser-server-types.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["@modelcontextprotocol/sdk", "#mcp-streamable-http", "#mcp-server", "#server-types"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": [
+            "@frontmcp/lazy-zod",
+            "@modelcontextprotocol/sdk",
+            "#mcp-streamable-http",
+            "#mcp-server",
+            "#server-types"
+          ]
         }
       }
     },

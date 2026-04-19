@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { eventStore } from '../data/event.store';
 
 const outputSchema = z.object({

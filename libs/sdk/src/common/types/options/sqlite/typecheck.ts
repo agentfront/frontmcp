@@ -1,9 +1,10 @@
 // common/types/options/sqlite/typecheck.ts
 // Compile-time type sync checks between interfaces and Zod schemas
 
-import type { z } from 'zod';
-import type { sqliteOptionsSchema } from './schema';
+import type { z } from '@frontmcp/lazy-zod';
+
 import type { SqliteOptionsInterface } from './interfaces';
+import type { sqliteOptionsSchema } from './schema';
 
 type IsAssignable<T, U> = T extends U ? true : false;
 type AssertTrue<T extends true> = T;

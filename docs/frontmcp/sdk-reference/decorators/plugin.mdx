@@ -207,7 +207,7 @@ class Server {}
 
 ```typescript
 import { Plugin, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'send_elicitation_result',
@@ -235,7 +235,7 @@ export class ElicitationPlugin {}
 
 ```typescript
 import { Plugin, Provider, Token, Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Tokens
 export const ApprovalServiceToken = new Token<ApprovalService>('ApprovalService');

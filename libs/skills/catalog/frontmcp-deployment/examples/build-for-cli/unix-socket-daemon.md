@@ -18,8 +18,7 @@ Run a FrontMCP server as a local daemon accessible via Unix socket for IDE exten
 
 ```typescript
 // src/main.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'lookup',

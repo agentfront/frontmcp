@@ -26,8 +26,11 @@
           "libs/observability/package.json"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/sdk",
             "@frontmcp/utils",
             "@frontmcp/di",
@@ -56,8 +59,11 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/sdk",
             "@frontmcp/utils",
             "@frontmcp/di",

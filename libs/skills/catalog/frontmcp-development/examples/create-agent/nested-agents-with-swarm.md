@@ -19,8 +19,7 @@ Composing specialized sub-agents and configuring swarm-based handoff between age
 
 ```typescript
 // src/apps/support/agents/billing.agent.ts
-import { Agent, AgentContext, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'lookup_invoice',
@@ -65,8 +64,7 @@ class TechnicalAgent extends AgentContext {}
 
 ```typescript
 // src/apps/support/agents/triage.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'triage_agent',

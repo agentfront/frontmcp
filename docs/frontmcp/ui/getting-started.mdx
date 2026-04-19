@@ -54,7 +54,7 @@ The simplest way to add a widget is with an HTML template function:
 
 ```typescript title="src/tools/hello.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'say_hello',
@@ -135,7 +135,7 @@ ui: {
 
 ```typescript title="src/tools/user-profile.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_user',
@@ -192,7 +192,7 @@ Here's a full example combining multiple components:
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { card, badge, alert } from '@frontmcp/ui/components';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   location: z.string().describe('City name'),

@@ -3,8 +3,9 @@
  * Test fixtures for tools
  */
 
-import { z } from 'zod';
-import { ToolMetadata } from '../../common/metadata';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type ToolMetadata } from '../../common/metadata';
 
 /**
  * Simple test tool metadata

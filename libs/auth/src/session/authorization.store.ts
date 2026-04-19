@@ -6,8 +6,8 @@
  * Supports both in-memory (dev/test) and Redis (production) backends.
  */
 
+import { z } from '@frontmcp/lazy-zod';
 import { randomUUID, sha256Base64url } from '@frontmcp/utils';
-import { z } from 'zod';
 
 /**
  * PKCE challenge data
@@ -496,7 +496,6 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
  */
 export class RedisAuthorizationStore implements AuthorizationStore {
   constructor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly redis: any,
     private readonly namespace = 'oauth:',
   ) {}

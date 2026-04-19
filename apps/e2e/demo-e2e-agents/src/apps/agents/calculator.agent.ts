@@ -1,5 +1,5 @@
-import { Agent, AgentContext, AgentLlmAdapter } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { Agent, AgentContext, type AgentLlmAdapter } from '@frontmcp/sdk';
 
 /**
  * Mock LLM adapter for calculator that evaluates simple math.

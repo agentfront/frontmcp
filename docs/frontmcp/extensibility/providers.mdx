@@ -91,7 +91,7 @@ Every HTTP request creates a `FrontMcpContext` that flows through the entire exe
 
 ```ts
 import { Tool, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
 class MyTool {

@@ -1,0 +1,160 @@
+---
+title: 'Schemas — lazy by default'
+description: 'FrontMCP re-exports Zod via `@frontmcp/sdk` as a lazy-by-default Proxy — ~50× faster cold start with identical API.'
+---
+
+## TL;DR
+
+In FrontMCP, always import `z` from `@frontmcp/sdk`, **not** from `zod` directly:
+
+```ts
+import { z } from '@frontmcp/sdk';
+
+const UserSchema = z.object({
+  name: z.string(),
+  age: z.number().optional(),
+});
+```
+
+Same API as Zod v4, but schema construction is **deferred until the first
+`.parse()` call**. Bundled CLI binaries and edge workers start ~50× faster.
+If you need eager construction, use `eagerZ` (same place).
+
+## Why re-export through `@frontmcp/sdk`?
+
+`@frontmcp/sdk`'s `z` is a drop-in replacement for zod's own `z`, backed by
+the `@frontmcp/lazy-zod` Proxy. For every heavy compound factory
+(`z.object`, `z.union`, `z.discriminatedUnion`, `z.intersection`,
+`z.record`, `z.tuple`, `z.strictObject`, `z.looseObject`) the Proxy
+defers the real `z.object({...})` call until the schema is first parsed,
+and self-patches the hot-path methods (`parse` / `safeParse` /
+`parseAsync` / `safeParseAsync`) onto the schema instance after that
+first call. Primitives (`z.string`, `z.number`, `z.enum`, `z.literal`,
+`z.lazy`, `z.custom`, …) pass straight through to real zod because
+their construction cost is negligible.
+
+Types, inference, chainable methods, and `instanceof` checks all behave
+**exactly** like zod v4 — `z.infer<T>`, `.optional()`, `.refine()`,
+`.transform()`, `.merge()`, `z.ZodObject<Shape>`, `toJSONSchema()`,
+error shapes, everything. If your code works with `import { z } from 'zod'`
+it will work identically with `import { z } from '@frontmcp/sdk'`.
+
+## The `eagerZ` escape hatch
+
+When you **need** a schema to be fully constructed at module load — for
+example, you hand it to third-party code that immediately walks its
+`_def` tree, or you're in a hot path where the ~1 ms first-parse
+materialization cost would be visible — import `eagerZ`:
+
+```ts
+import { eagerZ } from '@frontmcp/sdk';
+
+// Fully constructed at module load time. No Proxy, no deferral.
+// `eagerZ` is the real zod `z` with zero overhead.
+const ImmediatelyReady = eagerZ.object({
+  foo: eagerZ.string(),
+});
+```
+
+`eagerZ` is literally `export { z as eagerZ } from 'zod'`. Use it only
+when you have a specific reason — the default `z` (lazy) is what you
+want for virtually everything.
+
+## Explicit `lazyZ` wrapper
+
+For cases where you already hold a real zod schema (e.g. the return
+value of a third-party library that builds zod internally) and want to
+defer *its* construction, wrap it in `lazyZ`:
+
+```ts
+import { eagerZ, lazyZ } from '@frontmcp/sdk';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
+
+// Deferred until first `.parse()`. The JSON-Schema → Zod conversion
+// itself is only paid when the schema is actually used.
+const fromOpenAPI = lazyZ(() =>
+  convertJsonSchemaToZod(openapiSpec) as ReturnType<typeof eagerZ.object>,
+);
+```
+
+## Performance
+
+Measured on a POC with 1,515 realistic schemas (mix of nested objects,
+discriminated unions, records, arrays — see `apps/poc-lazy-zod/` for the
+full benchmark). Each entry is the median over 30 runs, warmup 3,
+interleaved eager/lazy spawns:
+
+| Metric              | Eager zod | Lazy `z` | Delta      |
+| ------------------- | --------- | -------- | ---------- |
+| **Cold-start**      | 387 ms    | 7.1 ms   | **−98.2%** |
+| Cold-start (p95)    | 428 ms    | 7.6 ms   | −98.2%     |
+| First-parse         | 0.45 ms   | 1.47 ms  | +1.02 ms   |
+| Parse-all (1st pass)| 235 ms    | 616 ms   | +162%      |
+| Parse-all (steady)  | 31.0 ms   | 31.0 ms  | **+0.2%**  |
+| Bundle size         | 1.69 MB   | 1.70 MB  | +0.64%     |
+
+Interpretation:
+
+- **Cold-start** is the time from the bundled entry's first line to the
+  end of schema-module evaluation. Lazy defers all `z.object(...)` /
+  `z.union(...)` / etc. calls, so this is near-zero.
+- **First-parse** is the one-time materialization cost for the first
+  schema touched. ~1 ms — effectively free per schema.
+- **Parse-all (steady)** is the second pass over every schema, after
+  materialization. The lazy wrapper self-patches out of the hot path, so
+  the per-parse overhead is statistically indistinguishable from real zod.
+- **Parse-all (1st pass)** is higher for lazy because that pass pays the
+  deferred materialization cost for every schema at once. In realistic
+  workloads (edge workers that hit a handful of schemas per request)
+  you never see this number — you amortize 1 ms per *actually-used*
+  schema against the 380 ms saved at startup.
+
+### Per-worker cost model
+
+For an edge worker that serves N requests before being recycled and
+touches K distinct schemas in total:
+
+```
+savings ≈ 380 ms − (K × 1 ms)
+```
+
+Net-positive until K > 380 distinct schemas, which is far beyond any
+realistic tool/resource surface.
+
+## Escape hatches
+
+Two runtime helpers are also exported from `@frontmcp/sdk`:
+
+```ts
+import { isLazy, forceMaterialize } from '@frontmcp/sdk';
+
+// Runtime check: is this a lazy wrapper or a real zod schema?
+isLazy(schema); // true | false
+
+// Deeply materialize a lazy schema tree — useful before handing a
+// schema to third-party code that walks internal `_def` properties
+// (e.g. `toJSONSchema`, prototype-chain inspection).
+const real = forceMaterialize(schema);
+```
+
+The `@frontmcp/sdk` barrel also re-exports Zod v4's `toJSONSchema`, the
+`JSONSchema` type from `zod/v4/core`, every `Zod*` class (`ZodError`,
+`ZodType`, `ZodObject`, …), and every utility type (`z.infer`, `z.input`,
+`z.output`, `ZodTypeAny`, `ZodRawShape`), so you never need to reach past
+`@frontmcp/sdk` into `zod` directly.
+
+## Do I ever need to import `zod`?
+
+Almost never. The only cases that justify a direct `zod` import are:
+
+1. Writing a library that is **itself** a transitive dependency of
+   `@frontmcp/sdk` (e.g. `libs/auth` or `libs/lazy-zod`). These packages
+   must import from `'@frontmcp/lazy-zod'` to avoid a circular build
+   graph — see the library-development docs for details.
+2. Passing a zod schema into a third-party library that requires its
+   **exact** class identity — in that case, either use `eagerZ` (same
+   types as `zod`) or `forceMaterialize(schema)` on the lazy version.
+
+For everything else — your tools, resources, prompts, agents, config
+schemas, shape validators — `import { z } from '@frontmcp/sdk'` is the
+answer.

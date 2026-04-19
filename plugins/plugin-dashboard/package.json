@@ -45,10 +45,12 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "1.0.4",
-    "zod": "^4.0.0"
+    "@frontmcp/sdk": "1.0.4"
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"
+  },
+  "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.0.4"
   }
 }

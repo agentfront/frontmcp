@@ -19,8 +19,7 @@ Set up the canonical file structure for a standalone FrontMCP project with one a
 
 ```typescript
 // src/tools/fetch-weather.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'fetch_weather',
@@ -37,6 +36,7 @@ export default class FetchWeatherTool extends ToolContext {
 ```typescript
 // src/my-app.app.ts
 import { App } from '@frontmcp/sdk';
+
 import FetchWeatherTool from './tools/fetch-weather.tool';
 
 @App({
@@ -49,7 +49,9 @@ export class MyApp {}
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my-app.app';
 
 @FrontMcp({

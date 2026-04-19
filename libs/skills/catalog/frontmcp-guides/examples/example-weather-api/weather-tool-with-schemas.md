@@ -20,8 +20,7 @@ Shows how to create a tool with Zod input and output schemas, use `this.fetch()`
 
 ```typescript
 // src/tools/get-weather.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_weather',

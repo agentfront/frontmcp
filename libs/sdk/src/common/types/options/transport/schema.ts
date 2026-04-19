@@ -3,26 +3,25 @@
 // Transport configuration schema with protocol presets and simplified structure.
 // Uses explicit interfaces from interfaces.ts for IDE autocomplete.
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 import { isServerless } from '@frontmcp/utils';
-import { RawZodShape } from '../../common.types';
-import { redisOptionsSchema } from '../redis';
 
+import { type RawZodShape } from '../../common.types';
+import { redisOptionsSchema } from '../redis';
+// Import session types for internal use (already exported from session folder)
+import { platformDetectionConfigSchema, type PlatformDetectionConfig, type SessionMode } from '../session';
 // Import types from interfaces file
 // Note: SessionMode, PlatformMappingEntry, PlatformDetectionConfig
 // are already exported from session.options.ts - we only import them here for internal use
 import type {
-  TransportOptionsInterface,
+  DistributedEnabled,
+  EventStoreConfig,
   PersistenceConfig,
   ProtocolConfig,
   ProtocolPreset,
   SessionModeOption,
-  DistributedEnabled,
-  EventStoreConfig,
+  TransportOptionsInterface,
 } from './interfaces';
-
-// Import session types for internal use (already exported from session folder)
-import type { SessionMode, PlatformDetectionConfig } from '../session';
 
 // Re-export transport-specific types (not duplicated from session.options.ts)
 export type {
@@ -178,7 +177,6 @@ export function toLegacyProtocolFlags(protocol: ProtocolPreset | ProtocolConfig 
 
 // Note: platformMappingEntrySchema and platformDetectionConfigSchema
 // are already exported from session folder - import for internal use
-import { platformDetectionConfigSchema } from '../session';
 
 // ============================================
 // PROTOCOL CONFIG SCHEMA

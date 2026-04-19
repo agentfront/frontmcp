@@ -21,10 +21,10 @@ Shows an autonomous research agent with inner tools and configurable depth, and 
 
 ```typescript
 // src/research/agents/researcher.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { SearchDocsTool } from '../../search/tools/search-docs.tool';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
+
 import { IngestDocumentTool } from '../../ingestion/tools/ingest-document.tool';
+import { SearchDocsTool } from '../../search/tools/search-docs.tool';
 
 @Agent({
   name: 'research_topic',
@@ -79,8 +79,7 @@ export class ResearcherAgent extends AgentContext {
 
 ```typescript
 // src/plugins/audit-log.plugin.ts
-import { Plugin } from '@frontmcp/sdk';
-import type { PluginHookContext } from '@frontmcp/sdk';
+import { Plugin, type PluginHookContext } from '@frontmcp/sdk';
 
 @Plugin({
   name: 'AuditLog',

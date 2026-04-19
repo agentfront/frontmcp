@@ -50,8 +50,7 @@ Create a class extending `JobContext<In, Out>` and implement the `execute(input:
 ### Basic Example
 
 ```typescript
-import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'generate-report',
@@ -339,8 +338,7 @@ permissions: {
 For simple jobs that do not need a class, use the `job()` function builder. The callback receives `(input, ctx)` where `ctx` provides all `JobContext` methods.
 
 ```typescript
-import { job } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { job, z } from '@frontmcp/sdk';
 
 const CleanupTempFiles = job({
   name: 'cleanup-temp-files',
@@ -444,8 +442,7 @@ This creates the job file, spec file, and updates barrel exports.
 ## Complete Example: Data Pipeline Job
 
 ```typescript
-import { Job, JobContext, FrontMcp, App, job } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Job, job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'etl-pipeline',

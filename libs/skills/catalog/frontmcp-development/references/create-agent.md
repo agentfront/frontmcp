@@ -43,8 +43,7 @@ Agents are autonomous AI entities that use an LLM to reason, plan, and invoke in
 Create a class extending `AgentContext<In, Out>` and optionally override the `execute(input: In): Promise<Out>` method. The `@Agent` decorator requires `name`, `description`, and `llm` configuration.
 
 ```typescript
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'code_reviewer',
@@ -242,8 +241,7 @@ async execute(input: { text: string }) {
 The `tools` array in `@Agent` metadata defines tools that the agent itself can invoke during its reasoning loop. These are NOT exposed to external callers -- they are private to the agent.
 
 ```typescript
-import { Tool, ToolContext, Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'fetch_pr',
@@ -406,8 +404,7 @@ class BillingAgent extends AgentContext {}
 For agents that do not need a class, use the `agent()` function builder.
 
 ```typescript
-import { agent } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { agent, z } from '@frontmcp/sdk';
 
 const QuickSummarizer = agent({
   name: 'quick_summarizer',
@@ -458,7 +455,7 @@ Both return values that can be registered in `agents: [ExternalAgent, CloudAgent
 Add agent classes (or function-style agents) to the `agents` array in `@FrontMcp` or `@App`.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'review-app',

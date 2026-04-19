@@ -1,5 +1,6 @@
-import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { Prompt, PromptContext, type GetPromptResult } from '@frontmcp/sdk';
+
 import { executionTracker } from '../data/execution-tracker';
 
 const argsSchema = [];

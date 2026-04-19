@@ -13,7 +13,7 @@ The recommended way to create agent-driven components. `mcpComponent()` is a fac
 
 ```tsx
 import { mcpComponent } from '@frontmcp/react';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const WeatherCard = mcpComponent(
   ({ city, temp }) => (
@@ -144,7 +144,7 @@ When `component` is `null` and `columns` is provided, `mcpComponent` renders a d
 
 ```tsx
 import { mcpComponent } from '@frontmcp/react';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const OrderTable = mcpComponent(null, {
   name: 'show_orders',

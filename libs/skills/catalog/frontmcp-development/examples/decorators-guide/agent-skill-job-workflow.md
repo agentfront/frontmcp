@@ -21,8 +21,7 @@ Demonstrates the advanced decorator types: `@Agent` for autonomous AI agents, `@
 
 ```typescript
 // src/agents/research.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'research_agent',
@@ -61,8 +60,7 @@ class CodeMigrationSkill {}
 
 ```typescript
 // src/jobs/sync-data.job.ts
-import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'sync_data',
@@ -110,7 +108,7 @@ class DeployPipeline {}
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'platform',

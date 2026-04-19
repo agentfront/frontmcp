@@ -116,7 +116,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   <Tab title="Class-based Tool">
     ```ts
     import { Tool, ToolContext } from '@frontmcp/sdk';
-    import { z } from 'zod';
+    import { z } from '@frontmcp/sdk';
 
     @Tool({
       name: 'get-user-profile',
@@ -137,7 +137,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   <Tab title="Function-based Tool">
     ```ts
     import { tool } from '@frontmcp/sdk';
-    import { z } from 'zod';
+    import { z } from '@frontmcp/sdk';
 
     export const GetUserProfile = tool({
       name: 'get-user-profile',
@@ -597,7 +597,7 @@ Here's a full example with multiple tools using different caching strategies:
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
 import { CachePlugin } from '@frontmcp/plugin-cache';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Real-time data: short TTL
 @Tool({

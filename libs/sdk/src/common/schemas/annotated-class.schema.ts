@@ -1,23 +1,8 @@
-import { Type } from '@frontmcp/di';
+import { type Type } from '@frontmcp/di';
+import { z } from '@frontmcp/lazy-zod';
+
+import { isPackageSpecifier } from '../../esm-loader/package-specifier';
 import type { AgentType } from '../interfaces';
-import { z } from 'zod';
-import {
-  FrontMcpAdapterTokens,
-  FrontMcpAgentTokens,
-  FrontMcpAuthProviderTokens,
-  FrontMcpLocalAppTokens,
-  FrontMcpLogTransportTokens,
-  FrontMcpPluginTokens,
-  FrontMcpPromptTokens,
-  FrontMcpProviderTokens,
-  FrontMcpResourceTokens,
-  FrontMcpResourceTemplateTokens,
-  FrontMcpSkillTokens,
-  FrontMcpToolTokens,
-  FrontMcpJobTokens,
-  FrontMcpWorkflowTokens,
-  FrontMcpChannelTokens,
-} from '../tokens';
 import {
   frontMcpAdapterMetadataSchema,
   frontMcpAuthProviderMetadataSchema,
@@ -25,7 +10,23 @@ import {
   frontMcpProviderMetadataSchema,
   frontMcpRemoteAppMetadataSchema,
 } from '../metadata';
-import { isPackageSpecifier } from '../../esm-loader/package-specifier';
+import {
+  FrontMcpAdapterTokens,
+  FrontMcpAgentTokens,
+  FrontMcpAuthProviderTokens,
+  FrontMcpChannelTokens,
+  FrontMcpJobTokens,
+  FrontMcpLocalAppTokens,
+  FrontMcpLogTransportTokens,
+  FrontMcpPluginTokens,
+  FrontMcpPromptTokens,
+  FrontMcpProviderTokens,
+  FrontMcpResourceTemplateTokens,
+  FrontMcpResourceTokens,
+  FrontMcpSkillTokens,
+  FrontMcpToolTokens,
+  FrontMcpWorkflowTokens,
+} from '../tokens';
 
 /**
  * Check if an object has metadata for a given token, handling both Symbol() and Symbol.for()

@@ -1,6 +1,7 @@
-import { z } from 'zod';
-import { ProviderScope, ProviderMetadata } from '@frontmcp/di';
-import { RawZodShape } from '../types';
+import { ProviderScope, type ProviderMetadata } from '@frontmcp/di';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type RawZodShape } from '../types';
 
 /**
  * FrontMCP-specific schema for provider metadata validation.

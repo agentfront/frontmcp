@@ -18,8 +18,7 @@ Spin up an in-memory FrontMCP server from a flat config object using `create()`.
 
 ```typescript
 // src/embedded-server.ts
-import { create, tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { create, tool, z } from '@frontmcp/sdk';
 
 async function main() {
   const server = await create({

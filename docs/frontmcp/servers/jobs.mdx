@@ -44,7 +44,7 @@ Use class decorators for jobs that need dependency injection, lifecycle hooks, o
 
 ```ts
 import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Job({
   name: 'analyze-text',
@@ -82,7 +82,7 @@ For simpler jobs, use the functional builder:
 
 ```ts
 import { job } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const GreetJob = job({
   name: 'greet',

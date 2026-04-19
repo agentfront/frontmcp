@@ -1,6 +1,7 @@
-import { z } from 'zod';
-import { FlowName } from '../../metadata';
+import { type z } from '@frontmcp/lazy-zod';
+
 import { InvokeStateMissingKeyError } from '../../../errors';
+import { type FlowName } from '../../metadata';
 
 type RequiredView<T> = { [K in keyof T]-?: Exclude<T[K], undefined> };
 type StateAccess<T> = { [K in keyof T]: T[K] | undefined } & { required: RequiredView<T> };

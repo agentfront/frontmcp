@@ -4,7 +4,8 @@
  * @module @frontmcp/utils/secret-persistence
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { SecretData, SecretValidationResult } from './types';
 
 /**

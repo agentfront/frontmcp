@@ -19,9 +19,7 @@ Verify that tools are returned in the correct format for OpenAI and Claude clien
 
 ```typescript
 // src/__tests__/client-formats.spec.ts
-import { connectOpenAI } from '@frontmcp/sdk';
-import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { connectOpenAI, tool, z } from '@frontmcp/sdk';
 
 const AddTool = tool({
   name: 'add',

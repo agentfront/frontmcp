@@ -1,7 +1,8 @@
 // file: libs/sdk/src/channel/flows/list-channels.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import type ChannelRegistry from '../channel.registry';
 
 const inputSchema = z.object({}).optional();

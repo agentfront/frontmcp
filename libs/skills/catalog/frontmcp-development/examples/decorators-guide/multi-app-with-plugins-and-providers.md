@@ -47,8 +47,7 @@ class AuditPlugin {}
 
 ```typescript
 // src/tools/query.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'run_query',
@@ -68,8 +67,7 @@ class QueryTool extends ToolContext {
 
 ```typescript
 // src/tools/report.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'generate_report',
@@ -90,7 +88,7 @@ class ReportTool extends ToolContext {
 
 ```typescript
 // src/resources/dashboard.resource.ts
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
 
 @ResourceTemplate({
   name: 'dashboard',
@@ -109,7 +107,7 @@ class DashboardResource extends ResourceContext {
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'analytics',

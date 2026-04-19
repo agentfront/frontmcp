@@ -20,8 +20,8 @@ Demonstrates installing the Remember plugin and using `this.remember` in tools t
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import RememberPlugin from '@frontmcp/plugin-remember';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'my-app', tools: [PreferencesTool, GreetingTool] })
 class MyApp {}
@@ -41,8 +41,7 @@ class MyServer {}
 
 ```typescript
 // src/tools/preferences.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'set_preferences',
@@ -64,8 +63,7 @@ class PreferencesTool extends ToolContext {
 
 ```typescript
 // src/tools/greeting.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_greeting',

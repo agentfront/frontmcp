@@ -30,8 +30,8 @@ export const DATABASE: Token<DatabaseService> = Symbol('database');
 
 ```typescript
 // src/apps/main/tools/delete-record.tool.ts
-import { Tool, ToolContext, ResourceNotFoundError } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { ResourceNotFoundError, Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { DATABASE } from '../tokens';
 
 @Tool({

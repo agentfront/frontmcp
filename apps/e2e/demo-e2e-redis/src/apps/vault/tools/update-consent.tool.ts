@@ -1,6 +1,5 @@
-import { z } from 'zod';
-
 import type { VaultConsentRecord } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { resolveDemoSessionId } from '../../resolve-session-id';

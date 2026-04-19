@@ -20,14 +20,14 @@
  * - Auth Tag: 16 bytes (ensures integrity)
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 import {
-  hkdfSha256,
-  encryptAesGcm,
-  decryptAesGcm,
-  randomBytes,
-  base64urlEncode,
   base64urlDecode,
+  base64urlEncode,
+  decryptAesGcm,
+  encryptAesGcm,
+  hkdfSha256,
+  randomBytes,
 } from '@frontmcp/utils';
 
 // ============================================

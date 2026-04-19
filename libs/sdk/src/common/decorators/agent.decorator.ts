@@ -1,9 +1,25 @@
 import 'reflect-metadata';
+
+import { type ConcurrencyConfigInput, type RateLimitConfigInput, type TimeoutConfigInput } from '@frontmcp/guard';
+import type z from '@frontmcp/lazy-zod';
+
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { type AgentContext } from '../interfaces';
+import {
+  frontMcpAgentMetadataSchema,
+  type AgentMetadata,
+  type EsmOptions,
+  type RemoteOptions,
+  type ToolInputType,
+  type ToolOutputType,
+} from '../metadata';
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Agent.esm() and Agent.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import { AgentKind, type AgentEsmTargetRecord, type AgentRemoteRecord } from '../records/agent.record';
 import { extendedAgentMetadata, FrontMcpAgentTokens } from '../tokens';
-import { ToolInputType, ToolOutputType, AgentMetadata, frontMcpAgentMetadataSchema } from '../metadata';
-import type { ConcurrencyConfigInput, RateLimitConfigInput, TimeoutConfigInput } from '@frontmcp/guard';
-import { AgentContext } from '../interfaces';
-import z from 'zod';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 // Forward reference - AgentContext will be defined in agent.interface.ts
 type AgentContextBase = { execute: (...args: any[]) => any };
@@ -101,16 +117,6 @@ function frontMcpAgent<
     return agentFunction;
   };
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// STATIC METHODS: Agent.esm() and Agent.remote()
-// ═══════════════════════════════════════════════════════════════════
-
-import type { EsmOptions, RemoteOptions } from '../metadata';
-import { AgentKind } from '../records/agent.record';
-import type { AgentEsmTargetRecord, AgentRemoteRecord } from '../records/agent.record';
-import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
-import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function agentEsm(specifier: string, targetName: string, options?: EsmOptions<AgentMetadata>): AgentEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);

@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../common';
 import type { JobExecutionManager } from '../../job/execution/job-execution.manager';
 import type { WorkflowRunRecord } from '../../job/store/job-state.interface';

@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';

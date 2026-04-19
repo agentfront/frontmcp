@@ -45,7 +45,7 @@ The `ui` property in the `@Tool` decorator lets you define a template function t
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { card, descriptionList, badge } from '@frontmcp/ui';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   location: z.string().describe('City name or location'),
@@ -272,7 +272,7 @@ Always use `helpers.escapeHtml()` when rendering user-provided data to prevent X
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { card, descriptionList, badge } from '@frontmcp/ui';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'expense_summary',

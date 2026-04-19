@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { AppConfigProvider } from '../providers/app-config.provider';
 
 const outputSchema = z.object({

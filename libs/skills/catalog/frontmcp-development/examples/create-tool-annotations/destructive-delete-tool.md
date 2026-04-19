@@ -20,8 +20,7 @@ Demonstrates annotating a tool that deletes data, enabling MCP clients to warn u
 
 ```typescript
 // src/tools/delete-user.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'delete_user',
@@ -52,8 +51,7 @@ class DeleteUserTool extends ToolContext {
 
 ```typescript
 // src/tools/send-email.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'send_email',

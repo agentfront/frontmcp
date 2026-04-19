@@ -1,20 +1,23 @@
 // file: libs/sdk/src/common/entries/agent.entry.ts
 
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import type { AgentRecord } from '../records';
-import type { AgentContext } from '../interfaces';
-import type { AgentMetadata, ToolInputType, ToolOutputType } from '../metadata';
+import type { JSONSchema } from '@frontmcp/lazy-zod';
 import type {
-  Request,
-  Notification,
+  AuthInfo,
   CallToolRequest,
   CallToolResult,
-  Tool,
+  Notification,
+  Request,
   RequestHandlerExtra,
-  AuthInfo,
+  Tool,
 } from '@frontmcp/protocol';
+
 import type { AgentInputOf, AgentOutputOf } from '../decorators';
-import type { JSONSchema } from 'zod/v4/core';
+import type { AgentContext } from '../interfaces';
+import type { AgentMetadata, ToolInputType, ToolOutputType } from '../metadata';
+import type { AgentRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
+// Import SafeTransformResult from tool.entry to avoid duplication
+import { type SafeTransformResult } from './tool.entry';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
@@ -41,9 +44,6 @@ export type AgentCallExtra = RequestHandlerExtra<Request, Notification> & {
  * Parsed result of an agent execution.
  */
 export type ParsedAgentResult = CallToolResult;
-
-// Import SafeTransformResult from tool.entry to avoid duplication
-import { SafeTransformResult } from './tool.entry';
 
 // ============================================================================
 // Agent Entry Abstract Class

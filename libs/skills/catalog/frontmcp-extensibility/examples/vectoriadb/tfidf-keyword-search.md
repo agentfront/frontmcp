@@ -20,8 +20,9 @@ Shows how to use `TFIDFVectoria` for zero-dependency keyword search in a FrontMC
 
 ```typescript
 // src/providers/faq-search.provider.ts
-import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { TFIDFVectoria } from 'vectoriadb';
+
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const FAQSearch = Symbol('FAQSearch');
 
@@ -55,8 +56,8 @@ export class FAQSearchProvider {
 
 ```typescript
 // src/tools/search-faq.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { FAQSearch } from '../providers/faq-search.provider';
 
 @Tool({

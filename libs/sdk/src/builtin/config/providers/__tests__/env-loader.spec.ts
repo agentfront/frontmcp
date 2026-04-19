@@ -1,15 +1,17 @@
-import { z } from 'zod';
 import * as path from 'path';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import {
-  setNestedValue,
+  extractSchemaPaths,
   getNestedValue,
-  pathToEnvKey,
+  loadEnvFiles,
   mapEnvToNestedConfig,
   parseEnvContent,
   parseEnvContentSync,
-  loadEnvFiles,
+  pathToEnvKey,
   populateProcessEnv,
-  extractSchemaPaths,
+  setNestedValue,
 } from '../env-loader';
 
 describe('env-loader', () => {

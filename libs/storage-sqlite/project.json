@@ -28,8 +28,10 @@
         "platform": "node",
         "assets": ["libs/storage-sqlite/README.md", "LICENSE", "libs/storage-sqlite/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["@frontmcp/utils", "@frontmcp/sdk", "better-sqlite3", "zod"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "@frontmcp/sdk", "better-sqlite3", "zod"]
         }
       }
     },
@@ -48,8 +50,10 @@
         "platform": "node",
         "skipTypeCheck": true,
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["@frontmcp/utils", "@frontmcp/sdk", "better-sqlite3", "zod"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "@frontmcp/sdk", "better-sqlite3", "zod"]
         }
       }
     },

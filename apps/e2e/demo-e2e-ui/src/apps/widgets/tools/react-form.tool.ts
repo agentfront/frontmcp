@@ -5,8 +5,7 @@
  * The UI is defined as a React component and rendered via the React renderer.
  */
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import FormCard from './form-ui';

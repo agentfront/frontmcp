@@ -22,8 +22,11 @@
         "platform": "node",
         "assets": ["libs/plugins/README.md", "LICENSE", "libs/plugins/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/plugin-cache",
             "@frontmcp/plugin-codecall",
             "@frontmcp/plugin-dashboard",
@@ -47,8 +50,11 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/plugin-cache",
             "@frontmcp/plugin-codecall",
             "@frontmcp/plugin-dashboard",

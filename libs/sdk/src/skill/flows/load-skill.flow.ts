@@ -1,13 +1,14 @@
 // file: libs/sdk/src/skill/flows/load-skill.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
-import { InvalidInputError, InternalMcpError } from '../../errors';
-import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
+import { z } from '@frontmcp/lazy-zod';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { InternalMcpError, InvalidInputError } from '../../errors';
+import type { SkillSessionManager } from '../session/skill-session.manager';
+import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
-import type { SkillSessionManager } from '../session/skill-session.manager';
-import type { SkillPolicyMode, SkillActivationResult } from '../session/skill-session.types';
+import { formatSkillForLLM, generateNextSteps } from '../skill.utils';
 
 // Input schema matching MCP request format - supports multiple skill IDs
 const inputSchema = z.object({

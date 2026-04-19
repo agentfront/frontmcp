@@ -1,17 +1,18 @@
+import { z } from '@frontmcp/lazy-zod';
+import { RequestSchema } from '@frontmcp/protocol';
+
 import {
   Flow,
-  httpInputSchema,
-  FlowRunOptions,
-  httpOutputSchema,
-  FlowPlan,
   FlowBase,
   FlowHooksOf,
+  httpInputSchema,
+  httpOutputSchema,
   httpRespond,
   ServerRequestTokens,
-  Authorization,
+  type Authorization,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
-import { RequestSchema } from '@frontmcp/protocol';
 import { TransportServiceNotAvailableError } from '../../errors';
 
 export const plan = {

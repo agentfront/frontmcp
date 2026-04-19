@@ -1,3 +1,6 @@
+// Helper functions
+import { ConfigService } from './providers/config.service';
+
 /**
  * Built-in ConfigPlugin for environment variable management.
  *
@@ -7,7 +10,7 @@
  * @example
  * ```typescript
  * import { FrontMcp, App, ConfigPlugin } from '@frontmcp/sdk';
- * import { z } from 'zod';
+ * import { z } from '@frontmcp/lazy-zod';
  *
  * // Define configuration schema
  * const configSchema = z.object({
@@ -81,9 +84,6 @@ export {
   createDirectResolver,
 } from './config-resolver';
 export type { ConfigEntityType, ConfigResolutionContext, ConfigResolver } from './config-resolver';
-
-// Helper functions
-import { ConfigService } from './providers/config.service';
 
 /**
  * Get the ConfigService from an execution context.

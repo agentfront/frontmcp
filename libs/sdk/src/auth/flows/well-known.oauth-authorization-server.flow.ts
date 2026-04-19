@@ -1,21 +1,23 @@
 // auth/flows/well-known.oauth-authorization-server.flow.ts
 import 'reflect-metadata';
-import { z } from 'zod';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import {
+  Flow,
+  FlowBase,
+  getRequestBaseUrl,
+  httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
   HttpTextSchema,
-  Flow,
-  FlowBase,
-  FlowRunOptions,
-  ScopeEntry,
-  ServerRequest,
-  StageHookOf,
-  httpInputSchema,
-  FlowPlan,
-  getRequestBaseUrl,
-  makeWellKnownPaths,
   isOrchestratedMode,
+  makeWellKnownPaths,
+  StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ScopeEntry,
+  type ServerRequest,
 } from '../../common';
 import { FlowInputMissingError } from '../../errors/sdk.errors';
 

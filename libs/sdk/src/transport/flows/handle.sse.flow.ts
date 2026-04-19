@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { buildSetCookie, getMachineId, getRuntimeContext } from '@frontmcp/utils';
 
 import { createSessionId } from '../../auth/session/utils/session-id.utils';

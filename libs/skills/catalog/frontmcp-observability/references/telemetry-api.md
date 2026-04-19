@@ -22,9 +22,7 @@ Every execution context (tools, resources, prompts, agents) gets a `this.telemet
 ## Usage in Tools
 
 ```typescript
-import { z } from 'zod';
-
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'analyze_data',

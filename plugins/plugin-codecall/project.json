@@ -27,8 +27,11 @@
           "plugins/plugin-codecall/package.json"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@enclave-vm/core",
             "vectoriadb",
             "@frontmcp/sdk",
@@ -54,8 +57,11 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@enclave-vm/core",
             "vectoriadb",
             "@frontmcp/sdk",

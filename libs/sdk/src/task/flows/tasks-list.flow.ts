@@ -8,8 +8,7 @@
  * @module task/flows/tasks-list.flow
  */
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { ListTasksRequestSchema, ListTasksResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';

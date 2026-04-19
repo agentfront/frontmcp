@@ -46,8 +46,7 @@ new_classes = ["RateLimiterDO"]
 
 ```typescript
 // src/tools/rate-limited-action.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'rate_limited_action',
@@ -85,8 +84,7 @@ export class RateLimitedActionTool extends ToolContext {
 
 ```typescript
 // src/tools/file-upload.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'upload_file',

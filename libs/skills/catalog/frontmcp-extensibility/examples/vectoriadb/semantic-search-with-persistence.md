@@ -21,9 +21,9 @@ Shows how to use `VectoriaDB` for semantic search with transformer models, filte
 
 ```typescript
 // src/providers/knowledge-base.provider.ts
+import { FileStorageAdapter, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
+
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
-import type { DocumentMetadata } from 'vectoriadb';
 
 export const KnowledgeBase = Symbol('KnowledgeBase');
 
@@ -80,8 +80,8 @@ export class KnowledgeBaseProvider {
 
 ```typescript
 // src/tools/semantic-search.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { KnowledgeBase } from '../providers/knowledge-base.provider';
 
 @Tool({

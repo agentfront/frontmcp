@@ -1,8 +1,10 @@
 import * as yaml from 'js-yaml';
-import { z } from 'zod';
-import { readFile, fileExists, getCwd, pathResolve } from '@frontmcp/utils';
-import { loadEnvFiles, mapEnvToNestedConfig, extractSchemaPaths, populateProcessEnv } from './env-loader';
+
+import { type z } from '@frontmcp/lazy-zod';
+import { fileExists, getCwd, pathResolve, readFile } from '@frontmcp/utils';
+
 import { ConfigValidationError } from './config.service';
+import { extractSchemaPaths, loadEnvFiles, mapEnvToNestedConfig, populateProcessEnv } from './env-loader';
 
 /**
  * Options for the config loader.

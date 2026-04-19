@@ -3,10 +3,12 @@
  */
 
 import 'reflect-metadata';
-import AgentRegistry from '../agent.registry';
-import { Agent, AgentContext } from '../../common';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
-import { z } from 'zod';
+import { Agent, AgentContext } from '../../common';
+import AgentRegistry from '../agent.registry';
 
 // Mock LLM adapter for testing
 const mockLlmAdapter = {

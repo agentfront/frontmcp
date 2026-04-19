@@ -109,7 +109,7 @@ export default class MyPlugin extends DynamicPlugin<MyPluginOptions> {
 For complex options with defaults, use Zod schemas with two types:
 
 ```ts title="my-plugin.types.ts"
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Inner schema (without outer .default())
 const myPluginOptionsObjectSchema = z.object({
@@ -246,7 +246,7 @@ Plugins can contribute skills that teach AI how to perform workflows using the p
 
 ```ts
 import { Plugin, Skill, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Plugin tool
 const deployInputSchema = z.object({

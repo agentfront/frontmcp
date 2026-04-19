@@ -14,6 +14,7 @@
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/utils": ["libs/utils/dist/index.d.ts"],
       "@frontmcp/di": ["libs/di/dist/index.d.ts"],
+      "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"],
       "@frontmcp/uipack": ["libs/uipack/dist/index.d.ts"],
       "@frontmcp/uipack/*": ["libs/uipack/dist/*/index.d.ts"],
       "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],

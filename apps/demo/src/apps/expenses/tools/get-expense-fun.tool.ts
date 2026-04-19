@@ -1,5 +1,6 @@
-import z from 'zod';
+import z from '@frontmcp/lazy-zod';
 import { tool } from '@frontmcp/sdk';
+
 import { ExpenseConfigProvider } from '../providers';
 
 export default tool({

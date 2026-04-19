@@ -311,7 +311,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 For plugins with complex options and defaults, use Zod:
 
 ```ts title="my-plugin.types.ts"
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Define inner schema (without outer .default())
 const myPluginOptionsObjectSchema = z.object({

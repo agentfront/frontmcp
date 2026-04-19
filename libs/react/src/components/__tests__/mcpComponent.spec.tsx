@@ -1,11 +1,13 @@
+import { act, render } from '@testing-library/react';
 import React from 'react';
-import { render, act } from '@testing-library/react';
-import { z } from 'zod';
-import { mcpComponent, mcpLazy } from '../mcpComponent';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
+import { ComponentRegistry } from '../ComponentRegistry';
+import { mcpComponent, mcpLazy } from '../mcpComponent';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -18,8 +18,7 @@ Deploy a FrontMCP server to Vercel serverless functions with Vercel KV for sessi
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet',

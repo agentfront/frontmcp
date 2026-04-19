@@ -1,7 +1,8 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { getSessionStore } from '../data/session.store';
+
 import { resolveDemoSessionId } from '../../resolve-session-id';
+import { getSessionStore } from '../data/session.store';
 
 const outputSchema = z.object({
   sessionId: z.string(),

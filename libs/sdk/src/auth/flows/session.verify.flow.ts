@@ -19,8 +19,6 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from 'zod';
-
 import {
   buildInsufficientScopeHeader,
   buildInvalidTokenHeader,
@@ -33,6 +31,7 @@ import {
   type ProviderVerifyRef,
   type VerifyResult,
 } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 import { getMachineId, randomUUID } from '@frontmcp/utils';
 
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';

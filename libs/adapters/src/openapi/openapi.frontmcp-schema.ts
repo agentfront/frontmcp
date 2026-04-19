@@ -6,7 +6,7 @@
  * to ensure only valid data is used and invalid fields are warned about.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 /**

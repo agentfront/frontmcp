@@ -8,9 +8,11 @@
  * is provided, input is validated before reaching the execute callback.
  */
 
-import { useContext, useEffect, useRef, useMemo } from 'react';
+import { useContext, useEffect, useMemo, useRef } from 'react';
+
+import type { z } from '@frontmcp/lazy-zod';
 import type { CallToolResult } from '@frontmcp/sdk';
-import type { z } from 'zod';
+
 import { FrontMcpContext } from '../provider/FrontMcpContext';
 import { zodToJsonSchema } from '../utils/zodToJsonSchema';
 

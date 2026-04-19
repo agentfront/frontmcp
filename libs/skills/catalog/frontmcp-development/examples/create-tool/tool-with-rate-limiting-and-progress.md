@@ -20,8 +20,7 @@ A batch processing tool that uses rate limiting, concurrency control, progress n
 
 ```typescript
 // src/apps/main/tools/batch-process.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'batch_process',

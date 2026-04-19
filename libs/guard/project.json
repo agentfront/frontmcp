@@ -7,6 +7,7 @@
   "targets": {
     "generate-types": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "options": {
         "command": "npx tsx scripts/generate-schema-types.mjs"
       }
@@ -27,8 +28,10 @@
         "platform": "node",
         "assets": ["libs/guard/README.md", "libs/guard/CHANGELOG.md", "LICENSE", "libs/guard/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["@frontmcp/utils", "zod"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "zod"]
         }
       }
     },
@@ -46,8 +49,10 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["@frontmcp/utils", "zod"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "zod"]
         }
       }
     },

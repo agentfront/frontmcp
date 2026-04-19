@@ -422,7 +422,7 @@ Register it the same way as a class workflow: `workflows: [QuickDeploy]`.
 Add workflow classes (or function-style workflows) to the `workflows` array in `@App`. Workflows require jobs to be enabled since each step runs a named job.
 
 ```typescript
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'pipeline-app',
@@ -462,8 +462,7 @@ This creates the workflow file, spec file, and updates barrel exports.
 ## Complete Example: CI/CD Pipeline
 
 ```typescript
-import { Workflow, Job, JobContext, FrontMcp, App, workflow } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Job, JobContext, Workflow, workflow, z } from '@frontmcp/sdk';
 
 // --- Jobs ---
 

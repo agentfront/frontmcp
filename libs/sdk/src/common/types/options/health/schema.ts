@@ -3,7 +3,8 @@
 // Health and readiness endpoint configuration schema for @FrontMcp decorator.
 // Uses explicit interfaces from interfaces.ts for IDE autocomplete.
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { RawZodShape } from '../../common.types';
 import type { HealthOptionsInterface, HealthReadyzOptionsInterface } from './interfaces';
 

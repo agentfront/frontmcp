@@ -1,11 +1,12 @@
-import { Token, Type } from '@frontmcp/di';
-import { FlowMetadata, FlowName } from '../metadata';
-import { z } from 'zod';
-import { HookEntry, ScopeEntry } from '../entries';
-import { FlowState, FlowStateOf } from './internal/flow.utils';
-import { FrontMcpLogger } from './logger.interface';
+import { type Token, type Type } from '@frontmcp/di';
+import { type z } from '@frontmcp/lazy-zod';
+
 import type { FrontMcpContext } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
+import { type HookEntry, type ScopeEntry } from '../entries';
+import { type FlowMetadata, type FlowName } from '../metadata';
+import { FlowState, type FlowStateOf } from './internal/flow.utils';
+import { type FrontMcpLogger } from './logger.interface';
 
 export type FlowInputOf<N extends FlowName> = z.infer<ExtendFlows[N]['input']>;
 export type FlowOutputOf<N extends FlowName> = z.infer<ExtendFlows[N]['output']>;

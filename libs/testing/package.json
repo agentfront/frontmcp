@@ -96,7 +96,8 @@
     "@frontmcp/ui": "1.0.4",
     "@playwright/test": "^1.40.0",
     "jest": "^29.0.0 || ^30.0.0",
-    "@jest/globals": "^29.0.0 || ^30.0.0"
+    "@jest/globals": "^29.0.0 || ^30.0.0",
+    "@frontmcp/lazy-zod": "1.0.4"
   },
   "peerDependenciesMeta": {
     "@frontmcp/ui": {

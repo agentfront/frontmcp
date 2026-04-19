@@ -1,6 +1,7 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Agent, AgentContext } from '@frontmcp/sdk';
+
 import GetWeatherTool from '../tools/get-weather.tool';
-import { z } from 'zod';
 
 @Agent({
   name: 'summary-agent',

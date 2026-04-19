@@ -8,9 +8,7 @@ description: In-memory testing with create() and connectOpenAI/connectClaude wit
 Uses `connect()` or `create()` for in-memory testing without HTTP overhead.
 
 ```typescript
-import { create, connectOpenAI } from '@frontmcp/sdk';
-import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { connectOpenAI, create, tool, z } from '@frontmcp/sdk';
 
 const AddTool = tool({
   name: 'add',

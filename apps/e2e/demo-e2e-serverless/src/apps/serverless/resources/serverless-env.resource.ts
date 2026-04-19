@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { deploymentTracker } from '../data/deployment-tracker';
 
 const outputSchema = z.object({

@@ -1,18 +1,19 @@
 /**
  * Tests for elicitation types.
  */
+import { z } from '@frontmcp/lazy-zod';
+
 import {
   DEFAULT_ELICIT_TTL,
-  type ElicitStatus,
-  type ElicitResult,
   type ElicitMode,
   type ElicitOptions,
-  type TypedElicitResult,
+  type ElicitResult,
+  type ElicitStatus,
   type PendingElicit,
   type PendingElicitFallback,
   type ResolvedElicitResult,
+  type TypedElicitResult,
 } from '../elicitation.types';
-import { z } from 'zod';
 
 describe('Elicitation Types', () => {
   describe('DEFAULT_ELICIT_TTL', () => {
