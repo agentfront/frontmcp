@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { ParsedArgs } from '../../../core/args';
+import { type ParsedArgs } from '../../../core/args';
 import { c } from '../../../core/colors';
 import { ensureDir, runCmd } from '@frontmcp/utils';
 import { resolveEntry } from '../../../shared/fs';
@@ -51,7 +51,7 @@ export async function buildSdk(opts: ParsedArgs): Promise<void> {
     sourcemap: true,
     external: [
       '@frontmcp/sdk', '@frontmcp/di', '@frontmcp/utils',
-      '@frontmcp/auth', '@frontmcp/adapters', '@frontmcp/plugins',
+      '@frontmcp/auth', '@frontmcp/adapters', '@frontmcp/lazy-zod',
       'reflect-metadata', 'better-sqlite3', 'fsevents',
       // Keep user's dependencies external
       ...Object.keys(pkg.dependencies || {}),

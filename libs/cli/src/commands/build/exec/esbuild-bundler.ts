@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import { FrontmcpExecConfig } from './config';
+import { type FrontmcpExecConfig } from './config';
 
 // Default packages that must be kept external:
 // - native addons that cannot be bundled
@@ -24,7 +24,7 @@ const DEFAULT_EXTERNALS = [
   '@frontmcp/utils',
   '@frontmcp/auth',
   '@frontmcp/adapters',
-  '@frontmcp/plugins',
+  '@frontmcp/lazy-zod',
   'reflect-metadata',
 ];
 

@@ -1811,7 +1811,6 @@ async function upsertPackageJsonWithTarget(
     dependencies: {
       '@frontmcp/sdk': frontmcpLibRange,
       '@frontmcp/lazy-zod': frontmcpLibRange,
-      '@frontmcp/plugins': frontmcpLibRange,
       '@frontmcp/adapters': frontmcpLibRange,
       frontmcp: selfVersion,
       tslib: '^2.5.0',
