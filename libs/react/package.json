@@ -96,7 +96,7 @@
     "@frontmcp/sdk": "1.0.4",
     "@frontmcp/utils": "1.0.4",
     "react-router-dom": "^7.0.0",
-    "zod": "^4.0.0"
+    "@frontmcp/lazy-zod": "1.0.4"
   },
   "peerDependenciesMeta": {
     "react-router-dom": {

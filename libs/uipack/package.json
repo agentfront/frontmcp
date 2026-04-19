@@ -61,5 +61,8 @@
   },
   "devDependencies": {
     "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.0.4"
   }
 }

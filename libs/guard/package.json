@@ -52,7 +52,7 @@
     "@frontmcp/utils": "1.0.4"
   },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "@frontmcp/lazy-zod": "1.0.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
