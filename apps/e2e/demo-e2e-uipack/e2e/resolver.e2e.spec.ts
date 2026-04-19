@@ -86,7 +86,7 @@ test.describe('Import Resolver E2E', () => {
       expect(json.rewrites['react']).toBeUndefined();
       // react import should be preserved in the output
       expect(json.code).toContain("from 'react'");
-      // zod should still be rewritten
+      // @frontmcp/lazy-zod import should still be rewritten (to esm.sh)
       expect(json.code).toContain('esm.sh');
     });
   });

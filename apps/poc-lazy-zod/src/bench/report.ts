@@ -2,8 +2,9 @@
  * Reads results/results.json and prints a comparison table.
  * Evaluates the 5-criteria go/no-go gate and prints a verdict.
  */
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { readFile, writeJSON } from '@frontmcp/utils';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const RESULTS = path.join(ROOT, 'results', 'results.json');
@@ -16,6 +17,11 @@ type Measurement = {
   parseAllSteadyMs: number;
   count: number;
 };
+
+// Only property names whose value is `number` — rules out `variant`.
+type NumericKey = {
+  [K in keyof Measurement]: Measurement[K] extends number ? K : never;
+}[keyof Measurement];
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -32,8 +38,8 @@ const stddev = (xs: number[]): number => {
   return Math.sqrt(xs.reduce((acc, x) => acc + (x - mu) ** 2, 0) / xs.length);
 };
 
-function agg(rs: Measurement[], key: keyof Measurement) {
-  const xs = rs.map((r) => r[key] as number);
+function agg<K extends NumericKey>(rs: Measurement[], key: K) {
+  const xs = rs.map((r) => r[key]);
   return { median: median(xs), p95: p95(xs), mean: mean(xs), stddev: stddev(xs) };
 }
 
@@ -47,8 +53,8 @@ function pct(lazy: number, eager: number) {
   return `${sign}${d.toFixed(1)}%`;
 }
 
-function main() {
-  const raw = JSON.parse(fs.readFileSync(RESULTS, 'utf8'));
+async function main() {
+  const raw = JSON.parse(await readFile(RESULTS, 'utf8'));
   const { config, bundleSizes, runs } = raw as {
     config: { N: number; warmup: number; nodeArgs: string[]; nodeVersion: string };
     bundleSizes: { eagerBytes: number; lazyBytes: number; deltaPct: number };
@@ -129,22 +135,15 @@ function main() {
     : 'ABANDON — speedup does not clear threshold.';
   console.log(`\n  Verdict: ${verdict}\n`);
 
-  fs.writeFileSync(
-    path.join(ROOT, 'results', 'summary.json'),
-    JSON.stringify(
-      {
-        cold: { eager: coldEager, lazy: coldLazy },
-        firstParse: { eager: firstEager, lazy: firstLazy },
-        parseAllFirst: { eager: all1Eager, lazy: all1Lazy },
-        parseAllSteady: { eager: all2Eager, lazy: all2Lazy },
-        bundleSizes,
-        gate,
-        verdict,
-      },
-      null,
-      2,
-    ),
-  );
+  await writeJSON(path.join(ROOT, 'results', 'summary.json'), {
+    cold: { eager: coldEager, lazy: coldLazy },
+    firstParse: { eager: firstEager, lazy: firstLazy },
+    parseAllFirst: { eager: all1Eager, lazy: all1Lazy },
+    parseAllSteady: { eager: all2Eager, lazy: all2Lazy },
+    bundleSizes,
+    gate,
+    verdict,
+  });
 }
 
 main();
