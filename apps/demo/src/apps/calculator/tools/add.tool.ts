@@ -1,5 +1,4 @@
-import { z } from '@frontmcp/lazy-zod';
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'add',
