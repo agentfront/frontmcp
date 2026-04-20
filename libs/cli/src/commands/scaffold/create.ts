@@ -181,6 +181,7 @@ export default class Server {}
 `;
 
 const TEMPLATE_CALC_APP_TS = `
+import { App } from '@frontmcp/sdk';
 import AddTool from './tools/add.tool';
 
 @App({
@@ -192,6 +193,7 @@ export class CalcApp {}
 `;
 
 const TEMPLATE_ADD_TOOL_TS = `
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'add',
