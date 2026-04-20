@@ -170,7 +170,7 @@ async function scaffoldFileIfMissing(baseDir: string, p: string, content: string
 
 const TEMPLATE_MAIN_TS = `
 import 'reflect-metadata';
-import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { FrontMcp } from '@frontmcp/sdk';
 import { CalcApp } from './calc.app';
 
 @FrontMcp({
