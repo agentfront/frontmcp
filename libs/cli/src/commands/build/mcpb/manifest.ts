@@ -190,7 +190,7 @@ export function loadPackageJsonMeta(cwd: string): PackageJsonMeta {
  */
 export function parseAuthor(author: unknown): McpbAuthor {
   if (!author) return { name: 'unknown' };
-  if (typeof author === 'object' && author !== null && 'name' in author) {
+  if (typeof author === 'object' && 'name' in author) {
     const a = author as McpbAuthor;
     return {
       name: a.name,
