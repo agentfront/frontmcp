@@ -4,14 +4,15 @@
  * Defines the contract that npm packages must follow to be loadable by FrontMCP.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import {
-  isDecoratedToolClass,
-  isDecoratedResourceClass,
-  isDecoratedPromptClass,
-  isDecoratedSkillClass,
-  isDecoratedJobClass,
   isDecoratedAgentClass,
+  isDecoratedJobClass,
+  isDecoratedPromptClass,
+  isDecoratedResourceClass,
+  isDecoratedSkillClass,
+  isDecoratedToolClass,
   isDecoratedWorkflowClass,
 } from '../app/instances/esm-normalize.utils';
 

@@ -27,7 +27,7 @@ Use the `context` getter for convenient access:
 
 ```ts
 import { Tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
 class MyTool {

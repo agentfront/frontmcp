@@ -20,8 +20,7 @@ An autonomous agent that uses inner tools to review GitHub pull requests.
 
 ```typescript
 // src/apps/review/tools/fetch-pr.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'fetch_pr',
@@ -44,8 +43,7 @@ class FetchPRTool extends ToolContext {
 
 ```typescript
 // src/apps/review/tools/post-review.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'post_review_comment',
@@ -70,8 +68,7 @@ class PostReviewCommentTool extends ToolContext {
 
 ```typescript
 // src/apps/review/agents/pr-reviewer.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'pr_reviewer',

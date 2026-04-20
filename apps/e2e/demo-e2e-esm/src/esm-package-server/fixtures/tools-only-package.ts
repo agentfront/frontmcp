@@ -4,8 +4,9 @@
  * The ESM loader detects decorated classes automatically — no manifest needed.
  */
 import 'reflect-metadata';
+
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 @Tool({
   name: 'multiply',

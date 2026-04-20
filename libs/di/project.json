@@ -20,10 +20,13 @@
         "platform": "node",
         "assets": ["libs/di/README.md", "libs/di/CHANGELOG.md", "LICENSE", "libs/di/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["zod", "reflect-metadata"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/lazy-zod", "zod", "reflect-metadata"]
         }
-      }
+      },
+      "dependsOn": ["^build"]
     },
     "build-esm": {
       "executor": "@nx/esbuild:esbuild",
@@ -39,8 +42,10 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["zod", "reflect-metadata"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/lazy-zod", "zod", "reflect-metadata"]
         }
       }
     },

@@ -1,8 +1,7 @@
 import 'reflect-metadata';
 
-import type z from 'zod';
-
 import { type ConcurrencyConfigInput, type RateLimitConfigInput, type TimeoutConfigInput } from '@frontmcp/guard';
+import type z from '@frontmcp/lazy-zod';
 
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
 import { type ToolContext } from '../interfaces';

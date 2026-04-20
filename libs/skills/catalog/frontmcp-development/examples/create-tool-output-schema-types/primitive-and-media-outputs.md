@@ -20,8 +20,7 @@ Demonstrates using primitive string literals and media types as `outputSchema` f
 
 ```typescript
 // src/tools/summarize.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Primitive literal: returns plain text
 @Tool({
@@ -42,8 +41,7 @@ class SummarizeTextTool extends ToolContext {
 
 ```typescript
 // src/tools/generate-chart.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Media type: returns base64 image data
 @Tool({
@@ -66,8 +64,7 @@ class GenerateChartTool extends ToolContext {
 
 ```typescript
 // src/tools/analyze-document.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Multi-content array: returns text + image
 @Tool({

@@ -26,8 +26,11 @@
           "plugins/plugin-feature-flags/package.json"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/sdk",
             "@frontmcp/utils",
             "@splitsoftware/splitio",
@@ -53,8 +56,11 @@
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "@frontmcp/sdk",
             "@frontmcp/utils",
             "@splitsoftware/splitio",

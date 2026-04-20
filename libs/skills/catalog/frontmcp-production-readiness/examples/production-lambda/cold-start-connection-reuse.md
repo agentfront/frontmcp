@@ -60,8 +60,8 @@ export class DbConnectionProvider {
 
 ```typescript
 // src/tools/optimized-query.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { DB_CLIENT } from '../providers/db-connection.provider';
 
 @Tool({
@@ -96,6 +96,7 @@ export class OptimizedQueryTool extends ToolContext {
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 // Only import lightweight modules at the top level
 // Heavy imports happen lazily in providers
 import { MyApp } from './my.app';

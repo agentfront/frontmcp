@@ -1,7 +1,8 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../common';
-import type { JobRegistryInterface } from '../job.registry';
 import type { JobExecutionManager } from '../execution/job-execution.manager';
+import type { JobRegistryInterface } from '../job.registry';
 
 @Tool({
   name: 'execute-job',

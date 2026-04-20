@@ -18,3 +18,8 @@ out
 docs/live/docs.json
 docs/docs.draft.json
 docs/docs.backup.json
+
+# POC benchmark artifacts — generated bundles and results, not source.
+apps/poc-lazy-zod/results/
+apps/poc-lazy-zod/src/schemas/eager.ts
+apps/poc-lazy-zod/src/schemas/lazy.ts

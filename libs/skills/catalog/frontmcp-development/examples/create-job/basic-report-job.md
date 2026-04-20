@@ -18,8 +18,7 @@ A minimal job that generates a report with progress tracking and structured outp
 
 ```typescript
 // src/jobs/generate-report.job.ts
-import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'generate-report',

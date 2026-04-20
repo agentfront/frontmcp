@@ -1,7 +1,7 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 import {
   computeResource,

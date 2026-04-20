@@ -4,8 +4,7 @@
  * Uses `template: { file: '...' }` which bundles the React component at
  * server startup via esbuild, producing inline HTML with esm.sh import maps.
  */
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {

@@ -1,5 +1,6 @@
-import { z } from 'zod';
-import { Redis as RedisClient } from 'ioredis';
+import { type Redis as RedisClient } from 'ioredis';
+
+import { z } from '@frontmcp/lazy-zod';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Memory Scopes

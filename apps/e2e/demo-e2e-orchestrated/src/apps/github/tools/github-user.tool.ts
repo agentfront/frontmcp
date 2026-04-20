@@ -4,8 +4,8 @@
  * This is a demo tool for E2E testing of multi-provider orchestrated auth.
  * In a full implementation, it would use the orchestration accessor to get tokens.
  */
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 const inputSchema = {};
 

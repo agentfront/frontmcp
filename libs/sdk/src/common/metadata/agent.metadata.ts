@@ -1,16 +1,21 @@
-import { z } from 'zod';
-import { FuncType, Type, Token } from '@frontmcp/di';
-import { RawZodShape } from '../types';
-import type { RateLimitConfig, ConcurrencyConfig, TimeoutConfig } from '@frontmcp/guard';
-import { rateLimitConfigSchema, concurrencyConfigSchema, timeoutConfigSchema } from '@frontmcp/guard';
-import type { EntryAvailability } from '@frontmcp/utils';
-import { entryAvailabilitySchema } from '@frontmcp/utils';
-import { ProviderType } from '../interfaces/provider.interface';
-import { PluginType } from '../interfaces/plugin.interface';
-import { AdapterType } from '../interfaces/adapter.interface';
-import { ToolType } from '../interfaces/tool.interface';
-import { ResourceType } from '../interfaces/resource.interface';
-import { PromptType } from '../interfaces/prompt.interface';
+import { type FuncType, type Token, type Type } from '@frontmcp/di';
+import {
+  concurrencyConfigSchema,
+  rateLimitConfigSchema,
+  timeoutConfigSchema,
+  type ConcurrencyConfig,
+  type RateLimitConfig,
+  type TimeoutConfig,
+} from '@frontmcp/guard';
+import { z } from '@frontmcp/lazy-zod';
+import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
+
+import { type AdapterType } from '../interfaces/adapter.interface';
+import { type PluginType } from '../interfaces/plugin.interface';
+import { type PromptType } from '../interfaces/prompt.interface';
+import { type ProviderType } from '../interfaces/provider.interface';
+import { type ResourceType } from '../interfaces/resource.interface';
+import { type ToolType } from '../interfaces/tool.interface';
 import {
   annotatedFrontMcpAdaptersSchema,
   annotatedFrontMcpAgentsSchema,
@@ -20,7 +25,8 @@ import {
   annotatedFrontMcpResourcesSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
-import { ToolInputType, ToolOutputType } from './tool.metadata';
+import { type RawZodShape } from '../types';
+import { type ToolInputType, type ToolOutputType } from './tool.metadata';
 
 /**
  * Agent type definition (class or factory function).

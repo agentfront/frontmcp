@@ -5,7 +5,8 @@
  * on top of StorageAdapter.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { MemoryStorageAdapter } from '../adapters';
 import { TypedStorage } from '../typed-storage';
 

@@ -9,6 +9,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "paths": {
+      "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"],
       "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"]
     }
   },

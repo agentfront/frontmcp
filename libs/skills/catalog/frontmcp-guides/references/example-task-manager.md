@@ -45,6 +45,7 @@ An authenticated task management MCP server with CRUD tools, a Redis-backed prov
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { TasksApp } from './tasks.app';
 
 @FrontMcp({
@@ -63,11 +64,12 @@ export default class TaskManagerServer {}
 ```typescript
 // src/tasks.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { RedisTaskStoreProvider } from './providers/task-store.provider';
 import { CreateTaskTool } from './tools/create-task.tool';
+import { DeleteTaskTool } from './tools/delete-task.tool';
 import { ListTasksTool } from './tools/list-tasks.tool';
 import { UpdateTaskTool } from './tools/update-task.tool';
-import { DeleteTaskTool } from './tools/delete-task.tool';
 
 @App({
   name: 'Tasks',
@@ -100,8 +102,9 @@ export interface Task {
 
 ```typescript
 // src/providers/task-store.provider.ts
-import { Provider } from '@frontmcp/sdk';
 import type { Token } from '@frontmcp/di';
+import { Provider } from '@frontmcp/sdk';
+
 import type { Task } from '../types/task';
 
 export interface TaskStore {
@@ -167,8 +170,8 @@ export class RedisTaskStoreProvider implements TaskStore {
 
 ```typescript
 // src/tools/create-task.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { TASK_STORE } from '../providers/task-store.provider';
 
 @Tool({
@@ -219,8 +222,8 @@ export class CreateTaskTool extends ToolContext {
 
 ```typescript
 // src/tools/list-tasks.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { TASK_STORE } from '../providers/task-store.provider';
 
 @Tool({
@@ -277,8 +280,8 @@ export class ListTasksTool extends ToolContext {
 
 ```typescript
 // src/tools/update-task.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { TASK_STORE } from '../providers/task-store.provider';
 
 @Tool({
@@ -331,8 +334,8 @@ export class UpdateTaskTool extends ToolContext {
 
 ```typescript
 // src/tools/delete-task.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { TASK_STORE } from '../providers/task-store.provider';
 
 @Tool({
@@ -385,8 +388,9 @@ export class DeleteTaskTool extends ToolContext {
 ```typescript
 // test/create-task.tool.spec.ts
 import { ToolContext } from '@frontmcp/sdk';
-import { CreateTaskTool } from '../src/tools/create-task.tool';
+
 import { TASK_STORE, type TaskStore } from '../src/providers/task-store.provider';
+import { CreateTaskTool } from '../src/tools/create-task.tool';
 import type { Task } from '../src/types/task';
 
 describe('CreateTaskTool', () => {
@@ -465,6 +469,7 @@ describe('CreateTaskTool', () => {
 ```typescript
 // test/tasks.e2e.spec.ts
 import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';
+
 import Server from '../src/main';
 
 describe('Task Manager E2E', () => {

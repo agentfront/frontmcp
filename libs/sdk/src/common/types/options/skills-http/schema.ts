@@ -1,7 +1,8 @@
 // common/types/options/skills-http/schema.ts
 // Zod schema for skills HTTP configuration
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { RawZodShape } from '../../common.types';
 import type { SkillsConfigAuthMode, SkillsConfigOptions as SkillsConfigOptionsInterface } from './interfaces';
 

@@ -1,6 +1,7 @@
 // output-schemas.ts
-import { z } from 'zod';
-
+// Use lazy-zod: this module defines many top-level discriminated-union
+// and object schemas. Lazy construction defers the cost to first `.parse()`.
+import { z } from '@frontmcp/lazy-zod';
 import {
   JSONRPCErrorSchema,
   JSONRPCResponseSchema,

@@ -1,6 +1,5 @@
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
 
 const replayAlertPayloadSchema = z.object({
   index: z.number(),

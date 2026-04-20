@@ -1,5 +1,6 @@
-import { z } from 'zod';
-import { RawZodShape } from '../types';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type RawZodShape } from '../types';
 
 /**
  * Declarative metadata describing what a FrontMcpProvider contributes at app scope.

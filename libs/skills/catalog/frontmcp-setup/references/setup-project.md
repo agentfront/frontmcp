@@ -141,6 +141,7 @@ The `@FrontMcp` decorator accepts a `FrontMcpMetadata` object with these fields:
 
 ```typescript
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -180,6 +181,7 @@ export default class Server {}
 
 ```typescript
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -225,8 +227,7 @@ export default class Server {}
 Create `src/tools/add.tool.ts`:
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'add',
@@ -249,6 +250,7 @@ Create `src/apps/calc.app.ts`:
 
 ```typescript
 import { App } from '@frontmcp/sdk';
+
 import AddTool from '../tools/add.tool';
 
 @App({
@@ -276,7 +278,9 @@ Update `src/main.ts`:
 
 ```typescript
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { CalcApp } from './apps/calc.app';
 
 @FrontMcp({
@@ -292,23 +296,20 @@ Resources, Prompts, and Skills follow the same decorator pattern:
 
 ```typescript
 // Resource - returns MCP ReadResourceResult
-import { Resource, ResourceContext } from '@frontmcp/sdk';
+// Prompt - returns MCP GetPromptResult
+
+// Skill - compound capability with tools + instructions
+import { Prompt, PromptContext, Resource, ResourceContext, Skill, SkillContext } from '@frontmcp/sdk';
 
 @Resource({ uri: 'config://app', name: 'App Config', mimeType: 'application/json' })
 export default class AppConfigResource extends ResourceContext {
   /* ... */
 }
 
-// Prompt - returns MCP GetPromptResult
-import { Prompt, PromptContext } from '@frontmcp/sdk';
-
 @Prompt({ name: 'summarize', description: 'Summarize a document' })
 export default class SummarizePrompt extends PromptContext {
   /* ... */
 }
-
-// Skill - compound capability with tools + instructions
-import { Skill, SkillContext } from '@frontmcp/sdk';
 
 @Skill({ name: 'data-analysis', description: 'Analyze datasets' })
 export default class DataAnalysisSkill extends SkillContext {

@@ -19,10 +19,9 @@ Shows a fully stateless server design that works on Vercel edge runtime with no 
 
 ```typescript
 // src/tools/edge-safe-tool.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 // Use @frontmcp/utils for cross-platform crypto — not node:crypto
-import { sha256Hex, randomUUID } from '@frontmcp/utils';
+import { randomUUID, sha256Hex } from '@frontmcp/utils';
 
 @Tool({
   name: 'process_request',
@@ -60,6 +59,7 @@ export class ProcessRequestTool extends ToolContext {
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { EdgeApp } from './edge.app';
 
 @FrontMcp({

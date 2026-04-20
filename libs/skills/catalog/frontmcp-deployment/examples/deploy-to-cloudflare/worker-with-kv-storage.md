@@ -18,8 +18,7 @@ Deploy a FrontMCP server to Cloudflare Workers with KV namespace for session and
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'store_value',

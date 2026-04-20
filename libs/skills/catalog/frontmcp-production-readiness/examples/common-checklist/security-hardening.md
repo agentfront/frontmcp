@@ -19,8 +19,8 @@ Shows how to configure authentication, CORS, input validation, and rate limiting
 
 ```typescript
 // src/main.ts
-import { FrontMcp } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { FrontMcp, z } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({
@@ -59,8 +59,7 @@ export default class SecureServer {}
 
 ```typescript
 // src/tools/safe-query.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'safe_query',

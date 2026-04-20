@@ -19,8 +19,7 @@ An agent that overrides `execute()` to perform multi-pass LLM reasoning with `th
 
 ```typescript
 // src/apps/review/agents/structured-reviewer.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'structured_reviewer',

@@ -1,11 +1,13 @@
 // file: plugins/plugin-remember/src/__tests__/remember-tools.spec.ts
 
 import 'reflect-metadata';
-import { z } from 'zod';
-import { rememberThisInputSchema, rememberThisOutputSchema } from '../tools/remember-this.tool';
-import { recallInputSchema, recallOutputSchema } from '../tools/recall.tool';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import { forgetInputSchema, forgetOutputSchema } from '../tools/forget.tool';
 import { listMemoriesInputSchema, listMemoriesOutputSchema } from '../tools/list-memories.tool';
+import { recallInputSchema, recallOutputSchema } from '../tools/recall.tool';
+import { rememberThisInputSchema, rememberThisOutputSchema } from '../tools/remember-this.tool';
 
 describe('Remember Tools', () => {
   describe('RememberThisTool', () => {

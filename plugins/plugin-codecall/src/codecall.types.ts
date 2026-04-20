@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/codecall.types.ts
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 // ===== Filter Function Types =====
 

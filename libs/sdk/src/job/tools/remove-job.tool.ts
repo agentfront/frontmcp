@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../common';
 import type { JobRegistryInterface } from '../job.registry';
 

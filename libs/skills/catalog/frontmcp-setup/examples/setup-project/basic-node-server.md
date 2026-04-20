@@ -20,8 +20,7 @@ Scaffold a minimal FrontMCP server with one app and one tool, running on Node.js
 
 ```typescript
 // src/tools/add.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'add',
@@ -41,6 +40,7 @@ export default class AddTool extends ToolContext {
 ```typescript
 // src/apps/calc.app.ts
 import { App } from '@frontmcp/sdk';
+
 import AddTool from '../tools/add.tool';
 
 @App({
@@ -53,7 +53,9 @@ export class CalcApp {}
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { CalcApp } from './apps/calc.app';
 
 @FrontMcp({

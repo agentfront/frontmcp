@@ -36,6 +36,60 @@ export * from '@frontmcp/guard';
 export * from './remote-mcp';
 export * from './esm-loader';
 
+// Lazy-zod: `z` is lazy by default for cold-start wins, `eagerZ` is the
+// straight zod pass-through, `lazyZ` is the explicit factory form.
+// See libs/lazy-zod/README.md for the rationale and POC numbers.
+// Also mirror zod's `export default z` so `import z from '@frontmcp/lazy-zod'`
+// (the namespace-default form) keeps working after migration.
+export { default } from '@frontmcp/lazy-zod';
+export {
+  z,
+  eagerZ,
+  lazyZ,
+  isLazy,
+  forceMaterialize,
+  LazyZodSchema,
+  type InferLazy,
+  // JSON-Schema helpers re-exported through the single zod boundary.
+  toJSONSchema,
+  type JSONSchema,
+  // Zod v4 class values + type aliases, re-exported so consumers never
+  // import from `zod` directly (per project convention).
+  NEVER,
+  ZodAny,
+  ZodArray,
+  ZodBigInt,
+  ZodBoolean,
+  ZodDate,
+  ZodDefault,
+  ZodDiscriminatedUnion,
+  ZodEnum,
+  ZodError,
+  ZodIntersection,
+  ZodLiteral,
+  ZodNever,
+  ZodNull,
+  ZodNullable,
+  ZodNumber,
+  ZodObject,
+  ZodOptional,
+  ZodRecord,
+  ZodString,
+  ZodSymbol,
+  ZodTuple,
+  ZodType,
+  ZodUndefined,
+  ZodUnion,
+  ZodUnknown,
+  ZodVoid,
+  type ZodTypeAny,
+  type ZodRawShape,
+  // Utility type aliases (z.infer / z.input / z.output)
+  type infer,
+  type input,
+  type output,
+} from '@frontmcp/lazy-zod';
+
 // Re-export MCP types commonly needed by consumers
 export type {
   // Result types (used as return type annotations in execute() methods)

@@ -1,7 +1,7 @@
 import React from 'react';
-import { z } from 'zod';
-import { mcpComponent, useCallTool } from '@frontmcp/react';
-import type { CallToolResult } from '@frontmcp/react';
+
+import { z } from '@frontmcp/lazy-zod';
+import { mcpComponent, useCallTool, type CallToolResult } from '@frontmcp/react';
 
 function GreetingCard({ title, message }: { title: string; message: string }): React.ReactElement {
   return (

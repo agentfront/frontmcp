@@ -20,8 +20,7 @@ Demonstrates annotating a tool that only reads data, signaling to MCP clients th
 
 ```typescript
 // src/tools/search-users.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'search_users',

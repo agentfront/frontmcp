@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Plugin, Skill, Tool, ToolContext } from '@frontmcp/sdk';
 
 // =============================================================================

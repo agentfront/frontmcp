@@ -1,20 +1,22 @@
 // file: plugins/plugin-dashboard/src/__tests__/tools.spec.ts
 
 import 'reflect-metadata';
-import { z } from 'zod';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import { graphToolInputSchema, type GraphToolInput } from '../tools/graph.tool';
-import {
-  listToolsInputSchema,
-  listToolsOutputSchema,
-  type ListToolsInput,
-  type ListToolsOutput,
-} from '../tools/list-tools.tool';
 import {
   listResourcesInputSchema,
   listResourcesOutputSchema,
   type ListResourcesInput,
   type ListResourcesOutput,
 } from '../tools/list-resources.tool';
+import {
+  listToolsInputSchema,
+  listToolsOutputSchema,
+  type ListToolsInput,
+  type ListToolsOutput,
+} from '../tools/list-tools.tool';
 
 describe('Tool Schemas', () => {
   describe('graphToolInputSchema', () => {

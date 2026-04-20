@@ -1,5 +1,5 @@
-import { Resource, ResourceContext, MCP_ERROR_CODES } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { MCP_ERROR_CODES, Resource, ResourceContext } from '@frontmcp/sdk';
 
 const outputSchema = z.object({
   errorCodes: z.array(

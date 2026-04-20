@@ -8,7 +8,7 @@ icon: "wrench"
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'get_weather',
@@ -180,7 +180,7 @@ For simpler tools, use the `tool()` function:
 
 ```typescript
 import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const getWeather = tool({
   name: 'get_weather',
@@ -306,7 +306,7 @@ type Output = ToolOutputOf<typeof metadata>; // { result: number }
 
 ```typescript
 import { Tool, ToolContext, App, FrontMcp } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   operation: z.enum(['add', 'subtract', 'multiply', 'divide']),

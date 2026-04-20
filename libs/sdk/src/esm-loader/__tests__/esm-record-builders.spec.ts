@@ -1,6 +1,13 @@
-import { z } from 'zod';
-import { buildEsmToolRecord, buildEsmResourceRecord, buildEsmPromptRecord } from '../factories/esm-record-builders';
-import type { EsmToolDefinition, EsmResourceDefinition, EsmPromptDefinition } from '../factories/esm-record-builders';
+import { z } from '@frontmcp/lazy-zod';
+
+import {
+  buildEsmPromptRecord,
+  buildEsmResourceRecord,
+  buildEsmToolRecord,
+  type EsmPromptDefinition,
+  type EsmResourceDefinition,
+  type EsmToolDefinition,
+} from '../factories/esm-record-builders';
 
 describe('esm-record-builders', () => {
   describe('buildEsmToolRecord()', () => {

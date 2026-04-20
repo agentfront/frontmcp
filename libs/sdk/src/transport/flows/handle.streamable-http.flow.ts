@@ -1,6 +1,5 @@
-import { z } from 'zod';
-
 import type { StoredSession } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 import { CallToolResultSchema, ElicitResultSchema, RequestSchema } from '@frontmcp/protocol';
 import { buildSetCookie, getMachineId, getRuntimeContext } from '@frontmcp/utils';
 

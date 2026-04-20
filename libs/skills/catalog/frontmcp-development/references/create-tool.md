@@ -34,9 +34,7 @@ Tools are the primary way to expose executable actions to AI clients in the MCP 
 Create a class extending `ToolContext<In, Out>` and implement the `execute(input: In): Promise<Out>` method. The `@Tool` decorator requires at minimum a `name` and an `inputSchema`.
 
 ```typescript
-import { z } from 'zod';
-
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet_user',
@@ -408,9 +406,7 @@ Annotation fields:
 For simple tools that do not need a class, use the `tool()` function builder. It returns a value you register the same way as a class tool.
 
 ```typescript
-import { z } from 'zod';
-
-import { tool } from '@frontmcp/sdk';
+import { tool, z } from '@frontmcp/sdk';
 
 const AddNumbers = tool({
   name: 'add_numbers',

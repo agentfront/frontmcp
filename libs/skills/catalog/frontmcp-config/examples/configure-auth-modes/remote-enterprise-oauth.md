@@ -19,8 +19,7 @@ Delegate authentication to an external OAuth orchestrator with Redis-backed toke
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'query_data',

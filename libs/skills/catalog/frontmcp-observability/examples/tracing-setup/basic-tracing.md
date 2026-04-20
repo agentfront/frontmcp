@@ -42,9 +42,7 @@ export default class Server {}
 
 ```typescript
 // src/apps/my-app/tools/hello.tool.ts
-import { z } from 'zod';
-
-import { Tool, ToolContext } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'hello',

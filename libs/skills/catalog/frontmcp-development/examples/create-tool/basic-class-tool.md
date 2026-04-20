@@ -19,8 +19,7 @@ A minimal tool using the class-based pattern with Zod input validation and outpu
 
 ```typescript
 // src/apps/main/tools/greet-user.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet_user',

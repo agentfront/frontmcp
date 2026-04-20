@@ -11,8 +11,7 @@
  * 2. Recipient replies → onEvent() triggered → notification to Claude
  */
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Channel, ChannelContext, Tool, ToolContext, type ChannelNotification } from '@frontmcp/sdk';
 
 // ─── Simulated Service State ────────────────────────────────────

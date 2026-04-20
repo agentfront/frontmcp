@@ -74,9 +74,7 @@ FRONTMCP_DEPLOYMENT_MODE=distributed frontmcp build --target distributed
 
 ```typescript
 // src/main.ts
-import { z } from 'zod';
-
-import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({ name: 'status', description: 'Server status', inputSchema: {} })
 class StatusTool extends ToolContext {

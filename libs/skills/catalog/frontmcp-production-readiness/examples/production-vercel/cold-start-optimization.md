@@ -45,8 +45,7 @@ export class LazyApiClientProvider {
 
 ```typescript
 // src/tools/cached-lookup.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Cache OpenAPI spec in module scope — survives warm invocations
 let cachedSpec: unknown | undefined;
@@ -78,6 +77,7 @@ export class CachedLookupTool extends ToolContext {
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 // Only import lightweight modules at the top level
 import { MyApp } from './my.app';
 

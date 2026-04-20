@@ -19,8 +19,7 @@ A job that syncs data from an external API with automatic retry, exponential bac
 
 ```typescript
 // src/jobs/sync-external-api.job.ts
-import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'sync-external-api',

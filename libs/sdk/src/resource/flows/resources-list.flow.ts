@@ -12,8 +12,7 @@ import {
 
 import 'reflect-metadata';
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } from '@frontmcp/protocol';
 
 import { InvalidInputError, InvalidMethodError } from '../../errors';

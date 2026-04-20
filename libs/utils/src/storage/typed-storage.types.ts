@@ -5,8 +5,9 @@
  * type-safe JSON serialization on top of StorageAdapter.
  */
 
+import type { z } from '@frontmcp/lazy-zod';
+
 import type { SetOptions } from './types';
-import type { z } from 'zod';
 
 /**
  * Options for TypedStorage wrapper

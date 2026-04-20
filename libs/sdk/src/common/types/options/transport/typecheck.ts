@@ -10,22 +10,21 @@
 // This file is included in the build but exports nothing - purely for
 // compile-time validation.
 
-import type { z } from 'zod';
+import type { z } from '@frontmcp/lazy-zod';
 
-// Import schemas
-import type { transportOptionsSchema, persistenceConfigSchema } from './schema';
 // Platform detection schemas are in session folder
 import type { platformDetectionConfigSchema, platformMappingEntrySchema } from '../session';
-
 // Import interfaces
 import type {
-  TransportOptionsInterface,
   PersistenceConfig,
   PlatformDetectionConfig,
   PlatformMappingEntry,
   ProtocolConfig,
   ProtocolPreset,
+  TransportOptionsInterface,
 } from './interfaces';
+// Import schemas
+import type { persistenceConfigSchema, transportOptionsSchema } from './schema';
 
 // ============================================
 // TYPE SYNC HELPERS

@@ -1,9 +1,10 @@
 // common/types/options/skills-http/typecheck.ts
 // Compile-time type sync checks between interfaces and Zod schemas
 
-import type { z } from 'zod';
-import type { skillsConfigOptionsSchema } from './schema';
+import type { z } from '@frontmcp/lazy-zod';
+
 import type { SkillsConfigOptions as SkillsConfigOptionsInterface } from './interfaces';
+import type { skillsConfigOptionsSchema } from './schema';
 
 type IsAssignable<T, U> = T extends U ? true : false;
 type AssertTrue<T extends true> = T;

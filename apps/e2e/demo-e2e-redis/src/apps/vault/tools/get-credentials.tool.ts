@@ -1,7 +1,8 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { getVault } from '../data/vault.store';
+
 import { resolveDemoSessionId } from '../../resolve-session-id';
+import { getVault } from '../data/vault.store';
 
 const inputSchema = {
   entryId: z.string().describe('Vault entry ID'),

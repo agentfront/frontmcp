@@ -1,9 +1,10 @@
 // file: libs/sdk/src/skill/flows/search-skills.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, normalizeToolRef } from '../../common';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
+import { Flow, FlowBase, FlowHooksOf, normalizeToolRef, type FlowPlan, type FlowRunOptions } from '../../common';
 import { InvalidInputError } from '../../errors';
-import { SkillSearchOptions, SkillSearchResult } from '../skill-storage.interface';
+import { type SkillSearchOptions, type SkillSearchResult } from '../skill-storage.interface';
 
 // Input schema matching MCP request format
 const inputSchema = z.object({

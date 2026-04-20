@@ -1,10 +1,11 @@
 // common/types/options/logging/schema.ts
 // Zod schema for logging configuration
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { annotatedFrontMcpLoggerSchema } from '../../../schemas';
 import type { RawZodShape } from '../../common.types';
-import { LogLevel, LoggingOptionsInterface } from './interfaces';
+import { LogLevel, type LoggingOptionsInterface } from './interfaces';
 
 /**
  * Logging options Zod schema.

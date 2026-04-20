@@ -1,20 +1,19 @@
 // file: libs/plugins/src/codecall/tools/describe.tool.ts
-import { Tool, ToolContext, ToolEntry } from '@frontmcp/sdk';
-import type { JSONSchema } from 'zod/v4/core';
-import { toJSONSchema } from 'zod/v4';
+import { toJSONSchema, z, ZodType, type JSONSchema } from '@frontmcp/lazy-zod';
+import { Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
+
+import { isBlockedSelfReference } from '../security';
+import { generateSmartExample } from '../utils';
+import {
+  describeToolDescription,
+  describeToolInputSchema,
+  describeToolOutputSchema,
+  type DescribeToolInput,
+  type DescribeToolOutput,
+} from './describe.schema';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
-import { z, ZodType } from 'zod';
-import {
-  DescribeToolInput,
-  describeToolInputSchema,
-  DescribeToolOutput,
-  describeToolOutputSchema,
-  describeToolDescription,
-} from './describe.schema';
-import { generateSmartExample } from '../utils';
-import { isBlockedSelfReference } from '../security';
 
 @Tool({
   name: 'codecall:describe',

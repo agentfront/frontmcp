@@ -1,5 +1,5 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 const inputSchema = { name: z.string().default('World') };
 

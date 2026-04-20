@@ -387,7 +387,7 @@ export default class HelloApp {}
   <Tab title="Class-based (Recommended)">
     ```ts src/tools/greet.tool.ts
     import { Tool, ToolContext } from '@frontmcp/sdk';
-    import { z } from 'zod';
+    import { z } from '@frontmcp/sdk';
 
     @Tool({
       name: 'greet',
@@ -406,7 +406,7 @@ export default class HelloApp {}
   <Tab title="Function-based">
     ```ts src/tools/greet.tool.ts
     import { tool } from '@frontmcp/sdk';
-    import { z } from 'zod';
+    import { z } from '@frontmcp/sdk';
 
     export default tool({
       name: 'greet',
@@ -599,7 +599,7 @@ Here's a more advanced version with multiple features:
 
 ```ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet',

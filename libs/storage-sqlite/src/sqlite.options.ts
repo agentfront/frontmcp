@@ -4,7 +4,7 @@
  * Configuration types and Zod schema for SQLite-based storage.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 /**
  * SQLite storage configuration options.

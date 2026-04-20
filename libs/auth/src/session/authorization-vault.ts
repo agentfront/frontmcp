@@ -21,7 +21,8 @@
  * - No incremental authorization support
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 // randomUUID can be imported from @frontmcp/utils if needed
 
 // ============================================

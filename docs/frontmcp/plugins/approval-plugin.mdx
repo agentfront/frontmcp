@@ -81,7 +81,7 @@ export default class Server {}
 
 ```ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'file_write',
@@ -517,7 +517,7 @@ ApprovalPlugin.init({
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
 import { ApprovalPlugin, userGrantor } from '@frontmcp/plugin-approval';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Configure approval plugin with webhook mode
 const approvalPlugin = ApprovalPlugin.init({

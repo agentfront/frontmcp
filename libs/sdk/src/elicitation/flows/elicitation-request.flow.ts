@@ -7,13 +7,13 @@
  * @module elicitation/flows/elicitation-request.flow
  */
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
-import { InvalidInputError, ElicitationStoreNotInitializedError } from '../../errors';
-import type { ElicitMode } from '../elicitation.types';
-import { DEFAULT_ELICIT_TTL } from '../elicitation.types';
-import type { PendingElicitRecord } from '../store';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { ElicitationStoreNotInitializedError, InvalidInputError } from '../../errors';
+import { DEFAULT_ELICIT_TTL, type ElicitMode } from '../elicitation.types';
+import { type PendingElicitRecord } from '../store';
 
 const inputSchema = z.object({
   /** Related request ID from the transport */

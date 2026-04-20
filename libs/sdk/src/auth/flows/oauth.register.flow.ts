@@ -19,18 +19,19 @@
  * - Decide JWT vs opaque access tokens; provide introspection if opaque.
  */
 
+import { z } from '@frontmcp/lazy-zod';
+import { base64urlEncode, isProduction, randomBytes, randomUUID } from '@frontmcp/utils';
+
 import {
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
   StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
-import { randomUUID, randomBytes, base64urlEncode, isProduction } from '@frontmcp/utils';
 
 /** Simple in-memory registry (dev only) */
 type RegisteredClient = {

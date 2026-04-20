@@ -4,7 +4,8 @@
  * Defines types for the tool consent flow that allows users to select
  * which MCP tools they want to expose to the LLM.
  */
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { consentConfigSchema } from '../options/shared.schemas';
 
 // Re-export schema for tests

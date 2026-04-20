@@ -6,7 +6,8 @@
     "declaration": true,
     "types": ["node"],
     "module": "NodeNext",
-    "moduleResolution": "NodeNext"
+    "moduleResolution": "NodeNext",
+    "paths": { "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"] }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/__tests__/**", "src/**/__test-utils__/**"]

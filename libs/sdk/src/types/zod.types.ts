@@ -1,4 +1,4 @@
-import { z, ZodType } from 'zod';
+import { type z, type ZodType } from '@frontmcp/lazy-zod';
 
 type Primitive = string | number | boolean | bigint | null | undefined;
 type Flatten<T> = T extends Primitive

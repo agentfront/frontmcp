@@ -80,6 +80,7 @@
             "group": "FrontMCP",
             "pages": [
               "frontmcp/fundamentals/overview",
+              "frontmcp/fundamentals/schemas",
               {
                 "group": "Core Components",
                 "pages": [

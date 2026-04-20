@@ -18,8 +18,7 @@ Configure a FrontMCP server with remote OAuth 2.1 authentication and use the cre
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'create_github_issue',

@@ -1,7 +1,8 @@
-import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { Prompt, PromptContext, type GetPromptResult } from '@frontmcp/sdk';
+
 import { AppConfigProvider } from '../providers/app-config.provider';
-import { REQUEST_LOGGER_TOKEN, RequestLogger } from '../providers/request-logger.provider';
+import { REQUEST_LOGGER_TOKEN, type RequestLogger } from '../providers/request-logger.provider';
 
 // Singleton instances
 let appConfigProviderInstance: AppConfigProvider | null = null;

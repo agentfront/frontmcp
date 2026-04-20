@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/utils/describe.utils.ts
 
-import type { JSONSchema } from 'zod/v4/core';
+import type { JSONSchema } from '@frontmcp/lazy-zod';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;

@@ -1,7 +1,8 @@
-import { z } from 'zod';
-import { RawZodShape } from '../types';
-import { ToolInputType, ToolOutputType } from './tool.metadata';
-import { JobRetryConfig, JobPermission } from './job.metadata';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type RawZodShape } from '../types';
+import { type JobPermission, type JobRetryConfig } from './job.metadata';
+import { type ToolInputType, type ToolOutputType } from './tool.metadata';
 
 declare global {
   /**

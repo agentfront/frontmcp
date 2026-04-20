@@ -19,8 +19,7 @@ Configure a FrontMCP server for Vercel deployment with Vercel KV storage and mod
 
 ```typescript
 // src/tools/lookup-user.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'lookup_user',
@@ -37,6 +36,7 @@ export default class LookupUserTool extends ToolContext {
 ```typescript
 // src/apps/users.app.ts
 import { App } from '@frontmcp/sdk';
+
 import LookupUserTool from '../tools/lookup-user.tool';
 
 @App({
@@ -49,7 +49,9 @@ export class UsersApp {}
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { UsersApp } from './apps/users.app';
 
 @FrontMcp({

@@ -1,9 +1,10 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import EmployeeRedisProvider from '../providers/redis.provider';
+
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
-import { toMs } from '../utils/time';
+import EmployeeRedisProvider from '../providers/redis.provider';
 import { openKey as siteOpenKey } from '../utils/keys';
+import { toMs } from '../utils/time';
 
 @Tool({
   name: 'admin-add-entry',

@@ -4,9 +4,10 @@
  * Detects unique auth providers across nested apps and determines
  * if orchestrated mode is required at the parent scope level.
  */
-import { z } from 'zod';
-import { isPublicMode, isTransparentMode, isOrchestratedMode, isOrchestratedRemote } from '../options/utils';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { AuthOptions } from '../options/schema';
+import { isOrchestratedMode, isOrchestratedRemote, isPublicMode, isTransparentMode } from '../options/utils';
 
 // ============================================
 // Schemas

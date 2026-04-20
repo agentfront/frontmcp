@@ -172,8 +172,7 @@ class AnalyticsApp {}
 | `ui?`                | UI widget configuration for tool rendering                           |
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'search_users',
@@ -293,7 +292,7 @@ class AppConfigResource extends ResourceContext {
 | `icons?`       | Array of Icon objects for UI representation                     |
 
 ```typescript
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
 
 @ResourceTemplate({
   name: 'user_profile',
@@ -332,8 +331,7 @@ class UserProfileResource extends ResourceContext {
 | `swarm?`        | Multi-agent swarm configuration                        |
 
 ```typescript
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'research_agent',
@@ -499,8 +497,7 @@ class DatabaseProvider {}
 | `access`       | Access control configuration        |
 
 ```typescript
-import { Flow } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Flow, z } from '@frontmcp/sdk';
 
 @Flow({
   name: 'approval-flow',
@@ -536,8 +533,7 @@ class ApprovalFlow {}
 | `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`   |
 
 ```typescript
-import { Job, JobContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Job, JobContext, z } from '@frontmcp/sdk';
 
 @Job({
   name: 'sync_data',
@@ -630,7 +626,7 @@ class DeployPipeline {}
 | `@Around` | Wrapping | Wraps the flow, controlling execution     |
 
 ```typescript
-import { Will, Did, Stage, Around, HookContext } from '@frontmcp/sdk';
+import { Around, Did, HookContext, Stage, Will } from '@frontmcp/sdk';
 
 class AuditHooks {
   @Will('tools:call-tool')

@@ -1,5 +1,5 @@
 // file: libs/plugins/src/codecall/tools/execute.schema.ts
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 /** Minimum script length - at least a simple callTool invocation */
 const MIN_EXECUTE_SCRIPT_LENGTH = 'return callTool("a",{})'.length;

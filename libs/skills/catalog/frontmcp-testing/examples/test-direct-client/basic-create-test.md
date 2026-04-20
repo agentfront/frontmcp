@@ -19,9 +19,7 @@ Test tools in-memory without any HTTP overhead using the `create()` function fro
 
 ```typescript
 // src/__tests__/direct-client.spec.ts
-import { create } from '@frontmcp/sdk';
-import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { create, tool, z } from '@frontmcp/sdk';
 
 const AddTool = tool({
   name: 'add',

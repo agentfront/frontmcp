@@ -1,9 +1,10 @@
-import { DynamicPlugin, Plugin, ProviderType, ProviderScope } from '../../common';
 import { getCwd } from '@frontmcp/utils';
-import type { ConfigPluginOptions, ConfigPluginOptionsInput } from './config.types';
+
+import { DynamicPlugin, Plugin, ProviderScope, type ProviderType } from '../../common';
 import { ConfigPluginConfigToken } from './config.symbols';
-import { ConfigService } from './providers/config.service';
+import type { ConfigPluginOptions, ConfigPluginOptionsInput } from './config.types';
 import { loadConfig } from './providers/config-loader';
+import { ConfigService } from './providers/config.service';
 import { loadEnvFiles, populateProcessEnv } from './providers/env-loader';
 
 /**
@@ -26,7 +27,7 @@ import { loadEnvFiles, populateProcessEnv } from './providers/env-loader';
  * class MyServer {}
  *
  * // With typed schema (convict-style)
- * import { z } from 'zod';
+ * import { z } from '@frontmcp/lazy-zod';
  *
  * const configSchema = z.object({
  *   database: z.object({

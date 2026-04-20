@@ -4,8 +4,9 @@
  * @module @frontmcp/utils/key-persistence
  */
 
-import { z } from 'zod';
-import type { AnyKeyData, SecretKeyData, AsymmetricKeyData } from './types';
+import { z } from '@frontmcp/lazy-zod';
+
+import type { AnyKeyData, AsymmetricKeyData, SecretKeyData } from './types';
 
 /**
  * Maximum allowed clock drift for createdAt validation (1 minute).

@@ -1,15 +1,15 @@
-import { EntryOwnerRef, ToolInputType, ToolOutputType } from '../common';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type EntryOwnerRef, type ScopeEntry, type ToolInputType, type ToolOutputType } from '../common';
+import { type ToolInputOf, type ToolOutputOf } from '../common/decorators';
 import { JobEntry } from '../common/entries/job.entry';
-import { JobRecord, JobKind, JobFunctionTokenRecord } from '../common/records/job.record';
-import { JobContext, JobCtorArgs } from '../common/interfaces/job.interface';
-import { ToolInputOf, ToolOutputOf } from '../common/decorators';
-import ProviderRegistry from '../provider/provider.registry';
-import { z } from 'zod';
-import HookRegistry from '../hooks/hook.registry';
-import { ScopeEntry } from '../common';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { JobContext, type JobCtorArgs } from '../common/interfaces/job.interface';
+import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
+import { DynamicJobDirectExecutionError, InvalidRegistryKindError } from '../errors';
 import { InvalidHookFlowError } from '../errors/mcp.error';
-import { InvalidRegistryKindError, DynamicJobDirectExecutionError } from '../errors';
+import type HookRegistry from '../hooks/hook.registry';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import type ProviderRegistry from '../provider/provider.registry';
 
 /**
  * Concrete implementation of a job that can be executed.

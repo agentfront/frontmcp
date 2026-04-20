@@ -1,6 +1,6 @@
 // file: libs/sdk/src/channel/reply/reply.types.ts
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 /**
  * Input schema for the channel reply tool.

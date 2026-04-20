@@ -43,7 +43,7 @@ Use class decorators for tools that need dependency injection, lifecycle hooks, 
 
 ```ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'greet',
@@ -63,7 +63,7 @@ For simpler tools, use the functional builder:
 
 ```ts
 import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const GreetTool = tool({
   name: 'greet',

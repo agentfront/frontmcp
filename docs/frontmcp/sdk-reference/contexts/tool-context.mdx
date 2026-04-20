@@ -226,7 +226,7 @@ get outputHistory(): ReadonlyArray<Out>
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = {
   action: z.enum(['create', 'update', 'delete']),

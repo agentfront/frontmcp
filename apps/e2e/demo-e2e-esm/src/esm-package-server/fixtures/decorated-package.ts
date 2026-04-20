@@ -15,18 +15,19 @@
  * - 1 Job: process-data (input/output schemas)
  */
 import 'reflect-metadata';
+
+import { z } from '@frontmcp/lazy-zod';
 import {
-  Tool,
-  ToolContext,
-  Resource,
-  ResourceContext,
-  Prompt,
-  PromptContext,
-  Skill,
   Job,
   JobContext,
+  Prompt,
+  PromptContext,
+  Resource,
+  ResourceContext,
+  Skill,
+  Tool,
+  ToolContext,
 } from '@frontmcp/sdk';
-import { z } from 'zod';
 
 // ═══════════════════════════════════════════════════════════════════
 // TOOLS

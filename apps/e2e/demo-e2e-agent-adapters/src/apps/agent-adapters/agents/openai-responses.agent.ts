@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Agent, AgentContext, OpenAIAdapter } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { createOpenAIResponsesMock } from '../mocks/openai-responses-mock';
 import { GetDataTool } from '../tools/get-data.tool';
 

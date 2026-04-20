@@ -1,8 +1,9 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Agent, AgentContext, AnthropicAdapter } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { createAnthropicMock } from '../mocks/anthropic-mock';
-import { GetDataTool } from '../tools/get-data.tool';
 import { AddNumbersTool } from '../tools/add-numbers.tool';
+import { GetDataTool } from '../tools/get-data.tool';
 
 const anthropicMock = createAnthropicMock();
 

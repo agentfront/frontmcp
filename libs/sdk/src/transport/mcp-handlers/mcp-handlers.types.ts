@@ -1,15 +1,16 @@
-import { z, type ZodType } from 'zod';
+import { type z, type ZodType } from '@frontmcp/lazy-zod';
 import type {
+  AuthInfo,
+  McpServerOptions,
   Notification,
   Request,
-  Result,
   RequestHandlerExtra,
-  McpServerOptions,
-  AuthInfo,
+  Result,
 } from '@frontmcp/protocol';
-import type { LocalTransporter } from '../transport.local';
+
 import type { Authorization } from '../../common';
 import type { Scope } from '../../scope';
+import type { LocalTransporter } from '../transport.local';
 
 type Primitive = string | number | boolean | bigint | null | undefined;
 type Flatten<T> = T extends Primitive

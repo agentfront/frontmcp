@@ -1,5 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+
 import { noteStore } from '../data/note.store';
 
 const outputSchema = z.object({

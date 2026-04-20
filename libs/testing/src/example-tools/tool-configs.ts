@@ -23,7 +23,7 @@
  * ```
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 // ═══════════════════════════════════════════════════════════════════
 // BASIC UI TOOL CONFIG

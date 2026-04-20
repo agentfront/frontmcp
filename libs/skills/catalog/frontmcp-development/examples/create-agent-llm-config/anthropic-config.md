@@ -19,8 +19,7 @@ Configuring an agent with the Anthropic provider and common model options.
 
 ```typescript
 // src/apps/main/agents/summarizer.agent.ts
-import { Agent, AgentContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Agent, AgentContext, z } from '@frontmcp/sdk';
 
 @Agent({
   name: 'summarizer',

@@ -1,12 +1,11 @@
-import { z } from 'zod';
-import { Type, isClass, getMetadata } from '@frontmcp/di';
-import { isValidMcpUri } from '@frontmcp/utils';
-import type { EntryAvailability } from '@frontmcp/utils';
-import { entryAvailabilitySchema } from '@frontmcp/utils';
-import { RawZodShape } from '../types';
-import { FrontMcpToolTokens } from '../tokens';
-import type { ToolContext } from '../interfaces';
+import { getMetadata, isClass, type Type } from '@frontmcp/di';
+import { z } from '@frontmcp/lazy-zod';
+import { entryAvailabilitySchema, isValidMcpUri, type EntryAvailability } from '@frontmcp/utils';
+
 import { InvalidInputError } from '../../errors/mcp.error';
+import { type ToolContext } from '../interfaces';
+import { FrontMcpToolTokens } from '../tokens';
+import { type RawZodShape } from '../types';
 
 // ============================================
 // Skill Metadata Types

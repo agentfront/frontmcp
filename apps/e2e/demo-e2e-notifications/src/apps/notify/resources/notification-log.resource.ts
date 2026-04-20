@@ -1,6 +1,7 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { notificationLogStore, NotificationLogEntry } from '../data/notification-log.store';
+
+import { notificationLogStore, type NotificationLogEntry } from '../data/notification-log.store';
 
 const outputSchema = z.object({
   notifications: z.array(

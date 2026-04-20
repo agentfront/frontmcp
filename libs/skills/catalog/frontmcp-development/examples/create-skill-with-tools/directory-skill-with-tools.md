@@ -74,8 +74,7 @@ const DeployServiceSkill = await skillDir('./skills/deploy-service');
 
 ```typescript
 // src/skills/audit.skill.ts
-import { Skill, SkillContext, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Skill, SkillContext, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'analyze_codebase',
@@ -120,7 +119,7 @@ class CodebaseAuditSkill extends SkillContext {}
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'audit-app',

@@ -16,8 +16,9 @@
  */
 
 // Import types from ui-config for use in this file
+import type { ZodTypeAny } from '@frontmcp/lazy-zod';
+
 import type { WidgetServingMode as _WidgetServingMode } from './ui-config';
-import type { ZodTypeAny } from 'zod';
 
 // Re-export shared types from ui-config for backwards compatibility
 export type {
@@ -788,7 +789,7 @@ export interface WidgetConfig<Input = Record<string, unknown>, Output = unknown>
   /**
    * Custom MDX components available in templates.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   mdxComponents?: Record<string, any>;
 
   /**
@@ -1037,7 +1038,7 @@ export interface BuildManifestOptions<Input = Record<string, unknown>, Output = 
   /**
    * Theme configuration override.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   theme?: any;
 
   /**
@@ -1189,6 +1190,5 @@ export const DEFAULT_RENDERER_ASSETS: Record<UIType, Partial<RendererAssets>> = 
  */
 // eslint-disable-next-line @typescript-eslint/no-namespace
 declare namespace React {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type ComponentType<P = any> = (props: P) => any;
 }

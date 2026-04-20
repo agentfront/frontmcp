@@ -1,6 +1,6 @@
 import React from 'react';
-import { z } from 'zod';
 
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {

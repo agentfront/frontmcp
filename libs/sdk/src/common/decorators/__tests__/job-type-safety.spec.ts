@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 import { Job, JobContext } from '../../';
 

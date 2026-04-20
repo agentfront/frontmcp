@@ -61,8 +61,7 @@ class MySDK {}
 The `create()` factory spins up a server from a flat config object — no decorators or classes needed:
 
 ```typescript
-import { create } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { create, z } from '@frontmcp/sdk';
 
 const server = await create({
   info: { name: 'my-service', version: '1.0.0' },

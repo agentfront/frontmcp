@@ -5,8 +5,7 @@
  * Supported by: OpenAI, ext-apps, Cursor
  * NOT supported by: Claude, Continue, Cody, generic-mcp (will skip UI)
  */
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {

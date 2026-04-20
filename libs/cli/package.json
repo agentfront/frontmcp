@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
+    "@frontmcp/lazy-zod": "1.0.4",
     "@frontmcp/utils": "1.0.4",
     "commander": "^13.0.0",
     "tslib": "^2.3.0",

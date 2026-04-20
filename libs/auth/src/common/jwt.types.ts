@@ -1,5 +1,6 @@
-import { z } from 'zod';
-import { RawZodShape } from './zod-utils';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type RawZodShape } from './zod-utils';
 
 export interface JWKParameters {
   /** JWK "kty" (Key Type) Parameter */

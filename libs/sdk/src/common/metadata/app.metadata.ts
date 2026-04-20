@@ -1,37 +1,37 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 import { isValidMcpUri } from '@frontmcp/utils';
-import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
-import type { AppFilterConfig } from './app-filter.metadata';
-import { appFilterConfigSchema } from './app-filter.metadata';
-import type { EsmOptions, RemoteOptions } from './remote-primitive.metadata';
+
 import type {
-  AgentType,
-  ProviderType,
-  PromptType,
-  ResourceType,
-  ToolType,
-  AuthProviderType,
-  PluginType,
   AdapterType,
-  SkillType,
-  JobType,
-  WorkflowType,
+  AgentType,
+  AuthProviderType,
   ChannelType,
+  JobType,
+  PluginType,
+  PromptType,
+  ProviderType,
+  ResourceType,
+  SkillType,
+  ToolType,
+  WorkflowType,
 } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
+  annotatedFrontMcpAgentsSchema,
   annotatedFrontMcpAuthProvidersSchema,
+  annotatedFrontMcpChannelsSchema,
+  annotatedFrontMcpJobsSchema,
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpPromptsSchema,
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
   annotatedFrontMcpSkillsSchema,
   annotatedFrontMcpToolsSchema,
-  annotatedFrontMcpAgentsSchema,
-  annotatedFrontMcpJobsSchema,
   annotatedFrontMcpWorkflowsSchema,
-  annotatedFrontMcpChannelsSchema,
 } from '../schemas';
+import { authOptionsSchema, type AuthOptionsInput, type RawZodShape } from '../types';
+import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
+import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
 
 /**
  * Declarative metadata describing what a local mcp app contributes at app scope.

@@ -103,7 +103,7 @@ export class MyApp {}
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 const inputSchema = z.object({
   query: z.string().describe('Search query'),

@@ -21,8 +21,10 @@
         "platform": "node",
         "assets": ["libs/auth/README.md", "LICENSE", "libs/auth/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["@frontmcp/utils", "jose", "zod"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "jose", "zod"]
         }
       }
     },
@@ -41,8 +43,10 @@
         "platform": "node",
         "skipTypeCheck": true,
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["@frontmcp/utils", "jose", "zod"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/lazy-zod", "@frontmcp/utils", "jose", "zod"]
         }
       }
     },

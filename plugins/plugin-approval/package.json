@@ -50,11 +50,11 @@
     "ioredis": "^5.8.0",
     "@frontmcp/sdk": "1.0.4",
     "@frontmcp/utils": "1.0.4",
-    "reflect-metadata": "^0.2.2",
-    "zod": "^4.0.0"
+    "reflect-metadata": "^0.2.2"
   },
   "peerDependencies": {
-    "@vercel/kv": "^2.0.0 || ^3.0.0"
+    "@vercel/kv": "^2.0.0 || ^3.0.0",
+    "@frontmcp/lazy-zod": "1.0.4"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {

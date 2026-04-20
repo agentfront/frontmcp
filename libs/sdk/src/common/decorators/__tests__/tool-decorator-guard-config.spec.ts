@@ -1,5 +1,7 @@
 import 'reflect-metadata';
-import { z } from 'zod';
+
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../';
 
 describe('Tool decorator guard config validation', () => {

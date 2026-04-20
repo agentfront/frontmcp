@@ -1,22 +1,21 @@
 // options/typecheck.ts
 // Compile-time type sync checks between interfaces and Zod schemas
 
-import type { z } from 'zod';
-
-// Import schemas
-import type { publicAccessConfigSchema } from './shared.schemas';
-import type { publicAuthOptionsSchema } from './public.schema';
-import type { transparentAuthOptionsSchema } from './transparent.schema';
-import type { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
+import type { z } from '@frontmcp/lazy-zod';
 
 // Import interfaces
 import type {
+  LocalAuthOptionsInterface,
   PublicAccessConfig,
   PublicAuthOptionsInterface,
-  TransparentAuthOptionsInterface,
-  LocalAuthOptionsInterface,
   RemoteAuthOptionsInterface,
+  TransparentAuthOptionsInterface,
 } from './interfaces';
+import type { localAuthSchema, remoteAuthSchema } from './orchestrated.schema';
+import type { publicAuthOptionsSchema } from './public.schema';
+// Import schemas
+import type { publicAccessConfigSchema } from './shared.schemas';
+import type { transparentAuthOptionsSchema } from './transparent.schema';
 
 // ============================================
 // TYPE SYNC HELPERS

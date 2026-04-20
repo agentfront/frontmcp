@@ -1,7 +1,10 @@
 // options/orchestrated.schema.ts
 // Local and Remote auth modes (formerly orchestrated local/remote)
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
+import type { RawZodShape } from '../common/zod-utils';
+import type { LocalAuthOptionsInterface, RemoteAuthOptionsInterface } from './interfaces';
 import {
   cimdConfigSchema,
   consentConfigSchema,
@@ -13,8 +16,6 @@ import {
   tokenRefreshConfigSchema,
   tokenStorageConfigSchema,
 } from './shared.schemas';
-import type { RawZodShape } from '../common/zod-utils';
-import type { LocalAuthOptionsInterface, RemoteAuthOptionsInterface } from './interfaces';
 
 // ============================================
 // SHARED LOCAL/REMOTE FIELDS

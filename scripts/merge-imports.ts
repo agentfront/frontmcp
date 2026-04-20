@@ -36,13 +36,39 @@ function parseImportLine(line: string): { module: string; specifiers: ImportSpec
   };
 }
 
+// Track whether the START of each line is inside a backtick-delimited
+// template literal. Imports written as examples inside template strings
+// (e.g. scaffold templates in CLI code) must NOT be deduplicated against
+// real top-level imports — doing so silently strips them from the
+// template at commit time.
+function computeTemplateLineMask(content: string): boolean[] {
+  const lines = content.split('\n');
+  const mask: boolean[] = new Array(lines.length).fill(false);
+  let inTemplate = false;
+  for (let i = 0; i < lines.length; i++) {
+    mask[i] = inTemplate;
+    const line = lines[i];
+    for (let j = 0; j < line.length; j++) {
+      const ch = line[j];
+      if (ch === '\\' && j + 1 < line.length) {
+        j++;
+        continue;
+      }
+      if (ch === '`') inTemplate = !inTemplate;
+    }
+  }
+  return mask;
+}
+
 function processFile(filePath: string): void {
   const content = readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
+  const inTemplateAtStart = computeTemplateLineMask(content);
   const imports: Array<{ idx: number; parsed: NonNullable<ReturnType<typeof parseImportLine>> }> = [];
   const importIndices = new Set<number>();
 
   for (let i = 0; i < lines.length; i++) {
+    if (inTemplateAtStart[i]) continue;
     const line = lines[i].trim();
     if (!line.startsWith('import ') || !line.includes('{') || !line.includes('}')) continue;
     const parsed = parseImportLine(line);

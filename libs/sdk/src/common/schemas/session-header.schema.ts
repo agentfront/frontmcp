@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 /**
  * Zod schema for validating mcp-session-id header format.

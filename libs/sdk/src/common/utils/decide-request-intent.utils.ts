@@ -1,6 +1,7 @@
-import { z } from 'zod';
-import { ServerRequest } from '../interfaces';
-import { LegacyProtocolFlags } from '../types';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type ServerRequest } from '../interfaces';
+import { type LegacyProtocolFlags } from '../types';
 
 /* --------------------------------- Schemas --------------------------------- */
 

@@ -8,7 +8,7 @@
  * - Subpath imports
  * - Skip packages option
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Import Resolver E2E', () => {
   test.use({
@@ -53,7 +53,7 @@ test.describe('Import Resolver E2E', () => {
         source: [
           "import React from 'react';",
           "import { createRoot } from 'react-dom/client';",
-          "import { z } from 'zod';",
+          "import { z } from '@frontmcp/lazy-zod';",
         ].join('\n'),
       });
 
@@ -77,7 +77,7 @@ test.describe('Import Resolver E2E', () => {
   test.describe('Skip Packages', () => {
     test('should leave skipped packages untouched', async ({ mcp }) => {
       const result = await mcp.tools.call('resolve-imports', {
-        source: ["import React from 'react';", "import { z } from 'zod';"].join('\n'),
+        source: ["import React from 'react';", "import { z } from '@frontmcp/lazy-zod';"].join('\n'),
         skipPackages: ['react'],
       });
 
@@ -86,7 +86,7 @@ test.describe('Import Resolver E2E', () => {
       expect(json.rewrites['react']).toBeUndefined();
       // react import should be preserved in the output
       expect(json.code).toContain("from 'react'");
-      // zod should still be rewritten
+      // @frontmcp/lazy-zod import should still be rewritten (to esm.sh)
       expect(json.code).toContain('esm.sh');
     });
   });

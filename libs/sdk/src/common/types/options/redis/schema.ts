@@ -1,8 +1,9 @@
 // common/types/options/redis/schema.ts
 // Zod schema for Redis/storage configuration
 
-import { z } from 'zod';
-import type { RedisOptionsInterface, PubsubOptionsInterface } from './interfaces';
+import { z } from '@frontmcp/lazy-zod';
+
+import type { PubsubOptionsInterface, RedisOptionsInterface } from './interfaces';
 
 // ============================================
 // Storage Provider Types

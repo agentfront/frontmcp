@@ -164,7 +164,7 @@ Mark tools with their required roles:
 ```typescript
 // tools/approve-expense.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'approve-expense',
@@ -189,7 +189,7 @@ export default class ApproveExpenseTool extends ToolContext {
 ```typescript
 // tools/delete-expense.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'delete-expense',
@@ -213,7 +213,7 @@ export default class DeleteExpenseTool extends ToolContext {
 ```typescript
 // tools/create-expense.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'create-expense',

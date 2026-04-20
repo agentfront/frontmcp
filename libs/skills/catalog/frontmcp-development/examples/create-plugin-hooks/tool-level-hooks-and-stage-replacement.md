@@ -20,9 +20,7 @@ Demonstrates two advanced patterns: adding `@Will`/`@Did` hooks directly on a `@
 
 ```typescript
 // src/tools/process-order.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, ToolHook, z } from '@frontmcp/sdk';
 
 const { Will, Did } = ToolHook;
 
@@ -70,8 +68,7 @@ class ProcessOrderTool extends ToolContext {
 
 ```typescript
 // src/plugins/mock.plugin.ts
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Stage } = ToolHook;
 

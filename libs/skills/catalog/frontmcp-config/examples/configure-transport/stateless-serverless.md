@@ -19,8 +19,7 @@ Configure stateless transport for Vercel, Lambda, or Cloudflare deployments.
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'convert_currency',

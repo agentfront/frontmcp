@@ -4,7 +4,8 @@
  * @module @frontmcp/utils/approval
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { ApprovalScope, ApprovalState } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -19,8 +19,7 @@ Shows how to configure structured logging, error handling with MCP error codes, 
 
 ```typescript
 // src/tools/monitored-tool.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'monitored_operation',

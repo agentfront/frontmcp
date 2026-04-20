@@ -20,8 +20,8 @@ Shows how to create CRUD tools with authentication, using `this.context.session`
 
 ```typescript
 // src/tools/create-task.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { TASK_STORE } from '../providers/task-store.provider';
 
 @Tool({
@@ -70,8 +70,8 @@ export class CreateTaskTool extends ToolContext {
 
 ```typescript
 // src/tools/list-tasks.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { TASK_STORE } from '../providers/task-store.provider';
 
 @Tool({

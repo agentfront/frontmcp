@@ -1,7 +1,6 @@
 // file: libs/sdk/src/prompt/flows/get-prompt.flow.ts
 
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import {

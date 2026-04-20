@@ -1,13 +1,13 @@
-import { AuthenticatedServerRequest } from '../../server/server.types';
+import { toJSONSchema, type ZodType } from '@frontmcp/lazy-zod';
+import { type RequestId } from '@frontmcp/protocol';
+
+import { type ServerResponse } from '../../common';
+import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../../elicitation';
+import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
+import { type AuthenticatedServerRequest } from '../../server/server.types';
+import { rpcRequest } from '../transport.error';
 import { RecreateableSSEServerTransport } from './sse-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
-import { RequestId } from '@frontmcp/protocol';
-import { ZodType } from 'zod';
-import { toJSONSchema } from 'zod/v4';
-import { rpcRequest } from '../transport.error';
-import { ServerResponse } from '../../common';
-import { ElicitResult, ElicitOptions, DEFAULT_ELICIT_TTL } from '../../elicitation';
-import { ElicitationTimeoutError, InvalidInputError } from '../../errors';
 
 export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSEServerTransport> {
   sessionId: string;

@@ -19,8 +19,7 @@ Create a custom Lambda handler with an explicit API Gateway definition for CORS 
 ```typescript
 // src/lambda.ts
 import { createLambdaHandler } from '@frontmcp/adapters/lambda';
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'analyze',

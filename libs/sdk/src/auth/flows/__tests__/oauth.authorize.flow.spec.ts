@@ -10,26 +10,34 @@
  * - Error handling
  */
 import 'reflect-metadata';
-import { z } from 'zod';
-import OauthAuthorizeFlow from '../oauth.authorize.flow';
-import { InMemoryAuthorizationStore, generatePkceChallenge } from '@frontmcp/auth';
+
+import { generatePkceChallenge, InMemoryAuthorizationStore } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
+
 import {
+  createAnonymousOAuthRequest,
+  createIncrementalAuthRequest,
   // Flow test utilities
   createMockScopeEntry,
-  runFlowStages,
+  createOAuthInput,
+  createValidOAuthRequest,
+  expectOAuthHtmlPage,
+  expectOAuthRedirect,
   flowScenarios,
   // OAuth test utilities
   generateCodeVerifier,
   generatePkcePair,
-  createValidOAuthRequest,
-  createAnonymousOAuthRequest,
-  createIncrementalAuthRequest,
-  createOAuthInput,
   invalidOAuthRequests,
-  expectOAuthRedirect,
-  expectOAuthHtmlPage,
+  runFlowStages,
 } from '../../../__test-utils__';
-import { FlowMetadata, httpInputSchema, HttpRedirectSchema, HttpTextSchema, HttpHtmlSchema } from '../../../common';
+import {
+  HttpHtmlSchema,
+  httpInputSchema,
+  HttpRedirectSchema,
+  HttpTextSchema,
+  type FlowMetadata,
+} from '../../../common';
+import OauthAuthorizeFlow from '../oauth.authorize.flow';
 
 // ============================================
 // Test Setup Helpers

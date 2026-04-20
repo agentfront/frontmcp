@@ -93,7 +93,7 @@ The plugin extends all execution contexts with `this.remember`:
 
 ```ts Class-based tool
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'personalize-greeting',
@@ -115,7 +115,7 @@ export default class PersonalizeGreetingTool extends ToolContext {
 
 ```ts Function-based tool
 import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 export const PersonalizeGreeting = tool({
   name: 'personalize-greeting',
@@ -507,7 +507,7 @@ This exposes tools like `memory_remember_this`, `memory_recall`, `memory_forget`
 ```ts
 import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
 import { RememberPlugin } from '@frontmcp/plugin-remember';
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 
 // Configure with Redis
 const rememberPlugin = RememberPlugin.init({

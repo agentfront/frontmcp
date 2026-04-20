@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext, type ChannelRegistry } from '@frontmcp/sdk';
 
 const getBufferSchema = {

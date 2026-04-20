@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Skills Search Types

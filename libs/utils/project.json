@@ -30,10 +30,13 @@
         ],
         "assets": ["libs/utils/README.md", "libs/utils/CHANGELOG.md", "LICENSE", "libs/utils/package.json"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["#crypto-provider", "#async-context", "#event-emitter", "#env"]
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": ["@frontmcp/lazy-zod", "#crypto-provider", "#async-context", "#event-emitter", "#env"]
         }
-      }
+      },
+      "dependsOn": ["^build"]
     },
     "build-esm": {
       "executor": "@nx/esbuild:esbuild",
@@ -59,8 +62,10 @@
           "libs/utils/src/env/browser-env.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
-          "external": ["#crypto-provider", "#async-context", "#event-emitter", "#env"]
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": ["@frontmcp/lazy-zod", "#crypto-provider", "#async-context", "#event-emitter", "#env"]
         }
       }
     },

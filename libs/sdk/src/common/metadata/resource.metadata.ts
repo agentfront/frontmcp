@@ -1,9 +1,8 @@
-import { z } from 'zod';
-import { RawZodShape } from '../types';
-import { Icon, IconSchema } from '@frontmcp/protocol';
-import { isValidMcpUri, isValidMcpUriTemplate } from '@frontmcp/utils';
-import type { EntryAvailability } from '@frontmcp/utils';
-import { entryAvailabilitySchema } from '@frontmcp/utils';
+import { z } from '@frontmcp/lazy-zod';
+import { IconSchema, type Icon } from '@frontmcp/protocol';
+import { entryAvailabilitySchema, isValidMcpUri, isValidMcpUriTemplate, type EntryAvailability } from '@frontmcp/utils';
+
+import { type RawZodShape } from '../types';
 
 declare global {
   /**

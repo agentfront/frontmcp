@@ -5,9 +5,10 @@
  * These types are portable and can be used across different implementations.
  */
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import type { ProviderSnapshot } from '../session/session.types';
-import type { TransportSession, TransportProtocol } from '../session/transport-session.types';
+import type { TransportProtocol, TransportSession } from '../session/transport-session.types';
 
 // ============================================
 // Auth Mode

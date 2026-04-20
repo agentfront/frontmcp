@@ -5,7 +5,16 @@
  * The schema is also the source of truth for JSON Schema generation.
  */
 
-import { z } from 'zod';
+// Lazy-by-default `z`. Same API as `zod`'s `z`, but compound schemas
+// (`z.object`, `z.union`, `z.discriminatedUnion`, `z.intersection`,
+// `z.record`, `z.tuple`) defer construction until first `.parse()`.
+// This schema is parsed at CLI startup — using lazy-z keeps module load
+// from materializing every nested config-shape eagerly.
+//
+// Imported directly from `@frontmcp/lazy-zod` (not the `@frontmcp/sdk`
+// barrel) to keep this leaf module lightweight — pulling the full SDK
+// barrel into Jest's transform chain trips on `jose`'s ESM-only build.
+import { z } from '@frontmcp/lazy-zod';
 
 // ============================================
 // Server Defaults

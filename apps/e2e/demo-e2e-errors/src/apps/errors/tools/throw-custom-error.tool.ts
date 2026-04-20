@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { PublicMcpError, Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {

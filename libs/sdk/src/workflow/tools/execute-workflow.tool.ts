@@ -1,8 +1,9 @@
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
 import { Tool, ToolContext } from '../../common';
+import type { JobExecutionManager } from '../../job/execution/job-execution.manager';
 import type { JobRegistryInterface } from '../../job/job.registry';
 import type { WorkflowRegistryInterface } from '../workflow.registry';
-import type { JobExecutionManager } from '../../job/execution/job-execution.manager';
 
 @Tool({
   name: 'execute-workflow',

@@ -19,32 +19,33 @@
  */
 
 import {
+  completeCurrentProvider,
+  escapeHtml,
+  getNextProvider,
+  isSessionComplete,
+  startNextProvider,
+  type FederatedAuthSession,
+  type ProviderPkce,
+  type ProviderTokens,
+  type ProviderUserInfo,
+} from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
+import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
+
+import {
   Flow,
   FlowBase,
-  FlowPlan,
-  FlowRunOptions,
+  HttpHtmlSchema,
   httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
-  HttpHtmlSchema,
-  StageHookOf,
   isOrchestratedMode,
+  StageHookOf,
+  type FlowPlan,
+  type FlowRunOptions,
 } from '../../common';
-import { z } from 'zod';
-import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import {
-  escapeHtml,
-  type FederatedAuthSession,
-  type ProviderTokens,
-  type ProviderUserInfo,
-  completeCurrentProvider,
-  startNextProvider,
-  isSessionComplete,
-  getNextProvider,
-  type ProviderPkce,
-} from '@frontmcp/auth';
-import { randomUUID, sha256Base64url, generateCodeVerifier } from '@frontmcp/utils';
 import { InternalMcpError } from '../../errors';
+import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
 

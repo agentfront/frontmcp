@@ -7,6 +7,7 @@
     "declarationMap": true,
     "types": ["node"],
     "paths": {
+      "@frontmcp/lazy-zod": ["libs/lazy-zod/dist/index.d.ts"],
       "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"],
       "@frontmcp/plugin-cache": ["plugins/plugin-cache/dist/index.d.ts"],
       "@frontmcp/plugin-codecall": ["plugins/plugin-codecall/dist/index.d.ts"],

@@ -24,12 +24,12 @@ Demonstrates a production-ready server configuration combining CodeCall, Remembe
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
-import CodeCallPlugin from '@frontmcp/plugin-codecall';
-import RememberPlugin from '@frontmcp/plugin-remember';
 import { ApprovalPlugin } from '@frontmcp/plugin-approval';
 import CachePlugin from '@frontmcp/plugin-cache';
+import CodeCallPlugin from '@frontmcp/plugin-codecall';
 import FeatureFlagPlugin from '@frontmcp/plugin-feature-flags';
+import RememberPlugin from '@frontmcp/plugin-remember';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'core', tools: [ReadDataTool, WriteDataTool, DeleteDataTool] })
 class CoreApp {}
@@ -89,8 +89,7 @@ class ProductionServer {}
 
 ```typescript
 // src/tools/delete-data.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'delete_data',

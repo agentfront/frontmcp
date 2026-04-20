@@ -1,22 +1,23 @@
-import { ProviderRegistryInterface } from './internal';
-import type { ToolInputType, ToolOutputType, AgentMetadata, AgentType } from '../metadata';
-import { FlowControl } from './flow.interface';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
-import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
-import {
-  AgentLlmAdapter,
-  AgentPrompt,
-  AgentToolDefinition,
-  AgentCompletion,
-  AgentCompletionChunk,
-  AgentCompletionOptions,
-  AgentToolCall,
-} from './llm-adapter.interface';
-import { AgentInputOf, AgentOutputOf } from '../decorators';
-import { AgentExecutionLoop, ToolExecutor } from '../../agent/agent-execution-loop';
-import { ElicitResult, ElicitOptions, performElicit } from '../../elicitation';
-import { ZodType } from 'zod';
+import { type ZodType } from '@frontmcp/lazy-zod';
+
+import { AgentExecutionLoop, type ToolExecutor } from '../../agent/agent-execution-loop';
+import { performElicit, type ElicitOptions, type ElicitResult } from '../../elicitation';
 import { AgentMethodNotAvailableError } from '../../errors';
+import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
+import { type AgentInputOf, type AgentOutputOf } from '../decorators';
+import type { AgentMetadata, AgentType, ToolInputType, ToolOutputType } from '../metadata';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
+import { FlowControl } from './flow.interface';
+import { type ProviderRegistryInterface } from './internal';
+import {
+  type AgentCompletion,
+  type AgentCompletionChunk,
+  type AgentCompletionOptions,
+  type AgentLlmAdapter,
+  type AgentPrompt,
+  type AgentToolCall,
+  type AgentToolDefinition,
+} from './llm-adapter.interface';
 
 // Re-export AgentType for convenience (defined in agent.metadata.ts)
 export type { AgentType };

@@ -1,5 +1,6 @@
-import { ServerResponse } from '../common';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type ServerResponse } from '../common';
 
 export const RedirectSchema = z.object({
   status: z.literal(302),

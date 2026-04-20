@@ -6,26 +6,31 @@
  * create records for tools/resources/prompts that execute locally in-process.
  */
 
-import { z } from 'zod';
 import type { Type } from '@frontmcp/di';
+import { z } from '@frontmcp/lazy-zod';
+
 import {
-  ToolKind,
-  ToolMetadata,
-  ToolContext,
-  ResourceKind,
-  ResourceMetadata,
-  ResourceEntry,
   PromptKind,
-  PromptMetadata,
-  PromptEntry,
+  ResourceKind,
+  ToolKind,
+  type PromptClassTokenRecord,
+  type PromptEntry,
+  type PromptMetadata,
+  type ResourceClassTokenRecord,
+  type ResourceEntry,
+  type ResourceMetadata,
+  type ToolClassTokenRecord,
+  type ToolContext,
+  type ToolMetadata,
 } from '../../common';
-import type { ToolClassTokenRecord, ResourceClassTokenRecord, PromptClassTokenRecord } from '../../common';
 import {
-  createEsmToolContextClass,
-  createEsmResourceContextClass,
   createEsmPromptContextClass,
+  createEsmResourceContextClass,
+  createEsmToolContextClass,
+  type EsmPromptExecuteHandler,
+  type EsmResourceReadHandler,
+  type EsmToolExecuteHandler,
 } from './esm-context-factories';
-import type { EsmToolExecuteHandler, EsmResourceReadHandler, EsmPromptExecuteHandler } from './esm-context-factories';
 
 /**
  * Metadata for an ESM-loaded tool (simplified shape for tools loaded from packages).

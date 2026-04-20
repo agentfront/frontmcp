@@ -1,5 +1,6 @@
-import { Tool, ToolContext, ScopeEntry } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
+import { Tool, ToolContext, type ScopeEntry } from '@frontmcp/sdk';
+
 import { ParentScopeToken } from '../dashboard.symbol';
 import { safeRegex } from '../shared/safe-regex';
 

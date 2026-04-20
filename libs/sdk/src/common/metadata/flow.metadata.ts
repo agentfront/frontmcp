@@ -1,11 +1,11 @@
-import { z } from 'zod';
-import { Token } from '@frontmcp/di';
-import { RawZodShape } from '../types';
-import { HttpMethod, ServerRequest } from '../interfaces';
-import { ScopeEntry } from '../entries';
+import { type Token } from '@frontmcp/di';
+import { z } from '@frontmcp/lazy-zod';
+
+import { type ScopeEntry } from '../entries';
+import { type HttpMethod, type ServerRequest } from '../interfaces';
+import { type RawZodShape } from '../types';
 
 declare module '@frontmcp/sdk' {
-  // eslint-disable-next-line
   export interface ExtendFlows {}
 }
 

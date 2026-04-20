@@ -1,5 +1,4 @@
-import { type ZodType } from 'zod';
-
+import { type ZodType } from '@frontmcp/lazy-zod';
 import {
   ElicitResultSchema,
   EmptyResultSchema,

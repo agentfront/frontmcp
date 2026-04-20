@@ -47,8 +47,7 @@
   },
   "dependencies": {
     "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "1.0.4",
-    "zod": "^4.0.0"
+    "@frontmcp/sdk": "1.0.4"
   },
   "peerDependencies": {
     "@vercel/kv": "^2.0.0 || ^3.0.0"

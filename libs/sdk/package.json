@@ -118,6 +118,7 @@
     "@frontmcp/utils": "1.0.4",
     "@frontmcp/guard": "1.0.4",
     "@frontmcp/di": "1.0.4",
+    "@frontmcp/lazy-zod": "1.0.4",
     "@frontmcp/uipack": "1.0.4",
     "@frontmcp/auth": "1.0.4",
     "@frontmcp/protocol": "1.0.4",

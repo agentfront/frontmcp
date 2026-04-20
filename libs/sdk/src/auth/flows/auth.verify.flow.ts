@@ -16,7 +16,6 @@ import {
 import 'reflect-metadata';
 
 import type { JSONWebKeySet } from 'jose';
-import { z } from 'zod';
 
 import {
   authUserSchema,
@@ -42,6 +41,7 @@ import {
   type TransparentVerifiedPayload,
   type VerifyResult,
 } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
 
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 

@@ -1,6 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
+import { RememberAccessorToken, type RememberAccessor } from '@frontmcp/plugin-remember';
 import { Resource, ResourceContext } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { RememberAccessorToken, RememberAccessor } from '@frontmcp/plugin-remember';
 
 const outputSchema = z.object({
   session: z.object({

@@ -21,9 +21,9 @@ Demonstrates combining the Cache plugin for tool result caching with the Feature
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import CachePlugin from '@frontmcp/plugin-cache';
 import FeatureFlagPlugin from '@frontmcp/plugin-feature-flags';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'api',
@@ -55,8 +55,7 @@ class MyServer {}
 
 ```typescript
 // src/tools/get-weather.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Per-tool cache metadata with custom TTL and sliding window
 @Tool({
@@ -80,8 +79,7 @@ class GetWeatherTool extends ToolContext {
 
 ```typescript
 // src/tools/beta-search.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // Tool gated behind a feature flag -- hidden from list_tools when flag is off
 @Tool({

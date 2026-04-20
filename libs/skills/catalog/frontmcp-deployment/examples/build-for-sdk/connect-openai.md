@@ -18,9 +18,7 @@ Use `connectOpenAI()` to get tools formatted for OpenAI's function-calling API.
 
 ```typescript
 // src/openai-integration.ts
-import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
-import { connectOpenAI } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { App, connectOpenAI, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'search_docs',

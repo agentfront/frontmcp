@@ -4,8 +4,9 @@
 // in isolation. Instead, we test the applyAutoTransportPersistence transform function directly
 // by extracting and testing its logic.
 
-import { z } from 'zod';
-import { redisOptionsSchema, RedisOptions } from '../../types/options/redis';
+import { z } from '@frontmcp/lazy-zod';
+
+import { redisOptionsSchema, type RedisOptions } from '../../types/options/redis';
 import { transportOptionsSchema } from '../../types/options/transport';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)

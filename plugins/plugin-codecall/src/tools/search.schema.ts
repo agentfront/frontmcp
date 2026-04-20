@@ -1,5 +1,5 @@
 // file: libs/plugins/src/codecall/tools/search.schema.ts
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 export const searchToolDescription = `Find tools by splitting user request into atomic actions.
 

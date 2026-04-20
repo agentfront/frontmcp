@@ -3,9 +3,7 @@ import { Flow, FlowBase, FlowControl, FlowHooksOf, ToolEntry, type FlowPlan, typ
 
 import 'reflect-metadata';
 
-import { z } from 'zod';
-import { toJSONSchema } from 'zod/v4';
-
+import { toJSONSchema, z } from '@frontmcp/lazy-zod';
 import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { buildCDNInfoForUIType, type AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';

@@ -1,5 +1,5 @@
-import { readFile, fileExists, getCwd, getEnv, setEnv, pathResolve } from '@frontmcp/utils';
-import { z } from 'zod';
+import { type z } from '@frontmcp/lazy-zod';
+import { fileExists, getCwd, getEnv, pathResolve, readFile, setEnv } from '@frontmcp/utils';
 
 /**
  * Parse a .env file content into key-value pairs.
@@ -226,7 +226,7 @@ export function extractSchemaPaths(schema: z.ZodType, prefix = ''): string[] {
   const unwrapped = unwrapZodType(schema);
 
   // Check if it's an object schema by looking for 'shape' property
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const def = (unwrapped as any)._zod?.def ?? (unwrapped as any)._def;
   const shape = def?.shape ?? def?.properties;
 
@@ -239,7 +239,7 @@ export function extractSchemaPaths(schema: z.ZodType, prefix = ''): string[] {
       const unwrappedField = unwrapZodType(fieldSchema);
 
       // Check if unwrapped field has a shape (is an object)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const fieldDef = (unwrappedField as any)._zod?.def ?? (unwrappedField as any)._def;
       const fieldShape = fieldDef?.shape ?? fieldDef?.properties;
 
@@ -264,7 +264,6 @@ export function extractSchemaPaths(schema: z.ZodType, prefix = ''): string[] {
  * Works with both Zod v3 and v4.
  */
 function unwrapZodType(schema: z.ZodType): z.ZodType {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const def = (schema as any)._zod?.def ?? (schema as any)._def;
 
   if (!def) return schema;

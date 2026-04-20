@@ -25,7 +25,7 @@ Without tasks, a slow tool call ties up the HTTP request until the tool returns 
 ### 1. Opt a tool into task invocation
 
 ```ts tool.ts
-import { z } from 'zod';
+import { z } from '@frontmcp/sdk';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 @Tool({

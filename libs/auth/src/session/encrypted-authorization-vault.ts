@@ -23,20 +23,19 @@
  * ```
  */
 
-import { z } from 'zod';
-import { randomUUID } from '@frontmcp/utils';
-import { AsyncLocalStorage } from '@frontmcp/utils';
+import { z } from '@frontmcp/lazy-zod';
+import { AsyncLocalStorage, randomUUID } from '@frontmcp/utils';
+
 import { EncryptionContextNotSetError, VaultLoadError, VaultNotFoundError } from '../errors/auth-internal.errors';
-import { VaultEncryption, encryptedDataSchema } from './vault-encryption';
-import type { EncryptedData, VaultSensitiveData } from './vault-encryption';
 import type {
+  AppCredential,
   AuthorizationVault,
   AuthorizationVaultEntry,
-  AppCredential,
+  PendingIncrementalAuth,
   VaultConsentRecord,
   VaultFederatedRecord,
-  PendingIncrementalAuth,
 } from './authorization-vault';
+import { encryptedDataSchema, VaultEncryption, type EncryptedData, type VaultSensitiveData } from './vault-encryption';
 
 // ============================================
 // Encrypted Vault Entry Schema
@@ -107,7 +106,6 @@ const encryptionContextStorage = new AsyncLocalStorage<EncryptionContext>();
  */
 export class EncryptedRedisVault implements AuthorizationVault {
   constructor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly redis: any,
     private readonly encryption: VaultEncryption,
     private readonly namespace = 'vault:',
@@ -590,7 +588,6 @@ export class EncryptedRedisVault implements AuthorizationVault {
  * Create an encrypted vault with the given configuration
  */
 export function createEncryptedVault(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   redis: any,
   config: {
     pepper?: string;

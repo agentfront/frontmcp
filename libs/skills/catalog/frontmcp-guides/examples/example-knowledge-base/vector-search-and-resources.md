@@ -20,8 +20,8 @@ Shows a semantic search tool with embedding generation and a resource template f
 
 ```typescript
 // src/search/tools/search-docs.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
 import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 
 @Tool({
@@ -81,8 +81,9 @@ export class SearchDocsTool extends ToolContext {
 
 ```typescript
 // src/search/resources/doc.resource.ts
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
 import type { ReadResourceResult } from '@frontmcp/protocol';
+import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
+
 import { VECTOR_STORE } from '../../ingestion/providers/vector-store.provider';
 
 @ResourceTemplate({

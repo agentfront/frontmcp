@@ -7,7 +7,7 @@
 
 import 'reflect-metadata';
 
-import { z } from 'zod';
+import { z } from '@frontmcp/lazy-zod';
 
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { Plugin, Skill, SkillContext, Tool, ToolContext, type SkillContent } from '../../common';

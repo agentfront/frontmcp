@@ -29,12 +29,12 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@noble/ciphers": "^2.1.1",
-    "@enclave-vm/ast": "^2.13.0",
-    "zod": "^4.0.0"
+    "@enclave-vm/ast": "^2.13.0"
   },
   "peerDependencies": {
     "@vercel/kv": "^2.0.0 || ^3.0.0",
-    "ioredis": "^5.0.0"
+    "ioredis": "^5.0.0",
+    "@frontmcp/lazy-zod": "1.0.4"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {

@@ -53,8 +53,11 @@
           "libs/ui/src/runtime/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": {
+            ".js": ".js"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "react",
             "react-dom",
             "react/*",
@@ -141,8 +144,11 @@
           "libs/ui/src/runtime/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".mjs" },
+          "outExtension": {
+            ".js": ".mjs"
+          },
           "external": [
+            "@frontmcp/lazy-zod",
             "react",
             "react-dom",
             "react/*",

@@ -72,8 +72,7 @@ interface ElicitationOptionsInput {
 When elicitation is enabled, tools can request user input via the MCP elicitation protocol:
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'delete_records',

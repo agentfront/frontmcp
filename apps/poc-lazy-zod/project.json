@@ -1,0 +1,32 @@
+{
+  "name": "poc-lazy-zod",
+  "targets": {
+    "generate-schemas": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsx src/schemas/generate.ts",
+        "cwd": "apps/poc-lazy-zod"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsx src/bench/build.ts",
+        "cwd": "apps/poc-lazy-zod"
+      }
+    },
+    "bench": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["tsx src/bench/build.ts", "tsx src/bench/run.ts", "tsx src/bench/report.ts"],
+        "cwd": "apps/poc-lazy-zod",
+        "parallel": false
+      }
+    },
+    "test": {
+      "options": {
+        "passWithNoTests": true
+      }
+    }
+  }
+}

@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { z } from '@frontmcp/lazy-zod';
 import { ResourceNotFoundError, Tool, ToolContext } from '@frontmcp/sdk';
 
 const inputSchema = {

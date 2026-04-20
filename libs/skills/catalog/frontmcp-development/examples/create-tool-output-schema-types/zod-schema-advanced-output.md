@@ -19,8 +19,7 @@ Demonstrates using full Zod schema objects (not raw shapes) as `outputSchema`, i
 
 ```typescript
 // src/tools/list-products.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // z.object() -- structured object output
 @Tool({
@@ -56,8 +55,7 @@ class GetOrderStatusTool extends ToolContext {
 
 ```typescript
 // src/tools/search-catalog.tool.ts
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 // z.discriminatedUnion() -- different shapes based on a type field
 const ProductResult = z.discriminatedUnion('type', [

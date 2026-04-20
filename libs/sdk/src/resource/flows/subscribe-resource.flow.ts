@@ -1,9 +1,10 @@
 // file: libs/sdk/src/resource/flows/subscribe-resource.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
-import { z } from 'zod';
-import { SubscribeRequestSchema, EmptyResultSchema } from '@frontmcp/protocol';
-import { InvalidMethodError, InvalidInputError, ResourceNotFoundError } from '../../errors';
+import { z } from '@frontmcp/lazy-zod';
+import { EmptyResultSchema, SubscribeRequestSchema } from '@frontmcp/protocol';
+
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
+import { InvalidInputError, InvalidMethodError, ResourceNotFoundError } from '../../errors';
 
 const inputSchema = z.object({
   request: SubscribeRequestSchema,

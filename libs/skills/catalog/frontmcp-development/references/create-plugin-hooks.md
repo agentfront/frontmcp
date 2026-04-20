@@ -72,7 +72,7 @@ In addition to flow-based hooks, plugins can register callbacks for server lifec
 Runs after the HTTP server is fully initialized and listening. Use for warming caches, starting background indexing, or logging readiness.
 
 ```typescript
-import { Plugin, DynamicPlugin } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin } from '@frontmcp/sdk';
 
 @Plugin({
   name: 'cache-warmer',
@@ -105,12 +105,12 @@ For convenience, FrontMCP exports typed aliases so you do not need to call `Flow
 
 ```typescript
 import {
-  ToolHook, // FlowHooksOf('tools:call-tool')
-  ListToolsHook, // FlowHooksOf('tools:list-tools')
-  ResourceHook, // FlowHooksOf('resources:read-resource')
-  ListResourcesHook, // FlowHooksOf('resources:list-resources')
   AgentCallHook, // FlowHooksOf('agents:call-agent')
   HttpHook, // FlowHooksOf('http:request')
+  ListResourcesHook, // FlowHooksOf('resources:list-resources')
+  ListToolsHook, // FlowHooksOf('tools:list-tools')
+  ResourceHook, // FlowHooksOf('resources:read-resource')
+  ToolHook, // FlowHooksOf('tools:call-tool')
 } from '@frontmcp/sdk';
 ```
 
@@ -152,8 +152,7 @@ Both `@Will` and `@Did` (and `@Around`) accept an optional options object:
 ### Logging Plugin
 
 ```typescript
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Will, Did } = ToolHook;
 
@@ -174,8 +173,7 @@ export class LoggingPlugin {
 ### Authorization Check Plugin
 
 ```typescript
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Will } = ToolHook;
 
@@ -194,8 +192,7 @@ export class AuthCheckPlugin {
 ### Caching Plugin with @Around
 
 ```typescript
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Around } = ToolHook;
 
@@ -227,8 +224,7 @@ export class CachePlugin {
 ### Stage Replacement
 
 ```typescript
-import { Plugin } from '@frontmcp/sdk';
-import { ToolHook } from '@frontmcp/sdk';
+import { Plugin, ToolHook } from '@frontmcp/sdk';
 
 const { Stage } = ToolHook;
 
@@ -249,8 +245,9 @@ Register plugins in your `@App` decorator:
 
 ```typescript
 import { App } from '@frontmcp/sdk';
-import { LoggingPlugin } from './plugins/logging.plugin';
+
 import { CachePlugin } from './plugins/cache.plugin';
+import { LoggingPlugin } from './plugins/logging.plugin';
 
 @App({
   name: 'my-app',
@@ -266,8 +263,7 @@ Plugins are initialized in array order. Hook priority determines execution order
 You can add hook methods directly on a `@Tool` class to intercept its own execution flow. The hooks apply only when **this tool** is called:
 
 ```typescript
-import { Tool, ToolContext } from '@frontmcp/sdk';
-import { z } from 'zod';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 const { Will, Did } = ToolHook;
 

@@ -1,23 +1,26 @@
-import * as path from 'path';
 import { createRequire } from 'module';
-import { c } from '../../core/colors';
+import * as path from 'path';
+
 import {
+  copyFile,
+  cp,
   ensureDir,
   fileExists,
   isDirEmpty,
-  writeFile,
-  writeJSON,
   readFile,
   readJSON,
   runCmd,
   stat,
-  cp,
-  copyFile,
+  writeFile,
+  writeJSON,
 } from '@frontmcp/utils';
+
+import { c } from '../../core/colors';
 import { runInit } from '../../core/tsconfig';
 import { getSelfVersion } from '../../core/version';
-import { buildSkillsSection } from '../skills/install';
 import { clack } from '../../shared/prompts';
+import { buildSkillsSection } from '../skills/install';
+
 // Inline skill manifest types to avoid build dependency on @frontmcp/skills source
 interface SkillCatalogEntry {
   name: string;
@@ -190,8 +193,7 @@ export class CalcApp {}
 `;
 
 const TEMPLATE_ADD_TOOL_TS = `
-import {Tool, ToolContext} from "@frontmcp/sdk";
-import {z} from "zod";
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 @Tool({
   name: 'add',
@@ -209,7 +211,7 @@ export default class AddTool extends ToolContext {
 `;
 
 const TEMPLATE_E2E_TEST_TS = `
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 /**
  * E2E tests for the MCP server.
@@ -1809,7 +1811,6 @@ async function upsertPackageJsonWithTarget(
     engines: PM_CONFIG[pm].engines,
     dependencies: {
       '@frontmcp/sdk': frontmcpLibRange,
-      '@frontmcp/plugins': frontmcpLibRange,
       '@frontmcp/adapters': frontmcpLibRange,
       frontmcp: selfVersion,
       tslib: '^2.5.0',
