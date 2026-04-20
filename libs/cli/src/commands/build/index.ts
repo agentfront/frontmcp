@@ -169,6 +169,10 @@ async function buildSingleTarget(
       const { buildBrowser } = await import('./browser/index.js');
       return buildBrowser(targetOpts);
     }
+    case 'mcpb': {
+      const { buildMcpb } = await import('./mcpb/index.js');
+      return buildMcpb(targetOpts, config);
+    }
     case 'vercel':
     case 'lambda':
     case 'cloudflare':
@@ -177,7 +181,7 @@ async function buildSingleTarget(
       return runAdapterBuild(targetOpts, adapter);
     }
     default:
-      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda, distributed`);
+      throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda, distributed, mcpb`);
   }
 }
 

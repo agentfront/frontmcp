@@ -140,6 +140,7 @@
                   "frontmcp/deployment/unix-socket",
                   "frontmcp/deployment/mcp-clients",
                   "frontmcp/deployment/serverless",
+                  "frontmcp/deployment/mcpb",
                   "frontmcp/deployment/health-checks",
                   "frontmcp/deployment/high-availability",
                   "frontmcp/deployment/frontmcp-config",

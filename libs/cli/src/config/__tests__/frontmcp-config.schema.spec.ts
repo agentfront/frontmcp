@@ -106,6 +106,75 @@ describe('frontmcpConfigSchema', () => {
       expect(result.success).toBe(true);
     });
 
+    it('should accept minimal mcpb target', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [{ target: 'mcpb' }],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept fully populated mcpb target', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        version: '1.2.3',
+        deployments: [
+          {
+            target: 'mcpb',
+            displayName: 'My Server',
+            longDescription: '# My Server\n\nA sample MCP bundle.',
+            author: { name: 'Acme', email: 'hello@acme.dev', url: 'https://acme.dev' },
+            license: 'Apache-2.0',
+            homepage: 'https://acme.dev/my-server',
+            repository: { type: 'git', url: 'https://github.com/acme/my-server' },
+            documentation: 'https://docs.acme.dev',
+            support: 'https://github.com/acme/my-server/issues',
+            icon: 'assets/icon.png',
+            keywords: ['mcp', 'demo'],
+            privacyPolicies: ['https://acme.dev/privacy'],
+            compatibility: {
+              claude_desktop: '>=1.0.0',
+              platforms: ['darwin', 'linux', 'win32'],
+              runtimes: { node: '>=22.0.0' },
+            },
+            userConfig: {
+              apiKey: {
+                type: 'string',
+                title: 'API Key',
+                description: 'API token for the external service',
+                required: true,
+                sensitive: true,
+              },
+              maxItems: {
+                type: 'number',
+                title: 'Max Items',
+                default: 50,
+                min: 1,
+                max: 1000,
+              },
+            },
+            sea: { enabled: true, mergeFrom: './dist/ci-binaries' },
+            includeNodeModules: false,
+            deterministic: true,
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept mcpb target with string repository', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [
+          {
+            target: 'mcpb',
+            repository: 'https://github.com/acme/my-server',
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('should accept CSP with array directives inside deployment', () => {
       const result = frontmcpConfigSchema.safeParse({
         name: 'csp-server',
@@ -204,6 +273,44 @@ describe('frontmcpConfigSchema', () => {
       const result = frontmcpConfigSchema.safeParse({
         name: 'my-server',
         deployments: [{ target: 'browser', server: { http: { port: 3000 } } }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject mcpb userConfig entry with unknown type', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [
+          {
+            target: 'mcpb',
+            userConfig: {
+              // biome-ignore lint/suspicious/noExplicitAny: intentional invalid type
+              foo: { type: 'bogus' as any, title: 'Foo' },
+            },
+          },
+        ],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject mcpb with invalid email in author', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [{ target: 'mcpb', author: { name: 'Acme', email: 'not-an-email' } }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject mcpb with invalid platforms', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [
+          {
+            target: 'mcpb',
+            // biome-ignore lint/suspicious/noExplicitAny: intentional invalid platform
+            compatibility: { platforms: ['bsd' as any] },
+          },
+        ],
       });
       expect(result.success).toBe(false);
     });

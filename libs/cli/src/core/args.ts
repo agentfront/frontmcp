@@ -23,7 +23,16 @@ export type Command =
   | 'configure';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'distributed';
-export type BuildTarget = 'cli' | 'node' | 'sdk' | 'browser' | 'cloudflare' | 'vercel' | 'lambda' | 'distributed';
+export type BuildTarget =
+  | 'cli'
+  | 'node'
+  | 'sdk'
+  | 'browser'
+  | 'cloudflare'
+  | 'vercel'
+  | 'lambda'
+  | 'distributed'
+  | 'mcpb';
 
 const DEPLOYMENT_ADAPTERS: readonly DeploymentAdapter[] = ['node', 'vercel', 'lambda', 'cloudflare', 'distributed'];
 const BUILD_TARGETS: readonly BuildTarget[] = [
@@ -35,6 +44,7 @@ const BUILD_TARGETS: readonly BuildTarget[] = [
   'vercel',
   'lambda',
   'distributed',
+  'mcpb',
 ];
 
 export function isDeploymentAdapter(val: string): val is DeploymentAdapter {
@@ -62,6 +72,12 @@ export interface ParsedArgs {
   buildTarget?: BuildTarget;
   // Build --js flag (cli target: produce JS bundle instead of SEA binary)
   js?: boolean;
+  // MCPB flags
+  sea?: boolean;
+  mergeFrom?: string;
+  icon?: string;
+  noDeterministic?: boolean;
+  stageOnly?: boolean;
   // Create command flags
   yes?: boolean;
   target?: DeploymentAdapter;

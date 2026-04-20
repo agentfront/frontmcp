@@ -21,6 +21,8 @@ Commands for building, testing, and debugging your FrontMCP server.
 | `build`              | Compile entry with TypeScript (tsc)                           |
 | `build --target node` | Build distributable executable bundle (esbuild)               |
 | `build --target cli`  | Build CLI executable with subcommands per tool                |
+| `build --target mcpb` | Package server as an `.mcpb` archive for MCPB-aware clients   |
+| `mcpb validate <path>` | Validate a `.mcpb` archive against the MCPB v0.3 spec        |
 | `test`               | Run E2E tests with auto-injected Jest configuration           |
 | `init`               | Create or fix a tsconfig.json suitable for FrontMCP           |
 | `doctor`             | Check Node/npm versions and tsconfig requirements. Use `--fix` to auto-repair (installs missing deps, creates app directories) |
@@ -95,8 +97,13 @@ See [ESM Packages](/frontmcp/servers/esm-packages) for full documentation on ESM
 
 | Option                 | Description                                                                      |
 | ---------------------- | -------------------------------------------------------------------------------- |
-| `--target <target>`    | Build target: `node`, `cli`, `vercel`, `lambda`, `cloudflare`        |
+| `--target <target>`    | Build target: `node`, `cli`, `sdk`, `browser`, `vercel`, `lambda`, `cloudflare`, `distributed`, `mcpb` |
 | `--js`                 | Emit plain JavaScript bundle instead of SEA (use with `--target cli`)            |
+| `--sea`                | Also build a single-executable binary for the host platform (use with `--target mcpb`) |
+| `--merge-from <dir>`   | Merge cross-platform SEA binaries from `{dir}/{platform}/{name}` (use with `--target mcpb`) |
+| `--icon <path>`        | Override the icon path included in the archive (use with `--target mcpb`)        |
+| `--no-deterministic`   | Disable deterministic archive output (use with `--target mcpb`)                  |
+| `--stage-only`         | Leave the MCPB staging directory intact and skip zipping (use with `--target mcpb`) |
 
 ### Start Options
 

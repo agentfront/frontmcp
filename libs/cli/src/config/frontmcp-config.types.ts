@@ -184,7 +184,8 @@ export type DeploymentTargetType =
   | 'lambda'
   | 'cloudflare'
   | 'browser'
-  | 'sdk';
+  | 'sdk'
+  | 'mcpb';
 
 interface DeploymentBase {
   /** Deployment target type. */
@@ -249,6 +250,85 @@ export interface SdkDeployment extends DeploymentBase {
   /** No server — SDK is a library. */
 }
 
+// ============================================
+// MCPB Deployment (MCP Bundle)
+// ============================================
+
+export interface McpbAuthor {
+  name: string;
+  email?: string;
+  url?: string;
+}
+
+export type McpbUserConfigType = 'string' | 'number' | 'boolean' | 'directory' | 'file';
+
+export interface McpbUserConfigEntry {
+  type: McpbUserConfigType;
+  title: string;
+  description?: string;
+  required?: boolean;
+  default?: string | number | boolean;
+  multiple?: boolean;
+  sensitive?: boolean;
+  min?: number;
+  max?: number;
+}
+
+export interface McpbCompatibility {
+  /** Semver range for Claude Desktop (e.g., ">=1.0.0"). */
+  claude_desktop?: string;
+  /** Supported platforms. */
+  platforms?: Array<'darwin' | 'win32' | 'linux'>;
+  /** Runtime version constraints. */
+  runtimes?: {
+    node?: string;
+    python?: string;
+  };
+}
+
+export type McpbRepository = string | { type: string; url: string };
+
+export interface McpbDeployment extends DeploymentBase {
+  target: 'mcpb';
+  /** Human-friendly display name. */
+  displayName?: string;
+  /** Long markdown description. */
+  longDescription?: string;
+  /** Author object — overrides parsed package.json.author. */
+  author?: McpbAuthor;
+  /** SPDX license identifier — overrides package.json.license. */
+  license?: string;
+  /** Project homepage URL. */
+  homepage?: string;
+  /** Source repository. */
+  repository?: McpbRepository;
+  /** Documentation URL. */
+  documentation?: string;
+  /** Support URL (issues/contact). */
+  support?: string;
+  /** Path to icon (PNG) relative to project root. */
+  icon?: string;
+  /** Keywords for search. */
+  keywords?: string[];
+  /** Privacy policy URLs. */
+  privacyPolicies?: string[];
+  /** Runtime/platform compatibility constraints. */
+  compatibility?: McpbCompatibility;
+  /** User-configurable inputs (injected as env vars). */
+  userConfig?: Record<string, McpbUserConfigEntry>;
+  /** Single-executable binary integration. */
+  sea?: {
+    /** Build SEA binary for host platform. */
+    enabled?: boolean;
+    /** Directory of pre-built cross-platform SEA binaries to merge. */
+    mergeFrom?: string;
+  };
+  /** Include node_modules/ in archive (opt-in). */
+  includeNodeModules?: boolean;
+  /** Deterministic archive output. @default true */
+  deterministic?: boolean;
+}
+
 export type DeploymentTarget =
   | NodeDeployment
   | DistributedDeployment
@@ -257,7 +337,8 @@ export type DeploymentTarget =
   | LambdaDeployment
   | CloudflareDeployment
   | BrowserDeployment
-  | SdkDeployment;
+  | SdkDeployment
+  | McpbDeployment;
 
 // ============================================
 // Top-Level Config

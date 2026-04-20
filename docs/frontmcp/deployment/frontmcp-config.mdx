@@ -67,17 +67,41 @@ Each entry in `deployments` defines a build target with independent settings:
 | `browser` | Browser bundle | In-memory | Memory only |
 | `cli` | Standalone binary | stdio | SQLite, memory |
 | `sdk` | Library for embedding | Direct (in-process) | Configurable |
+| `mcpb` | MCP Bundle archive (see [MCPB](/frontmcp/deployment/mcpb)) | stdio | SQLite, memory |
 
 ### Deployment Target Fields
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `target` | string | One of the 8 target types above |
+| `target` | string | One of the 9 target types above |
 | `server` | ServerConfig | HTTP, CORS, CSP, and security header settings |
 | `ha` | HaConfig | HA settings (distributed target only) |
 | `cli` | CliConfig | CLI-specific settings (cli target only) |
 | `js` | boolean | Generate .js bundle instead of native binary (cli target) |
 | `env` | Record | Per-target environment variables |
+
+### MCPB-Only Fields
+
+The `mcpb` target supports additional fields for [MCP Bundle](/frontmcp/deployment/mcpb) metadata:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `displayName` | string | Human-friendly bundle title shown in the installer |
+| `longDescription` | string | Markdown description for the extension details page |
+| `author` | `{ name, email?, url? }` | Overrides parsed `package.json.author` |
+| `license` | string | SPDX license identifier |
+| `homepage` | string | Project homepage URL |
+| `repository` | string \| `{ type, url }` | Source repository |
+| `documentation` | string | Documentation URL |
+| `support` | string | Support / issues URL |
+| `icon` | string | Icon path relative to project root (PNG) |
+| `keywords` | string[] | Keywords for client search |
+| `privacyPolicies` | string[] | Privacy policy URLs for external services this server talks to |
+| `compatibility` | object | `{ claude_desktop?, platforms?, runtimes? }` constraints |
+| `userConfig` | Record | MCPB `user_config` overrides (type, min/max, etc.) — merged with translated `setup.steps` |
+| `sea` | `{ enabled?, mergeFrom? }` | Build SEA binary for the host and/or merge pre-built binaries |
+| `includeNodeModules` | boolean | Include `server/node_modules/` in the archive (off by default) |
+| `deterministic` | boolean | Produce byte-identical archives across runs (defaults to `true`) |
 
 ## Server Configuration
 

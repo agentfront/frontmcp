@@ -1,12 +1,14 @@
 import { Command } from 'commander';
-import { getSelfVersion } from './version';
-import { registerDevCommands } from '../commands/dev/register';
+
 import { registerBuildCommands } from '../commands/build/register';
-import { registerScaffoldCommands } from '../commands/scaffold/register';
-import { registerPmCommands } from '../commands/pm/register';
+import { registerDevCommands } from '../commands/dev/register';
+import { registerMcpbCommands } from '../commands/mcpb/register';
 import { registerPackageCommands } from '../commands/package/register';
+import { registerPmCommands } from '../commands/pm/register';
+import { registerScaffoldCommands } from '../commands/scaffold/register';
 import { registerSkillsCommands } from '../commands/skills/register';
 import { customizeHelp } from './help';
+import { getSelfVersion } from './version';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -22,6 +24,7 @@ export function createProgram(): Command {
   registerPmCommands(program);
   registerPackageCommands(program);
   registerSkillsCommands(program);
+  registerMcpbCommands(program);
   customizeHelp(program);
 
   return program;
