@@ -1,0 +1,41 @@
+{
+  "name": "demo-e2e-mcpb",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-mcpb/fixture/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:mcpb"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": [{ "projects": ["cli"], "target": "build" }],
+      "options": {
+        "command": "node ../../../../libs/cli/dist/src/core/cli.js build --target mcpb",
+        "cwd": "apps/e2e/demo-e2e-mcpb/fixture"
+      },
+      "outputs": ["{projectRoot}/fixture/dist"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-mcpb"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-mcpb/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-mcpb-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-mcpb/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-mcpb"
+      }
+    }
+  }
+}

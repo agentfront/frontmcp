@@ -1,0 +1,323 @@
+---
+title: MCP Bundles (MCPB)
+slug: deployment/mcpb
+icon: box-archive
+description: Package a FrontMCP server as a .mcpb archive that Claude Desktop and other MCPB-aware clients can install with one click.
+---
+
+FrontMCP can emit a [**MCP Bundle**](https://github.com/modelcontextprotocol/mcpb)
+(`.mcpb`) — a ZIP archive with a declarative `manifest.json` that describes the
+server's metadata, tools, user-configurable inputs, and runtime command. Clients
+such as Claude Desktop double-click the bundle; the host extracts it and starts
+the server over stdio.
+
+<Info>
+  MCPB targets **spec v0.3**. Archives are portable across macOS, Linux, and
+  Windows. FrontMCP emits the `node` server type by default, with optional SEA
+  binaries for offline execution.
+</Info>
+
+## When to use MCPB
+
+<Tabs>
+<Tab title="Use MCPB when">
+- You ship an MCP server to end users who install via Claude Desktop, Cursor,
+  or another MCPB-aware client — no CLI, no `npx`, no registry.
+- You want a single signed artifact with a stable hash you can attach to a
+  GitHub release.
+- You need a `user_config` form so users can supply tokens/paths during install
+  rather than editing JSON.
+</Tab>
+<Tab title="Use `--target cli` when">
+- You're distributing a full interactive CLI (subcommands per tool, session
+  management, OAuth flows).
+- Your primary consumers are scripts and humans, not MCP clients.
+</Tab>
+<Tab title="Use `--target node` / serverless when">
+- You're hosting the server yourself as an HTTP endpoint.
+- You need Vercel, Lambda, Cloudflare Workers, or a distributed deployment.
+</Tab>
+</Tabs>
+
+## Quick start
+
+```bash
+# Basic bundle — produces dist/mcpb/{name}-{version}.mcpb
+frontmcp build --target mcpb
+
+# Include a SEA binary for the host platform (offline-capable install)
+frontmcp build --target mcpb --sea
+
+# Merge pre-built cross-platform binaries from a CI matrix
+frontmcp build --target mcpb --merge-from ./ci-bins
+
+# Validate an existing archive
+frontmcp mcpb validate dist/mcpb/my-server-1.0.0.mcpb
+```
+
+## Output layout
+
+```
+dist/mcpb/
+  my-server-1.0.0.mcpb              # ZIP archive — the distributable artifact
+  __stage/                          # intermediate staging (removed by default)
+    manifest.json                   # MCPB v0.3 manifest
+    server/
+      index.js                      # esbuild single-file CJS bundle
+      package.json                  # minimal CJS marker
+      _skills/                      # present when the server ships skills
+    bin/
+      darwin-arm64/my-server        # present when --sea or --merge-from
+      win32-x64/my-server.exe
+    icon.png                        # present when resolved
+    README.md                       # present when README.md exists in cwd
+```
+
+The archive is **deterministic by default** — two back-to-back builds produce
+byte-identical output (fixed mtime, lexicographic entry ordering). FrontMCP
+logs the `sha256` of every archive it emits so you can attach it to release
+notes.
+
+## Configuration
+
+MCPB metadata lives alongside your other deployment targets in `frontmcp.config`:
+
+```ts frontmcp.config.ts
+import { defineConfig } from 'frontmcp';
+
+export default defineConfig({
+  name: 'my-server',
+  version: '1.2.3',
+  nodeVersion: '>=22.0.0',
+  deployments: [
+    {
+      target: 'mcpb',
+      displayName: 'My Server',
+      longDescription: '# My Server\n\nReads your calendar.',
+      author: { name: 'Acme', email: 'hello@acme.dev' },
+      license: 'Apache-2.0',
+      homepage: 'https://acme.dev/my-server',
+      repository: 'https://github.com/acme/my-server',
+      icon: 'assets/icon.png',
+      keywords: ['calendar', 'scheduling'],
+      compatibility: {
+        claude_desktop: '>=1.0.0',
+        platforms: ['darwin', 'linux', 'win32'],
+        runtimes: { node: '>=22.0.0' },
+      },
+      sea: { enabled: true },
+    },
+  ],
+});
+```
+
+Unset fields fall back to `package.json` — `name`, `version`, `description`,
+`author`, `license`, `homepage`, `repository`, `keywords`, and an `icon.png`
+in the project root are all detected automatically.
+
+## Tools and prompts
+
+FrontMCP boots your server in a **schema-extraction** mode at build time
+(`FRONTMCP_SCHEMA_EXTRACT=1`) to enumerate tools, resources, prompts, and
+skills without starting the HTTP transport. The manifest emits:
+
+- `tools[]` — every user-defined tool with its `name` and `description`
+  (system tools like `execute-job` / `register-workflow` are filtered out)
+- `tools_generated: false` — consumers can trust the static list
+- `prompts[]` — prompt names + descriptions
+- `prompts_generated: true` — FrontMCP prompts resolve via `execute()`; MCPB's
+  static `text` field cannot represent JS logic, so consumers query
+  `prompts/get` at runtime for the rendered template
+
+<Note>
+Skills travel with the bundle. The build copies each skill's `SKILL.md` and
+`references/` / `examples/` / `scripts/` / `assets/` directories into
+`server/_skills/<skill>--<asset>/` and emits a runtime manifest so your code
+resolves them via `__dirname` after the host extracts the archive.
+</Note>
+
+## User configuration
+
+If your exec config defines a [`setup.steps`](/frontmcp/deployment/frontmcp-config)
+questionnaire, FrontMCP translates each step into MCPB `user_config` entries and
+wires them back into `mcp_config.env` via `${user_config.KEY}` references:
+
+```json manifest.json (excerpt)
+{
+  "server": {
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "API_TOKEN": "${user_config.apiToken}",
+        "MAX_ITEMS": "${user_config.maxItems}"
+      }
+    }
+  },
+  "user_config": {
+    "apiToken": {
+      "type": "string",
+      "title": "API Token",
+      "description": "Token for calling the external API",
+      "required": true,
+      "sensitive": true
+    },
+    "maxItems": {
+      "type": "number",
+      "title": "Max items",
+      "default": 25,
+      "min": 1,
+      "max": 100
+    }
+  }
+}
+```
+
+Claude Desktop shows each entry in the install dialog and re-runs the server
+with the user's answers as environment variables — matching FrontMCP's existing
+`.env` convention so the same code path works in dev and in the bundled server.
+
+Type resolution:
+
+| FrontMCP schema                               | MCPB `type`           |
+| --------------------------------------------- | --------------------- |
+| `z.string()`                                  | `string`              |
+| `z.number()` / `z.number().int()`             | `number`              |
+| `z.boolean()`                                 | `boolean`             |
+| `z.array(z.string())`                         | `string` + `multiple` |
+| `userConfig.key.type: 'directory'` override   | `directory`           |
+| `userConfig.key.type: 'file'` override        | `file`                |
+
+Defaults are stripped automatically when `sensitive: true` so secrets never
+leak into the manifest.
+
+<Warning>
+`setup.steps` with `showWhen` (conditional visibility) or `next` (branching)
+have no MCPB equivalent — MCPB forms are flat key/value. The generator logs a
+warning and renders those steps unconditionally.
+</Warning>
+
+## SEA binaries and platform overrides
+
+Pass `--sea` (or set `sea.enabled` in config) to ship a [Node.js
+single-executable](https://nodejs.org/api/single-executable-applications.html)
+alongside the bundled JS. FrontMCP emits a `platform_overrides` block in
+`mcp_config` that routes each supported OS/arch to its binary:
+
+```json
+"mcp_config": {
+  "command": "node",
+  "args": ["${__dirname}/server/index.js"],
+  "platform_overrides": {
+    "darwin-arm64": { "command": "${__dirname}/bin/darwin-arm64/my-server", "args": [] },
+    "linux-x64":    { "command": "${__dirname}/bin/linux-x64/my-server",    "args": [] },
+    "win32-x64":    { "command": "${__dirname}/bin/win32-x64/my-server.exe", "args": [] }
+  }
+}
+```
+
+Platforms without a binary fall through to the Node command — the bundled JS
+runs on any machine with Node installed.
+
+### Cross-platform archives
+
+Node SEA can only build for the **host** OS/arch in a single pass. To ship a
+single `.mcpb` that runs binary-only on every platform, run builds in a CI
+matrix and assemble them with `--merge-from`:
+
+```yaml .github/workflows/release.yml (excerpt)
+jobs:
+  build-sea:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+            key: darwin-arm64
+          - os: macos-13
+            arch: x64
+            key: darwin-x64
+          - os: ubuntu-latest
+            arch: x64
+            key: linux-x64
+          - os: windows-latest
+            arch: x64
+            key: win32-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: yarn install --frozen-lockfile
+      - run: npx frontmcp build --target mcpb --sea --stage-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sea-${{ matrix.key }}
+          path: dist/mcpb/__stage/bin/${{ matrix.key }}/*
+
+  pack:
+    needs: build-sea
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: ci-bins }
+      - run: npx frontmcp build --target mcpb --merge-from ci-bins
+      - uses: softprops/action-gh-release@v2
+        with: { files: dist/mcpb/*.mcpb }
+```
+
+## CLI flags
+
+| Flag                   | Description                                                              |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `--target mcpb`        | Selects the MCPB target                                                  |
+| `-o, --out-dir <dir>`  | Output root — the archive lands at `{out-dir}/mcpb/{name}-{version}.mcpb`|
+| `-e, --entry <path>`   | Manually specify the server entry file                                   |
+| `--sea`                | Also build an SEA binary for the host platform                           |
+| `--merge-from <dir>`   | Merge pre-built cross-platform binaries from `{dir}/{platform}/{name}`   |
+| `--icon <path>`        | Override the icon path                                                   |
+| `--no-deterministic`   | Disable deterministic archive output (use for diagnostics only)          |
+| `--stage-only`         | Leave the staging directory intact and skip zipping                      |
+
+## Validate an archive
+
+Use the `mcpb validate` subcommand before attaching an archive to a release:
+
+```bash
+$ frontmcp mcpb validate dist/mcpb/my-server-1.2.3.mcpb
+[mcpb:validate] dist/mcpb/my-server-1.2.3.mcpb
+[mcpb:validate] name=my-server version=1.2.3
+[mcpb:validate] tools=7 prompts=2 user_config=2
+[mcpb:validate] archive is valid
+```
+
+The validator checks that the archive:
+
+- opens as a ZIP and contains a `manifest.json`
+- parses against the MCPB v0.3 schema
+- points `server.entry_point` to a file actually present in the archive
+- uses only allow-listed `${…}` substitutions
+  (`__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`,
+  and declared `user_config` keys)
+- has an accessible icon if one is declared
+- has no zip-slip paths or absolute paths where `${__dirname}/…` is expected
+- binaries referenced in `platform_overrides` exist under `bin/`
+
+Warnings fire for archives over 50 MB, for declarations of `node_modules/`,
+and for absolute paths that should probably be `${__dirname}/…`.
+
+## Troubleshooting
+
+| Symptom                                            | Cause / Fix                                                                                                           |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/sdk is required for schema extraction` | Make sure `@frontmcp/sdk` is installed and not excluded from the bundle.                                              |
+| Archive > 100 MB                                   | Set `build.esbuild.external` for native/optional deps, or drop `--sea` to ship node-only.                             |
+| `Unknown substitution variable`                    | Only the allow-listed variables above and declared `user_config` keys are valid.                                      |
+| `entry_point is not present in the archive`        | A custom entry or bundler config moved the server file; re-run without overrides or set `--entry` correctly.           |
+| `platform_overrides.darwin-arm64.command` missing  | `--merge-from` layout must be `{dir}/{platform}/{name}[.exe]` — check the folder names against MCPB platform keys.     |
+| Two builds produce different SHA-256s              | `--no-deterministic` or `deterministic: false` was set, or an input file had a changing timestamp embedded in content. |
+
+## Reference
+
+- [MCPB specification](https://github.com/modelcontextprotocol/mcpb) — upstream
+- [`frontmcp.config`](/frontmcp/deployment/frontmcp-config) — deployment target reference
+- [Production builds](/frontmcp/deployment/production-build) — for Node-hosted deployments

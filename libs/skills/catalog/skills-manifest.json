@@ -513,6 +513,23 @@
           ]
         },
         {
+          "name": "build-for-mcpb",
+          "description": "Package a FrontMCP server as a .mcpb archive that Claude Desktop and other MCPB-aware clients install with one click",
+          "examples": [
+            {
+              "name": "mcpb-bundle-build",
+              "description": "Produce a .mcpb archive for Claude Desktop with metadata, tools, and install-time user_config.",
+              "level": "basic",
+              "tags": ["deployment", "mcpb", "bundle", "claude-desktop", "user-config"],
+              "features": [
+                "Using `frontmcp build --target mcpb` to produce a single `.mcpb` archive",
+                "Translating `setup.steps` into MCPB `user_config` + `${user_config.KEY}` env bindings",
+                "Validating the archive round-trip with `frontmcp mcpb validate`"
+              ]
+            }
+          ]
+        },
+        {
           "name": "build-for-sdk",
           "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs",
           "examples": [

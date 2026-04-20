@@ -213,6 +213,103 @@ export const sdkDeploymentSchema = deploymentBaseSchema
   })
   .strict();
 
+// ============================================
+// MCPB (MCP Bundles) target — produces a .mcpb ZIP archive
+// per https://github.com/modelcontextprotocol/mcpb (manifest_version 0.3)
+// ============================================
+
+export const mcpbAuthorSchema = z
+  .object({
+    name: z.string(),
+    email: z.string().email().optional(),
+    url: z.string().url().optional(),
+  })
+  .strict();
+
+export const mcpbUserConfigEntrySchema = z
+  .object({
+    type: z.enum(['string', 'number', 'boolean', 'directory', 'file']),
+    title: z.string(),
+    description: z.string().optional(),
+    required: z.boolean().optional(),
+    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    multiple: z.boolean().optional(),
+    sensitive: z.boolean().optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+  })
+  .strict();
+
+export const mcpbCompatibilitySchema = z
+  .object({
+    claude_desktop: z.string().optional(),
+    platforms: z.array(z.enum(['darwin', 'win32', 'linux'])).optional(),
+    runtimes: z
+      .object({
+        node: z.string().optional(),
+        python: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export const mcpbRepositorySchema = z.union([
+  z.string(),
+  z
+    .object({
+      type: z.string(),
+      url: z.string(),
+    })
+    .strict(),
+]);
+
+export const mcpbDeploymentSchema = deploymentBaseSchema
+  .extend({
+    target: z.literal('mcpb'),
+    /** Human-friendly display name shown in installer dialog. */
+    displayName: z.string().optional(),
+    /** Long markdown description shown in extension details. */
+    longDescription: z.string().optional(),
+    /** Author object (name/email/url). Overrides parsed package.json.author. */
+    author: mcpbAuthorSchema.optional(),
+    /** SPDX license identifier. Overrides package.json.license. */
+    license: z.string().optional(),
+    /** Project homepage URL. */
+    homepage: z.string().url().optional(),
+    /** Source repository (string URL or {type, url}). */
+    repository: mcpbRepositorySchema.optional(),
+    /** Documentation URL. */
+    documentation: z.string().url().optional(),
+    /** Support URL (issues/contact). */
+    support: z.string().optional(),
+    /** Path to icon (PNG) relative to project root. */
+    icon: z.string().optional(),
+    /** Keywords for search. */
+    keywords: z.array(z.string()).optional(),
+    /** Privacy policy URLs for external services this bundle talks to. */
+    privacyPolicies: z.array(z.string()).optional(),
+    /** Runtime/platform/client compatibility constraints. */
+    compatibility: mcpbCompatibilitySchema.optional(),
+    /** User-configurable inputs (injected as env vars at runtime). */
+    userConfig: z.record(z.string(), mcpbUserConfigEntrySchema).optional(),
+    /** Single-executable-application binary integration. */
+    sea: z
+      .object({
+        /** Build SEA binary for host platform and include via platform_overrides. */
+        enabled: z.boolean().optional(),
+        /** Directory of pre-built SEA binaries to merge (e.g., CI artifacts). */
+        mergeFrom: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    /** Include node_modules/ in archive (opt-in, defaults off). */
+    includeNodeModules: z.boolean().optional(),
+    /** Produce byte-identical archives across builds. @default true */
+    deterministic: z.boolean().optional(),
+  })
+  .strict();
+
 export const deploymentTargetSchema = z.discriminatedUnion('target', [
   nodeDeploymentSchema,
   distributedDeploymentSchema,
@@ -222,6 +319,7 @@ export const deploymentTargetSchema = z.discriminatedUnion('target', [
   cloudflareDeploymentSchema,
   browserDeploymentSchema,
   sdkDeploymentSchema,
+  mcpbDeploymentSchema,
 ]);
 
 // ============================================

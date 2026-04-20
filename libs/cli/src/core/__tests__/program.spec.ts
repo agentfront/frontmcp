@@ -11,7 +11,7 @@ describe('createProgram', () => {
     expect(program.version()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('should register all 19 commands', () => {
+  it('should register all top-level commands', () => {
     const program = createProgram();
     const names = program.commands.map((c) => c.name()).sort();
     expect(names).toEqual([
@@ -25,6 +25,7 @@ describe('createProgram', () => {
       'install',
       'list',
       'logs',
+      'mcpb',
       'restart',
       'service',
       'skills',

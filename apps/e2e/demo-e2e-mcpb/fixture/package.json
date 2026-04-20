@@ -1,0 +1,15 @@
+{
+  "name": "mcpb-demo",
+  "version": "1.2.3",
+  "description": "MCPB e2e fixture — exercises frontmcp build --target mcpb",
+  "author": "FrontMCP E2E <e2e@agentfront.dev>",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentfront.dev",
+  "keywords": [
+    "mcpb",
+    "e2e",
+    "fixture"
+  ],
+  "main": "./src/main.ts",
+  "private": true
+}

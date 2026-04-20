@@ -51,6 +51,13 @@ npx frontmcp create my-app
 | `frontmcp uninstall <name>` | Remove an installed MCP app                     |
 | `frontmcp configure <name>` | Re-run setup questionnaire for an installed app |
 
+### MCP Bundles (MCPB)
+
+| Command                         | Description                                                            |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| `frontmcp build --target mcpb`  | Package the server into a `.mcpb` archive (MCPB v0.3 spec)             |
+| `frontmcp mcpb validate <path>` | Verify an existing `.mcpb` archive against the MCPB v0.3 specification |
+
 ## Options Reference
 
 ### General
@@ -157,6 +164,60 @@ frontmcp inspector                  # Launch MCP Inspector UI
 frontmcp build --exec               # Single-file executable bundle
 frontmcp build --exec --cli         # CLI with subcommands per tool
 ```
+
+### MCP Bundles (`.mcpb`)
+
+The `mcpb` target produces a ZIP archive that can be loaded directly into Claude
+Desktop (and other MCPB-aware clients) without any install step — the host app
+extracts the archive and starts the server via stdio.
+
+```bash
+frontmcp build --target mcpb                         # basic node bundle
+frontmcp build --target mcpb --sea                   # include a SEA binary for this OS/arch
+frontmcp build --target mcpb --merge-from ./ci-bins  # merge pre-built cross-platform binaries
+frontmcp build --target mcpb --stage-only            # leave the staging directory for inspection
+frontmcp mcpb validate dist/mcpb/myapp-1.0.0.mcpb    # verify an archive
+```
+
+`frontmcp.config`:
+
+```ts
+import { defineConfig } from 'frontmcp';
+
+export default defineConfig({
+  name: 'my-server',
+  version: '1.2.3',
+  deployments: [
+    {
+      target: 'mcpb',
+      displayName: 'My Server',
+      author: { name: 'Acme', email: 'hello@acme.dev' },
+      license: 'Apache-2.0',
+      homepage: 'https://acme.dev/my-server',
+      repository: 'https://github.com/acme/my-server',
+      icon: 'assets/icon.png',
+      compatibility: {
+        claude_desktop: '>=1.0.0',
+        platforms: ['darwin', 'linux', 'win32'],
+        runtimes: { node: '>=22.0.0' },
+      },
+      sea: { enabled: true },
+    },
+  ],
+});
+```
+
+Fields not declared in the deployment fall back to the project `package.json`
+(name, version, description, author, license, homepage, repository, keywords).
+FrontMCP `setup.steps` are automatically translated to MCPB `user_config` and
+exposed as environment variables at runtime via `${user_config.KEY}`
+substitution in `mcp_config.env`. Conditional visibility / branching steps
+(`showWhen`, `next`) have no MCPB equivalent — the generator logs a warning
+and renders them unconditionally.
+
+Cross-platform SEA binaries require a CI matrix build (Node SEA only builds
+for the host OS/arch in a single pass). Use `--merge-from <dir>` to assemble
+pre-built binaries organized as `{mergeFromDir}/{platform}/{appName}[.exe]`.
 
 ### Generated CLI Features
 

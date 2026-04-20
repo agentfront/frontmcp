@@ -1,4 +1,10 @@
-import { BuildTarget, DeploymentAdapter, PackageManagerOption, ParsedArgs, RedisSetupOption } from './args';
+import {
+  type BuildTarget,
+  type DeploymentAdapter,
+  type PackageManagerOption,
+  type ParsedArgs,
+  type RedisSetupOption,
+} from './args';
 
 /**
  * Convert commander's parsed command name, positional arguments, and options
@@ -19,6 +25,11 @@ export function toParsedArgs(
   if (commandName === 'build') {
     if (options['target'] !== undefined) out.buildTarget = options['target'] as BuildTarget;
     if (options['js'] !== undefined) out.js = options['js'] as boolean;
+    if (options['sea'] !== undefined) out.sea = options['sea'] as boolean;
+    if (options['mergeFrom'] !== undefined) out.mergeFrom = options['mergeFrom'] as string;
+    if (options['icon'] !== undefined) out.icon = options['icon'] as string;
+    if (options['deterministic'] === false) out.noDeterministic = true;
+    if (options['stageOnly'] !== undefined) out.stageOnly = options['stageOnly'] as boolean;
   }
 
   // Create

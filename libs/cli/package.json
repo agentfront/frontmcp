@@ -42,11 +42,15 @@
     "tslib": "^2.3.0",
     "vectoriadb": "^2.2.0",
     "@rspack/core": "^1.7.6",
-    "esbuild": "^0.27.3"
+    "esbuild": "^0.27.3",
+    "yauzl": "^3.2.0",
+    "yazl": "^3.3.1"
   },
   "devDependencies": {
     "typescript": "^5.5.3",
     "tsx": "^4.20.6",
-    "@types/node": "^24.0.0"
+    "@types/node": "^24.0.0",
+    "@types/yauzl": "^2.10.3",
+    "@types/yazl": "^2.4.5"
   }
 }
