@@ -1,6 +1,6 @@
-import * as fs from 'fs';
-
 import type { Entry, ZipFile } from 'yauzl';
+
+import { readFileBuffer, sha256Hex } from '@frontmcp/utils';
 
 const yauzl = require('yauzl') as typeof import('yauzl');
 
@@ -46,7 +46,11 @@ export function readArchive(archivePath: string): Promise<ArchiveContents> {
           reject(new Error('manifest.json missing from archive'));
           return;
         }
-        resolve({ entries, manifest: JSON.parse(manifestRaw) });
+        try {
+          resolve({ entries, manifest: JSON.parse(manifestRaw) });
+        } catch (err) {
+          reject(new Error(`Invalid manifest.json: ${(err as Error).message}`));
+        }
       });
       zip.on('error', reject);
     });
@@ -55,7 +59,6 @@ export function readArchive(archivePath: string): Promise<ArchiveContents> {
 
 /** SHA-256 of the archive contents as lowercase hex. */
 export async function sha256File(filePath: string): Promise<string> {
-  const { createHash } = await import('crypto');
-  const buf = fs.readFileSync(filePath);
-  return createHash('sha256').update(buf).digest('hex');
+  const buf = await readFileBuffer(filePath);
+  return sha256Hex(buf);
 }

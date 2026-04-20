@@ -64,11 +64,11 @@ frontmcp mcpb validate dist/mcpb/my-server-1.0.0.mcpb
   (the build-time schema extractor boots it in introspection mode).
 - `@frontmcp/sdk` must be installed and reachable at the path used by the
   build (never exclude it from bundling).
-- For `--sea` builds, Node.js ≥ 24 is required (SEA spec prerequisite).
+- For `--sea` builds, Node.js ≥ 24 is required (FrontMCP targets the current SEA API).
 
 ## What the Archive Contains
 
-```
+```text
 dist/mcpb/
   my-server-1.0.0.mcpb              # the distributable artifact
   __stage/                          # removed after successful zip
@@ -128,7 +128,7 @@ Node SEA builds for the host OS/arch only. To ship a `.mcpb` that runs
 binary-only on every platform, run the build in a CI matrix and assemble with
 `--merge-from`:
 
-```
+```text
 ci-bins/
   darwin-arm64/my-server
   darwin-x64/my-server
@@ -175,13 +175,24 @@ bundled JS, so a partial matrix is fine.
 ## Troubleshooting
 
 | Problem                                                | Cause                                                          | Solution                                                                                                                    |
-| ------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------- | --------- | ------------------------ |
+| ------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `@frontmcp/sdk is required for schema extraction`      | SDK missing or externalized from bundle                        | Ensure `@frontmcp/sdk` is installed                                                                                         |
 | Archive > 100 MB                                       | node_modules bundled or node runtime bloated                   | Tune `build.esbuild.external`, drop `--sea`, or disable `includeNodeModules`                                                |
 | `Unknown substitution variable` on validate            | Typo in `mcp_config.args` / `env`                              | Only `__dirname`, `HOME`, `DESKTOP`, `DOCUMENTS`, `DOWNLOADS`, `pathSeparator`, and declared `user_config` keys are allowed |
 | `entry_point is not present in archive`                | Custom `--entry` flag or bundler moved the file                | Re-run without the override, or update the config's `entry`                                                                 |
 | Two builds produce different SHA-256                   | `--no-deterministic` set, or inputs embed a changing timestamp | Restore deterministic mode; scan your sources for live date/time values                                                     |
-| `platform_overrides.{platform}.command` missing binary | `--merge-from` folders don't match MCPB platform keys          | Expected layout: `{dir}/{darwin-arm64                                                                                       | darwin-x64 | linux-arm64 | linux-x64 | win32-x64}/{name}[.exe]` |
+| `platform_overrides.{platform}.command` missing binary | `--merge-from` folders don't match MCPB platform keys          | See the expected layout below                                                                                               |
+
+Expected `--merge-from` layout (platform dirs must match MCPB platform keys):
+
+```text
+{dir}/
+  darwin-arm64/{name}
+  darwin-x64/{name}
+  linux-arm64/{name}
+  linux-x64/{name}
+  win32-x64/{name}.exe
+```
 
 ## Examples
 

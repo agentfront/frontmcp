@@ -29,8 +29,8 @@ export interface ZipResult {
 export interface ZipOptions {
   /** Apply DETERMINISTIC_MTIME to every entry. @default true */
   deterministic?: boolean;
-  /** Compression level passed to yazl (0 = store, 1-9 = deflate). @default 6 */
-  compressionLevel?: number;
+  /** When true, deflate entries; when false, store uncompressed. @default true */
+  compress?: boolean;
 }
 
 /**
@@ -59,7 +59,11 @@ export function listFilesForArchive(
       // expected to be portable across Windows/macOS/Linux consumers.
     }
   }
-  return out.sort((a, b) => (a.archivePath < b.archivePath ? -1 : 1));
+  return out.sort((a, b) => {
+    if (a.archivePath < b.archivePath) return -1;
+    if (a.archivePath > b.archivePath) return 1;
+    return 0;
+  });
 }
 
 /** Create a deterministic `.mcpb` archive from a staged directory. */
@@ -69,7 +73,7 @@ export async function createDeterministicZip(
   options: ZipOptions = {},
 ): Promise<ZipResult> {
   const yazl = require('yazl') as typeof import('yazl');
-  const { deterministic = true, compressionLevel = 6 } = options;
+  const { deterministic = true, compress = true } = options;
 
   const files = listFilesForArchive(stageDir);
   const zip = new yazl.ZipFile();
@@ -77,7 +81,7 @@ export async function createDeterministicZip(
   for (const { archivePath: rel, absPath } of files) {
     zip.addFile(absPath, rel, {
       mtime: deterministic ? DETERMINISTIC_MTIME : undefined,
-      compress: compressionLevel > 0,
+      compress,
     });
   }
   zip.end({ forceZip64Format: false });

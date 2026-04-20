@@ -23,7 +23,7 @@ import type { McpbDeployment } from '../../../config/frontmcp-config.types';
 import { loadExecConfig, normalizeConfig } from '../exec/config';
 import { bundleWithEsbuild, formatSize } from '../exec/esbuild-bundler';
 import { buildPlatformOverrides, mergeBinariesFrom, resolveHostPlatform, binaryFileName, type BinaryEntry } from './binary';
-import { generateMcpbManifest, resolveIconPath } from './manifest';
+import { generateMcpbManifest, loadPackageJsonMeta, resolveIconPath } from './manifest';
 import { setupStepsToUserConfig } from './user-config';
 import { stageMcpbDirectory, writeManifest } from './stage';
 import { createDeterministicZip } from './zip';
@@ -43,6 +43,12 @@ export async function buildMcpb(
   const outDir = path.resolve(cwd, opts.outDir || 'dist');
 
   console.log(`${c('cyan', '[build:mcpb]')} Building MCP Bundle...`);
+
+  // Snapshot outDir before any build work so cleanup only removes artifacts
+  // this build produced — files the user had sitting there are preserved.
+  const preExistingEntries = fs.existsSync(outDir)
+    ? new Set<string>(fs.readdirSync(outDir))
+    : new Set<string>();
 
   // 1. Resolve exec + mcpb config
   const rawConfig = await loadExecConfig(cwd);
@@ -177,7 +183,8 @@ export async function buildMcpb(
     fs.rmSync(stageDir, { recursive: true, force: true });
   }
   const iconOverride = opts.icon ?? mcpbDeployment?.icon;
-  const iconAbs = resolveIconPath(cwd, iconOverride);
+  const pkgMeta = loadPackageJsonMeta(cwd);
+  const iconAbs = resolveIconPath(cwd, iconOverride, pkgMeta.icon);
   const iconAbsPath = iconAbs ? path.resolve(cwd, iconAbs) : undefined;
 
   const stageResult = stageMcpbDirectory({
@@ -218,7 +225,7 @@ export async function buildMcpb(
   // 10. Zip (unless --stage-only)
   if (opts.stageOnly) {
     console.log(`${c('yellow', '[build:mcpb]')} --stage-only set; leaving ${path.relative(cwd, stageDir)} for inspection`);
-    cleanupIntermediates(outDir, ['__stage']);
+    cleanupIntermediates(outDir, preExistingEntries, ['__stage']);
     return;
   }
 
@@ -241,24 +248,28 @@ export async function buildMcpb(
 
   // 11. Cleanup
   fs.rmSync(stageDir, { recursive: true, force: true });
-  cleanupIntermediates(outDir, [`${execConfig.name}-${execConfig.version}.mcpb`]);
+  cleanupIntermediates(outDir, preExistingEntries, [`${execConfig.name}-${execConfig.version}.mcpb`]);
 
   console.log(`\n${c('green', 'MCPB build completed.')}`);
   console.log(`${c('gray', 'Install:')} open ${path.relative(cwd, zipResult.archivePath)}`);
 }
 
 /**
- * Remove files/dirs in outDir that aren't in the keep-list.
+ * Remove intermediates this build produced, leaving pre-existing files and the
+ * keep-list alone. The tsc + esbuild stages write intermediates directly into
+ * outDir (same pattern as the exec target uses); we keep the archive and — in
+ * stage-only mode — the `__stage/` directory so the user can inspect it.
  *
- * The tsc + esbuild stages write intermediates directly into outDir (same
- * pattern as the exec target uses). We keep the archive and — in stage-only
- * mode — the `__stage/` directory so the user can inspect it.
+ * `preExisting` is the set of entries that were in `outDir` before the build
+ * started. Anything in that set is preserved unconditionally so a shared
+ * outDir (e.g., `--out-dir dist` alongside other targets) is not clobbered.
  */
-function cleanupIntermediates(outDir: string, keep: string[]): void {
+function cleanupIntermediates(outDir: string, preExisting: Set<string>, keep: string[]): void {
   if (!fs.existsSync(outDir)) return;
   const keepSet = new Set(keep);
   for (const entry of fs.readdirSync(outDir)) {
     if (keepSet.has(entry)) continue;
+    if (preExisting.has(entry)) continue;
     const full = path.join(outDir, entry);
     try {
       fs.rmSync(full, { recursive: true, force: true });

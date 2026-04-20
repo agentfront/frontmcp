@@ -1,6 +1,7 @@
 import { execFileSync } from 'child_process';
-import * as fs from 'fs';
 import * as path from 'path';
+
+import { fileExists, rm } from '@frontmcp/utils';
 
 const APP_NAME = 'mcpb-demo';
 const APP_VERSION = '1.2.3';
@@ -50,8 +51,8 @@ export async function ensureBuild(extraArgs: string[] = []): Promise<string> {
   if (buildDone && extraArgs.length === 0) return ARCHIVE_PATH;
 
   // Clear any prior artifacts to guarantee a fresh build.
-  if (fs.existsSync(DIST_DIR)) {
-    fs.rmSync(DIST_DIR, { recursive: true, force: true });
+  if (await fileExists(DIST_DIR)) {
+    await rm(DIST_DIR, { recursive: true, force: true });
   }
 
   console.log('[e2e:mcpb] Building MCPB archive...');

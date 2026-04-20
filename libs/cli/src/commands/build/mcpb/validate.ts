@@ -9,11 +9,13 @@
  *   4. `server.entry_point` resolves to an entry inside the archive
  *   5. Every `${user_config.KEY}` reference declares matching user_config[KEY]
  *   6. Only allow-listed variables appear in substitutions
- *   7. `icon` / `icons[*].src` files exist when referenced
- *   8. No zip-slip (entry names with `..` segments or absolute paths)
+ *   7. `manifest.icon` file exists when referenced
+ *   8. No zip-slip (normalized entry names escaping the archive root)
  *   9. Warnings on large archives, absolute-path args, node_modules presence
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import type { Entry, ZipFile } from 'yauzl';
 import { mcpbManifestSchema, type McpbManifest, type McpbMcpConfig } from './manifest';
 import { ALLOWED_SUBSTITUTION_VARS, ARCHIVE_SIZE_ERROR, ARCHIVE_SIZE_WARN, USER_CONFIG_PREFIX } from './constants';
@@ -51,9 +53,11 @@ export async function validateMcpb(archivePath: string): Promise<ValidateResult>
     result.warnings.push(`Archive is ${(archive.size / 1024 / 1024).toFixed(1)} MB`);
   }
 
-  // Zip-slip: flag any suspicious entry names
+  // Zip-slip: flag entries that escape the archive root.
+  // Substring-matching `..` would false-positive on legit names like `foo..bar`,
+  // so we normalize and check for literal `..` segments plus absolute paths.
   for (const entry of archive.entries) {
-    if (entry.startsWith('/') || entry.includes('..')) {
+    if (isUnsafeArchivePath(entry)) {
       result.errors.push(`Zip-slip risk: entry "${entry}"`);
     }
   }
@@ -178,6 +182,10 @@ interface RawArchive {
 
 function readArchive(archivePath: string): Promise<RawArchive> {
   const yauzl = require('yauzl') as typeof import('yauzl');
+  // yauzl's ZipFile doesn't expose the archive byte size, so measure it
+  // directly from disk. stat before open mirrors the error path for missing
+  // files.
+  const size = fs.statSync(archivePath).size;
   return new Promise<RawArchive>((resolve, reject) => {
     yauzl.open(archivePath, { lazyEntries: true }, (err: Error | null, zip: ZipFile | undefined) => {
       if (err || !zip) {
@@ -186,6 +194,17 @@ function readArchive(archivePath: string): Promise<RawArchive> {
       }
       const entries: string[] = [];
       let manifestRaw: string | undefined;
+      let settled = false;
+      const settle = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        try {
+          zip.close();
+        } catch {
+          // best-effort close — don't mask the original error
+        }
+        fn();
+      };
 
       zip.readEntry();
       zip.on('entry', (entry: Entry) => {
@@ -193,7 +212,7 @@ function readArchive(archivePath: string): Promise<RawArchive> {
         if (entry.fileName === 'manifest.json') {
           zip.openReadStream(entry, (streamErr: Error | null, stream: NodeJS.ReadableStream | undefined) => {
             if (streamErr || !stream) {
-              reject(streamErr || new Error('Failed to open manifest stream'));
+              settle(() => reject(streamErr || new Error('Failed to open manifest stream')));
               return;
             }
             const chunks: Buffer[] = [];
@@ -202,16 +221,30 @@ function readArchive(archivePath: string): Promise<RawArchive> {
               manifestRaw = Buffer.concat(chunks).toString('utf-8');
               zip.readEntry();
             });
-            stream.on('error', reject);
+            stream.on('error', (e: Error) => settle(() => reject(e)));
           });
         } else {
           zip.readEntry();
         }
       });
       zip.on('end', () => {
-        resolve({ entries, manifestRaw, size: zip.fileSize ?? 0 });
+        settle(() => resolve({ entries, manifestRaw, size }));
       });
-      zip.on('error', reject);
+      zip.on('error', (e: Error) => settle(() => reject(e)));
     });
   });
+}
+
+/**
+ * A zip entry is unsafe if it uses an absolute path or any normalized segment
+ * would let it escape the archive root (`..`). Backslashes are also rejected
+ * so Windows-style paths can't bypass the POSIX check.
+ */
+function isUnsafeArchivePath(entry: string): boolean {
+  if (!entry) return false;
+  if (entry.startsWith('/') || entry.includes('\\')) return true;
+  if (/^[a-zA-Z]:/.test(entry)) return true; // drive-letter absolute
+  const normalized = path.posix.normalize(entry);
+  if (normalized.startsWith('../') || normalized === '..') return true;
+  return normalized.split('/').some((segment) => segment === '..');
 }

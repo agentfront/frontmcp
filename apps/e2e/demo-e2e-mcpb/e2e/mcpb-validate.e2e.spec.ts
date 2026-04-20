@@ -1,6 +1,7 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import { ensureBuild, getArchivePath, runFrontmcp } from './helpers/mcpb-build';
 
@@ -19,22 +20,22 @@ describe('frontmcp mcpb validate', () => {
   });
 
   it('exits non-zero and reports the error for a missing archive', () => {
-    const missing = path.join(os.tmpdir(), 'does-not-exist.mcpb');
+    const missing = path.join(os.tmpdir(), `frontmcp-missing-${Date.now()}-${process.pid}.mcpb`);
     const result = runFrontmcp(['mcpb', 'validate', missing]);
     expect(result.exitCode).not.toBe(0);
     expect(result.stdout + result.stderr).toContain('Cannot open archive');
   });
 
-  it('rejects an archive that is not a valid ZIP', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpb-e2e-'));
+  it('rejects an archive that is not a valid ZIP', async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'mcpb-e2e-'));
     try {
       const bogus = path.join(tmpDir, 'bogus.mcpb');
-      fs.writeFileSync(bogus, 'not a zip archive');
+      await writeFile(bogus, 'not a zip archive');
       const result = runFrontmcp(['mcpb', 'validate', bogus]);
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout + result.stderr).toContain('Cannot open archive');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, { recursive: true, force: true });
     }
   });
 });

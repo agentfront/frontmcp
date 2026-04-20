@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import { fileExists, stat } from '@frontmcp/utils';
 
 import { readArchive, sha256File } from './helpers/archive';
 import {
@@ -15,15 +15,15 @@ describe('frontmcp build --target mcpb', () => {
     await ensureBuild();
   });
 
-  it('produces the .mcpb archive at the expected path', () => {
-    expect(fs.existsSync(getArchivePath())).toBe(true);
-    const size = fs.statSync(getArchivePath()).size;
+  it('produces the .mcpb archive at the expected path', async () => {
+    expect(await fileExists(getArchivePath())).toBe(true);
+    const { size } = await stat(getArchivePath());
     expect(size).toBeGreaterThan(0);
   });
 
-  it('removes the __stage intermediate directory after zipping', () => {
+  it('removes the __stage intermediate directory after zipping', async () => {
     const stageDir = `${getMcpbDir()}/__stage`;
-    expect(fs.existsSync(stageDir)).toBe(false);
+    expect(await fileExists(stageDir)).toBe(false);
   });
 
   it('produces a v0.3 manifest with the expected metadata', async () => {
