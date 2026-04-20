@@ -170,7 +170,7 @@ async function scaffoldFileIfMissing(baseDir: string, p: string, content: string
 
 const TEMPLATE_MAIN_TS = `
 import 'reflect-metadata';
-import { App, FrontMcp, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, FrontMcp, Tool, ToolContext, z } from '@frontmcp/sdk';
 import { CalcApp } from './calc.app';
 
 @FrontMcp({
@@ -192,7 +192,6 @@ export class CalcApp {}
 `;
 
 const TEMPLATE_ADD_TOOL_TS = `
-import { z } from '@frontmcp/lazy-zod';
 
 @Tool({
   name: 'add',
@@ -1810,7 +1809,6 @@ async function upsertPackageJsonWithTarget(
     engines: PM_CONFIG[pm].engines,
     dependencies: {
       '@frontmcp/sdk': frontmcpLibRange,
-      '@frontmcp/lazy-zod': frontmcpLibRange,
       '@frontmcp/adapters': frontmcpLibRange,
       frontmcp: selfVersion,
       tslib: '^2.5.0',
