@@ -6,35 +6,38 @@
  * like local apps, but with lazy capability discovery and TTL-based caching.
  */
 
-import {
-  AdapterRegistryInterface,
-  AppEntry,
-  AppRecord,
-  PluginRegistryInterface,
-  ProviderRegistryInterface,
-  RemoteAppMetadata,
-  RemoteAuthConfig,
-  EntryOwnerRef,
-  PluginEntry,
-  AdapterEntry,
-  FrontMcpLogger,
-  SkillEntry,
-} from '../../common';
-import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import { idFromString } from '@frontmcp/utils';
-import ProviderRegistry from '../../provider/provider.registry';
-import ToolRegistry from '../../tool/tool.registry';
-import ResourceRegistry from '../../resource/resource.registry';
+
+import {
+  AppEntry,
+  type AdapterEntry,
+  type AdapterRegistryInterface,
+  type AppRecord,
+  type EntryOwnerRef,
+  type FrontMcpLogger,
+  type PluginEntry,
+  type PluginRegistryInterface,
+  type ProviderRegistryInterface,
+  type RemoteAppMetadata,
+  type RemoteAuthConfig,
+  type SkillEntry,
+} from '../../common';
 import PromptRegistry from '../../prompt/prompt.registry';
+import type ProviderRegistry from '../../provider/provider.registry';
 import { McpClientService } from '../../remote-mcp';
 import { CapabilityCache } from '../../remote-mcp/cache';
 import {
-  createRemoteToolInstance,
+  createRemotePromptInstance,
   createRemoteResourceInstance,
   createRemoteResourceTemplateInstance,
-  createRemotePromptInstance,
+  createRemoteToolInstance,
 } from '../../remote-mcp/factories';
-import type { McpConnectRequest, McpTransportType, McpRemoteAuthConfig } from '../../remote-mcp/mcp-client.types';
+import type { McpConnectRequest, McpRemoteAuthConfig, McpTransportType } from '../../remote-mcp/mcp-client.types';
+import ResourceRegistry from '../../resource/resource.registry';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import ToolRegistry from '../../tool/tool.registry';
+import { diffRemoved } from './diff-remote-capabilities';
+import { resolveRemoteAppOwner, type ResolveAppsLike } from './resolve-remote-app-owner';
 
 /**
  * Interface for scope with optional MCP client service cache.
@@ -176,6 +179,21 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   // Capability change subscription cleanup
   private _unsubscribeCapability?: () => void;
 
+  // Connection change subscription cleanup — fires clearCapabilities
+  // when the MCP client reports our appId as disconnected, so registry
+  // state stays in sync with connection lifecycle without waiting for
+  // the next capability refresh cycle.
+  private _unsubscribeConnection?: () => void;
+
+  // Previous-capability snapshots per kind, keyed by qualified name
+  // (namespace + remote name). Used by the diff-on-refresh path to
+  // detect removals between refreshes so the registry drops tools the
+  // remote server no longer advertises. Tokens are stored so unregister
+  // can be called directly without re-deriving from metadata.
+  private previousToolTokens: Map<string, unknown> = new Map();
+  private previousResourceTokens: Map<string, unknown> = new Map();
+  private previousPromptTokens: Map<string, unknown> = new Map();
+
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
     this.id = this.metadata.id ?? idFromString(this.metadata.name);
@@ -229,6 +247,23 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
           // Invalidate cache and trigger reload on next access
           this.capabilityCache.invalidate(this.id);
           this.capabilitiesLoaded = false;
+        }
+      });
+
+      // Subscribe to connection lifecycle so a `disconnected` event drops
+      // this app's capabilities from the local registry without waiting
+      // for a capability refresh cycle. Keeps local state in sync with
+      // the MCP client's connection state.
+      this._unsubscribeConnection = this.mcpClient.onConnectionChange((appId, status) => {
+        if (appId !== this.id) return;
+        if (status === 'disconnected' || status === 'error') {
+          logger.info(`Remote app ${this.id} ${status} — clearing capabilities from registry`);
+          this.clearCapabilities();
+          this.capabilityCache.invalidate(this.id);
+          this.capabilitiesLoaded = false;
+          this.isConnected = false;
+        } else if (status === 'connected') {
+          this.isConnected = true;
         }
       });
 
@@ -442,11 +477,28 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   }
 
   /**
+   * Resolve the effective owner for registered capabilities. Delegates to
+   * the pure `resolveRemoteAppOwner` helper so the lookup logic stays
+   * unit-testable without spinning up a full remote-app instance.
+   */
+  private resolveEffectiveOwner(): EntryOwnerRef {
+    const scope = this.scopeProviders.getActiveScope();
+    return resolveRemoteAppOwner({
+      ownerAppName: this.metadata.ownerAppName,
+      fallback: this.appOwner,
+      apps: (scope as unknown as { apps?: ResolveAppsLike }).apps,
+      logger: scope.logger,
+      remoteId: this.id,
+    });
+  }
+
+  /**
    * Discover remote capabilities and register them in standard registries.
    */
   private async discoverAndRegisterCapabilities(): Promise<void> {
     const logger = this.scopeProviders.getActiveScope().logger;
     const namespace = this.metadata.namespace || this.metadata.name;
+    const effectiveOwner = this.resolveEffectiveOwner();
 
     // Try to use cached capabilities
     let capabilities = this.capabilityCache.get(this.id);
@@ -463,6 +515,14 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       logger.debug(`Using cached capabilities for remote app ${this.id}`);
     }
 
+    // Diff-on-refresh: compute the fresh snapshot (qualifiedName → token)
+    // BEFORE registering so we can decide which previously-registered
+    // entries are now stale. Registrations themselves are idempotent by
+    // token, so re-registering the unchanged ones is free.
+    const nextToolTokens = new Map<string, unknown>();
+    const nextResourceTokens = new Map<string, unknown>();
+    const nextPromptTokens = new Map<string, unknown>();
+
     // Register tools using standard ToolInstance with dynamic context class
     for (const remoteTool of capabilities.tools) {
       const toolInstance = createRemoteToolInstance(
@@ -470,11 +530,12 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.mcpClient,
         this.id,
         this.scopeProviders,
-        this.appOwner,
+        effectiveOwner,
         namespace,
       );
       await toolInstance.ready;
       this._tools.registerToolInstance(toolInstance);
+      nextToolTokens.set(toolInstance.fullName ?? toolInstance.name, toolInstance.record.provide);
     }
 
     // Register resources using standard ResourceInstance with dynamic context class
@@ -484,11 +545,12 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.mcpClient,
         this.id,
         this.scopeProviders,
-        this.appOwner,
+        effectiveOwner,
         namespace,
       );
       await resourceInstance.ready;
       this._resources.registerResourceInstance(resourceInstance);
+      nextResourceTokens.set(resourceInstance.fullName ?? resourceInstance.name, resourceInstance.record.provide);
     }
 
     // Register resource templates using standard ResourceInstance
@@ -498,11 +560,12 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.mcpClient,
         this.id,
         this.scopeProviders,
-        this.appOwner,
+        effectiveOwner,
         namespace,
       );
       await templateInstance.ready;
       this._resources.registerResourceInstance(templateInstance);
+      nextResourceTokens.set(templateInstance.fullName ?? templateInstance.name, templateInstance.record.provide);
     }
 
     // Register prompts using standard PromptInstance with dynamic context class
@@ -512,16 +575,64 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.mcpClient,
         this.id,
         this.scopeProviders,
-        this.appOwner,
+        effectiveOwner,
         namespace,
       );
       await promptInstance.ready;
       this._prompts.registerPromptInstance(promptInstance);
+      nextPromptTokens.set(promptInstance.fullName ?? promptInstance.name, promptInstance.record.provide);
     }
+
+    // Diff: for every kind, anything in the previous snapshot missing
+    // from the fresh one is an admin-side removal (or a remote rename).
+    // Unregister it — the registries emit `bump('removed')` and any
+    // subscriber (plugin sync coordinator, tool list responses) sees it.
+    const removedTools = diffRemoved(this.previousToolTokens, nextToolTokens);
+    for (const [qualifiedName, token] of removedTools) {
+      this._tools.unregisterToolInstance(token as never);
+      logger.debug(`Remote app ${this.id}: unregistered tool '${qualifiedName}' (no longer advertised)`);
+    }
+    const removedResources = diffRemoved(this.previousResourceTokens, nextResourceTokens);
+    for (const [qualifiedName, token] of removedResources) {
+      this._resources.unregisterResourceInstance(token as never);
+      logger.debug(`Remote app ${this.id}: unregistered resource '${qualifiedName}' (no longer advertised)`);
+    }
+    const removedPrompts = diffRemoved(this.previousPromptTokens, nextPromptTokens);
+    for (const [qualifiedName, token] of removedPrompts) {
+      this._prompts.unregisterPromptInstance(token as never);
+      logger.debug(`Remote app ${this.id}: unregistered prompt '${qualifiedName}' (no longer advertised)`);
+    }
+
+    this.previousToolTokens = nextToolTokens;
+    this.previousResourceTokens = nextResourceTokens;
+    this.previousPromptTokens = nextPromptTokens;
 
     logger.info(
       `Remote app ${this.id} capabilities loaded: ${capabilities.tools.length} tools, ` +
-        `${capabilities.resources.length} resources, ${capabilities.prompts.length} prompts`,
+        `${capabilities.resources.length} resources, ${capabilities.prompts.length} prompts ` +
+        `(removed ${removedTools.length}/${removedResources.length}/${removedPrompts.length})`,
     );
+  }
+
+  /**
+   * Unregister every capability this remote app previously registered and
+   * forget its snapshots. Called by `McpClientService.disconnect` so a
+   * whole-app disconnect drops the app's tools from the local registry
+   * without waiting for the next capability-refresh cycle. Idempotent —
+   * running again after a clean disconnect is a no-op.
+   */
+  clearCapabilities(): void {
+    for (const [, token] of this.previousToolTokens) {
+      this._tools.unregisterToolInstance(token as never);
+    }
+    for (const [, token] of this.previousResourceTokens) {
+      this._resources.unregisterResourceInstance(token as never);
+    }
+    for (const [, token] of this.previousPromptTokens) {
+      this._prompts.unregisterPromptInstance(token as never);
+    }
+    this.previousToolTokens = new Map();
+    this.previousResourceTokens = new Map();
+    this.previousPromptTokens = new Map();
   }
 }

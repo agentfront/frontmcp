@@ -3,19 +3,19 @@
  * @description Types for MCP client connections to remote servers
  */
 
-import type { Client } from '@frontmcp/protocol';
-import type { Transport } from '@frontmcp/protocol';
-import type {
-  Tool,
-  Resource,
-  ResourceTemplate,
-  Prompt,
-  ServerCapabilities,
-  CallToolResult,
-  ReadResourceResult,
-  GetPromptResult,
+import {
+  type AuthInfo,
+  type CallToolResult,
+  type Client,
+  type GetPromptResult,
+  type Prompt,
+  type ReadResourceResult,
+  type Resource,
+  type ResourceTemplate,
+  type ServerCapabilities,
+  type Tool,
+  type Transport,
 } from '@frontmcp/protocol';
-import type { AuthInfo } from '@frontmcp/protocol';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONNECTION TYPES
@@ -303,6 +303,25 @@ export interface McpConnectRequest {
   auth?: McpRemoteAuthConfig;
   /** Namespace prefix for tool names (default: appId) */
   namespace?: string;
+  /**
+   * Name of a LOCAL FrontMCP app that should own the proxied capabilities
+   * from this remote connection. When set, every ToolInstance /
+   * ResourceInstance / PromptInstance registered from this connection
+   * carries `owner.id === ownerAppName` (with the owner `ref` resolved
+   * from the scope's `AppRegistry` lookup) so registry filters, policy
+   * hooks, and per-app auth dispatchers can target them by name.
+   *
+   * When omitted, owner falls back to the remote `appId` — preserving
+   * pre-existing behavior. When set but the lookup misses (e.g. a name
+   * that hasn't been contributed to the scope yet), the SDK logs a
+   * warning and falls back to remote-`appId` ownership rather than
+   * failing the connect.
+   *
+   * The remote `appId` remains available on every registered instance
+   * via `metadata.remoteAppId` so consumers that previously extracted
+   * it from `fullName` have a stable accessor.
+   */
+  ownerAppName?: string;
 }
 
 /**

@@ -1,25 +1,34 @@
-import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import { AppEntry, EntryLineage, EntryOwnerRef, ScopeEntry, ToolEntry, ToolRecord, ToolType } from '../common';
-import { ToolChangeEvent, ToolEmitter } from './tool.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
-import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { ToolInstance } from './tool.instance';
-import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.types';
-import ToolsListFlow from './flows/tools-list.flow';
-import CallToolFlow from './flows/call-tool.flow';
-import { ServerCapabilities } from '@frontmcp/protocol';
-import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
-import { logAvailabilityFiltering } from '../common/availability';
+import { getMetadata, tokenName, type Token } from '@frontmcp/di';
+import { type ServerCapabilities } from '@frontmcp/protocol';
+import { ensureMaxLen, getRuntimeContext, isEntryAvailable, sepFor } from '@frontmcp/utils';
+
 import {
-  NameDisambiguationError,
+  type AppEntry,
+  type EntryLineage,
+  type EntryOwnerRef,
+  type ScopeEntry,
+  type ToolEntry,
+  type ToolRecord,
+  type ToolType,
+} from '../common';
+import { logAvailabilityFiltering } from '../common/availability';
+import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import {
   EntryValidationError,
+  NameDisambiguationError,
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
 } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
+import CallToolFlow from './flows/call-tool.flow';
+import ToolsListFlow from './flows/tools-list.flow';
+import { ToolEmitter, type ToolChangeEvent } from './tool.events';
+import { ToolInstance } from './tool.instance';
+import { DEFAULT_EXPORT_OPTS, type ExportNameOptions, type IndexedTool } from './tool.types';
+import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
 
 export default class ToolRegistry extends RegistryAbstract<
   ToolInstance, // IMPORTANT: instances map holds ToolInstance (not the interface)
@@ -672,6 +681,48 @@ export default class ToolRegistry extends RegistryAbstract<
     // Rebuild indexes
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Remove a previously-registered tool instance from this registry.
+   *
+   * Accepts either the `ToolEntry` itself or the token it was registered
+   * under (`entry.record.provide`). Returns `true` when a matching entry
+   * was removed, `false` when nothing matched — idempotent, so callers
+   * can safely unregister the same entry twice.
+   *
+   * Emits a `bump('removed')` subscription event on successful removal so
+   * downstream listeners (e.g. the plugin's sync coordinator, policy
+   * enforcement hook) see the capability drop in real time.
+   *
+   * Primary use: `AppRemoteInstance.discoverAndRegisterCapabilities`
+   * diffs fresh vs. previous remote capabilities on every refresh, so
+   * admin-side removals in the Frontegg portal propagate to the local
+   * registry without a server restart.
+   */
+  unregisterToolInstance(entryOrToken: ToolEntry | Token): boolean {
+    const token = this.resolveUnregisterToken(entryOrToken);
+    if (!token) return false;
+    const wasPresent = this.instances.delete(token as Token<ToolInstance>);
+    const before = this.localRows.length;
+    this.localRows = this.localRows.filter((row) => row.token !== token);
+    const rowRemoved = this.localRows.length < before;
+    if (!wasPresent && !rowRemoved) return false;
+    this.reindex();
+    this.bump('removed');
+    return true;
+  }
+
+  private resolveUnregisterToken(entryOrToken: ToolEntry | Token): Token | undefined {
+    // Distinguish between a ToolEntry (has `.record.provide`) and a bare
+    // Token. The ToolEntry shape is the common caller form; supporting
+    // tokens lets callers hold references to already-unregistered entries
+    // and still drop them cleanly.
+    if (typeof entryOrToken === 'function' || typeof entryOrToken === 'symbol') {
+      return entryOrToken as Token;
+    }
+    const record = (entryOrToken as { record?: { provide?: unknown } }).record;
+    return record?.provide as Token | undefined;
   }
 
   /**

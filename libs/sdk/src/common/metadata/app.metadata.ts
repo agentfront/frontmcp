@@ -329,6 +329,24 @@ export interface RemoteAppMetadata {
   namespace?: string;
 
   /**
+   * Name of a LOCAL FrontMCP app that should own the proxied capabilities
+   * from this remote connection. When set, every ToolInstance /
+   * ResourceInstance / PromptInstance registered from the remote carries
+   * `owner.id === ownerAppName` (with the `ref` resolved from the scope's
+   * `AppRegistry` lookup), so sync / policy / auth hooks can target them
+   * by a stable local-app name regardless of the remote's id.
+   *
+   * When omitted, ownership falls back to this remote app's own id
+   * (current behavior — zero breaking change). When set but the lookup
+   * misses, the SDK logs a warning and falls back to remote-id ownership.
+   *
+   * The remote app id remains available on every registered instance via
+   * `metadata.remoteAppId` for consumers that previously parsed it out of
+   * `fullName`.
+   */
+  ownerAppName?: string;
+
+  /**
    * Transport-specific options for the remote connection.
    */
   transportOptions?: RemoteTransportOptions;
@@ -466,6 +484,7 @@ export const frontMcpRemoteAppMetadataSchema = z
     cacheTTL: z.number().optional(),
     packageConfig: packageConfigSchema.optional(),
     filter: appFilterConfigSchema.optional(),
+    ownerAppName: z.string().min(1).optional(),
     standalone: z
       .union([z.literal('includeInParent'), z.boolean()])
       .optional()

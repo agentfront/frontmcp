@@ -1,6 +1,6 @@
+import { type LocalAppMetadata, type RemoteAppMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { LocalAppMetadata, RemoteAppMetadata } from '../metadata';
 
 export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   type: tokenFactory.type('app'),
@@ -38,5 +38,6 @@ export const FrontMcpRemoteAppTokens: RawMetadataShape<RemoteAppMetadata> = {
   cacheTTL: tokenFactory.meta('cacheTTL'),
   packageConfig: tokenFactory.meta('packageConfig'),
   filter: tokenFactory.meta('filter'),
+  ownerAppName: tokenFactory.meta('ownerAppName'),
   standalone: tokenFactory.meta('standalone'),
 } as const;
