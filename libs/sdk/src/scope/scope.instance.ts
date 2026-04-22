@@ -543,6 +543,11 @@ export class Scope extends ScopeEntry {
         }
     }
 
+    // Cloud auto-load happens in FrontMcpInstance.bootstrap() before the
+    // scope is created — contributions (plugins, providers, overrides) are
+    // merged into the metadata the Scope receives, so by the time we're
+    // here, any cloud-contributed plugins are already in `this.metadata.plugins`.
+
     if (serverPlugins.length > 0) {
       const serverPluginScopeInfo: PluginScopeInfo = {
         ownScope: this,

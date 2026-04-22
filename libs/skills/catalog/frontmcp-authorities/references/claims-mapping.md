@@ -214,6 +214,29 @@ authorities: {
 - The default fallback behavior (no `claimsMapping`) already looks for `roles` and `permissions` at the top level, so Frontegg often works without explicit mapping.
 - For cross-tenant operations, use `tenantIds` (array) instead of `tenantId` (single active tenant).
 
+### Frontegg app-integration (ABAC on FrontMCP entries)
+
+When `cloud.appIntegration.enabled` is set, the `@frontmcp/plugin-frontegg` plugin hooks into `checkEntryAuthorities` and evaluates Frontegg-portal-managed ABAC policies on every tool/resource/prompt/agent call. The plugin builds the ABAC evaluation context from the incoming JWT using these paths (all relative to `authInfo` / `authInfo.extra` / `claims`):
+
+| ABAC context field | Extraction order (first match wins)                                        |
+| ------------------ | -------------------------------------------------------------------------- |
+| `user.sub`         | `authInfo.sub`, `claims.sub`                                               |
+| `user.roles`       | `authInfo.extra.roles`, `authInfo.roles`, `claims.roles`                   |
+| `user.permissions` | `authInfo.extra.permissions`, `authInfo.permissions`, `claims.permissions` |
+| `user.claims`      | `authInfo.extra.claims` or `authInfo.claims` (raw)                         |
+| `input`            | `state.input.arguments` (tool args) or `state.input`                       |
+
+**Example ABAC policy authored in the Frontegg portal** (denies `send_email` for non-support departments):
+
+```json
+{
+  "entryId": "frontmcp:tool:demo:send_email",
+  "conditions": [{ "path": "user.claims.department", "op": "equals", "value": "support" }]
+}
+```
+
+The plugin maps portal operators (`equals`, `greater_than`, `contains`, …) to the SDK's canonical codes (`eq`, `gt`, `contains`, …). Unknown operators are skipped with a warning, never silently allowed. See the plugin's `policy.mapper.ts` for the full translation table.
+
 ## Custom IdP / claimsResolver
 
 If your JWT structure does not fit the dot-path model, use `claimsResolver` instead of `claimsMapping`. This gives full programmatic control over claim extraction.

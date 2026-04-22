@@ -12,6 +12,7 @@ import {
 } from '../schemas';
 import {
   authOptionsSchema,
+  cloudOptionsSchema,
   elicitationOptionsSchema,
   extAppsOptionsSchema,
   healthOptionsSchema,
@@ -27,6 +28,7 @@ import {
   transportOptionsSchema,
   type AuthOptions,
   type AuthOptionsInput,
+  type CloudOptionsInput,
   type ElicitationOptionsInput,
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
@@ -394,6 +396,24 @@ export interface FrontMcpBaseMetadata {
   authorities?: import('@frontmcp/auth').AuthoritiesConfig;
 
   /**
+   * Cloud integration options.
+   *
+   * When set, the SDK lazy-loads `@frontmcp/plugin-frontegg` and wires up
+   * Frontegg-backed OAuth validation, gateway proxying, approval flows, and
+   * masking/RBAC guardrails. Requires `@frontmcp/plugin-frontegg` to be
+   * installed; a warning is logged if missing.
+   *
+   * @example
+   * ```ts
+   * cloud: {
+   *   clientId: process.env.FRONTEGG_CLIENT_ID!,
+   *   secret: process.env.FRONTEGG_SECRET!,
+   * }
+   * ```
+   */
+  cloud?: CloudOptionsInput;
+
+  /**
    * Background tasks configuration per MCP 2025-11-25 tasks spec.
    *
    * Enabled automatically when any tool declares `execution.taskSupport` other
@@ -508,6 +528,7 @@ export const frontMcpBaseSchema = z.object({
       pipes: z.array(z.any()).optional(),
     })
     .optional(),
+  cloud: cloudOptionsSchema.optional(),
   tasks: z
     .object({
       enabled: z.boolean().optional(),
@@ -669,6 +690,7 @@ const frontMcpLiteSchema = z.object({
   skillsConfig: skillsConfigOptionsSchema.optional(),
   loader: packageLoaderSchema.optional(),
   // Pass through without deep validation — not used in CLI mode
+  cloud: z.any().optional(),
   http: z.any().optional(),
   redis: z.any().optional(),
   pubsub: z.any().optional(),

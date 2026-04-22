@@ -3229,6 +3229,104 @@
           "examples": []
         }
       ]
+    },
+    {
+      "name": "frontmcp-cloud-provider",
+      "category": "extensibility",
+      "description": "Build your own cloud provider — a packaged integration that a FrontMCP server loads with a single `cloud: { ... }` config line and that contributes plugins, adapters, providers, tools, resources, option overrides, and fetches tenant-managed runtime config over the network. Use when you want to ship an opinionated all-in-one integration (like the Frontegg provider) for your own platform, internal PaaS, or enterprise identity/control plane.",
+      "path": "frontmcp-cloud-provider",
+      "targets": ["all"],
+      "hasResources": true,
+      "tags": [
+        "cloud",
+        "provider",
+        "enterprise",
+        "platform",
+        "extensibility",
+        "contribute",
+        "bootstrap",
+        "runtime-context",
+        "plugin-composition",
+        "merge-strategies"
+      ],
+      "bundle": ["full"],
+      "priority": 9,
+      "visibility": "both",
+      "license": "Apache-2.0",
+      "references": [
+        {
+          "name": "contribute-api",
+          "description": "Synchronous contribute() hook — CloudContributions shape, additive arrays, per-field merge strategies, forbidden async patterns",
+          "examples": [
+            {
+              "name": "minimal-provider",
+              "description": "Shows the smallest possible CloudProvider — a named export with `name` and a sync `contribute()` that returns a single plugin, plus the matching package.json for npm publishing.",
+              "level": "basic",
+              "tags": ["cloud", "contribute", "minimal", "plugin", "packaging"],
+              "features": [
+                "Exporting `cloudProvider` as a named export from the package entry",
+                "Returning a `CloudContributions` object with a single `plugins` entry from a sync `contribute()`",
+                "Validating required options inside `contribute()` and throwing for missing fields",
+                "Omitting `bootstrap()` when the provider has no remote runtime work",
+                "Declaring `@frontmcp/sdk` in `peerDependencies` so host and plugin share the same SDK version"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "bootstrap-api",
+          "description": "Async bootstrap() — CloudBootstrapContext, runtime-context idioms, parallel fetch with per-fetcher fallback, periodic refresh patterns",
+          "examples": [
+            {
+              "name": "full-lifecycle",
+              "description": "Shows an end-to-end CloudProvider that contributes plugins plus an options override synchronously, then bootstraps by fetching three remote configs in parallel and publishing feature flags, CORS allowlist, and login URL into the runtime context.",
+              "level": "advanced",
+              "tags": ["cloud", "contribute", "bootstrap", "runtime-context", "feature-flags", "cors"],
+              "features": [
+                "Running a two-phase lifecycle — sync `contribute()` for static injection and async `bootstrap()` for remote config",
+                "Fetching feature flags, CORS allowlist, and login URL in parallel inside `bootstrap()` with per-fetcher fallback",
+                "Publishing both a bulk `yourcloud.featureFlags` object and per-flag `yourcloud.features.<name>` keys",
+                "Sharing a single HTTP client between `contribute()` and `bootstrap()` via a Map keyed on `clientId|domain`",
+                "Registering an unref`ed periodic refresh timer that updates published feature flags without blocking process exit"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "merge-strategies",
+          "description": "Override vs fillGaps vs additive — how each strategy affects user-observable behavior, with decision tree",
+          "examples": [
+            {
+              "name": "fillgaps-vs-override",
+              "description": "Contrasts `fillGaps` and `override` strategies on the same `cors.origin` field, showing side-by-side what the user observes depending on whether they set the field themselves.",
+              "level": "intermediate",
+              "tags": ["cloud", "merge", "cors", "strategy", "fillgaps", "override"],
+              "features": [
+                "Applying `strategy: fillGaps` so the user's `cors.origin` wins when they set it and the cloud value fills in only when it is undefined",
+                "Applying `strategy: override` so the cloud's `cors.origin` replaces whatever the user set",
+                "Comparing `strategy: additive` as a third option that concatenates user and cloud arrays",
+                "Choosing `fillGaps` as the safe default for user-tunable fields",
+                "Reserving `override` for platform-enforced policies such as a mandatory CORS allowlist"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "packaging",
+          "description": "npm packaging rules — peerDependencies for @frontmcp/sdk, named export of cloudProvider, ESM/CJS considerations, SDK version compatibility",
+          "examples": []
+        },
+        {
+          "name": "shared-http-client",
+          "description": "WeakMap-keyed shared HTTP client so contribute() and bootstrap() use the same token cache — avoiding double client_credentials grants at startup",
+          "examples": []
+        },
+        {
+          "name": "runtime-context-keys",
+          "description": "Key-naming conventions for CloudRuntimeContext — dual-publishing feature flags (bulk + per-flag), health probes, audit emitters, namespace hygiene across multiple providers",
+          "examples": []
+        }
+      ]
     }
   ]
 }

@@ -10,6 +10,9 @@ import {
   type FrontMcpInterface,
   type ScopeEntry,
 } from '../common';
+import { mergeCloudContributions } from '../common/types/options/cloud/merge';
+import type { CloudProvider } from '../common/types/options/cloud/provider';
+import { CloudRuntimeContextToken, InMemoryCloudRuntimeContext } from '../common/types/options/cloud/runtime-context';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer } from '../direct';
 import { InternalMcpError, ServerNotFoundError } from '../errors';
@@ -17,6 +20,7 @@ import { HealthService } from '../health';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
 import ProviderRegistry from '../provider/provider.registry';
+import { loadCloudProvider } from '../scope/cloud-autoload';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
@@ -31,9 +35,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
   private providers: ProviderRegistry;
   private scopes: ScopeRegistry;
   private log?: FrontMcpLogger;
+  private cloud?: { provider: CloudProvider; runtime: InMemoryCloudRuntimeContext };
 
-  constructor(config: FrontMcpConfigType) {
+  /**
+   * @param config parsed + cloud-merged FrontMcpConfigType
+   * @param cloud optional cloud binding; assigned BEFORE initialize() runs so
+   *  its `if (this.cloud)` branch sees a deterministic value (no microtask
+   *  race between constructor and assign-after-new).
+   */
+  constructor(config: FrontMcpConfigType, cloud?: { provider: CloudProvider; runtime: InMemoryCloudRuntimeContext }) {
     this.config = config;
+    this.cloud = cloud;
     this.ready = this.initialize();
   }
 
@@ -50,8 +62,83 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const tag = [name, version].filter(Boolean).join(' v');
     this.log?.info(`Initializing FrontMCP${tag ? ` "${tag}"` : ''}...`);
 
+    // Register the cloud runtime context as a global provider so tools/hooks
+    // can `@Inject(CloudRuntimeContextToken)` to read cloud-published values
+    // (login URL, feature flags, managed cors origins, etc.). The context is
+    // only created when a cloud provider is attached; otherwise tools that
+    // depend on it must handle `undefined`.
+    if (this.cloud) {
+      this.providers.addDynamicProviders([
+        {
+          name: 'cloud:runtime-context',
+          provide: CloudRuntimeContextToken,
+          useValue: this.cloud.runtime,
+        },
+      ]);
+    }
+
     this.scopes = new ScopeRegistry(this.providers);
     await this.scopes.ready;
+
+    // Async cloud bootstrap — runs AFTER the scope is ready. Cloud can now
+    // fetch remote config over HTTP (using any DI providers its static
+    // contributions registered earlier) and populate the runtime context.
+    await this.runCloudBootstrap();
+  }
+
+  private async runCloudBootstrap(): Promise<void> {
+    if (!this.cloud) return;
+    const { provider, runtime } = this.cloud;
+    // Typeof guard: a truthy non-function (e.g. `true`, string) would crash
+    // on call; treat only an actual function as a valid bootstrap.
+    if (typeof provider.bootstrap !== 'function') return;
+
+    const cloudOptions = (this.config as unknown as { cloud?: unknown }).cloud;
+    const logger = this.log?.child(`cloud:${provider.name}`);
+    const bootstrapLogger = {
+      info: (msg: string, meta?: Record<string, unknown>) => logger?.info(msg, meta),
+      warn: (msg: string, meta?: Record<string, unknown>) => logger?.warn(msg, meta),
+      debug: (msg: string, meta?: Record<string, unknown>) => logger?.verbose?.(msg, meta),
+      error: (msg: string, meta?: Record<string, unknown>) => logger?.error?.(msg, meta),
+    };
+
+    try {
+      await provider.bootstrap({
+        options: cloudOptions as Parameters<NonNullable<CloudProvider['bootstrap']>>[0]['options'],
+        runtime,
+        logger: bootstrapLogger,
+        registries: this.resolveCloudRegistries(),
+      });
+      this.log?.verbose?.(`cloud: provider '${provider.name}' bootstrap complete`);
+    } catch (e) {
+      // Publish a failure flag so tools/hooks that depend on cloud-managed
+      // runtime values (login URL, feature flags, cors allowlist) can fail
+      // fast instead of operating on stale/missing defaults.
+      runtime.set('cloud.bootstrapFailed', true);
+      runtime.set('cloud.bootstrapError', e instanceof Error ? e.message : String(e));
+      this.log?.warn(`cloud: provider '${provider.name}' bootstrap failed`, {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  /**
+   * Build the `registries` field passed to cloud bootstrap. Picks the primary
+   * (first) scope — multi-scope aggregation is a future extension. Returns
+   * `undefined` when no scopes exist (nothing to expose).
+   */
+  private resolveCloudRegistries():
+    | NonNullable<Parameters<NonNullable<CloudProvider['bootstrap']>>[0]['registries']>
+    | undefined {
+    const scopes = this.getScopes() as Scope[];
+    const primary = scopes[0];
+    if (!primary) return undefined;
+    return {
+      tools: primary.tools,
+      resources: primary.resources,
+      prompts: primary.prompts,
+      agents: primary.agents,
+    };
   }
 
   async start() {
@@ -135,11 +222,70 @@ export class FrontMcpInstance implements FrontMcpInterface {
       return;
     }
 
-    const frontMcp = new FrontMcpInstance(parsedConfig);
+    const { config: mergedConfig, cloud } = FrontMcpInstance.applyCloudContributions(parsedConfig);
+    const frontMcp = new FrontMcpInstance(mergedConfig, cloud);
     await frontMcp.ready;
 
     await frontMcp.start();
     frontMcp.log?.info('FrontMCP bootstrap complete');
+  }
+
+  /**
+   * Resolve the configured cloud provider (if any), merge its synchronous
+   * static contributions into the parsed config, and pair the provider with
+   * a fresh runtime context. The returned `cloud` object is passed into
+   * `new FrontMcpInstance(config, cloud)` so `initialize()` sees it
+   * deterministically at the moment `this.cloud` is read.
+   *
+   * Post-merge steps:
+   *   1. Re-run `applyAutoTransportPersistence` so cloud-injected `redis`
+   *      still triggers transport session auto-persistence.
+   *   2. Re-parse through `frontMcpMetadataSchema` so cloud-contributed
+   *      `apps`, `plugins`, `providers`, etc. are Zod-validated the same
+   *      as user-supplied entries.
+   */
+  private static applyCloudContributions(parsedConfig: FrontMcpConfigType): {
+    config: FrontMcpConfigType;
+    cloud?: { provider: CloudProvider; runtime: InMemoryCloudRuntimeContext };
+  } {
+    const cloudOptions = (parsedConfig as unknown as { cloud?: unknown }).cloud;
+    // Bootstrap logger isn't available yet — write to stderr so a stdio MCP
+    // server's stdout JSON-RPC stream is never corrupted.
+    const preLogger = {
+      warn: (msg: string) => {
+        try {
+          process.stderr.write(`[frontmcp] ${msg}\n`);
+        } catch {
+          // process may be undefined in edge runtimes — fall through silently.
+        }
+      },
+      verbose: undefined,
+    };
+    const loaded = loadCloudProvider(cloudOptions, preLogger);
+    if (!loaded) return { config: parsedConfig };
+
+    const merged = mergeCloudContributions(parsedConfig as Record<string, unknown>, loaded.contributions, preLogger);
+
+    // Re-validate post-merge so cloud-injected apps/providers/tools honor
+    // the same schema as user-supplied ones. Skip the transform chain
+    // because the input is already fully-resolved; we just want shape
+    // validation + re-run of applyAutoTransportPersistence.
+    let finalConfig: FrontMcpConfigType;
+    try {
+      finalConfig = frontMcpMetadataSchema.parse(merged) as FrontMcpConfigType;
+    } catch (e) {
+      preLogger.warn(
+        `cloud: contributions failed re-validation — falling back to merged config without re-validation: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+      finalConfig = merged as FrontMcpConfigType;
+    }
+
+    return {
+      config: finalConfig,
+      cloud: { provider: loaded.provider, runtime: new InMemoryCloudRuntimeContext() },
+    };
   }
 
   /**
@@ -154,7 +300,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * export default FrontMcpInstance.createHandler(config);
    */
   public static async createHandler(options: FrontMcpConfigType): Promise<unknown> {
-    const frontMcp = new FrontMcpInstance(options);
+    const { config, cloud } = FrontMcpInstance.applyCloudContributions(options);
+    const frontMcp = new FrontMcpInstance(config, cloud);
     await frontMcp.ready;
 
     const server = frontMcp.providers.get(FrontMcpServer);
@@ -182,7 +329,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
   public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
     // Parse config through Zod to apply defaults (providers, tools, etc.)
     const parsedConfig = frontMcpMetadataSchema.parse(options);
-    const frontMcp = new FrontMcpInstance(parsedConfig);
+    const { config, cloud } = FrontMcpInstance.applyCloudContributions(parsedConfig);
+    const frontMcp = new FrontMcpInstance(config, cloud);
     await frontMcp.ready;
     return frontMcp;
   }
@@ -219,7 +367,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
       };
     }
 
-    const frontMcp = new FrontMcpInstance(parsedConfig);
+    // Load cloud provider in CLI mode too. The lite schema treats `cloud`
+    // as opaque, so any fields populated by the full schema's defaults
+    // (e.g. `domain`) are NOT filled in here — the cloud provider itself
+    // must apply defaults. We still wire the runtime context and bootstrap.
+    const { config: mergedConfig, cloud } = FrontMcpInstance.applyCloudContributions(
+      parsedConfig as FrontMcpConfigType,
+    );
+    const frontMcp = new FrontMcpInstance(mergedConfig, cloud);
     await frontMcp.ready;
     return frontMcp;
   }
