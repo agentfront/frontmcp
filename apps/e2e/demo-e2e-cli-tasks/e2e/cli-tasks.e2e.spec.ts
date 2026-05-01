@@ -157,11 +157,12 @@ test.describe('CLI Task Runner E2E', () => {
 
   test('SIGKILL of worker triggers orphan detection (record → failed)', async ({ mcp }) => {
     const { taskId } = await createTask(mcp, 'crash', { delayMs: 100 });
-    // Wait long enough for the crash tool to SIGKILL itself.
-    await new Promise((r) => setTimeout(r, 1500));
-    const snap = await getTask(mcp, taskId);
-    expect(snap.result?.status).toBe('failed');
-    expect(snap.result?.statusMessage).toMatch(/runner exited/i);
+    // Worker SIGKILLs itself after delayMs; orphan detection fires on the next
+    // tasks/get. Process spawn + kill timing varies across CI runners, so poll
+    // instead of a single static wait.
+    const snap = await pollUntil(mcp, taskId, (s) => s === 'failed' || s === 'completed');
+    expect(snap.status).toBe('failed');
+    expect(snap.statusMessage).toMatch(/runner exited/i);
   });
 
   test('tasks/list surfaces records created across different client sessions', async ({ mcp, server }) => {
