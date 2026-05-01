@@ -175,15 +175,89 @@ jobs:
           npx nx release version "${{ steps.version.outputs.version }}" \
             --git-tag=false --git-commit=false
 
-      - name: Commit version bump
+      - name: Normalize internal @frontmcp/* dep ranges
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
+
+          # Force every internal @frontmcp/* dep/peerDep/devDep entry to the new exact version.
+          # Safety net: nx release version with `preserveMatchingDependencyRanges` can leave a peer
+          # range untouched if its old value still satisfies the OLD package version, even when the
+          # NEW version no longer matches. That trips @nx/dependency-checks lint on the next push.
+          # We rewrite unconditionally so the working tree is internally consistent before commit.
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const VERSION = process.env.VERSION;
+          const SECTIONS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+          const dirs = ['libs', 'plugins'];
+          let totalChanged = 0;
+          for (const dir of dirs) {
+            if (!fs.existsSync(dir)) continue;
+            for (const entry of fs.readdirSync(dir)) {
+              const f = path.join(dir, entry, 'package.json');
+              if (!fs.existsSync(f)) continue;
+              const raw = fs.readFileSync(f, 'utf8');
+              const p = JSON.parse(raw);
+              let changed = false;
+              for (const s of SECTIONS) {
+                if (!p[s]) continue;
+                for (const k of Object.keys(p[s])) {
+                  if (k.startsWith('@frontmcp/') && p[s][k] !== VERSION) {
+                    console.log(`  ${f} :: ${s}.${k}: ${p[s][k]} -> ${VERSION}`);
+                    p[s][k] = VERSION;
+                    changed = true;
+                  }
+                }
+              }
+              if (changed) {
+                const trailingNewline = raw.endsWith('\n') ? '\n' : '';
+                fs.writeFileSync(f, JSON.stringify(p, null, 2) + trailingNewline);
+                totalChanged++;
+              }
+            }
+          }
+          console.log(`Normalized ${totalChanged} package.json file(s) to v${VERSION}`);
+          NODE
+
+      - name: Commit version bump
+        env:
+          BRANCH: ${{ steps.context.outputs.branch }}
+        run: |
+          set -euo pipefail
           git config user.name "agentfront[bot]"
           git config user.email "agentfront[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain)" ]; then
-            git add -A
-            git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
-            git push origin HEAD
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
           fi
+
+          git add -A
+          git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
+
+          # Rebase onto remote in case the branch advanced while we were running
+          # (manual hotfix push, concurrent workflow, etc). Retry a couple of times
+          # to handle a race window between rebase and push.
+          for attempt in 1 2 3; do
+            git fetch origin "$BRANCH"
+            if git rebase "origin/$BRANCH"; then
+              if git push origin "HEAD:$BRANCH"; then
+                echo "Pushed version bump on attempt $attempt"
+                exit 0
+              fi
+            else
+              echo "::error::Rebase onto origin/$BRANCH failed — aborting"
+              git rebase --abort || true
+              exit 1
+            fi
+            echo "Push attempt $attempt failed, retrying..."
+          done
+
+          echo "::error::Failed to push version bump after 3 attempts"
+          exit 1
 
       - name: Build all packages
         run: |
