@@ -32,7 +32,15 @@ module.exports = {
   silent: true,
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/nx-plugin',
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts', '!src/**/files/**'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+    '!src/**/files/**',
+    // Type-only schemas and minimal type shims (no executable code)
+    '!src/**/schema.ts',
+    '!src/executors/executor-context.ts',
+  ],
   coverageThreshold: {
     global: {
       statements: 98,
