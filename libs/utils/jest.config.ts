@@ -27,6 +27,30 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/utils',
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+    '!src/**/types.ts',
+    '!src/**/*.types.ts',
+    // Pure runtime-bound re-exports — single line, nothing to test
+    '!src/async-context/node-async-context.ts',
+    '!src/path/node-path.ts',
+    // Browser-only entrypoints — never imported by the Node test runner
+    '!src/async-context/browser-async-context.ts',
+    '!src/env/browser-runtime-context.ts',
+    '!src/event-emitter/browser-event-emitter.ts',
+    '!src/crypto/browser.ts',
+    '!src/path/browser-path.ts',
+    '!src/storage/adapters/indexeddb.ts',
+    '!src/storage/adapters/localstorage.ts',
+    // Module-load IIFE that resolves machine ID by deployment mode. The
+    // standalone (file-persistence) branch is unreachable in tests because
+    // modern Node exposes `globalThis.crypto.getRandomValues`, which makes
+    // `isBrowser()` return true and short-circuits dev persistence. Covered
+    // by integration tests against a built artifact.
+    '!src/machine-id/machine-id.ts',
+  ],
   coverageThreshold: {
     global: {
       statements: 90,

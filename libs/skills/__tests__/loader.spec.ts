@@ -3,14 +3,15 @@
  */
 
 import * as path from 'node:path';
+
 import {
-  getSkillsByTarget,
-  getSkillsByCategory,
-  getSkillsByBundle,
   getInstructionOnlySkills,
   getResourceSkills,
-  resolveSkillPath,
+  getSkillsByBundle,
+  getSkillsByCategory,
+  getSkillsByTarget,
   loadManifest,
+  resolveSkillPath,
 } from '../src/loader';
 import type { SkillCatalogEntry } from '../src/manifest';
 
@@ -99,6 +100,16 @@ describe('loader', () => {
     it('should exclude skills without bundle', () => {
       const result = getSkillsByBundle(skills, 'full');
       expect(result.map((s) => s.name)).toEqual(['full-only']);
+    });
+
+    it('should treat an empty bundle array as not matching', () => {
+      const empty = [makeEntry({ name: 'no-tags', bundle: [] as SkillCatalogEntry['bundle'] })];
+      expect(getSkillsByBundle(empty, 'recommended')).toEqual([]);
+    });
+
+    it('returns no matches when no skill has the queried bundle', () => {
+      const result = getSkillsByBundle(skills, 'nonexistent');
+      expect(result).toEqual([]);
     });
   });
 
