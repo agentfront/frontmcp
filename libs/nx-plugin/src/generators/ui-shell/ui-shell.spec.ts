@@ -1,5 +1,6 @@
+import { readJson, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, readJson } from '@nx/devkit';
+
 import { uiShellGenerator } from './ui-shell';
 
 describe('ui-shell generator', () => {
@@ -123,5 +124,10 @@ describe('ui-shell generator', () => {
   it('should export default', async () => {
     const mod = await import('./ui-shell');
     expect(mod.default).toBe(uiShellGenerator);
+  });
+
+  it('runs prettier formatting when skipFormat is not set', async () => {
+    await uiShellGenerator(tree, { name: 'admin-dashboard' });
+    expect(tree.exists('ui/shells/src/admin-dashboard/admin-dashboard.shell.ts')).toBe(true);
   });
 });

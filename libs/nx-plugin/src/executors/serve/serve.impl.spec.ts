@@ -1,10 +1,10 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+
 import type { ExecutorContext } from '../executor-context.js';
+import serveExecutor from './serve.impl';
 
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
-
-import serveExecutor from './serve.impl';
 
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
@@ -159,6 +159,21 @@ describe('serve executor', () => {
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }
+  });
+
+  it('should kill the child when generator finishes and child is alive', async () => {
+    const mockChild = createMockChild();
+    mockSpawn.mockReturnValue(mockChild as never);
+
+    const gen = serveExecutor({}, mockContext);
+    await gen.next();
+
+    const secondPromise = gen.next();
+    mockChild.emit('close', 0);
+    await secondPromise;
+
+    await gen.next();
+    expect(mockChild.kill).toHaveBeenCalledTimes(1);
   });
 
   it('should not kill child if already killed', async () => {
