@@ -1,8 +1,15 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { findDeployment, getDeploymentTargets, loadFrontMcpConfig, validateConfig } from '../frontmcp-config.loader';
+import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
+
+import {
+  findDeployment,
+  getDeploymentTargets,
+  loadFrontMcpConfig,
+  tryLoadFrontMcpConfig,
+  validateConfig,
+} from '../frontmcp-config.loader';
 
 describe('validateConfig', () => {
   it('should validate and return parsed config', () => {
@@ -81,15 +88,15 @@ describe('getDeploymentTargets', () => {
 // proceeded with default values. Now the loader uses esbuild as a last
 // resort and hard-fails on transpile errors.
 describe('loadFrontMcpConfig: TS config under "type": "commonjs" (#365)', () => {
-  function makeProject(tsConfigSource: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-loader-'));
-    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo', type: 'commonjs' }));
-    fs.writeFileSync(path.join(dir, 'frontmcp.config.ts'), tsConfigSource);
+  async function makeProject(tsConfigSource: string): Promise<string> {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-'));
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo', type: 'commonjs' }));
+    await writeFile(path.join(dir, 'frontmcp.config.ts'), tsConfigSource);
     return dir;
   }
 
   it('loads a TS config under type:commonjs via esbuild fallback', async () => {
-    const dir = makeProject(`
+    const dir = await makeProject(`
 const config: { name: string; nodeVersion: string; deployments: Array<{target: string}> } = {
   name: 'cjs-loaded',
   nodeVersion: '>=24.0.0',
@@ -102,16 +109,108 @@ export default config;
       expect(cfg.name).toBe('cjs-loaded');
       expect(cfg.nodeVersion).toBe('>=24.0.0');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
   it('hard-fails when the TS config has a syntax error (no silent default)', async () => {
-    const dir = makeProject(`this is not valid typescript {{{`);
+    const dir = await makeProject(`this is not valid typescript {{{`);
     try {
       await expect(loadFrontMcpConfig(dir)).rejects.toThrow(/Failed to load frontmcp\.config\.ts/);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('bundles sibling-helper imports so multi-file configs work under CJS', async () => {
+    // CR3 — `transformSync` only transpiles the entry; `esbuild.build` with
+    // `bundle: true` inlines `import { foo } from './helpers'` so the output
+    // doesn't emit unresolvable `require('./helpers')` under "type": "commonjs".
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-multi-'));
+    try {
+      await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo', type: 'commonjs' }));
+      await writeFile(path.join(dir, 'helpers.ts'), `export const HELPER_NAME: string = 'multi-loaded';\n`);
+      await writeFile(
+        path.join(dir, 'frontmcp.config.ts'),
+        `import { HELPER_NAME } from './helpers';
+const config: { name: string; deployments: Array<{target: string}> } = {
+  name: HELPER_NAME,
+  deployments: [{ target: 'node' }],
+};
+export default config;
+`,
+      );
+      const cfg = await loadFrontMcpConfig(dir);
+      expect(cfg.name).toBe('multi-loaded');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// Regression — `runBuild` previously hard-failed when the user had a legacy
+// `frontmcp.config.js` (top-level `cli`/`sea`/`esbuild`, no `deployments`).
+// `tryLoadFrontMcpConfig` returns undefined for legacy shapes so the exec
+// build can pick the file up via its own loader.
+describe('tryLoadFrontMcpConfig — legacy shape recovery', () => {
+  async function makeJsProject(jsConfigSource: string): Promise<string> {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-legacy-'));
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo', type: 'commonjs' }));
+    await writeFile(path.join(dir, 'frontmcp.config.js'), jsConfigSource);
+    return dir;
+  }
+
+  it('returns undefined for legacy top-level `cli`/`sea`/`esbuild` shape', async () => {
+    const dir = await makeJsProject(`module.exports = {
+      name: 'demo', version: '1.0.0', entry: './src/main.ts',
+      esbuild: { external: [] }, sea: { enabled: false },
+      cli: { enabled: true, outputDefault: 'text' },
+    };`);
+    try {
+      const cfg = await tryLoadFrontMcpConfig(dir);
+      // No `deployments` field → not a v1.1 config; downstream exec-loader
+      // handles it from disk directly.
+      expect(cfg).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns undefined when no config file is present', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-empty-'));
+    try {
+      // No frontmcp.config.* and no package.json → undefined, no throw.
+      const cfg = await tryLoadFrontMcpConfig(dir);
+      expect(cfg).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still hard-fails when the file exists but cannot be parsed', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-bad-'));
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo', type: 'commonjs' }));
+    await writeFile(path.join(dir, 'frontmcp.config.ts'), 'this is not valid typescript {{{');
+    try {
+      await expect(tryLoadFrontMcpConfig(dir)).rejects.toThrow(/Failed to load frontmcp\.config\.ts/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns parsed config when the new-shape schema matches', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-newshape-'));
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo' }));
+    await writeFile(
+      path.join(dir, 'frontmcp.config.json'),
+      JSON.stringify({ name: 'demo', deployments: [{ target: 'node' }] }),
+    );
+    try {
+      const cfg = await tryLoadFrontMcpConfig(dir);
+      expect(cfg?.name).toBe('demo');
+      expect(cfg?.deployments).toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

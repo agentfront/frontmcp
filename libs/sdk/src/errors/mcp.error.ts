@@ -282,20 +282,43 @@ export class InvalidInputError extends PublicMcpError {
 /**
  * Invalid output validation error (internal - don't expose schema details)
  */
+export interface InvalidOutputErrorDetails {
+  /** Property path inside the structured output where the violation was found. */
+  path?: string;
+  /** String form of the offending value (e.g., 'Infinity', 'NaN'). */
+  value?: string;
+  /** Free-form reason for the rejection (e.g., 'non-finite-number'). */
+  reason?: string;
+}
+
 export class InvalidOutputError extends InternalMcpError {
   private readonly hasCustomErrorId: boolean;
+  /** Optional structured context — path/value/reason — for diagnostics. */
+  readonly details?: InvalidOutputErrorDetails;
 
-  constructor(errorId?: string) {
-    super('Tool output validation failed', 'INVALID_OUTPUT');
+  constructor(errorIdOrDetails?: string | InvalidOutputErrorDetails, maybeDetails?: InvalidOutputErrorDetails) {
+    // Support both the legacy `new InvalidOutputError(errorId?)` call shape
+    // and the new `new InvalidOutputError(details?)` / `(errorId, details)` shapes.
+    const errorId = typeof errorIdOrDetails === 'string' ? errorIdOrDetails : undefined;
+    const details: InvalidOutputErrorDetails | undefined =
+      typeof errorIdOrDetails === 'object' && errorIdOrDetails !== null ? errorIdOrDetails : maybeDetails;
+
+    const baseMsg = 'Tool output validation failed';
+    const detailFragment = details?.reason
+      ? ` (${details.reason}${details.path ? ` at ${details.path}` : ''}${details.value !== undefined ? `: ${details.value}` : ''})`
+      : '';
+    super(baseMsg + detailFragment, 'INVALID_OUTPUT');
     this.hasCustomErrorId = !!errorId;
     if (errorId) {
       this.errorId = errorId;
     }
+    this.details = details;
   }
 
   override getPublicMessage(): string {
-    // If a custom errorId was provided (e.g., request ID), include it for correlation
-    // Otherwise, use a simpler message since the auto-generated ID isn't meaningful to users
+    // The public message intentionally omits the path/value (those can leak
+    // implementation details). The internal `.message` and the `.details`
+    // property carry the diagnostic info for logs.
     if (this.hasCustomErrorId) {
       return `Output validation failed. Please contact support with error ID: ${this.errorId}`;
     }
@@ -580,8 +603,23 @@ export function formatMcpErrorResponse(error: any, isDevelopment = !isProduction
  *
  * Used by the CLI error formatter so that `this.fail(new PublicMcpError('X'))`
  * surfaces "X" rather than the wrapper's "Tool execution failed: Unknown error".
+ *
+ * Cycles in the chain (legal in JS — e.g. `e.cause = e`, or transitive
+ * `a.cause = b; b.cause = a`) are short-circuited via a `WeakSet` of
+ * already-visited error objects. The walker terminates immediately on
+ * revisit instead of recursing further.
  */
 export function extractPublicMessage(error: unknown): string {
+  return extractPublicMessageImpl(error, new WeakSet<object>());
+}
+
+function extractPublicMessageImpl(error: unknown, visited: WeakSet<object>): string {
+  if (error && typeof error === 'object') {
+    if (visited.has(error)) {
+      return 'Unknown error';
+    }
+    visited.add(error);
+  }
   // 1. Direct PublicMcpError → its public message
   if (error instanceof PublicMcpError) {
     return error.getPublicMessage();
@@ -591,7 +629,7 @@ export function extractPublicMessage(error: unknown): string {
   if (error instanceof McpError) {
     const inner = (error as { originalError?: unknown }).originalError;
     if (inner !== undefined) {
-      const innerMsg = extractPublicMessage(inner);
+      const innerMsg = extractPublicMessageImpl(inner, visited);
       if (innerMsg && innerMsg !== 'Unknown error') return innerMsg;
     }
     // Internal errors expose a sanitized public message, but the wrapped
@@ -603,7 +641,7 @@ export function extractPublicMessage(error: unknown): string {
   if (error instanceof Error) {
     const cause = (error as { cause?: unknown }).cause;
     if (cause !== undefined) {
-      const causeMsg = extractPublicMessage(cause);
+      const causeMsg = extractPublicMessageImpl(cause, visited);
       if (causeMsg && causeMsg !== 'Unknown error') return causeMsg;
     }
     if (error.message) return error.message;

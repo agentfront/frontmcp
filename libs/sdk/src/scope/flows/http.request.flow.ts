@@ -284,7 +284,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         routerBody['method'] !== 'initialize';
       const respondNoSession = (): never => {
         const requestId = (routerBody?.['id'] as string | number | null | undefined) ?? null;
-        this.respond({
+        // `this.respond(...)` always throws a FlowControl envelope; we cast the
+        // call to `never` rather than emitting an unreachable Error so the
+        // dependency on FlowControl semantics is explicit.
+        return this.respond({
           kind: 'json',
           status: 200,
           contentType: 'application/json; charset=utf-8',
@@ -297,8 +300,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
               data: { transport: 'streamable-http', expected: 'initialize' },
             },
           },
-        });
-        throw new Error('unreachable');
+        }) as never;
       };
 
       // Handle DELETE method immediately - it's for session termination

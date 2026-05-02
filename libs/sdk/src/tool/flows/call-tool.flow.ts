@@ -1238,7 +1238,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           path: found.path,
           value: String(found.value),
         });
-        throw new InvalidOutputError();
+        throw new InvalidOutputError({
+          reason: 'non-finite-number',
+          path: found.path,
+          value: String(found.value),
+        });
       }
     }
 

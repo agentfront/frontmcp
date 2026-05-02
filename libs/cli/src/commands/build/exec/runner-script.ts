@@ -5,9 +5,21 @@
 
 import { type FrontmcpExecConfig } from './config';
 
+/**
+ * Defense-in-depth: scrub anything outside `[a-zA-Z0-9._+-]` from values that
+ * the runner / installer scripts interpolate into bash. The user owns
+ * `frontmcp.config`, so a malicious value would be self-inflicted, but the
+ * generated scripts are committed into repos and downloaded by end-users —
+ * so we keep them safe to copy/paste regardless of upstream config hygiene.
+ */
+export function sanitizeShellLiteral(value: string): string {
+  // `-` placed last in the character class is literal, so no escape needed.
+  return value.replace(/[^A-Za-z0-9._+-]/g, '_');
+}
+
 export function generateRunnerScript(config: FrontmcpExecConfig, cliMode?: boolean, seaMode?: boolean): string {
   const name = config.name;
-  const version = config.version || '0.0.0';
+  const version = sanitizeShellLiteral(config.version || '0.0.0');
 
   // #377 — `--target node` runner used to silently exec the bundle for any
   // flag, so `./frontegg-bin --help` quietly booted the HTTP server. Intercept

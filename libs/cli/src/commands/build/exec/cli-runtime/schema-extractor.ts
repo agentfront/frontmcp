@@ -229,10 +229,9 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
     // when no port was declared — caller falls back to its own default.
     let httpPort: number | undefined;
     try {
-      const cfg = (typeof configOrClass === 'function' && typeof Reflect !== 'undefined' &&
-        (Reflect as { getMetadata?: (k: string, t: unknown) => unknown }).getMetadata)
-        ? ((Reflect as { getMetadata: (k: string, t: unknown) => unknown })
-            .getMetadata('__frontmcp:config', configOrClass) as Record<string, unknown> | undefined)
+      const sdk = require('@frontmcp/sdk') as { getDecoratorConfig?: (t: unknown) => Record<string, unknown> | undefined };
+      const cfg = typeof sdk.getDecoratorConfig === 'function'
+        ? sdk.getDecoratorConfig(configOrClass)
         : (configOrClass as Record<string, unknown> | undefined);
       const http = cfg?.['http'] as { port?: number } | undefined;
       if (http && typeof http.port === 'number') httpPort = http.port;

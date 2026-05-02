@@ -7,6 +7,34 @@ import { InternalMcpError } from '../../errors/mcp.error';
 import { frontMcpMetadataSchema, type FrontMcpMetadata } from '../metadata';
 import { FrontMcpTokens } from '../tokens';
 
+/**
+ * Reflect metadata key under which the @FrontMcp() decorator stores the
+ * fully-parsed configuration. Treat as a private implementation detail —
+ * external callers should use `getDecoratorConfig(target)` instead so we
+ * can change the key or shape without breaking them.
+ *
+ * @internal
+ */
+export const FRONTMCP_CONFIG_METADATA_KEY = '__frontmcp:config';
+
+/**
+ * Read the @FrontMcp() decorator's parsed config off a class target. Returns
+ * `undefined` when the input is not a decorated class — callers should treat
+ * that as "no metadata available" and fall back to other sources.
+ *
+ * Used by the schema extractor and adapter validators to resolve the
+ * server's http port, the cloudflare sqlite/redis check, and other
+ * build-time decisions without reaching into Reflect directly.
+ */
+export function getDecoratorConfig(target: unknown): FrontMcpMetadata | undefined {
+  if (typeof target !== 'function') return undefined;
+  if (typeof Reflect === 'undefined') return undefined;
+  const reflect = Reflect as { getMetadata?: (k: string, t: unknown) => unknown };
+  if (typeof reflect.getMetadata !== 'function') return undefined;
+  const config = reflect.getMetadata(FRONTMCP_CONFIG_METADATA_KEY, target);
+  return (config ?? undefined) as FrontMcpMetadata | undefined;
+}
+
 // Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
 // Uses direct relative paths instead of require('@frontmcp/sdk') which would create
 // a circular dependency since index.ts exports this decorator.
@@ -70,8 +98,10 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       Reflect.defineMetadata(FrontMcpTokens[property] ?? property, metadata[property], target);
     }
 
-    // Store full parsed config for build-time extraction (e.g., schema-extractor via connect())
-    Reflect.defineMetadata('__frontmcp:config', metadata, target);
+    // Store full parsed config for build-time extraction (e.g., schema-extractor via connect()).
+    // The metadata key is a private contract — read it via `getDecoratorConfig()` from the SDK,
+    // not directly, so the key/shape can change without breaking external callers.
+    Reflect.defineMetadata(FRONTMCP_CONFIG_METADATA_KEY, metadata, target);
 
     const isServerless = getEnvFlag('FRONTMCP_SERVERLESS');
     const isSchemaExtract = getEnvFlag('FRONTMCP_SCHEMA_EXTRACT');

@@ -124,7 +124,8 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 
     // 8. Register in registry. CLI builds omit the network section (they don't
     // bind a port), so fall back to undefined when --port wasn't passed.
-    const port = opts.port || manifestData.network?.defaultPort;
+    // Use `??` (not `||`) so an explicit `--port 0` overrides the manifest.
+    const port = opts.port ?? manifestData.network?.defaultPort;
     registerApp(manifestData.name, {
       version: manifestData.version,
       installDir,

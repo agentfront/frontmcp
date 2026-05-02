@@ -4,6 +4,7 @@
  */
 
 import { type FrontmcpExecConfig } from './config';
+import { sanitizeShellLiteral } from './runner-script';
 
 export interface InstallerScriptContext {
   /** Build target this installer was generated for. Drives binary copying and Node version checks. */
@@ -19,7 +20,9 @@ export function generateInstallerScript(
   const name = config.name;
   const nativeAddons = config.dependencies?.nativeAddons || [];
   const storageType = config.storage?.type || 'none';
-  const nodeVersion = config.nodeVersion || '>=22.0.0';
+  // Sanitize before interpolating into bash echo / error messages — the
+  // user-controlled `nodeVersion` ends up in command lines verbatim.
+  const nodeVersion = sanitizeShellLiteral(config.nodeVersion || '>=22.0.0');
   const minNodeMajor = extractMinMajor(nodeVersion);
 
   // CLI/SEA installs ship a self-contained binary — no Node runtime required

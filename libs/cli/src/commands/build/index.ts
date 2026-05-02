@@ -7,7 +7,13 @@ import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
-import { type DeploymentTarget, findDeployment, type FrontMcpConfigParsed, getDeploymentTargets, loadFrontMcpConfig } from '../../config';
+import {
+  type DeploymentTarget,
+  findDeployment,
+  type FrontMcpConfigParsed,
+  getDeploymentTargets,
+  tryLoadFrontMcpConfig,
+} from '../../config';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);
@@ -127,27 +133,15 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
 
   // Try loading frontmcp.config for multi-target support.
   //
-  // #365 — only swallow the "no config file present" case. If a config file
-  // EXISTS but fails to load (e.g., a TS config under "type": "commonjs"
-  // that the loader couldn't transpile), surface the error instead of
-  // silently using defaults — that was the silent-corruption mode the
-  // original loader had.
-  let config: FrontMcpConfigParsed | undefined;
-  const configExists = (
-    await Promise.all(
-      ['frontmcp.config.ts', 'frontmcp.config.js', 'frontmcp.config.json', 'frontmcp.config.mjs', 'frontmcp.config.cjs']
-        .map((f) => fileExists(path.join(cwd, f))),
-    )
-  ).some(Boolean);
-  if (configExists) {
-    config = await loadFrontMcpConfig(cwd);
-  } else {
-    try {
-      config = await loadFrontMcpConfig(cwd);
-    } catch {
-      // No config file present and no package.json → fall back to CLI flags only.
-    }
-  }
+  // #365 — `tryLoadFrontMcpConfig` differentiates between recoverable cases:
+  //   - no config file present                          → returns undefined
+  //   - config exists but doesn't match the new schema  → returns undefined
+  //     (legacy top-level `cli`/`sea`/`esbuild` shape — picked up later by
+  //     the exec-build's own `loadExecConfig`)
+  // …and hard failures:
+  //   - file exists but can't be parsed (TS syntax error, broken require)
+  //     → the error propagates, no silent-default regression.
+  const config: FrontMcpConfigParsed | undefined = await tryLoadFrontMcpConfig(cwd);
 
   // If no -t flag and config has deployments, build all targets from config
   if (!opts.buildTarget && config && config.deployments.length > 0) {
@@ -276,33 +270,13 @@ async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<
   }
 
   // #375 — adapter-level pre-validation: read the entry's @FrontMcp() config
-  // metadata via the schema-extractor's lightweight path and let the adapter
-  // reject incompatible features (sqlite/redis on Workers, etc.) before
-  // emitting an unrunnable bundle.
+  // metadata and let the adapter reject incompatible features
+  // (sqlite/redis on Workers, etc.) before emitting an unrunnable bundle.
+  // `loadEntryDecoratorConfig` handles both compiled-JS and raw-TS entries
+  // (TS goes through esbuild + Module._compile so we don't need a tsc pass).
   if (template.validate) {
-    let decoratorConfig: Record<string, unknown> | undefined;
-    try {
-      // Best-effort: load the entry as a CJS require and pull the decorator's
-      // attached metadata off the class. Failures are non-fatal — the build
-      // continues and the adapter validate() falls back to a no-op.
-      const Reflect = (globalThis as { Reflect?: { getMetadata?: (k: string, t: unknown) => unknown } }).Reflect;
-      const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
-      process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
-      try {
-        const mod = require(entry);
-        const target = (mod && (mod.default || mod)) as unknown;
-        if (typeof target === 'function' && Reflect?.getMetadata) {
-          decoratorConfig = Reflect.getMetadata('__frontmcp:config', target) as Record<string, unknown> | undefined;
-        } else if (target && typeof target === 'object') {
-          decoratorConfig = target as Record<string, unknown>;
-        }
-      } finally {
-        if (prev === undefined) delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
-        else process.env['FRONTMCP_SCHEMA_EXTRACT'] = prev;
-      }
-    } catch {
-      /* fall through — adapter validate() handles undefined input */
-    }
+    const { loadEntryDecoratorConfig } = await import('./load-entry-config.js');
+    const decoratorConfig = await loadEntryDecoratorConfig(entry);
     template.validate(decoratorConfig);
   }
 

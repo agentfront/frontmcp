@@ -361,9 +361,10 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir, cli: true } as any);
 
         const cli = getCliMocks();
-        // Two calls: (1) early decorator-config probe to resolve manifest port (#371),
-        // (2) full schema extraction for CLI command generation.
-        expect(cli.extractSchemas).toHaveBeenCalledTimes(2);
+        // F4: schema extraction is now run once per build — the result is
+        // reused for both the manifest port resolution (#371) and CLI
+        // command generation, instead of two ~200ms calls per build.
+        expect(cli.extractSchemas).toHaveBeenCalledTimes(1);
         expect(cli.extractSchemas.mock.calls[0][0]).toContain('test-app.bundle.js');
       } finally {
         process.chdir(originalCwd);
@@ -405,8 +406,8 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir } as any);
 
         const cli = getCliMocks();
-        // Two calls: decorator-config probe + full CLI schema extraction.
-        expect(cli.extractSchemas).toHaveBeenCalledTimes(2);
+        // Single shared extraction (F4).
+        expect(cli.extractSchemas).toHaveBeenCalledTimes(1);
       } finally {
         process.chdir(originalCwd);
       }
@@ -420,8 +421,8 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir, cli: true } as any);
 
         const cli = getCliMocks();
-        // Two calls: decorator-config probe + full CLI schema extraction.
-        expect(cli.extractSchemas).toHaveBeenCalledTimes(2);
+        // Single shared extraction (F4).
+        expect(cli.extractSchemas).toHaveBeenCalledTimes(1);
       } finally {
         process.chdir(originalCwd);
       }

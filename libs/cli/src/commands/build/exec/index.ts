@@ -134,25 +134,28 @@ export async function buildExec(
     `${c('green', '[build:exec]')} bundle created: ${path.relative(cwd, bundleResult.bundlePath)} (${formatSize(bundleResult.bundleSize)})`,
   );
 
-  // 6. Extract decorator-level config (http.port, etc.) from the server
-  //    bundle. This runs BEFORE schema extraction so the manifest can
-  //    reflect the port the server will actually bind on.
+  // 6. Extract schema once and reuse for both the manifest port resolution
+  //    (#371) and the CLI command generation (when cliEnabled). Schema
+  //    extraction loads the user's bundle and boots an in-memory client
+  //    (~200ms); running it twice on every --target cli build added up.
   const bundleFilename = `${config.name}.bundle.js`;
-  let decoratorHttpPort: number | undefined;
+  const { extractSchemas } = await import('./cli-runtime/schema-extractor.js');
+  let extractedSchema: Awaited<ReturnType<typeof extractSchemas>> | undefined;
   try {
-    const { extractSchemas } = await import('./cli-runtime/schema-extractor.js');
-    const earlySchema = await extractSchemas(bundleResult.bundlePath);
-    decoratorHttpPort = earlySchema.httpPort;
-  } catch {
-    // Schema extraction is best-effort here — the cliEnabled branch will
-    // re-run it for the full schema. If it fails, the manifest port falls
-    // back to its default precedence chain.
+    extractedSchema = await extractSchemas(bundleResult.bundlePath);
+  } catch (err) {
+    if (cliEnabled) {
+      // CLI builds genuinely need the schema — fail loud.
+      throw err;
+    }
+    // For --target node we only need httpPort from the schema; falling back
+    // to the manifest's default precedence chain is acceptable.
   }
 
   // 7. Generate manifest with extracted decorator port + per-deployment cli config
   const manifest = generateManifest(config, bundleFilename, {
     target: cliEnabled ? 'cli' : 'node',
-    decoratorHttpPort,
+    decoratorHttpPort: extractedSchema?.httpPort,
     outputDefault: config.cli?.outputDefault as 'text' | 'json' | undefined,
   });
 
@@ -161,7 +164,7 @@ export async function buildExec(
   if (cliEnabled) {
     console.log(`${c('cyan', '[build:exec]')} extracting schemas for CLI...`);
 
-    const { extractSchemas, SYSTEM_TOOL_NAMES } = await import('./cli-runtime/schema-extractor.js');
+    const { SYSTEM_TOOL_NAMES } = await import('./cli-runtime/schema-extractor.js');
     const { generateCliEntry, resolveToolCommandName } = await import('./cli-runtime/generate-cli-entry.js');
     const { generateOutputFormatterSource } = await import('./cli-runtime/output-formatter.js');
     const { generateSessionManagerSource } = await import('./cli-runtime/session-manager.js');
@@ -170,8 +173,10 @@ export async function buildExec(
     const { generateDaemonClientSource } = await import('./cli-runtime/daemon-client.js');
     const { bundleCliWithEsbuild } = await import('./cli-runtime/cli-bundler.js');
 
-    // Extract schemas from server bundle
-    const schema = await extractSchemas(bundleResult.bundlePath);
+    // Reuse the schema extracted in step 6 (single extraction per build).
+    // The non-null assertion is safe — we threw above if cliEnabled and
+    // extraction failed, so by here `extractedSchema` is always defined.
+    const schema = extractedSchema!;
 
     const capabilities = schema.capabilities;
     const userToolCount = schema.tools.filter(

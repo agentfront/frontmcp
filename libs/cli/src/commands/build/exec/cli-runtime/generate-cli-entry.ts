@@ -4,6 +4,7 @@
  */
 
 import { type CliConfig, type OAuthConfig } from '../config';
+import { EXTRACT_PUBLIC_MESSAGE_SNIPPET } from './extract-public-message.snippet';
 import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
 
@@ -237,49 +238,30 @@ async function closeClient() {
 // Flag set by long-running commands (serve, daemon) to prevent the footer from calling process.exit().
 var _isLongRunning = false;
 
-// Walk an error chain (cause / originalError) and return the most user-friendly
-// message — prefers PublicMcpError.getPublicMessage() over wrapped wrappers like
-// "Tool 'X' execution failed: Unknown error". Mirrors @frontmcp/sdk's
-// extractPublicMessage so the SEA bundle stays self-contained.
-function _extractPublicMessage(err) {
-  if (err == null) return 'Unknown error';
-  if (typeof err === 'string') return err;
-  // Direct PublicMcpError (has isPublic === true and a non-default message)
-  if (err && err.isPublic === true && err.message) return err.message;
-  // Wrapped: try originalError, then cause
-  var inner = err && (err.originalError || err.cause);
-  if (inner) {
-    var innerMsg = _extractPublicMessage(inner);
-    if (innerMsg && innerMsg !== 'Unknown error') return innerMsg;
-  }
-  // Fallback: own .message, but skip generic wrappers when we have nothing better.
-  if (err.message) return err.message;
-  return String(err);
-}
-// Print an error with the best available public message and set the appropriate
-// exit code (1 = runtime error, 2 = usage error). Centralized so every action
-// handler reports the same shape.
-function _exitWithError(err, code) {
-  var msg = _extractPublicMessage(err);
-  console.error('Error: ' + msg);
-  process.exitCode = code || 1;
-}
+${EXTRACT_PUBLIC_MESSAGE_SNIPPET}
 
 var program = new Command();
 // Make Commander's own usage errors (unknown subcommand, missing required option,
 // invalid value) exit with code 2 instead of the default 0 — matches POSIX
 // convention and lets shell scripts/CI distinguish runtime failures from usage.
+//
+// Sets process.exitCode and re-throws so the parseAsync() footer can run
+// closeClient() / native-addon teardown before the actual exit. Calling
+// process.exit() directly here would skip that and could leave better-sqlite3
+// / ONNX / file handles in a corrupt state for short-lived runs.
 program.exitOverride(function(err) {
   if (err.code === 'commander.helpDisplayed' || err.code === 'commander.help' || err.code === 'commander.version') {
-    process.exit(0);
-  }
-  if (err.code === 'commander.unknownCommand' || err.code === 'commander.unknownOption' ||
+    process.exitCode = 0;
+  } else if (err.code === 'commander.unknownCommand' || err.code === 'commander.unknownOption' ||
       err.code === 'commander.missingArgument' || err.code === 'commander.missingMandatoryOptionValue' ||
       err.code === 'commander.invalidArgument' || err.code === 'commander.optionMissingArgument' ||
       err.code === 'commander.invalidOptionArgument' || err.code === 'commander.excessArguments') {
-    process.exit(2);
+    process.exitCode = 2;
+  } else {
+    process.exitCode = 1;
   }
-  process.exit(1);
+  // Re-throw so parseAsync().catch in the footer runs cleanup before exit.
+  throw err;
 });
 program
   .name(${JSON.stringify(appName)})
@@ -369,6 +351,15 @@ ${optionLines}
       var result = await client.callTool(${JSON.stringify(tool.name)}, args);
       var mode = program.opts().output || ${JSON.stringify('text')};
       console.log(fmt.formatToolResult(result, mode));
+      // The SDK converts thrown errors into a CallToolResult with isError:true
+      // (so HTTP/JSON-RPC clients still get a structured response). Detect
+      // that here and map to a non-zero exit code so shell scripts can gate
+      // on success — Zod input validation errors → exit 2 (usage), all
+      // other tool errors → exit 1 (runtime).
+      if (result && result.isError === true) {
+        var rmeta = (result && result._meta) || {};
+        process.exitCode = (rmeta.code === 'INVALID_INPUT') ? 2 : 1;
+      }
     } catch (err) {
       var meta = err && err._meta ? err._meta : (err && err.data && err.data._meta ? err.data._meta : null);
       if (meta && meta.authorization_required) {
@@ -377,10 +368,9 @@ ${optionLines}
         console.error('Or run: ' + ${JSON.stringify(appName)} + ' login');
         process.exitCode = 1;
       } else {
-        // Extract the public message (PublicMcpError → its message, not the
-        // wrapped "Tool 'X' execution failed: Unknown error" of ToolExecutionError).
-        // Zod / commander usage errors → exit 2; runtime errors → exit 1.
-        var isUsage = err && (err.code === 'INVALID_INPUT' || err.code === 'INVALID_PARAMS');
+        // Thrown error path (transport / DI / pre-flow failure) — same
+        // mapping as the isError result path above.
+        var isUsage = err && err.code === 'INVALID_INPUT';
         _exitWithError(err, isUsage ? 2 : 1);
       }
     }
@@ -625,6 +615,13 @@ promptCmd
 // Symmetric \`prompt get <name>\` to mirror \`resource read <uri>\`. Looks up
 // per-prompt argument metadata from \`promptArgs\` and forwards as MCP
 // \`prompts/get\` request arguments. Unknown / missing required flags exit 2.
+//
+// Robust flag parser supports:
+//   --key value         (canonical form)
+//   --key=value         (single-token form)
+//   --bool              (boolean — value defaults to "true")
+//   --                  (end-of-options marker; everything after is ignored)
+// Unknown flags fail-fast with exit 2 instead of being silently dropped.
 var promptArgs = {
       ${promptArgsMap}
     };
@@ -640,19 +637,39 @@ var _getCmd = promptCmd
         process.exitCode = 1;
         return;
       }
-      // Parse trailing --key value pairs from this command's args
-      var raw = this.args.slice(1);
+      var rawTokens = this.args.slice(1);
       var args = {};
-      for (var i = 0; i < raw.length; i++) {
-        var tok = raw[i];
-        if (typeof tok === 'string' && tok.indexOf('--') === 0) {
-          var key = tok.slice(2);
-          var val = (i + 1 < raw.length) ? raw[i + 1] : undefined;
-          // Map kebab → original argument name from the spec
-          var match = null;
-          for (var s = 0; s < spec.length; s++) { if (spec[s].kebab === key) { match = spec[s]; break; } }
-          if (match) { args[match.name] = val; i++; }
+      var unknown = [];
+      var byKebab = {};
+      for (var s = 0; s < spec.length; s++) byKebab[spec[s].kebab] = spec[s];
+      for (var i = 0; i < rawTokens.length; i++) {
+        var tok = rawTokens[i];
+        if (tok === '--') break;
+        if (typeof tok !== 'string' || tok.indexOf('--') !== 0) continue;
+        var keyAndVal = tok.slice(2);
+        var key, val;
+        var eq = keyAndVal.indexOf('=');
+        if (eq >= 0) {
+          key = keyAndVal.slice(0, eq);
+          val = keyAndVal.slice(eq + 1);
+        } else {
+          key = keyAndVal;
+          var next = (i + 1 < rawTokens.length) ? rawTokens[i + 1] : undefined;
+          if (typeof next === 'string' && next.indexOf('--') !== 0) {
+            val = next;
+            i++;
+          } else {
+            val = 'true';
+          }
         }
+        var match = byKebab[key];
+        if (!match) { unknown.push('--' + key); continue; }
+        args[match.name] = val;
+      }
+      if (unknown.length > 0) {
+        console.error('Error: unknown option(s) for prompt "' + name + '": ' + unknown.join(', '));
+        process.exitCode = 2;
+        return;
       }
       // Validate required args
       for (var r = 0; r < spec.length; r++) {
@@ -1703,9 +1720,20 @@ program.parseAsync(process.argv).then(async function() {
   // (ONNX runtime, etc.) can release mutexes before V8 tears down.
   setImmediate(function() { process.exit(process.exitCode || 0); });
 }).catch(async function(err) {
-  console.error('Fatal:', err.message || err);
+  // Commander errors come through exitOverride with the code already set on
+  // process.exitCode. They are user-facing usage errors, not fatals — don't
+  // re-print "Fatal:" / "Unknown error" for them.
+  var isCommanderErr = err && typeof err.code === 'string' && err.code.indexOf('commander.') === 0;
+  if (!isCommanderErr) {
+    console.error('Fatal:', err.message || err);
+  }
   await closeClient();
-  process.exit(1);
+  // Use the exit code set by exitOverride (which can legitimately be 0 for
+  // --help / --version). Only fall back to 1 when no code was set.
+  setImmediate(function() {
+    var code = (typeof process.exitCode === 'number') ? process.exitCode : 1;
+    process.exit(code);
+  });
 });`;
 }
 
