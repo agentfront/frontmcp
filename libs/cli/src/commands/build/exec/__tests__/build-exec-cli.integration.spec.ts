@@ -361,7 +361,9 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir, cli: true } as any);
 
         const cli = getCliMocks();
-        expect(cli.extractSchemas).toHaveBeenCalledTimes(1);
+        // Two calls: (1) early decorator-config probe to resolve manifest port (#371),
+        // (2) full schema extraction for CLI command generation.
+        expect(cli.extractSchemas).toHaveBeenCalledTimes(2);
         expect(cli.extractSchemas.mock.calls[0][0]).toContain('test-app.bundle.js');
       } finally {
         process.chdir(originalCwd);
@@ -403,7 +405,8 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir } as any);
 
         const cli = getCliMocks();
-        expect(cli.extractSchemas).toHaveBeenCalledTimes(1);
+        // Two calls: decorator-config probe + full CLI schema extraction.
+        expect(cli.extractSchemas).toHaveBeenCalledTimes(2);
       } finally {
         process.chdir(originalCwd);
       }
@@ -417,7 +420,8 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir, cli: true } as any);
 
         const cli = getCliMocks();
-        expect(cli.extractSchemas).toHaveBeenCalledTimes(1);
+        // Two calls: decorator-config probe + full CLI schema extraction.
+        expect(cli.extractSchemas).toHaveBeenCalledTimes(2);
       } finally {
         process.chdir(originalCwd);
       }
@@ -572,7 +576,10 @@ describe('buildExec() integration', () => {
       }
     });
 
-    it('should call buildSea for CLI bundle when both sea and cli enabled', async () => {
+    it('should call buildSea once (CLI only) when both sea and cli enabled', async () => {
+      // #373 — `--target cli` previously emitted both a server SEA (~114 MB,
+      // unused by the runner) and a CLI SEA. Now only the CLI SEA is built;
+      // the server-mode pass is reserved for `--target node`.
       const originalCwd = process.cwd();
       process.chdir(tmpDir);
 
@@ -580,8 +587,24 @@ describe('buildExec() integration', () => {
         await buildExec({ outDir, cli: true, sea: true } as any);
 
         const seaBuilder = require('../sea-builder');
-        // Once for server, once for CLI
-        expect(seaBuilder.buildSea).toHaveBeenCalledTimes(2);
+        expect(seaBuilder.buildSea).toHaveBeenCalledTimes(1);
+        // Confirm it's the CLI binary that was built (name has `-cli` suffix)
+        const seaCalls = seaBuilder.buildSea.mock.calls as Array<[unknown, unknown, string]>;
+        expect(seaCalls[0]?.[2]).toMatch(/-cli$/);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('builds the server SEA only (not CLI) for --target node', async () => {
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+      try {
+        await buildExec({ outDir, sea: true } as any);
+        const seaBuilder = require('../sea-builder');
+        expect(seaBuilder.buildSea).toHaveBeenCalledTimes(1);
+        const seaCalls = seaBuilder.buildSea.mock.calls as Array<[unknown, unknown, string]>;
+        expect(seaCalls[0]?.[2]).not.toMatch(/-cli$/);
       } finally {
         process.chdir(originalCwd);
       }

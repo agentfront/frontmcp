@@ -2,20 +2,22 @@
  * runInstall() orchestrator — installs an MCP app from npm, local, or git source.
  */
 
-import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { ParsedArgs } from '../../core/args';
-import { c } from '../../core/colors';
-import { appDir, ensurePmDirs } from '../pm/paths';
-import { parseInstallSource } from './types';
-import { registerApp } from './registry';
-import { runQuestionnaire, writeEnvFile } from './questionnaire';
-import { fetchFromNpm } from './sources/npm';
-import { fetchFromLocal } from './sources/local';
-import { fetchFromGit } from './sources/git';
-import { ExecManifest } from '../build/exec/manifest';
+import * as path from 'path';
+
 import { runCmd } from '@frontmcp/utils';
+
+import { type ParsedArgs } from '../../core/args';
+import { c } from '../../core/colors';
+import { type ExecManifest } from '../build/exec/manifest';
+import { appDir, ensurePmDirs } from '../pm/paths';
+import { runQuestionnaire, writeEnvFile } from './questionnaire';
+import { registerApp } from './registry';
+import { fetchFromGit } from './sources/git';
+import { fetchFromLocal } from './sources/local';
+import { fetchFromNpm } from './sources/npm';
+import { parseInstallSource } from './types';
 
 export async function runInstall(opts: ParsedArgs): Promise<void> {
   const sourceStr = opts._[1];
@@ -120,8 +122,9 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
       console.log(`${c('green', '[install]')} configuration saved to .env`);
     }
 
-    // 8. Register in registry
-    const port = opts.port || manifestData.network.defaultPort;
+    // 8. Register in registry. CLI builds omit the network section (they don't
+    // bind a port), so fall back to undefined when --port wasn't passed.
+    const port = opts.port || manifestData.network?.defaultPort;
     registerApp(manifestData.name, {
       version: manifestData.version,
       installDir,

@@ -1,5 +1,5 @@
 // errors/mcp.error.ts
-import { randomBytes, bytesToHex, isProduction } from '@frontmcp/utils';
+import { bytesToHex, isProduction, randomBytes } from '@frontmcp/utils';
 
 /**
  * MCP-specific error codes per JSON-RPC specification.
@@ -570,4 +570,44 @@ export function toMcpError(error: any): McpError {
 export function formatMcpErrorResponse(error: any, isDevelopment = !isProduction()) {
   const mcpError = toMcpError(error);
   return mcpError.toMcpError(isDevelopment);
+}
+
+/**
+ * Walk an error chain (cause / originalError) and return the most
+ * user-friendly message available — preferring `PublicMcpError.getPublicMessage()`,
+ * falling back to a wrapped `originalError`'s public message, and finally
+ * to `error.message` / `String(error)`.
+ *
+ * Used by the CLI error formatter so that `this.fail(new PublicMcpError('X'))`
+ * surfaces "X" rather than the wrapper's "Tool execution failed: Unknown error".
+ */
+export function extractPublicMessage(error: unknown): string {
+  // 1. Direct PublicMcpError → its public message
+  if (error instanceof PublicMcpError) {
+    return error.getPublicMessage();
+  }
+  // 2. Internal McpError that wraps an originalError — prefer the inner one
+  //    when it is a PublicMcpError. Covers `ToolExecutionError(PublicMcpError)`.
+  if (error instanceof McpError) {
+    const inner = (error as { originalError?: unknown }).originalError;
+    if (inner !== undefined) {
+      const innerMsg = extractPublicMessage(inner);
+      if (innerMsg && innerMsg !== 'Unknown error') return innerMsg;
+    }
+    // Internal errors expose a sanitized public message, but the wrapped
+    // `getPublicMessage()` prefix is more informative than "Unknown error".
+    const own = error.getPublicMessage();
+    if (own) return own;
+  }
+  // 3. Plain Error — surface .message; check for a `cause` chain.
+  if (error instanceof Error) {
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause !== undefined) {
+      const causeMsg = extractPublicMessage(cause);
+      if (causeMsg && causeMsg !== 'Unknown error') return causeMsg;
+    }
+    if (error.message) return error.message;
+  }
+  // 4. Anything else — coerce to string.
+  return error == null ? 'Unknown error' : String(error);
 }

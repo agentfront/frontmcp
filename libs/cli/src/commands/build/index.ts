@@ -7,7 +7,7 @@ import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
-import { findDeployment, type FrontMcpConfigParsed, getDeploymentTargets, loadFrontMcpConfig } from '../../config';
+import { type DeploymentTarget, findDeployment, type FrontMcpConfigParsed, getDeploymentTargets, loadFrontMcpConfig } from '../../config';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);
@@ -42,6 +42,16 @@ async function generateAdapterFiles(
     const entryPath = path.join(outDir, 'index.js');
     await fsp.writeFile(entryPath, entryContent, 'utf8');
     console.log(c('green', `  Generated ${adapter} entry at ${path.relative(cwd, entryPath)}`));
+
+    // ESM adapters (vercel, lambda) emit `import` syntax in the entry. The
+    // user's project may be `"type": "commonjs"`, in which case Node and
+    // rspack treat the .js file as CJS and parsing fails on `import`.
+    // Drop a sibling package.json with `"type": "module"` so the dist
+    // directory is always interpreted correctly regardless of the parent.
+    if (template.moduleFormat === 'esnext') {
+      const pkgPath = path.join(outDir, 'package.json');
+      await fsp.writeFile(pkgPath, JSON.stringify({ type: 'module' }, null, 2), 'utf8');
+    }
   }
 
   // Bundle if adapter requires it (creates single CJS file for serverless)
@@ -59,23 +69,32 @@ async function generateAdapterFiles(
     }
   }
 
-  // Generate config file if adapter has one (skip if already exists)
+  // Generate config file if adapter has one. By default we preserve an
+  // existing user-edited file. Adapters that mark `alwaysWriteConfig` (e.g.,
+  // cloudflare's wrangler.toml) overwrite it on every build so the
+  // generated `main = ...` path always matches the actual build output —
+  // see #374.
   if (template.getConfig && template.configFileName) {
     const configPath = path.join(cwd, template.configFileName);
+    const exists = await fileExists(configPath);
 
-    if (await fileExists(configPath)) {
-      console.log(c('yellow', `  ${template.configFileName} already exists (skipping)`));
-    } else {
-      const configContent = template.getConfig(cwd);
-
+    const configContent = template.getConfig(cwd);
+    const writeIt = async (): Promise<void> => {
       if (typeof configContent === 'string') {
-        // Write as plain text (e.g., TOML for wrangler.toml)
         await fsp.writeFile(configPath, configContent, 'utf8');
       } else {
-        // Write as JSON
         await writeJSON(configPath, configContent);
       }
+    };
+
+    if (!exists) {
+      await writeIt();
       console.log(c('green', `  Generated ${template.configFileName}`));
+    } else if (template.alwaysWriteConfig) {
+      await writeIt();
+      console.log(c('green', `  Updated ${template.configFileName} (build output reference)`));
+    } else {
+      console.log(c('yellow', `  ${template.configFileName} already exists (skipping)`));
     }
   }
 }
@@ -106,12 +125,28 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
 export async function runBuild(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
 
-  // Try loading frontmcp.config for multi-target support
+  // Try loading frontmcp.config for multi-target support.
+  //
+  // #365 — only swallow the "no config file present" case. If a config file
+  // EXISTS but fails to load (e.g., a TS config under "type": "commonjs"
+  // that the loader couldn't transpile), surface the error instead of
+  // silently using defaults — that was the silent-corruption mode the
+  // original loader had.
   let config: FrontMcpConfigParsed | undefined;
-  try {
+  const configExists = (
+    await Promise.all(
+      ['frontmcp.config.ts', 'frontmcp.config.js', 'frontmcp.config.json', 'frontmcp.config.mjs', 'frontmcp.config.cjs']
+        .map((f) => fileExists(path.join(cwd, f))),
+    )
+  ).some(Boolean);
+  if (configExists) {
     config = await loadFrontMcpConfig(cwd);
-  } catch {
-    // No config file — fall back to CLI flags only
+  } else {
+    try {
+      config = await loadFrontMcpConfig(cwd);
+    } catch {
+      // No config file present and no package.json → fall back to CLI flags only.
+    }
   }
 
   // If no -t flag and config has deployments, build all targets from config
@@ -140,7 +175,7 @@ async function buildSingleTarget(
   opts: ParsedArgs,
   config?: FrontMcpConfigParsed,
 ): Promise<void> {
-  const deployment = config ? findDeployment(config, target) : undefined;
+  const deployment:DeploymentTarget | undefined = config ? findDeployment(config, target) : undefined;
 
   // Resolve output directory: deployment.outDir > CLI --out-dir > dist/{target}
   const baseOutDir = path.resolve(process.cwd(), opts.outDir || 'dist');
@@ -152,14 +187,48 @@ async function buildSingleTarget(
   const entry = opts.entry || config?.entry;
   const targetOpts = { ...opts, outDir: targetOutDir, entry };
 
+  // #370: forward `build.storage` and per-deployment `cli.outputDefault` from
+  // the FrontMcp config into the exec build so the manifest reflects them.
+  // The exec build has its own loader (`loadExecConfig`) that doesn't see
+  // the deployment-level shape; passing these via opts merges them in
+  // `normalizeConfig` before the manifest is generated.
+  //
+  // Only the cli deployment shape carries a `cli` block; map it down to the
+  // narrow exec-config shape (outputDefault / description / authRequired) so
+  // the result is a clean object, never `false`.
+  const cliDeploymentConfig = deployment?.target === 'cli' ? deployment.cli : undefined;
+  const execOverrides: {
+    storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
+    cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+  } = {
+    storage: config?.build?.storage,
+    cli: cliDeploymentConfig
+      ? {
+          ...(cliDeploymentConfig.outputDefault ? { outputDefault: cliDeploymentConfig.outputDefault } : {}),
+          ...(cliDeploymentConfig.description ? { description: cliDeploymentConfig.description } : {}),
+          ...(typeof cliDeploymentConfig.authRequired === 'boolean'
+            ? { authRequired: cliDeploymentConfig.authRequired }
+            : {}),
+        }
+      : undefined,
+  };
+
   switch (target) {
     case 'cli': {
       const { buildExec } = await import('./exec/index.js');
-      return buildExec({ ...targetOpts, cli: true, sea: !opts.js } as ParsedArgs & { cli: boolean; sea: boolean });
+      return buildExec({
+        ...targetOpts,
+        cli: true,
+        sea: !opts.js,
+        execOverrides,
+      } as ParsedArgs & { cli: boolean; sea: boolean; execOverrides?: typeof execOverrides });
     }
     case 'node': {
       const { buildExec } = await import('./exec/index.js');
-      return buildExec(targetOpts);
+      return buildExec({
+        ...targetOpts,
+        execOverrides,
+      } as ParsedArgs & { execOverrides?: typeof execOverrides });
     }
     case 'sdk': {
       const { buildSdk } = await import('./sdk/index.js');
@@ -204,6 +273,37 @@ async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<
     console.log(
       c('yellow', 'Cloudflare Workers adapter is experimental. See docs for limitations.'),
     );
+  }
+
+  // #375 — adapter-level pre-validation: read the entry's @FrontMcp() config
+  // metadata via the schema-extractor's lightweight path and let the adapter
+  // reject incompatible features (sqlite/redis on Workers, etc.) before
+  // emitting an unrunnable bundle.
+  if (template.validate) {
+    let decoratorConfig: Record<string, unknown> | undefined;
+    try {
+      // Best-effort: load the entry as a CJS require and pull the decorator's
+      // attached metadata off the class. Failures are non-fatal — the build
+      // continues and the adapter validate() falls back to a no-op.
+      const Reflect = (globalThis as { Reflect?: { getMetadata?: (k: string, t: unknown) => unknown } }).Reflect;
+      const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
+      process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+      try {
+        const mod = require(entry);
+        const target = (mod && (mod.default || mod)) as unknown;
+        if (typeof target === 'function' && Reflect?.getMetadata) {
+          decoratorConfig = Reflect.getMetadata('__frontmcp:config', target) as Record<string, unknown> | undefined;
+        } else if (target && typeof target === 'object') {
+          decoratorConfig = target as Record<string, unknown>;
+        }
+      } finally {
+        if (prev === undefined) delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
+        else process.env['FRONTMCP_SCHEMA_EXTRACT'] = prev;
+      }
+    } catch {
+      /* fall through — adapter validate() handles undefined input */
+    }
+    template.validate(decoratorConfig);
   }
 
   const moduleFormat = template.moduleFormat;

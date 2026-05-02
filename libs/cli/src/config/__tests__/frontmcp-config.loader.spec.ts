@@ -1,4 +1,8 @@
-import { findDeployment, getDeploymentTargets, validateConfig } from '../frontmcp-config.loader';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+import { findDeployment, getDeploymentTargets, loadFrontMcpConfig, validateConfig } from '../frontmcp-config.loader';
 
 describe('validateConfig', () => {
   it('should validate and return parsed config', () => {
@@ -68,5 +72,46 @@ describe('getDeploymentTargets', () => {
       deployments: [{ target: 'distributed' }, { target: 'cli' }, { target: 'browser' }],
     });
     expect(getDeploymentTargets(config)).toEqual(['distributed', 'cli', 'browser']);
+  });
+});
+
+// #365 — when the project is `"type": "commonjs"`, the loader used to fail
+// silently on `frontmcp.config.ts` (Node can't `require` a TS file without
+// a hook, and `import()` errors out on the type mismatch) and the build
+// proceeded with default values. Now the loader uses esbuild as a last
+// resort and hard-fails on transpile errors.
+describe('loadFrontMcpConfig: TS config under "type": "commonjs" (#365)', () => {
+  function makeProject(tsConfigSource: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-loader-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo', type: 'commonjs' }));
+    fs.writeFileSync(path.join(dir, 'frontmcp.config.ts'), tsConfigSource);
+    return dir;
+  }
+
+  it('loads a TS config under type:commonjs via esbuild fallback', async () => {
+    const dir = makeProject(`
+const config: { name: string; nodeVersion: string; deployments: Array<{target: string}> } = {
+  name: 'cjs-loaded',
+  nodeVersion: '>=24.0.0',
+  deployments: [{ target: 'node' }],
+};
+export default config;
+`);
+    try {
+      const cfg = await loadFrontMcpConfig(dir);
+      expect(cfg.name).toBe('cjs-loaded');
+      expect(cfg.nodeVersion).toBe('>=24.0.0');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('hard-fails when the TS config has a syntax error (no silent default)', async () => {
+    const dir = makeProject(`this is not valid typescript {{{`);
+    try {
+      await expect(loadFrontMcpConfig(dir)).rejects.toThrow(/Failed to load frontmcp\.config\.ts/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

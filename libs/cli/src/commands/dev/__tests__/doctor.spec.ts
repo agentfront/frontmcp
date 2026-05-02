@@ -1,6 +1,12 @@
 // file: libs/cli/src/commands/dev/__tests__/doctor.spec.ts
 
+import { spawn } from 'child_process';
 import * as path from 'path';
+
+import { fileExists, readJSON } from '@frontmcp/utils';
+
+import { resolveEntry } from '../../../shared/fs';
+import { runDoctor } from '../doctor';
 
 // Mock child_process
 jest.mock('child_process', () => {
@@ -28,11 +34,6 @@ jest.mock('../../../shared/fs', () => {
     resolveEntry: jest.fn(),
   };
 });
-
-import { spawn } from 'child_process';
-import { fileExists, readJSON } from '@frontmcp/utils';
-import { resolveEntry } from '../../../shared/fs';
-import { runDoctor } from '../doctor';
 
 // Helper to simulate npm version check
 function mockNpmVersion(version: string) {
@@ -231,6 +232,37 @@ describe('doctor command', () => {
       await runDoctor();
 
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('❌ entry not detected'));
+    });
+
+    it('should spawn npm without shell:true (no DEP0190)', async () => {
+      // #381: doctor must not pass `shell: true` to spawn — it triggers
+      // Node's DEP0190 deprecation warning every time the command runs.
+      Object.defineProperty(process, 'versions', {
+        value: { ...originalVersions, node: '22.0.0' },
+        configurable: true,
+      });
+      (fileExists as jest.Mock).mockResolvedValue(true);
+      (readJSON as jest.Mock).mockResolvedValue({
+        compilerOptions: {
+          target: 'es2021',
+          module: 'esnext',
+          emitDecoratorMetadata: true,
+          experimentalDecorators: true,
+        },
+      });
+      (resolveEntry as jest.Mock).mockResolvedValue('/test/src/main.ts');
+
+      await runDoctor();
+
+      const calls = (spawn as jest.Mock).mock.calls;
+      // First call is for npm version
+      expect(calls[0][0]).toMatch(/^npm(\.cmd)?$/);
+      expect(calls[0][1]).toEqual(['-v']);
+      // Either no third arg, or third arg without shell:true
+      const opts = calls[0][2] as { shell?: unknown } | undefined;
+      if (opts) {
+        expect(opts.shell).not.toBe(true);
+      }
     });
 
     it('should show entry file path when found', async () => {

@@ -49,14 +49,33 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
     }
 
     if (filename.endsWith('.ts')) {
-      // TypeScript config — try tsx or ts-node for runtime loading
+      // #365 — When the project is `"type": "commonjs"` (the default),
+      // `require()` can't load .ts (no transpiler) and `await import()`
+      // fails with "Make sure to set 'type': 'module'". The previous loader
+      // silently fell through to defaults. Now we transpile the .ts file
+      // with esbuild (already a dependency) and eval the resulting CJS.
+      // Any failure throws — no silent fallback.
       try {
         const mod = require(configPath);
         return mod.default ?? mod;
-      } catch {
-        // If require fails (no ts-node), try dynamic import
-        const mod = await import(configPath);
-        return mod.default ?? mod;
+      } catch (requireErr) {
+        try {
+          const mod = await import(configPath);
+          return mod.default ?? mod;
+        } catch {
+          // Both runtime loaders rejected — fall through to esbuild transpile.
+        }
+        try {
+          return await loadTsConfigViaEsbuild(configPath);
+        } catch (esbuildErr) {
+          throw new Error(
+            `Failed to load ${filename}.\n` +
+              `  require() error: ${(requireErr as Error).message}\n` +
+              `  esbuild error:   ${(esbuildErr as Error).message}\n` +
+              `Hint: ensure the file exports a default config (e.g., ` +
+              `\`export default defineConfig({...})\`) and that all imports resolve.`,
+          );
+        }
       }
     }
 
@@ -72,6 +91,35 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
 
   // Fallback: derive from package.json
   return deriveFromPackageJson(cwd);
+}
+
+/**
+ * Transpile a TypeScript config file with esbuild (CJS target) and eval the
+ * result via Module-via-vm. Used as a last-resort path when neither `require()`
+ * (no ts-node hook) nor `await import()` (project is `"type": "commonjs"`)
+ * can load the file directly.
+ */
+async function loadTsConfigViaEsbuild(configPath: string): Promise<unknown> {
+  const esbuild = require('esbuild') as typeof import('esbuild');
+  const source = fs.readFileSync(configPath, 'utf-8');
+  const transformed = esbuild.transformSync(source, {
+    loader: 'ts',
+    format: 'cjs',
+    target: 'es2022',
+    sourcefile: configPath,
+  });
+
+  const Module = require('module') as typeof import('module');
+  const m = new Module(configPath, module);
+  // Make the loaded module's `require` resolve relative to the config dir
+  // so user `import { defineConfig } from 'frontmcp'` keeps working.
+  m.filename = configPath;
+  m.paths = (Module as unknown as { _nodeModulePaths(p: string): string[] })._nodeModulePaths(path.dirname(configPath));
+
+  (m as any)._compile(transformed.code, configPath);
+
+  const exported = (m as any).exports as { default?: unknown };
+  return exported?.default ?? exported;
 }
 
 /**

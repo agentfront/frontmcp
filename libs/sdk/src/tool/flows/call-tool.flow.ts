@@ -9,11 +9,12 @@ import {
   resolveServingMode,
   type ToolResponseContent,
 } from '@frontmcp/uipack/adapters';
-import { getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
+import { findNonFiniteNumber, getRuntimeContext, isDebug, isDevelopment, randomUUID } from '@frontmcp/utils';
 
 import {
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   isOrchestratedMode,
   ToolContext,
@@ -852,6 +853,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
       this.logger.verbose('execute:done');
     } catch (error) {
+      // FlowControl is a control-flow signal (this.fail / this.respond / this.handled
+      // from inside the tool). Re-throw without wrapping so callers (HTTP /
+      // Direct / CLI) can extract the originating error from `originalError`
+      // and surface its public message instead of a generic "Unknown error".
+      if (error instanceof FlowControl) {
+        throw error;
+      }
       // Re-throw timeout errors without wrapping
       if (error instanceof ExecutionTimeoutError) {
         this.logger.warn('execute: tool execution timed out', {
@@ -1215,6 +1223,23 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         errors: parseResult.error,
       });
       throw new InvalidOutputError();
+    }
+
+    // Reject non-finite numbers (Infinity / -Infinity / NaN) — JSON.stringify
+    // silently coerces them to `null`, which Zod's `z.number()` accepts as
+    // valid input but produces corrupted output for downstream consumers.
+    // Opt-out via `@FrontMcp({ output: { allowNonFinite: true } })`.
+    const allowNonFinite = (this.scope.metadata as { output?: { allowNonFinite?: boolean } }).output?.allowNonFinite;
+    if (allowNonFinite !== true) {
+      const found = findNonFiniteNumber(parseResult.data);
+      if (found) {
+        this.logger.error('finalize: non-finite number in tool output', {
+          tool: tool.metadata.name,
+          path: found.path,
+          value: String(found.value),
+        });
+        throw new InvalidOutputError();
+      }
     }
 
     const result = parseResult.data;

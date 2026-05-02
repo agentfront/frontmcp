@@ -53,4 +53,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   authorities: tokenFactory.meta('authorities'),
   // background tasks configuration (MCP 2025-11-25 tasks spec)
   tasks: tokenFactory.meta('tasks'),
+  // output validation policy (e.g., reject non-finite numeric output)
+  output: tokenFactory.meta('output'),
 };

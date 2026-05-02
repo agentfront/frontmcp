@@ -38,7 +38,14 @@ export class FlowControl extends Error {
   }
 
   static fail(error: Error): never {
-    throw new FlowControl('fail', { error: error.message });
+    // Preserve the original error object on the FlowControl envelope so
+    // downstream formatters can extract `PublicMcpError.getPublicMessage()`
+    // (or walk the cause/originalError chain). Keeping `output.error` as the
+    // message string maintains backwards compatibility with existing
+    // callers that read it directly.
+    const fc = new FlowControl('fail', { error: error.message });
+    (fc as { originalError?: Error }).originalError = error;
+    throw fc;
   }
 
   static abort(reason: string): never {

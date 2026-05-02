@@ -3,8 +3,8 @@
  * This creates a commander.js-based CLI where each MCP tool is a subcommand.
  */
 
-import { CliConfig, OAuthConfig } from '../config';
-import { ExtractedSchema, ExtractedTool, ExtractedPrompt, ExtractedResourceTemplate, ExtractedCapabilities, ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
+import { type CliConfig, type OAuthConfig } from '../config';
+import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
 
 export const RESERVED_COMMANDS = new Set([
@@ -12,6 +12,9 @@ export const RESERVED_COMMANDS = new Set([
   'login', 'logout', 'connect', 'serve', 'daemon',
   'doctor', 'install', 'uninstall', 'sessions', 'help', 'version',
   'skills', 'job', 'workflow',
+  // Reserved by the symmetric `prompt get <name>` / `resource read <uri>`
+  // sub-API; included so a user-defined entry can never shadow them.
+  'get', 'list', 'read',
 ]);
 
 export interface CliEntryOptions {
@@ -234,7 +237,50 @@ async function closeClient() {
 // Flag set by long-running commands (serve, daemon) to prevent the footer from calling process.exit().
 var _isLongRunning = false;
 
+// Walk an error chain (cause / originalError) and return the most user-friendly
+// message — prefers PublicMcpError.getPublicMessage() over wrapped wrappers like
+// "Tool 'X' execution failed: Unknown error". Mirrors @frontmcp/sdk's
+// extractPublicMessage so the SEA bundle stays self-contained.
+function _extractPublicMessage(err) {
+  if (err == null) return 'Unknown error';
+  if (typeof err === 'string') return err;
+  // Direct PublicMcpError (has isPublic === true and a non-default message)
+  if (err && err.isPublic === true && err.message) return err.message;
+  // Wrapped: try originalError, then cause
+  var inner = err && (err.originalError || err.cause);
+  if (inner) {
+    var innerMsg = _extractPublicMessage(inner);
+    if (innerMsg && innerMsg !== 'Unknown error') return innerMsg;
+  }
+  // Fallback: own .message, but skip generic wrappers when we have nothing better.
+  if (err.message) return err.message;
+  return String(err);
+}
+// Print an error with the best available public message and set the appropriate
+// exit code (1 = runtime error, 2 = usage error). Centralized so every action
+// handler reports the same shape.
+function _exitWithError(err, code) {
+  var msg = _extractPublicMessage(err);
+  console.error('Error: ' + msg);
+  process.exitCode = code || 1;
+}
+
 var program = new Command();
+// Make Commander's own usage errors (unknown subcommand, missing required option,
+// invalid value) exit with code 2 instead of the default 0 — matches POSIX
+// convention and lets shell scripts/CI distinguish runtime failures from usage.
+program.exitOverride(function(err) {
+  if (err.code === 'commander.helpDisplayed' || err.code === 'commander.help' || err.code === 'commander.version') {
+    process.exit(0);
+  }
+  if (err.code === 'commander.unknownCommand' || err.code === 'commander.unknownOption' ||
+      err.code === 'commander.missingArgument' || err.code === 'commander.missingMandatoryOptionValue' ||
+      err.code === 'commander.invalidArgument' || err.code === 'commander.optionMissingArgument' ||
+      err.code === 'commander.invalidOptionArgument' || err.code === 'commander.excessArguments') {
+    process.exit(2);
+  }
+  process.exit(1);
+});
 program
   .name(${JSON.stringify(appName)})
   .version(${JSON.stringify(appVersion)})
@@ -329,10 +375,14 @@ ${optionLines}
         console.error('Authorization required' + (meta.app ? ' for ' + meta.app : ''));
         if (meta.auth_url) console.error('Authorize at: ' + meta.auth_url);
         console.error('Or run: ' + ${JSON.stringify(appName)} + ' login');
+        process.exitCode = 1;
       } else {
-        console.error('Error:', err.message || err);
+        // Extract the public message (PublicMcpError → its message, not the
+        // wrapped "Tool 'X' execution failed: Unknown error" of ToolExecutionError).
+        // Zod / commander usage errors → exit 2; runtime errors → exit 1.
+        var isUsage = err && (err.code === 'INVALID_INPUT' || err.code === 'INVALID_PARAMS');
+        _exitWithError(err, isUsage ? 2 : 1);
       }
-      process.exitCode = 1;
     }
   });`;
   });
@@ -417,8 +467,7 @@ resourceCmd
         });
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -432,8 +481,7 @@ resourceCmd
       var mode = program.opts().output || 'text';
       console.log(fmt.formatResourceResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -470,8 +518,7 @@ ${optionLines}
       var mode = program.opts().output || 'text';
       console.log(fmt.formatResourceResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
   });
@@ -496,8 +543,7 @@ templateCmd
         });
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -505,6 +551,19 @@ ${subcommands.join('\n\n')}`;
 }
 
 function generatePromptCommands(prompts: ExtractedPrompt[]): string {
+  // Map known prompts → option specs so `prompt get <name>` knows which flags
+  // to accept per prompt. Unknown prompt names still call getPrompt() and
+  // surface the server's error to the user.
+  const promptArgsMap = prompts.map((p) => {
+    const args = (p.arguments || []).map((a) => ({
+      name: a.name,
+      kebab: camelToKebab(a.name),
+      camel: kebabToCamel(camelToKebab(a.name)),
+      required: !!a.required,
+    }));
+    return `${JSON.stringify(p.name)}: ${JSON.stringify(args)}`;
+  }).join(',\n      ');
+
   const subcommands = prompts.map((prompt) => {
     const cmdName = camelToKebab(prompt.name).replace(/_/g, '-');
     const argOptions = (prompt.arguments || [])
@@ -519,7 +578,7 @@ function generatePromptCommands(prompts: ExtractedPrompt[]): string {
 
     return `promptCmd
   .command(${JSON.stringify(cmdName)})
-  .description(${JSON.stringify(prompt.description || '')})
+  .description(${JSON.stringify((prompt.description || '') + ' (deprecated alias — use `prompt get ' + cmdName + '`)')})
 ${argOptions}
   .action(async function(opts) {
     try {
@@ -534,8 +593,7 @@ ${argOptions}
       var mode = program.opts().output || 'text';
       console.log(fmt.formatPromptResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
   });
@@ -560,8 +618,56 @@ promptCmd
         });
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
+    }
+  });
+
+// Symmetric \`prompt get <name>\` to mirror \`resource read <uri>\`. Looks up
+// per-prompt argument metadata from \`promptArgs\` and forwards as MCP
+// \`prompts/get\` request arguments. Unknown / missing required flags exit 2.
+var promptArgs = {
+      ${promptArgsMap}
+    };
+var _getCmd = promptCmd
+  .command('get <name>')
+  .description('Render a prompt by name')
+  .allowUnknownOption(true)
+  .action(async function(name) {
+    try {
+      var spec = promptArgs[name];
+      if (!spec) {
+        console.error('Error: Unknown prompt: ' + name);
+        process.exitCode = 1;
+        return;
+      }
+      // Parse trailing --key value pairs from this command's args
+      var raw = this.args.slice(1);
+      var args = {};
+      for (var i = 0; i < raw.length; i++) {
+        var tok = raw[i];
+        if (typeof tok === 'string' && tok.indexOf('--') === 0) {
+          var key = tok.slice(2);
+          var val = (i + 1 < raw.length) ? raw[i + 1] : undefined;
+          // Map kebab → original argument name from the spec
+          var match = null;
+          for (var s = 0; s < spec.length; s++) { if (spec[s].kebab === key) { match = spec[s]; break; } }
+          if (match) { args[match.name] = val; i++; }
+        }
+      }
+      // Validate required args
+      for (var r = 0; r < spec.length; r++) {
+        if (spec[r].required && args[spec[r].name] === undefined) {
+          console.error('Error: missing required option --' + spec[r].kebab);
+          process.exitCode = 2;
+          return;
+        }
+      }
+      var client = await getClient();
+      var result = await client.getPrompt(name, args);
+      var mode = program.opts().output || 'text';
+      console.log(fmt.formatPromptResult(result, mode));
+    } catch (err) {
+      _exitWithError(err, 1);
     }
   });
 
@@ -598,8 +704,7 @@ skillsCmd
         console.log("  Use '" + program.name() + " skills load <name>' to load a skill.\\n");
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -620,8 +725,7 @@ skillsCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -657,8 +761,7 @@ skillsCmd
         console.log("  Load: " + program.name() + " skills load " + name + '\\n');
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -686,8 +789,7 @@ skillsCmd
         console.log("  Use '" + program.name() + " skills read <name>' for full details.\\n");
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -725,8 +827,7 @@ ${optionLines}
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
     }
@@ -757,8 +858,7 @@ ${optionLines}
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
   });
@@ -789,8 +889,7 @@ ${optionLines}
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 
@@ -818,8 +917,7 @@ jobCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -851,8 +949,7 @@ ${jobs.length > 0 ? genericRun : `jobRunCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`}
 
@@ -870,8 +967,7 @@ jobCmd
         console.log('Status: ' + (result.status || JSON.stringify(result)));
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -901,8 +997,7 @@ workflowCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -931,8 +1026,7 @@ workflowCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -950,8 +1044,7 @@ workflowCmd
         console.log('Status: ' + (result.status || JSON.stringify(result)));
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -1004,8 +1097,7 @@ subscribeCmd
       setInterval(function() {}, 2147483647);
       await new Promise(function() {});
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -1033,8 +1125,7 @@ subscribeCmd
       setInterval(function() {}, 2147483647);
       await new Promise(function() {});
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }

@@ -73,8 +73,43 @@ module.exports = {
 };
 `,
 
+  // #375 — fail the build when the user's @FrontMcp config references
+  // Node-only storage providers that can't run on Workers. Conditional
+  // (env-gated) usage still passes; only unconditional declarations throw.
+  validate: (decoratorConfig) => {
+    if (!decoratorConfig) return;
+    const sqlite = decoratorConfig['sqlite'];
+    const redis = decoratorConfig['redis'];
+    const errors: string[] = [];
+    if (sqlite && typeof sqlite === 'object') {
+      errors.push(
+        'sqlite storage is not supported on --target cloudflare (no fs / native modules on Workers). ' +
+          'Use Cloudflare KV / Durable Objects, or gate the sqlite branch behind a build-time `define` ' +
+          'so the bundler can dead-code-eliminate it.',
+      );
+    }
+    if (redis && typeof redis === 'object') {
+      errors.push(
+        'ioredis-style `redis` storage is not supported on --target cloudflare (no Node net). ' +
+          'Use Vercel KV / Upstash Redis (HTTP), or move the redis config to a runtime branch ' +
+          'gated on `globalThis.process?.env`.',
+      );
+    }
+    if (errors.length) {
+      throw new Error(
+        `[--target cloudflare] config incompatible with Cloudflare Workers:\n  - ${errors.join('\n  - ')}`,
+      );
+    }
+  },
+
+  // #374 — always write wrangler.toml from the build output. Skipping when
+  // the file already exists left users with a wrangler.toml that pointed at
+  // dist/index.js while the build emitted dist/cloudflare/index.js, and
+  // wrangler deploy silently failed.
+  alwaysWriteConfig: true,
+
   getConfig: (_cwd: string) => `name = "frontmcp-worker"
-main = "dist/index.js"
+main = "dist/cloudflare/index.js"
 compatibility_date = "2024-01-01"
 `,
 

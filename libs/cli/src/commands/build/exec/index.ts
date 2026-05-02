@@ -27,14 +27,39 @@ import { validateStepGraph } from './setup';
 import { ensureDir, fileExists, runCmd } from '@frontmcp/utils';
 import { REQUIRED_DECORATOR_FIELDS } from '../../../core/tsconfig';
 
-export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolean }): Promise<void> {
+export async function buildExec(
+  opts: ParsedArgs & {
+    cli?: boolean;
+    sea?: boolean;
+    execOverrides?: {
+      storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
+      cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+    };
+  },
+): Promise<void> {
   const cwd = process.cwd();
   const outDir = path.resolve(cwd, opts.outDir || 'dist');
 
   console.log(`${c('cyan', '[build:exec]')} Building executable bundle...`);
 
-  // 1. Load config
+  // 1. Load config (and merge in overrides forwarded from frontmcp.config —
+  //    `build.storage`, `deployments[].cli.outputDefault`, etc.)
   const rawConfig = await loadExecConfig(cwd);
+  if (opts.execOverrides) {
+    if (opts.execOverrides.storage && !rawConfig.storage) {
+      rawConfig.storage = opts.execOverrides.storage;
+    }
+    if (opts.execOverrides.cli) {
+      const existing = rawConfig.cli;
+      // CliConfig requires `enabled: boolean`; preserve any existing value or
+      // default to true (we only get here when CLI mode is being configured).
+      rawConfig.cli = {
+        enabled: existing?.enabled ?? true,
+        ...existing,
+        ...opts.execOverrides.cli,
+      };
+    }
+  }
   const config = normalizeConfig(rawConfig);
   const cliEnabled = opts.cli || config.cli?.enabled;
   const seaEnabled = opts.sea || config.sea?.enabled;
@@ -109,9 +134,27 @@ export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolea
     `${c('green', '[build:exec]')} bundle created: ${path.relative(cwd, bundleResult.bundlePath)} (${formatSize(bundleResult.bundleSize)})`,
   );
 
-  // 6. Generate manifest
+  // 6. Extract decorator-level config (http.port, etc.) from the server
+  //    bundle. This runs BEFORE schema extraction so the manifest can
+  //    reflect the port the server will actually bind on.
   const bundleFilename = `${config.name}.bundle.js`;
-  const manifest = generateManifest(config, bundleFilename);
+  let decoratorHttpPort: number | undefined;
+  try {
+    const { extractSchemas } = await import('./cli-runtime/schema-extractor.js');
+    const earlySchema = await extractSchemas(bundleResult.bundlePath);
+    decoratorHttpPort = earlySchema.httpPort;
+  } catch {
+    // Schema extraction is best-effort here — the cliEnabled branch will
+    // re-run it for the full schema. If it fails, the manifest port falls
+    // back to its default precedence chain.
+  }
+
+  // 7. Generate manifest with extracted decorator port + per-deployment cli config
+  const manifest = generateManifest(config, bundleFilename, {
+    target: cliEnabled ? 'cli' : 'node',
+    decoratorHttpPort,
+    outputDefault: config.cli?.outputDefault as 'text' | 'json' | undefined,
+  });
 
   // 7. CLI build step (if enabled)
   let cliBundlePath: string | undefined;
@@ -243,27 +286,33 @@ export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolea
   }
 
   // 8. Build SEA binaries if enabled
+  //
+  // For --target cli (cliEnabled === true), the runner script `exec`s only
+  // the CLI binary — the standalone server SEA is dead weight (~114 MB, see
+  // issue #373). Skip the server-SEA pass entirely in that mode. For
+  // --target node (cliEnabled === false), build only the server SEA.
   let seaServerResult: { executablePath: string; executableSize: number } | undefined;
   let seaCliResult: { executablePath: string; executableSize: number } | undefined;
   if (seaEnabled) {
     const { buildSea } = await import('./sea-builder.js');
 
-    // Rebuild server bundle as self-contained for SEA (inlines all deps)
-    // Use a temp filename so the original non-self-contained bundle is preserved
-    const seaTempName = `${config.name}.sea-temp`;
-    console.log(`${c('cyan', '[build:sea]')} rebuilding server bundle (self-contained)...`);
-    const seaBundle = await bundleWithEsbuild(compiledEntry, outDir, config, {
-      selfContained: true,
-      outputName: seaTempName,
-    });
+    if (!cliEnabled) {
+      // Server-only SEA path (--target node): rebuild bundle as self-contained
+      // (inlines all deps) and produce ${name}-bin.
+      const seaTempName = `${config.name}.sea-temp`;
+      console.log(`${c('cyan', '[build:sea]')} rebuilding server bundle (self-contained)...`);
+      const seaBundle = await bundleWithEsbuild(compiledEntry, outDir, config, {
+        selfContained: true,
+        outputName: seaTempName,
+      });
 
-    console.log(`${c('cyan', '[build:sea]')} building server SEA binary...`);
-    seaServerResult = await buildSea(seaBundle.bundlePath, outDir, config.name);
-    // Clean up temp self-contained bundle
-    fs.unlinkSync(seaBundle.bundlePath);
-    console.log(
-      `${c('green', '[build:sea]')} server binary: ${path.relative(cwd, seaServerResult.executablePath)} (${formatSize(seaServerResult.executableSize)})`,
-    );
+      console.log(`${c('cyan', '[build:sea]')} building server SEA binary...`);
+      seaServerResult = await buildSea(seaBundle.bundlePath, outDir, config.name);
+      fs.unlinkSync(seaBundle.bundlePath);
+      console.log(
+        `${c('green', '[build:sea]')} server binary: ${path.relative(cwd, seaServerResult.executablePath)} (${formatSize(seaServerResult.executableSize)})`,
+      );
+    }
 
     if (cliBundlePath) {
       console.log(`${c('cyan', '[build:sea]')} building CLI SEA binary...`);
@@ -290,7 +339,10 @@ export async function buildExec(opts: ParsedArgs & { cli?: boolean; sea?: boolea
   );
 
   // 10. Generate installer script
-  const installerContent = generateInstallerScript(config);
+  const installerContent = generateInstallerScript(config, {
+    target: cliEnabled ? 'cli' : 'node',
+    seaEnabled: !!seaEnabled,
+  });
   const installerPath = path.join(outDir, `install-${config.name}.sh`);
   fs.writeFileSync(installerPath, installerContent, { mode: 0o755 });
   console.log(
