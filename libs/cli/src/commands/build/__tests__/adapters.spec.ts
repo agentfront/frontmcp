@@ -54,8 +54,11 @@ describe('Build Adapters', () => {
   });
 
   describe('lambdaAdapter', () => {
-    it('should have esnext module format', () => {
-      expect(lambdaAdapter.moduleFormat).toBe('esnext');
+    // #368 round-3 — switched from 'esnext' to 'commonjs' to eliminate the
+    // strict-ESM bundle problem (TS-emitted extensionless imports rejected
+    // by rspack). Lambda's runtime accepts CJS handlers either way.
+    it('should have commonjs module format', () => {
+      expect(lambdaAdapter.moduleFormat).toBe('commonjs');
     });
 
     it('should require bundling', () => {
@@ -76,7 +79,8 @@ describe('Build Adapters', () => {
       expect(entry).toContain('@codegenie/serverless-express');
       expect(entry).toContain('./main.js');
       expect(entry).toContain('getServerlessHandlerAsync');
-      expect(entry).toContain('export const handler');
+      // Round-3: emits CJS exports, not ESM.
+      expect(entry).toContain('exports.handler');
     });
   });
 
@@ -116,8 +120,9 @@ describe('Build Adapters', () => {
   });
 
   describe('vercelAdapter', () => {
-    it('should have esnext module format', () => {
-      expect(vercelAdapter.moduleFormat).toBe('esnext');
+    // #368 round-3 — switched from 'esnext' to 'commonjs'; see lambda comment.
+    it('should have commonjs module format', () => {
+      expect(vercelAdapter.moduleFormat).toBe('commonjs');
     });
 
     it('should require bundling', () => {
@@ -137,7 +142,8 @@ describe('Build Adapters', () => {
       const entry = vercelAdapter.getEntryTemplate('./main.js');
       expect(entry).toContain('./main.js');
       expect(entry).toContain('getServerlessHandlerAsync');
-      expect(entry).toContain('export default');
+      // Round-3: emits CJS module.exports = handler (with .default for compat).
+      expect(entry).toContain('module.exports');
     });
 
     it('should have getConfig method', () => {
@@ -235,17 +241,37 @@ describe('Build Adapters', () => {
     });
   });
 
-  describe('vercelAdapter / lambdaAdapter ESM-in-CJS regression (#368)', () => {
-    // The entry templates use `import` syntax. Without a sibling
-    // `{"type": "module"}` package.json (or .mjs extension), rspack parses
-    // them as CJS when the parent project is `"type": "commonjs"` and the
-    // build fails. The build pipeline drops the package.json now; the
-    // adapter still declares moduleFormat='esnext' so the build wiring fires.
-    it('vercel adapter is declared esnext (so the build emits a sibling package.json)', () => {
-      expect(vercelAdapter.moduleFormat).toBe('esnext');
+  describe('vercelAdapter / lambdaAdapter CJS entries (#368 round-3)', () => {
+    // Round 1: entries used `import` syntax with a sibling `{"type":"module"}`
+    //          package.json — rspack treated it as strict ESM and rejected
+    //          extensionless TS-emitted relative imports.
+    // Round 2: added rspack `byDependency.fullySpecified: false` — partial
+    //          relief but the user's retest still hit "Module not found" on
+    //          extensionless imports plus new `await import('openai')` errors.
+    // Round 3: switched both adapters to `commonjs` entries (mirrors the
+    //          stable cloudflare adapter). No sibling type:module file is
+    //          emitted, rspack is in CJS mode, fully-specified isn't enforced.
+    it('vercel adapter declares commonjs (no sibling type:module package.json emitted)', () => {
+      expect(vercelAdapter.moduleFormat).toBe('commonjs');
     });
-    it('lambda adapter is declared esnext (so the build emits a sibling package.json)', () => {
-      expect(lambdaAdapter.moduleFormat).toBe('esnext');
+    it('lambda adapter declares commonjs (no sibling type:module package.json emitted)', () => {
+      expect(lambdaAdapter.moduleFormat).toBe('commonjs');
+    });
+
+    it('vercel entry uses CJS require()/module.exports (not import/export)', () => {
+      const entry = vercelAdapter.getEntryTemplate('./main.js');
+      expect(entry).toContain("require('./main.js')");
+      expect(entry).toContain('module.exports');
+      expect(entry).not.toMatch(/^\s*import\s/m);
+      expect(entry).not.toMatch(/^\s*export\s/m);
+    });
+
+    it('lambda entry uses CJS require()/exports.handler (not import/export)', () => {
+      const entry = lambdaAdapter.getEntryTemplate('./main.js');
+      expect(entry).toContain("require('./main.js')");
+      expect(entry).toContain('exports.handler');
+      expect(entry).not.toMatch(/^\s*import\s/m);
+      expect(entry).not.toMatch(/^\s*export\s/m);
     });
 
     it('round-2: lambda adapter validate hook fails when @codegenie/serverless-express is missing', () => {

@@ -64,6 +64,12 @@ export interface FrontmcpExecConfig {
 }
 
 const CONFIG_FILENAMES = [
+  // #365 round-3 — `.ts` is checked first so the user's typed config takes
+  // priority over a stale `.js` left in the project. `.ts` loading routes
+  // through the same esbuild path as the new-shape loader so it works under
+  // `"type": "commonjs"` (Node's `require(.ts)` and `await import(.ts)` are
+  // both unreliable here and were the root cause of #365 1.1.0–1.1.2-beta.1).
+  'frontmcp.config.ts',
   'frontmcp.config.js',
   'frontmcp.config.json',
   'frontmcp.config.mjs',
@@ -71,7 +77,7 @@ const CONFIG_FILENAMES = [
 ];
 
 /**
- * Load frontmcp.config.js/json from the given directory.
+ * Load frontmcp.config.{ts,js,json,mjs,cjs} from the given directory.
  * Falls back to deriving minimal config from package.json.
  */
 export async function loadExecConfig(cwd: string): Promise<FrontmcpExecConfig> {
@@ -82,8 +88,32 @@ export async function loadExecConfig(cwd: string): Promise<FrontmcpExecConfig> {
         const content = fs.readFileSync(configPath, 'utf-8');
         return JSON.parse(content) as FrontmcpExecConfig;
       }
+      if (filename.endsWith('.ts')) {
+        // Delegate to the new loader's esbuild transpile so `.ts` configs
+        // work under `"type": "commonjs"` projects. Hard-fails on parse error
+        // (no silent default) — matches frontmcp-config.loader semantics.
+        // tsc uses `--moduleResolution nodenext`, so the dynamic import
+        // needs an explicit `.js` suffix that resolves to the compiled
+        // output. The barrel (`../../../config/index.js`) re-exports
+        // `loadFrontMcpConfig` from the loader module.
+        const { loadFrontMcpConfig } = await import('../../../config/index.js');
+        try {
+          // The new-shape loader returns a parsed config — we only consume the
+          // legacy-shape fields here. Fields that exist in both shapes
+          // (name, version, entry, nodeVersion) carry through; new-shape-only
+          // fields like `deployments` are ignored by this consumer.
+          const newShape = await loadFrontMcpConfig(cwd);
+          return newShape as unknown as FrontmcpExecConfig;
+        } catch (err) {
+          throw new Error(
+            `Failed to load ${filename}: ${(err as Error).message}\n` +
+              `If your config doesn't match the new schema (deployments[] etc.), ` +
+              `rename it to .js or use the legacy module.exports shape.`,
+          );
+        }
+      }
       // JS/MJS/CJS config — require it
-       
+
       const mod = require(configPath);
       return (mod.default || mod) as FrontmcpExecConfig;
     }
