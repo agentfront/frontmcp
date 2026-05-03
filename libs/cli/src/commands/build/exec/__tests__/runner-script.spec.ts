@@ -1,5 +1,5 @@
 import { generateRunnerScript } from '../runner-script';
-import { FrontmcpExecConfig } from '../config';
+import { type FrontmcpExecConfig } from '../config';
 
 describe('runner-script', () => {
   describe('generateRunnerScript', () => {
@@ -136,6 +136,42 @@ describe('runner-script', () => {
       const config: FrontmcpExecConfig = { name: 'app', nodeVersion: '>=20.0.0' };
       const script = generateRunnerScript(config);
       expect(script).toContain('-lt "20"');
+    });
+
+    // #377 — node-target runner used to silently boot the HTTP server when
+    // invoked with `--help`. Server runners now intercept --help/--version/
+    // --print-manifest and reject other flags up front.
+    describe('node-target --help interception', () => {
+      it('intercepts --help in JS-mode server runner', () => {
+        const config: FrontmcpExecConfig = { name: 'demo', version: '0.1.0' };
+        const script = generateRunnerScript(config, /* cliMode */ false, /* seaMode */ false);
+        expect(script).toContain('case "${1:-}"');
+        expect(script).toContain('-h|--help)');
+        expect(script).toContain('--version)');
+        expect(script).toContain('--print-manifest)');
+        expect(script).toContain('demo v0.1.0');
+      });
+
+      it('intercepts --help in SEA-mode server runner', () => {
+        const config: FrontmcpExecConfig = { name: 'demo', version: '0.1.0' };
+        const script = generateRunnerScript(config, /* cliMode */ false, /* seaMode */ true);
+        expect(script).toContain('-h|--help)');
+        expect(script).toContain('--print-manifest)');
+      });
+
+      it('rejects other --flags with a guiding error and exit 2', () => {
+        const config: FrontmcpExecConfig = { name: 'demo' };
+        const script = generateRunnerScript(config, /* cliMode */ false, /* seaMode */ false);
+        expect(script).toContain('--*)');
+        expect(script).toContain('exit 2');
+        expect(script).toContain('build with --target cli');
+      });
+
+      it('does NOT intercept flags in CLI-mode runner (CLI bundle has its own parser)', () => {
+        const config: FrontmcpExecConfig = { name: 'demo' };
+        const cliScript = generateRunnerScript(config, /* cliMode */ true, /* seaMode */ false);
+        expect(cliScript).not.toContain('-h|--help)');
+      });
     });
   });
 });

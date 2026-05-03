@@ -267,6 +267,42 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         debug: decision.debug,
       });
 
+      // #380 — Detect JSON-RPC POST/GET requests without a session/initialize
+      // and surface a structured JSON-RPC error envelope instead of letting
+      // them fall through to Express's default 404 (which returns HTML and
+      // breaks every MCP client SDK that parses the response as JSON).
+      // The body shape check (`jsonrpc + method`) is sufficient — only
+      // genuine JSON-RPC requests get the error envelope; everything else
+      // (favicon, health probes, custom routes) still falls through.
+      const routerBody = request.body as Record<string, unknown> | undefined;
+      const isJsonRpcRequest =
+        request.method.toUpperCase() !== 'DELETE' &&
+        routerBody &&
+        typeof routerBody === 'object' &&
+        routerBody['jsonrpc'] === '2.0' &&
+        typeof routerBody['method'] === 'string' &&
+        routerBody['method'] !== 'initialize';
+      const respondNoSession = (): never => {
+        const requestId = (routerBody?.['id'] as string | number | null | undefined) ?? null;
+        // `this.respond(...)` always throws a FlowControl envelope; we cast the
+        // call to `never` rather than emitting an unreachable Error so the
+        // dependency on FlowControl semantics is explicit.
+        return this.respond({
+          kind: 'json',
+          status: 200,
+          contentType: 'application/json; charset=utf-8',
+          body: {
+            jsonrpc: '2.0',
+            id: requestId,
+            error: {
+              code: -32600,
+              message: 'Session not initialized — send `initialize` first',
+              data: { transport: 'streamable-http', expected: 'initialize' },
+            },
+          },
+        }) as never;
+      };
+
       // Handle DELETE method immediately - it's for session termination
       // regardless of what protocol the session was created with
       if (request.method.toUpperCase() === 'DELETE') {
@@ -335,6 +371,12 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         }
 
         if (decision.intent === 'unknown') {
+          if (isJsonRpcRequest) {
+            this.logger.info(
+              `[${this.requestId}] no session, JSON-RPC body present — responding with structured error (#380)`,
+            );
+            respondNoSession();
+          }
           // continue to other middleware
           // with authentication (public/authorized routes)
           this.logger.verbose(`[${this.requestId}] decision is unknown, continue to next http middleware`);
@@ -348,6 +390,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         this.state.set('intent', decision.intent);
       } else if (verifyResult.kind === 'forbidden') {
         if (decision.intent === 'unknown') {
+          if (isJsonRpcRequest) {
+            respondNoSession();
+          }
           this.logger.verbose(
             `[${this.requestId}] forbidden with unknown intent, continue to other public http middleware`,
           );
@@ -366,6 +411,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       } else {
         this.logger.verbose(`[${this.requestId}] not authorized request, check decision intent: ${decision.intent}`);
         if (decision.intent === 'unknown') {
+          if (isJsonRpcRequest) {
+            respondNoSession();
+          }
           this.logger.verbose(`[${this.requestId}] decision is unknown, continue to other public http middleware`);
           // continue to other middleware
           // without authentication (public routes)

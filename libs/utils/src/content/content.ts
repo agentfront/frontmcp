@@ -96,6 +96,43 @@ export function sanitizeToJson(value: unknown): unknown {
 }
 
 /**
+ * Walk a JSON-like value and return the first non-finite number encountered
+ * (`Infinity`, `-Infinity`, or `NaN`), or `undefined` if all numbers are
+ * finite. Used by the SDK to reject tool/resource output that would silently
+ * be serialized as `null` by `JSON.stringify`.
+ *
+ * Cycles in the input tree are not expected (callers run sanitizeToJson
+ * first, which drops them) but we guard with a WeakSet anyway.
+ */
+export function findNonFiniteNumber(value: unknown): { path: string; value: number } | undefined {
+  const seen = new WeakSet<object>();
+
+  function walk(val: unknown, path: string): { path: string; value: number } | undefined {
+    if (typeof val === 'number' && !Number.isFinite(val)) {
+      return { path, value: val };
+    }
+    if (val && typeof val === 'object') {
+      if (seen.has(val)) return undefined;
+      seen.add(val);
+      if (Array.isArray(val)) {
+        for (let i = 0; i < val.length; i++) {
+          const found = walk(val[i], `${path}[${i}]`);
+          if (found) return found;
+        }
+        return undefined;
+      }
+      for (const [k, v] of Object.entries(val)) {
+        const found = walk(v, path ? `${path}.${k}` : k);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  }
+
+  return walk(value, '');
+}
+
+/**
  * Common MIME types by file extension.
  */
 const MIME_TYPES: Record<string, string> = {

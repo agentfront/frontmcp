@@ -1,5 +1,5 @@
 import { generateManifest } from '../manifest';
-import { FrontmcpExecConfig } from '../config';
+import { type FrontmcpExecConfig } from '../config';
 
 describe('manifest', () => {
   describe('generateManifest', () => {
@@ -16,9 +16,41 @@ describe('manifest', () => {
       expect(manifest.nodeVersion).toBe('>=22.0.0');
       expect(manifest.bundle).toBe('test-app.bundle.js');
       expect(manifest.storage).toEqual({ type: 'none', required: false });
-      expect(manifest.network).toEqual({ defaultPort: 3001, supportsSocket: true });
+      // #371: default port is 3000 (Express default — what the server
+      // actually binds), not the legacy phantom 3001.
+      expect(manifest.network).toEqual({ defaultPort: 3000, supportsSocket: true });
       expect(manifest.dependencies).toEqual({ system: [], nativeAddons: [] });
       expect(manifest.setup).toBeUndefined();
+    });
+
+    // #371 — port resolution precedence: build-config > decorator > default
+    describe('network.defaultPort precedence (#371)', () => {
+      it('uses frontmcp.config network.defaultPort when set (highest precedence)', () => {
+        const config: FrontmcpExecConfig = {
+          name: 'a',
+          network: { defaultPort: 8080 },
+        };
+        const m = generateManifest(config, 'a.bundle.js', { decoratorHttpPort: 9999 });
+        expect(m.network?.defaultPort).toBe(8080);
+      });
+
+      it('falls back to decorator http.port when build-config does not set port', () => {
+        const config: FrontmcpExecConfig = { name: 'a' };
+        const m = generateManifest(config, 'a.bundle.js', { decoratorHttpPort: 4242 });
+        expect(m.network?.defaultPort).toBe(4242);
+      });
+
+      it('falls back to 3000 when neither build-config nor decorator set port', () => {
+        const config: FrontmcpExecConfig = { name: 'a' };
+        const m = generateManifest(config, 'a.bundle.js');
+        expect(m.network?.defaultPort).toBe(3000);
+      });
+
+      it('omits the network section entirely for --target cli builds', () => {
+        const config: FrontmcpExecConfig = { name: 'a' };
+        const m = generateManifest(config, 'a.bundle.js', { target: 'cli' });
+        expect(m.network).toBeUndefined();
+      });
     });
 
     it('should include storage config', () => {

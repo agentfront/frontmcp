@@ -59,6 +59,8 @@ export interface McpbManifest {
   };
   tools?: Array<{ name: string; description: string }>;
   tools_generated?: boolean;
+  resources?: Array<{ name?: string; uri: string; description?: string; mimeType?: string }>;
+  resources_generated?: boolean;
   prompts?: Array<{ name: string; description?: string }>;
   prompts_generated?: boolean;
   user_config?: Record<string, McpbUserConfigEntry>;
@@ -144,6 +146,19 @@ export const mcpbManifestSchema = z
       .array(z.object({ name: z.string(), description: z.string() }).strict())
       .optional(),
     tools_generated: z.boolean().optional(),
+    resources: z
+      .array(
+        z
+          .object({
+            name: z.string().optional(),
+            uri: z.string(),
+            description: z.string().optional(),
+            mimeType: z.string().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    resources_generated: z.boolean().optional(),
     prompts: z
       .array(
         z
@@ -316,6 +331,16 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
     .filter((t) => !SYSTEM_TOOL_NAMES.has(t.name))
     .map((t) => ({ name: t.name, description: t.description || '' }));
 
+  // #376 — emit resources alongside tools/prompts. The server runtime
+  // already registers @Resource entries, but the manifest writer was
+  // dropping them, so MCPB-aware clients had no way to discover them.
+  const resources = schema.resources.map((r) => ({
+    ...(r.name ? { name: r.name } : {}),
+    uri: r.uri,
+    ...(r.description ? { description: r.description } : {}),
+    ...(r.mimeType ? { mimeType: r.mimeType } : {}),
+  }));
+
   const prompts = schema.prompts.map((p) => ({
     name: p.name,
     ...(p.description ? { description: p.description } : {}),
@@ -358,6 +383,15 @@ export function generateMcpbManifest(input: GenerateMcpbManifestInput): McpbMani
     },
     tools,
     tools_generated: false,
+    ...(resources.length > 0
+      ? {
+          resources,
+          // FrontMCP resources resolve dynamically (their bodies come from
+          // execute()/read()), so consumers should still query the server at
+          // runtime — but the static manifest now exposes name/uri/mimeType.
+          resources_generated: true,
+        }
+      : {}),
     prompts,
     // FrontMCP prompts resolve dynamically via execute() — MCPB's static `text`
     // template cannot represent JS logic. Set generated:true so consumers query

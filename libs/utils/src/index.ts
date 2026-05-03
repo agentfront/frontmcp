@@ -27,7 +27,7 @@ export type { ParsedUriTemplate } from './uri';
 export { trimSlashes, joinPath, pathResolve, pathJoin, basename, dirname, extname } from './path';
 
 // Content utilities
-export { sanitizeToJson, inferMimeType } from './content';
+export { sanitizeToJson, inferMimeType, findNonFiniteNumber } from './content';
 
 // HTTP utilities
 export { validateBaseUrl, buildSetCookie, parseCookies, getCookie, isLocalhost, isSecureRequest } from './http';

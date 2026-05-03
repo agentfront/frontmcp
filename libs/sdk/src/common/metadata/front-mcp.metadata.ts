@@ -226,6 +226,20 @@ export interface FrontMcpBaseMetadata {
   };
 
   /**
+   * Output-validation policy applied after entry-level Zod parsing succeeds.
+   *
+   * `allowNonFinite: true` lets `Infinity`, `-Infinity`, and `NaN` pass through
+   * to JSON serialization (where they become `null`). Default is `false` —
+   * non-finite numeric output throws `InvalidOutputError`, surfacing silent
+   * `JSON.stringify` corruption that `z.number()` would otherwise let through.
+   *
+   * @default { allowNonFinite: false }
+   */
+  output?: {
+    allowNonFinite?: boolean;
+  };
+
+  /**
    * Jobs and workflows configuration.
    * Enables the jobs/workflows system for saved, discoverable, triggerable executions.
    *
@@ -475,6 +489,17 @@ export const frontMcpBaseSchema = z.object({
       cdnOverrides: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
+  /**
+   * Output-validation policy applied after entry-level Zod parsing succeeds.
+   * `allowNonFinite: true` lets `Infinity`, `-Infinity`, and `NaN` reach JSON
+   * serialization (where they become `null`). Default is `false` — non-finite
+   * numeric output throws `InvalidOutputError`.
+   */
+  output: z
+    .object({
+      allowNonFinite: z.boolean().optional().default(false),
+    })
+    .optional(),
   jobs: z
     .object({
       enabled: z.boolean(),
@@ -684,6 +709,18 @@ const frontMcpLiteSchema = z.object({
   jobs: z.any().optional(),
   throttle: z.any().optional(),
   health: z.any().optional(),
+  // Required by Scope.validateAuthoritiesConfig — when entries declare
+  // `authorities` metadata the engine still needs the top-level config
+  // to instantiate. Pass-through (`z.any()`) so CLI/MCPB builds work
+  // without forcing the full base-schema validation pipeline.
+  authorities: z.any().optional(),
+  // Output-validation policy (see `frontMcpBaseSchema.output`). CLI mode
+  // honors the same `allowNonFinite` switch as the full server.
+  output: z
+    .object({
+      allowNonFinite: z.boolean().optional().default(false),
+    })
+    .optional(),
 });
 
 /**
