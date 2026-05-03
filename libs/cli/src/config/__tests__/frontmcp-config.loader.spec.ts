@@ -198,6 +198,24 @@ describe('tryLoadFrontMcpConfig — legacy shape recovery', () => {
     }
   });
 
+  it('throws when a v1.1 config is malformed (not silently undefined)', async () => {
+    // Round-3 CR — only legacy exec-only shapes (top-level cli/sea/esbuild
+    // without deployments) get the silent-undefined fallback. A config that
+    // *looks* v1.1 (has `deployments` or no exec-only marker fields) but is
+    // malformed must throw, not silently fall back to defaults.
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-malformed-'));
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo' }));
+    await writeFile(
+      path.join(dir, 'frontmcp.config.json'),
+      JSON.stringify({ name: 'demo', deployments: 'not-an-array' }),
+    );
+    try {
+      await expect(tryLoadFrontMcpConfig(dir)).rejects.toThrow(/Invalid frontmcp\.config/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('returns parsed config when the new-shape schema matches', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-loader-newshape-'));
     await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'demo' }));

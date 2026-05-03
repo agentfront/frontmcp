@@ -70,9 +70,20 @@ export async function tryLoadFrontMcpConfig(cwd: string): Promise<FrontMcpConfig
   }
   const result = frontmcpConfigSchema.safeParse(raw);
   if (!result.success) {
-    // Legacy shape (e.g., older `frontmcp.config.js` with top-level `cli`/`sea`).
-    // Don't fail — `loadExecConfig` will pick it up directly when needed.
-    return undefined;
+    // Distinguish two failure shapes:
+    //   1. Legacy exec-only config — top-level `cli` / `sea` / `esbuild`,
+    //      no `deployments` key. Return undefined so `loadExecConfig` picks
+    //      it up directly. Pre-v1.1 fixtures live in this branch.
+    //   2. Anything else — looks like the user attempted a v1.1 config and
+    //      got it wrong (typo'd `deployments`, invalid `target`, etc.).
+    //      Throw so we don't silently fall back to defaults — that was the
+    //      silent-corruption mode #365 was trying to eliminate.
+    const obj = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : undefined;
+    const isLegacyExecOnlyShape =
+      !!obj && !('deployments' in obj) && ('cli' in obj || 'sea' in obj || 'esbuild' in obj);
+    if (isLegacyExecOnlyShape) return undefined;
+    const issues = result.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+    throw new Error(`Invalid frontmcp.config:\n${issues}`);
   }
   return result.data;
 }
