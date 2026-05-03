@@ -195,6 +195,12 @@ async function buildSingleTarget(
   const execOverrides: {
     storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
     cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+    // #365 round-3 — without this, top-level `nodeVersion` declared in
+    // `frontmcp.config.{ts,js}` was silently dropped because the legacy
+    // `loadExecConfig` doesn't read .ts and the new-shape loader's result
+    // wasn't forwarded into buildExec. The exec build's manifest emitter
+    // shipped the SDK default (`>=22.0.0`) instead of the user's value.
+    nodeVersion?: string;
   } = {
     storage: config?.build?.storage,
     cli: cliDeploymentConfig
@@ -206,6 +212,7 @@ async function buildSingleTarget(
             : {}),
         }
       : undefined,
+    nodeVersion: config?.nodeVersion,
   };
 
   switch (target) {

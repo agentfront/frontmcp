@@ -18,13 +18,17 @@ import type { AdapterTemplate } from '../types';
  * @see https://github.com/codegenie/serverless-express
  */
 export const lambdaAdapter: AdapterTemplate = {
-  moduleFormat: 'esnext',
+  // #368 round-3 — switched from 'esnext' to 'commonjs' for the same reason
+  // as the vercel adapter: strict-ESM rspack rejects TS-emitted extensionless
+  // relative imports, and the `byDependency.fullySpecified: false` workaround
+  // didn't suppress it reliably. Lambda's Node runtime accepts CJS handlers,
+  // and the bundled output is a CJS `handler.cjs` either way.
+  moduleFormat: 'commonjs',
   shouldBundle: true,
   bundleOutput: 'handler.cjs',
 
-  getSetupTemplate: () => `// Serverless environment setup - MUST be imported first
+  getSetupTemplate: () => `// Serverless environment setup - MUST be required first
 // This sets FRONTMCP_SERVERLESS before any decorators run
-// Required because ESM hoists imports before other statements
 process.env.FRONTMCP_SERVERLESS = '1';
 process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
 `,
@@ -35,10 +39,11 @@ process.env.FRONTMCP_DEPLOYMENT_MODE = 'serverless';
 // IMPORTANT: This adapter requires @codegenie/serverless-express
 // Install it with: npm install @codegenie/serverless-express
 //
-import './serverless-setup.js';
-import '${mainModulePath}';
-import { getServerlessHandlerAsync } from '@frontmcp/sdk';
-import serverlessExpress from '@codegenie/serverless-express';
+require('./serverless-setup.js');
+require('${mainModulePath}');
+const { getServerlessHandlerAsync } = require('@frontmcp/sdk');
+const serverlessExpressMod = require('@codegenie/serverless-express');
+const serverlessExpress = serverlessExpressMod.default || serverlessExpressMod;
 
 let serverlessExpressInstance = null;
 
@@ -47,7 +52,7 @@ async function setup() {
   serverlessExpressInstance = serverlessExpress({ app });
 }
 
-export const handler = async (event, context) => {
+exports.handler = async (event, context) => {
   if (!serverlessExpressInstance) {
     await setup();
   }
