@@ -1,3 +1,4 @@
+import type { CloudflareDeployment } from '../../../config/frontmcp-config.types';
 import type { AdapterTemplate } from '../types';
 
 /**
@@ -74,25 +75,45 @@ module.exports = {
 `,
 
   // #375 — fail the build when the user's @FrontMcp config references
-  // Node-only storage providers that can't run on Workers. Conditional
-  // (env-gated) usage still passes; only unconditional declarations throw.
-  validate: (decoratorConfig) => {
-    if (!decoratorConfig) return;
-    const sqlite = decoratorConfig['sqlite'];
-    const redis = decoratorConfig['redis'];
+  // Node-only storage providers that can't run on Workers.
+  //
+  // Round 1 only inspected the runtime-evaluated config object. The reporter's
+  // failure case was `sqlite: process.env.REDIS_HOST ? {…} : { sqlite: {…} }` —
+  // a ternary that may evaluate to `undefined` at decorator-load time (so the
+  // runtime check sees nothing) but still ships the Node-only branch in the
+  // bundled worker. Round 2 also inspects `info.keysSeenInSource`, which is
+  // collected by walking the @FrontMcp({...}) source expression — that captures
+  // the property name regardless of whether its value is a literal, a ternary,
+  // or a function call. If `sqlite`/`redis` appear at all, fail loud and tell
+  // the user how to gate them at the source level.
+  validate: (decoratorConfig, info) => {
     const errors: string[] = [];
-    if (sqlite && typeof sqlite === 'object') {
+
+    const sqliteIsLiteral =
+      decoratorConfig?.['sqlite'] !== undefined &&
+      typeof decoratorConfig['sqlite'] === 'object' &&
+      decoratorConfig['sqlite'] !== null;
+    const redisIsLiteral =
+      decoratorConfig?.['redis'] !== undefined &&
+      typeof decoratorConfig['redis'] === 'object' &&
+      decoratorConfig['redis'] !== null;
+    const sqliteSeen = sqliteIsLiteral || !!info?.keysSeenInSource?.includes('sqlite');
+    const redisSeen = redisIsLiteral || !!info?.keysSeenInSource?.includes('redis');
+
+    if (sqliteSeen) {
       errors.push(
         'sqlite storage is not supported on --target cloudflare (no fs / native modules on Workers). ' +
-          'Use Cloudflare KV / Durable Objects, or gate the sqlite branch behind a build-time `define` ' +
-          'so the bundler can dead-code-eliminate it.',
+          'Even an env-gated `sqlite: process.env.X ? {...} : undefined` still ships the Node-only ' +
+          'branch in the worker bundle. Use Cloudflare KV / Durable Objects, or move the sqlite ' +
+          'config behind a build-time `define` so the bundler can dead-code-eliminate it.',
       );
     }
-    if (redis && typeof redis === 'object') {
+    if (redisSeen) {
       errors.push(
         'ioredis-style `redis` storage is not supported on --target cloudflare (no Node net). ' +
-          'Use Vercel KV / Upstash Redis (HTTP), or move the redis config to a runtime branch ' +
-          'gated on `globalThis.process?.env`.',
+          'Even an env-gated `redis: process.env.X ? {...} : undefined` still ships the Node-only ' +
+          'branch in the worker bundle. Use Vercel KV / Upstash Redis (HTTP), or move the redis ' +
+          'config behind a build-time `define` so the bundler can dead-code-eliminate it.',
       );
     }
     if (errors.length) {
@@ -108,10 +129,19 @@ module.exports = {
   // wrangler deploy silently failed.
   alwaysWriteConfig: true,
 
-  getConfig: (_cwd: string) => `name = "frontmcp-worker"
+  // #374 round-2 — merge `frontmcp.config.deployments[].wrangler.{name,
+  // compatibilityDate}` into the rendered TOML so values declared in the
+  // user's config actually reach `wrangler deploy`. Defaults preserved when
+  // the field is absent or no deployment was matched.
+  getConfig: (_cwd, deployment) => {
+    const wrangler = (deployment as CloudflareDeployment | undefined)?.wrangler ?? {};
+    const name = wrangler.name ?? 'frontmcp-worker';
+    const compatibilityDate = wrangler.compatibilityDate ?? '2024-01-01';
+    return `name = "${name}"
 main = "dist/cloudflare/index.js"
-compatibility_date = "2024-01-01"
-`,
+compatibility_date = "${compatibilityDate}"
+`;
+  },
 
   configFileName: 'wrangler.toml',
 };

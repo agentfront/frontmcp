@@ -554,6 +554,26 @@ function generatePromptCommands(prompts: ExtractedPrompt[]): string {
     return `${JSON.stringify(p.name)}: ${JSON.stringify(args)}`;
   }).join(',\n      ');
 
+  // #382 round-2 — collect the union of all known prompt-arg kebab names so we
+  // can register them as `.option(--<name> <value>)` on `prompt get`. Without
+  // these registrations, Commander treats the value tokens (e.g. `add` after
+  // `--op`) as extra positional args and rejects them with
+  // `too many arguments for 'get'. Expected 1 argument but got 7.` —
+  // breaking every prompt that takes arguments. Per-prompt validation still
+  // happens inside the action handler against `promptArgs[name]`, so a user
+  // that types `--op` for a prompt that doesn't declare it gets a clear
+  // "unknown option(s) for prompt" error rather than silent acceptance.
+  const allKebabNames = new Set<string>();
+  for (const p of prompts) {
+    for (const a of p.arguments || []) {
+      allKebabNames.add(camelToKebab(a.name));
+    }
+  }
+  const promptGetOptionLines = Array.from(allKebabNames)
+    .sort()
+    .map((kebab) => `  .option(${JSON.stringify(`--${kebab} <value>`)}, '')`)
+    .join('\n');
+
   const subcommands = prompts.map((prompt) => {
     const cmdName = camelToKebab(prompt.name).replace(/_/g, '-');
     const argOptions = (prompt.arguments || [])
@@ -628,6 +648,7 @@ var promptArgs = {
 var _getCmd = promptCmd
   .command('get <name>')
   .description('Render a prompt by name')
+${promptGetOptionLines}
   .allowUnknownOption(true)
   .action(async function(name) {
     try {
@@ -637,41 +658,51 @@ var _getCmd = promptCmd
         process.exitCode = 1;
         return;
       }
+      // Commander parsed registered options into rawOpts (camelCased). For
+      // unregistered prompts (a flag a different prompt declares but this one
+      // doesn't), fall back to scanning the raw token stream — that way an
+      // out-of-spec --foo for "this" prompt still surfaces as an explicit
+      // "unknown option(s)" error rather than being silently dropped.
+      var rawOpts = this.opts();
       var rawTokens = this.args.slice(1);
       var args = {};
       var unknown = [];
       var byKebab = {};
-      for (var s = 0; s < spec.length; s++) byKebab[spec[s].kebab] = spec[s];
+      var byCamel = {};
+      for (var s = 0; s < spec.length; s++) {
+        byKebab[spec[s].kebab] = spec[s];
+        byCamel[spec[s].camel] = spec[s];
+      }
+      // 1. Pull values from Commander-parsed options (registered names).
+      for (var camelKey in rawOpts) {
+        if (Object.prototype.hasOwnProperty.call(rawOpts, camelKey)) {
+          var matchByCamel = byCamel[camelKey];
+          if (matchByCamel) {
+            args[matchByCamel.name] = rawOpts[camelKey];
+          }
+        }
+      }
+      // 2. Scan rawTokens for any --<flag> not in this prompt's spec — those
+      //    are real "unknown for this prompt" errors. (Commander already
+      //    consumed the registered ones; only out-of-spec flags survive here
+      //    via .allowUnknownOption(true).)
       for (var i = 0; i < rawTokens.length; i++) {
         var tok = rawTokens[i];
         if (tok === '--') break;
         if (typeof tok !== 'string' || tok.indexOf('--') !== 0) continue;
         var keyAndVal = tok.slice(2);
-        var key, val;
         var eq = keyAndVal.indexOf('=');
-        if (eq >= 0) {
-          key = keyAndVal.slice(0, eq);
-          val = keyAndVal.slice(eq + 1);
-        } else {
-          key = keyAndVal;
-          var next = (i + 1 < rawTokens.length) ? rawTokens[i + 1] : undefined;
-          if (typeof next === 'string' && next.indexOf('--') !== 0) {
-            val = next;
-            i++;
-          } else {
-            val = 'true';
-          }
+        var key = eq >= 0 ? keyAndVal.slice(0, eq) : keyAndVal;
+        if (!byKebab[key]) {
+          unknown.push('--' + key);
         }
-        var match = byKebab[key];
-        if (!match) { unknown.push('--' + key); continue; }
-        args[match.name] = val;
       }
       if (unknown.length > 0) {
         console.error('Error: unknown option(s) for prompt "' + name + '": ' + unknown.join(', '));
         process.exitCode = 2;
         return;
       }
-      // Validate required args
+      // 3. Validate required args.
       for (var r = 0; r < spec.length; r++) {
         if (spec[r].required && args[spec[r].name] === undefined) {
           console.error('Error: missing required option --' + spec[r].kebab);

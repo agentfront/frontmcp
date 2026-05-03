@@ -48,7 +48,17 @@ export default function callToolRequestHandler({
             });
             return formatMcpErrorResponse(new InternalMcpError('FlowControl output is not a valid CallToolResult'));
           }
-          // For handled, next, abort, fail - return appropriate response
+          // #369 — for `fail`, propagate the original error (set by FlowControl.fail)
+          // so PublicMcpError.message/code reach the client intact instead of being
+          // flattened to the "Flow ended with: fail" sentinel. Mirrors the unwrap
+          // already in `direct-server.ts:125-128` so both transport paths agree.
+          if (e.type === 'fail') {
+            const original = (e as { originalError?: unknown }).originalError;
+            if (original !== undefined) {
+              return formatMcpErrorResponse(original);
+            }
+          }
+          // For handled, next, abort (and `fail` with no original error) — return appropriate response
           logger.warn(`FlowControl ended with type: ${e.type}`, { tool: toolName, type: e.type, output: e.output });
           return formatMcpErrorResponse(new InternalMcpError(`Flow ended with: ${e.type}`));
         }

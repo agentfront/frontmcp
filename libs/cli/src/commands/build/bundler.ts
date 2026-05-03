@@ -36,11 +36,33 @@ export async function bundleForServerless(
       'react-dom': 'react-dom',
       'react-dom/server': 'react-dom/server',
       'react/jsx-runtime': 'react/jsx-runtime',
+      // #368 round-2 — Lambda's entry imports `@codegenie/serverless-express`
+      // which is intentionally a peer dep (the user installs the version
+      // they want). Mark it external so rspack doesn't fail with
+      // "Module not found" trying to bundle it. The lambda adapter's own
+      // validate hook surfaces a clear "npm install @codegenie/serverless-express"
+      // error when it's actually missing from node_modules at build time.
+      '@codegenie/serverless-express': '@codegenie/serverless-express',
     },
     resolve: {
       extensions: ['.js', '.mjs', '.cjs', '.json'],
-      // Allow imports without file extensions (TypeScript compiles without .js but ESM requires them)
+      // Allow imports without file extensions (TypeScript compiles without .js
+      // but strict ESM requires them).
+      //
+      // #368 round-2 — top-level `fullySpecified: false` alone wasn't enough.
+      // When the entry's sibling `package.json` declares `{"type":"module"}`
+      // (vercel/lambda adapters do this so Node treats `index.js` as ESM),
+      // rspack classifies the relative import edges as `esm` dependencies
+      // and applies its strict-ESM resolver, which ignores the top-level
+      // setting. `byDependency` overrides per dependency type so
+      // `import { CalcApp } from './calc.app'` resolves whether the import
+      // is parsed as CJS, ESM, or commonjs-require.
       fullySpecified: false,
+      byDependency: {
+        esm: { fullySpecified: false },
+        commonjs: { fullySpecified: false },
+        'commonjs-require': { fullySpecified: false },
+      },
     },
     module: {
       rules: [],

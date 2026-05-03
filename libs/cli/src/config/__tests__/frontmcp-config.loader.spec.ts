@@ -122,6 +122,37 @@ export default config;
     }
   });
 
+  it('round-2: does not emit Node\'s "Failed to load the ES module" warning for .ts under CJS (#365)', async () => {
+    // Round 1 left the loader trying `await import()` after `require()` failed,
+    // which causes Node to print
+    //   Warning: Failed to load the ES module: ... Make sure to set "type":
+    //   "module" in the nearest package.json file or use the .mjs extension.
+    // The build proceeded via esbuild but the warning still leaked to stderr,
+    // making retesters believe the config wasn't loaded. Round 2 detects
+    // CJS and skips Node's `await import()` entirely.
+    const dir = await makeProject(`
+const config: { name: string; deployments: Array<{target: string}> } = {
+  name: 'cjs-no-warn',
+  deployments: [{ target: 'node' }],
+};
+export default config;
+`);
+    const originalEmit = process.emitWarning;
+    const warnings: string[] = [];
+    process.emitWarning = ((msg: string | Error) => {
+      warnings.push(typeof msg === 'string' ? msg : msg.message);
+    }) as typeof process.emitWarning;
+    try {
+      const cfg = await loadFrontMcpConfig(dir);
+      expect(cfg.name).toBe('cjs-no-warn');
+      const esmWarnings = warnings.filter((w) => /Failed to load the ES module/i.test(w));
+      expect(esmWarnings).toEqual([]);
+    } finally {
+      process.emitWarning = originalEmit;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('bundles sibling-helper imports so multi-file configs work under CJS', async () => {
     // CR3 — `transformSync` only transpiles the entry; `esbuild.build` with
     // `bundle: true` inlines `import { foo } from './helpers'` so the output
