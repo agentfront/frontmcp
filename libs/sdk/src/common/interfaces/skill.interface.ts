@@ -1,9 +1,16 @@
 // file: libs/sdk/src/common/interfaces/skill.interface.ts
 
-import { Type } from '@frontmcp/di';
-import { SkillMetadata, SkillToolRef, normalizeToolRef, SkillParameter, SkillResources } from '../metadata';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
-import { SkillRecord } from '../records';
+import { type Type } from '@frontmcp/di';
+
+import {
+  normalizeToolRef,
+  type SkillMetadata,
+  type SkillParameter,
+  type SkillResources,
+  type SkillToolRef,
+} from '../metadata';
+import { type SkillRecord } from '../records';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 
 /**
  * Type for skill definitions that can be passed to FrontMcp apps/plugins.
@@ -36,6 +43,34 @@ export interface SkillExampleInfo {
   level: string;
   /** Filename relative to the examples directory */
   filename: string;
+}
+
+/**
+ * Executable action declared by a dynamically-registered skill.
+ *
+ * Used by skill bundles (e.g. plugin-skilled-openapi) where the skill's content
+ * advertises one or more underlying invocable operations whose actual execution
+ * is mediated by a plugin-private mechanism. The actions are NOT MCP tools —
+ * they are descriptors the LLM reads to know what arguments and outputs to expect
+ * when it asks the plugin's meta-tool to execute one.
+ */
+export interface SkillAction {
+  /** Stable identifier within the skill (e.g. an OpenAPI operationId). */
+  actionId: string;
+  /** One-line summary suitable for inline display to the LLM. */
+  summary: string;
+  /** Optional human-readable description (markdown allowed). */
+  description?: string;
+  /** JSON Schema (Draft 2020-12) for the action's input. */
+  inputJsonSchema: Record<string, unknown>;
+  /** JSON Schema for the action's response payload. */
+  outputJsonSchema: Record<string, unknown>;
+  /**
+   * Optional ABAC/RBAC policy required to invoke this action. Shape is
+   * intentionally loose at the SDK boundary so libs/auth can interpret it
+   * without forcing the SDK to depend on libs/auth.
+   */
+  requiredAuthorities?: Record<string, unknown>;
 }
 
 /**
@@ -119,6 +154,24 @@ export interface SkillContent {
    * Examples are grouped by reference and contain name, description, level, and filename.
    */
   resolvedExamples?: SkillExampleInfo[];
+
+  /**
+   * Executable actions exposed by a dynamically-registered skill.
+   *
+   * Set by skill bundles (e.g. plugin-skilled-openapi) where the skill represents
+   * a curated group of invocable operations. The MCP client never sees these as
+   * standalone tools; they are surfaced through the skill's content so the LLM
+   * knows what it can ask the plugin's meta-tool to invoke.
+   */
+  actions?: SkillAction[];
+
+  /**
+   * Bundle version string for skills sourced from a versioned bundle (e.g. an
+   * OpenAPI overlay produced by FrontMCP Cloud). Polling clients can read this
+   * from the skill content to detect bundle swaps without relying on
+   * `notifications/skills/list_changed`, which is unreliable across MCP clients.
+   */
+  bundleVersion?: string;
 }
 
 /**

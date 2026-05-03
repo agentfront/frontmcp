@@ -73,6 +73,22 @@ These plugins are maintained by the FrontMCP team and published as individual pa
     **Best for:** Expensive computations, API rate limiting, multi-tenant data, frequently accessed resources
 
   </Card>
+
+  <Card title="Skilled OpenAPI Plugin" icon="layer-group" href="/frontmcp/plugins/skilled-openapi/overview">
+    Wrap a customer's REST API as a curated set of MCP **skills** without rewriting any controllers. Per-operation
+    tools stay hidden behind three meta-tools (`search_skill`, `load_skill`, `execute_action`); signed bundles
+    ship from CI and hot-swap at runtime.
+
+    **Features:**
+    - OpenAPI Overlay-aligned bundle wire format (anticipates SEP-2076)
+    - Three sources: static / npm / saas-pull (with cache fallback)
+    - Bundle signing (RS256 / Ed25519, OPA-style JWT-of-hashes)
+    - Five-gate authorization: signature → RFC 8707 → ABAC → credential scoping → SSRF
+    - Reuses `@frontmcp/adapters/openapi` runtime — no duplicated HTTP path
+
+    **Best for:** Large APIs (50+ ops) where flat exposure breaks the agent, CI-driven schema delivery, customer-facing MCP servers
+
+  </Card>
 </CardGroup>
 
 <Note>More official plugins are coming soon! Rate limiting, observability, and validation plugins are in development.</Note>

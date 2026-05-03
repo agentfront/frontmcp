@@ -1,0 +1,103 @@
+---
+title: Coexistence with the OpenAPI Adapter
+sidebarTitle: Coexistence
+description: When to use this plugin, when to use the OpenAPI adapter, and how to run both in the same FrontMCP server.
+icon: arrows-split-up-and-left
+---
+
+The [OpenAPI adapter](/frontmcp/adapters/openapi-adapter) and the Skilled OpenAPI plugin both turn an OpenAPI spec into MCP-callable surface — but they do it for different audiences and ship different contracts.
+
+## At a glance
+
+| | OpenAPI Adapter | Skilled OpenAPI Plugin |
+| --- | --- | --- |
+| **Discovery unit** | One MCP tool per `operationId` | One MCP **skill** bundling many ops |
+| **Visible to MCP client** | Every operation (in `tools/list`) | Three meta-tools only; per-op tools hidden |
+| **When the spec changes** | Server redeploy | Bundle hot-swap (signed, atomic) |
+| **Bundle origin trust** | None — spec is local | Signed bundles from CI / SaaS |
+| **ABAC per operation** | Via `@FrontMcp({ authorities })` on the adapter-mounted tools | Native; `requiredAuthorities` on the bundle's operations |
+| **Runtime cost** | `mcp-from-openapi` parser at boot | Pre-parsed bundle (parsing happens in your CI) |
+| **Sweet spot** | 5–20 hand-curated endpoints | 50+ endpoints, multi-service, customer-facing |
+
+## When to use each
+
+### OpenAPI adapter
+
+- You're wrapping a small internal API (≤20 ops) and the LLM should see every endpoint.
+- You control the spec and ship it inside your repo.
+- You want every op to appear in `tools/list` and be callable by name.
+- You're not yet ready for a CI-driven bundle pipeline.
+
+### Skilled OpenAPI plugin
+
+- You're wrapping a large API (50+ ops) where flat exposure breaks the agent.
+- The spec changes faster than your server redeploys (multiple times per day).
+- You need per-skill curation — the LLM should see "billing" and "customers" as named capabilities, not 47 individual endpoints.
+- You need ABAC at the operation granularity, with policies that travel with the bundle.
+- You need bundle origin trust — your CI signs, the runtime verifies.
+
+## Running both in the same server
+
+Both can register simultaneously without conflict — they don't share registries or fight over `tools/list`:
+
+- The adapter writes to `scope.tools` (visible).
+- The plugin writes to `scope.skills` (visible) and a plugin-private `HiddenOpRegistry` (not visible).
+
+The two paths never interact at runtime. A natural pattern: small handcrafted internal tools through the adapter, large customer-facing API surface through the plugin.
+
+```ts title="src/main.ts"
+import { FrontMcp } from '@frontmcp/sdk';
+import OpenApiAdapter from '@frontmcp/adapters/openapi';
+import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
+
+@FrontMcp({
+  info: { name: 'Acme MCP', version: '1.0.0' },
+  apps: [
+    OpenApiAdapter.fromSpec({
+      name: 'admin-tools',
+      spec: './specs/admin.openapi.yaml',
+      // 6 internal admin endpoints, hand-curated, visible
+    }),
+  ],
+  plugins: [
+    SkilledOpenApiPlugin.init({
+      source: { type: 'saas', /* ... */ },
+      // 200+ customer-facing endpoints from a CI-published bundle
+    }),
+  ],
+})
+export default class Server {}
+```
+
+The MCP client sees:
+
+```
+tools/list:
+  - search_skill, load_skill, execute_action   # from the plugin
+  - admin:resetCache, admin:reindex, ...       # from the adapter
+skills/list:
+  - billing, customers, orders, ...            # from the plugin
+```
+
+## Migration paths
+
+### From adapter to plugin
+
+If you started with the adapter and your spec grew past the point where flat exposure works:
+
+1. **Don't rip out the adapter** — leave it serving the small internal ops.
+2. **Move the public-facing surface** into a bundle. The simplest path is a script in your CI that reads your existing OpenAPI spec, runs the same `mcp-from-openapi` parser the adapter uses to produce `mapper[]` for each op, groups operations into skills (probably by tag or by URL path prefix), wraps the result in a `ResolvedBundle`, and signs it.
+3. **Register the plugin** with a `static` source pointing at the bundle artifact your CI produces.
+4. **Phase**: deploy with both running, remove operations from the adapter as the bundle covers them, eventually drop adapter-managed ops the bundle now owns.
+
+A future v1.2.x release may ship a CLI helper (`frontmcp openapi-to-bundle`) that does step 2 mechanically; for now it's a small script.
+
+### From plugin to adapter
+
+Rare, but possible — if you decide a particular surface should be flatly exposed (e.g. a debugging tool), drop those operations from the bundle and add them to an adapter-mounted app.
+
+## What if both register the same tool name?
+
+The adapter writes to `scope.tools`; the plugin only ever writes meta-tool names (`search_skill`, `load_skill`, `execute_action`) to `scope.tools`. Your adapter-mounted ops and the meta-tools cannot collide unless you deliberately name an adapter tool `search_skill`.
+
+For per-operation collisions inside the plugin (one bundle declaring two skills that both reference the same `operationId`), the bundle's Zod cross-validator rejects at apply time.

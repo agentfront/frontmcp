@@ -1,0 +1,54 @@
+// file: plugins/plugin-skilled-openapi/src/tools/search-skill.tool.ts
+
+import { ScopeEntry, Tool, ToolContext } from '@frontmcp/sdk';
+
+import { BundleSyncService } from '../sync/bundle-sync.service';
+import {
+  searchSkillDescription,
+  searchSkillInputSchema,
+  searchSkillOutputSchema,
+  type SearchSkillInput,
+  type SearchSkillOutput,
+} from './search-skill.schema';
+
+@Tool({
+  name: 'search_skill',
+  description: searchSkillDescription,
+  inputSchema: searchSkillInputSchema,
+  outputSchema: searchSkillOutputSchema,
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
+})
+export default class SearchSkillTool extends ToolContext {
+  async execute(input: SearchSkillInput): Promise<SearchSkillOutput> {
+    // Touching BundleSyncService triggers its factory which lazily starts
+    // the configured bundle source on first call.
+    this.get(BundleSyncService);
+    const scope = this.get(ScopeEntry);
+    const skillRegistry = scope.skills;
+    if (!skillRegistry || !skillRegistry.hasAny()) {
+      return { skills: [] };
+    }
+
+    const limit = input.limit ?? 20;
+    const tags = input.tags;
+    const results = await skillRegistry.search(input.query, {
+      topK: limit,
+      ...(tags ? { tags } : {}),
+    });
+
+    return {
+      skills: results.map((r) => ({
+        skillId: r.metadata.id ?? r.metadata.name,
+        name: r.metadata.name,
+        description: r.metadata.description ?? '',
+        score: r.score,
+        ...((r.metadata as { bundleVersion?: string }).bundleVersion
+          ? { bundleVersion: (r.metadata as { bundleVersion?: string }).bundleVersion }
+          : {}),
+      })),
+    };
+  }
+}

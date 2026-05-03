@@ -35,6 +35,7 @@
       "@frontmcp/plugin-dashboard": ["plugins/plugin-dashboard/src/index.ts"],
       "@frontmcp/plugin-feature-flags": ["plugins/plugin-feature-flags/src/index.ts"],
       "@frontmcp/plugin-remember": ["plugins/plugin-remember/src/index.ts"],
+      "@frontmcp/plugin-skilled-openapi": ["plugins/plugin-skilled-openapi/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "@frontmcp/uipack": ["libs/uipack/src/index.ts"],

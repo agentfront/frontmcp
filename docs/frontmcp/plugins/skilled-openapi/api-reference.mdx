@@ -1,0 +1,153 @@
+---
+title: API Reference
+sidebarTitle: API Reference
+description: Exported types, classes, and DI tokens from @frontmcp/plugin-skilled-openapi.
+icon: book
+---
+
+The plugin re-exports a small public surface from `@frontmcp/plugin-skilled-openapi`. Everything else is plugin-private and may change without notice.
+
+## Default export
+
+```ts
+import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
+```
+
+The plugin class itself. Call `.init(options)` to produce a registerable provider for the FrontMCP `plugins:` array. Same instance is also available as a named export:
+
+```ts
+import { SkilledOpenApiPlugin } from '@frontmcp/plugin-skilled-openapi';
+```
+
+## Plugin options
+
+```ts
+import {
+  SkilledOpenApiPluginOptions,         // resolved (after Zod parsing, defaults applied)
+  SkilledOpenApiPluginOptionsInput,    // input shape (what users pass to .init())
+  skilledOpenApiPluginOptionsSchema,   // zod schema, exported for downstream tooling
+} from '@frontmcp/plugin-skilled-openapi';
+```
+
+See [Configuration](/frontmcp/plugins/skilled-openapi/configuration) for the field-by-field breakdown.
+
+## Source option types
+
+```ts
+import {
+  BundleSourceOptions,    // discriminated union of the three below
+  StaticSourceOptions,
+  NpmSourceOptions,
+  SaasSourceOptions,
+} from '@frontmcp/plugin-skilled-openapi';
+```
+
+See [Sources](/frontmcp/plugins/skilled-openapi/sources) for the per-source semantics.
+
+## Signature & outbound options
+
+```ts
+import { SignatureKey, OutboundOptions } from '@frontmcp/plugin-skilled-openapi';
+```
+
+`SignatureKey` is the entry shape for `trustedKeys[]`. `OutboundOptions` is the parsed `outbound` block — useful when you read it via `SkilledOpenApiConfig`.
+
+## DI tokens
+
+```ts
+import {
+  SkilledOpenApiConfig,                // resolved-at-construction config holder
+  SkilledOpenApiCredentialResolver,    // abstract token for the vault adapter
+} from '@frontmcp/plugin-skilled-openapi';
+```
+
+### `SkilledOpenApiConfig`
+
+Singleton populated by the plugin's `dynamicProviders()`. Inject in any plugin/tool:
+
+```ts
+import { SkilledOpenApiConfig } from '@frontmcp/plugin-skilled-openapi';
+
+class MyHook {
+  constructor(private readonly config: SkilledOpenApiConfig) {}
+
+  doStuff() {
+    // config.options is the parsed SkilledOpenApiPluginOptions
+    // config.outbound shortcut for config.options.outbound
+  }
+}
+```
+
+### `SkilledOpenApiCredentialResolver`
+
+Abstract token. Override the provider with your own implementation to back the executor's auth resolution with a libs/auth-vault, AWS Secrets Manager, GCP Secret Manager, etc. Default implementation is the in-memory `MemoryCredentialResolver` seeded by the `credentials` plugin option.
+
+```ts
+abstract class SkilledOpenApiCredentialResolver {
+  abstract resolve(ref: string, opts: { bundleId: string }): Promise<string | undefined>;
+}
+```
+
+Override pattern:
+
+```ts
+import { Plugin, ProviderType } from '@frontmcp/sdk';
+import { SkilledOpenApiCredentialResolver } from '@frontmcp/plugin-skilled-openapi';
+
+@Plugin({
+  name: 'my-vault',
+  providers: [
+    {
+      provide: SkilledOpenApiCredentialResolver,
+      useValue: new MyVaultResolver(/* ... */),
+    } as ProviderType,
+  ],
+})
+export class MyVaultPlugin {}
+```
+
+Register `MyVaultPlugin` after `SkilledOpenApiPlugin` so the override wins.
+
+## Internal modules (do not depend on)
+
+The following are exported for tests and the plan but are NOT part of the stable API:
+
+- `BundleStore`, `HiddenOpRegistry`, `BundleSyncService` — runtime registries
+- `OperationDescriptor`, `BundledSkill`, `ResolvedBundle`, `AuthBinding`, `BundleIntegrity` — wire types (use the JSON shape documented in [Bundle Format](/frontmcp/plugins/skilled-openapi/bundle-format) instead)
+- `executeOperation`, `OpenApiRuntimeDeps` — runtime executor
+- `BundlePushJwtVerifier`, `WebhookReplayGuard`, `AuthorityGuard` — security helpers
+- `verifyBundleSignature`, `bundleDigest`, `canonicalize` — signature primitives
+
+These are subject to change; pin to a specific minor version if you depend on them.
+
+## SDK additions used by the plugin
+
+The plugin extends `@frontmcp/sdk` with three additive changes you can use directly:
+
+### `SkillRegistry.registerSkillContent(content, opts?)`
+
+Register a skill at runtime from a fully-resolved `SkillContent`. Returns a handle with an `unregister()` method.
+
+```ts
+const handle = await scope.skills.registerSkillContent({
+  id: 'my-skill',
+  name: 'My skill',
+  description: '...',
+  instructions: '# Instructions',
+  tools: [],
+  actions: [/* ... */],
+  bundleVersion: '1.0.0',
+});
+// later:
+await handle.unregister();
+```
+
+### `SkillContent.actions[]` and `bundleVersion`
+
+`SkillContent` carries optional `actions[]` (the per-skill executable operations) and `bundleVersion` (for change detection without `notifications/skills/list_changed`).
+
+### `notifications/skills/list_changed`
+
+Added to `McpNotificationMethod`. The `NotificationService` subscribes to `scope.skills` and broadcasts on every global change event.
+
+These changes are documented in the [skills feature page](/frontmcp/features/skills) and are usable independently of this plugin.

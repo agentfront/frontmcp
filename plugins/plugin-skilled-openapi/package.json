@@ -1,0 +1,61 @@
+{
+  "name": "@frontmcp/plugin-skilled-openapi",
+  "version": "1.0.4",
+  "description": "FrontMCP plugin: serve a customer's OpenAPI spec as skill bundles (signed, OpenAPI-Overlay-based) with hidden per-operation tools mediated by three meta-tools (search_skill / load_skill / execute_action).",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "frontmcp",
+    "openapi",
+    "skills",
+    "agent-skills",
+    "plugin",
+    "agentfront"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "plugins/plugin-skilled-openapi"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-skilled-openapi/README.md",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "dependencies": {
+    "@frontmcp/adapters": "1.0.4",
+    "@frontmcp/auth": "1.0.4",
+    "@frontmcp/protocol": "1.0.4",
+    "@frontmcp/sdk": "1.0.4",
+    "@frontmcp/utils": "1.0.4"
+  },
+  "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.0.4"
+  },
+  "devDependencies": {
+    "reflect-metadata": "^0.2.2"
+  }
+}

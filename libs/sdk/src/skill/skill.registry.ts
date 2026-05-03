@@ -1,31 +1,45 @@
 // file: libs/sdk/src/skill/skill.registry.ts
 
-import { Token, tokenName } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef, ScopeEntry, SkillEntry, SkillType, SkillToolValidationMode } from '../common';
-import { SkillContent } from '../common/interfaces';
-import { SkillChangeEvent, SkillEmitter } from './skill.events';
-import { SkillInstance, createSkillInstance } from './skill.instance';
-import { normalizeSkill, skillDiscoveryDeps } from './skill.utils';
-import { SkillRecord } from '../common/records';
-import ProviderRegistry from '../provider/provider.registry';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import { tokenName, type Token } from '@frontmcp/di';
+import { type ServerCapabilities } from '@frontmcp/protocol';
+import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+
 import {
-  SkillStorageProvider,
-  SkillSearchOptions,
-  SkillSearchResult,
-  SkillLoadResult,
-  SkillListOptions,
-  SkillListResult,
+  type EntryLineage,
+  type EntryOwnerRef,
+  type ScopeEntry,
+  type SkillEntry,
+  type SkillToolValidationMode,
+  type SkillType,
+} from '../common';
+import { logAvailabilityFiltering } from '../common/availability';
+import { type SkillContent } from '../common/interfaces';
+import type { SkillMetadata } from '../common/metadata';
+import { SkillKind, type SkillRecord, type SkillValueRecord } from '../common/records';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import {
+  SkillValidationError,
+  type SkillValidationReport,
+  type SkillValidationResult,
+} from './errors/skill-validation.error';
+import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
+import { MemorySkillProvider } from './providers/memory-skill.provider';
+import {
+  type MutableSkillStorageProvider,
+  type SkillListOptions,
+  type SkillListResult,
+  type SkillLoadResult,
+  type SkillSearchOptions,
+  type SkillSearchResult,
+  type SkillStorageProvider,
 } from './skill-storage.interface';
 import { SkillToolValidator } from './skill-validator';
-import { MemorySkillProvider } from './providers/memory-skill.provider';
-import type { ExternalSkillProviderBase } from './providers/external-skill.provider';
+import { SkillEmitter, type SkillChangeEvent } from './skill.events';
+import { createSkillInstance, type SkillInstance } from './skill.instance';
+import { normalizeSkill, skillDiscoveryDeps } from './skill.utils';
 import type { SyncResult } from './sync/sync-state.interface';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-import { ServerCapabilities } from '@frontmcp/protocol';
-import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
-import { logAvailabilityFiltering } from '../common/availability';
-import { SkillValidationError, SkillValidationResult, SkillValidationReport } from './errors/skill-validation.error';
 
 /**
  * Indexed skill for efficient lookup.
@@ -160,6 +174,33 @@ export interface SkillRegistryInterface {
   validateAllTools(): Promise<SkillValidationReport>;
 
   /**
+   * Register a skill at runtime from a fully-resolved SkillContent.
+   *
+   * Used by plugins (e.g. plugin-skilled-openapi) that ingest skill bundles after
+   * the registry has booted. Returns a handle whose `unregister()` removes the
+   * skill again and fires another change event. Re-registering the same `id`
+   * replaces the previous content.
+   *
+   * Dynamically-registered skills appear in {@link search}, {@link loadSkill},
+   * {@link listSkills}, {@link count}, and {@link getSkills}. They participate
+   * in `notifications/skills/list_changed` broadcasts.
+   *
+   * @param content - The skill content to register
+   * @param opts - Optional registration metadata (e.g. source identifier for diagnostics)
+   * @returns Handle exposing `unregister()` and the resolved skill id
+   */
+  registerSkillContent(
+    content: SkillContent,
+    opts?: { source?: string },
+  ): Promise<{ id: string; unregister: () => Promise<void> }>;
+
+  /**
+   * Remove a previously-registered dynamic skill by id.
+   * No-op (returns false) if the id was not registered dynamically.
+   */
+  unregisterSkill(id: string): Promise<boolean>;
+
+  /**
    * Sync local skills to external storage.
    * Only available when an external provider in persistent mode is set.
    *
@@ -196,6 +237,16 @@ export default class SkillRegistry
 
   /** Local skills indexed for lookup */
   private localRows: IndexedSkill[] = [];
+
+  /** Skills registered dynamically at runtime via {@link registerSkillContent} */
+  private dynamicRows: IndexedSkill[] = [];
+
+  /**
+   * Original SkillContent preserved verbatim for dynamic skills, so loadSkill
+   * returns the exact content (including `actions[]` and `bundleVersion`) that
+   * was registered, rather than a metadata-rebuild that loses extra fields.
+   */
+  private dynamicContents = new Map<string, SkillContent>();
 
   /** Adopted skills from child registries */
   private adopted = new Map<SkillRegistry, IndexedSkill[]>();
@@ -481,6 +532,25 @@ export default class SkillRegistry
    * - qualified name (owner:name format)
    */
   async loadSkill(skillId: string): Promise<SkillLoadResult | undefined> {
+    // Dynamic skills bypass the SkillInstance.load() path so the original
+    // SkillContent (with `actions[]` / `bundleVersion`) survives intact.
+    const dynamic = this.dynamicContents.get(skillId);
+    if (dynamic) {
+      const toolNames = dynamic.tools.map((t) => t.name);
+      let availableTools = toolNames;
+      let missingTools: string[] = [];
+      let isComplete = true;
+      let warning: string | undefined;
+      if (this.toolValidator) {
+        const validation = this.toolValidator.validate(toolNames);
+        availableTools = validation.available;
+        missingTools = validation.missing;
+        isComplete = validation.complete;
+        warning = this.toolValidator.formatWarning(validation, dynamic.name);
+      }
+      return { skill: dynamic, availableTools, missingTools, isComplete, warning };
+    }
+
     // Try local skills first by ID/baseName, then qualified name
     let localSkill = this.findByName(skillId) ?? this.findByQualifiedName(skillId);
 
@@ -701,10 +771,156 @@ export default class SkillRegistry
     return report;
   }
 
+  /* -------------------- Dynamic registration -------------------- */
+
+  /**
+   * Register a skill at runtime from a fully-resolved SkillContent.
+   * See {@link SkillRegistryInterface.registerSkillContent} for full contract.
+   */
+  async registerSkillContent(
+    content: SkillContent,
+    opts?: { source?: string },
+  ): Promise<{ id: string; unregister: () => Promise<void> }> {
+    if (!content || typeof content.id !== 'string' || content.id.length === 0) {
+      throw new Error('registerSkillContent: SkillContent.id is required');
+    }
+    if (typeof content.name !== 'string' || content.name.length === 0) {
+      throw new Error('registerSkillContent: SkillContent.name is required');
+    }
+
+    const id = content.id;
+
+    // Replace if already registered with the same id
+    const existingIdx = this.dynamicRows.findIndex((r) => r.instance.name === id);
+    if (existingIdx !== -1) {
+      this.dynamicRows.splice(existingIdx, 1);
+    }
+
+    // Synthesize a SkillValueRecord from the SkillContent
+    const metadata: SkillMetadata = {
+      id,
+      name: content.name,
+      description: content.description,
+      // SkillInstructionSource accepts a plain string for inline instructions
+      instructions: content.instructions,
+      tools: content.tools.map((t) => ({
+        name: t.name,
+        ...(t.purpose !== undefined && { purpose: t.purpose }),
+        ...(t.required !== undefined && { required: t.required }),
+      })),
+      ...(content.parameters && { parameters: content.parameters }),
+      ...(content.examples && { examples: content.examples }),
+      ...(content.license && { license: content.license }),
+      ...(content.compatibility && { compatibility: content.compatibility }),
+      ...(content.specMetadata && { specMetadata: content.specMetadata }),
+      ...(content.allowedTools && { allowedTools: content.allowedTools }),
+      ...(content.resources && { resources: content.resources }),
+    };
+
+    const provideToken = Symbol(`dynamic-skill:${id}`);
+    const record: SkillValueRecord = {
+      kind: SkillKind.VALUE,
+      provide: provideToken,
+      metadata,
+    };
+
+    const instance = createSkillInstance(record, this.providers, this.owner);
+    // Pre-load instructions so subsequent loads return the same content (no file/URL
+    // resolution: instructions came in as an inline string).
+    try {
+      await instance.load();
+    } catch (error) {
+      this.scope.logger.warn(
+        `[SkillRegistry] Failed to pre-load dynamic skill ${id} from source ${opts?.source ?? 'unknown'}: ${
+          (error as Error).message
+        }`,
+      );
+    }
+
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(provideToken, instance, lineage, this);
+    this.dynamicRows.push(row);
+    this.dynamicContents.set(id, content);
+
+    // Push the original SkillContent (with actions/bundleVersion preserved) into
+    // the storage provider so search/list/load see it unchanged. If the storage
+    // provider isn't mutable (read-only external provider), skip silently — the
+    // dynamicRows path still serves getSkills/findByName/loadSkill via the registry.
+    const mutable = this.asMutableProvider(this.storageProvider);
+    if (mutable) {
+      try {
+        if (await mutable.exists(id)) {
+          await mutable.update(id, content);
+        } else {
+          await mutable.add(content);
+        }
+      } catch (error) {
+        this.scope.logger.warn(
+          `[SkillRegistry] Failed to index dynamic skill ${id} in storage provider: ${(error as Error).message}`,
+        );
+      }
+    }
+
+    this.reindex();
+    this.bump('reset');
+
+    let unregistered = false;
+    const unregister = async (): Promise<void> => {
+      if (unregistered) return;
+      unregistered = true;
+      await this.unregisterSkill(id);
+    };
+
+    this.scope.logger.debug(
+      `[SkillRegistry] Registered dynamic skill ${id}${opts?.source ? ` (source: ${opts.source})` : ''}`,
+    );
+
+    return { id, unregister };
+  }
+
+  /**
+   * Remove a previously-registered dynamic skill by id.
+   */
+  async unregisterSkill(id: string): Promise<boolean> {
+    const idx = this.dynamicRows.findIndex((r) => r.instance.name === id);
+    if (idx === -1) return false;
+
+    this.dynamicRows.splice(idx, 1);
+    this.dynamicContents.delete(id);
+
+    const mutable = this.asMutableProvider(this.storageProvider);
+    if (mutable) {
+      try {
+        await mutable.remove(id);
+      } catch (error) {
+        this.scope.logger.warn(
+          `[SkillRegistry] Failed to remove dynamic skill ${id} from storage provider: ${(error as Error).message}`,
+        );
+      }
+    }
+
+    this.reindex();
+    this.bump('reset');
+    this.scope.logger.debug(`[SkillRegistry] Unregistered dynamic skill ${id}`);
+    return true;
+  }
+
   /* -------------------- Internal helpers -------------------- */
 
+  private asMutableProvider(provider: SkillStorageProvider): MutableSkillStorageProvider | undefined {
+    const candidate = provider as Partial<MutableSkillStorageProvider>;
+    if (
+      typeof candidate.add === 'function' &&
+      typeof candidate.update === 'function' &&
+      typeof candidate.remove === 'function'
+    ) {
+      return provider as MutableSkillStorageProvider;
+    }
+    return undefined;
+  }
+
   private listAllIndexed(): IndexedSkill[] {
-    return [...this.localRows, ...[...this.adopted.values()].flat()];
+    return [...this.localRows, ...this.dynamicRows, ...[...this.adopted.values()].flat()];
   }
 
   private listAllInstances(): readonly SkillEntry[] {

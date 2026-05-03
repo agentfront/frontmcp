@@ -1,5 +1,4 @@
 import { type McpOpenAPITool } from 'mcp-from-openapi';
-import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 
 import { z, type JSONSchema } from '@frontmcp/lazy-zod';
 import { tool, type FrontMcpLogger } from '@frontmcp/sdk';
@@ -414,7 +413,14 @@ function getZodSchemaFromJsonSchema(
   }
 
   try {
-    const zodSchema = convertJsonSchemaToZod(jsonSchema);
+    // Zod 4 native JSON Schema → Zod conversion (semi-experimental in Zod
+    // 4.3.x but stable for the JSON Schema subset OpenAPI specs produce).
+    const zodSchema = z.fromJSONSchema(
+      jsonSchema as Parameters<typeof z.fromJSONSchema>[0],
+      {
+        defaultTarget: 'draft-2020-12',
+      } as Parameters<typeof z.fromJSONSchema>[1],
+    );
     if (typeof zodSchema?.parse !== 'function') {
       throw new Error('Conversion did not produce a valid Zod schema.');
     }

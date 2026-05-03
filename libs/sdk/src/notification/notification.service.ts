@@ -293,11 +293,18 @@ export const MCP_LOGGING_LEVEL_PRIORITY: Record<LoggingLevel, number> = {
 
 /**
  * MCP notification method types per the 2025-11-25 specification.
+ *
+ * `notifications/skills/list_changed` is FrontMCP's anticipation of SEP-2076
+ * (Agent Skills as a First-Class MCP Primitive, working-group draft). Many MCP
+ * clients do not honor list_changed notifications today, so this is best-effort:
+ * dynamically-registered skills also expose `bundleVersion` on their SkillContent
+ * so polling clients can detect change cheaply.
  */
 export type McpNotificationMethod =
   | 'notifications/resources/list_changed'
   | 'notifications/tools/list_changed'
   | 'notifications/prompts/list_changed'
+  | 'notifications/skills/list_changed'
   | 'notifications/resources/updated'
   | 'notifications/message'
   | 'notifications/progress'
@@ -414,6 +421,18 @@ export class NotificationService {
       }
     });
     this.unsubscribers.push(unsubPrompts);
+
+    // Subscribe to skill changes (best-effort; clients that don't honor it
+    // can still read `bundleVersion` from skill content to detect changes).
+    const skillRegistry = this.scope.skills;
+    if (skillRegistry?.subscribe) {
+      const unsubSkills = skillRegistry.subscribe({ immediate: false }, (event) => {
+        if (event.changeScope === 'global') {
+          this.broadcastNotification('notifications/skills/list_changed');
+        }
+      });
+      this.unsubscribers.push(unsubSkills);
+    }
 
     this.logger.info('Notification service initialized with registry subscriptions');
   }

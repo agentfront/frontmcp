@@ -2,12 +2,12 @@
  * Elicitation Content Validation Helper
  *
  * Validates elicitation result content against the stored JSON Schema.
- * Uses zod-from-json-schema for JSON Schema to Zod conversion.
+ * Uses Zod 4's native `z.fromJSONSchema` for JSON Schema → Zod conversion.
  *
  * @module elicitation/helpers/validate-elicitation-content
  */
 
-import { convertJsonSchemaToZod } from 'zod-from-json-schema';
+import { z } from '@frontmcp/lazy-zod';
 
 /**
  * Validation result interface.
@@ -57,7 +57,12 @@ export function validateElicitationContent(
   jsonSchema: Record<string, unknown>,
 ): ElicitationValidationResult {
   try {
-    const zodSchema = convertJsonSchemaToZod(jsonSchema);
+    const zodSchema = z.fromJSONSchema(
+      jsonSchema as Parameters<typeof z.fromJSONSchema>[0],
+      {
+        defaultTarget: 'draft-2020-12',
+      } as Parameters<typeof z.fromJSONSchema>[1],
+    );
     const parseResult = zodSchema.safeParse(content);
 
     if (parseResult.success) {

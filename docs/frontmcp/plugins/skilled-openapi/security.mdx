@@ -1,0 +1,191 @@
+---
+title: Security
+sidebarTitle: Security
+description: Bundle signing (OPA model), RFC 8707 audience checks, layered SSRF defenses, ABAC integration, OWASP MCP Top 10 mapping.
+icon: shield-check
+---
+
+The plugin sits across three threat-rich domains:
+
+1. **MCP server security** (OWASP MCP Top 10 2026, CVE-2025-6514, the Anthropic Git MCP CVE chain CVE-2025-68143/144/145)
+2. **Indirect prompt injection** (Anthropic's Feb 2026 system card identifies indirect injection as the dominant attack class)
+3. **Outbound HTTP from a server-side runtime** (SSRF surged 452% from 2023 to 2024)
+
+Every security control in this page maps to one of those vectors. This is not a theoretical surface — it's a defense-in-depth stack for the production pattern of "wrap a customer's REST API and serve it to an LLM."
+
+## Five-gate authorization stack
+
+Every `execute_action` traverses five gates. Removing any of them requires editing the plugin source:
+
+```
+MCP client
+   │
+   ▼  ① Inbound auth (RFC 8707-validated JWT from the MCP transport)
+SkilledOpenApi meta-tools
+   │
+   ▼  ② Bundle origin (signature verified, see below)
+HiddenOpRegistry
+   │
+   ▼  ③ Per-skill ABAC (action.requiredAuthorities via AuthoritiesEngine)
+   │
+   ▼  ④ Credential scoping (vaultRef must resolve via the configured CredentialResolver)
+OpenApiHttpExecutor
+   │
+   ▼  ⑤ Outbound execution (SSRF allowlist + IP blocklist + circuit breaker)
+Customer REST API
+```
+
+## Bundle signing (OPA model)
+
+The `integrity` envelope on every bundle is a JWT-of-hashes modeled on [OPA's signed-bundle pattern](https://www.openpolicyagent.org/docs/management-bundles).
+
+```ts
+interface BundleIntegrity {
+  alg: 'RS256' | 'EdDSA';
+  keyId: string;
+  signature: string;   // base64url
+  digest: string;      // sha256 hex of canonical bundle bytes (excluding integrity)
+}
+```
+
+Verification flow:
+
+1. Re-compute sha256 of the canonicalized bundle minus the `integrity` field.
+2. Reject if the computed digest doesn't match `integrity.digest`.
+3. Look up the trusted public key by `integrity.keyId`. Reject if unknown.
+4. Reject if the trusted key's algorithm doesn't match `integrity.alg`.
+5. Verify the signature over the canonical bytes (not the digest hex) using the public key.
+
+Any failure → keep the existing bundle, surface failure via `/healthz` + structured error log + audit trail. Never partial apply.
+
+```ts
+SkilledOpenApiPlugin.init({
+  // ...
+  requireSignature: true,                  // default: true. Never set false in production.
+  trustedKeys: [
+    {
+      keyId: 'frontmcp-cloud-2026-01',
+      alg: 'RS256',
+      publicKeyPem: process.env.FRONTMCP_BUNDLE_PUBKEY!,
+    },
+  ],
+})
+```
+
+`dev: true` bypasses signature verification with a loud startup warning. **Never** set it in production. Setting `requireSignature: false` without `dev: true` also emits a startup warning to call out the misconfiguration.
+
+## RFC 8707 enforcement
+
+Per the MCP authorization spec (draft 2026-03-15), every JWT must carry RFC 8707 Resource Indicators. The plugin enforces this on the SaaS-push channel via `BundlePushJwtVerifier`:
+
+- **`aud`** must equal the configured `expectedAudience` (typically `bundleId`)
+- **`resource`** must equal the configured `expectedResource` (typically the FrontMCP server's canonical URL)
+- **`iss`** must equal `expectedIssuer`
+- **`roles`** must include at least one of `requiredRoles` (default: `['frontmcp:cloud:push']`)
+
+This blocks the confused-deputy class of attack where a token issued for one customer's FrontMCP gets replayed against another's.
+
+For `passthrough caller token` outbound calls (an `AuthBinding` with `passthroughCallerToken: true`), the plugin verifies the caller's JWT has a `resource` claim matching the customer REST API's base URL before forwarding it.
+
+## Input sanitization (CVE-2025-6514 lesson)
+
+Even after signature verification, every string in a bundle is treated as adversarial input. The Zod schema in `bundle.schema.ts` enforces:
+
+- **URL construction**: WHATWG `URL` only, never string concat
+- **Path templates**: reject `..`, backticks, `$(`, `${`, whitespace, `?`, `#`
+- **Header names**: must match RFC 7230 token grammar
+- **Header values**: stripped of CR/LF before assignment
+- **JSON Schema input**: `additionalProperties` constraints applied at the Zod boundary; the executor validates input against the schema again before invoking the upstream
+- **No `eval`, `Function`, `child_process`, `vm`, or dynamic `require`** anywhere in the executor or sync paths
+- **No bundle data in shell commands** — the plugin never shells out
+
+The CVE-2025-6514 root cause was passing untrusted server response data into system handlers. The plugin doesn't shell out at all.
+
+## SSRF defenses (layered)
+
+A hostname allowlist alone is insufficient (DNS rebinding bypasses it). The plugin layers:
+
+1. **URL string check** before DNS resolution: reject `file:`, `data:`, `gopher:`, `ftp:`; require `https:` (allow `http:` only via explicit `allowHttp: true`).
+2. **Hostname allowlist**: only declared `services[].baseUrl` hosts.
+3. **Cloud-metadata hostname blocklist**: `metadata.google.internal`, `metadata.azure.com`, `metadata.aws.com` blocked even if technically allowlisted.
+4. **DNS resolve once** at request start; reject if any resolved IP falls in deny ranges:
+   - RFC 1918 private (10/8, 172.16/12, 192.168/16)
+   - Link-local (169.254/16) — blocks AWS/GCP/Azure metadata services (169.254.169.254)
+   - Loopback (127/8, ::1)
+   - IPv6 ULA (fc00::/7) and link-local (fe80::/10)
+5. **Per-host concurrency cap** (`maxConcurrencyPerHost`, default 10).
+
+`allowPrivateNetworks: true` bypasses the IP blocklist for self-hosted scenarios where the customer's REST API legitimately lives on a private network. Loud startup warning when set. Default is fail-closed.
+
+## ABAC integration
+
+`requiredAuthorities` on a skill or operation is the same `AuthoritiesPolicy` shape `@frontmcp/auth` uses everywhere:
+
+```jsonc
+{
+  "operationId": "refundInvoice",
+  "requiredAuthorities": {
+    "operator": "AND",
+    "permissions": { "all": ["invoices:write"] },
+    "attributes": { "match": { "input.amount": { "$lte": 10000 } } }
+  }
+}
+```
+
+Evaluation runs through `AuthoritiesEngine` from `@frontmcp/auth` — RBAC, ABAC, ReBAC, custom evaluators, and combinators (`anyOf`, `allOf`, `not`) are all available. See the [authorities docs](/frontmcp/authentication/authorities) for the full grammar.
+
+The check happens inside `execute_action`, with the caller's `authInfo` from the MCP request mapped through `AuthoritiesContextBuilder`. Denial returns `ok: false` with a structured reason and is recorded in the audit log.
+
+## OWASP MCP Top 10 (2026) coverage
+
+| OWASP MCP risk | This plugin's defense |
+| --- | --- |
+| MCP-1 Tool poisoning | Bundle signing + bundle-diff log on every swap (rug-pull detection) |
+| MCP-2 Prompt injection (direct) | Inbound auth + meta-tool input schema strict validation |
+| MCP-3 Indirect prompt injection | Structural output envelope from `execute_action`; output schema enforcement |
+| MCP-4 Excessive agency | Per-skill ABAC + credential scoping + structured ABAC denial path |
+| MCP-5 Sensitive info disclosure | Outbound allowlist + audit log + no credential echo in logs/traces |
+| MCP-6 Insecure tool description | Signed-bundle origin + bundle-diff log surfaces description changes |
+| MCP-7 Confused deputy | RFC 8707 enforcement on every JWT (push channel + caller-token passthrough) |
+| MCP-8 Supply chain | Sigstore/SLSA provenance verification on npm-source (planned v1.2.x) |
+| MCP-9 Excessive permissions | Per-bundle credential allowlist + per-skill scoping |
+| MCP-10 Insufficient observability | OTel spans + audit log + bundle diff + `/healthz` enrichment |
+
+## Indirect prompt injection mitigations
+
+The customer's REST API can return content (CRM names, ticket bodies, user-supplied fields) that contains instructions targeting the LLM. Defenses:
+
+- **Structural separation**: `execute_action` returns `{ ok, status, data, contentType, error }` — `data` is opaque to the LLM unless explicitly extracted.
+- **Output schema validation as a bottleneck**: every response validated against the bundle's declared `outputSchema`.
+- **Response size cap** (`defaultMaxResponseBytes`, default 256KB; per-op override via `op.maxResponseBytes`).
+- **Optional content sanitizer hook** (planned v1.2.x): customers register a `sanitize(action, data)` callback to strip HTML, redact PII, or refuse content matching known-injection heuristics.
+
+The signed-bundle origin reduces the surface (you trust your own CI pipeline to produce instructions), but it does not eliminate it. **Treat customer REST API responses no more than user input.** Document this loudly in your team's playbook.
+
+## Production checklist
+
+Before flipping to production:
+
+- [ ] `dev: false` (default) and `requireSignature: true` (default)
+- [ ] At least one entry in `trustedKeys[]`
+- [ ] Credentials wired via the [auth vault](/frontmcp/authentication/auth) instead of the in-memory `MemoryCredentialResolver` for any non-trivial deployment
+- [ ] `allowHttp: false` (default) unless your upstream is on `localhost`
+- [ ] `allowPrivateNetworks: false` (default) unless self-hosted on a private network
+- [ ] `outbound.maxConcurrencyPerHost` tuned to match your upstream's rate-limit budget
+- [ ] Audit log routed to a SIEM
+- [ ] `/healthz` polling configured to alert on `lastPullAt > 2 * pollIntervalMs` (saas source) or `lastApplyError != null`
+
+## Deferred to v1.2.x
+
+The following are planned but not in v1.2.0:
+
+- Sigstore Cosign v3 keyless verification (alongside the JWT/key path)
+- GitHub artifact attestation verification for npm-source
+- Webhook channel (`POST /__skilled_openapi/push`) with nonce + replay window
+- Optional content-sanitizer hook for response bodies
+- Discovery-bundle pattern for signing key rotation
+- Bundle rollback admin endpoint (`POST /__skilled_openapi/rollback`)
+- Per-service circuit-breaker (currently relies on per-host concurrency cap)
+- TLS pinning per service (opt-in)
+
+Track [the v1.2.x roadmap](/frontmcp/updates) for release dates.

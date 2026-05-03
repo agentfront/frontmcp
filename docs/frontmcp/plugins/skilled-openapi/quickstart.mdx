@@ -1,0 +1,238 @@
+---
+title: Quick Start
+sidebarTitle: Quick Start
+description: Install the plugin, point it at a fixture skill bundle, and call execute_action end-to-end in 5 minutes.
+icon: rocket
+---
+
+<Note>
+  This guide assumes you have a FrontMCP project set up. If you're new to FrontMCP, start with the [installation guide](/frontmcp/getting-started/installation) first.
+</Note>
+
+The fastest way to see the plugin in action is to point it at a **static** bundle file — no SaaS, no signing keypair, no npm package. We'll use the same fixture the e2e suite ships with so you can verify expected behavior against real test output.
+
+## From zero to skilled MCP server
+
+<Steps>
+  <Step title="Install the plugin">
+    <CodeGroup>
+    ```bash npm
+    npm install @frontmcp/plugin-skilled-openapi
+    ```
+    ```bash pnpm
+    pnpm add @frontmcp/plugin-skilled-openapi
+    ```
+    ```bash yarn
+    yarn add @frontmcp/plugin-skilled-openapi
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Save a fixture bundle">
+    Create `bundle.json` in your project. This is the canonical worked example used in the rest of the docs and the e2e suite — one `invoices` skill bundling three OpenAPI operations against a `billing` service.
+
+    ```json title="bundle.json"
+    {
+      "schemaVersion": 1,
+      "bundleId": "demo:billing",
+      "version": "1.0.0",
+      "generatedAt": "2026-05-04T12:00:00.000Z",
+      "sourceDigest": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "services": [
+        { "id": "billing", "baseUrl": "http://127.0.0.1:9876" }
+      ],
+      "authBindings": {
+        "default": { "kind": "bearer", "vaultRef": "billing-token" }
+      },
+      "skills": [
+        {
+          "id": "invoices",
+          "name": "Invoices",
+          "description": "Issue, query, and refund invoices.",
+          "instructions": "# Invoices\n\nThree operations: createInvoice, getInvoice, refundInvoice.",
+          "operationIds": ["createInvoice", "getInvoice", "refundInvoice"]
+        }
+      ],
+      "operations": {
+        "createInvoice": {
+          "operationId": "createInvoice",
+          "serviceId": "billing",
+          "httpMethod": "POST",
+          "pathTemplate": "/v1/invoices",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "customerId": { "type": "string" },
+              "amount": { "type": "number" }
+            },
+            "required": ["customerId", "amount"]
+          },
+          "outputSchema": { "type": "object" },
+          "mapper": [
+            { "inputKey": "customerId", "type": "body", "key": "customerId", "required": true },
+            { "inputKey": "amount", "type": "body", "key": "amount", "required": true }
+          ],
+          "authBindingRef": "default"
+        },
+        "getInvoice": {
+          "operationId": "getInvoice",
+          "serviceId": "billing",
+          "httpMethod": "GET",
+          "pathTemplate": "/v1/invoices/{id}",
+          "inputSchema": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+          "outputSchema": { "type": "object" },
+          "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
+          "authBindingRef": "default"
+        },
+        "refundInvoice": {
+          "operationId": "refundInvoice",
+          "serviceId": "billing",
+          "httpMethod": "POST",
+          "pathTemplate": "/v1/invoices/{id}/refunds",
+          "inputSchema": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "amount": { "type": "number" } },
+            "required": ["id", "amount"]
+          },
+          "outputSchema": { "type": "object" },
+          "mapper": [
+            { "inputKey": "id", "type": "path", "key": "id", "required": true },
+            { "inputKey": "amount", "type": "body", "key": "amount", "required": true }
+          ],
+          "authBindingRef": "default"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Register the plugin">
+    Add `SkilledOpenApiPlugin.init(...)` to your FrontMCP server. The `dev: true` flag bypasses the signing requirement so you can iterate without a keypair — see [Security](/frontmcp/plugins/skilled-openapi/security) before flipping to production.
+
+    ```ts title="src/main.ts"
+    import * as path from 'node:path';
+    import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+    import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
+
+    @FrontMcp({
+      info: { name: 'Skilled-OpenAPI Demo', version: '0.1.0' },
+      apps: [],
+      plugins: [
+        SkilledOpenApiPlugin.init({
+          source: {
+            type: 'static',
+            path: path.resolve(__dirname, '../bundle.json'),
+            watch: true,
+          },
+          // dev mode for local iteration — bypasses signing + allows http://
+          dev: true,
+          requireSignature: false,
+          credentials: { 'billing-token': 'demo-bearer-xyz' },
+          outbound: {
+            allowHttp: true,
+            allowPrivateNetworks: true,
+            defaultTimeoutMs: 5_000,
+            defaultMaxResponseBytes: 256 * 1024,
+            maxConcurrencyPerHost: 10,
+          },
+        }),
+      ],
+      logging: { level: LogLevel.Info },
+      http: { port: 3010 },
+    })
+    export default class Server {}
+    ```
+  </Step>
+
+  <Step title="Run a tiny mock REST server (the upstream the bundle points at)">
+    The bundle's `services[0].baseUrl` is `http://127.0.0.1:9876` — point it at a real upstream and the plugin will execute real HTTP calls. For the quickstart, save this stub alongside `src/main.ts`:
+
+    ```ts title="src/mock-billing.ts"
+    import * as http from 'node:http';
+
+    const invoices = new Map<string, { id: string; status: string; amount: number }>();
+    let seq = 1;
+
+    http.createServer(async (req, res) => {
+      const auth = req.headers['authorization'];
+      if (!auth?.startsWith('Bearer ')) {
+        res.writeHead(401).end(JSON.stringify({ error: 'no bearer' }));
+        return;
+      }
+      const url = new URL(req.url ?? '/', 'http://x');
+      // POST /v1/invoices
+      if (req.method === 'POST' && url.pathname === '/v1/invoices') {
+        const body = await new Promise<string>((r) => {
+          const chunks: Buffer[] = [];
+          req.on('data', (c) => chunks.push(c));
+          req.on('end', () => r(Buffer.concat(chunks).toString('utf8')));
+        });
+        const { amount } = JSON.parse(body);
+        const id = `inv_${seq++}`;
+        invoices.set(id, { id, status: 'open', amount });
+        res.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ id, status: 'open' }));
+        return;
+      }
+      // GET /v1/invoices/:id
+      const m = url.pathname.match(/^\/v1\/invoices\/([^/]+)$/);
+      if (req.method === 'GET' && m) {
+        const inv = invoices.get(m[1]!);
+        if (!inv) return void res.writeHead(404).end('{}');
+        return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(inv));
+      }
+      res.writeHead(404).end('{}');
+    }).listen(9876, () => console.log('mock billing on :9876'));
+    ```
+
+    Run it in a separate terminal:
+
+    ```bash
+    npx tsx src/mock-billing.ts
+    ```
+  </Step>
+
+  <Step title="Connect MCP Inspector and verify">
+    Boot your FrontMCP server (`npx tsx src/main.ts`) and connect MCP Inspector to `http://localhost:3010`. You should see:
+
+    - `tools/list` returns **only** `search_skill`, `load_skill`, `execute_action`. The three OpenAPI operations are hidden.
+    - `skills/list` returns the `invoices` skill.
+    - `search_skill({ query: "create invoice" })` returns `[{ skillId: "invoices", ... }]`.
+    - `load_skill({ skillId: "invoices" })` returns the markdown instructions plus three actions with their JSON Schemas.
+    - `execute_action({ skillId: "invoices", actionId: "createInvoice", input: { customerId: "cus_1", amount: 4200 } })` returns `{ ok: true, status: 201, data: { id: "inv_1", status: "open" } }` and the mock server logs the hit.
+  </Step>
+</Steps>
+
+## What you just did
+
+You ran the same flow the [e2e suite](https://github.com/agentfront/frontmcp/tree/main/apps/e2e/demo-e2e-skilled-openapi) tests on every commit:
+
+1. The plugin parsed your bundle, validated it against the strict Zod schema, and registered the `invoices` skill into `scope.skills` via `SkillRegistry.registerSkillContent()`.
+2. It populated a plugin-private `HiddenOpRegistry` with the three operation descriptors, keyed by `(skillId, actionId)`. These never touch `scope.tools`, so they can't leak into `tools/list`.
+3. When the MCP client called `execute_action`, the plugin:
+   - looked up `(invoices, createInvoice)` in the hidden-op registry,
+   - ran the ABAC guard (no `requiredAuthorities` on this op → granted),
+   - resolved the `bearer` auth binding via the in-memory `CredentialResolver` (seeded by your `credentials: { ... }` option),
+   - delegated to `@frontmcp/adapters/openapi`'s `buildRequest` → `fetch` → `parseResponse`,
+   - SSRF-checked the resolved URL against the bundle's declared `services[].baseUrl` host allowlist,
+   - returned a structured `{ ok, status, data }` envelope to the MCP client.
+
+## Hot-swap test
+
+While the server is running, edit `bundle.json` — bump the `version` to `"1.0.1"` and tweak the skill's `instructions`. The plugin's `StaticSource` watches the file, the `BundleSyncService` applies the diff atomically, and clients receive `notifications/skills/list_changed`. Polling clients can read the new `bundleVersion` directly from the skill content (the notification is best-effort; many MCP clients don't honor it).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Bundle format" icon="file-code" href="/frontmcp/plugins/skilled-openapi/bundle-format">
+    The full wire format, including the signature envelope you'll need before going to production.
+  </Card>
+  <Card title="Sources" icon="cloud-arrow-down" href="/frontmcp/plugins/skilled-openapi/sources">
+    Move from `static` to `npm` (pinned) or `saas` (CI-driven, signed, hot-pulled) source.
+  </Card>
+  <Card title="Meta-tools" icon="wrench" href="/frontmcp/plugins/skilled-openapi/meta-tools">
+    `search_skill` / `load_skill` / `execute_action` — exact contracts and prompts for the LLM.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/frontmcp/plugins/skilled-openapi/security">
+    Sign your bundles, switch off `dev: true`, wire credentials to `libs/auth`'s vault.
+  </Card>
+</CardGroup>
