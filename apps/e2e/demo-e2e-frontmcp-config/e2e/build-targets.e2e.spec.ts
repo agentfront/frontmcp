@@ -20,8 +20,9 @@
  *          themselves, regardless of value evaluation.
  */
 import { execFileSync } from 'node:child_process';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { ensureDir, fileExists, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const FRONTMCP_BIN = path.join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
@@ -56,41 +57,41 @@ function runFrontmcp(cwd: string, args: string[]): CliResult {
   }
 }
 
-function makeTmpProject(prefix: string): string {
-  fs.mkdirSync(TMP_ROOT, { recursive: true });
-  return fs.mkdtempSync(path.join(TMP_ROOT, `${prefix}-`));
+async function makeTmpProject(prefix: string): Promise<string> {
+  await ensureDir(TMP_ROOT);
+  return mkdtemp(path.join(TMP_ROOT, `${prefix}-`));
 }
 
-function writeTextFile(dir: string, rel: string, content: string): void {
+async function writeTextFile(dir: string, rel: string, content: string): Promise<void> {
   const full = path.join(dir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content, 'utf-8');
+  await ensureDir(path.dirname(full));
+  await writeFile(full, content);
 }
 
 describe('Adapter build E2E — wrangler config + Cloudflare AST validate (#374, #375)', () => {
   let tmp: string;
 
-  beforeAll(() => {
-    if (!fs.existsSync(FRONTMCP_BIN)) {
+  beforeAll(async () => {
+    if (!(await fileExists(FRONTMCP_BIN))) {
       throw new Error(
         `frontmcp CLI not built at ${FRONTMCP_BIN}. ` + `Run \`yarn nx build cli\` before this E2E suite.`,
       );
     }
   });
 
-  afterEach(() => {
-    if (tmp && fs.existsSync(tmp)) {
-      fs.rmSync(tmp, { recursive: true, force: true });
+  afterEach(async () => {
+    if (tmp && (await fileExists(tmp))) {
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 
-  afterAll(() => {
-    if (fs.existsSync(TMP_ROOT)) fs.rmSync(TMP_ROOT, { recursive: true, force: true });
+  afterAll(async () => {
+    if (await fileExists(TMP_ROOT)) await rm(TMP_ROOT, { recursive: true, force: true });
   });
 
   describe('#375 — Cloudflare validate aborts on env-gated sqlite/redis (round-2 reporter repro)', () => {
-    function writeMain(dir: string, decoratorBody: string): void {
-      writeTextFile(
+    async function writeMain(dir: string, decoratorBody: string): Promise<void> {
+      await writeTextFile(
         dir,
         'src/main.ts',
         `import 'reflect-metadata';
@@ -100,12 +101,12 @@ import { FrontMcp } from '@frontmcp/sdk';
 export default class App {}
 `,
       );
-      writeTextFile(
+      await writeTextFile(
         dir,
         'package.json',
         JSON.stringify({ name: 'cf-validate-fixture', version: '0.0.0', type: 'commonjs' }, null, 2),
       );
-      writeTextFile(
+      await writeTextFile(
         dir,
         'frontmcp.config.js',
         `module.exports = {
@@ -117,9 +118,9 @@ export default class App {}
       );
     }
 
-    it('aborts the build when @FrontMcp({...}) source has env-gated sqlite (the reporter repro)', () => {
-      tmp = makeTmpProject('cf-sqlite');
-      writeMain(
+    it('aborts the build when @FrontMcp({...}) source has env-gated sqlite (the reporter repro)', async () => {
+      tmp = await makeTmpProject('cf-sqlite');
+      await writeMain(
         tmp,
         `{
   http: { port: 3000 },
@@ -134,12 +135,12 @@ export default class App {}
       const combined = stdout + stderr;
       expect(combined).toMatch(/sqlite storage is not supported on --target cloudflare/i);
       // Ensure the failure happened pre-bundle — no dist artifacts written.
-      expect(fs.existsSync(path.join(tmp, 'dist', 'cloudflare', 'index.js'))).toBe(false);
+      expect(await fileExists(path.join(tmp, 'dist', 'cloudflare', 'index.js'))).toBe(false);
     });
 
-    it('aborts the build when @FrontMcp({...}) source has env-gated redis', () => {
-      tmp = makeTmpProject('cf-redis');
-      writeMain(
+    it('aborts the build when @FrontMcp({...}) source has env-gated redis', async () => {
+      tmp = await makeTmpProject('cf-redis');
+      await writeMain(
         tmp,
         `{
   http: { port: 3000 },
@@ -154,9 +155,9 @@ export default class App {}
       expect(stdout + stderr).toMatch(/redis.*not supported on --target cloudflare/i);
     });
 
-    it('aborts even on unconditional literal sqlite (round-1 case still covered)', () => {
-      tmp = makeTmpProject('cf-sqlite-literal');
-      writeMain(
+    it('aborts even on unconditional literal sqlite (round-1 case still covered)', async () => {
+      tmp = await makeTmpProject('cf-sqlite-literal');
+      await writeMain(
         tmp,
         `{
   http: { port: 3000 },
@@ -177,8 +178,8 @@ export default class App {}
     // `generateAdapterFiles` regardless of whether the bundler step succeeds
     // (the bundler is only invoked for `shouldBundle` adapters, which
     // cloudflare is not — it has its own non-bundling path).
-    function writeCloudflareFixture(dir: string, deploymentExtras: string): void {
-      writeTextFile(
+    async function writeCloudflareFixture(dir: string, deploymentExtras: string): Promise<void> {
+      await writeTextFile(
         dir,
         'src/main.js',
         `// Plain JS entry — no @FrontMcp metadata, no sqlite/redis literals,
@@ -186,12 +187,12 @@ export default class App {}
 module.exports = {};
 `,
       );
-      writeTextFile(
+      await writeTextFile(
         dir,
         'package.json',
         JSON.stringify({ name: 'cf-wrangler-fixture', version: '0.0.0', type: 'commonjs' }, null, 2),
       );
-      writeTextFile(
+      await writeTextFile(
         dir,
         'frontmcp.config.js',
         `module.exports = {
@@ -203,48 +204,52 @@ module.exports = {};
       );
     }
 
-    it('writes deployments[].wrangler.{name, compatibilityDate} into wrangler.toml', () => {
-      tmp = makeTmpProject('cf-wrangler-merge');
-      writeCloudflareFixture(tmp, `, wrangler: { name: 'frontegg-bin', compatibilityDate: '2025-01-01' }`);
+    it('writes deployments[].wrangler.{name, compatibilityDate} into wrangler.toml', async () => {
+      tmp = await makeTmpProject('cf-wrangler-merge');
+      await writeCloudflareFixture(tmp, `, wrangler: { name: 'frontegg-bin', compatibilityDate: '2025-01-01' }`);
 
       const { stdout, stderr } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
-      const combined = stdout + stderr;
       const wranglerPath = path.join(tmp, 'wrangler.toml');
 
-      // The build may fail post-wrangler-write (tsc on a JS entry is fine but
-      // some downstream steps may still fail). What matters for #374 is that
-      // wrangler.toml was written with the configured values before the build
-      // ran into trouble. If wrangler.toml doesn't exist at all, that means
-      // generateAdapterFiles never reached the cloudflare config step.
-      if (!fs.existsSync(wranglerPath)) {
+      // wrangler.toml MUST exist after the build — the test asserts its
+      // contents, so silently skipping when it's missing would mask the
+      // regression we're trying to catch (#374 round-1 + round-2).
+      const exists = await fileExists(wranglerPath);
+      if (!exists) {
         // Surface build output so the failure mode is debuggable.
-        throw new Error(`wrangler.toml not written. Build output:\n${combined}`);
+        throw new Error(`wrangler.toml not written. Build output:\n${stdout}${stderr}`);
       }
-      const toml = fs.readFileSync(wranglerPath, 'utf-8');
+      expect(exists).toBe(true);
+
+      const toml = await readFile(wranglerPath);
       expect(toml).toContain('name = "frontegg-bin"');
       expect(toml).toContain('compatibility_date = "2025-01-01"');
       // main path must always reflect the build's actual output dir (#374 round-1 fix).
       expect(toml).toContain('main = "dist/cloudflare/index.js"');
     });
 
-    it('falls back to defaults when deployments[].wrangler is omitted', () => {
-      tmp = makeTmpProject('cf-wrangler-defaults');
-      writeCloudflareFixture(tmp, ''); // no `wrangler` field
+    it('falls back to defaults when deployments[].wrangler is omitted', async () => {
+      tmp = await makeTmpProject('cf-wrangler-defaults');
+      await writeCloudflareFixture(tmp, ''); // no `wrangler` field
 
-      runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      const { stdout, stderr } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
       const wranglerPath = path.join(tmp, 'wrangler.toml');
-      if (!fs.existsSync(wranglerPath)) return; // build aborted earlier; nothing to assert
+      const exists = await fileExists(wranglerPath);
+      if (!exists) {
+        throw new Error(`wrangler.toml not written. Build output:\n${stdout}${stderr}`);
+      }
+      expect(exists).toBe(true);
 
-      const toml = fs.readFileSync(wranglerPath, 'utf-8');
+      const toml = await readFile(wranglerPath);
       expect(toml).toContain('name = "frontmcp-worker"');
       expect(toml).toContain('compatibility_date = "2024-01-01"');
     });
 
-    it('overwrites an existing wrangler.toml on every build (#374 round-1 alwaysWriteConfig)', () => {
-      tmp = makeTmpProject('cf-wrangler-overwrite');
-      writeCloudflareFixture(tmp, `, wrangler: { name: 'updated-name', compatibilityDate: '2025-06-01' }`);
+    it('overwrites an existing wrangler.toml on every build (#374 round-1 alwaysWriteConfig)', async () => {
+      tmp = await makeTmpProject('cf-wrangler-overwrite');
+      await writeCloudflareFixture(tmp, `, wrangler: { name: 'updated-name', compatibilityDate: '2025-06-01' }`);
       // Pre-seed a stale wrangler.toml that points at the wrong main path.
-      writeTextFile(
+      await writeTextFile(
         tmp,
         'wrangler.toml',
         `name = "stale-name"
@@ -253,8 +258,12 @@ compatibility_date = "2024-01-01"
 `,
       );
 
-      runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
-      const toml = fs.readFileSync(path.join(tmp, 'wrangler.toml'), 'utf-8');
+      const { stdout, stderr } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      const wranglerPath = path.join(tmp, 'wrangler.toml');
+      if (!(await fileExists(wranglerPath))) {
+        throw new Error(`wrangler.toml not written. Build output:\n${stdout}${stderr}`);
+      }
+      const toml = await readFile(wranglerPath);
       expect(toml).toContain('name = "updated-name"');
       expect(toml).toContain('compatibility_date = "2025-06-01"');
       expect(toml).toContain('main = "dist/cloudflare/index.js"');

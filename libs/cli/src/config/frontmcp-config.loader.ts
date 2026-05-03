@@ -112,7 +112,7 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
       // straight to esbuild. For ESM projects we still try the runtime
       // paths first (faster, no transpile cost). Either way, a failure on
       // every path throws the combined error — never silent defaults.
-      const isCjsProject = isCommonJsProject(cwd);
+      const isCjsProject = await isCommonJsProject(cwd);
       let requireErr: Error | undefined;
       try {
         const mod = require(configPath);
@@ -163,12 +163,15 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
  * Read errors (no package.json, malformed JSON) are treated as "CJS" — that's
  * the safer default for the loader because it routes us through esbuild
  * transpilation rather than relying on Node's experimental TS handling.
+ *
+ * Routed through `@frontmcp/utils` per repo convention so this module
+ * doesn't reach into `node:fs` for an ad-hoc package.json read.
  */
-function isCommonJsProject(cwd: string): boolean {
+async function isCommonJsProject(cwd: string): Promise<boolean> {
   try {
     const pkgPath = path.join(cwd, 'package.json');
-    if (!fs.existsSync(pkgPath)) return true;
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { type?: string };
+    const contents = await readFile(pkgPath);
+    const pkg = JSON.parse(contents) as { type?: string };
     return pkg.type !== 'module';
   } catch {
     return true;
@@ -221,11 +224,6 @@ async function loadTsConfigViaEsbuild(configPath: string): Promise<unknown> {
   const exported = (m as any).exports as { default?: unknown };
   return exported?.default ?? exported;
 }
-
-// Surface the @frontmcp/utils import even though esbuild reads the entry
-// itself — keeps the file's filesystem boundary going through @frontmcp/utils
-// for any future expansion.
-void readFile;
 
 /**
  * Derive minimal config from package.json.

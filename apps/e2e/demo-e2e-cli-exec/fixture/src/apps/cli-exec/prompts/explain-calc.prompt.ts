@@ -23,21 +23,25 @@ export default class ExplainCalcPrompt extends PromptContext {
     const aNum = Number(a);
     const bNum = Number(b);
     let result: number | string;
-    switch (op) {
-      case 'add':
-        result = aNum + bNum;
-        break;
-      case 'sub':
-        result = aNum - bNum;
-        break;
-      case 'mul':
-        result = aNum * bNum;
-        break;
-      case 'div':
-        result = bNum === 0 ? 'undefined' : aNum / bNum;
-        break;
-      default:
-        result = `unknown op: ${op}`;
+    if (!Number.isFinite(aNum) || !Number.isFinite(bNum)) {
+      result = `invalid operands: a=${a}, b=${b} (both must be numeric)`;
+    } else {
+      switch (op) {
+        case 'add':
+          result = aNum + bNum;
+          break;
+        case 'sub':
+          result = aNum - bNum;
+          break;
+        case 'mul':
+          result = aNum * bNum;
+          break;
+        case 'div':
+          result = bNum === 0 ? 'undefined' : aNum / bNum;
+          break;
+        default:
+          result = `unknown op: ${op}`;
+      }
     }
     return {
       description: `${op} ${a} and ${b}`,
