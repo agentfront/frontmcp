@@ -27,6 +27,7 @@ async function generateAdapterFiles(
   outDir: string,
   entryBasename: string,
   cwd: string,
+  deployment?: DeploymentTarget,
 ): Promise<void> {
   const template = ADAPTERS[adapter];
 
@@ -84,7 +85,7 @@ async function generateAdapterFiles(
     const configPath = path.join(cwd, template.configFileName);
     const exists = await fileExists(configPath);
 
-    const configContent = template.getConfig(cwd);
+    const configContent = template.getConfig(cwd, deployment);
     const writeIt = async (): Promise<void> => {
       if (typeof configContent === 'string') {
         await fsp.writeFile(configPath, configContent, 'utf8');
@@ -241,7 +242,7 @@ async function buildSingleTarget(
     case 'cloudflare':
     case 'distributed': {
       const adapter = TARGET_TO_ADAPTER[target];
-      return runAdapterBuild(targetOpts, adapter);
+      return runAdapterBuild(targetOpts, adapter, deployment);
     }
     default:
       throw new Error(`Unknown build target: ${target}. Available: cli, node, sdk, browser, cloudflare, vercel, lambda, distributed, mcpb`);
@@ -251,7 +252,11 @@ async function buildSingleTarget(
 /**
  * Build using a deployment adapter (serverless platforms).
  */
-async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<void> {
+async function runAdapterBuild(
+  opts: ParsedArgs,
+  adapter: AdapterName,
+  deployment?: DeploymentTarget,
+): Promise<void> {
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
   const outDir = path.resolve(cwd, opts.outDir || 'dist');
@@ -272,12 +277,14 @@ async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<
   // #375 — adapter-level pre-validation: read the entry's @FrontMcp() config
   // metadata and let the adapter reject incompatible features
   // (sqlite/redis on Workers, etc.) before emitting an unrunnable bundle.
-  // `loadEntryDecoratorConfig` handles both compiled-JS and raw-TS entries
-  // (TS goes through esbuild + Module._compile so we don't need a tsc pass).
+  // `loadEntryDecoratorInfo` handles both compiled-JS and raw-TS entries
+  // (TS goes through esbuild + Module._compile so we don't need a tsc pass)
+  // AND scans the source AST for keys hidden behind env-gated ternaries —
+  // round-2 made the env-gated case the headline #375 reproducer.
   if (template.validate) {
-    const { loadEntryDecoratorConfig } = await import('./load-entry-config.js');
-    const decoratorConfig = await loadEntryDecoratorConfig(entry);
-    template.validate(decoratorConfig);
+    const { loadEntryDecoratorInfo } = await import('./load-entry-config.js');
+    const info = await loadEntryDecoratorInfo(entry);
+    template.validate(info.decoratorConfig, { keysSeenInSource: info.keysSeenInSource });
   }
 
   const moduleFormat = template.moduleFormat;
@@ -313,7 +320,7 @@ async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<
   if (adapter !== 'node') {
     console.log(c('cyan', `[build] Generating ${adapter} deployment files...`));
     const entryBasename = path.basename(entry);
-    await generateAdapterFiles(adapter, outDir, entryBasename, cwd);
+    await generateAdapterFiles(adapter, outDir, entryBasename, cwd, deployment);
   }
 
   console.log(c('green', 'Build completed.'));

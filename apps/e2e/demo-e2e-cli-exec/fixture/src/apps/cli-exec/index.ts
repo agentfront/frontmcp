@@ -2,6 +2,7 @@ import { App } from '@frontmcp/sdk';
 
 import ProcessDataJob from './jobs/process-data.job';
 import CodeReviewPrompt from './prompts/code-review.prompt';
+import ExplainCalcPrompt from './prompts/explain-calc.prompt';
 import AppInfoResource from './resources/app-info.resource';
 import ItemByIdTemplate from './resources/item-by-id.resource-template';
 import greetingHelper from './skills/greeting-helper.skill';
@@ -20,7 +21,7 @@ import TransformDataTool from './tools/transform-data.tool';
   description: 'CLI Exec E2E testing app',
   tools: [AddTool, DivideTool, TransformDataTool, DoctorTool, GreetTool, JobTool, SubscribeTool, SkillsTool],
   resources: [AppInfoResource, ItemByIdTemplate],
-  prompts: [CodeReviewPrompt],
+  prompts: [CodeReviewPrompt, ExplainCalcPrompt],
   skills: [MathHelperSkill, greetingHelper],
   jobs: [ProcessDataJob],
 })

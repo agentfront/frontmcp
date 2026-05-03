@@ -1,3 +1,5 @@
+import type { DeploymentTarget } from '../../config/frontmcp-config.types';
+
 /**
  * Configuration for a deployment adapter.
  * Each adapter defines how to compile and package the FrontMCP server
@@ -36,9 +38,14 @@ export type AdapterTemplate = {
   /**
    * Generate the deployment platform config file content.
    * @param cwd - Current working directory (for detecting package manager, etc.)
+   * @param deployment - Resolved `frontmcp.config.deployments[]` entry for this
+   *   target, when one was found. Adapters that opt in (e.g., cloudflare)
+   *   merge platform-specific fields (`wrangler.name`, `compatibilityDate`)
+   *   into their generated config so values declared in `frontmcp.config.js`
+   *   actually reach the platform — see #374.
    * @returns Object (for JSON) or string (for TOML/YAML)
    */
-  getConfig?: (cwd: string) => object | string;
+  getConfig?: (cwd: string, deployment?: DeploymentTarget) => object | string;
 
   /** Name of the config file (e.g., 'vercel.json', 'wrangler.toml') */
   configFileName?: string;
@@ -60,10 +67,21 @@ export type AdapterTemplate = {
    *
    * @param decoratorConfig - Best-effort `__frontmcp:config` metadata
    *   extracted from the entry's @FrontMcp() decorator. May be undefined
-   *   when the entry exports a plain config object.
+   *   when the entry exports a plain config object or the decorator's
+   *   value evaluates to undefined at module-load time (e.g., env-gated
+   *   ternaries that resolve to undefined when the env isn't set).
+   * @param info - Round-2 (#375): structural metadata about the entry source.
+   *   `info.keysSeenInSource` lists the top-level property names that appear
+   *   in `@FrontMcp({...})` arg expressions even when their values are
+   *   conditional. Adapters can use this to reject incompatible options
+   *   (e.g., `sqlite: process.env.X ? {...} : undefined`) that the runtime
+   *   config alone can't catch.
    * @throws to abort the build with a user-facing message.
    */
-  validate?: (decoratorConfig: Record<string, unknown> | undefined) => void;
+  validate?: (
+    decoratorConfig: Record<string, unknown> | undefined,
+    info?: { keysSeenInSource: string[] },
+  ) => void;
 
   /**
    * Whether `getConfig()` output should overwrite an existing config file

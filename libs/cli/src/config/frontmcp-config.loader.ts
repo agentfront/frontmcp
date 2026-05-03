@@ -103,32 +103,41 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
 
     if (filename.endsWith('.ts')) {
       // #365 — When the project is `"type": "commonjs"` (the default),
-      // `require()` can't load .ts (no transpiler) and `await import()`
-      // fails with "Make sure to set 'type': 'module'". The previous loader
-      // silently fell through to defaults. Now we transpile the .ts file
-      // with esbuild (already a dependency) and eval the resulting CJS.
-      // Any failure throws — no silent fallback.
+      // `require()` can't load .ts without a hook and `await import()` emits
+      // Node's `Failed to load the ES module … Make sure to set "type": "module"`
+      // warning to stderr regardless of whether type-stripping eventually
+      // succeeds — that warning by itself looked to retesters like a hard
+      // load failure even when the build proceeded. Round 2: when the host
+      // project is CJS, skip Node's `await import()` entirely and go
+      // straight to esbuild. For ESM projects we still try the runtime
+      // paths first (faster, no transpile cost). Either way, a failure on
+      // every path throws the combined error — never silent defaults.
+      const isCjsProject = await isCommonJsProject(cwd);
+      let requireErr: Error | undefined;
       try {
         const mod = require(configPath);
         return mod.default ?? mod;
-      } catch (requireErr) {
+      } catch (e) {
+        requireErr = e as Error;
+      }
+      if (!isCjsProject) {
         try {
           const mod = await import(configPath);
           return mod.default ?? mod;
         } catch {
-          // Both runtime loaders rejected — fall through to esbuild transpile.
+          // Fall through to esbuild.
         }
-        try {
-          return await loadTsConfigViaEsbuild(configPath);
-        } catch (esbuildErr) {
-          throw new Error(
-            `Failed to load ${filename}.\n` +
-              `  require() error: ${(requireErr as Error).message}\n` +
-              `  esbuild error:   ${(esbuildErr as Error).message}\n` +
-              `Hint: ensure the file exports a default config (e.g., ` +
-              `\`export default defineConfig({...})\`) and that all imports resolve.`,
-          );
-        }
+      }
+      try {
+        return await loadTsConfigViaEsbuild(configPath);
+      } catch (esbuildErr) {
+        throw new Error(
+          `Failed to load ${filename}.\n` +
+            `  require() error: ${requireErr?.message ?? '(skipped)'}\n` +
+            `  esbuild error:   ${(esbuildErr as Error).message}\n` +
+            `Hint: ensure the file exports a default config (e.g., ` +
+            `\`export default defineConfig({...})\`) and that all imports resolve.`,
+        );
       }
     }
 
@@ -144,6 +153,29 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
 
   // Fallback: derive from package.json
   return deriveFromPackageJson(cwd);
+}
+
+/**
+ * Read the host project's `package.json.type` to decide whether `await import()`
+ * of a `.ts` file is worth attempting. Returns true when the project is
+ * declared `"type": "commonjs"` or omits the field entirely (Node's default).
+ *
+ * Read errors (no package.json, malformed JSON) are treated as "CJS" — that's
+ * the safer default for the loader because it routes us through esbuild
+ * transpilation rather than relying on Node's experimental TS handling.
+ *
+ * Routed through `@frontmcp/utils` per repo convention so this module
+ * doesn't reach into `node:fs` for an ad-hoc package.json read.
+ */
+async function isCommonJsProject(cwd: string): Promise<boolean> {
+  try {
+    const pkgPath = path.join(cwd, 'package.json');
+    const contents = await readFile(pkgPath);
+    const pkg = JSON.parse(contents) as { type?: string };
+    return pkg.type !== 'module';
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -192,11 +224,6 @@ async function loadTsConfigViaEsbuild(configPath: string): Promise<unknown> {
   const exported = (m as any).exports as { default?: unknown };
   return exported?.default ?? exported;
 }
-
-// Surface the @frontmcp/utils import even though esbuild reads the entry
-// itself — keeps the file's filesystem boundary going through @frontmcp/utils
-// for any future expansion.
-void readFile;
 
 /**
  * Derive minimal config from package.json.

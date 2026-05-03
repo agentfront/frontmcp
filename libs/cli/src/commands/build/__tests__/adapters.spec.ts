@@ -173,6 +173,27 @@ describe('Build Adapters', () => {
     it('passes when decoratorConfig is undefined (plain config / no decorator)', () => {
       expect(() => cloudflareAdapter.validate?.(undefined)).not.toThrow();
     });
+
+    it('round-2: throws when source AST shows env-gated sqlite (#375 retest)', () => {
+      // The runtime-evaluated config object resolves to {} when REDIS_HOST is unset,
+      // but the bundled worker still ships the sqlite branch. The source-AST
+      // scan picks up the key regardless of value evaluation.
+      expect(() =>
+        cloudflareAdapter.validate?.({}, { keysSeenInSource: ['sqlite'] }),
+      ).toThrow(/sqlite storage is not supported on --target cloudflare/);
+    });
+
+    it('round-2: throws when source AST shows env-gated redis (#375 retest)', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.({}, { keysSeenInSource: ['redis', 'http'] }),
+      ).toThrow(/redis.*not supported on --target cloudflare/);
+    });
+
+    it('round-2: passes when keysSeenInSource has no sqlite/redis', () => {
+      expect(() =>
+        cloudflareAdapter.validate?.({}, { keysSeenInSource: ['http', 'cors', 'logger'] }),
+      ).not.toThrow();
+    });
   });
 
   describe('cloudflareAdapter wrangler.toml (#374)', () => {
@@ -184,6 +205,33 @@ describe('Build Adapters', () => {
       const config = cloudflareAdapter.getConfig?.('/tmp');
       expect(typeof config).toBe('string');
       expect(config).toContain('main = "dist/cloudflare/index.js"');
+    });
+
+    it('round-2: merges deployments[].wrangler.{name,compatibilityDate} into the rendered TOML', () => {
+      const deployment = {
+        target: 'cloudflare' as const,
+        wrangler: { name: 'frontegg-bin', compatibilityDate: '2025-01-01' },
+      };
+      const config = cloudflareAdapter.getConfig?.('/tmp', deployment);
+      expect(config).toContain('name = "frontegg-bin"');
+      expect(config).toContain('compatibility_date = "2025-01-01"');
+      expect(config).toContain('main = "dist/cloudflare/index.js"');
+    });
+
+    it('round-2: falls back to defaults when deployment.wrangler is partial', () => {
+      const deployment = {
+        target: 'cloudflare' as const,
+        wrangler: { name: 'just-a-name' },
+      };
+      const config = cloudflareAdapter.getConfig?.('/tmp', deployment);
+      expect(config).toContain('name = "just-a-name"');
+      expect(config).toContain('compatibility_date = "2024-01-01"');
+    });
+
+    it('round-2: falls back to defaults when no deployment is supplied', () => {
+      const config = cloudflareAdapter.getConfig?.('/tmp');
+      expect(config).toContain('name = "frontmcp-worker"');
+      expect(config).toContain('compatibility_date = "2024-01-01"');
     });
   });
 
@@ -198,6 +246,15 @@ describe('Build Adapters', () => {
     });
     it('lambda adapter is declared esnext (so the build emits a sibling package.json)', () => {
       expect(lambdaAdapter.moduleFormat).toBe('esnext');
+    });
+
+    it('round-2: lambda adapter validate hook fails when @codegenie/serverless-express is missing', () => {
+      // The current cwd is the monorepo root; `@codegenie/serverless-express`
+      // is not declared anywhere in this repo's package.json, so the walk
+      // should fail and the hook should throw with an actionable message.
+      // This test will need adjustment if the dep is later added — that's
+      // intentional, since presence-check tests reflect the actual repo state.
+      expect(() => lambdaAdapter.validate?.(undefined)).toThrow(/@codegenie\/serverless-express/);
     });
   });
 

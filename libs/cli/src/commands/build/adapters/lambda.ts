@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { AdapterTemplate } from '../types';
 
 /**
@@ -52,6 +54,35 @@ export const handler = async (event, context) => {
   return serverlessExpressInstance(event, context);
 };
 `,
+
+  // #368 round-2 — `@codegenie/serverless-express` is a peer dep on this
+  // adapter (the lambda runtime ships it via Layer or the user installs it).
+  // The bundler externalizes it so rspack doesn't try to bundle it; this
+  // validate hook surfaces a clear error at build time when the package
+  // isn't installed locally either, instead of letting the user discover
+  // a runtime "Cannot find module" error in CloudWatch logs.
+  validate: () => {
+    try {
+      // Walk node_modules from cwd upward so monorepos / hoisted layouts work.
+      let dir = process.cwd();
+      const root = path.parse(dir).root;
+      while (dir !== root) {
+        const pkg = path.join(dir, 'node_modules', '@codegenie', 'serverless-express', 'package.json');
+        if (fs.existsSync(pkg)) return;
+        const next = path.dirname(dir);
+        if (next === dir) break;
+        dir = next;
+      }
+    } catch {
+      // Fall through to throw — accessibility errors mean we can't verify presence.
+    }
+    throw new Error(
+      `[--target lambda] missing required peer dependency @codegenie/serverless-express.\n` +
+        `  Install it in your project:\n` +
+        `    npm install @codegenie/serverless-express\n` +
+        `  (or use a Lambda Layer that provides it).`,
+    );
+  },
 
   // No config file - user manages serverless.yml, SAM template, or CDK
 };
