@@ -52,4 +52,37 @@ describe('CLI Exec Error Handling', () => {
       expect(exitCode).toBe(2);
     });
   });
+
+  // #369 round-2 — round 1 stripped the literal "Unknown error" but replaced
+  // it with "Flow ended with: fail" + INTERNAL_ERROR code, still losing the
+  // user's PublicMcpError contents. Round 2 unwraps `originalError` from
+  // `FlowControl.fail` in the MCP-handler path so the public message AND
+  // the code reach the CLI intact.
+  describe('PublicMcpError preservation in JSON output (#369 round-2)', () => {
+    it("surfaces the user's message in --output json (not the FlowControl sentinel)", () => {
+      const { stdout, stderr, exitCode } = runCli(['--output', 'json', 'divide', '--a', '1', '--b', '0']);
+      expect(exitCode).toBe(1);
+      const combined = stdout + stderr;
+      // Round 1 surfaced this string in content[].text; round 2 must not.
+      expect(combined).not.toMatch(/Flow ended with/i);
+      // The headline assertion — the user's PublicMcpError message must reach the CLI.
+      expect(combined).toContain('Cannot divide by zero');
+    });
+
+    it('preserves the PublicMcpError code in --output json (INVALID_PARAMS, not INTERNAL_ERROR)', () => {
+      const { stdout, stderr, exitCode } = runCli(['--output', 'json', 'divide', '--a', '1', '--b', '0']);
+      expect(exitCode).toBe(1);
+      const combined = stdout + stderr;
+      expect(combined).toContain('INVALID_PARAMS');
+      // Round 1 turned every PublicMcpError code into the generic INTERNAL_ERROR
+      // because the FlowControl wrapper hid the original. The unwrap must
+      // restore the original code — this assertion is the load-bearing one.
+      expect(combined).not.toContain('INTERNAL_ERROR');
+    });
+
+    it('marks the result as isError=true so JSON consumers can branch on it', () => {
+      const { stdout, stderr } = runCli(['--output', 'json', 'divide', '--a', '1', '--b', '0']);
+      expect(stdout + stderr).toMatch(/"isError"\s*:\s*true/);
+    });
+  });
 });
