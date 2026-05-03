@@ -3,8 +3,8 @@
  * Validates that generateCliEntry() produces valid, well-structured JavaScript.
  */
 
-import { generateCliEntry, CliEntryOptions } from '../cli-runtime/generate-cli-entry';
-import { ExtractedSchema } from '../cli-runtime/schema-extractor';
+import { generateCliEntry, type CliEntryOptions } from '../cli-runtime/generate-cli-entry';
+import { type ExtractedSchema } from '../cli-runtime/schema-extractor';
 
 function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
   return {
@@ -408,6 +408,64 @@ describe('generated CLI smoke tests', () => {
     it('should include parseInt coercion for integer fields', () => {
       const source = generateCliEntry(makeOptions({ schema: fullSchema }));
       expect(source).toContain('parseInt(v, 10)');
+    });
+  });
+
+  describe('prompt get <name> option registration (#382)', () => {
+    it('registers .option() for every prompt arg on `prompt get` so Commander accepts --<arg> values', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          prompts: [
+            {
+              name: 'explain-calc',
+              description: 'Explain the calc result',
+              arguments: [
+                { name: 'op', description: 'Operation', required: true },
+                { name: 'a', description: 'Operand A', required: true },
+                { name: 'b', description: 'Operand B', required: true },
+              ],
+            },
+            {
+              name: 'code-review',
+              description: 'Review code',
+              arguments: [
+                { name: 'language', description: 'Language' },
+                { name: 'code', description: 'Code to review', required: true },
+              ],
+            },
+          ],
+        }),
+      }));
+
+      // The `get` subcommand must declare each prompt arg as a Commander option,
+      // otherwise `prompt get explain-calc --op add` is rejected with
+      // "too many arguments for 'get'" (#382 round-2 regression).
+      expect(source).toContain(".command('get <name>')");
+      expect(source).toContain('"--op <value>"');
+      expect(source).toContain('"--a <value>"');
+      expect(source).toContain('"--b <value>"');
+      expect(source).toContain('"--language <value>"');
+      expect(source).toContain('"--code <value>"');
+    });
+
+    it('emits the kebab form for camelCase prompt arg names', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          prompts: [
+            {
+              name: 'explain',
+              description: 'Explain',
+              arguments: [{ name: 'targetAudience', required: true }],
+            },
+          ],
+        }),
+      }));
+      expect(source).toContain('"--target-audience <value>"');
+    });
+
+    it('produces valid JavaScript with no prompts (no option lines)', () => {
+      const source = generateCliEntry(makeOptions({ schema: makeSchema({ prompts: [] }) }));
+      expect(() => new Function(stripShebang(source))).not.toThrow();
     });
   });
 });

@@ -20,8 +20,11 @@ const stripDist = (v) => {
   if (typeof v !== 'string') return v;
   // Strip "./dist/" prefix (build output paths)
   v = v.replace(/^\.\/dist\//, './');
-  // Strip "./src/" prefix and change .ts → .js (source paths used in imports field)
-  v = v.replace(/^\.\/src\/(.+)\.ts$/, './$1.js');
+  // Strip "./src/" prefix and change .ts → .js (source paths used in imports field).
+  // Negative lookahead leaves .d.ts declaration paths alone — TypeScript only
+  // honors .d.ts/.d.mts/.d.cts, so rewriting them to .d.js silently breaks
+  // every consumer's `import { defineConfig } from 'frontmcp'` (#364).
+  v = v.replace(/^\.\/src\/(?!.*\.d\.ts$)(.+)\.ts$/, './$1.js');
   return v;
 };
 

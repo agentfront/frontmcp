@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ensureBuild, getDistDir, getServerBundlePath, getCliBundlePath, getManifestPath } from './helpers/exec-cli';
+
+import { ensureBuild, getCliBundlePath, getDistDir, getManifestPath, getServerBundlePath } from './helpers/exec-cli';
 
 describe('CLI Exec Build Output', () => {
   beforeAll(async () => {
@@ -30,7 +31,7 @@ describe('CLI Exec Build Output', () => {
     expect(manifest.cli.resourceCount).toBeGreaterThanOrEqual(1);
     // templateCount includes user templates + skills:// resource templates
     expect(manifest.cli.templateCount).toBeGreaterThanOrEqual(1);
-    expect(manifest.cli.promptCount).toBe(1);
+    expect(manifest.cli.promptCount).toBe(2);
     // Capability flags
     expect(manifest.cli.skillsEnabled).toBe(true);
     expect(manifest.cli.jobsEnabled).toBe(true);
