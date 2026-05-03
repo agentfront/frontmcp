@@ -208,7 +208,15 @@ module.exports = {};
       tmp = await makeTmpProject('cf-wrangler-merge');
       await writeCloudflareFixture(tmp, `, wrangler: { name: 'frontegg-bin', compatibilityDate: '2025-01-01' }`);
 
-      const { stdout, stderr } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      const { stdout, stderr, exitCode } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      // Assert the build itself succeeded — otherwise a future regression that
+      // (a) writes a wrangler.toml early and (b) crashes downstream could leave
+      // these contents-only assertions passing while the actual build is broken.
+      if (exitCode !== 0) {
+        throw new Error(`Build exited ${exitCode}. Output:\n${stdout}${stderr}`);
+      }
+      expect(exitCode).toBe(0);
+
       const wranglerPath = path.join(tmp, 'wrangler.toml');
 
       // wrangler.toml MUST exist after the build — the test asserts its
@@ -232,7 +240,12 @@ module.exports = {};
       tmp = await makeTmpProject('cf-wrangler-defaults');
       await writeCloudflareFixture(tmp, ''); // no `wrangler` field
 
-      const { stdout, stderr } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      const { stdout, stderr, exitCode } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      if (exitCode !== 0) {
+        throw new Error(`Build exited ${exitCode}. Output:\n${stdout}${stderr}`);
+      }
+      expect(exitCode).toBe(0);
+
       const wranglerPath = path.join(tmp, 'wrangler.toml');
       const exists = await fileExists(wranglerPath);
       if (!exists) {
@@ -258,7 +271,12 @@ compatibility_date = "2024-01-01"
 `,
       );
 
-      const { stdout, stderr } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      const { stdout, stderr, exitCode } = runFrontmcp(tmp, ['build', '--target', 'cloudflare']);
+      if (exitCode !== 0) {
+        throw new Error(`Build exited ${exitCode}. Output:\n${stdout}${stderr}`);
+      }
+      expect(exitCode).toBe(0);
+
       const wranglerPath = path.join(tmp, 'wrangler.toml');
       if (!(await fileExists(wranglerPath))) {
         throw new Error(`wrangler.toml not written. Build output:\n${stdout}${stderr}`);
