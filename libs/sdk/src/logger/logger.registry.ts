@@ -1,14 +1,22 @@
 import 'reflect-metadata';
-import { ProviderScope, Token, tokenName } from '@frontmcp/di';
-import { FrontMcpLogger, LogLevel, LogTransportType, LogTransportInterface, LoggingConfigType } from '../common';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import ProviderRegistry from '../provider/provider.registry';
-import { LoggerKind, LoggerRecord } from './logger.types';
-import { loggerDiscoveryDeps, normalizeLogger } from './logger.utils';
+
+import { ProviderScope, tokenName, type Token } from '@frontmcp/di';
+
+import {
+  FrontMcpLogger,
+  LogLevel,
+  type LoggingConfigType,
+  type LogTransportInterface,
+  type LogTransportType,
+} from '../common';
+import { InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { ConsoleLogTransportInstance } from './instances/instance.console-logger';
-import { GetTransports, LoggerInstance } from './instances/instance.logger';
-import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
+import { LoggerInstance, type GetTransports } from './instances/instance.logger';
+import { LoggerKind, type LoggerRecord } from './logger.types';
+import { loggerDiscoveryDeps, normalizeLogger } from './logger.utils';
 
 export default class LoggerRegistry extends RegistryAbstract<LogTransportInterface, LoggerRecord, LogTransportType[]> {
   config: LoggingConfigType;

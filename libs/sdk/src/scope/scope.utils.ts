@@ -1,16 +1,17 @@
-import { Token, depsOfClass } from '@frontmcp/di';
-import {
-  AppScopeMetadata,
-  AppType,
-  FrontMcpMultiAppConfig,
-  FrontMcpSplitByAppConfig,
-  MultiAppScopeMetadata,
-  ScopeRecord,
-  ScopeKind,
-} from '../common';
+import { depsOfClass, type Token } from '@frontmcp/di';
+
 import { normalizeApp } from '../app/app.utils';
-import { Scope } from './scope.instance';
+import {
+  ScopeKind,
+  type AppScopeMetadata,
+  type AppType,
+  type FrontMcpMultiAppConfig,
+  type FrontMcpSplitByAppConfig,
+  type MultiAppScopeMetadata,
+  type ScopeRecord,
+} from '../common';
 import { ScopeConfigurationError } from '../errors';
+import { Scope } from './scope.instance';
 
 /**
  * Normalize a raw scope metadata list into useful maps/sets.

@@ -1,11 +1,19 @@
 import 'reflect-metadata';
-import { Token, tokenName } from '@frontmcp/di';
-import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType, FrontMcpLogger } from '../common';
-import { adapterDiscoveryDeps, normalizeAdapter } from './adapter.utils';
-import ProviderRegistry from '../provider/provider.registry';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { AdapterInstance } from './adapter.instance';
+
+import { tokenName, type Token } from '@frontmcp/di';
+
+import {
+  FrontMcpLogger,
+  type AdapterEntry,
+  type AdapterRecord,
+  type AdapterRegistryInterface,
+  type AdapterType,
+} from '../common';
 import { RegistryDefinitionNotFoundError, RegistryGraphEntryNotFoundError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { AdapterInstance } from './adapter.instance';
+import { adapterDiscoveryDeps, normalizeAdapter } from './adapter.utils';
 
 export default class AdapterRegistry
   extends RegistryAbstract<AdapterInstance, AdapterRecord, AdapterType[]>

@@ -1,7 +1,8 @@
 import 'reflect-metadata';
-import { FrontMcpPluginTokens } from '../tokens';
-import { PluginMetadata, frontMcpPluginMetadataSchema } from '../metadata';
+
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
+import { frontMcpPluginMetadataSchema, type PluginMetadata } from '../metadata';
+import { FrontMcpPluginTokens } from '../tokens';
 
 /**
  * Decorator that marks a class as a McpPlugin and provides metadata

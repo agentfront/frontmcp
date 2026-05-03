@@ -1,15 +1,14 @@
 // file: libs/sdk/src/common/interfaces/prompt.interface.ts
 
-import { randomUUID, getRuntimeContext } from '@frontmcp/utils';
-import type { RuntimeContext } from '@frontmcp/utils';
-import { FuncType, Token, Type } from '@frontmcp/di';
-import { PromptMetadata } from '../metadata';
-import { ProviderRegistryInterface } from './internal';
-import { FrontMcpLogger } from './logger.interface';
+import { type FuncType, type Token, type Type } from '@frontmcp/di';
+import { type AuthInfo, type GetPromptResult } from '@frontmcp/protocol';
+import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
+
+import { type ScopeEntry } from '../entries';
+import { type PromptMetadata } from '../metadata';
 import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@frontmcp/protocol';
-import { ScopeEntry } from '../entries';
-import { GetPromptResult } from '@frontmcp/protocol';
+import { type ProviderRegistryInterface } from './internal';
+import { type FrontMcpLogger } from './logger.interface';
 
 export interface PromptInterface {
   execute(args: Record<string, string>): Promise<GetPromptResult>;
@@ -19,7 +18,7 @@ export interface PromptInterface {
  * Functional prompt pattern - returned by prompt() builder.
  * A callable that returns an execute handler, with metadata attached.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export type FunctionalPromptType = (() => any) & { [key: symbol]: unknown };
 
 export type PromptType = Type<PromptInterface> | FuncType<PromptInterface> | FunctionalPromptType | string;

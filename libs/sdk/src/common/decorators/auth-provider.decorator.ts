@@ -1,6 +1,7 @@
 import 'reflect-metadata';
+
+import { frontMcpAuthProviderMetadataSchema, type AuthProviderMetadata } from '../metadata';
 import { FrontMcpAuthProviderTokens } from '../tokens';
-import { AuthProviderMetadata, frontMcpAuthProviderMetadataSchema } from '../metadata';
 
 /**
  * Decorator that marks a class as an AuthProvider module and provides metadata

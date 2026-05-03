@@ -1,33 +1,45 @@
 import { SignJWT } from 'jose';
-import { randomBytes, randomUUID, sha256Hex, getEnv, base64urlDecode } from '@frontmcp/utils';
-import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest, JWK } from '../../common';
+
 import {
-  PublicAuthOptions,
-  LocalAuthOptions,
-  RemoteAuthOptions,
-  isPublicMode,
-  isOrchestratedMode,
+  InMemoryAuthorizationStore,
+  InMemoryFederatedAuthSessionStore,
+  InMemoryOrchestratedTokenStore,
+  JwksService,
+  verifyPkce,
+  type AuthorizationStore,
+  type FederatedAuthSessionStore,
+  type OrchestratedTokenStore as TokenStore,
+} from '@frontmcp/auth';
+import { base64urlDecode, getEnv, randomBytes, randomUUID, sha256Hex } from '@frontmcp/utils';
+
+import {
+  FrontMcpAuth,
+  ProviderScope,
+  type FrontMcpLogger,
+  type JWK,
+  type ScopeEntry,
+  type ServerRequest,
+} from '../../common';
+import {
   isOrchestratedLocal,
+  isOrchestratedMode,
+  isPublicMode,
+  type LocalAuthOptions,
+  type PublicAuthOptions,
+  type RemoteAuthOptions,
 } from '../../common/types/options/auth';
-import ProviderRegistry from '../../provider/provider.registry';
-import WellKnownPrmFlow from '../flows/well-known.prm.flow';
-import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
-import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
-import SessionVerifyFlow from '../flows/session.verify.flow';
+import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
+import type ProviderRegistry from '../../provider/provider.registry';
+import { CimdService } from '../cimd';
 import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
+import OauthCallbackFlow from '../flows/oauth.callback.flow';
+import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
 import OauthRegisterFlow from '../flows/oauth.register.flow';
 import OauthTokenFlow from '../flows/oauth.token.flow';
-import OauthCallbackFlow from '../flows/oauth.callback.flow';
-import { JwksService, AuthorizationStore, InMemoryAuthorizationStore, verifyPkce } from '@frontmcp/auth';
-import { CimdService } from '../cimd';
-import {
-  InMemoryOrchestratedTokenStore,
-  InMemoryFederatedAuthSessionStore,
-  type FederatedAuthSessionStore,
-} from '@frontmcp/auth';
-import type { OrchestratedTokenStore as TokenStore } from '@frontmcp/auth';
-import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
-import { InMemoryStoreRequiredError } from '../../errors/auth-internal.errors';
+import SessionVerifyFlow from '../flows/session.verify.flow';
+import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
+import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
+import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote

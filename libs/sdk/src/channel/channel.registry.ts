@@ -1,14 +1,15 @@
 // file: libs/sdk/src/channel/channel.registry.ts
 
-import { Token } from '@frontmcp/di';
-import { EntryOwnerRef, ChannelEntry, ChannelRecord, ChannelType, FrontMcpLogger } from '../common';
-import { ChannelChangeEvent, ChannelEmitter } from './channel.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { normalizeChannel } from './channel.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import { type Token } from '@frontmcp/di';
+import type { ServerCapabilities } from '@frontmcp/protocol';
+
+import { FrontMcpLogger, type ChannelEntry, type ChannelRecord, type ChannelType, type EntryOwnerRef } from '../common';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { ChannelEmitter, type ChannelChangeEvent } from './channel.events';
 import { ChannelInstance } from './channel.instance';
 import type { IndexedChannel } from './channel.types';
-import type { ServerCapabilities } from '@frontmcp/protocol';
+import { normalizeChannel } from './channel.utils';
 
 /**
  * Interface for type-safe registry lookups.

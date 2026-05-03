@@ -1,9 +1,10 @@
-import { ClassType, FactoryType, Token, Type, ValueType } from '@frontmcp/di';
-import { ToolType } from './tool.interface';
-import { ResourceType } from './resource.interface';
-import { PromptType } from './prompt.interface';
-import { AdapterMetadata } from '../metadata';
-import { FrontMcpLogger } from './logger.interface';
+import { type ClassType, type FactoryType, type Token, type Type, type ValueType } from '@frontmcp/di';
+
+import { type AdapterMetadata } from '../metadata';
+import { type FrontMcpLogger } from './logger.interface';
+import { type PromptType } from './prompt.interface';
+import { type ResourceType } from './resource.interface';
+import { type ToolType } from './tool.interface';
 
 export interface AdapterInterface {
   options: { name: string } & Record<string, unknown>;

@@ -1,11 +1,15 @@
-import { BaseEntry } from './base.entry';
-import { AppRecord } from '../records';
-import { AdapterRegistryInterface, PluginRegistryInterface, ProviderRegistryInterface } from '../interfaces';
-import type { SkillRegistryInterface } from '../../skill/skill.registry';
-import { AppMetadata } from '../metadata';
-import type ToolRegistry from '../../tool/tool.registry';
-import type ResourceRegistry from '../../resource/resource.registry';
 import type PromptRegistry from '../../prompt/prompt.registry';
+import type ResourceRegistry from '../../resource/resource.registry';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import type ToolRegistry from '../../tool/tool.registry';
+import {
+  type AdapterRegistryInterface,
+  type PluginRegistryInterface,
+  type ProviderRegistryInterface,
+} from '../interfaces';
+import { type AppMetadata } from '../metadata';
+import { type AppRecord } from '../records';
+import { BaseEntry } from './base.entry';
 
 export abstract class AppEntry<Metadata = AppMetadata> extends BaseEntry<AppRecord, unknown, Metadata> {
   readonly id: string;

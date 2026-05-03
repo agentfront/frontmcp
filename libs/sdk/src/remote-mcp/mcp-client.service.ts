@@ -3,73 +3,70 @@
  * @description Service for managing connections to remote MCP servers
  */
 
-import { Client } from '@frontmcp/protocol';
-import { StreamableHTTPClientTransport } from '@frontmcp/protocol';
-import { SSEClientTransport } from '@frontmcp/protocol';
-import type { Transport } from '@frontmcp/protocol';
-import type {
-  Tool,
-  Resource,
-  ResourceTemplate,
-  Prompt,
-  CallToolResult,
-  ReadResourceResult,
-  GetPromptResult,
+import {
+  Client,
+  SSEClientTransport,
+  StreamableHTTPClientTransport,
+  type AuthInfo,
+  type CallToolResult,
+  type GetPromptResult,
+  type Prompt,
+  type ReadResourceResult,
+  type Resource,
+  type ResourceTemplate,
+  type Tool,
+  type Transport,
 } from '@frontmcp/protocol';
 
-import type { FrontMcpLogger } from '../common';
-import type { AuthInfo } from '@frontmcp/protocol';
-import type {
-  McpClientConnection,
-  McpConnectionStatus,
-  McpConnectionInfo,
-  McpClientServiceOptions,
-  McpConnectRequest,
-  McpRemoteCapabilities,
-  McpCapabilityChangeEvent,
-  McpCapabilityChangeCallback,
-  McpConnectionChangeCallback,
-  McpUnsubscribeFn,
-  McpRemoteAuthConfig,
-  McpRemoteAuthContext,
-  McpStaticCredentials,
-  McpHttpTransportOptions,
-} from './mcp-client.types';
-
+import { type FrontMcpLogger } from '../common';
 import {
-  RemoteConnectionError,
-  RemoteTimeoutError,
-  RemoteToolNotFoundError,
-  RemoteResourceNotFoundError,
-  RemotePromptNotFoundError,
-  RemoteToolExecutionError,
-  RemoteResourceReadError,
-  RemotePromptGetError,
-  RemoteCapabilityDiscoveryError,
-  RemoteNotConnectedError,
   RemoteAuthError,
+  RemoteCapabilityDiscoveryError,
+  RemoteConnectionError,
+  RemoteNotConnectedError,
+  RemotePromptGetError,
+  RemotePromptNotFoundError,
+  RemoteResourceNotFoundError,
+  RemoteResourceReadError,
+  RemoteTimeoutError,
+  RemoteToolExecutionError,
+  RemoteToolNotFoundError,
 } from '../errors/remote.errors';
-
-import {
-  withRetry,
-  isTransientError,
-  isConnectionError,
-  CircuitBreaker,
-  CircuitBreakerManager,
-  CircuitOpenError,
-  HealthChecker,
-  HealthCheckManager,
-  type RetryOptions,
-  type CircuitBreakerOptions,
-  type HealthCheckOptions,
-  type HealthStatus,
-} from './resilience';
-
 import {
   MethodNotImplementedError,
-  UnsupportedTransportTypeError,
   TransportNotConnectedError,
+  UnsupportedTransportTypeError,
 } from '../errors/transport.errors';
+import type {
+  McpCapabilityChangeCallback,
+  McpCapabilityChangeEvent,
+  McpClientConnection,
+  McpClientServiceOptions,
+  McpConnectionChangeCallback,
+  McpConnectionInfo,
+  McpConnectionStatus,
+  McpConnectRequest,
+  McpHttpTransportOptions,
+  McpRemoteAuthConfig,
+  McpRemoteAuthContext,
+  McpRemoteCapabilities,
+  McpStaticCredentials,
+  McpUnsubscribeFn,
+} from './mcp-client.types';
+import {
+  CircuitBreakerManager,
+  CircuitOpenError,
+  HealthCheckManager,
+  isConnectionError,
+  isTransientError,
+  withRetry,
+  type CircuitBreaker,
+  type CircuitBreakerOptions,
+  type HealthChecker,
+  type HealthCheckOptions,
+  type HealthStatus,
+  type RetryOptions,
+} from './resilience';
 
 // Default retry options for self-healing
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {

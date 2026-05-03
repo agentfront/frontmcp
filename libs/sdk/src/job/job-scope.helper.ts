@@ -1,27 +1,26 @@
-import { FrontMcpLogger } from '../common/interfaces/logger.interface';
-import { EntryOwnerRef } from '../common';
-import { JobType } from '../common/interfaces/job.interface';
-import { WorkflowType } from '../common/interfaces/workflow.interface';
-import ProviderRegistry from '../provider/provider.registry';
-import JobRegistry, { JobRegistryInterface } from './job.registry';
-import WorkflowRegistry, { WorkflowRegistryInterface } from '../workflow/workflow.registry';
-import { JobExecutionManager } from './execution/job-execution.manager';
-import { createJobStateStore, JobStateStoreOptions } from './store/job-state-store.factory';
-import { createJobDefinitionStore, JobDefinitionStoreOptions } from './store/job-definition-store.factory';
-import { JobStateStore } from './store/job-state.interface';
-import { JobDefinitionStore } from './store/job-definition.interface';
-
-// Import tools
-import ListJobsTool from './tools/list-jobs.tool';
-import ExecuteJobTool from './tools/execute-job.tool';
-import GetJobStatusTool from './tools/get-job-status.tool';
-import RegisterJobTool from './tools/register-job.tool';
-import RemoveJobTool from './tools/remove-job.tool';
-import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
+import { type EntryOwnerRef } from '../common';
+import { type JobType } from '../common/interfaces/job.interface';
+import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
+import { type WorkflowType } from '../common/interfaces/workflow.interface';
+import type ProviderRegistry from '../provider/provider.registry';
 import ExecuteWorkflowTool from '../workflow/tools/execute-workflow.tool';
 import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
+import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
+import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
+import { JobExecutionManager } from './execution/job-execution.manager';
+import JobRegistry, { type JobRegistryInterface } from './job.registry';
+import { createJobDefinitionStore, type JobDefinitionStoreOptions } from './store/job-definition-store.factory';
+import { type JobDefinitionStore } from './store/job-definition.interface';
+import { createJobStateStore, type JobStateStoreOptions } from './store/job-state-store.factory';
+import { type JobStateStore } from './store/job-state.interface';
+import ExecuteJobTool from './tools/execute-job.tool';
+import GetJobStatusTool from './tools/get-job-status.tool';
+// Import tools
+import ListJobsTool from './tools/list-jobs.tool';
+import RegisterJobTool from './tools/register-job.tool';
+import RemoveJobTool from './tools/remove-job.tool';
 
 export interface JobsConfig {
   enabled: boolean;

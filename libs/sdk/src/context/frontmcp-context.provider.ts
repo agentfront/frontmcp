@@ -5,11 +5,12 @@
  * The context is retrieved from AsyncLocalStorage via FrontMcpContextStorage.
  */
 
-import { ProviderScope } from '../common/metadata';
+import { type Token } from '@frontmcp/di';
+
 import { AsyncProvider } from '../common/interfaces/provider.interface';
-import { FrontMcpContext } from './frontmcp-context';
+import { ProviderScope } from '../common/metadata';
+import { type FrontMcpContext } from './frontmcp-context';
 import { FrontMcpContextStorage } from './frontmcp-context-storage';
-import { Token } from '@frontmcp/di';
 
 /**
  * DI token for accessing the current FrontMcpContext.

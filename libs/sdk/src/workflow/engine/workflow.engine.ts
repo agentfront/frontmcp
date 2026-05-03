@@ -1,18 +1,18 @@
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type WorkflowExecutionResult } from '../../common/interfaces/workflow.interface';
 import {
-  WorkflowMetadata,
-  WorkflowStep,
-  WorkflowStepContext,
-  WorkflowStepResult,
+  type WorkflowMetadata,
+  type WorkflowStep,
+  type WorkflowStepContext,
+  type WorkflowStepResult,
 } from '../../common/metadata/workflow.metadata';
-import { WorkflowExecutionResult } from '../../common/interfaces/workflow.interface';
-import { WorkflowStepExecutor } from './workflow-step.executor';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import { JobRegistryInterface } from '../../job/job.registry';
 import {
+  WorkflowDagValidationError,
   WorkflowStepNotFoundError,
   WorkflowTimeoutError,
-  WorkflowDagValidationError,
 } from '../../errors/workflow.errors';
+import { type JobRegistryInterface } from '../../job/job.registry';
+import { WorkflowStepExecutor } from './workflow-step.executor';
 
 /**
  * DAG-based workflow execution engine.

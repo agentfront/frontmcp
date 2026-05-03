@@ -1,25 +1,34 @@
-import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import { AppEntry, EntryLineage, EntryOwnerRef, ScopeEntry, ToolEntry, ToolRecord, ToolType } from '../common';
-import { ToolChangeEvent, ToolEmitter } from './tool.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
-import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { ToolInstance } from './tool.instance';
-import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.types';
-import ToolsListFlow from './flows/tools-list.flow';
-import CallToolFlow from './flows/call-tool.flow';
-import { ServerCapabilities } from '@frontmcp/protocol';
-import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
-import { logAvailabilityFiltering } from '../common/availability';
+import { getMetadata, tokenName, type Token } from '@frontmcp/di';
+import { type ServerCapabilities } from '@frontmcp/protocol';
+import { ensureMaxLen, getRuntimeContext, isEntryAvailable, sepFor } from '@frontmcp/utils';
+
 import {
-  NameDisambiguationError,
+  type AppEntry,
+  type EntryLineage,
+  type EntryOwnerRef,
+  type ScopeEntry,
+  type ToolEntry,
+  type ToolRecord,
+  type ToolType,
+} from '../common';
+import { logAvailabilityFiltering } from '../common/availability';
+import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.tool';
+import {
   EntryValidationError,
+  NameDisambiguationError,
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
 } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
+import CallToolFlow from './flows/call-tool.flow';
+import ToolsListFlow from './flows/tools-list.flow';
+import { ToolEmitter, type ToolChangeEvent } from './tool.events';
+import { ToolInstance } from './tool.instance';
+import { DEFAULT_EXPORT_OPTS, type ExportNameOptions, type IndexedTool } from './tool.types';
+import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
 
 export default class ToolRegistry extends RegistryAbstract<
   ToolInstance, // IMPORTANT: instances map holds ToolInstance (not the interface)

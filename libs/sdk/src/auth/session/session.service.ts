@@ -1,6 +1,7 @@
 // auth/session/session.service.ts
-import { Scope } from '../../scope';
 import type { CreateSessionArgs } from '@frontmcp/auth';
+
+import { type Scope } from '../../scope';
 import { McpSession } from './record/session.mcp';
 
 export class SessionService {

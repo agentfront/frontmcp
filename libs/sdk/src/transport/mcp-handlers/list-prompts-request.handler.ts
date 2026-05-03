@@ -1,5 +1,6 @@
-import { ListPromptsRequestSchema, ListPromptsRequest, ListPromptsResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { ListPromptsRequestSchema, type ListPromptsRequest, type ListPromptsResult } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listPromptsRequestHandler({
   scope,

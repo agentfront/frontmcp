@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/resource.events.ts
 
-import { ResourceEntry } from '../common';
+import { type ResourceEntry } from '../common';
 
 export type ResourceChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 

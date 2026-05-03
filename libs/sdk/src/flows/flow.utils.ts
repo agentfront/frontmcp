@@ -1,5 +1,6 @@
-import { Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
-import { FlowKind, FlowMetadata, FlowRecord, FlowType, FrontMcpFlowTokens } from '../common';
+import { depsOfClass, getMetadata, isClass, type Token } from '@frontmcp/di';
+
+import { FlowKind, FrontMcpFlowTokens, type FlowMetadata, type FlowRecord, type FlowType } from '../common';
 import { InvalidEntityError } from '../errors';
 
 export function collectFlowMetadata(cls: FlowType): FlowMetadata<never> {

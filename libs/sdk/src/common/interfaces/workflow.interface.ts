@@ -1,6 +1,7 @@
-import { FuncType, Type } from '@frontmcp/di';
-import { WorkflowMetadata, WorkflowStepResult } from '../metadata/workflow.metadata';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
+import { type FuncType, type Type } from '@frontmcp/di';
+
+import { type WorkflowMetadata, type WorkflowStepResult } from '../metadata/workflow.metadata';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 
 export type WorkflowType<T = unknown> = Type<T> | FuncType<T> | string;
 

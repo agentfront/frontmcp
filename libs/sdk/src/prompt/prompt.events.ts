@@ -1,6 +1,6 @@
 // file: libs/sdk/src/prompt/prompt.events.ts
 
-import { PromptEntry } from '../common';
+import { type PromptEntry } from '../common';
 
 export type PromptChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 

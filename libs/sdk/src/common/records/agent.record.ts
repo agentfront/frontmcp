@@ -1,9 +1,8 @@
-import { Token, Type } from '@frontmcp/di';
-import { ProviderType } from '../interfaces';
-import { AgentMetadata } from '../metadata';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
-import type { EsmOptions } from '../metadata';
+import { type Token, type Type } from '@frontmcp/di';
+
+import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import { type ProviderType } from '../interfaces';
+import { type AgentMetadata, type EsmOptions, type RemoteAuthConfig, type RemoteTransportOptions } from '../metadata';
 
 /**
  * Discriminator enum for agent record types.

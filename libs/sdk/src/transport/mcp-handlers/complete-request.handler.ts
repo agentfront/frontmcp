@@ -1,5 +1,6 @@
-import { CompleteRequestSchema, CompleteRequest, CompleteResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { CompleteRequestSchema, type CompleteRequest, type CompleteResult } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function completeRequestHandler({
   scope,

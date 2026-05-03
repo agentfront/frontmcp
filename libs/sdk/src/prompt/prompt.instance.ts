@@ -1,25 +1,26 @@
 // file: libs/sdk/src/prompt/prompt.instance.ts
 
+import { type GetPromptResult } from '@frontmcp/protocol';
+
 import {
-  EntryOwnerRef,
-  PromptEntry,
-  PromptGetExtra,
-  ParsedPromptResult,
-  PromptSafeTransformResult,
-  PromptRecord,
-  PromptKind,
   PromptContext,
-  PromptCtorArgs,
-  PromptMetadata,
-  PromptFunctionTokenRecord,
+  PromptEntry,
+  PromptKind,
+  type EntryOwnerRef,
+  type ParsedPromptResult,
+  type PromptCtorArgs,
+  type PromptFunctionTokenRecord,
+  type PromptGetExtra,
+  type PromptMetadata,
+  type PromptRecord,
+  type PromptSafeTransformResult,
+  type ScopeEntry,
 } from '../common';
-import ProviderRegistry from '../provider/provider.registry';
-import HookRegistry from '../hooks/hook.registry';
-import { ScopeEntry } from '../common';
+import { InvalidRegistryKindError, MissingPromptArgumentError } from '../errors';
+import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import type ProviderRegistry from '../provider/provider.registry';
 import { buildParsedPromptResult } from './prompt.utils';
-import { GetPromptResult } from '@frontmcp/protocol';
-import { MissingPromptArgumentError, InvalidRegistryKindError } from '../errors';
 
 export class PromptInstance extends PromptEntry {
   private readonly _providers: ProviderRegistry;

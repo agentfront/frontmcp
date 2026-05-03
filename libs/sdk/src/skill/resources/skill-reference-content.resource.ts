@@ -1,14 +1,15 @@
 // file: libs/sdk/src/skill/resources/skill-reference-content.resource.ts
 
-import { ReadResourceResult } from '@frontmcp/protocol';
-import { ResourceContext, ResourceCompletionResult } from '../../common/interfaces';
+import { type ReadResourceResult } from '@frontmcp/protocol';
+
 import { ResourceTemplate } from '../../common';
+import { ResourceContext, type ResourceCompletionResult } from '../../common/interfaces';
 import { ResourceNotFoundError } from '../../errors';
 import {
+  collectAllReferenceNames,
   findAndLoadSkill,
   getMcpVisibleSkillNames,
   readAndParseSkillFile,
-  collectAllReferenceNames,
 } from './skill-resource.helpers';
 
 type Params = { skillName: string; referenceName: string };

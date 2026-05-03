@@ -1,9 +1,10 @@
-import { FuncType, Type } from '@frontmcp/di';
-import { ToolInputType, ToolOutputType } from '../metadata';
-import { JobMetadata } from '../metadata/job.metadata';
+import { type FuncType, type Type } from '@frontmcp/di';
+
+import { type ToolInputOf, type ToolOutputOf } from '../decorators';
+import { type ToolInputType, type ToolOutputType } from '../metadata';
+import { type JobMetadata } from '../metadata/job.metadata';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
-import { ToolInputOf, ToolOutputOf } from '../decorators';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
 export type JobType<T = unknown> = Type<T> | FuncType<T> | string;
 

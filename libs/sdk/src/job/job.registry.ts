@@ -1,16 +1,17 @@
-import { Token, tokenName } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef } from '../common';
+import { tokenName, type Token } from '@frontmcp/di';
+
+import { type EntryLineage, type EntryOwnerRef } from '../common';
+import { type JobEntry } from '../common/entries/job.entry';
+import { type JobType } from '../common/interfaces/job.interface';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
-import { JobEntry } from '../common/entries/job.entry';
-import { JobRecord, JobDynamicRecord } from '../common/records/job.record';
-import { JobType } from '../common/interfaces/job.interface';
-import { JobChangeEvent, JobEmitter } from './job.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { normalizeJob, jobDiscoveryDeps } from './job.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { JobInstance } from './job.instance';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { type JobDynamicRecord, type JobRecord } from '../common/records/job.record';
 import { RegistryDefinitionNotFoundError, RegistryGraphEntryNotFoundError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { JobEmitter, type JobChangeEvent } from './job.events';
+import { JobInstance } from './job.instance';
+import { jobDiscoveryDeps, normalizeJob } from './job.utils';
 
 export interface IndexedJob {
   token: Token;

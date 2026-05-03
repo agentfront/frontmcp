@@ -1,16 +1,17 @@
 // file: libs/sdk/src/agent/agent.registry.ts
 
-import { Token, tokenName } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef, AgentEntry, AgentRecord, AgentType } from '../common';
-import { AgentChangeEvent, AgentEmitter } from './agent.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { normalizeAgent, agentDiscoveryDeps } from './agent.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { AgentInstance } from './agent.instance';
-import type { Tool, ServerCapabilities } from '@frontmcp/protocol';
-import { DependencyNotFoundError } from '../errors/mcp.error';
+import { tokenName, type Token } from '@frontmcp/di';
+import type { ServerCapabilities, Tool } from '@frontmcp/protocol';
 import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+
+import { type AgentEntry, type AgentRecord, type AgentType, type EntryLineage, type EntryOwnerRef } from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
+import { DependencyNotFoundError } from '../errors/mcp.error';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { AgentEmitter, type AgentChangeEvent } from './agent.events';
+import { AgentInstance } from './agent.instance';
+import { agentDiscoveryDeps, normalizeAgent } from './agent.utils';
 
 // ============================================================================
 // Types

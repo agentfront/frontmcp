@@ -1,6 +1,6 @@
+import { type AgentMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { AgentMetadata } from '../metadata';
 
 /**
  * Tokens for AgentMetadata properties.

@@ -1,6 +1,6 @@
-import { JobDefinitionStore } from './job-definition.interface';
-import { JobDynamicRecord } from '../../common/records/job.record';
-import { WorkflowDynamicRecord } from '../../common/records/workflow.record';
+import { type JobDynamicRecord } from '../../common/records/job.record';
+import { type WorkflowDynamicRecord } from '../../common/records/workflow.record';
+import { type JobDefinitionStore } from './job-definition.interface';
 
 /**
  * In-memory implementation of JobDefinitionStore.

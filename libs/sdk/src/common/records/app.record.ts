@@ -1,6 +1,7 @@
-import { Token, Type } from '@frontmcp/di';
-import { LocalAppMetadata, RemoteAppMetadata } from '../metadata';
-import { AppEntry } from '../entries';
+import { type Token, type Type } from '@frontmcp/di';
+
+import { type AppEntry } from '../entries';
+import { type LocalAppMetadata, type RemoteAppMetadata } from '../metadata';
 
 export enum AppKind {
   LOCAL_CLASS = 'LOCAL_CLASS',

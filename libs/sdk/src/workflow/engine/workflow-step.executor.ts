@@ -1,10 +1,10 @@
-import { WorkflowStep, WorkflowStepResult } from '../../common/metadata/workflow.metadata';
-import { JobRetryConfig } from '../../common/metadata/job.metadata';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import { JobRegistryInterface } from '../../job/job.registry';
-import { JobEntry } from '../../common/entries/job.entry';
+import { type JobEntry } from '../../common/entries/job.entry';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobRetryConfig } from '../../common/metadata/job.metadata';
+import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadata/workflow.metadata';
 import { InvalidEntityError } from '../../errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
+import { type JobRegistryInterface } from '../../job/job.registry';
 
 /**
  * Executes a single workflow step by resolving the job and running it.

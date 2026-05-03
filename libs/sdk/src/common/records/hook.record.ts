@@ -1,5 +1,5 @@
-import { HookType } from '../interfaces';
-import { HookMetadata } from '../metadata';
+import { type HookType } from '../interfaces';
+import { type HookMetadata } from '../metadata';
 
 export enum HookKind {
   METHOD_TOKEN = 'METHOD_TOKEN',

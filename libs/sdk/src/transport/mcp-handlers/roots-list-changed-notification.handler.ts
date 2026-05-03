@@ -1,6 +1,6 @@
-import { RootsListChangedNotificationSchema, Result } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import type { RootsListChangedNotification } from '@frontmcp/protocol';
+import { RootsListChangedNotificationSchema, type Result, type RootsListChangedNotification } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Handler for `notifications/roots/list_changed` notification from the client.

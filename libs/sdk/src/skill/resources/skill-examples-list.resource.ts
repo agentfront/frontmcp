@@ -1,8 +1,9 @@
 // file: libs/sdk/src/skill/resources/skill-examples-list.resource.ts
 
-import { ReadResourceResult } from '@frontmcp/protocol';
-import { ResourceContext, ResourceCompletionResult } from '../../common/interfaces';
+import { type ReadResourceResult } from '@frontmcp/protocol';
+
 import { ResourceTemplate } from '../../common';
+import { ResourceContext, type ResourceCompletionResult } from '../../common/interfaces';
 import { findAndLoadSkill, getMcpVisibleSkillNames } from './skill-resource.helpers';
 
 type SkillNameParams = { skillName: string };

@@ -1,7 +1,7 @@
-import { TransportBus, Transporter, TransportKey, TransportType } from './transport.types';
-import { AuthenticatedServerRequest } from '../server/server.types';
-import { ServerResponse } from '../common';
+import { type ServerResponse } from '../common';
 import { MethodNotImplementedError } from '../errors/transport.errors';
+import { type AuthenticatedServerRequest } from '../server/server.types';
+import { type TransportBus, type Transporter, type TransportKey, type TransportType } from './transport.types';
 
 export class RemoteTransporter implements Transporter {
   readonly type: TransportType;

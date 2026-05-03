@@ -1,12 +1,22 @@
-import { InitializeRequestSchema, type InitializeRequest, type InitializeResult } from '@frontmcp/protocol';
-import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import { UnsupportedClientVersionError } from '../../errors';
-import type { ClientCapabilities } from '../../notification';
-import { detectPlatformFromCapabilities, detectAIPlatform, supportsElicitation } from '../../notification';
+import { type SessionIdPayload } from '@frontmcp/auth';
+import {
+  InitializeRequestSchema,
+  LATEST_PROTOCOL_VERSION,
+  SUPPORTED_PROTOCOL_VERSIONS,
+  type InitializeRequest,
+  type InitializeResult,
+} from '@frontmcp/protocol';
+
 import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
-import type { SessionIdPayload } from '@frontmcp/auth';
-import type { SdkAuthInfo } from '../../server/server.types';
+import { UnsupportedClientVersionError } from '../../errors';
+import {
+  detectAIPlatform,
+  detectPlatformFromCapabilities,
+  supportsElicitation,
+  type ClientCapabilities,
+} from '../../notification';
+import { type SdkAuthInfo } from '../../server/server.types';
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Persist initialization data to the session cache and transport adapter.

@@ -1,5 +1,6 @@
-import { LogTransportInterface, LogRecord, LogTransport, LogLevel, LogFn } from '../../common';
 import { supportsAnsi } from '@frontmcp/utils';
+
+import { LogLevel, LogTransport, LogTransportInterface, type LogFn, type LogRecord } from '../../common';
 
 type LogLevelMeta = {
   label: string;

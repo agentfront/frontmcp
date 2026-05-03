@@ -1,12 +1,20 @@
-import { Token, Type, tokenName } from '@frontmcp/di';
-import ProviderRegistry from '../provider/provider.registry';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { FlowInputOf, FlowName, FlowOutputOf, FlowRecord, FlowType, ScopeEntry } from '../common';
-import { normalizeFlow } from './flow.utils';
-import { FlowInstance } from './flow.instance';
-import { FrontMcpContextStorage } from '../context';
+import { tokenName, type Token, type Type } from '@frontmcp/di';
 import { randomUUID } from '@frontmcp/utils';
-import { RegistryDependencyNotRegisteredError, FlowNotRegisteredError } from '../errors';
+
+import {
+  ScopeEntry,
+  type FlowInputOf,
+  type FlowName,
+  type FlowOutputOf,
+  type FlowRecord,
+  type FlowType,
+} from '../common';
+import { FrontMcpContextStorage } from '../context';
+import { FlowNotRegisteredError, RegistryDependencyNotRegisteredError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { FlowInstance } from './flow.instance';
+import { normalizeFlow } from './flow.utils';
 
 export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName>, FlowRecord, FlowType[]> {
   constructor(providers: ProviderRegistry, list: FlowType[]) {

@@ -1,22 +1,23 @@
 // file: libs/sdk/src/resource/resource.utils.ts
 
-import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
+import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
+
 import {
-  ResourceMetadata,
-  ResourceTemplateMetadata,
-  FrontMcpResourceTokens,
-  FrontMcpResourceTemplateTokens,
   extendedResourceMetadata,
   extendedResourceTemplateMetadata,
-  ResourceType,
-  ResourceRecord,
+  FrontMcpResourceTemplateTokens,
+  FrontMcpResourceTokens,
   ResourceKind,
-  ResourceTemplateRecord,
   ResourceTemplateKind,
-  ResourceEntry,
+  type ResourceEntry,
+  type ResourceMetadata,
+  type ResourceRecord,
+  type ResourceTemplateMetadata,
+  type ResourceTemplateRecord,
+  type ResourceType,
 } from '../common';
-import { ResourceTemplateType } from './resource.types';
 import { InvalidEntityError } from '../errors';
+import { type ResourceTemplateType } from './resource.types';
 
 /**
  * Collect metadata from a class decorated with @FrontMcpResource

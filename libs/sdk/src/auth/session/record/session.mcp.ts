@@ -1,4 +1,4 @@
-import { BaseCreateCtx, Session } from './session.base';
+import { Session, type BaseCreateCtx } from './session.base';
 
 /**
  * Represents an MCP session created from a verified authorization.

@@ -1,8 +1,12 @@
-import { Type } from '@frontmcp/di';
-import { WorkflowMetadata } from '../metadata';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
-import type { EsmOptions } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import {
+  type EsmOptions,
+  type RemoteAuthConfig,
+  type RemoteTransportOptions,
+  type WorkflowMetadata,
+} from '../metadata';
 
 export enum WorkflowKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

@@ -1,7 +1,7 @@
 // common/types/options/server-info/interfaces.ts
 // Explicit TypeScript interfaces for server info configuration
 
-import { Icon } from '@frontmcp/protocol';
+import { type Icon } from '@frontmcp/protocol';
 
 /**
  * Server information configuration options.

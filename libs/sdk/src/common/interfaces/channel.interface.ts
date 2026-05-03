@@ -1,7 +1,8 @@
-import { FuncType, Type } from '@frontmcp/di';
-import { ChannelMetadata, ChannelNotification } from '../metadata/channel.metadata';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
+import { type FuncType, type Type } from '@frontmcp/di';
+
 import { PublicMcpError } from '../../errors/mcp.error';
+import { type ChannelMetadata, type ChannelNotification } from '../metadata/channel.metadata';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 
 /**
  * Channel type definition (class or factory function).

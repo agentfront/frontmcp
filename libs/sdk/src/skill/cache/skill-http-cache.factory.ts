@@ -7,7 +7,7 @@
  */
 
 import type { FrontMcpLogger } from '../../common/index.js';
-import { SkillHttpCache, MemorySkillHttpCache, RedisSkillHttpCache } from './skill-http-cache.js';
+import { MemorySkillHttpCache, RedisSkillHttpCache, type SkillHttpCache } from './skill-http-cache.js';
 
 /**
  * Redis configuration options for the cache.

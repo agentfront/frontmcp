@@ -1,6 +1,7 @@
-import { Token, Type } from '@frontmcp/di';
-import { AppScopeMetadata, MultiAppScopeMetadata } from '../metadata';
-import { ScopeEntry } from '../entries';
+import { type Token, type Type } from '@frontmcp/di';
+
+import { type ScopeEntry } from '../entries';
+import { type AppScopeMetadata, type MultiAppScopeMetadata } from '../metadata';
 
 export enum ScopeKind {
   SPLIT_BY_APP = 'SPLIT_BY_APP',

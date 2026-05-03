@@ -1,5 +1,6 @@
-import { Type, Token, ValueType, ClassType, FactoryType } from '@frontmcp/di';
-import { PluginMetadata } from '../metadata';
+import { type ClassType, type FactoryType, type Token, type Type, type ValueType } from '@frontmcp/di';
+
+import { type PluginMetadata } from '../metadata';
 
 export type PluginClassType<Provide> = ClassType<Provide> & PluginMetadata;
 export type PluginValueType<Provide> = ValueType<Provide> & PluginMetadata;

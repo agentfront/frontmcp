@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/skill.events.ts
 
-import { SkillEntry } from '../common';
+import { type SkillEntry } from '../common';
 import type { SkillValidationReport } from './errors/skill-validation.error';
 import type { SyncResult } from './sync/sync-state.interface';
 

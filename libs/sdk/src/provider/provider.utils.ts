@@ -1,7 +1,7 @@
-import { Type, Token, ProviderKind, isClass, tokenName, getMetadata } from '@frontmcp/di';
-import { FrontMcpProviderTokens } from '../common';
-import type { ProviderMetadata, ProviderRecord, ProviderScope } from '../common';
-import { MissingProvideError, InvalidUseClassError, InvalidUseFactoryError, InvalidEntityError } from '../errors';
+import { getMetadata, isClass, ProviderKind, tokenName, type Token, type Type } from '@frontmcp/di';
+
+import { FrontMcpProviderTokens, type ProviderMetadata, type ProviderRecord, type ProviderScope } from '../common';
+import { InvalidEntityError, InvalidUseClassError, InvalidUseFactoryError, MissingProvideError } from '../errors';
 
 /**
  * Shape for provider input items (used during normalization).

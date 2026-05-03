@@ -1,12 +1,20 @@
 // file: libs/sdk/src/skill/skill.instance.ts
 
-import { EntryOwnerRef, SkillEntry, SkillKind, SkillRecord, SkillToolRef, normalizeToolRef } from '../common';
-import { SkillContent } from '../common/interfaces';
-import { SkillVisibility } from '../common/metadata/skill.metadata';
-import ProviderRegistry from '../provider/provider.registry';
-import { ScopeEntry } from '../common';
-import { loadInstructions, buildSkillContent, resolveReferences, resolveExamples } from './skill.utils';
-import { dirname, pathResolve, pathJoin, fileExists, readJSON } from '@frontmcp/utils';
+import { dirname, fileExists, pathJoin, pathResolve, readJSON } from '@frontmcp/utils';
+
+import {
+  normalizeToolRef,
+  SkillEntry,
+  SkillKind,
+  type EntryOwnerRef,
+  type ScopeEntry,
+  type SkillRecord,
+  type SkillToolRef,
+} from '../common';
+import { type SkillContent } from '../common/interfaces';
+import { type SkillVisibility } from '../common/metadata/skill.metadata';
+import type ProviderRegistry from '../provider/provider.registry';
+import { buildSkillContent, loadInstructions, resolveExamples, resolveReferences } from './skill.utils';
 
 /**
  * Extended SkillContent with additional metadata for caching.

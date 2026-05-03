@@ -1,5 +1,10 @@
-import { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState } from './job-state.interface';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import {
+  type JobExecutionState,
+  type JobRunRecord,
+  type JobStateStore,
+  type WorkflowRunRecord,
+} from './job-state.interface';
 
 /** Minimal Redis client interface covering operations used by this store. */
 export interface RedisStateStoreLike {

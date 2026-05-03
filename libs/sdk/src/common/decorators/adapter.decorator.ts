@@ -1,6 +1,7 @@
 import 'reflect-metadata';
+
+import { frontMcpAdapterMetadataSchema, type AdapterMetadata } from '../metadata';
 import { FrontMcpAdapterTokens } from '../tokens';
-import { AdapterMetadata, frontMcpAdapterMetadataSchema } from '../metadata';
 
 /**
  * Decorator that marks a class as a McpAdapter module and provides metadata

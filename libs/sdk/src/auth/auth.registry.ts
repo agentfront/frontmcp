@@ -1,35 +1,37 @@
 // auth/auth.registry.ts
 import 'reflect-metadata';
-import { Token, tokenName } from '@frontmcp/di';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import ProviderRegistry from '../provider/provider.registry';
+
+import { detectAuthProviders, type AppAuthInfo, type AuthProviderDetectionResult } from '@frontmcp/auth';
+import { tokenName, type Token } from '@frontmcp/di';
+
 import {
+  AuthProviderKind,
   FrontMcpAuth,
   FrontMcpLogger,
-  AuthProviderType,
-  AuthProviderEntry,
-  AuthProviderRecord,
-  AuthProviderKind,
-  EntryOwnerRef,
-  PrimaryAuthRecord,
-  ScopeEntry,
-  AuthOptions,
-  AuthOptionsInput,
-  parseAuthOptions,
+  isOrchestratedLocal,
+  isOrchestratedMode,
   isPublicMode,
   isTransparentMode,
-  isOrchestratedMode,
-  isOrchestratedLocal,
-  PublicAuthOptions,
-  AppType,
+  parseAuthOptions,
+  type AppType,
+  type AuthOptions,
+  type AuthOptionsInput,
+  type AuthProviderEntry,
+  type AuthProviderRecord,
+  type AuthProviderType,
+  type EntryOwnerRef,
+  type PrimaryAuthRecord,
+  type PublicAuthOptions,
+  type ScopeEntry,
 } from '../common';
-import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
-import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
-import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
-import { detectAuthProviders, type AuthProviderDetectionResult, type AppAuthInfo } from '@frontmcp/auth';
-import { DependencyNotFoundError, AuthConfigurationError } from '../errors';
 import { installContextExtensions } from '../context/context-extension';
+import { AuthConfigurationError, DependencyNotFoundError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
 import { orchestratedAuthContextExtension } from './authorization/orchestrated.context-extension';
+import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
+import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 
 /**
  * Default auth options when none provided - public mode with all tools open

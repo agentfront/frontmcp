@@ -1,14 +1,15 @@
 import 'reflect-metadata';
-import { FrontMcpLocalAppTokens } from '../tokens';
-import {
-  LocalAppMetadata,
-  frontMcpLocalAppMetadataSchema,
-  RemoteAppMetadata,
-  EsmAppOptions,
-  RemoteUrlAppOptions,
-} from '../metadata';
+
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import {
+  frontMcpLocalAppMetadataSchema,
+  type EsmAppOptions,
+  type LocalAppMetadata,
+  type RemoteAppMetadata,
+  type RemoteUrlAppOptions,
+} from '../metadata';
+import { FrontMcpLocalAppTokens } from '../tokens';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**

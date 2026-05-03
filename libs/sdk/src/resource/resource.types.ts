@@ -1,9 +1,10 @@
 // file: libs/sdk/src/resource/resource.types.ts
 
-import { EntryLineage, Token, Type, FuncType, ResourceEntry } from '../common';
-import { ResourceInstance } from './resource.instance';
-import ResourceRegistry from './resource.registry';
 import type { NameCase } from '@frontmcp/utils';
+
+import { type EntryLineage, type FuncType, type ResourceEntry, type Token, type Type } from '../common';
+import { ResourceInstance } from './resource.instance';
+import type ResourceRegistry from './resource.registry';
 
 // ============================================================================
 // Resource Template Type (interface equivalent)

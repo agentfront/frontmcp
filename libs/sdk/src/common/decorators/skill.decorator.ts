@@ -1,8 +1,17 @@
 import 'reflect-metadata';
-import { extendedSkillMetadata, FrontMcpSkillTokens } from '../tokens';
-import { SkillMetadata, skillMetadataSchema } from '../metadata';
-import { SkillKind, SkillValueRecord } from '../records';
+
 import { dirname } from '@frontmcp/utils';
+
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { skillMetadataSchema, type EsmOptions, type RemoteOptions, type SkillMetadata } from '../metadata';
+import { SkillKind, type SkillValueRecord } from '../records';
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Skill.esm() and Skill.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import { type SkillEsmTargetRecord, type SkillRemoteRecord } from '../records/skill.record';
+import { extendedSkillMetadata, FrontMcpSkillTokens } from '../tokens';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
  * Class decorator that marks a class as a Skill and provides metadata.
@@ -170,15 +179,6 @@ function resolveCallerDir(): string | undefined {
   }
   return undefined;
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// STATIC METHODS: Skill.esm() and Skill.remote()
-// ═══════════════════════════════════════════════════════════════════
-
-import type { EsmOptions, RemoteOptions } from '../metadata';
-import type { SkillEsmTargetRecord, SkillRemoteRecord } from '../records/skill.record';
-import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
-import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function skillEsm(specifier: string, targetName: string, options?: EsmOptions<SkillMetadata>): SkillEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);

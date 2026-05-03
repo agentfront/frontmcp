@@ -1,5 +1,6 @@
-import { ClassType, FactoryType, Type, ValueType } from '@frontmcp/di';
-import { AdapterMetadata } from '../metadata';
+import { type ClassType, type FactoryType, type Type, type ValueType } from '@frontmcp/di';
+
+import { type AdapterMetadata } from '../metadata';
 
 export enum AdapterKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

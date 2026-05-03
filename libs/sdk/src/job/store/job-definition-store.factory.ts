@@ -1,6 +1,6 @@
-import { JobDefinitionStore } from './job-definition.interface';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobDefinitionStore } from './job-definition.interface';
 import { MemoryJobDefinitionStore } from './memory-job-definition.store';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 
 /* istanbul ignore next -- no-op fallback used only when caller omits logger */
 const noopFn = () => {};

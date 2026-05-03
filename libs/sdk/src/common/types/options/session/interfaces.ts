@@ -1,7 +1,7 @@
 // common/types/options/session/interfaces.ts
 // Explicit TypeScript interfaces for session configuration
 
-import { AIPlatformType } from '../../auth/session.types';
+import { type AIPlatformType } from '../../auth/session.types';
 
 /**
  * Session mode type.

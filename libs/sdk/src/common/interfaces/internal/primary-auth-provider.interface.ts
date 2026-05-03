@@ -1,6 +1,12 @@
-import { ServerRequest } from '../server.interface';
-import { AuthOptions, isPublicMode, isTransparentMode, isOrchestratedMode, isOrchestratedRemote } from '../../types';
+import {
+  isOrchestratedMode,
+  isOrchestratedRemote,
+  isPublicMode,
+  isTransparentMode,
+  type AuthOptions,
+} from '../../types';
 import { urlToSafeId } from '../../utils';
+import { type ServerRequest } from '../server.interface';
 
 /**
  * Convert URL to a safe provider ID (hostname with dots replaced)

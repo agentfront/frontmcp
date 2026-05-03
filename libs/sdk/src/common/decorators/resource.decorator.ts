@@ -1,14 +1,23 @@
 import 'reflect-metadata';
-import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens, extendedResourceMetadata } from '../tokens';
+
+import { type ReadResourceRequest, type ReadResourceResult } from '@frontmcp/protocol';
+
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { type ResourceContext } from '../interfaces';
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Resource.esm() and Resource.remote()
+// ═══════════════════════════════════════════════════════════════════
 import {
   frontMcpResourceMetadataSchema,
   frontMcpResourceTemplateMetadataSchema,
-  ResourceMetadata,
-  ResourceTemplateMetadata,
+  type EsmOptions,
+  type RemoteOptions,
+  type ResourceMetadata,
+  type ResourceTemplateMetadata,
 } from '../metadata';
-
-import { ReadResourceRequest, ReadResourceResult } from '@frontmcp/protocol';
-import { ResourceContext } from '../interfaces';
+import { ResourceKind, type ResourceEsmTargetRecord, type ResourceRemoteRecord } from '../records/resource.record';
+import { extendedResourceMetadata, FrontMcpResourceTemplateTokens, FrontMcpResourceTokens } from '../tokens';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
  * Decorator that marks a class as a McpResource module and provides metadata
@@ -118,16 +127,6 @@ function frontMcpResourceTemplate<T extends ResourceTemplateMetadata>(
     return resourceFunction;
   };
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// STATIC METHODS: Resource.esm() and Resource.remote()
-// ═══════════════════════════════════════════════════════════════════
-
-import type { EsmOptions, RemoteOptions } from '../metadata';
-import { ResourceKind } from '../records/resource.record';
-import type { ResourceEsmTargetRecord, ResourceRemoteRecord } from '../records/resource.record';
-import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
-import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function resourceEsm(
   specifier: string,

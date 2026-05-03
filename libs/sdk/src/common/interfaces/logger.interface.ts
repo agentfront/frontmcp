@@ -1,5 +1,6 @@
-import { Type } from '@frontmcp/di';
-import { LogLevel } from '../types';
+import { type Type } from '@frontmcp/di';
+
+import { type LogLevel } from '../types';
 
 export interface LogRecord {
   level: LogLevel;

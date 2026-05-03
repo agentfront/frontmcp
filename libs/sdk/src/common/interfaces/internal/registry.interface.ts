@@ -1,15 +1,27 @@
-import { Token } from '@frontmcp/di';
-import { ScopeEntry, FlowEntry, ProviderEntry, PluginEntry, AdapterEntry, LoggerEntry } from '../../entries';
-import { FlowName } from '../../metadata';
+import { type Token } from '@frontmcp/di';
 
+import type AgentRegistryCls from '../../../agent/agent.registry';
+import type AppRegistryCls from '../../../app/app.registry';
+import type { AuthRegistry as AuthRegistryCls } from '../../../auth/auth.registry';
+import type { ChannelRegistryInterface } from '../../../channel/channel.registry';
 // Import concrete registry classes using `import type` to avoid circular deps
 import type HookRegistryCls from '../../../hooks/hook.registry';
-import type { AuthRegistry as AuthRegistryCls } from '../../../auth/auth.registry';
-import type AppRegistryCls from '../../../app/app.registry';
-import type ToolRegistryCls from '../../../tool/tool.registry';
-import type ResourceRegistryCls from '../../../resource/resource.registry';
+import type { JobRegistryInterface } from '../../../job/job.registry';
 import type PromptRegistryCls from '../../../prompt/prompt.registry';
-import type AgentRegistryCls from '../../../agent/agent.registry';
+import type ResourceRegistryCls from '../../../resource/resource.registry';
+// Import SkillRegistryInterface - using type import to avoid circular dependency
+import type { SkillRegistryInterface } from '../../../skill/skill.registry';
+import type ToolRegistryCls from '../../../tool/tool.registry';
+import type { WorkflowRegistryInterface } from '../../../workflow/workflow.registry';
+import {
+  type AdapterEntry,
+  type FlowEntry,
+  type LoggerEntry,
+  type PluginEntry,
+  type ProviderEntry,
+  type ScopeEntry,
+} from '../../entries';
+import { type FlowName } from '../../metadata';
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -71,12 +83,6 @@ export type AppRegistryKind =
   | 'ChannelRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
-
-// Import SkillRegistryInterface - using type import to avoid circular dependency
-import type { SkillRegistryInterface } from '../../../skill/skill.registry';
-import type { JobRegistryInterface } from '../../../job/job.registry';
-import type { WorkflowRegistryInterface } from '../../../workflow/workflow.registry';
-import type { ChannelRegistryInterface } from '../../../channel/channel.registry';
 
 export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;

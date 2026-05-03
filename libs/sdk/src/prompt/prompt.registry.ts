@@ -1,26 +1,35 @@
 // file: libs/sdk/src/prompt/prompt.registry.ts
 
-import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import { AppEntry, EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptType, ScopeEntry } from '../common';
-import { PromptChangeEvent, PromptEmitter } from './prompt.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
-import { logAvailabilityFiltering } from '../common/availability';
-import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
-import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-import { normalizePrompt, promptDiscoveryDeps } from './prompt.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { PromptInstance } from './prompt.instance';
-import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from './prompt.types';
-import GetPromptFlow from './flows/get-prompt.flow';
-import PromptsListFlow from './flows/prompts-list.flow';
-import { ServerCapabilities } from '@frontmcp/protocol';
+import { getMetadata, tokenName, type Token } from '@frontmcp/di';
+import { type ServerCapabilities } from '@frontmcp/protocol';
+import { ensureMaxLen, getRuntimeContext, isEntryAvailable, sepFor } from '@frontmcp/utils';
+
 import {
-  NameDisambiguationError,
+  type AppEntry,
+  type EntryLineage,
+  type EntryOwnerRef,
+  type PromptEntry,
+  type PromptRecord,
+  type PromptType,
+  type ScopeEntry,
+} from '../common';
+import { logAvailabilityFiltering } from '../common/availability';
+import {
   EntryValidationError,
+  NameDisambiguationError,
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
 } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import GetPromptFlow from './flows/get-prompt.flow';
+import PromptsListFlow from './flows/prompts-list.flow';
+import { PromptEmitter, type PromptChangeEvent } from './prompt.events';
+import { PromptInstance } from './prompt.instance';
+import { DEFAULT_PROMPT_EXPORT_OPTS, type IndexedPrompt, type PromptExportOptions } from './prompt.types';
+import { normalizePrompt, promptDiscoveryDeps } from './prompt.utils';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;

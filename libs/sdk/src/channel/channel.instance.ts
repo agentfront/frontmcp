@@ -1,18 +1,18 @@
 // file: libs/sdk/src/channel/channel.instance.ts
 
 import {
-  EntryOwnerRef,
   ChannelContext,
-  ChannelCtorArgs,
   ChannelEntry,
   ChannelKind,
-  ChannelRecord,
-  ChannelFunctionTokenRecord,
   FrontMcpLogger,
-  ScopeEntry,
+  type ChannelCtorArgs,
+  type ChannelFunctionTokenRecord,
+  type ChannelRecord,
+  type EntryOwnerRef,
+  type ScopeEntry,
 } from '../common';
-import ProviderRegistry from '../provider/provider.registry';
 import type { ChannelNotification } from '../common/metadata/channel.metadata';
+import type ProviderRegistry from '../provider/provider.registry';
 import type { ChannelNotificationService } from './channel-notification.service';
 
 /**

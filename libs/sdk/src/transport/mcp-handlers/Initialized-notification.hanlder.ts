@@ -1,5 +1,6 @@
-import { InitializedNotificationSchema, InitializedNotification, Result } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { InitializedNotificationSchema, type InitializedNotification, type Result } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function initializedNotificationHandler(
   options: McpHandlerOptions,

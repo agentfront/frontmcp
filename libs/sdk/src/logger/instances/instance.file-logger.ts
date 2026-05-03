@@ -1,7 +1,8 @@
-import { LogTransportInterface, LogRecord, LogTransport, LogLevel } from '../../common';
-import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
+
+import { LogLevel, LogTransport, LogTransportInterface, type LogRecord } from '../../common';
 
 const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
   [LogLevel.Off]: 'OFF',

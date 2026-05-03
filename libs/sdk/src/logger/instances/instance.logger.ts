@@ -1,14 +1,15 @@
+import { isDevelopment } from '@frontmcp/utils';
+
 import {
   FrontMcpLogger,
-  LogTransportInterface,
-  LogFn,
-  LoggingConfigType,
   LogLevel,
   LogLevelName,
-  LogRecord,
+  type LogFn,
+  type LoggingConfigType,
+  type LogRecord,
+  type LogTransportInterface,
 } from '../../common';
-import { isDevelopment } from '@frontmcp/utils';
-import { ConsoleLogTransportInstance } from './instance.console-logger';
+import { type ConsoleLogTransportInstance } from './instance.console-logger';
 
 export type GetTransports = () => {
   consoleTransport?: ConsoleLogTransportInstance;

@@ -1,7 +1,8 @@
-import { ClassType, Token, Type, ValueType } from '@frontmcp/di';
-import { FrontMcpAuth } from '../interfaces';
-import { AuthProviderMetadata } from '../metadata';
-import { AuthOptions } from '../types';
+import { type ClassType, type Token, type Type, type ValueType } from '@frontmcp/di';
+
+import { type FrontMcpAuth } from '../interfaces';
+import { type AuthProviderMetadata } from '../metadata';
+import { type AuthOptions } from '../types';
 
 export enum AuthProviderKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

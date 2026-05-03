@@ -1,4 +1,4 @@
-import { HookMetadata, FrontMcpFlowHookTokens } from '../common';
+import { FrontMcpFlowHookTokens, type HookMetadata } from '../common';
 import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decorator';
 
 export type StageEntry<C> = {

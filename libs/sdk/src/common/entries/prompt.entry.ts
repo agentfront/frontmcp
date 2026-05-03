@@ -1,14 +1,19 @@
 // file: libs/sdk/src/common/entries/prompt.entry.ts
 
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { PromptRecord } from '../records';
-import { PromptContext, PromptInterface } from '../interfaces';
-import { PromptMetadata } from '../metadata';
-import { GetPromptResult, Request, Notification } from '@frontmcp/protocol';
-import { RequestHandlerExtra } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
-import { ProviderRegistryInterface } from '../interfaces/internal';
+import {
+  type AuthInfo,
+  type GetPromptResult,
+  type Notification,
+  type Request,
+  type RequestHandlerExtra,
+} from '@frontmcp/protocol';
+
 import type ProviderRegistry from '../../provider/provider.registry';
+import { type PromptContext, type PromptInterface } from '../interfaces';
+import { type ProviderRegistryInterface } from '../interfaces/internal';
+import { type PromptMetadata } from '../metadata';
+import { type PromptRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 export type PromptGetExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;

@@ -12,12 +12,12 @@
  */
 
 import {
-  ElicitResult,
-  ElicitMode,
-  PendingElicitFallback,
-  ResolvedElicitResult,
-  FallbackExecutionResult,
-  FallbackResultCallback,
+  type ElicitMode,
+  type ElicitResult,
+  type FallbackExecutionResult,
+  type FallbackResultCallback,
+  type PendingElicitFallback,
+  type ResolvedElicitResult,
 } from '../elicitation.types';
 
 /**

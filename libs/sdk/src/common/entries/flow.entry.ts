@@ -1,10 +1,12 @@
 import 'reflect-metadata';
-import { Token, Type } from '@frontmcp/di';
+
+import { type Token, type Type } from '@frontmcp/di';
+
+import { type FlowBase, type FlowInputOf, type FlowOutputOf, type HttpMethod, type ServerRequest } from '../interfaces';
+import { type FlowMetadata, type FlowName } from '../metadata';
+import { type FlowRecord } from '../records';
 import { BaseEntry } from './base.entry';
-import { FlowRecord } from '../records';
-import { FlowBase, FlowInputOf, FlowOutputOf, HttpMethod, ServerRequest } from '../interfaces';
-import { FlowMetadata, FlowName } from '../metadata';
-import { ScopeEntry } from './scope.entry';
+import { type ScopeEntry } from './scope.entry';
 
 export abstract class FlowEntry<Name extends FlowName> extends BaseEntry<FlowRecord, FlowBase, FlowMetadata<never>> {
   readonly name: Name;

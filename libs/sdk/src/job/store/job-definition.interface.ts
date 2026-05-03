@@ -1,5 +1,5 @@
-import { JobDynamicRecord } from '../../common/records/job.record';
-import { WorkflowDynamicRecord } from '../../common/records/workflow.record';
+import { type JobDynamicRecord } from '../../common/records/job.record';
+import { type WorkflowDynamicRecord } from '../../common/records/workflow.record';
 
 export interface JobDefinitionStore {
   saveDefinition(record: JobDynamicRecord): Promise<void>;

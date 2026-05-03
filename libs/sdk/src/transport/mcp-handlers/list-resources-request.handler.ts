@@ -1,7 +1,8 @@
 // file: libs/sdk/src/transport/mcp-handlers/list-resources-request.handler.ts
 
-import { ListResourcesRequestSchema, ListResourcesRequest, ListResourcesResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { ListResourcesRequestSchema, type ListResourcesRequest, type ListResourcesResult } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listResourcesRequestHandler({
   scope,

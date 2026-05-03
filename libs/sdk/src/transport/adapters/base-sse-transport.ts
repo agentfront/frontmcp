@@ -1,15 +1,18 @@
-import { randomUUID } from '@frontmcp/utils';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import getRawBody from 'raw-body';
+import { type IncomingMessage, type ServerResponse } from 'node:http';
+
 import contentType from 'content-type';
+import getRawBody from 'raw-body';
+
 import {
-  Transport,
   JSONRPCMessageSchema,
-  type JSONRPCMessage,
-  type MessageExtraInfo,
   type AuthInfo,
+  type JSONRPCMessage,
   type RequestInfo as McpRequestInfo,
+  type MessageExtraInfo,
+  type Transport,
 } from '@frontmcp/protocol';
+import { randomUUID } from '@frontmcp/utils';
+
 import {
   TransportAlreadyStartedError,
   TransportNotConnectedError,

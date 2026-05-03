@@ -7,16 +7,16 @@
  * @module elicitation/helpers/fallback.helper
  */
 
-import type { FrontMcpLogger } from '../../common';
-import type { Scope } from '../../scope';
-import type { FallbackExecutionResult } from '../elicitation.types';
-import { DEFAULT_FALLBACK_WAIT_TTL } from '../elicitation.types';
+import { type CallToolResult } from '@frontmcp/protocol';
+
+import { type FrontMcpLogger } from '../../common';
 import {
-  ElicitationFallbackRequired,
-  ElicitationSubscriptionError,
   ElicitationStoreNotInitializedError,
+  ElicitationSubscriptionError,
+  type ElicitationFallbackRequired,
 } from '../../errors';
-import type { CallToolResult } from '@frontmcp/protocol';
+import { type Scope } from '../../scope';
+import { DEFAULT_FALLBACK_WAIT_TTL, type FallbackExecutionResult } from '../elicitation.types';
 
 /**
  * Create a typed error result for tool responses.

@@ -1,5 +1,5 @@
-import { AuthenticatedServerRequest } from '../server/server.types';
-import { ServerResponse } from '../common';
+import { type ServerResponse } from '../common';
+import { type AuthenticatedServerRequest } from '../server/server.types';
 
 export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http' | 'in-memory' | 'stdio';
 

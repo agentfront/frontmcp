@@ -2,10 +2,11 @@
 
 import {
   ListResourceTemplatesRequestSchema,
-  ListResourceTemplatesRequest,
-  ListResourceTemplatesResult,
+  type ListResourceTemplatesRequest,
+  type ListResourceTemplatesResult,
 } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listResourceTemplatesRequestHandler({
   scope,

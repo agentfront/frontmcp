@@ -1,6 +1,6 @@
+import { type AuthProviderMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { AuthProviderMetadata } from '../metadata';
 
 export const FrontMcpAuthProviderTokens: RawMetadataShape<AuthProviderMetadata> = {
   type: tokenFactory.type('auth-provider'),

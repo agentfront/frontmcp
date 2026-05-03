@@ -1,4 +1,4 @@
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { EnclaveExecutionError } from '../../errors';
 
 export interface EnclaveOptions {

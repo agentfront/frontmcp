@@ -1,6 +1,6 @@
+import { type SkillMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { SkillMetadata } from '../metadata';
 
 export const FrontMcpSkillTokens = {
   type: tokenFactory.type('skill'),

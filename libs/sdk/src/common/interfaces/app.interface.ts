@@ -1,5 +1,6 @@
-import { Type, ValueType } from '@frontmcp/di';
-import { AppMetadata, RemoteAppMetadata } from '../metadata';
+import { type Type, type ValueType } from '@frontmcp/di';
+
+import { type AppMetadata, type RemoteAppMetadata } from '../metadata';
 
 export type AppValueType<Provide> = ValueType<Provide> & AppMetadata;
 

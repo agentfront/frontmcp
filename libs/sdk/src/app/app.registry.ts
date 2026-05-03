@@ -1,12 +1,21 @@
 import 'reflect-metadata';
-import { Token, tokenName } from '@frontmcp/di';
-import { AppType, AppEntry, AppKind, AppRecord, EntryOwnerRef, FrontMcpLogger } from '../common';
+
+import { tokenName, type Token } from '@frontmcp/di';
+
+import {
+  AppKind,
+  FrontMcpLogger,
+  type AppEntry,
+  type AppRecord,
+  type AppType,
+  type EntryOwnerRef,
+  type RemoteAppMetadata,
+} from '../common';
+import { InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { appDiscoveryDeps, normalizeApp } from './app.utils';
-import ProviderRegistry from '../provider/provider.registry';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { AppLocalInstance, AppRemoteInstance, AppEsmInstance } from './instances';
-import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
-import type { RemoteAppMetadata } from '../common';
+import { AppEsmInstance, AppLocalInstance, AppRemoteInstance } from './instances';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
   private readonly owner: EntryOwnerRef;

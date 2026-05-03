@@ -1,7 +1,7 @@
 // file: libs/sdk/src/skill/skill-storage.interface.ts
 
-import { SkillMetadata } from '../common/metadata';
-import { SkillContent } from '../common/interfaces';
+import { type SkillContent } from '../common/interfaces';
+import { type SkillMetadata } from '../common/metadata';
 
 /**
  * Options for searching skills.

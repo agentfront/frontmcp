@@ -1,11 +1,11 @@
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { PublicMcpError } from '../../errors';
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsListRequestSchema,
   SkillsListResultSchema,
-  SkillsListRequest,
-  SkillsListResult,
+  type SkillsListRequest,
+  type SkillsListResult,
 } from './skills-mcp.types';
-import { PublicMcpError } from '../../errors';
 
 /**
  * MCP handler for skills/list custom method.

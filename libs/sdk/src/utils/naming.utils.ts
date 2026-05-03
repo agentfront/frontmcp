@@ -1,7 +1,7 @@
 // file: libs/sdk/src/utils/naming.utils.ts
 // MCP-specific naming utilities that use the MCP_ALLOWED character set
 
-import { splitWords, toCase, sepFor, NameCase } from '@frontmcp/utils';
+import { sepFor, splitWords, toCase, type NameCase } from '@frontmcp/utils';
 
 // Allowed chars per MCP spec: a-zA-Z0-9 _ - . /
 const MCP_ALLOWED = /[A-Za-z0-9_\-./]/;

@@ -1,9 +1,8 @@
-import { Type } from '@frontmcp/di';
-import { SkillContext } from '../interfaces';
-import { SkillMetadata } from '../metadata';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
-import type { EsmOptions } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import { type SkillContext } from '../interfaces';
+import { type EsmOptions, type RemoteAuthConfig, type RemoteTransportOptions, type SkillMetadata } from '../metadata';
 
 /**
  * Kinds of skill records supported by the framework.

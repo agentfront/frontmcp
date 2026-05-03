@@ -1,5 +1,6 @@
-import { SubscribeRequestSchema, SubscribeRequest, EmptyResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { SubscribeRequestSchema, type EmptyResult, type SubscribeRequest } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Handler for the resources/subscribe MCP request.

@@ -1,22 +1,22 @@
 // file: libs/sdk/src/channel/channel-scope.helper.ts
 
-import { FrontMcpLogger, EntryOwnerRef } from '../common';
-import { ChannelType } from '../common/interfaces/channel.interface';
-import { ChannelsConfigOptions } from '../common/metadata/channel.metadata';
-import ProviderRegistry from '../provider/provider.registry';
-import ChannelRegistry from './channel.registry';
-import { ChannelNotificationService } from './channel-notification.service';
-import { ChannelEventBus, wireAppEventSource } from './sources/app-event.source';
-import { wireAgentCompletionSource } from './sources/agent-completion.source';
-import { wireJobCompletionSource } from './sources/job-completion.source';
-import { ChannelReplyTool } from './reply/channel-reply.tool';
-import { normalizeTool } from '../tool/tool.utils';
-import { ToolInstance } from '../tool/tool.instance';
-import type { NotificationService } from '../notification/notification.service';
+import { type EntryOwnerRef, type FrontMcpLogger } from '../common';
+import { type ChannelType } from '../common/interfaces/channel.interface';
+import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
 import type FlowRegistry from '../flows/flow.registry';
+import type { NotificationService } from '../notification/notification.service';
+import type ProviderRegistry from '../provider/provider.registry';
+import { ToolInstance } from '../tool/tool.instance';
 import type ToolRegistry from '../tool/tool.registry';
-import SendChannelNotificationFlow from './flows/send-channel-notification.flow';
+import { normalizeTool } from '../tool/tool.utils';
+import { ChannelNotificationService } from './channel-notification.service';
+import ChannelRegistry from './channel.registry';
 import ListChannelsFlow from './flows/list-channels.flow';
+import SendChannelNotificationFlow from './flows/send-channel-notification.flow';
+import { ChannelReplyTool } from './reply/channel-reply.tool';
+import { wireAgentCompletionSource } from './sources/agent-completion.source';
+import { ChannelEventBus, wireAppEventSource } from './sources/app-event.source';
+import { wireJobCompletionSource } from './sources/job-completion.source';
 
 export interface RegisterChannelCapabilitiesArgs {
   providers: ProviderRegistry;

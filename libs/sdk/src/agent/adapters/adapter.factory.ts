@@ -1,15 +1,20 @@
-import {
-  AgentLlmAdapter,
-  AgentLlmConfig,
-  AgentLlmBuiltinConfig,
-  AgentLlmAdapterConfig,
-  AgentApiKeyConfig,
-  WithConfig,
-} from '../../common';
 import { getEnv } from '@frontmcp/utils';
+
+import {
+  generateFallbacks,
+  type ConfigResolutionContext,
+  type ConfigResolver,
+} from '../../builtin/config/config-resolver';
+import {
+  type AgentApiKeyConfig,
+  type AgentLlmAdapter,
+  type AgentLlmAdapterConfig,
+  type AgentLlmBuiltinConfig,
+  type AgentLlmConfig,
+  type WithConfig,
+} from '../../common';
 import { LlmAdapterError } from './base.adapter';
 import { createProviderAdapterSync } from './providers';
-import { ConfigResolver, ConfigResolutionContext, generateFallbacks } from '../../builtin/config/config-resolver';
 
 // Re-export ConfigResolver for backwards compatibility
 export type { ConfigResolver } from '../../builtin/config/config-resolver';

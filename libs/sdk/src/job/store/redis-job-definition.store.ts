@@ -1,7 +1,7 @@
-import { JobDefinitionStore } from './job-definition.interface';
-import { JobDynamicRecord } from '../../common/records/job.record';
-import { WorkflowDynamicRecord } from '../../common/records/workflow.record';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobDynamicRecord } from '../../common/records/job.record';
+import { type WorkflowDynamicRecord } from '../../common/records/workflow.record';
+import { type JobDefinitionStore } from './job-definition.interface';
 
 /** Minimal Redis client interface covering operations used by this store. */
 export interface RedisDefinitionStoreLike {

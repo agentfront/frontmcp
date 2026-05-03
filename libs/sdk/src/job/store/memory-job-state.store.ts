@@ -1,4 +1,9 @@
-import { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState } from './job-state.interface';
+import {
+  type JobExecutionState,
+  type JobRunRecord,
+  type JobStateStore,
+  type WorkflowRunRecord,
+} from './job-state.interface';
 
 /**
  * In-memory implementation of JobStateStore.

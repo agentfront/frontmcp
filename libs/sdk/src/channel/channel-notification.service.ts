@@ -1,7 +1,7 @@
 // file: libs/sdk/src/channel/channel-notification.service.ts
 
-import { FrontMcpLogger } from '../common';
-import { NotificationService, supportsChannels } from '../notification/notification.service';
+import { type FrontMcpLogger } from '../common';
+import { supportsChannels, type NotificationService } from '../notification/notification.service';
 
 /**
  * The MCP notification method for Claude Code channels.

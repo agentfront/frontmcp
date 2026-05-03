@@ -1,6 +1,6 @@
+import { type PromptMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { PromptMetadata } from '../metadata';
 
 export const FrontMcpPromptTokens = {
   type: tokenFactory.type('prompt'),

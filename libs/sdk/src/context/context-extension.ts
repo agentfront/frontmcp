@@ -22,7 +22,8 @@
  * @internal
  */
 
-import { Token } from '@frontmcp/di';
+import { type Token } from '@frontmcp/di';
+
 import { ExecutionContextBase } from '../common/interfaces/execution-context.interface';
 import { PromptContext } from '../common/interfaces/prompt.interface';
 import type { ContextExtension } from '../common/metadata/plugin.metadata';

@@ -1,11 +1,12 @@
-import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
-import { PluginMetadata, PluginType, FrontMcpPluginTokens, PluginRecord, PluginKind } from '../common';
+import { depsOfClass, getMetadata, isClass, tokenName, type Token } from '@frontmcp/di';
+
+import { FrontMcpPluginTokens, PluginKind, type PluginMetadata, type PluginRecord, type PluginType } from '../common';
 import {
-  MissingProvideError,
+  InvalidEntityError,
   InvalidUseClassError,
   InvalidUseFactoryError,
   InvalidUseValueError,
-  InvalidEntityError,
+  MissingProvideError,
 } from '../errors';
 
 export function collectPluginMetadata(cls: PluginType): PluginMetadata {

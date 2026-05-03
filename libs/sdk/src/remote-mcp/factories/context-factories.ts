@@ -7,10 +7,11 @@
  * and remote identifiers via closure.
  */
 
-import { Type } from '@frontmcp/di';
-import { ToolContext, ToolInputType, ToolOutputType, ResourceContext, PromptContext } from '../../common';
+import { type Type } from '@frontmcp/di';
+import type { CallToolResult, GetPromptResult, ReadResourceResult } from '@frontmcp/protocol';
+
+import { PromptContext, ResourceContext, ToolContext, type ToolInputType, type ToolOutputType } from '../../common';
 import type { McpClientService } from '../mcp-client.service';
-import type { CallToolResult, ReadResourceResult, GetPromptResult } from '@frontmcp/protocol';
 
 /**
  * Creates a remote tool context class with closed-over dependencies.

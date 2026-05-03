@@ -1,11 +1,11 @@
 import {
-  AgentLlmAdapter,
-  AgentPrompt,
-  AgentMessage,
-  AgentCompletion,
-  AgentCompletionChunk,
-  AgentToolDefinition,
-  AgentCompletionOptions,
+  type AgentCompletion,
+  type AgentCompletionChunk,
+  type AgentCompletionOptions,
+  type AgentLlmAdapter,
+  type AgentMessage,
+  type AgentPrompt,
+  type AgentToolDefinition,
 } from '../../common';
 
 // ============================================================================

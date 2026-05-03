@@ -10,8 +10,8 @@
  */
 
 import type { ScopeEntry } from '../../common/index.js';
-import { SkillHttpCache, MemorySkillHttpCache } from './skill-http-cache.js';
 import { createSkillHttpCache } from './skill-http-cache.factory.js';
+import { MemorySkillHttpCache, type SkillHttpCache } from './skill-http-cache.js';
 
 /**
  * Cache holder keyed by scope ID.

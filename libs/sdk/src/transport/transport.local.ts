@@ -1,12 +1,12 @@
-import { Transporter, TransportKey, TransportType } from './transport.types';
-import { AuthenticatedServerRequest } from '../server/server.types';
+import { type ServerResponse } from '../common';
+import { MethodNotImplementedError, UnsupportedTransportTypeError } from '../errors/transport.errors';
+import { type Scope } from '../scope';
+import { type AuthenticatedServerRequest } from '../server/server.types';
+import { type LocalTransportAdapter, type SupportedTransport } from './adapters/transport.local.adapter';
 import { TransportSSEAdapter } from './adapters/transport.sse.adapter';
 import { TransportStreamableHttpAdapter } from './adapters/transport.streamable-http.adapter';
 import { rpcError } from './transport.error';
-import { LocalTransportAdapter, SupportedTransport } from './adapters/transport.local.adapter';
-import { ServerResponse } from '../common';
-import { Scope } from '../scope';
-import { MethodNotImplementedError, UnsupportedTransportTypeError } from '../errors/transport.errors';
+import { type Transporter, type TransportKey, type TransportType } from './transport.types';
 
 export class LocalTransporter implements Transporter {
   readonly type: TransportType;

@@ -1,9 +1,10 @@
 // file: libs/sdk/src/common/interfaces/resource.interface.ts
 
-import { Type } from '@frontmcp/di';
-import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ResourceMetadata, type ResourceTemplateMetadata } from '../metadata';
+import { ExecutionContextBase, type ExecutionContextBaseArgs } from './execution-context.interface';
 import { FlowControl } from './flow.interface';
-import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
 /**
  * Base interface for resource implementations.

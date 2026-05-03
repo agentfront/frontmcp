@@ -1,6 +1,6 @@
+import { type ResourceMetadata, type ResourceTemplateMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 
 export const FrontMcpResourceTokens = {
   type: tokenFactory.type('resource'),

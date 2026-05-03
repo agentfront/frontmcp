@@ -1,8 +1,17 @@
 import 'reflect-metadata';
-import { FrontMcpPromptTokens, extendedPromptMetadata } from '../tokens';
-import { PromptMetadata, frontMcpPromptMetadataSchema } from '../metadata';
-import { GetPromptResult, GetPromptRequest } from '@frontmcp/protocol';
-import { PromptContext } from '../interfaces';
+
+import { type GetPromptRequest, type GetPromptResult } from '@frontmcp/protocol';
+
+import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { type PromptContext } from '../interfaces';
+import { frontMcpPromptMetadataSchema, type EsmOptions, type PromptMetadata, type RemoteOptions } from '../metadata';
+// ═══════════════════════════════════════════════════════════════════
+// STATIC METHODS: Prompt.esm() and Prompt.remote()
+// ═══════════════════════════════════════════════════════════════════
+
+import { PromptKind, type PromptEsmTargetRecord, type PromptRemoteRecord } from '../records/prompt.record';
+import { extendedPromptMetadata, FrontMcpPromptTokens } from '../tokens';
+import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 /**
  * Decorator that marks a class as a McpPrompt module and provides metadata
@@ -53,16 +62,6 @@ function frontMcpPrompt<T extends PromptMetadata>(
     return toolFunction;
   };
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// STATIC METHODS: Prompt.esm() and Prompt.remote()
-// ═══════════════════════════════════════════════════════════════════
-
-import type { EsmOptions, RemoteOptions } from '../metadata';
-import { PromptKind } from '../records/prompt.record';
-import type { PromptEsmTargetRecord, PromptRemoteRecord } from '../records/prompt.record';
-import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
-import { validateRemoteUrl } from '../utils/validate-remote-url';
 
 function promptEsm(specifier: string, targetName: string, options?: EsmOptions<PromptMetadata>): PromptEsmTargetRecord {
   const parsed = parsePackageSpecifier(specifier);

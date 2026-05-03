@@ -1,9 +1,10 @@
-import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
+import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
+
+import { type JobContext, type JobType } from '../common/interfaces/job.interface';
+import { type JobMetadata } from '../common/metadata/job.metadata';
+import { JobKind, type JobFunctionTokenRecord, type JobRecord } from '../common/records/job.record';
+import { extendedJobMetadata, FrontMcpJobTokens } from '../common/tokens/job.tokens';
 import { InvalidEntityError } from '../errors';
-import { JobMetadata } from '../common/metadata/job.metadata';
-import { FrontMcpJobTokens, extendedJobMetadata } from '../common/tokens/job.tokens';
-import { JobRecord, JobKind, JobFunctionTokenRecord } from '../common/records/job.record';
-import { JobContext, JobType } from '../common/interfaces/job.interface';
 
 export function collectJobMetadata(cls: JobType): JobMetadata {
   const extended = getMetadata(extendedJobMetadata, cls);

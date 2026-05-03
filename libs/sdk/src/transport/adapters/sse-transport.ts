@@ -8,8 +8,9 @@
  * This class extends our custom SSEServerTransport to expose a public API
  * for session recreation, maintaining the event ID sequence across reconnections.
  */
-import { SSEServerTransport, SSEServerTransportOptions } from './base-sse-transport';
 import type { ServerResponse } from 'http';
+
+import { SSEServerTransport, type SSEServerTransportOptions } from './base-sse-transport';
 
 export interface RecreateableSSEServerTransportOptions extends SSEServerTransportOptions {
   /**
@@ -84,7 +85,7 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
     }
     // Access internal MCP SDK property _eventIdCounter - may change between SDK versions.
     // If this breaks after an SDK update, check SSEServerTransport internals.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (this as any)._eventIdCounter = eventId;
   }
 

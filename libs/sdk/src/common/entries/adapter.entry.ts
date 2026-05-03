@@ -1,6 +1,6 @@
+import { type AdapterInterface } from '../interfaces';
+import { type AdapterMetadata } from '../metadata';
+import { type AdapterRecord } from '../records';
 import { BaseEntry } from './base.entry';
-import { AdapterRecord } from '../records';
-import { AdapterInterface } from '../interfaces';
-import { AdapterMetadata } from '../metadata';
 
 export abstract class AdapterEntry extends BaseEntry<AdapterRecord, AdapterInterface, AdapterMetadata> {}

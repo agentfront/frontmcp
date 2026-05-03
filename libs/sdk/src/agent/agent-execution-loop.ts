@@ -1,15 +1,15 @@
 // file: libs/sdk/src/agent/agent-execution-loop.ts
 
 import {
-  AgentLlmAdapter,
-  AgentPrompt,
-  AgentMessage,
-  AgentToolDefinition,
-  AgentToolCall,
-  AgentCompletion,
-  AgentCompletionOptions,
   supportsStreaming,
-  FrontMcpLogger,
+  type AgentCompletion,
+  type AgentCompletionOptions,
+  type AgentLlmAdapter,
+  type AgentMessage,
+  type AgentPrompt,
+  type AgentToolCall,
+  type AgentToolDefinition,
+  type FrontMcpLogger,
 } from '../common';
 
 // ============================================================================

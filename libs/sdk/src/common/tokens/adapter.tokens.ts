@@ -1,6 +1,6 @@
+import { type AdapterMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { AdapterMetadata } from '../metadata';
 
 export const FrontMcpAdapterTokens: RawMetadataShape<AdapterMetadata> = {
   type: tokenFactory.type('adapter'),

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
+
+import { frontMcpWorkflowMetadataSchema, type WorkflowMetadata } from '../metadata/workflow.metadata';
 import { extendedWorkflowMetadata, FrontMcpWorkflowTokens } from '../tokens';
-import { WorkflowMetadata, frontMcpWorkflowMetadataSchema } from '../metadata/workflow.metadata';
 
 /**
  * Decorator that marks a class as a Workflow and provides metadata.

@@ -1,4 +1,4 @@
-import { JobPermission, JobPermissionAction } from '../common/metadata/job.metadata';
+import { type JobPermission, type JobPermissionAction } from '../common/metadata/job.metadata';
 
 /**
  * Permission guard for jobs and workflows.

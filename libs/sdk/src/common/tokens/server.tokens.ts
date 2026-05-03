@@ -1,6 +1,6 @@
+import { type Authorization, type RawMetadataShape } from '../types';
+import { type HttpRequestIntent } from '../utils';
 import { tokenFactory } from './base.tokens';
-import { HttpRequestIntent } from '../utils';
-import { Authorization, RawMetadataShape } from '../types';
 
 interface ServerRequestTokenValue {
   intent: HttpRequestIntent;

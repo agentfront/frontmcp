@@ -1,7 +1,7 @@
-import { BaseEntry } from './base.entry';
+import { type AuthProviderInterface } from '../interfaces';
+import { type AuthProviderMetadata } from '../metadata';
 import type { AuthProviderRecord } from '../records';
-import { AuthProviderInterface } from '../interfaces';
-import { AuthProviderMetadata } from '../metadata';
+import { BaseEntry } from './base.entry';
 
 export abstract class AuthProviderEntry extends BaseEntry<
   AuthProviderRecord,

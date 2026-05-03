@@ -1,11 +1,12 @@
-import { FrontMcpAuth, ProviderScope, ScopeEntry, ServerRequest } from '../../common';
-import { TransparentAuthOptions } from '../../common/types/options/auth';
-import ProviderRegistry from '../../provider/provider.registry';
 import { JwksService } from '@frontmcp/auth';
-import WellKnownPrmFlow from '../flows/well-known.prm.flow';
-import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
-import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
+
+import { FrontMcpAuth, ProviderScope, type ScopeEntry, type ServerRequest } from '../../common';
+import { type TransparentAuthOptions } from '../../common/types/options/auth';
+import type ProviderRegistry from '../../provider/provider.registry';
 import SessionVerifyFlow from '../flows/session.verify.flow';
+import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
+import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
+import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 
 export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
   override ready: Promise<void>;

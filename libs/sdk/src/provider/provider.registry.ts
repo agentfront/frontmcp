@@ -1,44 +1,46 @@
 import 'reflect-metadata';
+
 import {
-  Ctor,
-  ProviderScope,
-  Token,
-  ProviderRecord,
-  ProviderKind,
-  ProviderInjectedRecord,
-  tokenName,
-  isClass,
-  isPromise,
   depsOfClass,
   hasAsyncWith,
+  isClass,
+  isPromise,
+  ProviderKind,
+  ProviderScope,
+  tokenName,
+  type Ctor,
+  type ProviderInjectedRecord,
+  type ProviderRecord,
+  type Token,
 } from '@frontmcp/di';
+
 import {
-  ProviderType,
-  ProviderRegistryInterface,
-  ScopeEntry,
-  RegistryKind,
-  RegistryType,
-  ProviderEntry,
   FrontMcpServer,
+  type ProviderEntry,
+  type ProviderRegistryInterface,
+  type ProviderType,
+  type RegistryKind,
+  type RegistryType,
+  type ScopeEntry,
 } from '../common';
-import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
+import { shouldCacheProviders, type DistributedEnabled } from '../common/types/options/transport';
+import { validateSessionId } from '../context/frontmcp-context';
 import {
-  ProviderNotRegisteredError,
-  ProviderScopeMismatchError,
-  ProviderNotInstantiatedError,
   DependencyCycleError,
+  InvalidDependencyScopeError,
+  PluginDependencyError,
   ProviderConstructionError,
   ProviderDependencyError,
-  ProviderScopedAccessError,
   ProviderNotAvailableError,
-  PluginDependencyError,
-  InvalidDependencyScopeError,
+  ProviderNotInstantiatedError,
+  ProviderNotRegisteredError,
+  ProviderScopedAccessError,
+  ProviderScopeMismatchError,
 } from '../errors';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { ProviderViews } from './provider.types';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
-import { validateSessionId } from '../context/frontmcp-context';
-import { type DistributedEnabled, shouldCacheProviders } from '../common/types/options/transport';
+import { type ProviderViews } from './provider.types';
+import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
 
 /**
  * Configuration options for ProviderRegistry.
