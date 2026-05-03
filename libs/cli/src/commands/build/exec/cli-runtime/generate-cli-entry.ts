@@ -3,8 +3,9 @@
  * This creates a commander.js-based CLI where each MCP tool is a subcommand.
  */
 
-import { CliConfig, OAuthConfig } from '../config';
-import { ExtractedSchema, ExtractedTool, ExtractedPrompt, ExtractedResourceTemplate, ExtractedCapabilities, ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
+import { type CliConfig, type OAuthConfig } from '../config';
+import { EXTRACT_PUBLIC_MESSAGE_SNIPPET } from './extract-public-message.snippet';
+import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
 
 export const RESERVED_COMMANDS = new Set([
@@ -12,6 +13,9 @@ export const RESERVED_COMMANDS = new Set([
   'login', 'logout', 'connect', 'serve', 'daemon',
   'doctor', 'install', 'uninstall', 'sessions', 'help', 'version',
   'skills', 'job', 'workflow',
+  // Reserved by the symmetric `prompt get <name>` / `resource read <uri>`
+  // sub-API; included so a user-defined entry can never shadow them.
+  'get', 'list', 'read',
 ]);
 
 export interface CliEntryOptions {
@@ -234,7 +238,31 @@ async function closeClient() {
 // Flag set by long-running commands (serve, daemon) to prevent the footer from calling process.exit().
 var _isLongRunning = false;
 
+${EXTRACT_PUBLIC_MESSAGE_SNIPPET}
+
 var program = new Command();
+// Make Commander's own usage errors (unknown subcommand, missing required option,
+// invalid value) exit with code 2 instead of the default 0 — matches POSIX
+// convention and lets shell scripts/CI distinguish runtime failures from usage.
+//
+// Sets process.exitCode and re-throws so the parseAsync() footer can run
+// closeClient() / native-addon teardown before the actual exit. Calling
+// process.exit() directly here would skip that and could leave better-sqlite3
+// / ONNX / file handles in a corrupt state for short-lived runs.
+program.exitOverride(function(err) {
+  if (err.code === 'commander.helpDisplayed' || err.code === 'commander.help' || err.code === 'commander.version') {
+    process.exitCode = 0;
+  } else if (err.code === 'commander.unknownCommand' || err.code === 'commander.unknownOption' ||
+      err.code === 'commander.missingArgument' || err.code === 'commander.missingMandatoryOptionValue' ||
+      err.code === 'commander.invalidArgument' || err.code === 'commander.optionMissingArgument' ||
+      err.code === 'commander.invalidOptionArgument' || err.code === 'commander.excessArguments') {
+    process.exitCode = 2;
+  } else {
+    process.exitCode = 1;
+  }
+  // Re-throw so parseAsync().catch in the footer runs cleanup before exit.
+  throw err;
+});
 program
   .name(${JSON.stringify(appName)})
   .version(${JSON.stringify(appVersion)})
@@ -323,16 +351,28 @@ ${optionLines}
       var result = await client.callTool(${JSON.stringify(tool.name)}, args);
       var mode = program.opts().output || ${JSON.stringify('text')};
       console.log(fmt.formatToolResult(result, mode));
+      // The SDK converts thrown errors into a CallToolResult with isError:true
+      // (so HTTP/JSON-RPC clients still get a structured response). Detect
+      // that here and map to a non-zero exit code so shell scripts can gate
+      // on success — Zod input validation errors → exit 2 (usage), all
+      // other tool errors → exit 1 (runtime).
+      if (result && result.isError === true) {
+        var rmeta = (result && result._meta) || {};
+        process.exitCode = (rmeta.code === 'INVALID_INPUT') ? 2 : 1;
+      }
     } catch (err) {
       var meta = err && err._meta ? err._meta : (err && err.data && err.data._meta ? err.data._meta : null);
       if (meta && meta.authorization_required) {
         console.error('Authorization required' + (meta.app ? ' for ' + meta.app : ''));
         if (meta.auth_url) console.error('Authorize at: ' + meta.auth_url);
         console.error('Or run: ' + ${JSON.stringify(appName)} + ' login');
+        process.exitCode = 1;
       } else {
-        console.error('Error:', err.message || err);
+        // Thrown error path (transport / DI / pre-flow failure) — same
+        // mapping as the isError result path above.
+        var isUsage = err && err.code === 'INVALID_INPUT';
+        _exitWithError(err, isUsage ? 2 : 1);
       }
-      process.exitCode = 1;
     }
   });`;
   });
@@ -417,8 +457,7 @@ resourceCmd
         });
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -432,8 +471,7 @@ resourceCmd
       var mode = program.opts().output || 'text';
       console.log(fmt.formatResourceResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -470,8 +508,7 @@ ${optionLines}
       var mode = program.opts().output || 'text';
       console.log(fmt.formatResourceResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
   });
@@ -496,8 +533,7 @@ templateCmd
         });
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -505,6 +541,19 @@ ${subcommands.join('\n\n')}`;
 }
 
 function generatePromptCommands(prompts: ExtractedPrompt[]): string {
+  // Map known prompts → option specs so `prompt get <name>` knows which flags
+  // to accept per prompt. Unknown prompt names still call getPrompt() and
+  // surface the server's error to the user.
+  const promptArgsMap = prompts.map((p) => {
+    const args = (p.arguments || []).map((a) => ({
+      name: a.name,
+      kebab: camelToKebab(a.name),
+      camel: kebabToCamel(camelToKebab(a.name)),
+      required: !!a.required,
+    }));
+    return `${JSON.stringify(p.name)}: ${JSON.stringify(args)}`;
+  }).join(',\n      ');
+
   const subcommands = prompts.map((prompt) => {
     const cmdName = camelToKebab(prompt.name).replace(/_/g, '-');
     const argOptions = (prompt.arguments || [])
@@ -519,7 +568,7 @@ function generatePromptCommands(prompts: ExtractedPrompt[]): string {
 
     return `promptCmd
   .command(${JSON.stringify(cmdName)})
-  .description(${JSON.stringify(prompt.description || '')})
+  .description(${JSON.stringify((prompt.description || '') + ' (deprecated alias — use `prompt get ' + cmdName + '`)')})
 ${argOptions}
   .action(async function(opts) {
     try {
@@ -534,8 +583,7 @@ ${argOptions}
       var mode = program.opts().output || 'text';
       console.log(fmt.formatPromptResult(result, mode));
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
   });
@@ -560,8 +608,83 @@ promptCmd
         });
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
+    }
+  });
+
+// Symmetric \`prompt get <name>\` to mirror \`resource read <uri>\`. Looks up
+// per-prompt argument metadata from \`promptArgs\` and forwards as MCP
+// \`prompts/get\` request arguments. Unknown / missing required flags exit 2.
+//
+// Robust flag parser supports:
+//   --key value         (canonical form)
+//   --key=value         (single-token form)
+//   --bool              (boolean — value defaults to "true")
+//   --                  (end-of-options marker; everything after is ignored)
+// Unknown flags fail-fast with exit 2 instead of being silently dropped.
+var promptArgs = {
+      ${promptArgsMap}
+    };
+var _getCmd = promptCmd
+  .command('get <name>')
+  .description('Render a prompt by name')
+  .allowUnknownOption(true)
+  .action(async function(name) {
+    try {
+      var spec = promptArgs[name];
+      if (!spec) {
+        console.error('Error: Unknown prompt: ' + name);
+        process.exitCode = 1;
+        return;
+      }
+      var rawTokens = this.args.slice(1);
+      var args = {};
+      var unknown = [];
+      var byKebab = {};
+      for (var s = 0; s < spec.length; s++) byKebab[spec[s].kebab] = spec[s];
+      for (var i = 0; i < rawTokens.length; i++) {
+        var tok = rawTokens[i];
+        if (tok === '--') break;
+        if (typeof tok !== 'string' || tok.indexOf('--') !== 0) continue;
+        var keyAndVal = tok.slice(2);
+        var key, val;
+        var eq = keyAndVal.indexOf('=');
+        if (eq >= 0) {
+          key = keyAndVal.slice(0, eq);
+          val = keyAndVal.slice(eq + 1);
+        } else {
+          key = keyAndVal;
+          var next = (i + 1 < rawTokens.length) ? rawTokens[i + 1] : undefined;
+          if (typeof next === 'string' && next.indexOf('--') !== 0) {
+            val = next;
+            i++;
+          } else {
+            val = 'true';
+          }
+        }
+        var match = byKebab[key];
+        if (!match) { unknown.push('--' + key); continue; }
+        args[match.name] = val;
+      }
+      if (unknown.length > 0) {
+        console.error('Error: unknown option(s) for prompt "' + name + '": ' + unknown.join(', '));
+        process.exitCode = 2;
+        return;
+      }
+      // Validate required args
+      for (var r = 0; r < spec.length; r++) {
+        if (spec[r].required && args[spec[r].name] === undefined) {
+          console.error('Error: missing required option --' + spec[r].kebab);
+          process.exitCode = 2;
+          return;
+        }
+      }
+      var client = await getClient();
+      var result = await client.getPrompt(name, args);
+      var mode = program.opts().output || 'text';
+      console.log(fmt.formatPromptResult(result, mode));
+    } catch (err) {
+      _exitWithError(err, 1);
     }
   });
 
@@ -598,8 +721,7 @@ skillsCmd
         console.log("  Use '" + program.name() + " skills load <name>' to load a skill.\\n");
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -620,8 +742,7 @@ skillsCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -657,8 +778,7 @@ skillsCmd
         console.log("  Load: " + program.name() + " skills load " + name + '\\n');
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -686,8 +806,7 @@ skillsCmd
         console.log("  Use '" + program.name() + " skills read <name>' for full details.\\n");
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -725,8 +844,7 @@ ${optionLines}
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
     }
@@ -757,8 +875,7 @@ ${optionLines}
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
   });
@@ -789,8 +906,7 @@ ${optionLines}
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 
@@ -818,8 +934,7 @@ jobCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -851,8 +966,7 @@ ${jobs.length > 0 ? genericRun : `jobRunCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`}
 
@@ -870,8 +984,7 @@ jobCmd
         console.log('Status: ' + (result.status || JSON.stringify(result)));
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -901,8 +1014,7 @@ workflowCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -931,8 +1043,7 @@ workflowCmd
         }
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -950,8 +1061,7 @@ workflowCmd
         console.log('Status: ' + (result.status || JSON.stringify(result)));
       }
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -1004,8 +1114,7 @@ subscribeCmd
       setInterval(function() {}, 2147483647);
       await new Promise(function() {});
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });
 
@@ -1033,8 +1142,7 @@ subscribeCmd
       setInterval(function() {}, 2147483647);
       await new Promise(function() {});
     } catch (err) {
-      console.error('Error:', err.message || err);
-      process.exitCode = 1;
+      _exitWithError(err, 1);
     }
   });`;
 }
@@ -1612,9 +1720,20 @@ program.parseAsync(process.argv).then(async function() {
   // (ONNX runtime, etc.) can release mutexes before V8 tears down.
   setImmediate(function() { process.exit(process.exitCode || 0); });
 }).catch(async function(err) {
-  console.error('Fatal:', err.message || err);
+  // Commander errors come through exitOverride with the code already set on
+  // process.exitCode. They are user-facing usage errors, not fatals — don't
+  // re-print "Fatal:" / "Unknown error" for them.
+  var isCommanderErr = err && typeof err.code === 'string' && err.code.indexOf('commander.') === 0;
+  if (!isCommanderErr) {
+    console.error('Fatal:', err.message || err);
+  }
   await closeClient();
-  process.exit(1);
+  // Use the exit code set by exitOverride (which can legitimately be 0 for
+  // --help / --version). Only fall back to 1 when no code was set.
+  setImmediate(function() {
+    var code = (typeof process.exitCode === 'number') ? process.exitCode : 1;
+    process.exit(code);
+  });
 });`;
 }
 

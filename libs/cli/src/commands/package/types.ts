@@ -20,7 +20,8 @@ export interface FrontmcpRegistry {
       runner: string;
       bundle: string;
       storage: 'sqlite' | 'redis' | 'none';
-      port: number;
+      /** Server port. Optional because CLI builds (no network) don't bind a port. */
+      port?: number;
       source?: { type: InstallSourceType; ref: string };
       /** Resolved ESM version (for ESM-loaded apps) */
       esmVersion?: string;

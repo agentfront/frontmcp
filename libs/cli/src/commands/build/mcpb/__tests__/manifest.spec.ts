@@ -254,6 +254,48 @@ describe('generateMcpbManifest', () => {
     expect(manifest.compatibility?.runtimes?.node).toBe('>=24.0.0');
   });
 
+  // #376 — `@Resource`-decorated entries were dropped from the MCPB manifest
+  // even though they registered at runtime, leaving Claude Desktop and other
+  // MCPB consumers blind to them.
+  describe('resources (#376)', () => {
+    it('emits a resources array when the schema contains resources', () => {
+      const manifest = generateMcpbManifest({
+        name: 'demo',
+        version: '1.0.0',
+        cwd: tmp,
+        schema: emptySchema({
+          resources: [
+            { uri: 'calc://status', name: 'calc-status', description: 'Per-op call counts', mimeType: 'application/json' },
+          ],
+        }),
+        userConfig: {},
+        userConfigEnv: {},
+      });
+      expect(manifest.resources).toEqual([
+        {
+          name: 'calc-status',
+          uri: 'calc://status',
+          description: 'Per-op call counts',
+          mimeType: 'application/json',
+        },
+      ]);
+      expect(manifest.resources_generated).toBe(true);
+    });
+
+    it('omits the resources field entirely when none are registered', () => {
+      const manifest = generateMcpbManifest({
+        name: 'demo',
+        version: '1.0.0',
+        cwd: tmp,
+        schema: emptySchema(),
+        userConfig: {},
+        userConfigEnv: {},
+      });
+      expect(manifest.resources).toBeUndefined();
+      expect(manifest.resources_generated).toBeUndefined();
+    });
+  });
+
   it('overrides from deployment take precedence over package.json', () => {
     fs.writeFileSync(
       path.join(tmp, 'package.json'),

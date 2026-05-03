@@ -1,11 +1,11 @@
 import {
   generateCliEntry,
-  CliEntryOptions,
+  type CliEntryOptions,
   resolveToolCommandName,
   extractTemplateParams,
   RESERVED_COMMANDS,
 } from '../cli-runtime/generate-cli-entry';
-import { ExtractedSchema } from '../cli-runtime/schema-extractor';
+import { type ExtractedSchema } from '../cli-runtime/schema-extractor';
 
 function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
   return {
@@ -795,7 +795,9 @@ describe('generateCliEntry', () => {
       }));
 
       expect(source).toContain('"code-review"');
-      expect(source).toContain('"Review code"');
+      // Per-prompt subcommand keeps the original description but appends a
+      // deprecation alias hint pointing to `prompt get <name>`.
+      expect(source).toContain('Review code');
       expect(source).toContain("'--code <value>'");
       expect(source).toContain("'--language <value>'");
     });
@@ -803,6 +805,36 @@ describe('generateCliEntry', () => {
     it('should include prompt list command', () => {
       const source = generateCliEntry(makeOptions());
       expect(source).toContain('listPrompts');
+    });
+
+    it('should include `prompt get <name>` symmetric subcommand', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          prompts: [
+            {
+              name: 'code_review',
+              description: 'Review code',
+              arguments: [
+                { name: 'code', description: 'Code to review', required: true },
+              ],
+            },
+          ],
+        }),
+      }));
+      expect(source).toContain("promptCmd\n  .command('get <name>')");
+      expect(source).toContain('Render a prompt by name');
+      // Per-prompt argument spec is embedded so the get-handler can validate
+      // required flags and remap kebab→original name.
+      expect(source).toContain('"name":"code"');
+      expect(source).toContain('"required":true');
+    });
+
+    it('should reserve `get`, `list`, `read` so user prompts cannot shadow them', () => {
+      // Direct check on the exported reserved set
+      const { RESERVED_COMMANDS } = require('../cli-runtime/generate-cli-entry');
+      expect(RESERVED_COMMANDS.has('get')).toBe(true);
+      expect(RESERVED_COMMANDS.has('list')).toBe(true);
+      expect(RESERVED_COMMANDS.has('read')).toBe(true);
     });
   });
 

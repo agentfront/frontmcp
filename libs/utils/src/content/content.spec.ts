@@ -1,4 +1,4 @@
-import { sanitizeToJson, inferMimeType } from './content';
+import { findNonFiniteNumber, inferMimeType, sanitizeToJson } from './content';
 
 describe('Content Utils', () => {
   describe('sanitizeToJson', () => {
@@ -186,6 +186,58 @@ describe('Content Utils', () => {
     it('should handle case insensitive extensions', () => {
       expect(inferMimeType('file:///data.JSON')).toBe('application/json');
       expect(inferMimeType('file:///image.PNG')).toBe('image/png');
+    });
+  });
+
+  describe('findNonFiniteNumber', () => {
+    it('returns undefined for finite primitives', () => {
+      expect(findNonFiniteNumber(0)).toBeUndefined();
+      expect(findNonFiniteNumber(42)).toBeUndefined();
+      expect(findNonFiniteNumber(-3.14)).toBeUndefined();
+      expect(findNonFiniteNumber(Number.MAX_VALUE)).toBeUndefined();
+    });
+
+    it('returns undefined for non-numeric values', () => {
+      expect(findNonFiniteNumber('Infinity')).toBeUndefined();
+      expect(findNonFiniteNumber(null)).toBeUndefined();
+      expect(findNonFiniteNumber(undefined)).toBeUndefined();
+      expect(findNonFiniteNumber(true)).toBeUndefined();
+    });
+
+    it('detects Infinity at the root', () => {
+      expect(findNonFiniteNumber(Infinity)).toEqual({ path: '', value: Infinity });
+    });
+
+    it('detects -Infinity at the root', () => {
+      expect(findNonFiniteNumber(-Infinity)).toEqual({ path: '', value: -Infinity });
+    });
+
+    it('detects NaN at the root', () => {
+      expect(findNonFiniteNumber(NaN)).toEqual({ path: '', value: NaN });
+    });
+
+    it('reports the property path for nested objects', () => {
+      const found = findNonFiniteNumber({ a: { b: { c: Infinity } } });
+      expect(found?.path).toBe('a.b.c');
+      expect(found?.value).toBe(Infinity);
+    });
+
+    it('reports the array index for nested arrays', () => {
+      const found = findNonFiniteNumber({ items: [1, 2, NaN, 3] });
+      expect(found?.path).toBe('items[2]');
+    });
+
+    it('returns the first occurrence in object key order', () => {
+      const found = findNonFiniteNumber({ first: 1, second: NaN, third: Infinity });
+      expect(found?.path).toBe('second');
+    });
+
+    it('handles cycles without infinite recursion', () => {
+      const a: Record<string, unknown> = { name: 'a' };
+      a['self'] = a;
+      expect(() => findNonFiniteNumber(a)).not.toThrow();
+      // No non-finite anywhere → returns undefined
+      expect(findNonFiniteNumber(a)).toBeUndefined();
     });
   });
 });

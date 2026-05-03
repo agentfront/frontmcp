@@ -41,6 +41,7 @@ export {
   isPublicError,
   toMcpError,
   formatMcpErrorResponse,
+  extractPublicMessage,
   // Error codes
   MCP_ERROR_CODES,
   type McpErrorCode,

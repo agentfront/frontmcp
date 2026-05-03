@@ -6,10 +6,11 @@
  */
 
 import 'reflect-metadata';
-import type { FrontMcpConfigInput } from '../common';
-import type { DirectClient, ConnectOptions, LLMConnectOptions } from './client.types';
-import { PLATFORM_CLIENT_INFO } from './llm-platform';
+
+import { getDecoratorConfig, type FrontMcpConfigInput } from '../common';
 import type { Scope } from '../scope/scope.instance';
+import type { ConnectOptions, DirectClient, LLMConnectOptions } from './client.types';
+import { PLATFORM_CLIENT_INFO } from './llm-platform';
 
 // Cache for initialized scopes (singleton per parsed config)
 // Using let to allow reassignment in clearScopeCache()
@@ -22,10 +23,11 @@ let scopeCache = new WeakMap<object, Promise<Scope>>();
  * @internal
  */
 async function getScope(config: FrontMcpConfigInput, mode?: 'full' | 'cli'): Promise<Scope> {
-  // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle)
+  // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle).
+  // `getDecoratorConfig` returns the parsed metadata via the SDK's stable accessor.
   let resolvedConfig = config;
   if (typeof config === 'function') {
-    const stored = Reflect.getMetadata('__frontmcp:config', config);
+    const stored = getDecoratorConfig(config);
     if (stored) {
       resolvedConfig = stored as FrontMcpConfigInput;
     }
