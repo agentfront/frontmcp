@@ -102,17 +102,33 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
     }
 
     if (filename.endsWith('.ts')) {
-      // #365 — When the project is `"type": "commonjs"` (the default),
-      // `require()` can't load .ts without a hook and `await import()` emits
-      // Node's `Failed to load the ES module … Make sure to set "type": "module"`
-      // warning to stderr regardless of whether type-stripping eventually
-      // succeeds — that warning by itself looked to retesters like a hard
-      // load failure even when the build proceeded. Round 2: when the host
-      // project is CJS, skip Node's `await import()` entirely and go
-      // straight to esbuild. For ESM projects we still try the runtime
-      // paths first (faster, no transpile cost). Either way, a failure on
-      // every path throws the combined error — never silent defaults.
+      // #365 — Loading `.ts` under `"type": "commonjs"` (the default) is a
+      // minefield across Node versions:
+      //   - Node 20: `require()` throws on TS syntax, `await import()` errors
+      //     with "Make sure to set type: module".
+      //   - Node 22+: `require(esm)` may succeed but return partial data, OR
+      //     emit a warning on `await import()` even when the load succeeds.
+      //   - Node 24: type-stripping may swallow `import { x } from ...`
+      //     statements, returning `{}` instead of the user's exports — the
+      //     1.1.2-beta.1 silent-defaults regression.
+      // Round 3: under CJS, ALWAYS transpile via esbuild. It's the only path
+      // that produces a deterministic, fully-typed result. ESM projects can
+      // still use Node's runtime loaders since they're well-behaved there.
       const isCjsProject = await isCommonJsProject(cwd);
+      if (isCjsProject) {
+        try {
+          return await loadTsConfigViaEsbuild(configPath);
+        } catch (esbuildErr) {
+          throw new Error(
+            `Failed to load ${filename} via esbuild.\n` +
+              `  ${(esbuildErr as Error).message}\n` +
+              `Hint: ensure the file exports a default config (e.g., ` +
+              `\`export default defineConfig({...})\`) and that all imports resolve.`,
+          );
+        }
+      }
+      // ESM project ("type": "module"): try Node's loaders first (faster,
+      // no transpile cost), fall back to esbuild on failure.
       let requireErr: Error | undefined;
       try {
         const mod = require(configPath);
@@ -120,13 +136,11 @@ async function loadRawConfig(cwd: string): Promise<unknown> {
       } catch (e) {
         requireErr = e as Error;
       }
-      if (!isCjsProject) {
-        try {
-          const mod = await import(configPath);
-          return mod.default ?? mod;
-        } catch {
-          // Fall through to esbuild.
-        }
+      try {
+        const mod = await import(configPath);
+        return mod.default ?? mod;
+      } catch {
+        // Fall through to esbuild.
       }
       try {
         return await loadTsConfigViaEsbuild(configPath);

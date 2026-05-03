@@ -34,6 +34,11 @@ export async function buildExec(
     execOverrides?: {
       storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
       cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+      // #365 round-3 — top-level `nodeVersion` from new-shape frontmcp.config
+      // gets forwarded here because the legacy `loadExecConfig` doesn't read
+      // it from .ts files (and never read top-level nodeVersion at all in
+      // the legacy shape).
+      nodeVersion?: string;
     };
   },
 ): Promise<void> {
@@ -58,6 +63,12 @@ export async function buildExec(
         ...existing,
         ...opts.execOverrides.cli,
       };
+    }
+    // #365 round-3 — apply only when the legacy loader didn't already pick up
+    // a value (the legacy loader can read it from .js/.json/.cjs/.mjs configs;
+    // the new-shape forward fills the .ts gap).
+    if (opts.execOverrides.nodeVersion && !rawConfig.nodeVersion) {
+      rawConfig.nodeVersion = opts.execOverrides.nodeVersion;
     }
   }
   const config = normalizeConfig(rawConfig);
