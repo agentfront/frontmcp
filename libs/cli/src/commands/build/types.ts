@@ -51,6 +51,27 @@ export type AdapterTemplate = {
    * @param bundleOutput - Name of the bundled file (e.g., 'handler.cjs')
    */
   postBundle?: (outDir: string, cwd: string, bundleOutput: string) => Promise<void>;
+
+  /**
+   * Pre-build validation hook. Runs after schema/decorator extraction but
+   * before TypeScript compilation. Allows the adapter to fail loudly when
+   * the user's config references runtime features that won't work on the
+   * target platform (e.g., sqlite on Cloudflare Workers).
+   *
+   * @param decoratorConfig - Best-effort `__frontmcp:config` metadata
+   *   extracted from the entry's @FrontMcp() decorator. May be undefined
+   *   when the entry exports a plain config object.
+   * @throws to abort the build with a user-facing message.
+   */
+  validate?: (decoratorConfig: Record<string, unknown> | undefined) => void;
+
+  /**
+   * Whether `getConfig()` output should overwrite an existing config file
+   * (e.g., wrangler.toml) on every build. When false, an existing file is
+   * left untouched but its contents are diffed against the build output and
+   * the build fails on mismatch (#374). Default: false (preserve existing).
+   */
+  alwaysWriteConfig?: boolean;
 };
 
 export type AdapterName = 'node' | 'vercel' | 'lambda' | 'cloudflare' | 'distributed';

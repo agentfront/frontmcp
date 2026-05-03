@@ -3,10 +3,69 @@
  * The runner checks Node.js, loads .env, and runs the bundle.
  */
 
-import { FrontmcpExecConfig } from './config';
+import { type FrontmcpExecConfig } from './config';
+
+/**
+ * Defense-in-depth: scrub anything outside `[a-zA-Z0-9._+-]` from values that
+ * the runner / installer scripts interpolate into bash. The user owns
+ * `frontmcp.config`, so a malicious value would be self-inflicted, but the
+ * generated scripts are committed into repos and downloaded by end-users —
+ * so we keep them safe to copy/paste regardless of upstream config hygiene.
+ */
+export function sanitizeShellLiteral(value: string): string {
+  // `-` placed last in the character class is literal, so no escape needed.
+  return value.replace(/[^A-Za-z0-9._+-]/g, '_');
+}
 
 export function generateRunnerScript(config: FrontmcpExecConfig, cliMode?: boolean, seaMode?: boolean): string {
   const name = config.name;
+  const version = sanitizeShellLiteral(config.version || '0.0.0');
+
+  // #377 — `--target node` runner used to silently exec the bundle for any
+  // flag, so `./frontegg-bin --help` quietly booted the HTTP server. Intercept
+  // help/version here so server-mode runners behave like a normal CLI for
+  // those flags. CLI-mode runners pass everything through to the bundle's
+  // own commander parser.
+  const helpInterceptor = !cliMode
+    ? `
+# Intercept standard CLI flags before booting the long-running server.
+case "\${1:-}" in
+  -h|--help)
+    cat <<EOF
+${name} v${version} — FrontMCP server
+
+This binary starts a long-running MCP HTTP server.
+
+Usage:
+  ${name}                       Start the server
+  ${name} --help                Show this help
+  ${name} --version             Show version
+  ${name} --print-manifest      Print the deployment manifest as JSON
+
+Configure via environment variables, .env, or frontmcp.config.
+
+For a CLI-style binary that exposes tools/resources/prompts as subcommands,
+build with: frontmcp build --target cli
+EOF
+    exit 0
+    ;;
+  --version)
+    echo "${name} ${version}"
+    exit 0
+    ;;
+  --print-manifest)
+    cat "\${SCRIPT_DIR}/${name}.manifest.json"
+    exit 0
+    ;;
+  --*)
+    echo "Error: unsupported flag '\${1}' on the server runner."
+    echo "This binary is a long-running HTTP server; flag-style invocation is reserved." >&2
+    echo "Run with no args to start, or build with --target cli for a CLI binary." >&2
+    exit 2
+    ;;
+esac
+`
+    : '';
 
   // SEA mode: binary is self-contained, no Node.js required
   if (seaMode) {
@@ -28,7 +87,7 @@ if [ ! -f "\${BINARY}" ]; then
   echo "Error: Binary not found at \${BINARY}"
   exit 1
 fi
-
+${helpInterceptor}
 # Load .env if present
 ENV_FILE="\${SCRIPT_DIR}/.env"
 if [ -f "\${ENV_FILE}" ]; then
@@ -61,7 +120,7 @@ ${comment}
 
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE="${bundle}"
-
+${helpInterceptor}
 # Check Node.js
 if ! command -v node &> /dev/null; then
   echo "Error: Node.js is required but not installed."

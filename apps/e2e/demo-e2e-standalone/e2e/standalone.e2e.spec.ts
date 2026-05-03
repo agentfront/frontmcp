@@ -7,7 +7,7 @@
  * - Tool/resource isolation between scopes
  * - SSE and message endpoints for standalone apps
  */
-import { test, expect, McpTestClient } from '@frontmcp/testing';
+import { expect, McpTestClient, test } from '@frontmcp/testing';
 
 test.describe('Standalone App E2E', () => {
   test.describe('Root Scope (Parent App)', () => {
@@ -261,7 +261,14 @@ test.describe('Standalone App E2E', () => {
 
     test('root scope /message should not overlap with /isolated/message', async ({ server }) => {
       // Verify that root scope handles /message
-      // And isolated scope handles /isolated/message separately
+      // And isolated scope handles /isolated/message separately.
+      //
+      // After #380, JSON-RPC POSTs without a session no longer fall through
+      // to Express's HTML 404 — the router returns a structured envelope:
+      //   HTTP 200, body { jsonrpc:"2.0", id, error:{ code:-32600, … } }
+      // We assert on that envelope (presence of `error.code === -32600`)
+      // because that's what proves the scope IS listening — a path that
+      // wasn't mounted would still produce Express's HTML 404.
       const rootResponse = await fetch(`${server.info.baseUrl}/message`, {
         method: 'POST',
         headers: {
@@ -271,9 +278,14 @@ test.describe('Standalone App E2E', () => {
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
       });
 
-      // Root /message without session should return 404 (session not found)
-      // This proves that the root scope IS listening on /message
-      expect(rootResponse.status).toBe(404);
+      expect(rootResponse.status).toBe(200);
+      const rootBody = (await rootResponse.json()) as {
+        jsonrpc?: string;
+        error?: { code?: number; message?: string };
+      };
+      expect(rootBody.jsonrpc).toBe('2.0');
+      expect(rootBody.error?.code).toBe(-32600);
+      expect(rootBody.error?.message).toMatch(/Session not initialized/i);
 
       const isolatedResponse = await fetch(`${server.info.baseUrl}/isolated/message`, {
         method: 'POST',
@@ -284,9 +296,13 @@ test.describe('Standalone App E2E', () => {
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
       });
 
-      // Isolated /isolated/message without session should also fail with session error
-      // This proves that the isolated scope IS listening on /isolated/message
-      expect(isolatedResponse.status).toBe(404); // 404 = session not found/initialized
+      expect(isolatedResponse.status).toBe(200);
+      const isolatedBody = (await isolatedResponse.json()) as {
+        jsonrpc?: string;
+        error?: { code?: number; message?: string };
+      };
+      expect(isolatedBody.jsonrpc).toBe('2.0');
+      expect(isolatedBody.error?.code).toBe(-32600);
     });
   });
 });

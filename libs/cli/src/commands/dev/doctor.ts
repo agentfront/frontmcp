@@ -1,7 +1,9 @@
-import * as path from 'path';
 import { spawn } from 'child_process';
-import { c } from '../../core/colors';
+import * as path from 'path';
+
 import { fileExists, readJSON } from '@frontmcp/utils';
+
+import { c } from '../../core/colors';
 import { checkRequiredTsOptions } from '../../core/tsconfig';
 import { resolveEntry } from '../../shared/fs';
 
@@ -33,7 +35,11 @@ export async function runDoctor(): Promise<void> {
   let npmVer = 'unknown';
   try {
     npmVer = await new Promise<string>((resolve, reject) => {
-      const child = spawn('npm', ['-v'], { shell: true });
+      // shell:true triggers Node DEP0190 (deprecated unescaped-arg passing).
+      // Use explicit binary names: npm.cmd on win32, npm elsewhere — args
+      // already in array form, no shell needed.
+      const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      const child = spawn(npmCmd, ['-v']);
       let out = '';
       child.stdout?.on('data', (d) => (out += String(d)));
       child.on('close', () => resolve(out.trim()));

@@ -7,7 +7,13 @@ import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS } from './adapters';
 import { type AdapterName } from './types';
 import { bundleForServerless } from './bundler';
-import { findDeployment, type FrontMcpConfigParsed, getDeploymentTargets, loadFrontMcpConfig } from '../../config';
+import {
+  type DeploymentTarget,
+  findDeployment,
+  type FrontMcpConfigParsed,
+  getDeploymentTargets,
+  tryLoadFrontMcpConfig,
+} from '../../config';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);
@@ -42,6 +48,16 @@ async function generateAdapterFiles(
     const entryPath = path.join(outDir, 'index.js');
     await fsp.writeFile(entryPath, entryContent, 'utf8');
     console.log(c('green', `  Generated ${adapter} entry at ${path.relative(cwd, entryPath)}`));
+
+    // ESM adapters (vercel, lambda) emit `import` syntax in the entry. The
+    // user's project may be `"type": "commonjs"`, in which case Node and
+    // rspack treat the .js file as CJS and parsing fails on `import`.
+    // Drop a sibling package.json with `"type": "module"` so the dist
+    // directory is always interpreted correctly regardless of the parent.
+    if (template.moduleFormat === 'esnext') {
+      const pkgPath = path.join(outDir, 'package.json');
+      await fsp.writeFile(pkgPath, JSON.stringify({ type: 'module' }, null, 2), 'utf8');
+    }
   }
 
   // Bundle if adapter requires it (creates single CJS file for serverless)
@@ -59,23 +75,32 @@ async function generateAdapterFiles(
     }
   }
 
-  // Generate config file if adapter has one (skip if already exists)
+  // Generate config file if adapter has one. By default we preserve an
+  // existing user-edited file. Adapters that mark `alwaysWriteConfig` (e.g.,
+  // cloudflare's wrangler.toml) overwrite it on every build so the
+  // generated `main = ...` path always matches the actual build output —
+  // see #374.
   if (template.getConfig && template.configFileName) {
     const configPath = path.join(cwd, template.configFileName);
+    const exists = await fileExists(configPath);
 
-    if (await fileExists(configPath)) {
-      console.log(c('yellow', `  ${template.configFileName} already exists (skipping)`));
-    } else {
-      const configContent = template.getConfig(cwd);
-
+    const configContent = template.getConfig(cwd);
+    const writeIt = async (): Promise<void> => {
       if (typeof configContent === 'string') {
-        // Write as plain text (e.g., TOML for wrangler.toml)
         await fsp.writeFile(configPath, configContent, 'utf8');
       } else {
-        // Write as JSON
         await writeJSON(configPath, configContent);
       }
+    };
+
+    if (!exists) {
+      await writeIt();
       console.log(c('green', `  Generated ${template.configFileName}`));
+    } else if (template.alwaysWriteConfig) {
+      await writeIt();
+      console.log(c('green', `  Updated ${template.configFileName} (build output reference)`));
+    } else {
+      console.log(c('yellow', `  ${template.configFileName} already exists (skipping)`));
     }
   }
 }
@@ -106,13 +131,17 @@ const TARGET_TO_ADAPTER: Record<string, AdapterName> = {
 export async function runBuild(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
 
-  // Try loading frontmcp.config for multi-target support
-  let config: FrontMcpConfigParsed | undefined;
-  try {
-    config = await loadFrontMcpConfig(cwd);
-  } catch {
-    // No config file — fall back to CLI flags only
-  }
+  // Try loading frontmcp.config for multi-target support.
+  //
+  // #365 — `tryLoadFrontMcpConfig` differentiates between recoverable cases:
+  //   - no config file present                          → returns undefined
+  //   - config exists but doesn't match the new schema  → returns undefined
+  //     (legacy top-level `cli`/`sea`/`esbuild` shape — picked up later by
+  //     the exec-build's own `loadExecConfig`)
+  // …and hard failures:
+  //   - file exists but can't be parsed (TS syntax error, broken require)
+  //     → the error propagates, no silent-default regression.
+  const config: FrontMcpConfigParsed | undefined = await tryLoadFrontMcpConfig(cwd);
 
   // If no -t flag and config has deployments, build all targets from config
   if (!opts.buildTarget && config && config.deployments.length > 0) {
@@ -140,7 +169,7 @@ async function buildSingleTarget(
   opts: ParsedArgs,
   config?: FrontMcpConfigParsed,
 ): Promise<void> {
-  const deployment = config ? findDeployment(config, target) : undefined;
+  const deployment:DeploymentTarget | undefined = config ? findDeployment(config, target) : undefined;
 
   // Resolve output directory: deployment.outDir > CLI --out-dir > dist/{target}
   const baseOutDir = path.resolve(process.cwd(), opts.outDir || 'dist');
@@ -152,14 +181,48 @@ async function buildSingleTarget(
   const entry = opts.entry || config?.entry;
   const targetOpts = { ...opts, outDir: targetOutDir, entry };
 
+  // #370: forward `build.storage` and per-deployment `cli.outputDefault` from
+  // the FrontMcp config into the exec build so the manifest reflects them.
+  // The exec build has its own loader (`loadExecConfig`) that doesn't see
+  // the deployment-level shape; passing these via opts merges them in
+  // `normalizeConfig` before the manifest is generated.
+  //
+  // Only the cli deployment shape carries a `cli` block; map it down to the
+  // narrow exec-config shape (outputDefault / description / authRequired) so
+  // the result is a clean object, never `false`.
+  const cliDeploymentConfig = deployment?.target === 'cli' ? deployment.cli : undefined;
+  const execOverrides: {
+    storage?: { type: 'sqlite' | 'redis' | 'none'; required?: boolean };
+    cli?: { outputDefault?: 'text' | 'json'; description?: string; authRequired?: boolean };
+  } = {
+    storage: config?.build?.storage,
+    cli: cliDeploymentConfig
+      ? {
+          ...(cliDeploymentConfig.outputDefault ? { outputDefault: cliDeploymentConfig.outputDefault } : {}),
+          ...(cliDeploymentConfig.description ? { description: cliDeploymentConfig.description } : {}),
+          ...(typeof cliDeploymentConfig.authRequired === 'boolean'
+            ? { authRequired: cliDeploymentConfig.authRequired }
+            : {}),
+        }
+      : undefined,
+  };
+
   switch (target) {
     case 'cli': {
       const { buildExec } = await import('./exec/index.js');
-      return buildExec({ ...targetOpts, cli: true, sea: !opts.js } as ParsedArgs & { cli: boolean; sea: boolean });
+      return buildExec({
+        ...targetOpts,
+        cli: true,
+        sea: !opts.js,
+        execOverrides,
+      } as ParsedArgs & { cli: boolean; sea: boolean; execOverrides?: typeof execOverrides });
     }
     case 'node': {
       const { buildExec } = await import('./exec/index.js');
-      return buildExec(targetOpts);
+      return buildExec({
+        ...targetOpts,
+        execOverrides,
+      } as ParsedArgs & { execOverrides?: typeof execOverrides });
     }
     case 'sdk': {
       const { buildSdk } = await import('./sdk/index.js');
@@ -204,6 +267,17 @@ async function runAdapterBuild(opts: ParsedArgs, adapter: AdapterName): Promise<
     console.log(
       c('yellow', 'Cloudflare Workers adapter is experimental. See docs for limitations.'),
     );
+  }
+
+  // #375 — adapter-level pre-validation: read the entry's @FrontMcp() config
+  // metadata and let the adapter reject incompatible features
+  // (sqlite/redis on Workers, etc.) before emitting an unrunnable bundle.
+  // `loadEntryDecoratorConfig` handles both compiled-JS and raw-TS entries
+  // (TS goes through esbuild + Module._compile so we don't need a tsc pass).
+  if (template.validate) {
+    const { loadEntryDecoratorConfig } = await import('./load-entry-config.js');
+    const decoratorConfig = await loadEntryDecoratorConfig(entry);
+    template.validate(decoratorConfig);
   }
 
   const moduleFormat = template.moduleFormat;

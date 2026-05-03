@@ -1,6 +1,6 @@
 // file: libs/cli/src/commands/build/__tests__/adapters.spec.ts
 
-import { ADAPTERS, nodeAdapter, lambdaAdapter, cloudflareAdapter, vercelAdapter } from '../adapters';
+import { ADAPTERS, nodeAdapter, lambdaAdapter, cloudflareAdapter, vercelAdapter, distributedAdapter } from '../adapters';
 
 describe('Build Adapters', () => {
   describe('ADAPTERS registry', () => {
@@ -105,7 +105,8 @@ describe('Build Adapters', () => {
     it('should generate wrangler.toml config', () => {
       const config = cloudflareAdapter.getConfig?.('/test');
       expect(config).toContain('name = "frontmcp-worker"');
-      expect(config).toContain('main = "dist/index.js"');
+      // #374: main now points at the path the build actually emits.
+      expect(config).toContain('main = "dist/cloudflare/index.js"');
       expect(config).toContain('compatibility_date');
     });
 
@@ -149,6 +150,75 @@ describe('Build Adapters', () => {
 
     it('should have postBundle hook', () => {
       expect(vercelAdapter.postBundle).toBeDefined();
+    });
+  });
+
+  describe('cloudflareAdapter validate (#375)', () => {
+    it('throws when the user config declares unconditional sqlite storage', () => {
+      expect(() => cloudflareAdapter.validate?.({ sqlite: { path: '~/db.sqlite' } })).toThrow(
+        /sqlite storage is not supported on --target cloudflare/,
+      );
+    });
+
+    it('throws when the user config declares unconditional redis (ioredis) storage', () => {
+      expect(() => cloudflareAdapter.validate?.({ redis: { host: 'localhost' } })).toThrow(
+        /redis.*not supported on --target cloudflare/,
+      );
+    });
+
+    it('passes when neither sqlite nor redis is declared', () => {
+      expect(() => cloudflareAdapter.validate?.({})).not.toThrow();
+    });
+
+    it('passes when decoratorConfig is undefined (plain config / no decorator)', () => {
+      expect(() => cloudflareAdapter.validate?.(undefined)).not.toThrow();
+    });
+  });
+
+  describe('cloudflareAdapter wrangler.toml (#374)', () => {
+    it('opts in to alwaysWriteConfig so wrangler.toml stays in sync with the build output', () => {
+      expect(cloudflareAdapter.alwaysWriteConfig).toBe(true);
+    });
+
+    it('emits wrangler.toml main pointing at dist/cloudflare/index.js', () => {
+      const config = cloudflareAdapter.getConfig?.('/tmp');
+      expect(typeof config).toBe('string');
+      expect(config).toContain('main = "dist/cloudflare/index.js"');
+    });
+  });
+
+  describe('vercelAdapter / lambdaAdapter ESM-in-CJS regression (#368)', () => {
+    // The entry templates use `import` syntax. Without a sibling
+    // `{"type": "module"}` package.json (or .mjs extension), rspack parses
+    // them as CJS when the parent project is `"type": "commonjs"` and the
+    // build fails. The build pipeline drops the package.json now; the
+    // adapter still declares moduleFormat='esnext' so the build wiring fires.
+    it('vercel adapter is declared esnext (so the build emits a sibling package.json)', () => {
+      expect(vercelAdapter.moduleFormat).toBe('esnext');
+    });
+    it('lambda adapter is declared esnext (so the build emits a sibling package.json)', () => {
+      expect(lambdaAdapter.moduleFormat).toBe('esnext');
+    });
+  });
+
+  describe('distributedAdapter', () => {
+    // #367: the build emits the HA bootstrap as serverless-setup.js (not
+    // ha-setup.js). The entry must require the file the build actually writes
+    // — otherwise `node dist/distributed/index.js` crashes immediately with
+    // MODULE_NOT_FOUND.
+    it('requires the file the build actually emits (serverless-setup.js)', () => {
+      const entry = distributedAdapter.getEntryTemplate('./main.js');
+      expect(entry).toContain("require('./serverless-setup.js')");
+      expect(entry).not.toContain("require('./ha-setup.js')");
+    });
+
+    it('emits a setup template that sets FRONTMCP_DEPLOYMENT_MODE=distributed', () => {
+      const setup = distributedAdapter.getSetupTemplate?.();
+      expect(setup).toContain("process.env.FRONTMCP_DEPLOYMENT_MODE = 'distributed'");
+    });
+
+    it('uses commonjs module format', () => {
+      expect(distributedAdapter.moduleFormat).toBe('commonjs');
     });
   });
 });

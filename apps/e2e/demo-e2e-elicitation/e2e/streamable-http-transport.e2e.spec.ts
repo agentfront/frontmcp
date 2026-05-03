@@ -6,7 +6,7 @@
  * - Elicitation working correctly after prior requests (session state persistence)
  * - Elicitation capability persistence across requests
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Streamable HTTP Transport E2E', () => {
   test.use({
@@ -160,6 +160,45 @@ test.describe('Streamable HTTP Transport E2E', () => {
     test('server capabilities response should include elicitation', async ({ mcp }) => {
       const caps = mcp.capabilities as Record<string, unknown>;
       expect(caps.elicitation).toBeDefined();
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // #380 — JSON-RPC error envelope when no session has been initialized
+  // ═══════════════════════════════════════════════════════════════════
+
+  test.describe('Un-initialized JSON-RPC POST (#380)', () => {
+    test('returns a structured JSON-RPC error envelope, not Express HTML 404', async ({ server }) => {
+      const url = `${server.info.baseUrl}/`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {},
+        }),
+      });
+
+      // Body must be JSON-RPC, not HTML
+      const contentType = response.headers.get('content-type') ?? '';
+      expect(contentType).toContain('application/json');
+
+      const body = (await response.json()) as {
+        jsonrpc: string;
+        id: number | string | null;
+        error: { code: number; message: string; data?: { transport?: string; expected?: string } };
+      };
+      expect(body.jsonrpc).toBe('2.0');
+      expect(body.id).toBe(1);
+      expect(body.error.code).toBe(-32600);
+      expect(body.error.message).toMatch(/Session not initialized/i);
+      expect(body.error.data?.expected).toBe('initialize');
     });
   });
 });

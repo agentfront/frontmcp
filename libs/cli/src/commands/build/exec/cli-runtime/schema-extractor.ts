@@ -66,6 +66,13 @@ export interface ExtractedSchema {
   jobs: ExtractedJob[];
   capabilities: ExtractedCapabilities;
   skillAssets: ExtractedSkillAsset[];
+  /**
+   * Server bind config extracted from `@FrontMcp({ http })` (or its
+   * decorator-attached `__frontmcp:config` metadata). Used by the manifest
+   * writer so the published manifest reflects the port the server will
+   * actually listen on, not a hard-coded SDK default.
+   */
+  httpPort?: number;
 }
 
 /** Known system tool names injected by SDK features (jobs, workflows). */
@@ -217,7 +224,22 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
       }
     }
 
-    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets };
+    // Extract http.port from the @FrontMcp() decorator metadata. Returns
+    // undefined when the entry is a plain config object (no decorator) or
+    // when no port was declared — caller falls back to its own default.
+    let httpPort: number | undefined;
+    try {
+      const sdk = require('@frontmcp/sdk') as { getDecoratorConfig?: (t: unknown) => Record<string, unknown> | undefined };
+      const cfg = typeof sdk.getDecoratorConfig === 'function'
+        ? sdk.getDecoratorConfig(configOrClass)
+        : (configOrClass as Record<string, unknown> | undefined);
+      const http = cfg?.['http'] as { port?: number } | undefined;
+      if (http && typeof http.port === 'number') httpPort = http.port;
+    } catch {
+      // best-effort — manifest writer will fall back to its own default
+    }
+
+    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort };
   } finally {
     await client.close().catch(() => {});
   }

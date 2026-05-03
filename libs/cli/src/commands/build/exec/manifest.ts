@@ -4,8 +4,8 @@
  * for installation and runtime.
  */
 
-import { FrontmcpExecConfig } from './config';
-import { SetupStep, zodSchemaToJsonSchema, idToEnvName } from './setup';
+import { type FrontmcpExecConfig } from './config';
+import { type SetupStep, zodSchemaToJsonSchema, idToEnvName } from './setup';
 
 export interface ExecManifest {
   name: string;
@@ -15,7 +15,12 @@ export interface ExecManifest {
     type: 'sqlite' | 'redis' | 'none';
     required: boolean;
   };
-  network: {
+  /**
+   * Server bind config. Omitted entirely for `--target cli` (CLI builds don't
+   * bind a port — the manifest is consumed by `frontmcp install`, container
+   * `EXPOSE`, and proxy generators).
+   */
+  network?: {
     defaultPort: number;
     supportsSocket: boolean;
   };
@@ -55,10 +60,28 @@ export interface ManifestSetupStep {
   showWhen?: Record<string, string | string[]>;
 }
 
+export interface GenerateManifestContext {
+  /** Build target the manifest is being written for. */
+  target?: 'node' | 'cli';
+  /** Port declared via `@FrontMcp({ http: { port } })` on the user's entry. */
+  decoratorHttpPort?: number;
+  /** `cli.outputDefault` from frontmcp.config.deployments[].cli (per-deployment). */
+  outputDefault?: 'text' | 'json';
+}
+
 export function generateManifest(
   config: FrontmcpExecConfig,
   bundleFilename: string,
+  context: GenerateManifestContext = {},
 ): ExecManifest {
+  // Resolve port precedence (highest → lowest):
+  //   1. `frontmcp.config.network.defaultPort`         (build-config override)
+  //   2. `@FrontMcp({ http: { port } })`               (decorator metadata)
+  //   3. 3000                                          (Express default)
+  // The legacy `3001` was a phantom default that didn't match what the
+  // server actually bound (#371).
+  const resolvedPort = config.network?.defaultPort ?? context.decoratorHttpPort ?? 3000;
+
   const manifest: ExecManifest = {
     name: config.name,
     version: config.version || '1.0.0',
@@ -67,16 +90,22 @@ export function generateManifest(
       type: config.storage?.type || 'none',
       required: config.storage?.required ?? false,
     },
-    network: {
-      defaultPort: config.network?.defaultPort || 3001,
-      supportsSocket: config.network?.supportsSocket ?? true,
-    },
     dependencies: {
       system: config.dependencies?.system || [],
       nativeAddons: config.dependencies?.nativeAddons || [],
     },
     bundle: bundleFilename,
   };
+
+  // Network section is server-build-specific. CLI builds don't bind a port,
+  // so emitting `network.defaultPort` confuses tooling that drives container
+  // `EXPOSE` / reverse proxies (#371 note).
+  if (context.target !== 'cli') {
+    manifest.network = {
+      defaultPort: resolvedPort,
+      supportsSocket: config.network?.supportsSocket ?? true,
+    };
+  }
 
   // Convert setup steps — serialize Zod schemas to JSON Schema
   if (config.setup?.steps && config.setup.steps.length > 0) {

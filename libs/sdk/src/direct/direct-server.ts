@@ -5,23 +5,28 @@
  * layer and invoking flows directly on the Scope instance.
  */
 
-import { randomUUID } from '@frontmcp/utils';
-import type {
-  ListToolsResult,
-  CallToolResult,
-  ListResourcesResult,
-  ReadResourceResult,
-  ListPromptsResult,
-  GetPromptResult,
-  ListResourceTemplatesResult,
+import {
+  type AuthInfo,
+  type CallToolResult,
+  type GetPromptResult,
+  type ListPromptsResult,
+  type ListResourcesResult,
+  type ListResourceTemplatesResult,
+  type ListToolsResult,
+  type ReadResourceResult,
 } from '@frontmcp/protocol';
-import type { AuthInfo } from '@frontmcp/protocol';
-import type { DirectMcpServer, DirectCallOptions, DirectAuthContext, DirectRequestMetadata } from './direct.types';
-import type { ConnectOptions } from './client.types';
-import type { DirectClient } from './client.types';
-import type { Scope } from '../scope/scope.instance';
+import { randomUUID } from '@frontmcp/utils';
+
 import { FlowControl } from '../common';
 import { InternalMcpError } from '../errors';
+import { type Scope } from '../scope/scope.instance';
+import { type ConnectOptions, type DirectClient } from './client.types';
+import {
+  type DirectAuthContext,
+  type DirectCallOptions,
+  type DirectMcpServer,
+  type DirectRequestMetadata,
+} from './direct.types';
 
 /**
  * Build AuthInfo from DirectAuthContext for flow execution.
@@ -106,7 +111,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
       // All MCP operations go through the standard flow system
       // Cast required: flowName is a string but runFlowForOutput expects specific flow type union.
       // The flow names used here are all valid MCP flow names from the SDK.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       return await this.scope.runFlowForOutput(flowName as any, { request, ctx });
     } catch (e) {
       // FlowControl is a control flow mechanism, not an error
@@ -114,7 +119,14 @@ export class DirectMcpServerImpl implements DirectMcpServer {
         if (e.type === 'respond') {
           return e.output as T;
         }
-        // For other flow control types (fail, abort), include details in error
+        // For `fail`, propagate the original error (set by FlowControl.fail)
+        // so PublicMcpError messages reach the CLI/HTTP error formatter
+        // intact instead of being flattened to "Unknown error".
+        if (e.type === 'fail') {
+          const original = (e as { originalError?: Error }).originalError;
+          if (original instanceof Error) throw original;
+        }
+        // For other flow control types (abort, etc.), include details in error
         const details = e.output ? `: ${JSON.stringify(e.output)}` : '';
         throw new InternalMcpError(`Flow ended with ${e.type}${details}`);
       }

@@ -15,6 +15,7 @@ import {
   isDecoratedToolClass,
   isDecoratedWorkflowClass,
 } from '../app/instances/esm-normalize.utils';
+import { getDecoratorConfig } from '../common/decorators/front-mcp.decorator';
 
 /**
  * The manifest that ESM packages export to declare their MCP primitives.
@@ -193,7 +194,7 @@ function hasManifestPrimitives(obj: Record<string, unknown>): boolean {
  * Extract manifest from a @FrontMcp decorated class.
  */
 function extractFromDecoratedClass(cls: unknown): FrontMcpPackageManifest {
-  const config = Reflect.getMetadata?.('__frontmcp:config', cls as object) as Record<string, unknown> | undefined;
+  const config = getDecoratorConfig(cls) as Record<string, unknown> | undefined;
   if (!config) {
     throw new Error('Decorated class does not have FrontMcp configuration metadata');
   }
