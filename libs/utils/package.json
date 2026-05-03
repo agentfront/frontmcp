@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/utils",
-  "version": "1.1.2-beta.1",
+  "version": "1.1.2",
   "description": "Shared utility functions for FrontMCP - string manipulation, URI handling, path utilities, and more",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -34,7 +34,7 @@
   "peerDependencies": {
     "@vercel/kv": "^2.0.0 || ^3.0.0",
     "ioredis": "^5.0.0",
-    "@frontmcp/lazy-zod": "1.1.2-beta.1"
+    "@frontmcp/lazy-zod": "1.1.2"
   },
   "peerDependenciesMeta": {
     "@vercel/kv": {
