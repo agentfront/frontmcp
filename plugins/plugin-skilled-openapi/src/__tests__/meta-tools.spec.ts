@@ -124,6 +124,11 @@ function makeToolThis(args: {
     },
     logger: fakeLogger,
     authInfo: args.authInfo ?? { user: { sub: 'u', roles: [], permissions: [] } },
+    // ToolContext.progress is `protected`; meta-tools call it through `this`.
+    // The test fixture doesn't go through the full ToolContext constructor,
+    // so stub it as a no-op resolving to `false` (the same return shape as
+    // the real method when no progressToken is present).
+    progress: jest.fn(async () => false),
   } as unknown as SearchSkillTool & LoadSkillTool & ExecuteActionTool;
 }
 
@@ -266,6 +271,43 @@ describe('execute_action', () => {
     } finally {
       global.fetch = realFetch;
     }
+  });
+
+  it('emits 5-step progress milestones on the happy path', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    const entry = buildEntry('billing', 'createInvoice', { pathTemplate: '/v1/x', mapper: [] });
+    hiddenOps.set(entry);
+
+    const realFetch = global.fetch;
+    global.fetch = jest.fn(async () => new Response('{}', { status: 200 })) as never;
+    try {
+      const ctx = makeToolThis({ hiddenOps });
+      const progressSpy = (ctx as unknown as { progress: jest.Mock }).progress;
+      await ExecuteActionTool.prototype.execute.call(ctx, {
+        skillId: 'billing',
+        actionId: 'createInvoice',
+        input: {},
+      });
+      // Five milestones, monotonically increasing, total=5 each.
+      expect(progressSpy).toHaveBeenCalledTimes(5);
+      const calls = progressSpy.mock.calls.map((args) => args[0]);
+      expect(calls).toEqual([1, 2, 3, 4, 5]);
+      const totals = progressSpy.mock.calls.map((args) => args[1]);
+      expect(totals.every((t) => t === 5)).toBe(true);
+      const messages = progressSpy.mock.calls.map((args) => args[2]);
+      expect(messages).toEqual(['resolve-action', 'authority-check', 'input-validate', 'http-call', 'done']);
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
+  it('stops emitting progress after an early-return phase (unknown action)', async () => {
+    const ctx = makeToolThis({});
+    const progressSpy = (ctx as unknown as { progress: jest.Mock }).progress;
+    await ExecuteActionTool.prototype.execute.call(ctx, { skillId: 's', actionId: 'missing' });
+    // Only the resolve-action milestone fires before the early return.
+    expect(progressSpy).toHaveBeenCalledTimes(1);
+    expect(progressSpy.mock.calls[0]).toEqual([1, 5, 'resolve-action']);
   });
 
   it('uses the entry service baseUrl when no active bundle is present (allowedHosts fallback)', async () => {

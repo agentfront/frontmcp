@@ -38,6 +38,14 @@ export default class ExecuteActionTool extends ToolContext {
     const guard = this.get(AuthorityGuard);
     const resolver = this.get(SkilledOpenApiCredentialResolver);
 
+    // Skill action progress: 5 milestones aligned with the phases of this tool.
+    // Each `progress()` call is a no-op when the caller didn't include a
+    // progressToken, so the overhead is a couple of `if (!token) return false`
+    // checks. Phases match the numbered comment blocks below.
+    const TOTAL_STEPS = 5;
+    const tick = (step: number, message: string): Promise<boolean> => this.progress(step, TOTAL_STEPS, message);
+
+    await tick(1, 'resolve-action');
     // 1) Resolve hidden op for (skillId, actionId).
     const entry = hiddenOps.get(input.skillId, input.actionId);
     if (!entry) {
@@ -57,6 +65,7 @@ export default class ExecuteActionTool extends ToolContext {
     const bundleId = pinned.bundleId;
     const bundle = bundleStore.current();
 
+    await tick(2, 'authority-check');
     // 2) Authority check (skill-level + op-level merged at call site).
     const policy = pinned.op.requiredAuthorities;
     const authResult = await guard.check({
@@ -81,6 +90,7 @@ export default class ExecuteActionTool extends ToolContext {
       outputSchema: pinned.op.outputSchema,
     });
 
+    await tick(3, 'input-validate');
     // 4) Validate input strictly. Mirrors the SDK call-tool flow's parseInput
     //    stage — invalid input never reaches the upstream HTTP call.
     const inputParse = schemas.input.safeParse(input.input ?? {});
@@ -119,6 +129,7 @@ export default class ExecuteActionTool extends ToolContext {
       logger: this.logger,
     };
 
+    await tick(4, 'http-call');
     const result = await executeOperation({
       entry: pinned,
       bundleId,
@@ -146,6 +157,7 @@ export default class ExecuteActionTool extends ToolContext {
       }
     }
 
+    await tick(5, 'done');
     return {
       ok: result.ok,
       status: result.status,

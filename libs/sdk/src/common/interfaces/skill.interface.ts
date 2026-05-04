@@ -19,6 +19,19 @@ export type SkillType<T = unknown> = Type<T> | SkillRecord | string;
 
 /**
  * Metadata for a resolved reference file within a skill's references/ directory.
+ *
+ * Three lookup paths are supported by the `skills://{skillName}/references/{name}`
+ * resource handler — listed in priority order (the first that's set wins):
+ *
+ *   1. `path`    — read from disk on demand (filesystem-backed catalog skills)
+ *   2. `content` — return the bundled inline markdown (bundle-sourced skills)
+ *   3. `filename` — historical lookup against the skill's `resources.references`
+ *      directory (kept for catalog backwards-compat)
+ *
+ * Bundle-sourced skills typically populate `name`, `description`, and
+ * `content` (no path on disk). Catalog-sourced skills populate `name`,
+ * `description`, and `filename` (or absolute `path`) so the file is read
+ * lazily on each `resources/read`.
  */
 export interface SkillReferenceInfo {
   /** Reference name (typically filename without .md) */
@@ -27,10 +40,19 @@ export interface SkillReferenceInfo {
   description: string;
   /** Filename relative to the skill directory */
   filename: string;
+  /** Optional absolute path on disk for direct lazy read. */
+  path?: string;
+  /** Optional inline markdown when the bundle carries content directly. */
+  content?: string;
+  /** Optional MIME type override (default: text/markdown). */
+  mediaType?: string;
 }
 
 /**
  * Metadata for a resolved example file within a skill's examples/ directory.
+ *
+ * Same lookup precedence as `SkillReferenceInfo`: `path` → `content` →
+ * `filename`.
  */
 export interface SkillExampleInfo {
   /** Example name (filename without .md) */
@@ -43,6 +65,12 @@ export interface SkillExampleInfo {
   level: string;
   /** Filename relative to the examples directory */
   filename: string;
+  /** Optional absolute path on disk for direct lazy read. */
+  path?: string;
+  /** Optional inline markdown when the bundle carries content directly. */
+  content?: string;
+  /** Optional MIME type override (default: text/markdown). */
+  mediaType?: string;
 }
 
 /**
@@ -142,6 +170,18 @@ export interface SkillContent {
    * Bundled resource directories (scripts/, references/, assets/).
    */
   resources?: SkillResources;
+
+  /**
+   * Optional skill quality rating (0..5). Mirrors `SkillMetadata.rating` so
+   * dynamically registered skills surface the same field in search results.
+   */
+  rating?: number;
+
+  /**
+   * Optional category, used for HTTP API filtering when the skill didn't
+   * come from the static catalog tree.
+   */
+  category?: string;
 
   /**
    * Resolved reference metadata from the skill's references/ directory.

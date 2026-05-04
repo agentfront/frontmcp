@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { type Command } from 'commander';
 
 export function registerSkillsCommands(program: Command): void {
   const skills = program.command('skills').description('Search, list, and install skills from the FrontMCP catalog');
@@ -58,6 +58,58 @@ export function registerSkillsCommands(program: Command): void {
           all: options.all,
           tag: options.tag,
           category: options.category,
+        });
+      },
+    );
+
+  skills
+    .command('export')
+    .description('Convert a catalog skill into a Cursor / Windsurf / Copilot rule file in the current directory')
+    .option('-t, --target <target>', 'Target IDE: cursor | windsurf | copilot', 'cursor')
+    .option('-n, --name <name>', 'Skill name to export (required unless --all is set)')
+    .option('-a, --all', 'Export every skill in the catalog')
+    .option('-d, --out <directory>', 'Output directory (default: cwd)')
+    .action(async (options: { target?: string; name?: string; all?: boolean; out?: string }) => {
+      const validTargets = ['cursor', 'windsurf', 'copilot'] as const;
+      type Target = (typeof validTargets)[number];
+      const t = (options.target ?? 'cursor') as Target;
+      if (!validTargets.includes(t)) {
+        console.error(`Invalid target "${options.target}". Valid targets: ${validTargets.join(', ')}`);
+        process.exit(1);
+      }
+      const { exportSkills } = await import('./export.js');
+      await exportSkills({
+        target: t,
+        name: options.name,
+        all: options.all,
+        outDir: options.out,
+      });
+    });
+
+  skills
+    .command('publish')
+    .description('Publish a skill to a public marketplace (Smithery or Glama)')
+    .argument('<name>', 'Skill name to publish')
+    .option('-t, --target <target>', 'Marketplace target: smithery | glama', 'smithery')
+    .option('--token <token>', 'API token (defaults to SMITHERY_TOKEN / GLAMA_TOKEN env)')
+    .option('--repository <url>', 'Repository URL to advertise on the marketplace')
+    .option('--dry-run', 'Print the payload + endpoint without submitting')
+    .action(
+      async (name: string, options: { target?: string; token?: string; repository?: string; dryRun?: boolean }) => {
+        const validTargets = ['smithery', 'glama'] as const;
+        type Target = (typeof validTargets)[number];
+        const t = (options.target ?? 'smithery') as Target;
+        if (!validTargets.includes(t)) {
+          console.error(`Invalid target "${options.target}". Valid targets: ${validTargets.join(', ')}`);
+          process.exit(1);
+        }
+        const { publishSkill } = await import('./publish.js');
+        await publishSkill({
+          target: t,
+          name,
+          token: options.token,
+          repository: options.repository,
+          dryRun: options.dryRun,
         });
       },
     );

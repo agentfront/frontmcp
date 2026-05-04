@@ -88,6 +88,12 @@ export interface BundledSkill {
   operationIds: string[];
   /** Optional skill-level authorities (in addition to per-op). */
   requiredAuthorities?: AuthoritiesPolicy;
+  /**
+   * Other skill ids this skill depends on. Same field name as the
+   * agentskills Skill Package Manifest. Resolved at apply time via
+   * `resolveSkillLoadOrder` (libs/adapters/src/skills/dependency).
+   */
+  requires?: string[];
 }
 
 /** Detached signature envelope for the bundle. */

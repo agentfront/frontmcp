@@ -115,6 +115,19 @@ export interface SkillCatalogEntry {
   bundle?: SkillBundle[];
   /** Install configuration for future distribution (optional — not yet used by CLI) */
   install?: SkillInstallConfig;
+  /**
+   * Optional skill quality rating (0..5, one decimal). Surfaced via the
+   * Skills HTTP API for consumers that want to filter by `min-rating` or
+   * sort by quality. Mirrors `SkillMetadata.rating` introduced in v1.2.0.
+   */
+  rating?: number;
+  /**
+   * Other catalog skills this skill depends on (by `name`). Used by the
+   * dependency resolver introduced in v1.2.0 to register dependencies first
+   * during scaffold/install. Aligns with the agentskills Skill Package
+   * Manifest proposal `requires` field.
+   */
+  requires?: string[];
 }
 
 /**

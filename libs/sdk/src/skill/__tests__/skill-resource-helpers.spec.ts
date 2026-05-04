@@ -5,17 +5,21 @@
  */
 
 import 'reflect-metadata';
-import {
-  getMcpVisibleSkills,
-  getMcpVisibleSkillNames,
-  findAndLoadSkill,
-  readSkillFile,
-  readAndParseSkillFile,
-  collectAllReferenceNames,
-  collectAllExampleNames,
-} from '../resources/skill-resource.helpers';
+
+import { readFile } from '@frontmcp/utils';
+
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
+import {
+  collectAllExampleNames,
+  collectAllReferenceNames,
+  findAndLoadSkill,
+  getMcpVisibleSkillNames,
+  getMcpVisibleSkills,
+  loadResolvedSkillResourceBody,
+  readAndParseSkillFile,
+  readSkillFile,
+} from '../resources/skill-resource.helpers';
 
 // Mock @frontmcp/utils (partial — keep real exports, override file I/O)
 jest.mock('@frontmcp/utils', () => ({
@@ -24,7 +28,6 @@ jest.mock('@frontmcp/utils', () => ({
   pathResolve: jest.fn((...parts: string[]) => parts.join('/')),
 }));
 
-import { readFile } from '@frontmcp/utils';
 const mockReadFile = readFile as jest.MockedFunction<typeof readFile>;
 
 // Mock skill-md-parser
@@ -313,6 +316,49 @@ describe('skill-resource.helpers', () => {
       const scope = createMockScope(skills);
       const names = await collectAllExampleNames(scope, 'adv');
       expect(names).toEqual(['advanced-config']);
+    });
+  });
+
+  describe('loadResolvedSkillResourceBody', () => {
+    it('returns inline content when entry.content is set (bundle-sourced)', async () => {
+      const instance = createMockSkillEntry('s1') as unknown as Parameters<typeof loadResolvedSkillResourceBody>[0];
+      const body = await loadResolvedSkillResourceBody(instance, 'references', {
+        filename: 'unused.md',
+        content: '# Inline body',
+      });
+      expect(body).toBe('# Inline body');
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it('reads from absolute entry.path when content is absent', async () => {
+      mockReadFile.mockResolvedValueOnce('# From disk');
+      const instance = createMockSkillEntry('s1') as unknown as Parameters<typeof loadResolvedSkillResourceBody>[0];
+      const body = await loadResolvedSkillResourceBody(instance, 'references', {
+        filename: 'unused.md',
+        path: '/absolute/path/to/ref.md',
+      });
+      expect(body).toBe('# From disk');
+      expect(mockReadFile).toHaveBeenCalledWith('/absolute/path/to/ref.md', 'utf-8');
+    });
+
+    it('falls back to filename via instance.getResources() when no path/content', async () => {
+      mockReadFile.mockResolvedValueOnce('# Filename body');
+      const instance = createMockSkillEntry('s1') as unknown as Parameters<typeof loadResolvedSkillResourceBody>[0];
+      const body = await loadResolvedSkillResourceBody(instance, 'references', { filename: 'r.md' });
+      expect(body).toBe('# Filename body');
+    });
+
+    it('throws when none of content/path/filename can produce content', async () => {
+      const instance = createMockSkillEntry('s1') as unknown as Parameters<typeof loadResolvedSkillResourceBody>[0];
+      await expect(loadResolvedSkillResourceBody(instance, 'references', {})).rejects.toThrow();
+    });
+
+    it('wraps disk errors with a descriptive message', async () => {
+      mockReadFile.mockRejectedValueOnce(new Error('ENOENT'));
+      const instance = createMockSkillEntry('s1') as unknown as Parameters<typeof loadResolvedSkillResourceBody>[0];
+      await expect(
+        loadResolvedSkillResourceBody(instance, 'references', { filename: 'x', path: '/missing.md' }),
+      ).rejects.toThrow(/Failed to read references/);
     });
   });
 });

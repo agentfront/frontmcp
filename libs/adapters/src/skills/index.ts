@@ -19,8 +19,16 @@ export type {
 export { bundleSkillToActions } from './bundle/bundle.types';
 export { crossValidate, resolvedBundleSchema, type ParsedBundle } from './bundle/bundle.schema';
 export { OverlayParseError, parseOverlay, type OverlayInput } from './bundle/overlay-parser';
-export { BundleStore, type BundleSwapListener } from './bundle/bundle.store';
+export {
+  BundleStore,
+  BundlePinnedError,
+  type BundleStoreOptions,
+  type BundleSwapListener,
+} from './bundle/bundle.store';
 export { diffBundles, formatDiffSummary, type BundleDiff } from './bundle/bundle-diff';
+
+// Dependency resolution
+export { resolveSkillLoadOrder, SkillDependencyCycleError, SkillDependencyMissingError } from './dependency/skill-dag';
 
 // Source configuration
 export {
@@ -39,6 +47,19 @@ export {
 // Sources
 export { createBundleSource, NpmSource, SaasPullSource, StaticSource } from './sources';
 export type { BundleSourceListener, SkillBundleSource } from './sources/skill-bundle-source.interface';
+
+// Filesystem skills source — produces SkillContent events for plain disk
+// directories with hot reload (xmcp / mcp-skillset parity).
+export {
+  FilesystemSkillsSource,
+  loadFilesystemSkill,
+  parseSkillFrontmatter,
+  type FilesystemSkillContent,
+  type FilesystemSkillsEvent,
+  type FilesystemSkillsListener,
+  type FilesystemSkillsLogger,
+  type FilesystemSkillsSourceOptions,
+} from './sources/filesystem-skills.source';
 
 // Security
 export {

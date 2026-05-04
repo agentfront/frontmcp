@@ -2,6 +2,8 @@
 
 Curated skills catalog for FrontMCP projects. Skills are SKILL.md-based instructional packages that teach AI agents how to perform multi-step tasks with FrontMCP.
 
+> **v1.2.0 — new manifest fields:** `rating` (0..5), `category` override, and `requires: string[]` (skill dependencies). The Skills HTTP API exposes them as `min-rating`, `category`, and resolves `requires` topologically before registration. See [Skills Adapter](../../docs/frontmcp/adapters/skills-adapter.mdx) for the runtime contract.
+
 ## Structure
 
 The catalog uses a **router skill model** — domain-scoped router skills, each containing a SKILL.md with a routing table, a `references/` directory with detailed topic guides, and optional `examples/` directories for standalone example files.
@@ -56,6 +58,9 @@ visibility: both # Optional: mcp | http | both
 compatibility: Node.js 24+ # Optional: environment requirements
 license: MIT # Optional: license
 allowed-tools: Read Edit # Optional: pre-approved tools
+rating: 4.5 # Optional (v1.2): 0..5 quality rating, surfaced via Skills HTTP API min-rating filter
+category: development # Optional (v1.2): catalog category override (defaults to the directory's parent category)
+requires: [frontmcp-setup] # Optional (v1.2): other skill names this depends on; resolver registers deps first
 ---
 # Skill Instructions
 

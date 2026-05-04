@@ -4,6 +4,9 @@ import {
   bundleSkillToActions,
   diffBundles,
   formatDiffSummary,
+  resolveSkillLoadOrder,
+  SkillDependencyCycleError,
+  SkillDependencyMissingError,
   verifyBundleSignature,
   type AuthBinding,
   type BundleDiff,
@@ -81,6 +84,19 @@ export class BundleSyncService {
   async apply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
     if (!bundle) throw new Error('apply: bundle is required');
 
+    // Gate 0: pin guard. When operators have pinned the active version,
+    // source-driven swaps accumulate in history elsewhere but are never
+    // committed. We surface this as a structured non-error result so the
+    // host can log it without paging anyone.
+    if (this.bundleStore.isPinned() && this.bundleStore.pinned() !== bundle.version) {
+      return {
+        applied: false,
+        reason: `bundle store pinned to ${this.bundleStore.pinned()}; ${bundle.version} not applied`,
+        bundleId: bundle.bundleId,
+        bundleVersion: bundle.version,
+      };
+    }
+
     // Gate 1: signature verification.
     if (this.options.requireSignature) {
       const verifyResult = verifyBundleSignature(bundle, this.options.trustedKeys);
@@ -125,13 +141,32 @@ export class BundleSyncService {
       //    path below and keeps the previous bundle active.
       this.rebuildHiddenOps(bundle);
 
-      // 2) Stage all skill registrations BEFORE removing anything. Calling
+      // 2) Resolve dependency-respecting load order. Cycles + missing deps
+      //    trip the rollback path so a malformed bundle doesn't half-apply.
+      let orderedSkills: ResolvedBundle['skills'];
+      try {
+        orderedSkills = resolveSkillLoadOrder(bundle.skills);
+      } catch (e) {
+        if (e instanceof SkillDependencyCycleError) {
+          throw new Error(
+            `[bundle-sync] dependency cycle in ${bundle.bundleId}@${bundle.version}: ${e.cycle.join(' -> ')}`,
+          );
+        }
+        if (e instanceof SkillDependencyMissingError) {
+          throw new Error(
+            `[bundle-sync] missing dependency in ${bundle.bundleId}@${bundle.version}: skill "${e.skillId}" requires "${e.missingId}"`,
+          );
+        }
+        throw e;
+      }
+
+      // 3) Stage all skill registrations BEFORE removing anything, in dep order.
       //    registerSkillContent with an existing id replaces in-place inside
       //    the SkillRegistry, so prior versions are not visible to consumers
       //    once their replacement has been registered. If any registration
       //    throws, the rollback path re-registers prior versions from
       //    `priorContents`.
-      for (const skill of bundle.skills) {
+      for (const skill of orderedSkills) {
         const content = this.toSkillContent(skill, bundle);
         const handle = await this.skillRegistry.registerSkillContent(content, {
           source: `skilled-openapi:${bundle.bundleId}`,

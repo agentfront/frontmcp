@@ -9,7 +9,7 @@ import {
   collectAllReferenceNames,
   findAndLoadSkill,
   getMcpVisibleSkillNames,
-  readAndParseSkillFile,
+  loadResolvedSkillResourceBody,
 } from './skill-resource.helpers';
 
 type Params = { skillName: string; referenceName: string };
@@ -51,13 +51,13 @@ export class SkillReferenceContentResource extends ResourceContext<Params> {
       throw new ResourceNotFoundError(uri);
     }
 
-    const { body } = await readAndParseSkillFile(instance, 'references', refEntry.filename);
+    const body = await loadResolvedSkillResourceBody(instance, 'references', refEntry);
 
     return {
       contents: [
         {
           uri,
-          mimeType: 'text/markdown',
+          mimeType: refEntry.mediaType ?? 'text/markdown',
           text: body,
         },
       ],

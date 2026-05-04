@@ -138,6 +138,17 @@ export type { SkillMdParseResult } from './skill-md-parser';
 export { loadSkillDirectory, scanSkillResources, skillDir } from './skill-directory-loader';
 export type { ScanResult } from './skill-directory-loader';
 
+// Semantic search extension point
+export { SkillSemanticSearchToken } from './semantic/skill-semantic-search.interface';
+export type { SkillSemanticSearchProvider } from './semantic/skill-semantic-search.interface';
+
+// Sandboxed `scripts/` execution runtime is deferred to v1.7 ("Sandbox &
+// CodeCall Expansion") so it can land alongside the production-grade
+// isolation primitives (sandbox-exec / bubblewrap / seccomp) and a unified
+// policy engine. v1.2 ships skill bundles that may carry a `scripts/`
+// directory, but the SDK does not execute them — the host's existing tool
+// surface or v1.3 sandboxed-process execution is the supported path.
+
 // HTTP Utilities
 export {
   formatSkillsForLlmCompact,
