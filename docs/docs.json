@@ -206,6 +206,20 @@
                       "frontmcp/plugins/codecall/production",
                       "frontmcp/plugins/codecall/examples"
                     ]
+                  },
+                  {
+                    "group": "Skilled OpenAPI",
+                    "pages": [
+                      "frontmcp/plugins/skilled-openapi/overview",
+                      "frontmcp/plugins/skilled-openapi/quickstart",
+                      "frontmcp/plugins/skilled-openapi/bundle-format",
+                      "frontmcp/plugins/skilled-openapi/sources",
+                      "frontmcp/plugins/skilled-openapi/meta-tools",
+                      "frontmcp/plugins/skilled-openapi/security",
+                      "frontmcp/plugins/skilled-openapi/configuration",
+                      "frontmcp/plugins/skilled-openapi/coexistence",
+                      "frontmcp/plugins/skilled-openapi/api-reference"
+                    ]
                   }
                 ]
               },

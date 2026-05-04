@@ -1,7 +1,7 @@
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import type { ChannelRecord } from '../records';
 import type { ChannelContext } from '../interfaces';
 import type { ChannelMetadata, ChannelSourceConfig } from '../metadata/channel.metadata';
+import type { ChannelRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 /**
  * Abstract base class for channel entries.

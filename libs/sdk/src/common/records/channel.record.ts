@@ -1,6 +1,7 @@
-import { Type } from '@frontmcp/di';
-import { ChannelContext } from '../interfaces';
-import { ChannelMetadata } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ChannelContext } from '../interfaces';
+import { type ChannelMetadata } from '../metadata';
 
 /**
  * Discriminator enum for channel record types.

@@ -1,5 +1,6 @@
-import { Type, Token, ClassType, ValueType, FactoryType, ClassToken } from '@frontmcp/di';
-import { AuthProviderMetadata } from '../metadata';
+import { type ClassToken, type ClassType, type FactoryType, type Token, type Type, type ValueType } from '@frontmcp/di';
+
+import { type AuthProviderMetadata } from '../metadata';
 
 export interface AuthProviderInterface {
   headers(): Record<string, string>;

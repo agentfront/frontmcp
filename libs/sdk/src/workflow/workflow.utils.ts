@@ -1,9 +1,10 @@
-import { isClass, getMetadata } from '@frontmcp/di';
+import { getMetadata, isClass } from '@frontmcp/di';
+
+import { type WorkflowType } from '../common/interfaces/workflow.interface';
+import { type WorkflowMetadata } from '../common/metadata/workflow.metadata';
+import { WorkflowKind, type WorkflowRecord } from '../common/records/workflow.record';
+import { extendedWorkflowMetadata, FrontMcpWorkflowTokens } from '../common/tokens/workflow.tokens';
 import { InvalidEntityError } from '../errors';
-import { WorkflowMetadata } from '../common/metadata/workflow.metadata';
-import { FrontMcpWorkflowTokens, extendedWorkflowMetadata } from '../common/tokens/workflow.tokens';
-import { WorkflowRecord, WorkflowKind } from '../common/records/workflow.record';
-import { WorkflowType } from '../common/interfaces/workflow.interface';
 
 export function collectWorkflowMetadata(cls: WorkflowType): WorkflowMetadata {
   const extended = getMetadata(extendedWorkflowMetadata, cls);

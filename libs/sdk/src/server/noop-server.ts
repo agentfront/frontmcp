@@ -1,4 +1,4 @@
-import { FrontMcpServer, HttpMethod, ServerRequestHandler } from '../common';
+import { FrontMcpServer, type HttpMethod, type ServerRequestHandler } from '../common';
 
 /**
  * No-op server implementation for CLI mode.

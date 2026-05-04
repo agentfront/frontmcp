@@ -1,4 +1,4 @@
-import { Type } from '../common';
+import { type Type } from '../common';
 
 export type AnyStage = string & {};
 

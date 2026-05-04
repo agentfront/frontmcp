@@ -1,4 +1,4 @@
-import { Type } from '@frontmcp/di';
+import { type Type } from '@frontmcp/di';
 
 export type HookBase<In, Ctx> = (input: In, ctx?: Ctx) => Promise<void>;
 

@@ -1,8 +1,9 @@
 // file: libs/sdk/src/skill/resources/skills-catalog.resource.ts
 
-import { ReadResourceResult } from '@frontmcp/protocol';
-import { ResourceContext } from '../../common/interfaces';
+import { type ReadResourceResult } from '@frontmcp/protocol';
+
 import { Resource } from '../../common';
+import { ResourceContext } from '../../common/interfaces';
 import { getMcpVisibleSkills } from './skill-resource.helpers';
 
 /**

@@ -10,14 +10,15 @@
  * 2. Fall back to base registry for global/unscoped providers
  */
 
-import { Token } from '@frontmcp/di';
+import { type Token } from '@frontmcp/di';
+
 import {
-  ProviderRegistryInterface,
-  RegistryKind,
-  RegistryType,
-  ProviderViews,
-  ScopeEntry,
-  ProviderEntry,
+  type ProviderEntry,
+  type ProviderRegistryInterface,
+  type ProviderViews,
+  type RegistryKind,
+  type RegistryType,
+  type ScopeEntry,
 } from '../common';
 
 export class FlowContextProviders implements ProviderRegistryInterface {

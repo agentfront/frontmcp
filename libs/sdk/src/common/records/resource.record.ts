@@ -1,9 +1,14 @@
-import { Type } from '@frontmcp/di';
-import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
-import { ResourceEntry } from '../entries';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
-import type { EsmOptions } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import { type ResourceEntry } from '../entries';
+import {
+  type EsmOptions,
+  type RemoteAuthConfig,
+  type RemoteTransportOptions,
+  type ResourceMetadata,
+  type ResourceTemplateMetadata,
+} from '../metadata';
 
 // ============================================================================
 // Static Resource Records

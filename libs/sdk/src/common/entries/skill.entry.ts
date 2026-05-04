@@ -1,9 +1,9 @@
 // file: libs/sdk/src/common/entries/skill.entry.ts
 
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { SkillRecord } from '../records';
-import { SkillContext, SkillContent } from '../interfaces';
-import { SkillMetadata, SkillToolRef, SkillResources, normalizeToolRef } from '../metadata';
+import { type SkillContent, type SkillContext } from '../interfaces';
+import { normalizeToolRef, type SkillMetadata, type SkillResources, type SkillToolRef } from '../metadata';
+import { type SkillRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 /**
  * Result of loading a skill with tool validation information.

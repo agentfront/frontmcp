@@ -1,13 +1,22 @@
 import 'reflect-metadata';
-import { Token, tokenName } from '@frontmcp/di';
-import { AppType, FrontMcpConfigType, FrontMcpLogger, ScopeEntry, ScopeRecord, ScopeKind } from '../common';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import ProviderRegistry from '../provider/provider.registry';
-import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+
+import { tokenName, type Token } from '@frontmcp/di';
+
 import { normalizeApp } from '../app/app.utils';
-import { normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps } from './scope.utils';
+import {
+  FrontMcpLogger,
+  ScopeKind,
+  type AppType,
+  type FrontMcpConfigType,
+  type ScopeEntry,
+  type ScopeRecord,
+} from '../common';
+import { InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
+import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from './scope.instance';
-import { RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
+import { normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps } from './scope.utils';
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {
   private logger?: FrontMcpLogger;

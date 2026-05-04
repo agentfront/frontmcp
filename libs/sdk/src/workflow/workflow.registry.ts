@@ -1,15 +1,16 @@
-import { Token, tokenName } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef } from '../common';
+import { tokenName, type Token } from '@frontmcp/di';
+
+import { type EntryLineage, type EntryOwnerRef } from '../common';
+import { type WorkflowEntry } from '../common/entries/workflow.entry';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
-import { WorkflowEntry } from '../common/entries/workflow.entry';
-import { WorkflowRecord, WorkflowDynamicRecord } from '../common/records/workflow.record';
-import { WorkflowType } from '../common/interfaces/workflow.interface';
-import { WorkflowChangeEvent, WorkflowEmitter } from './workflow.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { normalizeWorkflow } from './workflow.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { WorkflowInstance } from './workflow.instance';
+import { type WorkflowType } from '../common/interfaces/workflow.interface';
+import { type WorkflowDynamicRecord, type WorkflowRecord } from '../common/records/workflow.record';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { WorkflowEmitter, type WorkflowChangeEvent } from './workflow.events';
+import { WorkflowInstance } from './workflow.instance';
+import { normalizeWorkflow } from './workflow.utils';
 
 export interface IndexedWorkflow {
   token: Token;

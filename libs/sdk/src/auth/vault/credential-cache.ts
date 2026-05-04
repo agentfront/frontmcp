@@ -5,8 +5,8 @@
  * The CredentialCache class itself is exported from @frontmcp/auth.
  */
 
-import { Token } from '@frontmcp/di';
 import type { CredentialCache } from '@frontmcp/auth';
+import { type Token } from '@frontmcp/di';
 
 /**
  * DI Token for CredentialCache

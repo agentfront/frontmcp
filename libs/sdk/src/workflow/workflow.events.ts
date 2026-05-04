@@ -1,4 +1,4 @@
-import { WorkflowEntry } from '../common/entries/workflow.entry';
+import { type WorkflowEntry } from '../common/entries/workflow.entry';
 
 export type WorkflowChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 

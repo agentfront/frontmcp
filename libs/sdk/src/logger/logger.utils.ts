@@ -1,7 +1,13 @@
-import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
-import { FrontMcpLogTransportTokens, LogTransportMetadata, LogTransportType, LogTransportInterface } from '../common';
-import { LoggerKind, LoggerRecord } from './logger.types';
+import { depsOfClass, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
+
+import {
+  FrontMcpLogTransportTokens,
+  type LogTransportInterface,
+  type LogTransportMetadata,
+  type LogTransportType,
+} from '../common';
 import { InvalidEntityError } from '../errors';
+import { LoggerKind, type LoggerRecord } from './logger.types';
 
 export function collectLoggerMetadata(cls: LogTransportType): LogTransportMetadata {
   return Object.entries(FrontMcpLogTransportTokens).reduce((metadata, [key, token]) => {

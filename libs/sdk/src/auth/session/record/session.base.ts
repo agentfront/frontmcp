@@ -1,9 +1,9 @@
 // auth/session/record/session.base.ts
 
-import type { ProviderSnapshot, SessionMode } from '@frontmcp/auth';
-import { TransportIdGenerator } from '@frontmcp/auth';
-import { Scope } from '../../../scope';
+import { TransportIdGenerator, type ProviderSnapshot, type SessionMode } from '@frontmcp/auth';
+
 import { ScopeDeniedError } from '../../../errors/auth-internal.errors';
+import { type Scope } from '../../../scope';
 
 export interface BaseCreateCtx {
   id: string;

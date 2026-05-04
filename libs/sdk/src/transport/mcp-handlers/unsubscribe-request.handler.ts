@@ -1,5 +1,6 @@
-import { UnsubscribeRequestSchema, UnsubscribeRequest, EmptyResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { UnsubscribeRequestSchema, type EmptyResult, type UnsubscribeRequest } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Handler for the resources/unsubscribe MCP request.

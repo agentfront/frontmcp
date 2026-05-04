@@ -1,7 +1,7 @@
 // file: libs/sdk/src/utils/lineage.utils.ts
 // Owner lineage and qualified name utilities
 
-import { EntryLineage } from '../common';
+import { type EntryLineage } from '../common';
 
 /**
  * Convert an entry lineage to a string key.

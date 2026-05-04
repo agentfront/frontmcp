@@ -1,6 +1,6 @@
-import { JobStateStore } from './job-state.interface';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobStateStore } from './job-state.interface';
 import { MemoryJobStateStore } from './memory-job-state.store';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 
 export interface JobStateStoreOptions {
   redis?: {

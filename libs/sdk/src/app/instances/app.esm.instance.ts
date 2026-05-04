@@ -6,46 +6,47 @@
  * AppEsmInstance loads the package code locally and executes in-process.
  */
 
-import {
-  AdapterRegistryInterface,
-  AppEntry,
-  AppRecord,
-  PluginRegistryInterface,
-  ProviderRegistryInterface,
-  RemoteAppMetadata,
-  EntryOwnerRef,
-  PluginEntry,
-  AdapterEntry,
-  SkillEntry,
-} from '../../common';
-import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import { idFromString } from '@frontmcp/utils';
-import ProviderRegistry from '../../provider/provider.registry';
-import ToolRegistry from '../../tool/tool.registry';
-import ResourceRegistry from '../../resource/resource.registry';
-import PromptRegistry from '../../prompt/prompt.registry';
-import { EsmModuleLoader, EsmCacheManager } from '../../esm-loader';
-import type { EsmRegistryAuth } from '../../esm-loader/esm-auth.types';
-import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
-import { VersionPoller } from '../../esm-loader/version-poller';
-import type { FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
-import type { EsmLoadResult } from '../../esm-loader/esm-module-loader';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import { createEsmToolInstance, createEsmPromptInstance, createEsmResourceInstance } from '../../esm-loader/factories';
+
 import {
-  normalizeToolFromEsmExport,
-  normalizeResourceFromEsmExport,
-  normalizePromptFromEsmExport,
-  isDecoratedToolClass,
-  isDecoratedResourceClass,
-  isDecoratedPromptClass,
-} from './esm-normalize.utils';
-import { normalizeTool } from '../../tool/tool.utils';
-import { ToolInstance } from '../../tool/tool.instance';
-import { normalizeResource } from '../../resource/resource.utils';
-import { ResourceInstance } from '../../resource/resource.instance';
-import { normalizePrompt } from '../../prompt/prompt.utils';
+  AppEntry,
+  type AdapterEntry,
+  type AdapterRegistryInterface,
+  type AppRecord,
+  type EntryOwnerRef,
+  type PluginEntry,
+  type PluginRegistryInterface,
+  type ProviderRegistryInterface,
+  type RemoteAppMetadata,
+  type SkillEntry,
+} from '../../common';
+import { InternalMcpError } from '../../errors';
+import { EsmCacheManager, EsmModuleLoader } from '../../esm-loader';
+import { type EsmRegistryAuth } from '../../esm-loader/esm-auth.types';
+import { type FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
+import { type EsmLoadResult } from '../../esm-loader/esm-module-loader';
+import { createEsmPromptInstance, createEsmResourceInstance, createEsmToolInstance } from '../../esm-loader/factories';
+import { parsePackageSpecifier, type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import { VersionPoller } from '../../esm-loader/version-poller';
 import { PromptInstance } from '../../prompt/prompt.instance';
+import PromptRegistry from '../../prompt/prompt.registry';
+import { normalizePrompt } from '../../prompt/prompt.utils';
+import type ProviderRegistry from '../../provider/provider.registry';
+import { ResourceInstance } from '../../resource/resource.instance';
+import ResourceRegistry from '../../resource/resource.registry';
+import { normalizeResource } from '../../resource/resource.utils';
+import { type SkillRegistryInterface } from '../../skill/skill.registry';
+import { ToolInstance } from '../../tool/tool.instance';
+import ToolRegistry from '../../tool/tool.registry';
+import { normalizeTool } from '../../tool/tool.utils';
+import {
+  isDecoratedPromptClass,
+  isDecoratedResourceClass,
+  isDecoratedToolClass,
+  normalizePromptFromEsmExport,
+  normalizeResourceFromEsmExport,
+  normalizeToolFromEsmExport,
+} from './esm-normalize.utils';
 
 /**
  * Empty plugin registry for ESM apps.
@@ -119,6 +120,12 @@ class EmptySkillRegistry implements SkillRegistryInterface {
     return undefined;
   }
   hasExternalProvider() {
+    return false;
+  }
+  async registerSkillContent(): Promise<{ id: string; unregister: () => Promise<void> }> {
+    throw new InternalMcpError('registerSkillContent is not supported on ESM apps', 'UNSUPPORTED_OPERATION');
+  }
+  async unregisterSkill(): Promise<boolean> {
     return false;
   }
 }

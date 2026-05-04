@@ -1,18 +1,19 @@
-import { Ctor, Reference } from '@frontmcp/di';
+import { type Ctor, type Reference } from '@frontmcp/di';
+
 import {
   AdapterEntry,
-  AdapterInterface,
   AdapterKind,
-  AdapterRecord,
-  EntryOwnerRef,
-  FrontMcpAdapterResponse,
   FrontMcpLogger,
+  type AdapterInterface,
+  type AdapterRecord,
+  type EntryOwnerRef,
+  type FrontMcpAdapterResponse,
 } from '../common';
-import ProviderRegistry from '../provider/provider.registry';
-import ToolRegistry from '../tool/tool.registry';
-import ResourceRegistry from '../resource/resource.registry';
-import PromptRegistry from '../prompt/prompt.registry';
 import { InvalidRegistryKindError, RegistryNotInitializedError } from '../errors';
+import PromptRegistry from '../prompt/prompt.registry';
+import type ProviderRegistry from '../provider/provider.registry';
+import ResourceRegistry from '../resource/resource.registry';
+import ToolRegistry from '../tool/tool.registry';
 
 export class AdapterInstance extends AdapterEntry {
   readonly deps: Set<Reference>;

@@ -1,13 +1,13 @@
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { PublicMcpError } from '../../errors';
+import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
+import { formatSkillForLLM } from '../../skill/skill.utils';
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsLoadRequestSchema,
   SkillsLoadResultSchema,
-  SkillsLoadRequest,
-  SkillsLoadResult,
+  type SkillsLoadRequest,
+  type SkillsLoadResult,
 } from './skills-mcp.types';
-import { formatSkillForLLMWithSchemas } from '../../skill/skill-http.utils';
-import { formatSkillForLLM } from '../../skill/skill.utils';
-import { PublicMcpError } from '../../errors';
 
 /**
  * Tool information entry with availability and optional schemas.

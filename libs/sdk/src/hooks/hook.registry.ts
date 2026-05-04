@@ -1,20 +1,20 @@
 // src/hooks/hook.registry.ts
 
 import {
-  FlowCtxOf,
-  FlowInputOf,
-  FlowName,
-  FlowStagesOf,
-  HookEntry,
-  HookRecord,
-  HookType,
-  ScopeEntry,
-  Token,
+  type FlowCtxOf,
+  type FlowInputOf,
+  type FlowName,
+  type FlowStagesOf,
+  type HookEntry,
+  type HookRecord,
+  type HookType,
+  type ScopeEntry,
+  type Token,
 } from '../common';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import ProviderRegistry from '../provider/provider.registry';
-import { HookInstance } from './hook.instance';
 import { UnsupportedHookOwnerKindError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { HookInstance } from './hook.instance';
 
 export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord, HookType[]> {
   scope: ScopeEntry;

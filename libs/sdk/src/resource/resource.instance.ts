@@ -1,29 +1,30 @@
 // file: libs/sdk/src/resource/resource.instance.ts
 
-import {
-  EntryOwnerRef,
-  ResourceEntry,
-  ResourceReadExtra,
-  ParsedResourceResult,
-  ResourceSafeTransformResult,
-  ResourceRecord,
-  ResourceKind,
-  ResourceContext,
-  ResourceCtorArgs,
-  ResourceMetadata,
-  ResourceTemplateMetadata,
-  ResourceFunctionRecord,
-  ResourceTemplateRecord,
-  ResourceTemplateKind,
-} from '../common';
-import ProviderRegistry from '../provider/provider.registry';
-import HookRegistry from '../hooks/hook.registry';
-import { ScopeEntry } from '../common';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { matchUriTemplate, parseUriTemplate } from '@frontmcp/utils';
-import { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
-import { InvalidHookFlowError } from '../errors/mcp.error';
+
+import {
+  ResourceContext,
+  ResourceEntry,
+  ResourceKind,
+  ResourceTemplateKind,
+  type EntryOwnerRef,
+  type ParsedResourceResult,
+  type ResourceCtorArgs,
+  type ResourceFunctionRecord,
+  type ResourceMetadata,
+  type ResourceReadExtra,
+  type ResourceRecord,
+  type ResourceSafeTransformResult,
+  type ResourceTemplateMetadata,
+  type ResourceTemplateRecord,
+  type ScopeEntry,
+} from '../common';
 import { InvalidRegistryKindError } from '../errors';
+import { InvalidHookFlowError } from '../errors/mcp.error';
+import type HookRegistry from '../hooks/hook.registry';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import type ProviderRegistry from '../provider/provider.registry';
+import { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
 
 export class ResourceInstance<
   Params extends Record<string, string> = Record<string, string>,

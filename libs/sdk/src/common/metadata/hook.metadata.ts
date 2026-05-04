@@ -1,6 +1,7 @@
-import { Token } from '@frontmcp/di';
-import { FlowName } from './flow.metadata';
-import { EntryOwnerRef } from '../entries/base.entry';
+import { type Token } from '@frontmcp/di';
+
+import { type EntryOwnerRef } from '../entries/base.entry';
+import { type FlowName } from './flow.metadata';
 
 export type HookStageType = 'stage' | 'will' | 'did' | 'around';
 export type HookPriority = number;

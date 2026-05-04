@@ -1,15 +1,17 @@
 import 'reflect-metadata';
-import { Token, Type } from '@frontmcp/di';
+
+import { type Token, type Type } from '@frontmcp/di';
+
 import {
-  AgentMetadata,
-  AgentType,
-  FrontMcpAgentTokens,
-  extendedAgentMetadata,
-  AgentRecord,
   AgentKind,
+  extendedAgentMetadata,
+  FrontMcpAgentTokens,
+  type AgentMetadata,
+  type AgentRecord,
+  type AgentType,
 } from '../common';
-import { AgentConfigurationError } from '../errors/agent.errors';
 import { InvalidEntityError } from '../errors';
+import { AgentConfigurationError } from '../errors/agent.errors';
 
 // ============================================================================
 // Metadata Extraction

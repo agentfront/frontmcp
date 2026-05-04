@@ -1,4 +1,4 @@
-import { Type } from '@frontmcp/di';
+import { type Type } from '@frontmcp/di';
 
 export type ScopeType = Type<unknown>;
 

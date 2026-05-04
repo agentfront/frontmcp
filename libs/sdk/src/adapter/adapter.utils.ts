@@ -1,6 +1,13 @@
-import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
-import { AdapterMetadata, FrontMcpAdapterTokens, AdapterRecord, AdapterType, AdapterKind } from '../common';
-import { MissingProvideError, InvalidUseClassError, InvalidUseFactoryError, InvalidEntityError } from '../errors';
+import { depsOfClass, getMetadata, isClass, tokenName, type Token } from '@frontmcp/di';
+
+import {
+  AdapterKind,
+  FrontMcpAdapterTokens,
+  type AdapterMetadata,
+  type AdapterRecord,
+  type AdapterType,
+} from '../common';
+import { InvalidEntityError, InvalidUseClassError, InvalidUseFactoryError, MissingProvideError } from '../errors';
 
 export function collectAdapterMetadata(cls: AdapterType): AdapterMetadata {
   return Object.entries(FrontMcpAdapterTokens).reduce((metadata, [key, token]) => {

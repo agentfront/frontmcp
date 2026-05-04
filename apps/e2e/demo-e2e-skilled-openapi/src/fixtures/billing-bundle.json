@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "e2e:billing",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-04T12:00:00.000Z",
+  "sourceDigest": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "services": [
+    {
+      "id": "billing",
+      "baseUrl": "http://127.0.0.1:9876",
+      "description": "Mock billing REST API used by the e2e suite"
+    }
+  ],
+  "authBindings": {
+    "default": { "kind": "bearer", "vaultRef": "billing-token" }
+  },
+  "skills": [
+    {
+      "id": "invoices",
+      "name": "Invoices",
+      "description": "Issue, query, and refund invoices on the demo billing service.",
+      "instructions": "# Invoices skill\n\nThree operations: createInvoice, getInvoice, refundInvoice.",
+      "tags": ["billing", "demo"],
+      "operationIds": ["createInvoice", "getInvoice", "refundInvoice"]
+    },
+    {
+      "id": "guarded",
+      "name": "Guarded action",
+      "description": "An action gated by an admin role for testing ABAC denial.",
+      "instructions": "Requires the `admin` role.",
+      "operationIds": ["adminPing"]
+    }
+  ],
+  "operations": {
+    "createInvoice": {
+      "operationId": "createInvoice",
+      "serviceId": "billing",
+      "httpMethod": "POST",
+      "pathTemplate": "/v1/invoices",
+      "summary": "Create a new invoice",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customerId": { "type": "string" },
+          "amount": { "type": "number" }
+        },
+        "required": ["customerId", "amount"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" }
+        },
+        "required": ["id", "status"],
+        "additionalProperties": false
+      },
+      "mapper": [
+        { "inputKey": "customerId", "type": "body", "key": "customerId", "required": true },
+        { "inputKey": "amount", "type": "body", "key": "amount", "required": true }
+      ],
+      "authBindingRef": "default"
+    },
+    "getInvoice": {
+      "operationId": "getInvoice",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/invoices/{id}",
+      "summary": "Fetch an invoice by id",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "id": { "type": "string" } },
+        "required": ["id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" },
+          "amount": { "type": "number" }
+        },
+        "required": ["id", "status", "amount"],
+        "additionalProperties": false
+      },
+      "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
+      "authBindingRef": "default"
+    },
+    "refundInvoice": {
+      "operationId": "refundInvoice",
+      "serviceId": "billing",
+      "httpMethod": "POST",
+      "pathTemplate": "/v1/invoices/{id}/refunds",
+      "summary": "Issue a refund",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "amount": { "type": "number" }
+        },
+        "required": ["id", "amount"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "refundId": { "type": "string" },
+          "invoiceId": { "type": "string" }
+        },
+        "required": ["refundId", "invoiceId"],
+        "additionalProperties": false
+      },
+      "mapper": [
+        { "inputKey": "id", "type": "path", "key": "id", "required": true },
+        { "inputKey": "amount", "type": "body", "key": "amount", "required": true }
+      ],
+      "authBindingRef": "default"
+    },
+    "adminPing": {
+      "operationId": "adminPing",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/admin/ping",
+      "summary": "Admin-only ping (used to test ABAC denial)",
+      "inputSchema": { "type": "object", "properties": {} },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "ok": { "type": "boolean" } },
+        "required": ["ok"],
+        "additionalProperties": false
+      },
+      "mapper": [],
+      "authBindingRef": "default",
+      "requiredAuthorities": { "roles": { "all": ["admin"] } }
+    }
+  }
+}

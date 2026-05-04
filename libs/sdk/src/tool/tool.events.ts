@@ -1,4 +1,4 @@
-import { ToolEntry } from '../common';
+import { type ToolEntry } from '../common';
 
 export type ToolChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 

@@ -1,9 +1,8 @@
-import { Type } from '@frontmcp/di';
-import { PromptMetadata } from '../metadata';
-import { PromptEntry } from '../entries';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
-import type { EsmOptions } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import { type PromptEntry } from '../entries';
+import { type EsmOptions, type PromptMetadata, type RemoteAuthConfig, type RemoteTransportOptions } from '../metadata';
 
 export enum PromptKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

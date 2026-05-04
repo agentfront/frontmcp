@@ -1,4 +1,4 @@
-import { LogTransportInterface, LogTransportMetadata, Type } from '../common';
+import { type LogTransportInterface, type LogTransportMetadata, type Type } from '../common';
 
 export enum LoggerKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

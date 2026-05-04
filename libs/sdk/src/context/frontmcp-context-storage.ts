@@ -18,14 +18,15 @@
  * ```
  */
 
+import { type AuthInfo } from '@frontmcp/protocol';
 import { AsyncLocalStorage } from '@frontmcp/utils';
+
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
-import { FrontMcpContext, FrontMcpContextArgs } from './frontmcp-context';
-import { parseTraceContext } from './trace-context';
-import { extractMetadata } from './metadata.utils';
-import { AuthInfo } from '@frontmcp/protocol';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
+import { FrontMcpContext, type FrontMcpContextArgs } from './frontmcp-context';
+import { extractMetadata } from './metadata.utils';
+import { parseTraceContext } from './trace-context';
 
 /**
  * Module-level AsyncLocalStorage instance.

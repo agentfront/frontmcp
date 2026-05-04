@@ -1,0 +1,141 @@
+---
+title: Configuration
+sidebarTitle: Configuration
+description: Every plugin option, default value, and the env vars worth wiring through.
+icon: gear
+---
+
+The plugin's options are validated by Zod at construction time — invalid input throws synchronously rather than crashing later inside the bundle source. The full schema lives in [`src/skilled-openapi.types.ts`](https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-skilled-openapi/src/skilled-openapi.types.ts) and is exported as `skilledOpenApiPluginOptionsSchema` for downstream tooling.
+
+## Top-level shape
+
+```ts
+SkilledOpenApiPlugin.init({
+  source,             // required — see Sources page
+  requireSignature?,  // default: true
+  trustedKeys?,       // default: []
+  dev?,               // default: false
+  outbound?,          // see below; defaults filled in
+  sourceConflictPolicy?, // default: 'static-wins'
+  bundleCacheDir?,    // default: '.frontmcp/skilled-openapi'
+  credentials?,       // optional in-memory CredentialResolver seed
+})
+```
+
+## All options
+
+| Option | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `source` | `BundleSourceOptions` | (required) | One of `static`, `npm`, `saas` — see [Sources](/frontmcp/plugins/skilled-openapi/sources) |
+| `requireSignature` | `boolean` | `true` | Bundle must carry a verifiable `integrity` envelope. Default safe; never set false in production |
+| `trustedKeys` | `SignatureKey[]` | `[]` | Public keys for signature verification. At least one is mandatory when `requireSignature: true` |
+| `dev` | `boolean` | `false` | Bypasses signature verification and allows http://. **Loud startup warning when true.** Never in production |
+| `outbound.allowPrivateNetworks` | `boolean` | `false` | Bypass post-DNS IP blocklist. Set true only for self-hosted on a private network |
+| `outbound.allowHttp` | `boolean` | `false` | Allow `http://` upstreams (for local dev) |
+| `outbound.maxConcurrencyPerHost` | `number` | `10` | Per-host concurrent HTTP request cap |
+| `outbound.defaultTimeoutMs` | `number` | `30_000` | Default per-op timeout. Override per-op via `OperationDescriptor.timeoutMs` |
+| `outbound.defaultMaxResponseBytes` | `number` | `262_144` (256KB) | Default response size cap. Override per-op via `OperationDescriptor.maxResponseBytes` |
+| `outbound.egressProxy` | `string` | `undefined` | Optional egress proxy URL (planned v1.2.x; honors `HTTPS_PROXY` env when set) |
+| `sourceConflictPolicy` | `'static-wins'\|'last-wins'\|'reject'` | `'static-wins'` | Policy for when multiple sources register the same `bundleId` |
+| `bundleCacheDir` | `string` | `.frontmcp/skilled-openapi` | Where the SaaS source caches the last-good bundle |
+| `credentials` | `Record<string,string>` | `undefined` | In-memory credential map keyed by `vaultRef`. For dev / single-tenant only — production should override the `SkilledOpenApiCredentialResolver` provider with a libs/auth-vault-backed resolver |
+
+## `SignatureKey` shape
+
+```ts
+interface SignatureKey {
+  keyId: string;       // matches BundleIntegrity.keyId
+  alg: 'RS256' | 'EdDSA';
+  publicKeyPem: string; // PEM-encoded SPKI (RSA) or Ed25519
+}
+```
+
+Multiple entries supported — the verifier picks by `keyId`. Rotate by adding the new key first, leaving the old key, distributing bundles signed with the new key, then dropping the old key once no in-flight bundles depend on it.
+
+## Recommended env wiring
+
+A minimal production wiring uses environment variables for secrets and trusted keys:
+
+```ts
+import * as path from 'node:path';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
+
+@FrontMcp({
+  info: { name: 'Acme MCP', version: '1.0.0' },
+  apps: [],
+  plugins: [
+    SkilledOpenApiPlugin.init({
+      source: {
+        type: 'saas',
+        endpoint: process.env.FRONTMCP_BUNDLE_ENDPOINT!,
+        authToken: process.env.FRONTMCP_BUNDLE_TOKEN!,
+        expectedAudience: process.env.FRONTMCP_BUNDLE_AUDIENCE!,
+        expectedIssuer: process.env.FRONTMCP_BUNDLE_ISSUER!,
+        jwksUrl: process.env.FRONTMCP_BUNDLE_JWKS_URL!,
+        pollIntervalMs: 300_000,
+      },
+      trustedKeys: [
+        {
+          keyId: process.env.FRONTMCP_BUNDLE_KEY_ID!,
+          alg: 'EdDSA',
+          publicKeyPem: process.env.FRONTMCP_BUNDLE_PUBKEY!,
+        },
+      ],
+      bundleCacheDir: '/var/cache/frontmcp/skilled-openapi',
+      // outbound defaults are production-safe; tune maxConcurrencyPerHost only if needed
+    }),
+  ],
+  logging: { level: LogLevel.Info },
+  http: { port: 8080 },
+})
+export default class Server {}
+```
+
+For credentials, override the `SkilledOpenApiCredentialResolver` DI token with a vault-backed implementation rather than using the in-memory `credentials` option:
+
+```ts
+import { Plugin, ProviderType } from '@frontmcp/sdk';
+import { SkilledOpenApiCredentialResolver } from '@frontmcp/plugin-skilled-openapi';
+// your vault adapter from libs/auth or similar
+
+@Plugin({
+  name: 'my-vault-bridge',
+  providers: [
+    {
+      provide: SkilledOpenApiCredentialResolver,
+      useValue: new MyVaultBackedResolver(/* ... */),
+    } as ProviderType,
+  ],
+})
+export class VaultBridgePlugin {}
+```
+
+Register `VaultBridgePlugin` AFTER `SkilledOpenApiPlugin` so the override wins.
+
+## Reading current config at runtime
+
+The parsed plugin options are available via the `SkilledOpenApiConfig` DI token:
+
+```ts
+import { SkilledOpenApiConfig } from '@frontmcp/plugin-skilled-openapi';
+
+class MyHook {
+  constructor(private readonly config: SkilledOpenApiConfig) {}
+
+  doStuff() {
+    console.log(this.config.outbound.defaultTimeoutMs);
+    // ...
+  }
+}
+```
+
+## Validation surface
+
+Every option is validated at construction time. Examples:
+
+- Missing `source` → `ZodError: Required at "source"`
+- Malformed `saas.endpoint` URL → `ZodError: Invalid url at "source.endpoint"`
+- Unknown `outbound.maxConcurrencyPerHost: 0` → `ZodError: Number must be greater than 0`
+
+This means misconfiguration crashes the plugin at boot rather than producing weird runtime behavior. Monitor your boot logs.

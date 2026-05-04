@@ -1,15 +1,20 @@
 // file: libs/sdk/src/common/entries/resource.entry.ts
 
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { AnyResourceRecord } from '../records';
-import { ResourceContext, ResourceInterface } from '../interfaces';
-import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
-import { ReadResourceResult, Request, Notification } from '@frontmcp/protocol';
-import { RequestHandlerExtra } from '@frontmcp/protocol';
-import { AuthInfo } from '@frontmcp/protocol';
-import { ProviderRegistryInterface } from '../interfaces/internal';
-import type { ResourceArgumentCompleter } from '../interfaces/resource.interface';
-import ProviderRegistry from '../../provider/provider.registry';
+import {
+  type AuthInfo,
+  type Notification,
+  type ReadResourceResult,
+  type Request,
+  type RequestHandlerExtra,
+} from '@frontmcp/protocol';
+
+import type ProviderRegistry from '../../provider/provider.registry';
+import { type ResourceContext, type ResourceInterface } from '../interfaces';
+import { type ProviderRegistryInterface } from '../interfaces/internal';
+import { type ResourceArgumentCompleter } from '../interfaces/resource.interface';
+import { type ResourceMetadata, type ResourceTemplateMetadata } from '../metadata';
+import { type AnyResourceRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;

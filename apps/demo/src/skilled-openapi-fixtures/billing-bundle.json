@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "demo:billing",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-04T12:00:00.000Z",
+  "sourceDigest": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "services": [
+    {
+      "id": "billing",
+      "baseUrl": "http://localhost:9876",
+      "description": "Mock billing REST API for the skilled-openapi demo"
+    }
+  ],
+  "authBindings": {
+    "default": { "kind": "bearer", "vaultRef": "demo-billing-token" }
+  },
+  "skills": [
+    {
+      "id": "invoices",
+      "name": "Invoices",
+      "description": "Issue, query, and refund invoices on the demo billing service.",
+      "instructions": "# Invoices skill\n\nThis skill exposes three operations on the demo billing API:\n\n- `createInvoice` — issue a new invoice for a customer\n- `getInvoice` — fetch one invoice by id\n- `refundInvoice` — issue a refund against an existing invoice\n\nALWAYS call `getInvoice` before `refundInvoice` to verify the invoice exists\nand isn't already refunded.\n",
+      "tags": ["billing", "demo"],
+      "operationIds": ["createInvoice", "getInvoice", "refundInvoice"]
+    }
+  ],
+  "operations": {
+    "createInvoice": {
+      "operationId": "createInvoice",
+      "serviceId": "billing",
+      "httpMethod": "POST",
+      "pathTemplate": "/v1/invoices",
+      "summary": "Create a new invoice for a customer",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customerId": { "type": "string" },
+          "amount": { "type": "number" }
+        },
+        "required": ["customerId", "amount"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      },
+      "mapper": [
+        { "inputKey": "customerId", "type": "body", "key": "customerId", "required": true },
+        { "inputKey": "amount", "type": "body", "key": "amount", "required": true }
+      ],
+      "authBindingRef": "default"
+    },
+    "getInvoice": {
+      "operationId": "getInvoice",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/invoices/{id}",
+      "summary": "Fetch an invoice by id",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "id": { "type": "string" } },
+        "required": ["id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" },
+          "amount": { "type": "number" }
+        }
+      },
+      "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
+      "authBindingRef": "default"
+    },
+    "refundInvoice": {
+      "operationId": "refundInvoice",
+      "serviceId": "billing",
+      "httpMethod": "POST",
+      "pathTemplate": "/v1/invoices/{id}/refunds",
+      "summary": "Issue a refund against an invoice",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "amount": { "type": "number" }
+        },
+        "required": ["id", "amount"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "refundId": { "type": "string" },
+          "invoiceId": { "type": "string" }
+        }
+      },
+      "mapper": [
+        { "inputKey": "id", "type": "path", "key": "id", "required": true },
+        { "inputKey": "amount", "type": "body", "key": "amount", "required": true }
+      ],
+      "authBindingRef": "default"
+    }
+  }
+}

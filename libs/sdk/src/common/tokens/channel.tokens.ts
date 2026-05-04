@@ -1,6 +1,6 @@
+import { type ChannelMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { ChannelMetadata } from '../metadata';
 
 export const FrontMcpChannelTokens = {
   type: tokenFactory.type('channel'),

@@ -7,29 +7,30 @@
  */
 
 import type { Type } from '@frontmcp/di';
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@frontmcp/protocol';
+import type { Prompt, Resource, ResourceTemplate, Tool } from '@frontmcp/protocol';
+
 import {
-  ToolKind,
-  ToolClassTokenRecord,
-  ToolMetadata,
-  ToolContext,
-  ResourceKind,
-  ResourceClassTokenRecord,
-  ResourceMetadata,
-  ResourceEntry,
-  ResourceTemplateKind,
-  ResourceTemplateClassTokenRecord,
-  ResourceTemplateMetadata,
   PromptKind,
-  PromptClassTokenRecord,
-  PromptMetadata,
-  PromptEntry,
+  ResourceKind,
+  ResourceTemplateKind,
+  ToolKind,
+  type PromptClassTokenRecord,
+  type PromptEntry,
+  type PromptMetadata,
+  type ResourceClassTokenRecord,
+  type ResourceEntry,
+  type ResourceMetadata,
+  type ResourceTemplateClassTokenRecord,
+  type ResourceTemplateMetadata,
+  type ToolClassTokenRecord,
+  type ToolContext,
+  type ToolMetadata,
 } from '../../common';
 import type { McpClientService } from '../mcp-client.service';
 import {
-  createRemoteToolContextClass,
-  createRemoteResourceContextClass,
   createRemotePromptContextClass,
+  createRemoteResourceContextClass,
+  createRemoteToolContextClass,
 } from './context-factories';
 
 /**

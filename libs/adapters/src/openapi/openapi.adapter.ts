@@ -1,21 +1,23 @@
-import { Adapter, DynamicAdapter, FrontMcpAdapterResponse, FrontMcpLogger } from '@frontmcp/sdk';
-import {
-  OpenApiAdapterOptions,
-  InputTransform,
-  ToolTransform,
-  ExtendedMcpOpenAPITool,
-  PreToolTransform,
-  PostToolTransform,
-  PreToolTransformContext,
-  JsonSchemaType,
-  SchemaTransformContext,
-  SchemaDescriptionContext,
-  SchemaTransformFn,
-} from './openapi.types';
-import { OpenAPIToolGenerator, McpOpenAPITool } from 'mcp-from-openapi';
-import { createOpenApiTool } from './openapi.tool';
-import { validateSecurityConfiguration } from './openapi.security';
+import { OpenAPIToolGenerator, type McpOpenAPITool } from 'mcp-from-openapi';
+
+import { Adapter, DynamicAdapter, type FrontMcpAdapterResponse, type FrontMcpLogger } from '@frontmcp/sdk';
+
 import { OpenApiSpecPoller } from './openapi-spec-poller';
+import { validateSecurityConfiguration } from './openapi.security';
+import { createOpenApiTool } from './openapi.tool';
+import {
+  type ExtendedMcpOpenAPITool,
+  type InputTransform,
+  type JsonSchemaType,
+  type OpenApiAdapterOptions,
+  type PostToolTransform,
+  type PreToolTransform,
+  type PreToolTransformContext,
+  type SchemaDescriptionContext,
+  type SchemaTransformContext,
+  type SchemaTransformFn,
+  type ToolTransform,
+} from './openapi.types';
 
 /** Reserved keys that cannot be used as inputKey (prototype pollution protection) */
 const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];

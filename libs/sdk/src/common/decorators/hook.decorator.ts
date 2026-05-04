@@ -5,7 +5,7 @@
  * Supports both legacy TypeScript decorators and TC39 Stage 3 decorators.
  */
 
-import { HookStageType, HookOptions, FlowName, HookMetadata } from '../metadata';
+import { type FlowName, type HookMetadata, type HookOptions, type HookStageType } from '../metadata';
 import { FrontMcpFlowHookTokens } from '../tokens';
 import { isTC39MethodContext, PendingMetadataRegistry, type TC39MethodContext } from './decorator-utils';
 

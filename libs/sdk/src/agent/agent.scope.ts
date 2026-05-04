@@ -1,31 +1,33 @@
 // file: libs/sdk/src/agent/agent.scope.ts
 
 import 'reflect-metadata';
-import { ProviderScope, Token, Type } from '@frontmcp/di';
+
+import { ProviderScope, type Token, type Type } from '@frontmcp/di';
+
+import AdapterRegistry from '../adapter/adapter.registry';
 import {
-  EntryOwnerRef,
-  FlowInputOf,
-  FlowName,
-  FlowOutputOf,
-  FlowType,
   FrontMcpLogger,
   ScopeEntry,
-  AgentMetadata,
+  type AgentMetadata,
+  type EntryOwnerRef,
+  type FlowInputOf,
+  type FlowName,
+  type FlowOutputOf,
+  type FlowType,
 } from '../common';
-import ProviderRegistry from '../provider/provider.registry';
+import { FlowExitedWithoutOutputError } from '../errors';
 import FlowRegistry from '../flows/flow.registry';
-import ToolRegistry from '../tool/tool.registry';
-import ResourceRegistry from '../resource/resource.registry';
-import PromptRegistry from '../prompt/prompt.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PluginRegistry from '../plugin/plugin.registry';
-import AdapterRegistry from '../adapter/adapter.registry';
-import AgentRegistry from './agent.registry';
-import CallToolFlow from '../tool/flows/call-tool.flow';
+import PromptRegistry from '../prompt/prompt.registry';
+import ProviderRegistry from '../provider/provider.registry';
+import ResourceRegistry from '../resource/resource.registry';
 import { Scope } from '../scope';
+import CallToolFlow from '../tool/flows/call-tool.flow';
 import { ToolInstance } from '../tool/tool.instance';
+import ToolRegistry from '../tool/tool.registry';
 import { normalizeTool } from '../tool/tool.utils';
-import { FlowExitedWithoutOutputError } from '../errors';
+import AgentRegistry from './agent.registry';
 
 /**
  * AgentScope provides an isolated, private scope for agent execution.

@@ -1,23 +1,24 @@
 // file: libs/sdk/src/skill/skill.utils.ts
 
-import { Token, Type, isClass, getMetadata, depsOfClass } from '@frontmcp/di';
+import { depsOfClass, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
+import { fileExists, readdir, readFile, stat } from '@frontmcp/utils';
+
 import {
-  SkillMetadata,
-  SkillKind,
-  SkillRecord,
-  SkillContext,
-  FrontMcpSkillTokens,
   extendedSkillMetadata,
-  SkillType,
+  FrontMcpSkillTokens,
   isFileInstructions,
-  isUrlInstructions,
   isInlineInstructions,
-  SkillInstructionSource,
+  isUrlInstructions,
   normalizeToolRef,
+  SkillKind,
+  type SkillContext,
+  type SkillInstructionSource,
+  type SkillMetadata,
+  type SkillRecord,
+  type SkillType,
 } from '../common';
-import { SkillContent, SkillReferenceInfo, SkillExampleInfo } from '../common/interfaces';
-import { readFile, readdir, fileExists, stat } from '@frontmcp/utils';
-import { InvalidSkillError, SkillInstructionFetchError, InvalidInstructionSourceError } from '../errors';
+import { type SkillContent, type SkillExampleInfo, type SkillReferenceInfo } from '../common/interfaces';
+import { InvalidInstructionSourceError, InvalidSkillError, SkillInstructionFetchError } from '../errors';
 import { stripFrontmatter } from './skill-md-parser';
 
 /**

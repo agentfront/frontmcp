@@ -1,5 +1,6 @@
-import { ListToolsRequestSchema, ListToolsRequest, ListToolsResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { ListToolsRequestSchema, type ListToolsRequest, type ListToolsResult } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function listToolsRequestHandler({
   scope,

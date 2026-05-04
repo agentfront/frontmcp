@@ -1,7 +1,7 @@
 // common/types/options/logging/interfaces.ts
 // Explicit TypeScript interfaces for logging configuration
 
-import { LogTransportType } from '../../../interfaces';
+import { type LogTransportType } from '../../../interfaces';
 
 /**
  * Log level enumeration.

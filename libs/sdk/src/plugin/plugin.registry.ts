@@ -1,29 +1,31 @@
 // plugin-registry.ts
 import 'reflect-metadata';
-import { Token, tokenName, Ctor } from '@frontmcp/di';
-import {
-  EntryOwnerRef,
-  PluginEntry,
-  PluginKind,
-  PluginRecord,
-  PluginRegistryInterface,
-  PluginType,
-  ProviderEntry,
-  ScopeEntry,
-} from '../common';
-import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
-import ProviderRegistry from '../provider/provider.registry';
+
+import { tokenName, type Ctor, type Token } from '@frontmcp/di';
+
 import AdapterRegistry from '../adapter/adapter.registry';
-import ToolRegistry from '../tool/tool.registry';
-import ResourceRegistry from '../resource/resource.registry';
-import PromptRegistry from '../prompt/prompt.registry';
-import SkillRegistry from '../skill/skill.registry';
-import { normalizeProvider } from '../provider/provider.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { InvalidPluginScopeError, RegistryDependencyNotRegisteredError, InvalidRegistryKindError } from '../errors';
+import {
+  FrontMcpLogger,
+  PluginKind,
+  type EntryOwnerRef,
+  type PluginEntry,
+  type PluginRecord,
+  type PluginRegistryInterface,
+  type PluginType,
+  type ProviderEntry,
+  type ScopeEntry,
+} from '../common';
 import { installContextExtensions } from '../context';
-import { FrontMcpLogger } from '../common';
+import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import PromptRegistry from '../prompt/prompt.registry';
+import ProviderRegistry from '../provider/provider.registry';
+import { normalizeProvider } from '../provider/provider.utils';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import ResourceRegistry from '../resource/resource.registry';
+import SkillRegistry from '../skill/skill.registry';
+import ToolRegistry from '../tool/tool.registry';
+import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 
 /**
  * Scope information for plugin hook registration.
@@ -201,7 +203,7 @@ export default class PluginRegistry
       const depsInstances = await Promise.all(depsTokens.map((t) => this.providers.resolveBootstrapDep(t)));
 
       let pluginInstance: PluginEntry;
-      /* eslint-disable @typescript-eslint/no-explicit-any -- plugin instantiation uses type-erased class/factory references */
+
       if (rec.kind === PluginKind.CLASS) {
         const klass = rec.useClass as any;
         pluginInstance = new klass(...depsInstances);
@@ -215,7 +217,6 @@ export default class PluginRegistry
         pluginInstance = rec.useFactory(...args);
       } else if (rec.kind === PluginKind.VALUE) {
         pluginInstance = (rec as any).useValue;
-        /* eslint-enable @typescript-eslint/no-explicit-any */
       } else {
         throw new InvalidRegistryKindError('plugin', (rec as { kind?: string }).kind);
       }
@@ -264,7 +265,7 @@ export default class PluginRegistry
         // Register hooks to the determined target scope
         await targetHookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bind() returns a generic function signature
+
       pluginInstance.get = providers.get.bind(providers) as any;
 
       // Install context extensions declared by the plugin

@@ -1,5 +1,6 @@
-import { GetPromptRequestSchema, GetPromptRequest, GetPromptResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { GetPromptRequestSchema, type GetPromptRequest, type GetPromptResult } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 export default function getPromptRequestHandler({
   scope,

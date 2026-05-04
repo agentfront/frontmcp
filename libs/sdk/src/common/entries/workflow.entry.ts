@@ -1,6 +1,6 @@
-import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { WorkflowRecord, WorkflowKind } from '../records';
-import { WorkflowMetadata, WorkflowStep } from '../metadata/workflow.metadata';
+import { type WorkflowMetadata, type WorkflowStep } from '../metadata/workflow.metadata';
+import { WorkflowKind, type WorkflowRecord } from '../records';
+import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 export abstract class WorkflowEntry extends BaseEntry<WorkflowRecord, unknown, WorkflowMetadata> {
   owner: EntryOwnerRef;

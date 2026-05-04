@@ -1,0 +1,109 @@
+{
+  "name": "plugin-skilled-openapi",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "plugins/plugin-skilled-openapi/src",
+  "projectType": "library",
+  "tags": ["scope:plugins", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "plugins/plugin-skilled-openapi/dist",
+        "main": "plugins/plugin-skilled-openapi/src/index.ts",
+        "tsConfig": "plugins/plugin-skilled-openapi/tsconfig.lib.json",
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "plugins/plugin-skilled-openapi/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": [
+          "plugins/plugin-skilled-openapi/README.md",
+          "LICENSE",
+          "plugins/plugin-skilled-openapi/package.json"
+        ],
+        "esbuildOptions": {
+          "outExtension": {
+            ".js": ".js"
+          },
+          "external": [
+            "@frontmcp/lazy-zod",
+            "@frontmcp/sdk",
+            "@frontmcp/protocol",
+            "@frontmcp/adapters",
+            "@frontmcp/auth",
+            "@frontmcp/utils",
+            "mcp-from-openapi",
+            "jose",
+            "zod",
+            "reflect-metadata"
+          ]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "plugins/plugin-skilled-openapi/dist/esm",
+        "main": "plugins/plugin-skilled-openapi/src/index.ts",
+        "tsConfig": "plugins/plugin-skilled-openapi/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "esbuildOptions": {
+          "outExtension": {
+            ".js": ".mjs"
+          },
+          "external": [
+            "@frontmcp/lazy-zod",
+            "@frontmcp/sdk",
+            "@frontmcp/protocol",
+            "@frontmcp/adapters",
+            "@frontmcp/auth",
+            "@frontmcp/utils",
+            "mcp-from-openapi",
+            "jose",
+            "zod",
+            "reflect-metadata"
+          ]
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs", "build-esm"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js plugins/plugin-skilled-openapi/dist/package.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/unit/plugin-skilled-openapi"],
+      "options": {
+        "jestConfig": "plugins/plugin-skilled-openapi/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish plugins/plugin-skilled-openapi/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

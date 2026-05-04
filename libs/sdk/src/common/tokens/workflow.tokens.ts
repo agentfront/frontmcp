@@ -1,6 +1,6 @@
+import { type WorkflowMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { WorkflowMetadata } from '../metadata';
 
 export const FrontMcpWorkflowTokens = {
   type: tokenFactory.type('workflow'),

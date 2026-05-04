@@ -20,16 +20,16 @@
  */
 
 import {
-  AgentLlmAdapter,
-  AgentPrompt,
-  AgentMessage,
-  AgentCompletion,
-  AgentCompletionChunk,
-  AgentToolCall,
-  AgentToolDefinition,
-  AgentCompletionOptions,
+  type AgentCompletion,
+  type AgentCompletionChunk,
+  type AgentCompletionOptions,
+  type AgentLlmAdapter,
+  type AgentMessage,
+  type AgentPrompt,
+  type AgentToolCall,
+  type AgentToolDefinition,
 } from '../../common';
-import { BaseLlmAdapter, BaseLlmAdapterConfig, LlmAdapterError } from './base.adapter';
+import { BaseLlmAdapter, LlmAdapterError, type BaseLlmAdapterConfig } from './base.adapter';
 
 // ============================================================================
 // Types for the Anthropic SDK (duck-typed to avoid import dependency)

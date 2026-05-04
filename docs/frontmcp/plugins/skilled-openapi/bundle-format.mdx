@@ -1,0 +1,164 @@
+---
+title: Bundle Format
+sidebarTitle: Bundle Format
+description: The wire format the plugin consumes — services, authBindings, skills, operations, signature envelope. OpenAPI Overlay-aligned.
+icon: file-code
+---
+
+A skill bundle is the contract between whatever produced it (your CI, a SaaS analyzer, a hand-crafted JSON file) and the FrontMCP server that consumes it. The plugin validates every bundle with a strict Zod schema and cross-references service IDs, authBinding refs, and operation IDs before any skill is registered.
+
+## Two equivalent shapes
+
+The plugin accepts either:
+
+1. **A bare bundle JSON** (the simplest form, used in the [Quick Start](/frontmcp/plugins/skilled-openapi/quickstart) and the e2e suite).
+2. **An OpenAPI Overlay** (per the OAI Overlay spec 1.0/1.1) carrying the bundle under `info["x-frontmcp-bundle"]` or at the overlay root under `x-frontmcp-bundle`.
+
+Both project to the same internal `ResolvedBundle`. The Overlay shape exists so customers can hand-author bundles in any OpenAPI tool, layered on top of an existing spec they already maintain.
+
+```yaml title="overlay.yaml"
+overlay: 1.0.0
+info:
+  x-frontmcp-bundle:
+    schemaVersion: 1
+    bundleId: acme:prod
+    version: 2026.05.01-1
+    # ... rest of the bundle below
+```
+
+## TypeScript shape
+
+```ts
+interface ResolvedBundle {
+  schemaVersion: 1;
+  bundleId: string;             // stable id (customer slug + env)
+  version: string;              // monotonic; clients use this to detect swaps
+  generatedAt: string;          // ISO 8601 UTC
+  sourceDigest: string;         // sha256 hex of the canonical OpenAPI source
+
+  services: ServiceDescriptor[];
+  authBindings: Record<string, AuthBinding>;
+  skills: BundledSkill[];
+  operations: Record<string, OperationDescriptor>;
+
+  integrity?: BundleIntegrity;  // mandatory in production (requireSignature: true)
+}
+```
+
+### `ServiceDescriptor`
+
+One entry per upstream microservice. The bundle can wrap several services into one MCP surface.
+
+```ts
+interface ServiceDescriptor {
+  id: string;            // alphanumeric / `-` / `_`
+  baseUrl: string;       // resolved server URL, no trailing slash
+  description?: string;
+}
+```
+
+### `AuthBinding`
+
+Reusable auth bindings, referenced by `OperationDescriptor.authBindingRef`. Credentials are resolved at execute time from the configured `CredentialResolver`.
+
+```ts
+type AuthBinding =
+  | { kind: 'none' }
+  | { kind: 'bearer'; vaultRef: string; passthroughCallerToken?: boolean }
+  | { kind: 'apiKey'; in: 'header' | 'query'; name: string; vaultRef: string }
+  | { kind: 'oauth2'; flow: 'client_credentials'; vaultRef: string };
+```
+
+`passthroughCallerToken: true` on a bearer binding tells the executor to forward the MCP client's JWT to the upstream API instead of resolving a vault credential. Useful for "the upstream is this customer's own service and trusts our caller's token directly."
+
+### `BundledSkill`
+
+The discoverable unit. Each skill bundles a curated set of operationIds and ships markdown instructions the LLM reads before invoking any action.
+
+```ts
+interface BundledSkill {
+  id: string;                                  // unique within the bundle
+  name: string;
+  description: string;
+  instructions: string;                        // markdown, surfaced by load_skill
+  tags?: string[];
+  operationIds: string[];                      // must exist in bundle.operations
+  requiredAuthorities?: AuthoritiesPolicy;     // optional skill-level ABAC
+}
+```
+
+`AuthoritiesPolicy` is the same shape `@frontmcp/auth` uses across the rest of FrontMCP — `roles`, `permissions`, `attributes`, `relationships`, `custom`, `operator`, `not`, `anyOf`, `allOf`. See the [authorities docs](/frontmcp/authentication/authorities) for the full grammar.
+
+### `OperationDescriptor`
+
+One descriptor per OpenAPI operation. The plugin executes these by projecting them onto the `McpOpenAPITool` shape and calling `@frontmcp/adapters/openapi`'s `buildRequest` — the executor doesn't reinvent path interpolation, header injection defenses, or body building.
+
+```ts
+interface OperationDescriptor {
+  operationId: string;
+  serviceId: string;                            // → ServiceDescriptor.id
+  httpMethod: 'GET'|'POST'|'PUT'|'PATCH'|'DELETE'|'HEAD';
+  pathTemplate: string;                         // e.g. "/v1/customers/{id}/invoices"
+  inputSchema: Record<string, unknown>;         // JSON Schema 2020-12
+  outputSchema: Record<string, unknown>;        // JSON Schema 2020-12
+  mapper: ParameterMapper[];                    // from mcp-from-openapi
+  authBindingRef: string;                       // → bundle.authBindings[ref]
+  requiredAuthorities?: AuthoritiesPolicy;      // optional per-op ABAC
+  maxResponseBytes?: number;                    // override default cap
+  timeoutMs?: number;                           // override default timeout
+  summary?: string;
+  description?: string;
+}
+```
+
+The `mapper` array is the structure `mcp-from-openapi` produces when parsing an OpenAPI spec — each entry maps an `inputKey` from the JSON Schema to a slot (`path` / `query` / `header` / `cookie` / `body`). The SaaS analyzer (or whatever produces your bundle) runs the parser once at CI time so the runtime plugin doesn't re-derive parameter locations.
+
+### `BundleIntegrity`
+
+Detached signature envelope, modeled on [OPA's signed-bundle pattern](https://www.openpolicyagent.org/docs/management-bundles).
+
+```ts
+interface BundleIntegrity {
+  alg: 'RS256' | 'EdDSA';
+  keyId: string;          // matched against trustedKeys[].keyId
+  signature: string;      // base64url
+  digest: string;         // sha256 hex of the canonical bundle bytes (excluding integrity)
+}
+```
+
+The plugin verifies (a) the digest matches a recomputed sha256 of the canonicalized bundle minus the `integrity` field, (b) the signature is valid for that digest under a trusted public key in `trustedKeys[]`. Any failure rejects the bundle and keeps the previous one — never partial apply.
+
+## Validation rules the plugin enforces
+
+Defense-in-depth, applied even after signature verification (CVE-2025-6514 lesson — treat every string as adversarial):
+
+- **Path templates**: must start with `/`, no whitespace, no `?`/`#`, no `..`, no shell metacharacters (`` ` `` / `$(` / `${`)
+- **Service / skill / operation ids**: alphanumeric + `-` / `_` (skill ids also allow `.`; operation ids also allow `.` / `:`)
+- **API key names**: must match RFC 7230 token grammar
+- **Source digest**: must be hex (sha256)
+- **Generated timestamp**: must be ISO 8601 parsable
+- **Cross-references**: every `OperationDescriptor.serviceId` must reference a known service, every `authBindingRef` must reference a known auth binding, every `BundledSkill.operationIds[]` entry must reference a known operation
+- **Skill ids**: must be unique within the bundle
+
+A bundle that fails any of these rejects with a structured error containing the offending JSON path, and the previous bundle stays active.
+
+## Worked example
+
+The full e2e fixture bundle lives at [`apps/e2e/demo-e2e-skilled-openapi/src/fixtures/billing-bundle.json`](https://github.com/agentfront/frontmcp/blob/main/apps/e2e/demo-e2e-skilled-openapi/src/fixtures/billing-bundle.json) — a single `invoices` skill bundling three operations against a `billing` service, plus a `guarded` skill demonstrating the ABAC denial path. Use it as a starting point and adapt to your API.
+
+## Multi-service bundles
+
+One bundle can wrap several microservices natively — declare each service in `services[]` and point each operation at its `serviceId`. The plugin's host allowlist for outbound HTTP is built from the union of `services[].baseUrl` hostnames in the active bundle, so a bundle that mixes `api.billing.acme.com` and `api.crm.acme.com` produces a two-host allowlist for the executor's SSRF gate.
+
+## What's NOT in v1.2.0
+
+| Feature | Status |
+| --- | --- |
+| Multipart / form-data request bodies | Not supported |
+| Server-sent events / streaming responses | Not supported |
+| WebSocket operations | Not supported |
+| OpenAPI `callbacks` and `links` | Not supported |
+| `oauth2` interactive flows (authorization_code, device_code) | Not supported (only `client_credentials`) |
+| HTTP/2 push | Not supported |
+
+These are the same caveats the underlying `mcp-from-openapi` parser carries; bundles that include them will fail validation.

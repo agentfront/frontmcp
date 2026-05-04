@@ -1,5 +1,5 @@
-import { FlowType } from '../interfaces';
-import { FlowMetadata } from '../metadata';
+import { type FlowType } from '../interfaces';
+import { type FlowMetadata } from '../metadata';
 
 export enum FlowKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

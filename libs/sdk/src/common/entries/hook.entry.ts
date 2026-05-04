@@ -1,9 +1,10 @@
-import { Token } from '@frontmcp/di';
-import { ScopeEntry } from './scope.entry';
-import { HookOptions, HookMetadata, FlowName } from '../metadata';
-import { HookRecord } from '../records';
-import { HookBase, ProviderRegistryInterface } from '../interfaces';
+import { type Token } from '@frontmcp/di';
+
+import { type HookBase, type ProviderRegistryInterface } from '../interfaces';
+import { type FlowName, type HookMetadata, type HookOptions } from '../metadata';
+import { type HookRecord } from '../records';
 import { BaseEntry } from './base.entry';
+import { type ScopeEntry } from './scope.entry';
 
 export abstract class HookEntry<
   In = any,

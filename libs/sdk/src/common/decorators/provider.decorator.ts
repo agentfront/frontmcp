@@ -1,6 +1,7 @@
 import 'reflect-metadata';
+
+import { frontMcpProviderMetadataSchema, type ProviderMetadata } from '../metadata';
 import { FrontMcpProviderTokens } from '../tokens';
-import { frontMcpProviderMetadataSchema, ProviderMetadata } from '../metadata';
 
 /**
  * Decorator that marks a class as a McpProvider module and provides metadata

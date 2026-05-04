@@ -1,6 +1,6 @@
-import { JobDynamicRecord } from '../../common/records/job.record';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobDynamicRecord } from '../../common/records/job.record';
 import { JobEnclaveBridge } from './job-enclave.bridge';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 
 /**
  * Executor for DYNAMIC jobs that run scripts in the enclave sandbox.

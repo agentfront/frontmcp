@@ -6,35 +6,37 @@
  * like local apps, but with lazy capability discovery and TTL-based caching.
  */
 
-import {
-  AdapterRegistryInterface,
-  AppEntry,
-  AppRecord,
-  PluginRegistryInterface,
-  ProviderRegistryInterface,
-  RemoteAppMetadata,
-  RemoteAuthConfig,
-  EntryOwnerRef,
-  PluginEntry,
-  AdapterEntry,
-  FrontMcpLogger,
-  SkillEntry,
-} from '../../common';
-import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import { idFromString } from '@frontmcp/utils';
-import ProviderRegistry from '../../provider/provider.registry';
-import ToolRegistry from '../../tool/tool.registry';
-import ResourceRegistry from '../../resource/resource.registry';
+
+import {
+  AppEntry,
+  type AdapterEntry,
+  type AdapterRegistryInterface,
+  type AppRecord,
+  type EntryOwnerRef,
+  type FrontMcpLogger,
+  type PluginEntry,
+  type PluginRegistryInterface,
+  type ProviderRegistryInterface,
+  type RemoteAppMetadata,
+  type RemoteAuthConfig,
+  type SkillEntry,
+} from '../../common';
+import { InternalMcpError } from '../../errors';
 import PromptRegistry from '../../prompt/prompt.registry';
+import type ProviderRegistry from '../../provider/provider.registry';
 import { McpClientService } from '../../remote-mcp';
 import { CapabilityCache } from '../../remote-mcp/cache';
 import {
-  createRemoteToolInstance,
+  createRemotePromptInstance,
   createRemoteResourceInstance,
   createRemoteResourceTemplateInstance,
-  createRemotePromptInstance,
+  createRemoteToolInstance,
 } from '../../remote-mcp/factories';
-import type { McpConnectRequest, McpTransportType, McpRemoteAuthConfig } from '../../remote-mcp/mcp-client.types';
+import type { McpConnectRequest, McpRemoteAuthConfig, McpTransportType } from '../../remote-mcp/mcp-client.types';
+import ResourceRegistry from '../../resource/resource.registry';
+import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import ToolRegistry from '../../tool/tool.registry';
 
 /**
  * Interface for scope with optional MCP client service cache.
@@ -120,6 +122,12 @@ class EmptySkillRegistry implements SkillRegistryInterface {
     return undefined;
   }
   hasExternalProvider() {
+    return false;
+  }
+  async registerSkillContent(): Promise<{ id: string; unregister: () => Promise<void> }> {
+    throw new InternalMcpError('registerSkillContent is not supported on remote apps', 'UNSUPPORTED_OPERATION');
+  }
+  async unregisterSkill(): Promise<boolean> {
     return false;
   }
 }

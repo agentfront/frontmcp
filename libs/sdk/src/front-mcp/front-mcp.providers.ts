@@ -1,9 +1,10 @@
 import { ProviderScope } from '@frontmcp/di';
-import { FrontMcpConfigType, FrontMcpServer, ProviderValueType, AsyncProvider } from '../common';
-import { FrontMcpServerInstance } from '../server/server.instance';
-import { NoopFrontMcpServer } from '../server/noop-server';
-import { FrontMcpConfig } from './front-mcp.tokens';
+
+import { AsyncProvider, FrontMcpServer, type FrontMcpConfigType, type ProviderValueType } from '../common';
 import { FrontMcpContextStorage } from '../context';
+import { NoopFrontMcpServer } from '../server/noop-server';
+import { FrontMcpServerInstance } from '../server/server.instance';
+import { FrontMcpConfig } from './front-mcp.tokens';
 
 const frontMcpConfig = {
   with: (metadata: FrontMcpConfigType): ProviderValueType<FrontMcpConfigType> => ({

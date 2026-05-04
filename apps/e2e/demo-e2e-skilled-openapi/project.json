@@ -1,0 +1,61 @@
+{
+  "name": "demo-e2e-skilled-openapi",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-skilled-openapi/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:skilled-openapi"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-skilled-openapi",
+        "main": "apps/e2e/demo-e2e-skilled-openapi/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-skilled-openapi/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-skilled-openapi/webpack.config.js",
+        "generatePackageJson": true,
+        "assets": [
+          {
+            "input": "apps/e2e/demo-e2e-skilled-openapi/src/fixtures",
+            "glob": "**/*",
+            "output": "fixtures"
+          }
+        ]
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-skilled-openapi/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-skilled-openapi"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-skilled-openapi/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-skilled-openapi-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-skilled-openapi/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

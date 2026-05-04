@@ -1,0 +1,94 @@
+// file: plugins/plugin-skilled-openapi/src/security/authority-guard.ts
+//
+// Adapter from the bundle's `requiredAuthorities` policy (a free-form
+// Record<string, unknown> at the SDK boundary) into libs/auth's
+// AuthoritiesEngine. The plugin owns the engine instance because it has its
+// own profile registry (none, in v1.2 — bundles ship inline policies).
+
+import {
+  AuthoritiesContextBuilder,
+  AuthoritiesEngine,
+  AuthoritiesEvaluatorRegistry,
+  AuthoritiesProfileRegistry,
+  type AuthoritiesEvaluationContext,
+  type AuthoritiesMetadata,
+  type AuthoritiesResult,
+} from '@frontmcp/auth';
+import type { FrontMcpLogger } from '@frontmcp/sdk';
+
+import type { AuthoritiesPolicy } from '../bundle/bundle.types';
+
+export interface AuthorityCheckArgs {
+  /** Required-authorities policy from the bundle (skill-level + op-level merged). */
+  policy: AuthoritiesPolicy | undefined;
+  /** Caller authInfo (from MCP request); shape matches libs/auth's AuthInfoLike. */
+  authInfo: Partial<{ user?: Record<string, unknown>; extra?: Record<string, unknown> }>;
+  /** Tool/action input that ABAC predicates may reference. */
+  input: Record<string, unknown>;
+  /** Optional environment vars that ABAC predicates may reference. */
+  env?: Record<string, unknown>;
+}
+
+/**
+ * Default permissive guard when no policy is attached. v1.2 ships fail-closed
+ * for hidden ops: skill-level policy missing AND op-level policy missing means
+ * grant — but the meta-tool layer always requires successful skill resolution
+ * and the bundle signature verifies origin trust.
+ */
+export class AuthorityGuard {
+  private readonly engine: AuthoritiesEngine;
+  private readonly contextBuilder: AuthoritiesContextBuilder;
+  private readonly logger: FrontMcpLogger | undefined;
+
+  constructor(
+    opts: {
+      profiles?: AuthoritiesProfileRegistry;
+      evaluators?: AuthoritiesEvaluatorRegistry;
+      logger?: FrontMcpLogger;
+    } = {},
+  ) {
+    const profiles = opts.profiles ?? new AuthoritiesProfileRegistry();
+    const evaluators = opts.evaluators ?? new AuthoritiesEvaluatorRegistry();
+    this.engine = new AuthoritiesEngine(profiles, evaluators);
+    this.contextBuilder = new AuthoritiesContextBuilder();
+    this.logger = opts.logger;
+  }
+
+  async check(args: AuthorityCheckArgs): Promise<AuthoritiesResult> {
+    const { policy, authInfo, input, env } = args;
+    if (policy === undefined) {
+      // No policy → grant (skill-level signed-bundle origin trust is the upstream gate).
+      return { granted: true, evaluatedPolicies: [] };
+    }
+    // execute_action documents a non-throwing contract — every authority
+    // failure must surface as { granted: false, deniedBy: ... }. A malformed
+    // policy or an unsupported authInfo shape can throw inside libs/auth's
+    // contextBuilder.build / engine.evaluate, so wrap both in try/catch and
+    // translate to the structured envelope.
+    try {
+      const ctx: AuthoritiesEvaluationContext = this.contextBuilder.build(authInfo, input, env);
+      return await this.engine.evaluate(policy as AuthoritiesMetadata, ctx);
+    } catch (e) {
+      const message = normalizeCaughtMessage(e);
+      this.logger?.error(`[skilled-openapi:authority] evaluation failed: ${message}`);
+      return {
+        granted: false,
+        deniedBy: 'authority_evaluation_failed',
+        message,
+        evaluatedPolicies: [],
+      };
+    }
+  }
+}
+
+// Render a caught value into a string without ever throwing — covers the
+// cases where libs/auth (or a buggy evaluator) throws null/undefined or a
+// non-Error whose `.message` getter explodes.
+function normalizeCaughtMessage(e: unknown): string {
+  if (e instanceof Error) return e.message || 'authority evaluation threw';
+  if (typeof e === 'string') return e;
+  if (e !== null && typeof e === 'object' && typeof (e as { message?: unknown }).message === 'string') {
+    return (e as { message: string }).message;
+  }
+  return String(e ?? 'authority evaluation threw');
+}

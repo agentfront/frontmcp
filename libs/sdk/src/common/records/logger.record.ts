@@ -1,6 +1,7 @@
-import { Type } from '@frontmcp/di';
-import { LogTransportInterface } from '../interfaces';
-import { LogTransportMetadata } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type LogTransportInterface } from '../interfaces';
+import { type LogTransportMetadata } from '../metadata';
 
 export enum LoggerKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

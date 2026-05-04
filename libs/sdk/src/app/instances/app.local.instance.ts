@@ -1,13 +1,14 @@
-import { AppEntry, AppRecord, FrontMcpLogger, LocalAppMetadata } from '../../common';
 import { idFromString } from '@frontmcp/utils';
-import ProviderRegistry from '../../provider/provider.registry';
-import ToolRegistry from '../../tool/tool.registry';
-import ResourceRegistry from '../../resource/resource.registry';
-import PromptRegistry from '../../prompt/prompt.registry';
+
 import AdapterRegistry from '../../adapter/adapter.registry';
-import PluginRegistry, { PluginScopeInfo } from '../../plugin/plugin.registry';
 import AgentRegistry from '../../agent/agent.registry';
+import { AppEntry, FrontMcpLogger, type AppRecord, type LocalAppMetadata } from '../../common';
+import PluginRegistry, { type PluginScopeInfo } from '../../plugin/plugin.registry';
+import PromptRegistry from '../../prompt/prompt.registry';
+import ProviderRegistry from '../../provider/provider.registry';
+import ResourceRegistry from '../../resource/resource.registry';
 import SkillRegistry from '../../skill/skill.registry';
+import ToolRegistry from '../../tool/tool.registry';
 
 export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   override readonly id: string;

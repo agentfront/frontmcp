@@ -1,6 +1,6 @@
-import { JobDefinitionStore } from './job-definition.interface';
+import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type JobDefinitionStore } from './job-definition.interface';
 import { MemoryJobDefinitionStore } from './memory-job-definition.store';
-import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 
 /* istanbul ignore next -- no-op fallback used only when caller omits logger */
 const noopFn = () => {};
@@ -60,7 +60,9 @@ export function createJobDefinitionStore(
             port: options.redis.port ?? 6379,
           });
       return {
-        store: new RedisJobDefinitionStore(client, effectiveLogger, keyPrefix),
+        // Factory-created client lifetime is bound to the store, so the store
+        // must close it on dispose() — pass ownsClient: true.
+        store: new RedisJobDefinitionStore(client, effectiveLogger, keyPrefix, { ownsClient: true }),
         type: 'redis',
       };
     } catch (err) {

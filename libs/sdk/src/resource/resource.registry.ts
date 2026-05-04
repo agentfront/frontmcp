@@ -1,38 +1,39 @@
 // file: libs/sdk/src/resource/resource.registry.ts
 
-import { Token, tokenName, getMetadata } from '@frontmcp/di';
+import { getMetadata, tokenName, type Token } from '@frontmcp/di';
+import type { ServerCapabilities } from '@frontmcp/protocol';
+import { ensureMaxLen, getRuntimeContext, isEntryAvailable, sepFor } from '@frontmcp/utils';
+
 import {
-  AppEntry,
-  EntryLineage,
-  EntryOwnerRef,
-  ResourceEntry,
-  ResourceRecord,
-  ResourceTemplateRecord,
-  ResourceType,
-  ScopeEntry,
+  type AppEntry,
+  type EntryLineage,
+  type EntryOwnerRef,
+  type ResourceEntry,
+  type ResourceRecord,
+  type ResourceTemplateRecord,
+  type ResourceType,
+  type ScopeEntry,
 } from '../common';
-import { ResourceChangeEvent, ResourceEmitter } from './resource.events';
-import ProviderRegistry from '../provider/provider.registry';
-import { ensureMaxLen, sepFor, getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
 import { logAvailabilityFiltering } from '../common/availability';
-import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
+import { EntryValidationError, NameDisambiguationError } from '../errors';
+import type ProviderRegistry from '../provider/provider.registry';
+import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-import {
-  normalizeResource,
-  normalizeResourceTemplate,
-  isResourceTemplate,
-  resourceDiscoveryDeps,
-} from './resource.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { ResourceInstance } from './resource.instance';
-import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } from './resource.types';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import ReadResourceFlow from './flows/read-resource.flow';
-import ResourcesListFlow from './flows/resources-list.flow';
 import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
+import ResourcesListFlow from './flows/resources-list.flow';
 import SubscribeResourceFlow from './flows/subscribe-resource.flow';
 import UnsubscribeResourceFlow from './flows/unsubscribe-resource.flow';
-import type { ServerCapabilities } from '@frontmcp/protocol';
-import { NameDisambiguationError, EntryValidationError } from '../errors';
+import { ResourceEmitter, type ResourceChangeEvent } from './resource.events';
+import { ResourceInstance } from './resource.instance';
+import { DEFAULT_RESOURCE_EXPORT_OPTS, type IndexedResource, type ResourceExportOptions } from './resource.types';
+import {
+  isResourceTemplate,
+  normalizeResource,
+  normalizeResourceTemplate,
+  resourceDiscoveryDeps,
+} from './resource.utils';
 
 export default class ResourceRegistry extends RegistryAbstract<
   ResourceInstance, // instances map holds ResourceInstance

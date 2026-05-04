@@ -1,12 +1,12 @@
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { extractToolNames } from '../../common/metadata/skill.metadata';
+import { PublicMcpError } from '../../errors';
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import {
   SkillsSearchRequestSchema,
   SkillsSearchResultSchema,
-  SkillsSearchRequest,
-  SkillsSearchResult,
+  type SkillsSearchRequest,
+  type SkillsSearchResult,
 } from './skills-mcp.types';
-import { extractToolNames } from '../../common/metadata/skill.metadata';
-import { PublicMcpError } from '../../errors';
 
 /**
  * MCP handler for skills/search custom method.

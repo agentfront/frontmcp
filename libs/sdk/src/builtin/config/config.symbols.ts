@@ -1,4 +1,4 @@
-import { Reference } from '../../common';
+import { type Reference } from '../../common';
 import type { ConfigPluginOptions } from './config.types';
 
 /**

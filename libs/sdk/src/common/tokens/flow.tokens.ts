@@ -1,5 +1,5 @@
-import { RawMetadataShape } from '../types';
-import { FlowMetadata } from '../metadata';
+import { type FlowMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
 
 export const FrontMcpFlowTokens = {

@@ -73,6 +73,22 @@ These plugins are maintained by the FrontMCP team and published as individual pa
     **Best for:** Expensive computations, API rate limiting, multi-tenant data, frequently accessed resources
 
   </Card>
+
+  <Card title="Skilled OpenAPI Plugin" icon="layer-group" href="/frontmcp/plugins/skilled-openapi/overview">
+    Wrap a customer's REST API as a curated set of MCP **skills** without rewriting any controllers. Per-operation
+    tools stay hidden behind three meta-tools (`search_skill`, `load_skill`, `execute_action`); signed bundles
+    ship from CI and hot-swap at runtime.
+
+    **Features:**
+    - OpenAPI Overlay-aligned bundle wire format (anticipates SEP-2076)
+    - Three sources: static / npm / saas-pull (with cache fallback)
+    - Bundle signing (RS256 / Ed25519, OPA-style JWT-of-hashes)
+    - Five-gate authorization: signature → RFC 8707 → ABAC → credential scoping → SSRF
+    - Reuses `@frontmcp/adapters/openapi` runtime — no duplicated HTTP path
+
+    **Best for:** Large APIs (50+ ops) where flat exposure breaks the agent, CI-driven schema delivery, customer-facing MCP servers
+
+  </Card>
 </CardGroup>
 
 <Note>More official plugins are coming soon! Rate limiting, observability, and validation plugins are in development.</Note>
@@ -218,12 +234,13 @@ When publishing a community plugin:
 
 Choose the right plugin for your use case:
 
-| Plugin       | Best For                  | Overhead | Scope        | Complexity  |
-| ------------ | ------------------------- | -------- | ------------ | ----------- |
-| **Remember** | Session memory, approvals | Low      | Per-session  | Low         |
-| **CodeCall** | Large toolsets, workflows | Low      | Cross-app    | Medium      |
-| **Cache**    | Expensive operations      | Minimal  | Per-tool     | Low         |
-| **Custom**   | Any cross-cutting feature | Varies   | Configurable | Medium-High |
+| Plugin               | Best For                                   | Overhead | Scope        | Complexity  |
+| -------------------- | ------------------------------------------ | -------- | ------------ | ----------- |
+| **Remember**         | Session memory, approvals                  | Low      | Per-session  | Low         |
+| **CodeCall**         | Large toolsets, workflows                  | Low      | Cross-app    | Medium      |
+| **Cache**            | Expensive operations                       | Minimal  | Per-tool     | Low         |
+| **Skilled OpenAPI**  | Customer REST APIs as curated MCP skills   | Medium   | Per-bundle   | Medium      |
+| **Custom**           | Any cross-cutting feature                  | Varies   | Configurable | Medium-High |
 
 ## Next Steps
 
@@ -236,6 +253,9 @@ Choose the right plugin for your use case:
   </Card>
   <Card title="Cache Plugin" icon="database" href="/frontmcp/plugins/cache-plugin">
     Learn how to use the Cache plugin
+  </Card>
+  <Card title="Skilled OpenAPI Plugin" icon="layer-group" href="/frontmcp/plugins/skilled-openapi/overview">
+    Wrap a customer's REST API as curated MCP skills with signed bundles
   </Card>
   <Card title="Join Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
     Get help and share your plugins

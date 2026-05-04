@@ -1,6 +1,6 @@
 // dynamic-adapter.ts
-import { Reference, FrontMcpAdapterResponse, AdapterType, AdapterInterface } from '../interfaces';
 import { DynamicAdapterNameError } from '../../errors';
+import { type AdapterInterface, type AdapterType, type FrontMcpAdapterResponse, type Reference } from '../interfaces';
 
 // keep your original options union; just add optional `providers`
 type InitOptions<T> =

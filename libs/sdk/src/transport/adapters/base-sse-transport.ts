@@ -1,15 +1,18 @@
-import { randomUUID } from '@frontmcp/utils';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import getRawBody from 'raw-body';
+import { type IncomingMessage, type ServerResponse } from 'node:http';
+
 import contentType from 'content-type';
+import getRawBody from 'raw-body';
+
 import {
-  Transport,
   JSONRPCMessageSchema,
-  type JSONRPCMessage,
-  type MessageExtraInfo,
   type AuthInfo,
+  type JSONRPCMessage,
   type RequestInfo as McpRequestInfo,
+  type MessageExtraInfo,
+  type Transport,
 } from '@frontmcp/protocol';
+import { randomUUID } from '@frontmcp/utils';
+
 import {
   TransportAlreadyStartedError,
   TransportNotConnectedError,
@@ -244,5 +247,15 @@ export class SSEServerTransport implements Transport {
    */
   get lastEventId(): number {
     return this._eventIdCounter;
+  }
+
+  /**
+   * Protected setter for the event ID counter, exposed so subclasses can
+   * restore counter state when recreating a session from persisted
+   * checkpoints (see RecreateableSSEServerTransport). Callers MUST validate
+   * the input is a non-negative integer before calling.
+   */
+  protected setEventIdCounter(eventId: number): void {
+    this._eventIdCounter = eventId;
   }
 }

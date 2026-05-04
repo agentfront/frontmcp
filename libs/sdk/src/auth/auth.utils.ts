@@ -1,13 +1,14 @@
 // auth/auth.utils.ts
-import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
+import { depsOfClass, getMetadata, isClass, tokenName, type Token } from '@frontmcp/di';
+
 import {
-  AuthProviderMetadata,
-  FrontMcpAuthProviderTokens,
-  AuthProviderType,
-  AuthProviderRecord,
   AuthProviderKind,
+  FrontMcpAuthProviderTokens,
+  type AuthProviderMetadata,
+  type AuthProviderRecord,
+  type AuthProviderType,
 } from '../common';
-import { MissingProvideError, InvalidUseClassError, InvalidUseFactoryError, InvalidEntityError } from '../errors';
+import { InvalidEntityError, InvalidUseClassError, InvalidUseFactoryError, MissingProvideError } from '../errors';
 
 export function collectAuthMetadata(cls: AuthProviderType): AuthProviderMetadata {
   return Object.entries(FrontMcpAuthProviderTokens).reduce((metadata, [key, token]) => {

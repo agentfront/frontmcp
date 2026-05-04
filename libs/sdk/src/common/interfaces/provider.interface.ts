@@ -1,5 +1,6 @@
-import { Type, Token, ValueType, ClassType, FactoryType, ClassToken } from '@frontmcp/di';
-import { ProviderMetadata } from '../metadata';
+import { type ClassToken, type ClassType, type FactoryType, type Token, type Type, type ValueType } from '@frontmcp/di';
+
+import { type ProviderMetadata } from '../metadata';
 
 export type ProviderClassType<Provide> = ClassType<Provide> & ProviderMetadata;
 export type ProviderValueType<Provide> = ValueType<Provide> & ProviderMetadata;

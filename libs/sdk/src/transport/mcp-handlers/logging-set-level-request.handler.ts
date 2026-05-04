@@ -1,5 +1,6 @@
-import { SetLevelRequestSchema, SetLevelRequest, EmptyResult } from '@frontmcp/protocol';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { SetLevelRequestSchema, type EmptyResult, type SetLevelRequest } from '@frontmcp/protocol';
+
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Handler for the logging/setLevel MCP request.

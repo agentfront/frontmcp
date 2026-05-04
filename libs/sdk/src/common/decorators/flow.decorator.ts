@@ -1,4 +1,4 @@
-import { FlowMetadata, FlowName, frontMcpFlowMetadataSchema } from '../metadata';
+import { frontMcpFlowMetadataSchema, type FlowMetadata, type FlowName } from '../metadata';
 import { FrontMcpFlowTokens } from '../tokens';
 
 /**

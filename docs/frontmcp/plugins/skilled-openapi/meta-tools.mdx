@@ -1,0 +1,128 @@
+---
+title: Meta-Tools
+sidebarTitle: Meta-Tools
+description: search_skill / load_skill / execute_action — the three tools the MCP client sees, and the prompts to give the LLM.
+icon: wrench
+---
+
+The plugin exposes exactly three tools through standard `tools/list`. Every per-operation OpenAPI tool is hidden behind these — `execute_action` is the **only** path to actually invoke an upstream operation, and it's the sole authorization checkpoint.
+
+## `search_skill`
+
+Search the registry by free-form query.
+
+```json title="input"
+{
+  "query": "create an invoice",
+  "limit": 20,
+  "tags": ["billing"]
+}
+```
+
+```json title="output"
+{
+  "skills": [
+    {
+      "skillId": "invoices",
+      "name": "Invoices",
+      "description": "Issue, query, and refund invoices.",
+      "score": 0.42,
+      "bundleVersion": "1.0.0"
+    }
+  ]
+}
+```
+
+The score comes from the SDK's `SkillRegistry.search()` (TF-IDF in v1.2.0). `bundleVersion` is included when the skill was registered from a bundle — polling clients can use it to detect bundle swaps without depending on `notifications/skills/list_changed`.
+
+## `load_skill`
+
+Load the full markdown instructions and the executable actions for one skill.
+
+```json title="input"
+{ "skillId": "invoices" }
+```
+
+```json title="output"
+{
+  "skill": {
+    "id": "invoices",
+    "name": "Invoices",
+    "description": "Issue, query, and refund invoices.",
+    "instructions": "# Invoices skill\n\nThree operations: createInvoice, getInvoice, refundInvoice.",
+    "bundleVersion": "1.0.0",
+    "actions": [
+      {
+        "actionId": "createInvoice",
+        "summary": "Create a new invoice",
+        "inputJsonSchema": { "type": "object", "properties": { "customerId": {}, "amount": {} }, "required": ["customerId","amount"] },
+        "outputJsonSchema": { "type": "object" }
+      }
+    ]
+  },
+  "isComplete": true
+}
+```
+
+The LLM should call `load_skill` once per skill it intends to use, then keep the action schemas in context. Schemas inside `actions[]` are the same schemas the OpenAPI spec declared; the executor validates input against them on every `execute_action`.
+
+Throws an MCP-protocol error when the `skillId` is unknown.
+
+## `execute_action`
+
+Invoke one action of a previously-loaded skill.
+
+```json title="input"
+{
+  "skillId": "invoices",
+  "actionId": "createInvoice",
+  "input": { "customerId": "cus_42", "amount": 1234 }
+}
+```
+
+```json title="output (success)"
+{
+  "ok": true,
+  "status": 201,
+  "contentType": "application/json",
+  "data": { "id": "inv_1", "status": "open" }
+}
+```
+
+```json title="output (failure)"
+{
+  "ok": false,
+  "status": 0,
+  "error": "authority denied: missing required role 'admin'"
+}
+```
+
+### Pipeline
+
+1. **Resolve** `(skillId, actionId)` from the plugin-private `HiddenOpRegistry`. Unknown action returns `ok: false` with `error: "unknown action ..."`.
+2. **Pin** the operation descriptor at call entry — a hot bundle-swap mid-call doesn't change the descriptor the in-flight call uses.
+3. **Authorize**: evaluate the action's `requiredAuthorities` (if any) against the caller's `authInfo` via `@frontmcp/auth`'s `AuthoritiesEngine`. Denial returns `ok: false` with `error: "authority denied: ..."`.
+4. **Build** the outbound HTTP request through `@frontmcp/adapters/openapi`'s `buildRequest` — path interpolation, header injection defenses, body serialization, security context resolution all flow through the adapter.
+5. **SSRF gate**: scheme allowlist (`https:` by default), hostname allowlist (built from the active bundle's `services[].baseUrl`), post-DNS IPv4/IPv6 blocklist (RFC 1918, link-local incl. cloud metadata, loopback, ULA), cloud-metadata hostname blocklist.
+6. **Fetch** with timeout (`op.timeoutMs ?? defaultTimeoutMs`) and response-size cap (`op.maxResponseBytes ?? defaultMaxResponseBytes`).
+7. **Parse** the response through `parseResponse` and return the structured envelope.
+
+`execute_action` **never throws** — every failure (auth, schema, network, SSRF) returns `ok: false` with a structured `error` string. This keeps the meta-tool surface predictable for the LLM.
+
+## Prompts to give the LLM
+
+The exact prompt depends on your agent harness, but these phrasings work well in practice (cribbed from the tool descriptions the plugin ships):
+
+- For `search_skill`: *"Use this tool first to discover what skills exist for the user's request."*
+- For `load_skill`: *"Call this tool once per skill you intend to use. The instructions field is markdown — read it carefully before invoking any action."*
+- For `execute_action`: *"This is the only way to invoke an upstream operation. The pipeline auto-validates input, applies authority checks, and returns a structured envelope. Failures are returned as `ok: false` with a reason — they don't throw."*
+
+## Skills-only mode
+
+If your FrontMCP server is configured with `skills_only` mode (set via `?mode=skills_only` on the MCP transport URL), the meta-tools stay visible — they're the only way to use skills, and the plugin treats them as exempt from the skills-only filter. See [Skills](/frontmcp/features/skills) for the skills-only contract.
+
+## What about hidden tools?
+
+The per-operation tools never appear in `tools/list`, are never registered in `scope.tools`, and are not addressable through `tools/call`. They live exclusively in the plugin's `HiddenOpRegistry`, which is **not** exposed as a DI provider — no other plugin or tool can resolve them directly. The only path to invoke them is `execute_action`, which is also where the ABAC checkpoint runs.
+
+This is the security guarantee: removing `execute_action`'s authority check requires removing `execute_action` itself.

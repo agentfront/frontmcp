@@ -1,16 +1,17 @@
-import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
+import { depsOfClass, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
 import { isValidMcpUri } from '@frontmcp/utils';
+
 import {
-  LocalAppMetadata,
-  FrontMcpLocalAppTokens,
-  AppType,
-  AppRecord,
   AppKind,
-  RemoteAppMetadata,
-  AppEntry,
+  FrontMcpLocalAppTokens,
+  type AppEntry,
+  type AppRecord,
+  type AppType,
+  type LocalAppMetadata,
+  type RemoteAppMetadata,
 } from '../common';
-import { AppLocalInstance } from './instances';
-import { MissingProvideError, InvalidEntityError } from '../errors';
+import { InvalidEntityError, MissingProvideError } from '../errors';
+import { type AppLocalInstance } from './instances';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {
   return Object.entries(FrontMcpLocalAppTokens).reduce((metadata, [key, token]) => {

@@ -7,9 +7,10 @@
  * The ESM module's functions are closed over via closure.
  */
 
-import { Type } from '@frontmcp/di';
-import { ToolContext, ToolInputType, ToolOutputType, ResourceContext, PromptContext } from '../../common';
-import type { CallToolResult, ReadResourceResult, GetPromptResult } from '@frontmcp/protocol';
+import { type Type } from '@frontmcp/di';
+import type { CallToolResult, GetPromptResult, ReadResourceResult } from '@frontmcp/protocol';
+
+import { PromptContext, ResourceContext, ToolContext, type ToolInputType, type ToolOutputType } from '../../common';
 
 /**
  * Handler type for ESM tool execution.

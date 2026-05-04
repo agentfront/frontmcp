@@ -1,6 +1,6 @@
+import { type PluginMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { PluginMetadata } from '../metadata';
 
 export const FrontMcpPluginTokens = {
   type: tokenFactory.type('plugin'),

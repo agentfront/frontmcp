@@ -1,4 +1,4 @@
-import { JobEntry } from '../common/entries/job.entry';
+import { type JobEntry } from '../common/entries/job.entry';
 
 export type JobChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 

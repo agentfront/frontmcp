@@ -1,8 +1,9 @@
 // file: libs/sdk/src/prompt/prompt.types.ts
 
-import { EntryLineage, PromptEntry, Token } from '../common';
-import PromptRegistry from './prompt.registry';
 import type { NameCase } from '@frontmcp/utils';
+
+import { type EntryLineage, type PromptEntry, type Token } from '../common';
+import type PromptRegistry from './prompt.registry';
 
 // Re-export NameCase as PromptNameCase for consistency
 export type PromptNameCase = NameCase;

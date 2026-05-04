@@ -1,0 +1,112 @@
+---
+title: Sources
+sidebarTitle: Sources
+description: Where bundles come from — static (filesystem), npm (pinned package), or saas-pull (HTTPS with JWT, polling, cache fallback).
+icon: cloud-arrow-down
+---
+
+The plugin loads bundles through a `SkillBundleSource` interface. Three implementations ship in v1.2.0; you choose by setting `source.type` in the plugin options.
+
+| Source | Refresh | Production-ready | Use when |
+| --- | --- | --- | --- |
+| `static` | `fs.watch` (optional) | ✅ for self-hosted | Bundle lives on the FrontMCP server's filesystem; you control deployments |
+| `npm` | Server redeploy only | ✅ | Bundle ships as an npm package pinned in your `package.json` |
+| `saas` | Boot pull + interval polling | ✅ when paired with signing | Bundle is produced by an external service (FrontMCP Cloud or your own analyzer) |
+
+## `static`
+
+Loads from a local filesystem path. Optional `watch: true` re-fetches on file change (debounced 250ms). Falls back to a 2-second poll if `fs.watch` rejects the file (some platforms reject watch on certain filesystems).
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: {
+    type: 'static',
+    path: path.resolve(__dirname, '../bundle.json'),
+    watch: true,
+  },
+  // ...
+})
+```
+
+Bundle file extensions:
+- `.json` → JSON
+- `.yaml` / `.yml` → YAML
+- anything else → format sniffed from the first non-whitespace byte
+
+## `npm`
+
+Loads from a published npm package's default (or named) export. Pinned by your `package.json` — updates require a server redeploy, which is intentional: the lower-blast-radius distribution mode.
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: {
+    type: 'npm',
+    packageName: '@acme/frontmcp-billing-bundle',
+    exportName: 'frontmcpBundle',  // optional; default is the package's default export
+    verifyProvenance: true,        // logs a warning until v1.2.x ships verification
+  },
+  // ...
+})
+```
+
+The package's exported value must conform to the `ResolvedBundle` shape; the plugin parses it through the same Zod validator the static source uses.
+
+<Note>
+  v1.2.0 honors `verifyProvenance: true` by emitting a startup warning when no GitHub artifact attestation / Sigstore provenance is found. Actual provenance verification ships in v1.2.x. Do not rely on this flag as your only supply-chain control yet — sign your bundles via the `integrity` envelope and pin the npm version.
+</Note>
+
+## `saas`
+
+Pulls bundles from a configured HTTPS endpoint with a pinned JWT. Boot pull is mandatory; interval polling refreshes; a last-good cached bundle on disk is the fallback if a fresh pull fails.
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: {
+    type: 'saas',
+    endpoint: 'https://cloud.frontmcp.dev/v1/bundles/acme-prod',
+    authToken: process.env.FRONTMCP_CLOUD_TOKEN!,
+    expectedAudience: 'acme:prod',                 // RFC 8707 aud claim must match
+    expectedIssuer: 'https://cloud.frontmcp.dev',
+    jwksUrl: 'https://cloud.frontmcp.dev/.well-known/jwks.json',
+    pollIntervalMs: 300_000,                       // 5 min default
+    enableWebhook: false,                          // v1.2.x — interval-only in v1.2.0
+  },
+  bundleCacheDir: '.frontmcp/skilled-openapi',     // last-good bundle persisted here
+  // ...
+})
+```
+
+### Boot semantics
+
+1. **Initial pull** runs synchronously when the plugin's `BundleSyncService` factory boots.
+2. If the pull **succeeds**, the bundle is persisted to `bundleCacheDir` and applied via the sync service.
+3. If the pull **fails** AND a cached bundle exists, the cache is loaded with a startup warning. The server stays healthy.
+4. If the pull fails AND no cache exists, the source throws — the plugin reports a startup error but does not kill the server.
+
+This prevents a SaaS outage at boot from killing every customer's MCP server. The trade-off is that a long-broken SaaS will leave the server serving an old bundle indefinitely; monitor `lastPullAt` from `/healthz` (planned in v1.2.x) and your own SaaS-side metrics.
+
+### Polling
+
+Default `pollIntervalMs: 300_000` (5 min). Overlapping polls are skipped via a single-flight gate — if a previous poll is still in flight when the next interval fires, the new poll is dropped (not queued).
+
+### Webhook channel
+
+`enableWebhook: true` declares intent but is a no-op in v1.2.0 — the plugin's HTTP route extension hook lands in v1.2.x. Until then, the plugin only refreshes via the configured `pollIntervalMs`.
+
+## Source-conflict policy
+
+If multiple sources somehow register the same `bundleId` (e.g. you wire both `static` and `saas` simultaneously), the plugin's `sourceConflictPolicy` controls resolution:
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: { /* ... */ },
+  sourceConflictPolicy: 'static-wins',  // default: locally pinned beats remote
+})
+```
+
+Values:
+- `'static-wins'` (default): static beats npm beats saas
+- `'last-wins'`: most recent apply wins (use with caution; race-prone)
+- `'reject'`: fail to apply when a conflict is detected
+
+In v1.2.0 the plugin only constructs **one** source instance from `options.source`, so this policy is documented for future use when multi-source configurations land.

@@ -8,8 +8,9 @@
  * This class extends our custom SSEServerTransport to expose a public API
  * for session recreation, maintaining the event ID sequence across reconnections.
  */
-import { SSEServerTransport, SSEServerTransportOptions } from './base-sse-transport';
 import type { ServerResponse } from 'http';
+
+import { SSEServerTransport, type SSEServerTransportOptions } from './base-sse-transport';
 
 export interface RecreateableSSEServerTransportOptions extends SSEServerTransportOptions {
   /**
@@ -74,7 +75,7 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
    *
    * @param eventId - The event ID to restore (must be a non-negative integer)
    */
-  setEventIdCounter(eventId: number): void {
+  override setEventIdCounter(eventId: number): void {
     // Security: Validate event ID to prevent invalid values
     if (!this.isValidEventId(eventId)) {
       console.warn(
@@ -82,10 +83,10 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
       );
       return;
     }
-    // Access internal MCP SDK property _eventIdCounter - may change between SDK versions.
-    // If this breaks after an SDK update, check SSEServerTransport internals.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (this as any)._eventIdCounter = eventId;
+    // Routes through the base class's protected setter instead of an `as any`
+    // cast — keeps the type system honest and survives upstream refactors of
+    // the private field.
+    super.setEventIdCounter(eventId);
   }
 
   /**
@@ -98,11 +99,11 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
   setSessionState(sessionId: string, lastEventId?: number): void {
     // Verify session ID matches (or set it if the transport allows)
     if (this.sessionId !== sessionId) {
-      // The session ID is set in constructor, so this should match
-      // If it doesn't, log a warning but continue
+      // Session IDs are credentials — log only a short prefix.
+      const redact = (id: string): string => `${id.slice(0, 8)}…`;
       console.warn(
         `RecreateableSSEServerTransport: session ID mismatch. ` +
-          `Expected ${sessionId}, got ${this.sessionId}. Using constructor value.`,
+          `Expected ${redact(this.sessionId)}, got ${redact(sessionId)}. Using constructor value.`,
       );
     }
 

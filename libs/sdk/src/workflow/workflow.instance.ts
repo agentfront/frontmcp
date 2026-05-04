@@ -1,10 +1,9 @@
-import { EntryOwnerRef } from '../common';
+import { type EntryOwnerRef, type ScopeEntry } from '../common';
 import { WorkflowEntry } from '../common/entries/workflow.entry';
-import { WorkflowMetadata } from '../common/metadata/workflow.metadata';
-import { WorkflowRecord } from '../common/records/workflow.record';
-import ProviderRegistry from '../provider/provider.registry';
-import { ScopeEntry } from '../common';
-import HookRegistry from '../hooks/hook.registry';
+import { type WorkflowMetadata } from '../common/metadata/workflow.metadata';
+import { type WorkflowRecord } from '../common/records/workflow.record';
+import type HookRegistry from '../hooks/hook.registry';
+import type ProviderRegistry from '../provider/provider.registry';
 
 /**
  * Concrete implementation of a workflow that can be executed.

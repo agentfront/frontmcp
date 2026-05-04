@@ -1,9 +1,8 @@
-import { Type } from '@frontmcp/di';
-import { ToolContext } from '../interfaces';
-import { ToolMetadata } from '../metadata';
-import type { ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
-import type { RemoteTransportOptions, RemoteAuthConfig } from '../metadata';
-import type { EsmOptions } from '../metadata';
+import { type Type } from '@frontmcp/di';
+
+import { type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
+import { type ToolContext } from '../interfaces';
+import { type EsmOptions, type RemoteAuthConfig, type RemoteTransportOptions, type ToolMetadata } from '../metadata';
 
 export enum ToolKind {
   CLASS_TOKEN = 'CLASS_TOKEN',

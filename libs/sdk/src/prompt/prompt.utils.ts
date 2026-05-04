@@ -1,16 +1,17 @@
 // file: libs/sdk/src/prompt/prompt.utils.ts
 
-import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
+import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
+import { type GetPromptResult, type PromptMessage } from '@frontmcp/protocol';
+
 import {
-  PromptMetadata,
-  FrontMcpPromptTokens,
-  PromptType,
-  PromptRecord,
-  PromptKind,
-  PromptEntry,
   extendedPromptMetadata,
+  FrontMcpPromptTokens,
+  PromptKind,
+  type PromptEntry,
+  type PromptMetadata,
+  type PromptRecord,
+  type PromptType,
 } from '../common';
-import { GetPromptResult, PromptMessage } from '@frontmcp/protocol';
 import { InvalidEntityError } from '../errors';
 
 /**

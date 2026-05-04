@@ -8,6 +8,10 @@ icon: puzzle-piece
 
 The OpenAPI Adapter automatically converts OpenAPI 3.x specifications into fully-functional MCP tools. Each API operation becomes a callable tool with built-in validation, authentication, and type safety.
 
+<Tip>
+  Wrapping a large API (50+ operations)? The flat-exposure model the adapter uses hits the well-documented "tool overload" wall — Claude reliability degrades past ~20 tools, GPT Actions caps at 30. Consider the [Skilled OpenAPI plugin](/frontmcp/plugins/skilled-openapi/overview) instead, which curates operations into named **skills** behind three meta-tools and supports CI-signed bundle delivery. See the [coexistence guide](/frontmcp/plugins/skilled-openapi/coexistence) for running both in the same server.
+</Tip>
+
 ## Why use it
 
 - **Zero boilerplate** — Turn REST APIs into MCP tools without writing glue code

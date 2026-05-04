@@ -1,4 +1,4 @@
-import { FrontMcpConfigType } from '../metadata';
+import { type FrontMcpConfigType } from '../metadata';
 
 export interface FrontMcpInterface {
   readonly config: FrontMcpConfigType;

@@ -1,18 +1,19 @@
 // file: libs/sdk/src/skill/providers/memory-skill.provider.ts
 
-import { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
-import { SkillContent } from '../../common/interfaces';
-import { SkillMetadata, SkillVisibility } from '../../common/metadata';
-import { SkillToolValidator, ToolValidationResult } from '../skill-validator';
+import { TFIDFVectoria, type DocumentMetadata } from 'vectoriadb';
+
+import { type SkillContent } from '../../common/interfaces';
+import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import {
-  SkillStorageProviderType,
-  SkillSearchOptions,
-  SkillSearchResult,
-  SkillLoadResult,
-  SkillListOptions,
-  SkillListResult,
-  MutableSkillStorageProvider,
+  type MutableSkillStorageProvider,
+  type SkillListOptions,
+  type SkillListResult,
+  type SkillLoadResult,
+  type SkillSearchOptions,
+  type SkillSearchResult,
+  type SkillStorageProviderType,
 } from '../skill-storage.interface';
+import { type SkillToolValidator, type ToolValidationResult } from '../skill-validator';
 
 /**
  * Stop words to filter from search queries and indexing.

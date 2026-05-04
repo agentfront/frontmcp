@@ -1,6 +1,6 @@
+import { type JobMetadata } from '../metadata';
+import { type RawMetadataShape } from '../types';
 import { tokenFactory } from './base.tokens';
-import { RawMetadataShape } from '../types';
-import { JobMetadata } from '../metadata';
 
 export const FrontMcpJobTokens = {
   type: tokenFactory.type('job'),
