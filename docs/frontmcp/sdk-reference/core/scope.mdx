@@ -53,7 +53,7 @@ get tools(): ToolRegistry
 
 ```typescript
 const tools = scope.tools.getTools();
-const tool = scope.tools.findByName('my_tool');
+const tool = scope.tools.getExported('my_tool');
 ```
 
 ### resources
@@ -161,6 +161,30 @@ Get the plugin registry (if configured).
 get plugins(): PluginRegistry | undefined
 ```
 
+### jobs
+
+Get the job registry (when `jobs.enabled` is set on the server).
+
+```typescript
+get jobs(): JobRegistry | undefined
+```
+
+### workflows
+
+Get the workflow registry (when `jobs.enabled` is set on the server).
+
+```typescript
+get workflows(): WorkflowRegistry | undefined
+```
+
+### channels
+
+Get the channel registry (when `channels.enabled` is set on the server).
+
+```typescript
+get channels(): ChannelRegistry | undefined
+```
+
 ## Service Accessors
 
 ### notifications
@@ -179,10 +203,10 @@ scope.notifications.on('tool-called', (event) => {
 
 ### elicitationStore
 
-Get the elicitation store.
+Get the elicitation store (if configured).
 
 ```typescript
-get elicitationStore(): ElicitationStore
+get elicitationStore(): ElicitationStore | undefined
 ```
 
 ### eventStore
@@ -191,6 +215,38 @@ Get the event store (if configured).
 
 ```typescript
 get eventStore(): EventStore | undefined
+```
+
+### tasks
+
+Get the task registry for MCP 2025-11-25 background tasks (if enabled).
+
+```typescript
+get tasks(): TaskRegistry | undefined
+```
+
+### taskStore
+
+Get the persistent task record store (if tasks are enabled).
+
+```typescript
+get taskStore(): TaskStore | undefined
+```
+
+### channelNotifications
+
+Get the channel notification service (if channels are enabled).
+
+```typescript
+get channelNotifications(): ChannelNotificationService | undefined
+```
+
+### channelEventBus
+
+Get the in-process channel event bus (if channels are enabled).
+
+```typescript
+get channelEventBus(): ChannelEventBus | undefined
 ```
 
 ### skillSession
@@ -337,15 +393,17 @@ scope.notifications.on('progress', (event) => {
 
 ### Skill Sessions
 
+`SkillSessionManager` runs inside an `AsyncLocalStorage` context — call `runWithSession(sessionId, fn)` first, then query session state from inside `fn`:
+
 ```typescript
 const scope = instance.getScopes()[0];
 
 if (scope.skillSession) {
-  // Get allowed tools for a session
-  const allowed = await scope.skillSession.getAllowedTools(sessionId);
-
-  // Check if tool is allowed
-  const canUse = await scope.skillSession.isToolAllowed(sessionId, 'my_tool');
+  await scope.skillSession.runWithSession(sessionId, async () => {
+    const allowlist = scope.skillSession!.getToolAllowlist();
+    const canUse = scope.skillSession!.isToolAllowed('my_tool');
+    const activeIds = scope.skillSession!.getActiveSkillIds();
+  });
 }
 ```
 

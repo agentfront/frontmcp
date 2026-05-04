@@ -56,9 +56,15 @@ this.logger.error('Error message');
 ### Authentication
 
 ```typescript
-const auth = this.requestContext.authInfo;
-const user = auth.user;
-const token = auth.accessToken;
+// Auth info from the request context (Partial<AuthInfo>)
+const authInfo = this.context.authInfo;       // throws if no request context
+const sessionId = authInfo.sessionId;
+const token = authInfo.token;
+
+// Or, the typed FrontMcpAuthContext (roles / permissions / claims):
+if (this.auth.hasRole('admin')) {
+  const tenantId = this.auth.claims['tenantId'];
+}
 ```
 
 ### Execution Tracking
@@ -131,7 +137,11 @@ class MyTool extends ToolContext {
 
 ## Request Context
 
-All contexts can access the underlying request context:
+Contexts that extend `ExecutionContextBase` (Tool, Resource, Agent, Skill,
+Job, Channel) can access the unified request context. `PromptContext` does
+NOT extend `ExecutionContextBase` and does not expose `this.context` or
+`this.fetch()` — it only carries `args`, `metadata`, `runId`, `authInfo`,
+`scope`, plus `get`/`tryGet` for DI.
 
 ```typescript
 // Get request context (throws if not available)
@@ -156,7 +166,8 @@ const elapsed = ctx.elapsed('checkpoint1');
 
 ## HTTP Fetch
 
-All contexts provide context-aware fetch:
+Contexts that extend `ExecutionContextBase` provide a context-aware `fetch()`
+(not available on `PromptContext`):
 
 ```typescript
 async execute(input) {
@@ -185,7 +196,10 @@ async execute(input) {
 
 ## Best Practices
 
-### Use Type Parameters
+### Let the Decorator Infer Types
+
+The `@Tool` decorator infers input/output types from the schema — extend
+`ToolContext` without generics and let TypeScript do the rest.
 
 ```typescript
 @Tool({
@@ -193,12 +207,7 @@ async execute(input) {
   inputSchema: { x: z.number() },
   outputSchema: z.object({ result: z.number() }),
 })
-class MyTool extends ToolContext<
-  typeof inputSchema,
-  typeof outputSchema,
-  { x: number },
-  { result: number }
-> {
+class MyTool extends ToolContext {
   async execute(input: { x: number }): Promise<{ result: number }> {
     return { result: input.x * 2 };
   }

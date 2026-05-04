@@ -566,7 +566,7 @@ import { supportsElicitation } from '@frontmcp/sdk';
 class ConditionalElicitTool extends ToolContext {
   async execute({ action }) {
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.requestContext.authInfo.sessionId
+      this.authInfo.sessionId
     );
 
     if (supportsElicitation(capabilities, 'form')) {
@@ -1119,7 +1119,7 @@ class TransferFundsTool extends ToolContext {
 ### OAuth Authorization (URL Mode)
 
 ```ts
-import { generateElicitationToken } from '@frontmcp/sdk';
+import { randomUUID } from '@frontmcp/utils';
 
 @Tool({
   name: 'connect-github',
@@ -1128,15 +1128,13 @@ import { generateElicitationToken } from '@frontmcp/sdk';
 })
 class ConnectGitHubTool extends ToolContext {
   async execute() {
-    // Generate secure token - sessionId is encrypted inside
-    const elicitationToken = await generateElicitationToken(
-      this.requestContext.authInfo.sessionId,
-      { ttl: 300000 } // 5 minute timeout
-    );
+    // Generate an opaque correlation id for the OAuth callback
+    const elicitationId = randomUUID();
 
-    // Store OAuth state (token already contains encrypted sessionId)
-    await this.get(OAuthStateStore).set(elicitationToken, {
+    // Server-side mapping from correlation id to session
+    await this.get(OAuthStateStore).set(elicitationId, {
       provider: 'github',
+      sessionId: this.authInfo.sessionId,
       startedAt: Date.now(),
     });
 
@@ -1149,7 +1147,7 @@ class ConnectGitHubTool extends ToolContext {
       }),
       {
         mode: 'url',
-        elicitationId: elicitationToken,
+        elicitationId,
         ttl: 300000,
       }
     );
@@ -1160,7 +1158,7 @@ class ConnectGitHubTool extends ToolContext {
 
     // Store the token and return success
     await this.get(TokenStore).save(
-      this.requestContext.authInfo.sessionId,
+      this.authInfo.sessionId,
       'github',
       result.content!.accessToken
     );
@@ -1175,7 +1173,7 @@ class ConnectGitHubTool extends ToolContext {
 ```
 
 <Info>
-The `generateElicitationToken()` creates an opaque token containing the encrypted session ID. When the OAuth callback returns, the token is automatically validated and decrypted—you never need to expose raw session IDs in URLs.
+The `elicitationId` is an opaque correlation handle. Map it to the session in your own server-side store so the OAuth callback can resolve the session without exposing raw session IDs in URLs.
 </Info>
 
 ### Graceful Fallback
@@ -1194,7 +1192,7 @@ class DeleteFileTool extends ToolContext {
     // Check if we should/can request confirmation
     const shouldConfirm = !skipConfirmation;
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.requestContext.authInfo.sessionId
+      this.authInfo.sessionId
     );
     const canElicit = supportsElicitation(capabilities, 'form');
 

@@ -51,18 +51,19 @@ The `@Prompt` decorator validates at compile time that the decorated class exten
 
 ### Required Properties
 
-| Property    | Type               | Description              |
-| ----------- | ------------------ | ------------------------ |
-| `name`      | `string`           | Unique prompt identifier |
-| `arguments` | `PromptArgument[]` | Prompt arguments         |
+| Property | Type     | Description              |
+| -------- | -------- | ------------------------ |
+| `name`   | `string` | Unique prompt identifier |
 
 ### Optional Properties
 
-| Property      | Type     | Description          |
-| ------------- | -------- | -------------------- |
-| `title`       | `string` | Human-readable title |
-| `description` | `string` | Prompt description   |
-| `icons`       | `Icon[]` | Icons for display    |
+| Property        | Type                 | Description                               |
+| --------------- | -------------------- | ----------------------------------------- |
+| `title`         | `string`             | Human-readable title                      |
+| `description`   | `string`             | Prompt description                        |
+| `arguments`     | `PromptArgument[]`   | Prompt argument definitions               |
+| `icons`         | `Icon[]`             | Icons for display                         |
+| `availableWhen` | `EntryAvailability`  | Environment availability constraint        |
 
 ### Argument Definition
 
@@ -210,7 +211,7 @@ async execute(args: Record<string, string>) {
   this.logger.info('Building prompt', { args });
 
   // Authentication
-  const auth = this.requestContext.authInfo;
+  const auth = this.authInfo;
 
   // Error handling
   if (!args.topic) {

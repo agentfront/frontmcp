@@ -458,10 +458,10 @@ export default class CrossAppPlugin {
   @ToolHook.Will('execute')
   async checkOtherApps(ctx: FlowCtxOf<'tools:call-tool'>) {
     // Access all registered apps
-    const apps = ctx.scope.apps.getAll();
+    const apps = ctx.scope.apps.getApps();
 
-    // Get a specific app by ID
-    const otherApp = ctx.scope.apps.get('other-app-id');
+    // Find a specific app by ID
+    const otherApp = apps.find((a) => a.id === 'other-app-id');
   }
 }
 ```

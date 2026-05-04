@@ -117,7 +117,10 @@ class DataResource extends ResourceContext {
 import { Agent, AgentContext } from '@frontmcp/sdk';
 import { AnalyticsService } from './analytics.service';
 
-@Agent({ name: 'analyst', llm: { provider: 'openai', model: 'gpt-4o' } })
+@Agent({
+  name: 'analyst',
+  llm: { provider: 'openai', model: 'gpt-4o', apiKey: { env: 'OPENAI_API_KEY' } },
+})
 class AnalystAgent extends AgentContext {
   async execute(input) {
     const analytics = this.get(AnalyticsService);

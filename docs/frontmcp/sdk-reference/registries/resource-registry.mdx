@@ -203,7 +203,10 @@ subscribe(
 
 ```typescript
 const unsubscribe = registry.subscribe({}, (event) => {
-  console.log(`Resource ${event.kind}:`, event.entry?.uri);
+  console.log(`Resource change: ${event.kind} (v${event.version})`);
+  if (event.updatedUri) {
+    console.log(`Updated URI: ${event.updatedUri}`);
+  }
 });
 
 // Later
@@ -251,6 +254,8 @@ interface ResourceChangeEvent {
   snapshot: ReadonlyArray<ResourceEntry>;
   sessionId?: string;
   relatedRequestId?: string;
+  /** URI of the specific resource whose content changed (for kind: 'updated') */
+  updatedUri?: string;
 }
 ```
 

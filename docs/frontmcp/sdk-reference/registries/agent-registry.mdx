@@ -156,7 +156,7 @@ subscribe(
 
 ```typescript
 const unsubscribe = registry.subscribe({}, (event) => {
-  console.log(`Agent ${event.kind}:`, event.entry?.id);
+  console.log(`Agent ${event.kind}:`, event.agentId);
 });
 
 // Later
@@ -207,12 +207,23 @@ dispose(): void
 
 ```typescript
 interface AgentChangeEvent {
-  kind: 'added' | 'updated' | 'removed' | 'reset';
-  changeScope: 'global' | 'session';
+  kind: 'added' | 'updated' | 'removed' | 'reset'
+      | 'execution_start' | 'execution_complete' | 'execution_error';
+  changeScope: 'global' | 'scope' | 'app' | 'plugin' | 'agent';
   version: number;
-  snapshot: ReadonlyArray<AgentEntry>;
-  sessionId?: string;
-  relatedRequestId?: string;
+  snapshot: readonly AgentInstance[];
+  /** ID of the affected agent (for single-agent events) */
+  agentId?: string;
+  agentFullName?: string;
+  owner?: { kind: AgentChangeScope; id: string };
+  timestamp?: number;
+  execution?: {
+    runId: string;
+    input?: unknown;
+    output?: unknown;
+    error?: Error;
+    durationMs?: number;
+  };
 }
 ```
 

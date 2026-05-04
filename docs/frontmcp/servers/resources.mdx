@@ -291,7 +291,8 @@ class DataResource extends ResourceContext {
     this.metadata;         // Resource metadata (name, uri, description, etc.)
 
     // Authentication
-    this.requestContext.authInfo;    // Auth context from MCP session
+    this.authInfo;         // Partial<AuthInfo> from MCP session
+    this.auth;             // FrontMcpAuthContext (typed identity helpers)
 
     // Dependency injection
     this.get(DbService);   // Resolve a provider

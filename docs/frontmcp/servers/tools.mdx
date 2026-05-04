@@ -430,8 +430,10 @@ class ContextExampleTool extends ToolContext {
     this.input;              // { query: 'value' }
     this.metadata;           // Tool metadata (name, description, etc.)
 
-    // Authentication (prefer this.requestContext.authInfo)
-    this.requestContext.authInfo;      // Auth context from MCP session
+    // Authentication
+    this.authInfo;           // Partial<AuthInfo> from MCP session
+    this.auth;               // FrontMcpAuthContext (typed identity, roles, claims)
+    this.context.authInfo;   // Same authInfo, sourced from FrontMcpContext
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider
@@ -478,7 +480,7 @@ class CreateUserTool extends ToolContext {
 
 ### Request Context
 
-Class-based tools have access to the full request context including tracing, timing, and authentication:
+Class-based tools have access to the full request context (`FrontMcpContext`) including tracing, timing, and authentication:
 
 ```ts
 @Tool({
@@ -488,16 +490,16 @@ Class-based tools have access to the full request context including tracing, tim
 class TracedTool extends ToolContext {
   async execute({ query }: { query: string }) {
     // Full request context
-    const ctx = this.requestContext;
+    const ctx = this.context;
 
     // Tracing (W3C Trace Context)
     console.log(ctx.requestId);                    // Unique request ID
     console.log(ctx.traceContext.traceId);         // W3C Trace ID
     console.log(ctx.traceContext.parentId);        // Parent span ID (if present)
 
-    // Authentication (prefer over this.requestContext.authInfo)
+    // Authentication
     console.log(ctx.authInfo.token);               // JWT token
-    console.log(ctx.authInfo.user);                // User info
+    // Typed identity helpers also available via this.auth (FrontMcpAuthContext)
 
     // Session
     console.log(ctx.sessionId);                    // MCP session ID
@@ -518,7 +520,7 @@ class TracedTool extends ToolContext {
 ```
 
 <Tip>
-  Use `this.requestContext.authInfo` instead of `this.requestContext.authInfo` for accessing authentication data.
+  `this.context` returns the active `FrontMcpContext`. For typed identity (roles, scopes, claims) prefer `this.auth`.
   See [Request Context](/frontmcp/extensibility/request-context) for complete API reference.
 </Tip>
 
@@ -702,7 +704,7 @@ class UpdateUserStatusTool extends ToolContext {
       previousStatus: user.status,
       newStatus: status,
       reason,
-      performedBy: this.requestContext.authInfo?.userId,
+      performedBy: this.authInfo?.userId,
     });
 
     return {

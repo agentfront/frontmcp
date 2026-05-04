@@ -91,11 +91,11 @@ test('using pre-built users', async ({ mcp, auth }) => {
 
 ### User Definitions
 
-| User       | `sub`           | Scopes               |
-| ---------- | --------------- | -------------------- |
-| `admin`    | `test-admin`    | `['*']` (all scopes) |
-| `user`     | `test-user`     | `['read', 'write']`  |
-| `readOnly` | `test-readonly` | `['read']`           |
+| User       | `sub`          | Scopes                                       |
+| ---------- | -------------- | -------------------------------------------- |
+| `admin`    | `admin-001`    | `['admin:*', 'read', 'write', 'delete']`     |
+| `user`     | `user-001`     | `['read', 'write']`                          |
+| `readOnly` | `readonly-001` | `['read']`                                   |
 
 ---
 
@@ -281,7 +281,7 @@ test.describe('Public Mode', () => {
 test.describe('Orchestrated Mode', () => {
   test.use({
     server: './src/main.ts',
-    auth: { mode: 'local' },
+    auth: { mode: 'orchestrated', type: 'local' },
   });
 
   test('requires authentication', async ({ mcp }) => {

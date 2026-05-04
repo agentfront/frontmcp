@@ -248,18 +248,24 @@ Handler mode is triggered by setting `FRONTMCP_SERVERLESS=1` in your entry point
 export default class Handler {}
 ```
 
-The build command generates a wrapper that sets the environment variable:
+The build emits a `serverless-setup.js` that sets `FRONTMCP_SERVERLESS=1` (loaded
+first) plus an `index.js` entry that requires your compiled module and exposes
+the handler. The Vercel and Lambda adapters compile to **CommonJS** and bundle
+to `handler.cjs` via rspack:
 
 ```javascript
-// Generated dist/index.js (simplified)
-process.env.FRONTMCP_SERVERLESS = '1';
-import './main.js';
-import { getServerlessHandlerAsync } from '@frontmcp/sdk';
+// Generated dist/index.js (Vercel — simplified)
+require('./serverless-setup.js'); // sets FRONTMCP_SERVERLESS=1
+require('./main.js');             // runs the @FrontMcp decorator
+const { getServerlessHandlerAsync } = require('@frontmcp/sdk');
 
-export default async function handler(req, res) {
-  const app = await getServerlessHandlerAsync();
+let handlerPromise = null;
+module.exports = async function handler(req, res) {
+  if (!handlerPromise) handlerPromise = getServerlessHandlerAsync();
+  const app = await handlerPromise;
   return app(req, res);
-}
+};
+module.exports.default = module.exports;
 ```
 
 ### Quick Start
@@ -322,12 +328,16 @@ Serverless environments require distributed storage. In-memory storage does not 
     })
     ```
   </Tab>
-  <Tab title="Upstash">
+  <Tab title="Upstash (REST)">
+    Upstash exposes a Vercel-KV-compatible REST API. Point the `vercel-kv`
+    provider at the Upstash REST URL/token to use it from any platform:
+
     ```typescript
     @FrontMcp({
       redis: {
-        provider: 'upstash',
-        // Uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from env
+        provider: 'vercel-kv',
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
       },
     })
     ```

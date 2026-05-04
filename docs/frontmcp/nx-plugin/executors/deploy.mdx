@@ -40,9 +40,9 @@ nx deploy production
 | Target       | What Happens                                         |
 | ------------ | ---------------------------------------------------- |
 | `node`       | Builds the Docker image and runs `docker compose up --build -d` |
-| `vercel`     | Runs `vercel deploy` using `vercel.json` config      |
-| `lambda`     | Runs `sam deploy` using `template.yaml` SAM template |
-| `cloudflare` | Runs `wrangler deploy` using `wrangler.toml` config  |
+| `vercel`     | Runs `npx vercel --prod` using `vercel.json` config  |
+| `lambda`     | Runs `sam build && sam deploy` using `template.yaml` SAM template |
+| `cloudflare` | Runs `npx wrangler deploy` using `wrangler.toml` config |
 
 ## Workflow
 

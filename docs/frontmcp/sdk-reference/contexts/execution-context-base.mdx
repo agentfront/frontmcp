@@ -8,12 +8,20 @@ icon: "code"
 
 ```typescript
 export abstract class ExecutionContextBase<Out = unknown> {
-  readonly runId: string;
-  activeStage: string;
+  /** Unique identifier for this execution run (UUID) */
+  protected readonly runId: string;
+  /** Current execution stage marker (default: 'init') */
+  protected activeStage: string;
+  /** Scoped logger instance */
   protected readonly logger: FrontMcpLogger;
-  protected readonly providers: ProviderRegistryInterface;
 }
 ```
+
+<Note>
+`runId`, `activeStage`, and `logger` are `protected` — accessible inside
+subclasses but not from outside. The provider registry is private; use
+`get(token)` / `tryGet(token)` to resolve dependencies.
+</Note>
 
 ## Constructor
 
@@ -25,7 +33,7 @@ type ExecutionContextBaseArgs = {
 };
 ```
 
-## Properties
+## Properties (protected — visible to subclasses)
 
 | Property      | Type             | Description                                 |
 | ------------- | ---------------- | ------------------------------------------- |
@@ -129,10 +137,16 @@ getAuthInfo(): Partial<AuthInfo>
 ```
 
 ```typescript
-const auth = this.getAuthInfo();
-const user = auth.user;
-const token = auth.accessToken;
-const scopes = auth.scopes;
+// Returns Partial<AuthInfo> — bearer token, scopes, expiry, etc.
+const authInfo = this.getAuthInfo();
+const token = authInfo.token;
+const scopes = authInfo.scopes;
+const sessionId = authInfo.sessionId;
+
+// For role/permission/scope checks, prefer the typed FrontMcpAuthContext:
+if (this.auth.hasRole('admin')) {
+  const tenantId = this.auth.claims['tenantId'];
+}
 ```
 
 ### Execution Tracking

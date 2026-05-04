@@ -74,12 +74,13 @@ class BadTool extends ToolContext {
 | `rateLimit`      | `RateLimitConfig`           | Per-tool rate limit (`maxRequests`, `windowMs`, `partitionBy`)                     |
 | `concurrency`    | `ConcurrencyConfig`         | Per-tool concurrency cap (`maxConcurrent`, optional queue config)                  |
 | `timeout`        | `TimeoutConfig`             | Per-tool execution timeout (`executeMs`)                                           |
-| `availableWhen`  | `EnvironmentMatcher`        | Restrict discovery to specific platforms/runtimes/deployments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
-| `execution`      | `ExecutionOptions`          | Execution-level options (queueing, retry behavior)                                 |
-| `authProviders`  | `AuthProviderMapping[]`     | Required auth providers for this tool                                              |
-| `annotations`    | `ToolAnnotations`           | MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)   |
-| `examples`       | `ToolExample[]`             | Usage examples surfaced through `codecall:describe`                                |
-| `ui`             | `ToolUiConfig`              | UI widget configuration (template, displayMode, servingMode)                       |
+| `availableWhen`  | `EntryAvailability`         | Restrict discovery to specific platforms/runtimes/deployments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
+| `execution`      | `{ taskSupport?: 'required' \| 'optional' \| 'forbidden' }` | MCP 2025-11-25 task-execution mode for `tools/list` items |
+| `authProviders`  | `ToolAuthProviderRef[]`     | Required auth providers for this tool (string name or `{ name, required?, scopes?, alias? }`) |
+| `annotations`    | `ToolAnnotations`           | MCP hints (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) |
+| `examples`       | `ToolExample[]`             | Usage examples (`description`, `input`, optional `output`)                          |
+| `ui`             | `ToolUIConfig`              | UI widget configuration (`template`, `csp`, sanitization options)                   |
+| `hideFromDiscovery` | `boolean`                | Deprecated alias for `visibility: 'hidden'`                                         |
 
 ### Output Types
 
@@ -164,6 +165,7 @@ class SensitiveTool extends ToolContext {
   inputSchema: { query: z.string(), limit: z.number().optional() },
   examples: [
     {
+      description: 'Search for users named "john"',
       input: { query: 'john', limit: 10 },
       output: { users: [{ id: '1', name: 'John Doe' }], total: 1 },
     },
@@ -173,16 +175,19 @@ class SensitiveTool extends ToolContext {
 
 ### UI Configuration
 
+The `ui.template` field accepts a builder function, an HTML/MDX string, a React component, or a `FileSource` (for client-side transpilation):
+
 ```typescript
 @Tool({
   name: 'user_profile',
   inputSchema: { userId: z.string() },
   ui: {
-    widget: 'user-card',
-    template: 'react',
+    template: (ctx) => `<div>User ${ctx.input.userId}</div>`,
   },
 })
 ```
+
+See the [Tool UI guide](/frontmcp/servers/tools#tool-ui) for the full `ToolUIConfig` shape (CSP, sanitization, helpers, etc.).
 
 ## Function-Based Alternative
 
@@ -339,7 +344,11 @@ const outputSchema = z.object({
     idempotentHint: true,
   },
   examples: [
-    { input: { operation: 'add', a: 2, b: 3 }, output: { result: 5, operation: 'add' } },
+    {
+      description: 'Add two numbers',
+      input: { operation: 'add', a: 2, b: 3 },
+      output: { result: 5, operation: 'add' },
+    },
   ],
 })
 class CalculateTool extends ToolContext {

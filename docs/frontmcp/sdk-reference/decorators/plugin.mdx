@@ -60,15 +60,16 @@ function Plugin(providedMetadata: PluginMetadata): ClassDecorator
 
 ### Components
 
-| Property    | Type             | Description        |
-| ----------- | ---------------- | ------------------ |
-| `providers` | `ProviderType[]` | Plugin providers   |
-| `tools`     | `ToolType[]`     | Plugin tools       |
-| `resources` | `ResourceType[]` | Plugin resources   |
-| `prompts`   | `PromptType[]`   | Plugin prompts     |
-| `skills`    | `SkillType[]`    | Plugin skills      |
-| `adapters`  | `AdapterType[]`  | Framework adapters |
-| `plugins`   | `PluginType[]`   | Nested plugins     |
+| Property    | Type             | Description                                                            |
+| ----------- | ---------------- | ---------------------------------------------------------------------- |
+| `providers` | `ProviderType[]` | Plugin-scoped providers                                                |
+| `exports`   | `ProviderType[]` | Providers re-exported to the host app or other plugins                 |
+| `tools`     | `ToolType[]`     | Plugin tools                                                           |
+| `resources` | `ResourceType[]` | Plugin resources                                                       |
+| `prompts`   | `PromptType[]`   | Plugin prompts                                                         |
+| `skills`    | `SkillType[]`    | Plugin skills                                                          |
+| `adapters`  | `AdapterType[]`  | Framework adapters                                                     |
+| `plugins`   | `PluginType[]`   | Nested plugins                                                         |
 
 ### Extensions
 

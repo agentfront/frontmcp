@@ -122,8 +122,16 @@ export default class MyApiApp {}
   Customize generated tools with annotations, tags, descriptions, and more. Supports global, per-tool, and generator-based transforms. See [Tool Transforms](#tool-transforms).
 </ParamField>
 
-<ParamField path="outputTransforms" type="OutputTransformOptions">
-  Transform output schemas and response data. Supports built-in modes (move schema to description) and custom transforms at both pre-tool (schema) and post-tool (response) levels. See [Output Transforms](#output-transforms).
+<ParamField path="schemaTransforms" type="SchemaTransformOptions">
+  Modify input/output schema definitions at fetch() time. Use `schemaTransforms.input` and `schemaTransforms.output` for global, per-tool, or generator-based transforms.
+</ParamField>
+
+<ParamField path="outputSchema" type="OutputSchemaOptions">
+  Control where and how output schema is exposed: `mode` (`'definition' | 'description' | 'both'`), `descriptionFormat` (`'jsonSchema' | 'summary'`), and a custom `descriptionFormatter`.
+</ParamField>
+
+<ParamField path="dataTransforms" type="DataTransformOptions">
+  Transform tool definitions and API response data. Supports `preToolTransforms` (schema-level) and `postToolTransforms` (response-level), each with global, per-tool, and generator forms. See [Data Transforms](#data-transforms).
 </ParamField>
 
 <ParamField path="polling" type="SpecPollerOptions & { enabled: boolean }">
@@ -359,27 +367,32 @@ OpenapiAdapter.init({
 
 ### Input Schema Transformation
 
-Customize the input schema for generated tools.
+Customize the input schema definition for generated tools using `schemaTransforms.input`:
 
 ```ts
 OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  generateOptions: {
-    inputSchemaMapper: (schema) => {
-      // Remove sensitive fields from the input schema
-      if (schema.properties?.password) {
-        delete schema.properties.password;
-      }
+  schemaTransforms: {
+    input: {
+      global: (schema) => {
+        // Remove sensitive fields from the input schema
+        if (schema.properties?.password) {
+          delete schema.properties.password;
+        }
 
-      // Add custom fields
-      schema.properties.customField = {
-        type: 'string',
-        description: 'Custom field added by mapper',
-      };
+        // Add custom fields
+        schema.properties = {
+          ...schema.properties,
+          customField: {
+            type: 'string',
+            description: 'Custom field added by transform',
+          },
+        };
 
-      return schema;
+        return schema;
+      },
     },
   },
 });
@@ -387,7 +400,7 @@ OpenapiAdapter.init({
 
 ### Input Schema Transforms
 
-Hide inputs from AI/users and inject values server-side at request time. This is more powerful than `inputSchemaMapper` as it provides access to the authentication context.
+Hide inputs from AI/users and inject values server-side at request time. This is more powerful than `schemaTransforms.input` because it provides access to the authentication context.
 
 <CodeGroup>
 
@@ -399,7 +412,8 @@ OpenapiAdapter.init({
   inputTransforms: {
     global: [
       // Hide tenant header from AI, inject from user context
-      { inputKey: 'X-Tenant-Id', inject: (ctx) => ctx.authInfo.user?.tenantId },
+      // The injector receives { ctx, env, tool } — destructure ctx for FrontMcpContext
+      { inputKey: 'X-Tenant-Id', inject: ({ ctx }) => ctx.authInfo.user?.tenantId },
       // Add correlation ID to all requests
       { inputKey: 'X-Correlation-Id', inject: () => crypto.randomUUID() },
     ],
@@ -415,7 +429,7 @@ OpenapiAdapter.init({
   inputTransforms: {
     perTool: {
       'createAuditLog': [
-        { inputKey: 'userId', inject: (ctx) => ctx.authInfo.user?.id },
+        { inputKey: 'userId', inject: ({ ctx }) => ctx.authInfo.user?.id },
         { inputKey: 'timestamp', inject: () => new Date().toISOString() },
       ],
     },
@@ -519,56 +533,54 @@ OpenapiAdapter.init({
 | `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
 | `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
 
-### Output Transforms
+### Output Schema Display
 
-Transform output schemas and response data before tools are finalized. This feature provides built-in modes for common patterns plus custom callbacks for full flexibility.
-
-#### Output Schema Description Modes
-
-Control how output schemas appear in tool definitions with built-in modes:
+Control how output schemas appear in tool definitions via the `outputSchema` option:
 
 ```ts
 OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
-    outputSchemaDescriptionMode: 'summary', // or 'jsonSchema', 'compact', 'none'
+  outputSchema: {
+    mode: 'description',           // 'definition' | 'description' | 'both'
+    descriptionFormat: 'summary',  // 'jsonSchema' | 'summary'
   },
 });
 ```
 
-| Mode           | Description                                                                              |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| `'none'`       | No modification (default)                                                                |
-| `'jsonSchema'` | Append full JSON Schema to description                                                   |
-| `'summary'`    | Append human-readable summary (e.g., "Returns: object with status, data, items (array)") |
-| `'compact'`    | Append one-line type summary (e.g., "Returns: \{ status: number, data: object \}")       |
+| Field | Type | Description |
+| --- | --- | --- |
+| `mode` | `'definition' \| 'description' \| 'both'` | Where to expose the schema. Default: `'definition'`. |
+| `descriptionFormat` | `'jsonSchema' \| 'summary'` | Format used when schema appears in description. Default: `'summary'`. |
+| `descriptionFormatter` | `(schema, ctx) => string \| Promise<string>` | Custom formatter (sync or async, e.g., LLM-generated). |
 
 #### Custom Schema Formatter
 
-Provide your own formatter for `summary` and `compact` modes:
+Provide your own formatter (can be async to support LLM-based generation):
 
 ```ts
 OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
-    outputSchemaDescriptionMode: 'summary',
-    formatOutputSchema: (schema, mode) => {
-      if (mode === 'summary') {
-        return `Response: ${JSON.stringify(schema.properties || {})}`;
-      }
-      return `Type: ${schema.type || 'unknown'}`;
+  outputSchema: {
+    mode: 'description',
+    descriptionFormatter: async (schema, ctx) => {
+      // ctx.tool, ctx.adapterOptions, ctx.originalDescription available
+      return `Response: ${JSON.stringify(schema.properties || {})}`;
     },
   },
 });
 ```
 
+### Data Transforms
+
+Transform tool definitions and API response data via `dataTransforms`:
+
 #### Pre-Tool Transforms (Schema Level)
 
-Modify output schemas and descriptions before tools are created:
+Modify schemas and descriptions before tools are wrapped — applied during `fetch()` to `McpOpenAPITool` definitions:
 
 <CodeGroup>
 
@@ -577,14 +589,12 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       global: {
-        // Remove output schema from all tools
-        transformSchema: () => undefined,
-        // Add schema info to description
-        transformDescription: (desc, schema) =>
-          schema ? `${desc}\n\nReturns: ${JSON.stringify(schema)}` : desc,
+        transformSchema: (outputSchema, ctx) => undefined, // remove from all
+        transformDescription: (desc, outputSchema, ctx) =>
+          outputSchema ? `${desc}\n\nReturns: ${JSON.stringify(outputSchema)}` : desc,
       },
     },
   },
@@ -596,17 +606,14 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       perTool: {
-        'listUsers': {
+        listUsers: {
           transformDescription: (desc) => `${desc}\n\nPaginated list of users.`,
         },
-        'getUser': {
-          transformSchema: (schema) => ({
-            ...schema,
-            description: 'User object with profile data',
-          }),
+        getUser: {
+          transformSchema: (schema) => schema && { ...schema, description: 'User object with profile data' },
         },
       },
     },
@@ -619,10 +626,9 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
+  dataTransforms: {
     preToolTransforms: {
       generator: (tool) => {
-        // Remove output schema from all GET operations
         if (tool.metadata.method === 'get') {
           return {
             transformSchema: () => undefined,
@@ -650,13 +656,10 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
+  dataTransforms: {
     postToolTransforms: {
       global: {
-        transform: (data) => {
-          // Add metadata to all responses
-          return { ...data, _transformedAt: new Date().toISOString() };
-        },
+        transform: (data) => ({ ...(data as object), _transformedAt: new Date().toISOString() }),
       },
     },
   },
@@ -668,17 +671,15 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
+  dataTransforms: {
     postToolTransforms: {
       perTool: {
-        'listUsers': {
-          // Extract users array from response
+        listUsers: {
           transform: (data) => (data as any)?.users ?? data,
         },
-        'getUser': {
-          // Add computed fields
+        getUser: {
           transform: (data) => ({
-            ...data,
+            ...(data as any),
             fullName: `${(data as any)?.firstName} ${(data as any)?.lastName}`,
           }),
         },
@@ -693,10 +694,9 @@ OpenapiAdapter.init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  outputTransforms: {
+  dataTransforms: {
     postToolTransforms: {
       global: {
-        // Only transform successful responses
         filter: (ctx) => ctx.ok && ctx.status === 200,
         transform: (data) => ({ result: data }),
       },

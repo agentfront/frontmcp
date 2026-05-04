@@ -32,6 +32,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ```
     servers/production/
     ├── src/main.ts              # Entry point composing apps
+    ├── skills/                  # Skills bundle (unless --skills none)
     ├── Dockerfile               # Multi-stage Docker build
     ├── docker-compose.yml       # Docker Compose (+ Redis if selected)
     ├── .dockerignore
@@ -44,6 +45,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ```
     servers/production/
     ├── src/main.ts
+    ├── skills/                  # Skills bundle (unless --skills none)
     ├── vercel.json              # Vercel deployment config
     ├── project.json
     ├── tsconfig.json
@@ -54,6 +56,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ```
     servers/production/
     ├── src/main.ts
+    ├── skills/                  # Skills bundle (unless --skills none)
     ├── template.yaml            # AWS SAM template
     ├── project.json
     ├── tsconfig.json
@@ -64,6 +67,7 @@ nx g @frontmcp/nx:server production --apps crm,analytics
     ```
     servers/production/
     ├── src/main.ts
+    ├── skills/                  # Skills bundle (unless --skills none)
     ├── wrangler.toml            # Cloudflare Workers config
     ├── project.json
     ├── tsconfig.json

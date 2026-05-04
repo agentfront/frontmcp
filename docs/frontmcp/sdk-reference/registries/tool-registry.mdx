@@ -163,7 +163,7 @@ subscribe(
 
 ```typescript
 const unsubscribe = registry.subscribe({}, (event) => {
-  console.log(`Tool ${event.kind}:`, event.entry?.name);
+  console.log(`Tool change: ${event.kind} (v${event.version})`);
 });
 
 // Later: stop listening

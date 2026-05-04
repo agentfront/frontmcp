@@ -140,10 +140,10 @@ class SummarizePrompt extends PromptContext {
   description: 'Research agent that gathers information',
   llm: {
     provider: 'anthropic',
-    model: 'claude-sonnet-4-5-20250514',
-    apiKey: process.env.ANTHROPIC_API_KEY!,
+    model: 'claude-sonnet-4-20250514',
+    apiKey: { env: 'ANTHROPIC_API_KEY' },
   },
-  tools: ['web_search', 'summarize'],
+  tools: [WebSearchTool, SummarizeTool],
   systemInstructions: 'You are a thorough research assistant.',
 })
 class ResearcherAgent extends AgentContext {
@@ -169,37 +169,56 @@ class ReviewPRSkill extends SkillContext {}
 ### @Provider — DI Service
 
 ```ts
-export const DB_TOKEN = Symbol('Database');
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
-@Provider({ token: DB_TOKEN, scope: 'singleton' })
+@Provider({ name: 'DatabaseProvider', scope: ProviderScope.GLOBAL })
 export class DatabaseProvider {
-  static factory() { return new DatabaseProvider(); }
+  async query(sql: string) { /* ... */ }
 }
 ```
 
 ### @Plugin — Extension
 
 ```ts
+import { Plugin, DynamicPlugin } from '@frontmcp/sdk';
+
+interface AuditOptions { destination: string }
+
 @Plugin({ name: 'audit', description: 'Audit logging plugin' })
-class AuditPlugin extends DynamicPlugin {
-  async onRegister(ctx: PluginRegistrationContext) {
-    // Register hooks, providers, context extensions
+export default class AuditPlugin extends DynamicPlugin<AuditOptions> {
+  constructor(private readonly options: AuditOptions) {
+    super();
   }
 }
+
+// Usage: register via the static init() method
+@FrontMcp({
+  info: { name: 'Server', version: '1.0.0' },
+  apps: [MyApp],
+  plugins: [AuditPlugin.init({ destination: 's3://logs' })],
+})
+class Server {}
 ```
 
 ### @Flow — Lifecycle Pipeline
 
 ```ts
 @Flow({
-  name: 'custom:pipeline',
-  plan: { steps: ['pre', 'execute', 'post', 'finalize'] },
+  name: 'tools:call-tool',
+  plan: {
+    pre: ['parseInput', 'authorize'],
+    execute: ['runTool'],
+    post: ['validateOutput'],
+    finalize: ['respond'],
+  },
+  inputSchema: callToolInputSchema,
+  outputSchema: callToolOutputSchema,
+  access: 'authorized',
 })
-class PipelineFlow extends FlowBase {
-  async pre() { /* validate */ }
-  async execute() { /* process */ }
-  async post() { /* transform */ }
-  async finalize() { /* respond */ }
+class CallToolFlow extends FlowBase<'tools:call-tool'> {
+  @Stage('parseInput') async parseInput() { /* validate */ }
+  @Stage('runTool')    async runTool() { /* execute */ }
+  @Stage('respond')    async respond() { /* respond */ }
 }
 ```
 

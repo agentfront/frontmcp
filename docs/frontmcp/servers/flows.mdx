@@ -74,48 +74,56 @@ FrontMCP provides built-in flows for all MCP protocol operations:
 
 ## Creating Custom Flows
 
-Define custom flows with the `@Flow` decorator:
+Custom flows are defined with the `@Flow` decorator, a typed `FlowPlan`, and stage handlers attached via `FlowHooksOf(...).Stage(...)`. The plan is keyed by phase (`pre`, `execute`, `post`, `finalize`) and lists the stage names that run in that phase. Each named stage in the plan is implemented by a method on the flow class decorated with `@Stage('<stage-name>')`.
 
 ```ts
-import { Flow, FlowBase } from '@frontmcp/sdk';
+import { z } from '@frontmcp/lazy-zod';
+import { Flow, FlowBase, FlowHooksOf, type FlowPlan } from '@frontmcp/sdk';
+
+const name = 'custom:my-flow' as const;
+
+const inputSchema = z.object({ query: z.string() });
+const outputSchema = z.object({ result: z.string() });
+const stateSchema = z.object({ result: z.string().optional() });
+
+const plan = {
+  pre: ['validate'],
+  execute: ['process'],
+  post: ['format'],
+  finalize: ['send'],
+} as const satisfies FlowPlan<string>;
+
+const { Stage } = FlowHooksOf(name);
 
 @Flow({
-  name: 'custom:my-flow',
-  description: 'Custom processing pipeline',
-  plan: {
-    steps: ['pre', 'execute', 'post', 'finalize'],
-  },
+  name,
+  access: 'authorized',
+  inputSchema,
+  outputSchema,
+  plan,
 })
-export default class MyCustomFlow extends FlowBase {
-  async pre(): Promise<void> {
-    // Validate inputs, check permissions
-    const input = this.state.get('input');
-    if (!input) {
-      this.fail('Missing required input');
+export default class MyCustomFlow extends FlowBase<typeof name> {
+  @Stage('validate')
+  async validate() {
+    if (!this.rawInput.query) {
+      this.fail(new Error('Missing query'));
     }
   }
 
-  async execute(): Promise<void> {
-    // Core business logic
-    const result = await this.processRequest();
-    this.state.set('result', result);
+  @Stage('process')
+  async process() {
+    this.state.set('result', `processed: ${this.rawInput.query}`);
   }
 
-  async post(): Promise<void> {
-    // Transform output, cache results
-    const result = this.state.get('result');
-    this.state.set('output', this.formatResponse(result));
+  @Stage('format')
+  async format() {
+    const result = this.state.get('result') ?? '';
+    this.state.set('result', result.toUpperCase());
   }
 
-  async finalize(): Promise<void> {
-    // Send response to client
-    const output = this.state.get('output');
-    this.respond(output);
-  }
-
-  async error(err: Error): Promise<void> {
-    // Centralized error handling
-    this.respond({ error: err.message });
+  @Stage('send')
+  async send() {
+    this.respond({ result: this.state.get('result') ?? '' });
   }
 }
 ```
@@ -124,11 +132,14 @@ export default class MyCustomFlow extends FlowBase {
 
 ```ts
 @Flow({
-  name: string,              // Required: unique flow identifier
-  description?: string,      // Optional: human-readable description
-  plan: {
-    steps: string[],         // Required: ordered stage names
-  },
+  name: string,              // Required: registered FlowName from ExtendFlows
+  access?: 'public' | 'authorized', // Default: 'public'
+  inputSchema: ZodSchema,    // Required: input validation
+  outputSchema?: ZodSchema,  // Optional: output validation
+  plan: FlowPlan,            // Required: phase → stage names
+  dependsOn?: Token[],       // Optional: DI tokens this flow depends on
+  middleware?: FlowMiddlewareOptions, // Optional: HTTP middleware mounting
+  description?: string,      // Optional: documentation
 })
 ```
 
@@ -140,11 +151,12 @@ You don't need to create a full custom flow to customize behavior. Use **hooks**
 
 ### Hook Types
 
-| Hook Type  | When It Runs            | Use Case                              |
-| ---------- | ----------------------- | ------------------------------------- |
-| **Will**   | Before a stage executes | Validate, transform input             |
-| **Did**    | After a stage completes | Log, cache, transform output          |
-| **Around** | Wraps the entire stage  | Timing, retry logic, circuit breakers |
+| Hook Type  | When It Runs                | Use Case                              |
+| ---------- | --------------------------- | ------------------------------------- |
+| **Will**   | Before a stage executes     | Validate, transform input             |
+| **Did**    | After a stage completes     | Log, cache, transform output          |
+| **Around** | Wraps the entire stage      | Timing, retry logic, circuit breakers |
+| **Stage**  | Implements the stage itself | Define custom stage behavior          |
 
 ### Applying Hooks
 
@@ -220,27 +232,29 @@ Within flow stages, you have access to control methods:
 | Method                       | Description                                    |
 | ---------------------------- | ---------------------------------------------- |
 | `this.respond(value)`        | End the flow and send a response to the client |
-| `this.fail(message)`         | Abort the flow with an error                   |
+| `this.fail(error)`           | Abort the flow with an `Error` instance        |
 | `this.state.get(key)`        | Read from flow state                           |
 | `this.state.set(key, value)` | Write to flow state                            |
 
 ### State Management
 
-Flows use a state object to pass data between stages. Never mutate `rawInput` directly — use `state.set()` instead:
+Flows expose `this.rawInput` (raw request payload) and `this.input` (validated against `inputSchema`). Use `this.state` to pass data between stages — never mutate `rawInput` directly.
 
 ```ts
-async pre(): Promise<void> {
-  // Read from the request
-  const input = this.state.get('rawInput');
+@Stage('pre')
+async pre() {
+  // Validated input from the request
+  const input = this.input;
 
-  // Transform and store in state
+  // Transform and store in state for later stages
   this.state.set('normalizedInput', {
     ...input,
     timestamp: Date.now(),
   });
 }
 
-async execute(): Promise<void> {
+@Stage('execute')
+async execute() {
   // Read from state set in previous stage
   const input = this.state.get('normalizedInput');
   const result = await this.process(input);

@@ -2,7 +2,7 @@
 title: AI SDK Integration
 slug: react/ai-integration
 icon: robot
-description: Bridge MCP tools to OpenAI, Claude, Vercel AI, and LangChain
+description: Bridge MCP tools to OpenAI, Claude, and Vercel AI
 ---
 
 The `@frontmcp/react/ai` entry point bridges FrontMCP tools to popular AI SDK formats. Tools are automatically formatted for the target platform and results are converted back.
@@ -26,7 +26,7 @@ function AIChat() {
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `platform` | `LLMPlatform` | `'openai' \| 'claude' \| 'vercel-ai' \| 'langchain'` |
+| `platform` | `SupportedPlatform` | `'openai' \| 'claude' \| 'vercel-ai'` |
 | `options.server` | `string` | Target a named server |
 
 ### Return Value

@@ -44,20 +44,25 @@ function App(providedMetadata: LocalAppMetadata): ClassDecorator
 
 ### Optional Properties
 
-| Property      | Type     | Description                    |
-| ------------- | -------- | ------------------------------ |
-| `id`          | `string` | Stable identifier for tracking |
-| `description` | `string` | Human-readable description     |
+| Property      | Type                                | Description                                                                                                                |
+| ------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `id`          | `string`                            | Stable identifier for tracking                                                                                             |
+| `description` | `string`                            | Human-readable description                                                                                                 |
+| `auth`        | `AuthOptionsInput`                  | App-level auth configuration (overrides gateway auth)                                                                      |
+| `standalone`  | `boolean \| 'includeInParent'`      | If `true`, the app gets its own scope. If `'includeInParent'`, it acts as a separated scope under the app-name prefix.     |
 
 ### Components
 
-| Property    | Type             | Description                   |
-| ----------- | ---------------- | ----------------------------- |
-| `tools`     | `ToolType[]`     | Tools defined by this app     |
-| `resources` | `ResourceType[]` | Resources defined by this app |
-| `prompts`   | `PromptType[]`   | Prompts defined by this app   |
-| `agents`    | `AgentType[]`    | Agents defined by this app    |
-| `skills`    | `SkillType[]`    | Skills defined by this app    |
+| Property     | Type              | Description                            |
+| ------------ | ----------------- | -------------------------------------- |
+| `tools`      | `ToolType[]`      | Tools defined by this app              |
+| `resources`  | `ResourceType[]`  | Resources defined by this app          |
+| `prompts`    | `PromptType[]`    | Prompts defined by this app            |
+| `agents`     | `AgentType[]`     | Agents defined by this app             |
+| `skills`     | `SkillType[]`     | Skills defined by this app             |
+| `jobs`       | `JobType[]`       | Jobs registered by this app            |
+| `workflows`  | `WorkflowType[]`  | Workflows registered by this app       |
+| `channels`   | `ChannelType[]`   | Notification channels for this app     |
 
 ```typescript
 @App({

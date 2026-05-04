@@ -46,12 +46,13 @@ function ResourceTemplate(providedMetadata: ResourceTemplateMetadata): ClassDeco
 
 ### Optional Properties
 
-| Property      | Type     | Description                          |
-| ------------- | -------- | ------------------------------------ |
-| `title`       | `string` | Human-readable title                 |
-| `description` | `string` | Resource description                 |
-| `mimeType`    | `string` | MIME type for all matching resources |
-| `icons`       | `Icon[]` | Icons for display                    |
+| Property        | Type                | Description                          |
+| --------------- | ------------------- | ------------------------------------ |
+| `title`         | `string`            | Human-readable title                 |
+| `description`   | `string`            | Resource description                 |
+| `mimeType`      | `string`            | MIME type for all matching resources |
+| `icons`         | `Icon[]`            | Icons for display                    |
+| `availableWhen` | `EntryAvailability` | Environment availability constraint  |
 
 ## URI Template Syntax
 

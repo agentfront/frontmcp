@@ -170,10 +170,8 @@ llm: {
   apiKey: {
     env: 'OPENAI_API_KEY',  // From environment
   },
-  // or
-  apiKey: {
-    value: 'sk-...',  // Direct value (not recommended)
-  },
+  // or pass a literal string (not recommended)
+  // apiKey: 'sk-...',
 
   // Optional settings
   temperature: 0.7,

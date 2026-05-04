@@ -20,7 +20,7 @@ Search for tools by natural language query using semantic embeddings.
   "tool": "codecall:search",
   "input": {
     "queries": ["string (required) - Natural language search queries"],
-    "topK": "number (optional, default: 5) - Maximum results to return",
+    "topK": "number (optional, default: 10) - Maximum results per query",
     "appIds": ["string (optional) - Limit to specific apps"],
     "excludeToolNames": ["string (optional) - Tool names to exclude"],
     "minRelevanceScore": "number (optional) - Minimum relevance score threshold"
@@ -42,7 +42,13 @@ Search for tools by natural language query using semantic embeddings.
     }
   ],
   "totalAvailableTools": "number - Total tools in index",
-  "warnings": ["string (optional) - Any warnings about the search"]
+  "warnings": [
+    {
+      "type": "excluded_tool_not_found | no_results | low_relevance",
+      "message": "string - Warning message",
+      "affectedTools": ["string (optional) - Affected tool names"]
+    }
+  ]
 }
 ```
 
@@ -153,11 +159,10 @@ Get detailed schemas and documentation for specific tools.
         "idempotentHint": "boolean (optional)",
         "openWorldHint": "boolean (optional)"
       },
-      "examples": [
+      "usageExamples": [
         {
-          "description": "string - Example description",
-          "input": { /* Example input arguments */ },
-          "output": { /* Expected output */ }
+          "description": "string - What this example demonstrates",
+          "code": "string - JavaScript snippet using callTool()"
         }
       ]
     }
@@ -167,7 +172,7 @@ Get detailed schemas and documentation for specific tools.
 ```
 
 <Note>
-`examples` returns up to 5 examples per tool. User-provided examples from the `@Tool` decorator take priority, with smart-generated examples filling remaining slots based on tool intent (create, list, get, update, delete, search).
+`usageExamples` returns up to 5 entries per tool. Each entry has a `description` and a `code` snippet that calls the tool via `callTool(...)` so the LLM can copy the pattern directly into a `codecall:execute` script.
 </Note>
 
 ### Example
@@ -230,21 +235,18 @@ Get detailed schemas and documentation for specific tools.
     "annotations": {
       "readOnlyHint": true
     },
-    "examples": [
+    "usageExamples": [
       {
         "description": "List active users with pagination",
-        "input": { "status": "active", "limit": 50 },
-        "output": { "users": [], "total": 0, "hasMore": false }
+        "code": "const result = await callTool(\"users:list\", { status: \"active\", limit: 50 });"
       },
       {
         "description": "List admin users",
-        "input": { "role": "admin" },
-        "output": { "users": [], "total": 0, "hasMore": false }
+        "code": "const result = await callTool(\"users:list\", { role: \"admin\" });"
       },
       {
         "description": "List all users",
-        "input": {},
-        "output": { "users": [], "total": 0, "hasMore": false }
+        "code": "const result = await callTool(\"users:list\", {});"
       }
     ]
   }],
@@ -405,12 +407,17 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 
 ### Response Schema
 
+`codecall:invoke` returns the standard MCP `CallToolResult` — the same envelope a direct `tools/call` produces. Errors are surfaced via `isError: true` plus a textual `content` entry; there is no separate `{ status, error }` wrapper.
+
 **Success:**
 
 ```json
 {
-  "status": "ok",
-  "result": "any - Tool return value"
+  "content": [
+    { "type": "text", "text": "..." }
+  ],
+  "structuredContent": "any (optional) - structured tool output when the tool declares an outputSchema",
+  "isError": false
 }
 ```
 
@@ -418,11 +425,10 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "string - Error code",
-    "message": "string - Error message"
-  }
+  "content": [
+    { "type": "text", "text": "Tool \"users:delete\" not found. Use codecall:search to discover available tools." }
+  ],
+  "isError": true
 }
 ```
 
@@ -433,22 +439,28 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
   {
     "tool": "codecall:invoke",
     "input": {
-    "tool": "users:getById",
-    "input": {"id": "user-123"}
-  }
+      "tool": "users:getById",
+      "input": { "id": "user-123" }
+    }
   }
   ```
 
 ```json Response
 {
-  "status": "ok",
-  "result": {
-  "id": "user-123",
-  "email": "alice@example.com",
-  "name": "Alice Smith",
-  "role": "admin",
-  "status": "active"
-}
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"id\":\"user-123\",\"email\":\"alice@example.com\",\"name\":\"Alice Smith\",\"role\":\"admin\",\"status\":\"active\"}"
+    }
+  ],
+  "structuredContent": {
+    "id": "user-123",
+    "email": "alice@example.com",
+    "name": "Alice Smith",
+    "role": "admin",
+    "status": "active"
+  },
+  "isError": false
 }
 ```
 
@@ -611,7 +623,7 @@ describe('AgentScript', () => {
   });
 
   it('should execute basic script', async () => {
-    const result = await enclave.execute(`
+    const result = await enclave.run(`
       return 1 + 1;
     `);
 
@@ -621,14 +633,17 @@ describe('AgentScript', () => {
 
   it('should call tools', async () => {
     const mockToolHandler = jest.fn().mockResolvedValue({ users: [] });
+    const enclaveWithTools = new Enclave({ toolHandler: mockToolHandler });
 
-    const result = await enclave.execute(`
+    const result = await enclaveWithTools.run(`
       const data = await callTool('users:list', {});
       return data.users.length;
-    `, { toolHandler: mockToolHandler });
+    `);
 
     expect(mockToolHandler).toHaveBeenCalledWith('users:list', {});
     expect(result.value).toBe(0);
+
+    enclaveWithTools.dispose();
   });
 });
 ```
@@ -661,23 +676,33 @@ class TestApp {
 ```ts
 describe('Security', () => {
   it('should block eval', async () => {
-    const result = await enclave.execute(`
+    const enclave = new Enclave();
+    const result = await enclave.run(`
       eval('1 + 1');
     `);
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('eval');
+
+    enclave.dispose();
   });
 
   it('should enforce iteration limit', async () => {
-    const result = await enclave.execute(`
+    // Note: maxIterations is the Enclave-direct option (max loop iterations
+    // per loop). The CodeCall plugin maps its `vm.maxSteps` setting onto the
+    // Enclave's `maxToolCalls` cap; set `maxIterations` directly when using
+    // Enclave outside the plugin.
+    const enclave = new Enclave({ maxIterations: 1000 });
+    const result = await enclave.run(`
       let i = 0;
       for (const x of Array(100000)) { i++; }
       return i;
-    `, { config: { maxSteps: 1000 } });
+    `);
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('iteration limit');
+
+    enclave.dispose();
   });
 });
 ```

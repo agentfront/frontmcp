@@ -83,8 +83,8 @@ nx g @frontmcp/nx:lib github-tools --libType tool-register
 ```
 
 ```ts
-// In any app:
-import { GithubToolsTools } from '@libs/github-tools';
+// In any app (default import path is @frontmcp/<name>; pass --importPath to override):
+import { GithubToolsTools } from '@frontmcp/github-tools';
 
 @App({ id: 'crm', tools: [...GithubToolsTools, CreateLeadTool] })
 class CrmApp {}
@@ -145,7 +145,7 @@ Create environment-specific servers with different configurations:
 servers/
 ├── dev/           # All apps, public auth, memory storage
 ├── staging/       # All apps, transparent auth, Redis
-└── production/    # Selected apps, orchestrated auth, Redis cluster
+└── production/    # Selected apps, remote auth, Redis cluster
 ```
 
 Each server's `main.ts` can customize providers and auth:

@@ -78,10 +78,17 @@ async execute(uri: string, params: Params) {
 
 ### outputHistory
 
-History of output changes during execution.
+History of output changes during execution. Entries are `HistoryEntry` records:
 
 ```typescript
-get outputHistory(): ReadonlyArray<Out>
+type HistoryEntry<T> = {
+  at: number;
+  stage?: string;
+  value: T | undefined;
+  note?: string;
+};
+
+get outputHistory(): ReadonlyArray<HistoryEntry<Out>>
 ```
 
 ## Static Resource Example

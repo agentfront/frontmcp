@@ -339,10 +339,23 @@ auth: {
 
   // Production settings
   allowDefaultPublic: false,   // No anonymous access
-  dcrEnabled: false,           // Disable DCR in production
 
   // Use local mode login page or remote IdP
   // Never use the demo login page in production
+}
+```
+
+For remote mode, DCR is configured under `providerConfig`:
+
+```typescript
+auth: {
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  clientId: process.env.IDP_CLIENT_ID!,
+  clientSecret: process.env.IDP_CLIENT_SECRET!,
+  providerConfig: {
+    dcrEnabled: false,  // Disable DCR in production; pre-register clients
+  },
 }
 ```
 

@@ -246,7 +246,7 @@ class ContextExamplePrompt extends PromptContext {
     this.metadata;          // Prompt metadata (name, description, etc.)
 
     // Authentication
-    this.requestContext.authInfo;     // Auth context from MCP session
+    this.authInfo;           // AuthInfo from MCP session
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider

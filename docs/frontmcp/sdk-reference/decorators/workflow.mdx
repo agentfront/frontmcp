@@ -54,8 +54,8 @@ function Workflow(opts: WorkflowMetadata): ClassDecorator
 | `labels`            | `Record<string, string>`           | —          | Key-value labels                        |
 | `hideFromDiscovery` | `boolean`                          | `false`    | Hide from `list-workflows`              |
 | `permissions`       | `JobPermission[]`                  | —          | RBAC permission rules                   |
-| `inputSchema`       | `ZodShape`                         | —          | Workflow-level input schema             |
-| `outputSchema`      | `ZodShape`                         | —          | Workflow-level output schema            |
+| `inputSchema`       | `ToolInputType` (Zod raw shape)    | —          | Workflow-level input schema             |
+| `outputSchema`      | `ToolOutputType`                   | —          | Workflow-level output schema            |
 
 ### WorkflowStep
 

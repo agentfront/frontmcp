@@ -326,6 +326,8 @@ This triggers a targeted authorization flow for just the skipped app.
 When using OpenAPI adapters, tools are automatically grouped by auth provider:
 
 ```typescript
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
 @FrontMcp({
   info: { name: 'APIGateway', version: '1.0.0' },
   auth: {
@@ -333,24 +335,24 @@ When using OpenAPI adapters, tools are automatically grouped by auth provider:
     consent: { enabled: true },
   },
   adapters: [
-    {
-      type: 'openapi',
+    OpenapiAdapter.init({
+      name: 'github',
       spec: 'https://api.github.com/openapi.json',
       auth: {
         mode: 'transparent',
         provider: 'https://github.com',
         clientId: 'github-client-id',
       },
-    },
-    {
-      type: 'openapi',
+    }),
+    OpenapiAdapter.init({
+      name: 'stripe',
       spec: 'https://api.stripe.com/openapi.json',
       auth: {
         mode: 'transparent',
         provider: 'https://connect.stripe.com',
         clientId: 'stripe-client-id',
       },
-    },
+    }),
   ],
 })
 export class Server {}

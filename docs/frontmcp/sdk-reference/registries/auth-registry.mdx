@@ -34,11 +34,15 @@ getPrimary(): FrontMcpAuth
 ```typescript
 const auth = registry.getPrimary();
 
-// Check if user is authenticated
-const isAuth = await auth.isAuthenticated(request);
+// Provider identity / mode-derived metadata
+console.log(auth.id);        // e.g. 'github_com'
+console.log(auth.issuer);    // OAuth issuer URL when applicable
 
-// Get current user
-const user = await auth.getUser(request);
+// Validate an incoming HTTP request (throws on failure)
+await auth.validate(serverRequest);
+
+// Authenticated outbound fetch through the active provider
+const res = await auth.fetch('https://api.example.com/me');
 ```
 
 ### getAuthProviders()
@@ -187,26 +191,30 @@ class InvalidServer { }
 
 ## FrontMcpAuth API
 
-The primary auth provider exposes:
+The primary auth provider is an abstract base class:
 
 ```typescript
-interface FrontMcpAuth {
-  // Check authentication
-  isAuthenticated(request: Request): Promise<boolean>;
+abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
+  /** Promise resolved when the provider has finished initializing. */
+  ready: Promise<void>;
+  /** Parsed auth options (mode, providers, etc.). */
+  readonly options: Options;
+  /** Stable provider ID derived from options. */
+  readonly id: string;
 
-  // Get user info
-  getUser(request: Request): Promise<User | null>;
+  /** Authenticated outbound fetch (mode-specific implementation). */
+  abstract fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 
-  // Get access token
-  getAccessToken(request: Request): Promise<string | null>;
+  /** Validate an incoming server request — throws if not authenticated. */
+  abstract validate(request: ServerRequest): Promise<void>;
 
-  // Handle OAuth callback
-  handleCallback(request: Request): Promise<AuthResult>;
-
-  // Logout
-  logout(request: Request): Promise<void>;
+  /** OAuth issuer URL (when applicable). */
+  abstract get issuer(): string;
 }
 ```
+
+For request-scoped role/permission/scope checks, use `this.auth` (a
+`FrontMcpAuthContext`) inside execution contexts — see the section below.
 
 ## Session Integration
 
@@ -256,7 +264,7 @@ import type { FrontMcpAuthContext } from '@frontmcp/auth';
 | --------------- | ------------------------------------- | ------------------------------------------------------------ |
 | `user`          | `FrontMcpAuthUser`                    | Resolved user identity (`sub`, `name`, `email`, `picture`)   |
 | `isAnonymous`   | `boolean`                             | True when `sub` starts with `anon:` or is empty              |
-| `mode`          | `string`                              | Authentication mode (`public`, `transparent`, `orchestrated`) |
+| `mode`          | `string`                              | Authentication mode (`public`, `transparent`, `local`, `remote`) |
 | `sessionId`     | `string`                              | Session identifier (empty string if no session)              |
 | `scopes`        | `readonly string[]`                   | OAuth scopes granted to this session                         |
 | `claims`        | `Readonly<Record<string, unknown>>`   | Raw JWT claims                                               |
