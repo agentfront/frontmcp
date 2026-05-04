@@ -66,7 +66,7 @@ Returns the host adapter's handler (e.g., Express app).
 
 ### start()
 
-Start the HTTP server on the configured port.
+Start the server on the configured TCP port, or on a Unix domain socket when `HttpOptions.socketPath` is set (Unix socket overrides port).
 
 ```typescript
 start(): Promise<void>

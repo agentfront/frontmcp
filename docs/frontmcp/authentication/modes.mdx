@@ -306,7 +306,7 @@ federatedAuth: {
 
 ### OAuth Endpoints
 
-Orchestrated mode exposes standard OAuth endpoints:
+Local and remote modes expose standard OAuth endpoints:
 
 | Endpoint                                  | Method | Description                 |
 | ----------------------------------------- | ------ | --------------------------- |
@@ -335,8 +335,8 @@ Orchestrated mode exposes standard OAuth endpoints:
 </CardGroup>
 
 <Warning>
-  **Do NOT use orchestrated mode when:**
-  - You only have one IdP and don't need federation
+  **Do NOT use `local` or `remote` mode when:**
+  - You only have one IdP and don't need federation (use `transparent` instead)
   - You want to minimize auth complexity
   - Running multiple instances without Redis
 </Warning>
@@ -351,26 +351,26 @@ graph TD
     B -->|No| C[Public Mode]
     B -->|Yes| D{Multiple providers?}
     D -->|No| E{Need progressive auth<br/>or consent UI?}
-    D -->|Yes| F[Orchestrated Mode]
+    D -->|Yes| F[Local/Remote Mode]
     E -->|No| G[Transparent Mode]
     E -->|Yes| F
     F --> H{Have upstream IdP?}
-    H -->|Yes| I[Orchestrated Remote]
-    H -->|No| J[Orchestrated Local]
+    H -->|Yes| I[Remote Mode]
+    H -->|No| J[Local Mode]
 ```
 
 ---
 
 ## Security Comparison
 
-| Security Aspect        | Public         | Transparent           | Orchestrated       |
-| ---------------------- | -------------- | --------------------- | ------------------ |
-| Token Verification     | None           | Against upstream JWKS | Against local JWKS |
-| PKCE Support           | N/A            | Depends on IdP        | Always S256        |
-| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated     |
-| Key Management         | Auto-generated | Upstream-managed      | Self-managed       |
-| Consent UI             | No             | No                    | Optional           |
-| Session Revocation     | N/A            | N/A                   | Supported          |
+| Security Aspect        | Public         | Transparent           | Local              | Remote                                         |
+| ---------------------- | -------------- | --------------------- | ------------------ | ---------------------------------------------- |
+| Token Verification     | None           | Against upstream JWKS | Against local JWKS | Against local JWKS (FrontMCP-issued session)   |
+| PKCE Support           | N/A            | Depends on IdP        | Always S256        | Always S256 (downstream); upstream depends on IdP |
+| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated     | Depends on upstream IdP                        |
+| Key Management         | Auto-generated | Upstream-managed      | Self-managed       | Self-managed (session JWKS) + upstream JWKS    |
+| Consent UI             | No             | No                    | Optional           | Optional                                       |
+| Session Revocation     | N/A            | N/A                   | Supported          | Supported                                      |
 
 ---
 
@@ -384,7 +384,7 @@ sequenceDiagram
 
     Client->>FrontMCP: Request + Bearer token
 
-    alt Public/Orchestrated Mode
+    alt Public/Local/Remote Mode
         FrontMCP->>JwksService: Get gateway JWKS
         FrontMCP->>FrontMCP: Verify JWT locally
     else Transparent Mode

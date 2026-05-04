@@ -56,16 +56,26 @@ this.logger.error('Error message');
 
 ### Authentication
 
-```typescript
-// Auth info from the request context (Partial<AuthInfo>)
-const authInfo = this.context.authInfo;       // throws if no request context
-const sessionId = authInfo.sessionId;
-const token = authInfo.token;
+For `ExecutionContextBase`-derived contexts (Tool, Resource, Agent, Skill, Job, Channel) read auth from the request context:
 
-// Or, the typed FrontMcpAuthContext (roles / permissions / claims):
+```typescript
+// Partial<AuthInfo> — preferred
+const authInfo = this.context.authInfo;       // throws if no request context
+const sessionId = authInfo?.sessionId;
+const token = authInfo?.token;
+
+// Typed FrontMcpAuthContext (roles / permissions / claims):
 if (this.auth.hasRole('admin')) {
   const tenantId = this.auth.claims['tenantId'];
 }
+```
+
+`PromptContext` does not extend `ExecutionContextBase` and exposes `authInfo` directly:
+
+```typescript
+// In a class that extends PromptContext
+const sessionId = this.authInfo.sessionId;
+const token = this.authInfo.token;
 ```
 
 ### Execution Tracking

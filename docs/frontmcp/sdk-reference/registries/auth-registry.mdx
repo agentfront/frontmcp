@@ -226,9 +226,15 @@ When multiple apps have different auth requirements:
 })
 class MultiAuthServer { }
 
-// The registry detects mixed auth modes
+// The registry detects mixed auth providers across nested apps
 const detection = scope.authProviders.detection;
-// detection.modes = ['public', 'remote']
+// detection.providers is a Map<string, DetectedAuthProvider>
+const providerIds = Array.from(detection.providers.keys());
+// e.g. ['public', 'auth_example_com']
+for (const provider of detection.providers.values()) {
+  // provider.mode is one of 'public' | 'transparent' | 'local' | 'remote'
+  console.log(`${provider.id} -> ${provider.mode} (apps=[${provider.appIds.join(', ')}])`);
+}
 ```
 
 ## FrontMcpAuthContext

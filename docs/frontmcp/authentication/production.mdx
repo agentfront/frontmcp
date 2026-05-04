@@ -44,7 +44,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
   </Step>
 
   <Step title="Enable Refresh Token Flow">
-    For orchestrated modes, opt into automatic upstream token refresh.
+    For `local` and `remote` modes, opt into automatic token refresh.
 
     ```typescript
     auth: {
@@ -55,7 +55,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
     }
     ```
 
-    Token TTLs are controlled by the upstream identity provider; FrontMCP does not mint its own access/refresh tokens.
+    In **remote** mode, token TTLs are controlled by the upstream identity provider — FrontMCP does not mint its own access/refresh tokens. In **local** mode, FrontMCP acts as the authorization server and mints its own tokens (signed with `local.signKey`).
 
   </Step>
 
