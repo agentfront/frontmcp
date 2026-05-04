@@ -137,98 +137,10 @@ Community plugins are created and maintained by the FrontMCP community. While no
 
 ## Creating Custom Plugins
 
-You can create custom plugins to add any cross-cutting capability to FrontMCP. Plugins use the `@Plugin` decorator, extend `DynamicPlugin`, and hook into the tool execution lifecycle via `@ToolHook` decorators.
+Custom plugins are documented in two pages:
 
-### Basic Plugin Structure
-
-```ts
-import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
-
-@Plugin({
-  name: 'my-plugin',
-  description: 'My custom plugin',
-})
-export default class MyCustomPlugin extends DynamicPlugin {
-  // Runs BEFORE tool execution
-  @ToolHook.Will('execute', { priority: 1000 })
-  async beforeExecute(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const { tool, toolContext } = flowCtx.state;
-    if (!tool || !toolContext) return;
-    console.log(`About to execute tool: ${tool.fullName}`);
-  }
-
-  // Runs AFTER tool execution
-  @ToolHook.Did('execute', { priority: 1000 })
-  async afterExecute(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const { tool, toolContext } = flowCtx.state;
-    if (!tool || !toolContext) return;
-    console.log(`Tool ${tool.fullName} completed`);
-  }
-}
-```
-
-### Plugin Best Practices
-
-<AccordionGroup>
-  <Accordion title="1. Minimal Overhead">
-    - Keep plugin logic lightweight
-    - Avoid blocking operations in hooks
-    - Use async operations efficiently
-    - Cache expensive computations
-    - Consider performance impact on every tool call
-  </Accordion>
-  <Accordion title="2. Error Handling">
-    - Always handle errors gracefully
-    - Provide clear error messages
-    - Don't swallow errors silently
-    - Log failures appropriately
-    - Consider fallback strategies
-  </Accordion>
-  <Accordion title="3. Configuration">
-    - Support both plugin-level and tool-level configuration
-    - Provide sensible defaults
-    - Make features opt-in when possible
-    - Document all configuration options
-    - Validate configuration at initialization
-  </Accordion>
-  <Accordion title="4. Composability">
-    - Don't assume other plugins are present
-    - Avoid global state
-    - Use dependency injection for shared resources
-    - Document plugin interactions
-    - Test with common plugin combinations
-  </Accordion>
-  <Accordion title="5. Documentation">
-    - Provide clear usage examples
-    - Document hooks and lifecycle
-    - Explain performance characteristics
-    - Include migration guides
-    - Show integration with common tools
-  </Accordion>
-</AccordionGroup>
-
-### Publishing Your Plugin
-
-When publishing a community plugin:
-
-1. **Package Name:** Use the pattern `@yourscope/frontmcp-plugin-name` or `frontmcp-plugin-name`
-2. **Keywords:** Include `frontmcp`, `frontmcp-plugin`, `mcp`, `plugin`
-3. **README:** Include installation, usage, examples, and performance considerations
-4. **License:** Use a permissive license (MIT, Apache 2.0, etc.)
-5. **Tests:** Include comprehensive test coverage including hook behavior
-6. **TypeScript:** Provide TypeScript types and declarations
-
-```json package.json
-{
-  "name": "@yourscope/frontmcp-plugin-myfeature",
-  "version": "1.0.0",
-  "description": "FrontMCP plugin for MyFeature",
-  "keywords": ["frontmcp", "frontmcp-plugin", "mcp", "plugin", "myfeature"],
-  "peerDependencies": {
-    "@frontmcp/sdk": "^0.4.0"
-  }
-}
-```
+- **[Creating Plugins](/frontmcp/plugins/creating-plugins)** — quickstart: `@Plugin`, `DynamicPlugin`, hooks, dynamic providers, publishing.
+- **[Plugin API (Extensibility)](/frontmcp/extensibility/plugins)** — deep dive: hook reference, plugin scope, tool metadata extension, contributing tools/skills.
 
 ## Plugin Comparison
 

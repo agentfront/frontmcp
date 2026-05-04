@@ -64,12 +64,22 @@ class BadTool extends ToolContext {
 
 ### Optional Properties
 
-| Property       | Type       | Description                    |
-| -------------- | ---------- | ------------------------------ |
-| `description`  | `string`   | Tool description for AI        |
-| `outputSchema` | `ZodType`  | Output validation schema       |
-| `id`           | `string`   | Stable identifier for tracking |
-| `tags`         | `string[]` | Categorization tags            |
+| Property         | Type                        | Description                                                                       |
+| ---------------- | --------------------------- | --------------------------------------------------------------------------------- |
+| `description`    | `string`                    | Tool description for AI                                                            |
+| `outputSchema`   | `ZodType`                   | Output validation schema                                                           |
+| `id`             | `string`                    | Stable identifier for tracking                                                     |
+| `tags`           | `string[]`                  | Categorization tags                                                                |
+| `visibility`     | `'public' \| 'hidden' \| 'internal'` | Discovery visibility. `hidden` hides from public lists; `internal` keeps it for in-process callers only |
+| `rateLimit`      | `RateLimitConfig`           | Per-tool rate limit (`maxRequests`, `windowMs`, `partitionBy`)                     |
+| `concurrency`    | `ConcurrencyConfig`         | Per-tool concurrency cap (`maxConcurrent`, optional queue config)                  |
+| `timeout`        | `TimeoutConfig`             | Per-tool execution timeout (`executeMs`)                                           |
+| `availableWhen`  | `EnvironmentMatcher`        | Restrict discovery to specific platforms/runtimes/deployments. See [Environment Awareness](/frontmcp/features/environment-awareness) |
+| `execution`      | `ExecutionOptions`          | Execution-level options (queueing, retry behavior)                                 |
+| `authProviders`  | `AuthProviderMapping[]`     | Required auth providers for this tool                                              |
+| `annotations`    | `ToolAnnotations`           | MCP hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)   |
+| `examples`       | `ToolExample[]`             | Usage examples surfaced through `codecall:describe`                                |
+| `ui`             | `ToolUiConfig`              | UI widget configuration (template, displayMode, servingMode)                       |
 
 ### Output Types
 

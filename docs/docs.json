@@ -397,7 +397,9 @@
               "frontmcp/sdk-reference/errors/normalization-errors",
               "frontmcp/sdk-reference/errors/sdk-errors",
               "frontmcp/sdk-reference/errors/auth-internal-errors",
-              "frontmcp/sdk-reference/errors/esm-errors"
+              "frontmcp/sdk-reference/errors/esm-errors",
+              "frontmcp/sdk-reference/errors/task-errors",
+              "frontmcp/sdk-reference/errors/workflow-errors"
             ]
           },
           {

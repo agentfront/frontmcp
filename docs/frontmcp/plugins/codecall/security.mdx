@@ -363,52 +363,7 @@ CodeCallPlugin.init({
 
 ### VM Presets
 
-| Preset         | Timeout | Iterations | Tool Calls | Console Output | Console Calls | Use Case               |
-| -------------- | ------- | ---------- | ---------- | -------------- | ------------- | ---------------------- |
-| `locked_down`  | 2s      | 2,000      | 10         | 32KB           | 50            | Ultra-sensitive data   |
-| `secure`       | 3.5s    | 5,000      | 100        | 64KB           | 100           | **Production default** |
-| `balanced`     | 5s      | 10,000     | 200        | 256KB          | 500           | Complex workflows      |
-| `experimental` | 10s     | 20,000     | 500        | 1MB            | 1000          | Development only       |
-
-### Security Levels vs VM Presets
-
-<Warning>
-  Don't confuse **Enclave Security Levels** with **CodeCall VM Presets** - they serve different purposes but work together.
-</Warning>
-
-The Enclave library uses **Security Levels** (`STRICT`, `SECURE`, `STANDARD`, `PERMISSIVE`) for internal configuration, while CodeCall exposes **VM Presets** (`locked_down`, `secure`, `balanced`, `experimental`) as a user-friendly interface.
-
-**Mapping:**
-
-| VM Preset      | Enclave Security Level | Description                            |
-| -------------- | ---------------------- | -------------------------------------- |
-| `locked_down`  | `STRICT`               | Maximum security, minimal capabilities |
-| `secure`       | `SECURE`               | Production-safe with reasonable limits |
-| `balanced`     | `STANDARD`             | More flexibility for complex scripts   |
-| `experimental` | `PERMISSIVE`           | Development/testing only               |
-
-**Enclave Security Level Defaults:**
-
-| Config                | STRICT  | SECURE  | STANDARD | PERMISSIVE |
-| --------------------- | ------- | ------- | -------- | ---------- |
-| timeout               | 2,000ms | 3,500ms | 5,000ms  | 10,000ms   |
-| maxSteps         | 2,000   | 5,000   | 10,000   | 20,000     |
-| maxToolCalls          | 10      | 100     | 200      | 500        |
-| maxConsoleOutputBytes | 32KB    | 64KB    | 256KB    | 1MB        |
-| maxConsoleCalls       | 50      | 100     | 500      | 1,000      |
-| maxSanitizeDepth      | 5       | 10      | 15       | 20         |
-| maxSanitizeProperties | 500     | 1,000   | 5,000    | 10,000     |
-
-**When configuring CodeCall, use VM Presets:**
-
-```ts
-CodeCallPlugin.init({
-  vm: {
-    preset: 'secure',  // Maps to SECURE level
-    timeoutMs: 5000,   // Override specific values as needed
-  },
-});
-```
+VM presets control runtime limits (timeout, max iterations, max tool calls, console output budget). The full preset reference and Enclave Security Level mapping live in the [Configuration page → VM Presets section](/frontmcp/plugins/codecall/configuration#vm-configuration). Use `preset: 'secure'` for production unless you have a specific reason to deviate.
 
 ---
 
