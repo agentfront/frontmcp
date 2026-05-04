@@ -665,13 +665,16 @@ export default class SkillRegistry
     // Provider already applied pagination, so the additional overlay rows go
     // at the tail; total is the union of the two sets, hasMore reflects whether
     // ALL overlay rows could fit alongside the provider's offset/limit window.
+    // Honor the caller's offset into the combined set: if offset reaches past
+    // the provider's total, slice into the overlay accordingly.
     const limit = options?.limit ?? Number.POSITIVE_INFINITY;
     const offset = options?.offset ?? 0;
     const room = Math.max(0, limit - baseResult.skills.length);
-    const fittedOverlay = overlay.slice(0, room);
+    const overlayStart = Math.max(0, offset - baseResult.total);
+    const fittedOverlay = overlay.slice(overlayStart, overlayStart + room);
     const skills = [...baseResult.skills, ...fittedOverlay];
     const total = baseResult.total + overlay.length;
-    const hasMore = baseResult.hasMore || offset + skills.length < total;
+    const hasMore = baseResult.hasMore || overlayStart + fittedOverlay.length < overlay.length;
     return { skills, total, hasMore };
   }
 
@@ -1109,7 +1112,8 @@ export default class SkillRegistry
     if (
       typeof candidate.add === 'function' &&
       typeof candidate.update === 'function' &&
-      typeof candidate.remove === 'function'
+      typeof candidate.remove === 'function' &&
+      typeof candidate.exists === 'function'
     ) {
       return provider as MutableSkillStorageProvider;
     }

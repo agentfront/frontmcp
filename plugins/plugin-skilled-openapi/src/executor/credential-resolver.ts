@@ -23,7 +23,9 @@ export interface CredentialResolver {
 
 /**
  * In-memory resolver — values supplied at construction time. Suitable for
- * dev / demo / single-tenant. Trim values to defeat trailing-newline mishaps.
+ * dev / demo / single-tenant. Trailing-newline normalization is applied once
+ * at ingestion (constructor / setForBundle) so resolve() returns the stored
+ * value verbatim and never mutates an intentional secret.
  *
  * Bundle scoping: the constructor seeds tenant-wide credentials (the natural
  * shape of the plugin's `credentials` option for single-tenant demos). When a
@@ -37,7 +39,7 @@ export class MemoryCredentialResolver implements CredentialResolver {
   private readonly perBundle = new Map<string, Map<string, string>>();
 
   constructor(defaults: Record<string, string> = {}) {
-    this.defaults = new Map(Object.entries(defaults));
+    this.defaults = new Map(Object.entries(defaults).map(([k, v]) => [k, normalizeSecret(v)]));
   }
 
   /**
@@ -50,13 +52,19 @@ export class MemoryCredentialResolver implements CredentialResolver {
       bundle = new Map();
       this.perBundle.set(bundleId, bundle);
     }
-    bundle.set(ref, value);
+    bundle.set(ref, normalizeSecret(value));
   }
 
   async resolve(ref: string, opts: { bundleId: string }): Promise<string | undefined> {
     const scoped = this.perBundle.get(opts.bundleId)?.get(ref);
-    if (typeof scoped === 'string') return scoped.trim();
+    if (typeof scoped === 'string') return scoped;
     const fallback = this.defaults.get(ref);
-    return typeof fallback === 'string' ? fallback.trim() : undefined;
+    return typeof fallback === 'string' ? fallback : undefined;
   }
+}
+
+// Strip a single trailing CR/LF that a file-sourced secret commonly picks up,
+// without touching whitespace that may be part of the credential itself.
+function normalizeSecret(value: string): string {
+  return value.replace(/\r?\n$/, '');
 }

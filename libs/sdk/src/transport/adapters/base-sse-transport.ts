@@ -248,4 +248,14 @@ export class SSEServerTransport implements Transport {
   get lastEventId(): number {
     return this._eventIdCounter;
   }
+
+  /**
+   * Protected setter for the event ID counter, exposed so subclasses can
+   * restore counter state when recreating a session from persisted
+   * checkpoints (see RecreateableSSEServerTransport). Callers MUST validate
+   * the input is a non-negative integer before calling.
+   */
+  protected setEventIdCounter(eventId: number): void {
+    this._eventIdCounter = eventId;
+  }
 }

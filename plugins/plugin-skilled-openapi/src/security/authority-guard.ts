@@ -69,7 +69,7 @@ export class AuthorityGuard {
       const ctx: AuthoritiesEvaluationContext = this.contextBuilder.build(authInfo, input, env);
       return await this.engine.evaluate(policy as AuthoritiesMetadata, ctx);
     } catch (e) {
-      const message = (e as Error).message ?? 'authority evaluation threw';
+      const message = normalizeCaughtMessage(e);
       this.logger?.error(`[skilled-openapi:authority] evaluation failed: ${message}`);
       return {
         granted: false,
@@ -79,4 +79,16 @@ export class AuthorityGuard {
       };
     }
   }
+}
+
+// Render a caught value into a string without ever throwing — covers the
+// cases where libs/auth (or a buggy evaluator) throws null/undefined or a
+// non-Error whose `.message` getter explodes.
+function normalizeCaughtMessage(e: unknown): string {
+  if (e instanceof Error) return e.message || 'authority evaluation threw';
+  if (typeof e === 'string') return e;
+  if (e !== null && typeof e === 'object' && typeof (e as { message?: unknown }).message === 'string') {
+    return (e as { message: string }).message;
+  }
+  return String(e ?? 'authority evaluation threw');
 }

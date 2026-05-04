@@ -88,6 +88,30 @@ describe('WebhookReplayGuard', () => {
     expect(guard.check({ timestampMs: 1_001, nonce: 'aaaa1111' }).ok).toBe(false);
   });
 
+  it('rejects nonce replay at the freshness-window boundary', () => {
+    // Regression: a nonce whose expiresAt equals `now` must still be treated
+    // as tracked, otherwise an attacker can replay it at the exact boundary.
+    const guard = new WebhookReplayGuard({ windowMs: 1_000 });
+    let now = 1_000;
+    guard.setNowProvider(() => now);
+    expect(guard.check({ timestampMs: 1_000, nonce: 'boundary' }).ok).toBe(true);
+    // Advance to exactly expiresAt (1_000 + 1_000 = 2_000). The nonce must
+    // still be considered tracked at this tick.
+    now = 2_000;
+    const r = guard.check({ timestampMs: 2_000, nonce: 'boundary' });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/replay/);
+  });
+
+  it('constructor rejects invalid windowMs and capacity', () => {
+    expect(() => new WebhookReplayGuard({ windowMs: 0 })).toThrow(RangeError);
+    expect(() => new WebhookReplayGuard({ windowMs: -1 })).toThrow(RangeError);
+    expect(() => new WebhookReplayGuard({ windowMs: Number.NaN })).toThrow(RangeError);
+    expect(() => new WebhookReplayGuard({ capacity: 0 })).toThrow(RangeError);
+    expect(() => new WebhookReplayGuard({ capacity: 1.5 })).toThrow(RangeError);
+    expect(() => new WebhookReplayGuard({ capacity: -3 })).toThrow(RangeError);
+  });
+
   it('eviction drops the entry with the smallest expiresAt, not the oldest insertion', () => {
     // Mix in a stale-but-in-window timestamp so insertion order != expiry order.
     const guard = new WebhookReplayGuard({ capacity: 2, windowMs: 10_000 });

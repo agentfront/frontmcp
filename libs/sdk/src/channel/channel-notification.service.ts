@@ -96,9 +96,18 @@ export class ChannelNotificationService {
       return false;
     }
 
-    // Check subscription for targeted sends (skip if no source in meta — system message)
+    // Targeted sends MUST carry a `meta.source` so subscription enforcement can
+    // run. Letting messages through without it would let any caller bypass the
+    // subscription check, so missing-source is treated as a programming error
+    // and we fail closed rather than emitting an unfiltered notification.
     const channelName = meta['source'];
-    if (channelName && !this.notificationService.isChannelSubscribed(sessionId, channelName)) {
+    if (!channelName) {
+      this.logger.error(
+        `Channel notification rejected for session ${sessionId.slice(0, 20)}...: meta.source is required`,
+      );
+      return false;
+    }
+    if (!this.notificationService.isChannelSubscribed(sessionId, channelName)) {
       this.logger.verbose(`Session ${sessionId.slice(0, 20)}... not subscribed to channel "${channelName}", skipping`);
       return false;
     }

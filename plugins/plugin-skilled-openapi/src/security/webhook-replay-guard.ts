@@ -35,8 +35,16 @@ export class WebhookReplayGuard {
   private now: () => number = Date.now;
 
   constructor(options: WebhookReplayGuardOptions = {}) {
-    this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
-    this.capacity = options.capacity ?? DEFAULT_CAPACITY;
+    const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+    const capacity = options.capacity ?? DEFAULT_CAPACITY;
+    if (!Number.isFinite(windowMs) || windowMs <= 0) {
+      throw new RangeError('WebhookReplayGuard: windowMs must be a finite number > 0');
+    }
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      throw new RangeError('WebhookReplayGuard: capacity must be a positive integer');
+    }
+    this.windowMs = windowMs;
+    this.capacity = capacity;
   }
 
   /** For tests: override the time source. */
@@ -70,7 +78,11 @@ export class WebhookReplayGuard {
     // outer JWT signature).
     const key = sha256Hex(nonce);
     const expiresAt = this.seen.get(key);
-    if (expiresAt !== undefined && expiresAt > now) {
+    // Boundary handling: a nonce is considered fresh while expiresAt >= now.
+    // Using strict `>` here paired with `<=` in prune() left a one-tick window
+    // (abs(now - timestampMs) === windowMs) where a nonce could be accepted
+    // and then immediately replayed. Treat the boundary as still-tracked.
+    if (expiresAt !== undefined && expiresAt >= now) {
       return { ok: false, reason: 'nonce replay detected within freshness window' };
     }
 
@@ -102,7 +114,7 @@ export class WebhookReplayGuard {
     const now = this.now();
     let removed = 0;
     for (const [k, expiresAt] of this.seen) {
-      if (expiresAt <= now) {
+      if (expiresAt < now) {
         this.seen.delete(k);
         removed++;
       }

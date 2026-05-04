@@ -75,7 +75,7 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
    *
    * @param eventId - The event ID to restore (must be a non-negative integer)
    */
-  setEventIdCounter(eventId: number): void {
+  override setEventIdCounter(eventId: number): void {
     // Security: Validate event ID to prevent invalid values
     if (!this.isValidEventId(eventId)) {
       console.warn(
@@ -83,10 +83,10 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
       );
       return;
     }
-    // Access internal MCP SDK property _eventIdCounter - may change between SDK versions.
-    // If this breaks after an SDK update, check SSEServerTransport internals.
-
-    (this as any)._eventIdCounter = eventId;
+    // Routes through the base class's protected setter instead of an `as any`
+    // cast — keeps the type system honest and survives upstream refactors of
+    // the private field.
+    super.setEventIdCounter(eventId);
   }
 
   /**
@@ -99,11 +99,11 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
   setSessionState(sessionId: string, lastEventId?: number): void {
     // Verify session ID matches (or set it if the transport allows)
     if (this.sessionId !== sessionId) {
-      // The session ID is set in constructor, so this should match
-      // If it doesn't, log a warning but continue
+      // Session IDs are credentials — log only a short prefix. Matches the
+      // truncation pattern used in transport.sse.adapter.ts:28.
       console.warn(
         `RecreateableSSEServerTransport: session ID mismatch. ` +
-          `Expected ${sessionId}, got ${this.sessionId}. Using constructor value.`,
+          `Expected ${sessionId.slice(0, 40)}..., got ${this.sessionId.slice(0, 40)}.... Using constructor value.`,
       );
     }
 

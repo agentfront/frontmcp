@@ -11,6 +11,21 @@ export interface RedisDefinitionStoreLike {
   sadd(key: string, ...members: string[]): Promise<number>;
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
+  /** Optional graceful shutdown — present on ioredis. */
+  quit?(): Promise<unknown>;
+  /** Optional hard close — present on ioredis. */
+  disconnect?(): void;
+}
+
+export interface RedisJobDefinitionStoreOptions {
+  /**
+   * If true, dispose() will close the Redis client. Set when the store
+   * created the client itself (e.g. via the factory) so the lifecycle is
+   * tied to the store. Defaults to false to preserve the existing
+   * "shared client — don't close" behavior for callers that pass an
+   * externally-managed client.
+   */
+  ownsClient?: boolean;
 }
 
 /**
@@ -21,11 +36,35 @@ export class RedisJobDefinitionStore implements JobDefinitionStore {
   private readonly client: RedisDefinitionStoreLike;
   private readonly keyPrefix: string;
   private readonly logger: FrontMcpLogger;
+  private readonly ownsClient: boolean;
+  private disposed = false;
 
-  constructor(client: RedisDefinitionStoreLike, logger: FrontMcpLogger, keyPrefix = 'mcp:jobs:def:') {
+  constructor(
+    client: RedisDefinitionStoreLike,
+    logger: FrontMcpLogger,
+    keyPrefix = 'mcp:jobs:def:',
+    options: RedisJobDefinitionStoreOptions = {},
+  ) {
     this.client = client;
     this.logger = logger;
     this.keyPrefix = keyPrefix;
+    this.ownsClient = options.ownsClient ?? false;
+  }
+
+  /**
+   * Parse a Redis JSON payload, returning null on malformed input. Stale or
+   * truncated values must not crash the caller — log + treat as missing so
+   * the surrounding flow can recover.
+   */
+  private safeParse<T>(raw: string, jobId: string, kind: 'job' | 'workflow'): T | null {
+    try {
+      return JSON.parse(raw) as T;
+    } catch (e) {
+      this.logger.error(
+        `[RedisJobDefinitionStore] Failed to parse ${kind} definition for "${jobId}": ${(e as Error).message}; raw="${raw}"`,
+      );
+      return null;
+    }
   }
 
   private jobKey(jobId: string): string {
@@ -47,17 +86,15 @@ export class RedisJobDefinitionStore implements JobDefinitionStore {
   async getDefinition(jobId: string): Promise<JobDynamicRecord | null> {
     const raw = await this.client.get(this.jobKey(jobId));
     if (!raw) return null;
-    return JSON.parse(raw);
+    return this.safeParse<JobDynamicRecord>(raw, jobId, 'job');
   }
 
   async listDefinitions(): Promise<JobDynamicRecord[]> {
     const ids = await this.client.smembers(`${this.keyPrefix}jobs`);
-    const results: JobDynamicRecord[] = [];
-    for (const id of ids) {
-      const record = await this.getDefinition(id);
-      if (record) results.push(record);
-    }
-    return results;
+    // Fan out the per-id reads concurrently — the previous sequential loop
+    // serialized N round-trips, which dominates list latency on large catalogs.
+    const records = await Promise.all(ids.map((id) => this.getDefinition(id)));
+    return records.filter((r): r is JobDynamicRecord => r !== null);
   }
 
   // Note: removeDefinition is not atomic (see saveDefinition comment).
@@ -76,17 +113,14 @@ export class RedisJobDefinitionStore implements JobDefinitionStore {
   async getWorkflowDefinition(wfId: string): Promise<WorkflowDynamicRecord | null> {
     const raw = await this.client.get(this.workflowKey(wfId));
     if (!raw) return null;
-    return JSON.parse(raw);
+    return this.safeParse<WorkflowDynamicRecord>(raw, wfId, 'workflow');
   }
 
   async listWorkflowDefinitions(): Promise<WorkflowDynamicRecord[]> {
     const ids = await this.client.smembers(`${this.keyPrefix}workflows`);
-    const results: WorkflowDynamicRecord[] = [];
-    for (const id of ids) {
-      const record = await this.getWorkflowDefinition(id);
-      if (record) results.push(record);
-    }
-    return results;
+    // Same reasoning as listDefinitions — parallelize the per-id reads.
+    const records = await Promise.all(ids.map((id) => this.getWorkflowDefinition(id)));
+    return records.filter((r): r is WorkflowDynamicRecord => r !== null);
   }
 
   // Note: removeWorkflowDefinition is not atomic (see saveDefinition comment).
@@ -97,6 +131,23 @@ export class RedisJobDefinitionStore implements JobDefinitionStore {
   }
 
   async dispose(): Promise<void> {
-    // Don't close shared redis client
+    // Idempotent: subsequent dispose() calls are a no-op.
+    if (this.disposed) return;
+    this.disposed = true;
+
+    // Only close the client when we own it. Externally-supplied clients are
+    // shared and must outlive this store; the factory passes ownsClient=true
+    // when it creates the connection itself.
+    if (!this.ownsClient) return;
+
+    try {
+      if (typeof this.client.quit === 'function') {
+        await this.client.quit();
+      } else if (typeof this.client.disconnect === 'function') {
+        this.client.disconnect();
+      }
+    } catch (e) {
+      this.logger.warn(`[RedisJobDefinitionStore] dispose: failed to close redis client: ${(e as Error).message}`);
+    }
   }
 }

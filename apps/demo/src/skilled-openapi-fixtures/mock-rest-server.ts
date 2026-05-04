@@ -13,10 +13,6 @@ interface MockInvoice {
   customerId: string;
 }
 
-const invoices = new Map<string, MockInvoice>();
-let invoiceSeq = 1;
-let refundSeq = 1;
-
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -33,6 +29,10 @@ function reply(res: http.ServerResponse, status: number, body: unknown): void {
 }
 
 export async function startMockBillingServer(port = 9876): Promise<http.Server> {
+  const invoices = new Map<string, MockInvoice>();
+  let invoiceSeq = 1;
+  let refundSeq = 1;
+
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://localhost:${port}`);
@@ -43,13 +43,24 @@ export async function startMockBillingServer(port = 9876): Promise<http.Server> 
 
       // POST /v1/invoices
       if (req.method === 'POST' && url.pathname === '/v1/invoices') {
-        const body = JSON.parse((await readBody(req)) || '{}');
+        let body: { amount?: unknown; customerId?: unknown };
+        try {
+          body = JSON.parse((await readBody(req)) || '{}');
+        } catch {
+          return reply(res, 400, { error: 'invalid JSON' });
+        }
+        if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount <= 0) {
+          return reply(res, 400, { error: 'amount must be a finite number > 0' });
+        }
+        if (typeof body.customerId !== 'string' || body.customerId.length === 0) {
+          return reply(res, 400, { error: 'customerId must be a non-empty string' });
+        }
         const id = `inv_${invoiceSeq++}`;
         invoices.set(id, {
           id,
           status: 'open',
-          amount: Number(body.amount ?? 0),
-          customerId: String(body.customerId ?? ''),
+          amount: body.amount,
+          customerId: body.customerId,
         });
         return reply(res, 201, { id, status: 'open' });
       }
@@ -60,7 +71,7 @@ export async function startMockBillingServer(port = 9876): Promise<http.Server> 
         const id = getMatch[1]!;
         const inv = invoices.get(id);
         if (!inv) return reply(res, 404, { error: 'not found' });
-        return reply(res, 200, inv);
+        return reply(res, 200, { id: inv.id, status: inv.status, amount: inv.amount });
       }
 
       // POST /v1/invoices/{id}/refunds
