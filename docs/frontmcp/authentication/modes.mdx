@@ -132,7 +132,7 @@ sequenceDiagram
 | `provider`               | `string`             | Required        | Base URL of the IdP                  |
 | `providerConfig.jwksUri` | `string`             | Auto-discovered | Custom JWKS endpoint                 |
 | `providerConfig.jwks`    | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
-| `expectedAudience`       | `string \| string[]` | Resource URL    | Required audience claim value(s)     |
+| `expectedAudience`       | `string \| string[]` | Required        | Required audience claim value(s) — typically the protected resource URL |
 | `requiredScopes`         | `string[]`           | `[]`            | Scopes that must be present          |
 | `allowAnonymous`         | `boolean`            | `false`         | Allow requests without tokens        |
 
@@ -211,7 +211,7 @@ const auth: AuthOptionsInput = {
 
 ## Remote Mode
 
-FrontMCP acts as an OAuth 2.1 authorization server that proxies user authentication to an upstream IdP.
+FrontMCP acts as an OAuth 2.1 authorization server that **proxies user authentication to an upstream IdP**. End users never submit credentials to FrontMCP directly — they're redirected to the upstream IdP, and FrontMCP exchanges the resulting upstream code/tokens before issuing its own session token to the MCP client.
 
 ```typescript
 const auth: AuthOptionsInput = {
@@ -231,6 +231,7 @@ sequenceDiagram
     participant User
     participant Client
     participant FrontMCP as FrontMCP Auth Server
+    participant IdP as Upstream IdP
     participant Store as Authorization Store
 
     Note over Client: Generate PKCE<br/>code_verifier & code_challenge
@@ -238,11 +239,14 @@ sequenceDiagram
     Client->>FrontMCP: GET /oauth/authorize<br/>response_type=code<br/>client_id, redirect_uri<br/>code_challenge (S256)<br/>scope, state
 
     FrontMCP->>Store: Store pending authorization
-    FrontMCP-->>User: Show login page
+    FrontMCP-->>User: 302 Redirect to upstream IdP<br/>(authorize URL + upstream PKCE)
 
-    User->>FrontMCP: POST credentials (email)
-    FrontMCP->>FrontMCP: Validate user
-    FrontMCP->>Store: Create authorization code<br/>(60s TTL, single-use)
+    User->>IdP: Authenticate (credentials, MFA, …)
+    IdP-->>FrontMCP: Redirect back with upstream auth code
+    FrontMCP->>IdP: POST /token (exchange upstream code)
+    IdP-->>FrontMCP: { id_token, access_token, refresh_token }
+
+    FrontMCP->>Store: Create FrontMCP authorization code<br/>(60s TTL, single-use)
     FrontMCP-->>Client: Redirect to redirect_uri<br/>?code=xxx&state=yyy
 
     Client->>FrontMCP: POST /oauth/token<br/>grant_type=authorization_code<br/>code, redirect_uri<br/>client_id, code_verifier
@@ -250,8 +254,8 @@ sequenceDiagram
     FrontMCP->>Store: Get & validate code
     FrontMCP->>FrontMCP: Verify PKCE<br/>SHA256(code_verifier) == code_challenge
     FrontMCP->>Store: Mark code as used
-    FrontMCP->>FrontMCP: Sign access token (JWT)
-    FrontMCP->>Store: Store refresh token
+    FrontMCP->>FrontMCP: Sign FrontMCP session token (JWT)<br/>using identity from upstream id_token
+    FrontMCP->>Store: Store refresh token (links to upstream tokens)
     FrontMCP-->>Client: { access_token, refresh_token, expires_in }
 ```
 

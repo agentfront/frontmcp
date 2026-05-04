@@ -99,11 +99,13 @@ Authentication can be configured at two levels:
 
 ## OAuth 2.1 Compliance
 
-FrontMCP's local and remote modes are fully OAuth 2.1 compliant:
+FrontMCP's `local` mode is fully OAuth 2.1 compliant. In `remote` mode, FrontMCP's own endpoints (the surface the MCP client talks to) are OAuth 2.1-aligned, but the end-to-end behavior also depends on the upstream identity provider FrontMCP is proxying to.
 
-<Check>**PKCE Required** - Only S256 code challenge method supported</Check>
+The guarantees below apply to FrontMCP's own implementation:
+
+<Check>**PKCE Required** - Only S256 code challenge method supported (downstream)</Check>
 <Check>**Authorization Code Flow** - No implicit or password grants</Check>
-<Check>**Refresh Token Rotation** - Tokens rotate on each use</Check>
+<Check>**Refresh Token Rotation** - FrontMCP-issued refresh tokens rotate on each use (`local` mode; `remote` mode mirrors upstream behavior)</Check>
 <Check>**JWT Access Tokens** - Signed with RS256 or ES256</Check>
 
 ## Session Management
