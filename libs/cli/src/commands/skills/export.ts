@@ -4,7 +4,6 @@
 // catalog skill into the IDE-rule format the chosen target expects, and
 // write the file under the current working directory.
 
-import * as fs from 'fs';
 import * as path from 'path';
 
 import { ensureDir, readFile, writeFile } from '@frontmcp/utils';
@@ -66,7 +65,11 @@ export async function exportSkills(options: ExportSkillsOptions): Promise<void> 
     if (options.target === 'windsurf') {
       // Windsurf rules live in a single file — append rather than overwrite.
       let existing = '';
-      if (fs.existsSync(absPath)) existing = await readFile(absPath, 'utf8');
+      try {
+        existing = await readFile(absPath, 'utf8');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
       await writeFile(absPath, mergeWindsurf(existing, skill.name, out.contents));
     } else {
       await writeFile(absPath, out.contents);
@@ -106,13 +109,18 @@ function stripFrontmatter(raw: string): string {
  */
 function mergeWindsurf(existing: string, name: string, sectionContents: string): string {
   if (!existing) return sectionContents;
-  const heading = `## ${name}`;
-  const idx = existing.indexOf(heading);
-  if (idx === -1) {
+  // Anchor the heading match to the start of a line so a skill name appearing
+  // inside prose or a code block can't be mistaken for the section header.
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const headingRe = new RegExp(`^##\\s+${escaped}\\b`, 'm');
+  const match = headingRe.exec(existing);
+  if (!match) {
     return existing.endsWith('\n') ? `${existing}\n${sectionContents}` : `${existing}\n\n${sectionContents}`;
   }
-  // Replace from this heading to the next `## ` (or EOF).
-  const nextHeadingIdx = existing.indexOf('\n## ', idx + heading.length);
+  const idx = match.index;
+  const after = idx + match[0].length;
+  // Replace from this heading to the next `## ` line (or EOF).
+  const nextHeadingIdx = existing.indexOf('\n## ', after);
   const tail = nextHeadingIdx === -1 ? '' : existing.slice(nextHeadingIdx);
   return `${existing.slice(0, idx)}${sectionContents.trim()}\n${tail}`;
 }

@@ -21,6 +21,7 @@ import {
   type ScopeEntry,
   type ServerRequest,
 } from '../../../common';
+import { extractToolNames } from '../../../common/metadata/skill.metadata';
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import type ToolRegistry from '../../../tool/tool.registry';
 import { createSkillHttpAuthValidator } from '../../auth';
@@ -388,6 +389,8 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       if (provider) {
         const hits = await provider.search(options.semanticQuery, limit);
         const all = skillRegistry.getSkills(true);
+        const requestedTags = options.tags;
+        const requestedTools = options.tools;
         results = hits
           .map((h) => {
             const skill = all.find(
@@ -395,7 +398,20 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
             );
             return skill ? { metadata: skill.metadata, score: h.score } : undefined;
           })
-          .filter((r): r is NonNullable<typeof r> => r !== undefined);
+          .filter((r): r is NonNullable<typeof r> => r !== undefined)
+          .filter((r) => {
+            // Mirror skillRegistry.search semantics: every requested tag must
+            // be present, and at least one requested tool must be exposed.
+            if (requestedTags?.length) {
+              const tags = r.metadata.tags ?? [];
+              if (!requestedTags.every((t) => tags.includes(t))) return false;
+            }
+            if (requestedTools?.length) {
+              const refSet = new Set(extractToolNames(r.metadata));
+              if (!requestedTools.some((t) => refSet.has(t))) return false;
+            }
+            return true;
+          });
       } else {
         warning = {
           code: 'semantic-fallback',

@@ -215,6 +215,107 @@ describe('SkilledOpenApiPlugin', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
+    it('builds an OperationToolFactory when scope.tools is available', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'plugin-test-'));
+      const bundlePath = path.join(tmpDir, 'bundle.json');
+      await fs.writeFile(bundlePath, JSON.stringify(validBundle), 'utf8');
+
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: bundlePath },
+        requireSignature: false,
+        dev: true,
+        exposeOperationsAsInternalTools: true,
+      });
+      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+
+      const fakeLogger = {
+        warn: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+      const fakeTools = {
+        registerToolInstance: jest.fn(),
+        unregisterToolInstance: jest.fn(() => true),
+      };
+      const fakeScope = {
+        logger: fakeLogger,
+        skills: {
+          registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
+          unregisterSkill: jest.fn(async () => false),
+        },
+        tools: fakeTools,
+        providers: { getActiveScope: () => ({ logger: fakeLogger, hooks: { registerHooks: jest.fn() } }) },
+      };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      expect(sync).toBeInstanceOf(BundleSyncService);
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it('warns when exposeOperationsAsInternalTools=true but scope.tools is unavailable', async () => {
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: '/this/does/not/exist' },
+        requireSignature: false,
+        dev: true,
+        exposeOperationsAsInternalTools: true,
+      });
+      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+      const sharedWarn = jest.fn();
+      const childLogger = {
+        warn: sharedWarn,
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn(function self(): unknown {
+          return this;
+        }),
+      };
+      const fakeLogger = {
+        warn: sharedWarn,
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn(() => childLogger),
+      };
+      const fakeScope = { logger: fakeLogger, skills: { registerSkillContent: jest.fn() }, tools: undefined };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      expect(sync).toBeInstanceOf(BundleSyncService);
+      expect(sharedWarn).toHaveBeenCalledWith(expect.stringMatching(/scope\.tools is unavailable/));
+    });
+
+    it('skips OperationToolFactory wiring when exposeOperationsAsInternalTools=false', async () => {
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: '/this/does/not/exist' },
+        requireSignature: false,
+        dev: true,
+        exposeOperationsAsInternalTools: false,
+      });
+      const syncProvider = providers.find((p: { provide: unknown }) => p.provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+      const fakeLogger = {
+        warn: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+      const fakeScope = { logger: fakeLogger, skills: { registerSkillContent: jest.fn() } };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      expect(sync).toBeInstanceOf(BundleSyncService);
+      // The "scope.tools is unavailable" warn must NOT fire when the option is off.
+      expect(fakeLogger.warn).not.toHaveBeenCalledWith(expect.stringMatching(/scope\.tools is unavailable/));
+    });
+
     it('bundle-sync factory tolerates a malformed source config', async () => {
       const providers = SkilledOpenApiPlugin.dynamicProviders({
         // Use a static source with a path that doesn't exist — source.start()

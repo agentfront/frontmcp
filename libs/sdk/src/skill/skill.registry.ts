@@ -764,6 +764,8 @@ export default class SkillRegistry
       ...(content.specMetadata !== undefined && { specMetadata: content.specMetadata }),
       ...(content.allowedTools !== undefined && { allowedTools: content.allowedTools }),
       ...(content.resources !== undefined && { resources: content.resources }),
+      ...(content.rating !== undefined && { rating: content.rating }),
+      ...(content.category !== undefined && { category: content.category }),
     };
   }
 

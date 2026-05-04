@@ -46,6 +46,7 @@ export {
   copyFile,
   cp,
   readdir,
+  realpath,
   rm,
   mkdtemp,
   access,

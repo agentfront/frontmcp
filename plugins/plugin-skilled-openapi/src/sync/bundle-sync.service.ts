@@ -87,11 +87,18 @@ export class BundleSyncService {
     // Gate 0: pin guard. When operators have pinned the active version,
     // source-driven swaps accumulate in history elsewhere but are never
     // committed. We surface this as a structured non-error result so the
-    // host can log it without paging anyone.
-    if (this.bundleStore.isPinned() && this.bundleStore.pinned() !== bundle.version) {
+    // host can log it without paging anyone. The same-version case must
+    // also short-circuit here — `bundleStore.swap()` throws BundlePinnedError
+    // unconditionally while the store is pinned, so falling through would
+    // turn a no-op into a rollback failure.
+    if (this.bundleStore.isPinned()) {
+      const pinned = this.bundleStore.pinned();
       return {
         applied: false,
-        reason: `bundle store pinned to ${this.bundleStore.pinned()}; ${bundle.version} not applied`,
+        reason:
+          pinned === bundle.version
+            ? `bundle store pinned to ${pinned}; ${bundle.version} already active`
+            : `bundle store pinned to ${pinned}; ${bundle.version} not applied`,
         bundleId: bundle.bundleId,
         bundleVersion: bundle.version,
       };

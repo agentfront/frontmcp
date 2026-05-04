@@ -1,12 +1,6 @@
 // file: plugins/plugin-skilled-openapi/src/skilled-openapi.types.ts
 
-import {
-  bundleSourceSchema,
-  npmSourceSchema,
-  saasSourceSchema,
-  signatureKeySchema,
-  staticSourceSchema,
-} from '@frontmcp/adapters/skills';
+import { bundleSourceSchema, signatureKeySchema } from '@frontmcp/adapters/skills';
 import { z } from '@frontmcp/lazy-zod';
 
 // Re-export source-layer schemas/types from the Skills Adapter so existing
@@ -18,11 +12,13 @@ export {
   saasSourceSchema,
   signatureKeySchema,
   staticSourceSchema,
-  type BundleSourceOptions,
-  type NpmSourceOptions,
-  type SaasSourceOptions,
-  type SignatureKey,
-  type StaticSourceOptions,
+} from '@frontmcp/adapters/skills';
+export type {
+  BundleSourceOptions,
+  NpmSourceOptions,
+  SaasSourceOptions,
+  SignatureKey,
+  StaticSourceOptions,
 } from '@frontmcp/adapters/skills';
 
 // ─── Outbound execution / SSRF ─────────────────────────────────────────────

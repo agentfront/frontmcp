@@ -2,6 +2,8 @@
 //
 // Convert a catalog skill into a Cursor `.cursor/rules/<name>.mdc` rule file.
 
+import { safeSkillSlug } from './sanitize';
+
 export interface CursorExportInput {
   name: string;
   description: string;
@@ -36,14 +38,19 @@ export function exportToCursor(skill: CursorExportInput): ExporterOutput {
   fmLines.push('---');
   const body = `# ${skill.name}\n\n${skill.instructions.trim()}\n`;
   return {
-    relativePath: `.cursor/rules/${skill.name}.mdc`,
+    relativePath: `.cursor/rules/${safeSkillSlug(skill.name)}.mdc`,
     contents: `${fmLines.join('\n')}\n\n${body}`,
   };
 }
 
 function stringifyOneLine(text: string): string {
-  // Cursor frontmatter is YAML-ish; one-line scalars need quoting when they
-  // contain `:` or `#`. JSON.stringify gives a safe quoted form.
-  if (/[:#"]/.test(text)) return JSON.stringify(text);
+  // Cursor frontmatter is YAML-ish; one-line plain scalars break on indicator
+  // chars, on leading/trailing whitespace, and on values that look like
+  // booleans/null. JSON.stringify gives a safe quoted form for any of those.
+  if (text.length === 0) return '""';
+  if (/^\s|\s$/.test(text)) return JSON.stringify(text);
+  if (/[:#"'&*!|>%@`,[\]{}]/.test(text)) return JSON.stringify(text);
+  if (/^[-?]/.test(text)) return JSON.stringify(text);
+  if (/^(true|false|null|yes|no|on|off|~)$/i.test(text)) return JSON.stringify(text);
   return text;
 }

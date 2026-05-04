@@ -60,14 +60,26 @@ export async function publishSkill(options: PublishSkillsOptions): Promise<void>
     process.exit(1);
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), 30_000);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(c('red', `Publish failed: ${message}`));
+    process.exit(1);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
   if (!res.ok) {
     const body = await safeText(res);
     console.error(c('red', `Publish failed (${res.status} ${res.statusText}): ${body}`));

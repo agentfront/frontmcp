@@ -2,7 +2,7 @@
 
 import { type FrontMcpAuthContext, type FrontMcpFetchInit } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
-import { type AuthInfo } from '@frontmcp/protocol';
+import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
 
 import { ConfigService } from '../../builtin/config/providers/config.service';
@@ -196,19 +196,18 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * @param name Tool name (or fully-qualified `owner.name`).
    * @param args Tool arguments — validated by the tool's input schema.
    * @param opts Optional progress token / abort signal forwarded into `_meta`.
-   * @returns The tool's `CallToolResult` (typed as `unknown` because tools
-   *          cross plugin boundaries; cast at the call site if you know the shape).
+   * @returns The tool's `CallToolResult`.
    */
   async callTool(
     name: string,
     args?: Record<string, unknown>,
     opts?: { progressToken?: string | number; signal?: AbortSignal },
-  ): Promise<unknown> {
+  ): Promise<CallToolResult> {
     const scope = this.scope as unknown as {
       runFlow: (
         flowName: 'tools:call-tool',
         input: { request: unknown; ctx: unknown },
-      ) => Promise<{ success: boolean; result?: unknown; error?: Error }>;
+      ) => Promise<{ success: boolean; result?: CallToolResult; error?: Error }>;
     };
     const requestMeta: Record<string, unknown> = {};
     if (opts?.progressToken !== undefined) requestMeta['progressToken'] = opts.progressToken;
@@ -221,7 +220,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
       },
     };
     const ctx = {
-      authInfo: this._authInfo,
+      authInfo: this.getAuthInfo(),
       requestId: this.tryGetContext()?.requestId ?? this.runId,
       internalCall: true as const,
       ...(opts?.signal && { signal: opts.signal }),
@@ -229,6 +228,9 @@ export abstract class ExecutionContextBase<Out = unknown> {
     const outcome = await scope.runFlow('tools:call-tool', { request, ctx });
     if (!outcome.success) {
       throw outcome.error ?? new Error(`callTool("${name}") failed`);
+    }
+    if (!outcome.result) {
+      throw new Error(`callTool("${name}") returned no result`);
     }
     return outcome.result;
   }

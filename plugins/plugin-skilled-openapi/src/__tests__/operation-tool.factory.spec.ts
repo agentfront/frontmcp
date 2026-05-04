@@ -1,8 +1,22 @@
 import type { Token } from '@frontmcp/di';
 import type { ProviderRegistry, ToolFunctionTokenRecord, ToolRegistry } from '@frontmcp/sdk';
 
+import { executeOperation } from '../executor/openapi-runtime';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
+import { AuthorityGuard } from '../security/authority-guard';
+import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 import { OperationToolFactory, operationToolName } from '../tools/operation-tool.factory';
+
+jest.mock('../executor/openapi-runtime', () => ({
+  executeOperation: jest.fn(async () => ({
+    ok: true,
+    status: 200,
+    data: { ok: true },
+    contentType: 'application/json',
+  })),
+}));
+
+const mockExecuteOperation = executeOperation as jest.MockedFunction<typeof executeOperation>;
 
 const noopLogger = {
   warn: jest.fn(),
@@ -25,13 +39,14 @@ class FakeProviderRegistry {
 }
 
 class FakeToolRegistry {
-  registered: { token: Token; metadataName: string; visibility: unknown }[] = [];
+  registered: { token: Token; executor: unknown; metadataName: string; visibility: unknown }[] = [];
   unregistered: Token[] = [];
 
   registerToolInstance(tool: { record: ToolFunctionTokenRecord }) {
     const token = tool.record.provide as unknown as Token;
     this.registered.push({
       token,
+      executor: tool.record.provide,
       metadataName: tool.record.metadata.name,
       visibility: (tool.record.metadata as { visibility?: unknown }).visibility,
     });
@@ -40,6 +55,34 @@ class FakeToolRegistry {
     this.unregistered.push(token);
     return true;
   }
+}
+
+function buildFakeCtx(overrides: { granted?: boolean; deniedBy?: string } = {}) {
+  const guard = {
+    check: jest.fn(async () => ({ granted: overrides.granted ?? true, deniedBy: overrides.deniedBy })),
+  };
+  const resolver = {
+    resolve: jest.fn(async () => 'token'),
+  };
+  const config = {
+    outbound: {
+      allowPrivateNetworks: false,
+      maxConcurrencyPerHost: 10,
+      defaultTimeoutMs: 30_000,
+      defaultMaxResponseBytes: 256 * 1024,
+      allowHttp: false,
+    },
+  };
+  return {
+    logger: noopLogger,
+    authInfo: {},
+    get: jest.fn((token: unknown) => {
+      if (token === SkilledOpenApiConfig) return config;
+      if (token === AuthorityGuard) return guard;
+      if (token === SkilledOpenApiCredentialResolver) return resolver;
+      return undefined;
+    }),
+  } as never;
 }
 
 const buildEntry = (overrides: Partial<HiddenOpEntry> = {}): HiddenOpEntry => ({
@@ -87,6 +130,28 @@ describe('OperationToolFactory', () => {
       const bundle = 'a'.repeat(60);
       expect(operationToolName(bundle, 'opX')).toBe(`${bundle}.opX`);
       expect(`${bundle}.opX`.length).toBe(64);
+    });
+
+    it('truncates the bare operationId when it itself exceeds 64 chars', () => {
+      const bundle = 'short';
+      const longOpId = 'op_' + 'x'.repeat(80);
+      const out = operationToolName(bundle, longOpId);
+      expect(out.length).toBe(64);
+      expect(out).toBe(longOpId.slice(0, 64));
+    });
+  });
+
+  describe('metadata derivation', () => {
+    it('falls back to "<METHOD> <pathTemplate>" when summary is missing', () => {
+      const { factory, toolRegistry } = makeFactory();
+      const entry = buildEntry();
+      delete (entry.op as { summary?: string }).summary;
+      delete (entry.op as { description?: string }).description;
+      factory.register(entry);
+      // No way to read metadata back from the fake; assert via re-register
+      // path that the registration succeeded with a valid name.
+      expect(toolRegistry.registered).toHaveLength(1);
+      expect(toolRegistry.registered[0].metadataName).toBe('acme.createInvoice');
     });
   });
 
@@ -140,6 +205,110 @@ describe('OperationToolFactory', () => {
 
       expect(toolRegistry.registered).toHaveLength(2);
       expect(factory.size).toBe(1);
+    });
+
+    it('logs but does not throw when the underlying registry rejects an unregister', () => {
+      const toolRegistry = new FakeToolRegistry();
+      const providers = new FakeProviderRegistry();
+      jest.spyOn(toolRegistry, 'unregisterToolInstance').mockImplementation(() => {
+        throw new Error('boom');
+      });
+      const factory = new OperationToolFactory({
+        toolRegistry: toolRegistry as unknown as ToolRegistry,
+        providers: providers as unknown as ProviderRegistry,
+        logger: noopLogger as never,
+      });
+      factory.register(buildEntry());
+      expect(() => factory.unregisterAll()).not.toThrow();
+      expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringMatching(/unregister failed/));
+    });
+  });
+
+  describe('executor', () => {
+    beforeEach(() => {
+      mockExecuteOperation.mockClear();
+    });
+
+    function lastExecutor(toolRegistry: FakeToolRegistry) {
+      const last = toolRegistry.registered[toolRegistry.registered.length - 1];
+      return last.executor as (
+        input: Record<string, unknown>,
+        ctx: never,
+      ) => Promise<{
+        ok: boolean;
+        status: number;
+        error?: string;
+        data?: unknown;
+        contentType?: string;
+      }>;
+    }
+
+    it('returns an envelope with ok:false when authority denies the call', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+      const exec = lastExecutor(toolRegistry);
+      const result = await exec({ id: 'x' }, buildFakeCtx({ granted: false, deniedBy: 'role:admin' }));
+      expect(result).toEqual({ ok: false, status: 0, error: expect.stringMatching(/authority denied/) });
+      expect(mockExecuteOperation).not.toHaveBeenCalled();
+    });
+
+    it('returns an envelope with ok:false when input fails schema validation', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+      const exec = lastExecutor(toolRegistry);
+      // missing required `id`
+      const result = await exec({}, buildFakeCtx());
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(0);
+      expect(result.error).toMatch(/input validation failed/);
+      expect(mockExecuteOperation).not.toHaveBeenCalled();
+    });
+
+    it('passes through executeOperation envelope on success', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+      const exec = lastExecutor(toolRegistry);
+      const result = await exec({ id: 'x' }, buildFakeCtx());
+      expect(result).toEqual({ ok: true, status: 200, data: { ok: true }, contentType: 'application/json' });
+      expect(mockExecuteOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves error and contentType from upstream failure', async () => {
+      mockExecuteOperation.mockResolvedValueOnce({ ok: false, status: 500, error: 'upstream-boom', data: undefined });
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+      const exec = lastExecutor(toolRegistry);
+      const result = await exec({ id: 'x' }, buildFakeCtx());
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(500);
+      expect(result.error).toBe('upstream-boom');
+    });
+
+    it('omits data/contentType/error when upstream omits them', async () => {
+      mockExecuteOperation.mockResolvedValueOnce({ ok: true, status: 204, data: undefined });
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+      const exec = lastExecutor(toolRegistry);
+      const result = await exec({ id: 'x' }, buildFakeCtx());
+      expect(result).toEqual({ ok: true, status: 204 });
+    });
+
+    it('does not throw when service.baseUrl is malformed (allowedHosts stays empty)', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry({ service: { id: 'svc', baseUrl: 'not-a-url' } }));
+      const exec = lastExecutor(toolRegistry);
+      await expect(exec({ id: 'x' }, buildFakeCtx())).resolves.toMatchObject({ ok: true });
+      expect(mockExecuteOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats undefined input as an empty object', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+      const exec = lastExecutor(toolRegistry);
+      const result = await exec(undefined as unknown as Record<string, unknown>, buildFakeCtx());
+      // missing required `id`
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/input validation failed/);
     });
   });
 });

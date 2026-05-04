@@ -14,9 +14,9 @@
 // path would force opinions that don't apply.
 
 import { watch as fsWatch, type FSWatcher } from 'node:fs';
-import * as path from 'node:path';
+import { sep as pathSep } from 'node:path';
 
-import { basename, joinPath, readdir, readFile, stat } from '@frontmcp/utils';
+import { basename, joinPath, pathResolve, readdir, readFile, realpath, stat } from '@frontmcp/utils';
 
 /**
  * Lightweight logger surface — kept narrow so this module can sit in a
@@ -122,7 +122,16 @@ export class FilesystemSkillsSource {
   }
 
   async start(): Promise<void> {
-    this.rootResolved = path.resolve(this.options.skillsDir);
+    // Resolve symlinks at the root so symlinked skills directories compare
+    // correctly against children (which we also realpath below). If the dir
+    // does not exist yet, fall back to plain pathResolve — initialScan() will
+    // log a warning when it can't read the directory.
+    const absRoot = pathResolve(this.options.skillsDir);
+    try {
+      this.rootResolved = await realpath(absRoot);
+    } catch {
+      this.rootResolved = absRoot;
+    }
     await this.initialScan();
     if (this.options.watch) {
       this.beginWatch();
@@ -171,12 +180,17 @@ export class FilesystemSkillsSource {
       if (name.startsWith('.')) continue;
       const abs = joinPath(this.rootResolved, name);
       // Symlink-containment: only follow symlinks whose realpath stays inside
-      // skillsDir. Resolution via path.resolve keeps this synchronous and
-      // cheap; an attacker creating a symlink out to /etc would need to
-      // already have write access to skillsDir.
-      const resolved = path.resolve(abs);
-      if (!resolved.startsWith(this.rootResolved + path.sep) && resolved !== this.rootResolved) {
-        this.logger.warn(`[fs-skills] skipping ${name}: resolved path escapes skillsDir`);
+      // skillsDir. `pathResolve` only normalizes the string — symlinks need
+      // `realpath` to expose their true target.
+      let resolved: string;
+      try {
+        resolved = await realpath(abs);
+      } catch {
+        // race with concurrent delete or broken symlink — skip
+        continue;
+      }
+      if (!resolved.startsWith(this.rootResolved + pathSep) && resolved !== this.rootResolved) {
+        this.logger.warn(`[fs-skills] skipping ${name}: realpath escapes skillsDir`);
         continue;
       }
       try {
@@ -247,7 +261,7 @@ export class FilesystemSkillsSource {
           return;
         }
         // First path segment is the skill subdir name.
-        const first = filename.split(path.sep)[0];
+        const first = filename.split(pathSep)[0];
         if (!first || first.startsWith('.')) return; // editor swap files etc.
         const absDir = joinPath(this.rootResolved, first);
         this.scheduleRefresh(absDir);

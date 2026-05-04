@@ -5,10 +5,10 @@ import SkilledOpenApiPlugin from './skilled-openapi.plugin';
 export { SkilledOpenApiPlugin };
 export default SkilledOpenApiPlugin;
 
-export {
+export { skilledOpenApiPluginOptionsSchema } from './skilled-openapi.types';
+export type {
   SkilledOpenApiPluginOptions,
   SkilledOpenApiPluginOptionsInput,
-  skilledOpenApiPluginOptionsSchema,
   BundleSourceOptions,
   StaticSourceOptions,
   NpmSourceOptions,

@@ -6,6 +6,22 @@
 
 import { z } from '@frontmcp/lazy-zod';
 
+// SaaS endpoints carry pinned bearer tokens and JWKS material; both must be
+// HTTPS so the JWT and verification keys are not exposed in plaintext.
+const httpsUrl = z
+  .string()
+  .url()
+  .refine(
+    (v) => {
+      try {
+        return new URL(v).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'must use https://' },
+  );
+
 export const staticSourceSchema = z.object({
   type: z.literal('static'),
   /** Path to the bundle directory (containing spec.yaml + overlay.yaml) or a single overlay file. */
@@ -30,7 +46,7 @@ export const npmSourceSchema = z.object({
 export const saasSourceSchema = z.object({
   type: z.literal('saas'),
   /** SaaS pull endpoint, e.g. `https://cloud.frontmcp.dev/v1/bundles/<bundleId>`. */
-  endpoint: z.string().url(),
+  endpoint: httpsUrl,
   /** Pinned JWT issued by the SaaS for the customer's FrontMCP server. */
   authToken: z.string().min(1),
   /**
@@ -46,7 +62,7 @@ export const saasSourceSchema = z.object({
    */
   enableWebhook: z.boolean().default(false),
   /** JWKS URL for verifying SaaS-issued tokens. */
-  jwksUrl: z.string().url(),
+  jwksUrl: httpsUrl,
   /** Expected issuer (`iss`) claim. */
   expectedIssuer: z.string().min(1),
 });

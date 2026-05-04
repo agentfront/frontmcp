@@ -6,6 +6,7 @@
 // pick which ones to commit.
 
 import type { CursorExportInput, ExporterOutput } from './cursor';
+import { safeSkillSlug } from './sanitize';
 
 export type CopilotExportInput = CursorExportInput;
 
@@ -19,7 +20,7 @@ export function exportToCopilot(skill: CopilotExportInput): ExporterOutput {
   if (skill.tags?.length) header.push(`> Tags: ${skill.tags.join(', ')}`);
   header.push('');
   return {
-    relativePath: `.github/instructions/${skill.name}.md`,
+    relativePath: `.github/instructions/${safeSkillSlug(skill.name)}.md`,
     contents: `${header.join('\n')}${skill.instructions.trim()}\n`,
   };
 }

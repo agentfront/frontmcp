@@ -167,14 +167,12 @@ export async function loadResolvedSkillResourceBody(
   entry: { filename?: string; path?: string; content?: string },
 ): Promise<string> {
   if (typeof entry.content === 'string') {
-    const parsed = parseSkillMdFrontmatter(entry.content);
-    return parsed.body || entry.content;
+    return parseSkillMdFrontmatter(entry.content).body;
   }
   if (entry.path) {
     try {
       const raw = await readFile(entry.path, 'utf-8');
-      const parsed = parseSkillMdFrontmatter(raw);
-      return parsed.body || raw;
+      return parseSkillMdFrontmatter(raw).body;
     } catch {
       throw new Error(`Failed to read ${resourceType} from path "${entry.path}".`);
     }
