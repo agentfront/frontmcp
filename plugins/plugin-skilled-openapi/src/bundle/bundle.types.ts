@@ -124,21 +124,29 @@ export interface ResolvedBundle {
   integrity?: BundleIntegrity;
 }
 
-/** Convenience projection of a single skill's executable actions. */
+/**
+ * Convenience projection of a single skill's executable actions.
+ *
+ * Throws if any of the skill's `operationIds` is missing from `ops`. Silently
+ * dropping unknown ids would let a malformed bundle apply with the skill's
+ * advertised action list out of sync with what `execute_action` can actually
+ * resolve, so the bundle apply path treats this as a hard failure that trips
+ * the rollback.
+ */
 export function bundleSkillToActions(skill: BundledSkill, ops: Record<string, OperationDescriptor>): SkillAction[] {
-  return skill.operationIds
-    .map((opId) => {
-      const op = ops[opId];
-      if (!op) return undefined;
-      const action: SkillAction = {
-        actionId: op.operationId,
-        summary: op.summary ?? `${op.httpMethod} ${op.pathTemplate}`,
-        ...(op.description !== undefined && { description: op.description }),
-        inputJsonSchema: op.inputSchema,
-        outputJsonSchema: op.outputSchema,
-        ...(op.requiredAuthorities !== undefined && { requiredAuthorities: op.requiredAuthorities }),
-      };
-      return action;
-    })
-    .filter((a): a is SkillAction => a !== undefined);
+  return skill.operationIds.map((opId) => {
+    const op = ops[opId];
+    if (!op) {
+      throw new Error(`bundleSkillToActions: skill "${skill.id}" references unknown operationId "${opId}"`);
+    }
+    const action: SkillAction = {
+      actionId: op.operationId,
+      summary: op.summary ?? `${op.httpMethod} ${op.pathTemplate}`,
+      ...(op.description !== undefined && { description: op.description }),
+      inputJsonSchema: op.inputSchema,
+      outputJsonSchema: op.outputSchema,
+      ...(op.requiredAuthorities !== undefined && { requiredAuthorities: op.requiredAuthorities }),
+    };
+    return action;
+  });
 }

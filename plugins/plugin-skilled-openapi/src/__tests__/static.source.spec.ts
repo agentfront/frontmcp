@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import type { FrontMcpLogger } from '@frontmcp/sdk';
+
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { StaticSource } from '../sources/static.source';
 
@@ -17,14 +19,20 @@ const baseBundle = {
   operations: {},
 };
 
-const fakeLogger = {
-  warn: jest.fn(),
-  info: jest.fn(),
-  error: jest.fn(),
-  debug: jest.fn(),
-  verbose: jest.fn(),
-  child: jest.fn().mockReturnThis(),
-} as unknown as never;
+const makeLogger = (): FrontMcpLogger => {
+  const logger: Partial<FrontMcpLogger> & { child: jest.Mock } = {
+    warn: jest.fn(),
+    info: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    verbose: jest.fn(),
+    child: jest.fn(),
+  };
+  logger.child.mockReturnValue(logger as FrontMcpLogger);
+  return logger as FrontMcpLogger;
+};
+
+const fakeLogger: FrontMcpLogger = makeLogger();
 
 describe('StaticSource', () => {
   let tmpDir: string;
@@ -142,7 +150,7 @@ operations: {}
     await fs.writeFile(file, JSON.stringify(baseBundle), 'utf8');
 
     const warn = jest.fn();
-    const logger = { ...fakeLogger, warn } as unknown as never;
+    const logger: FrontMcpLogger = { ...makeLogger(), warn };
     const source = new StaticSource({ type: 'static', path: file, watch: true }, logger);
     source.onChange(() => {});
     await source.start();
@@ -158,18 +166,26 @@ operations: {}
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/refresh failed/));
   });
 
-  it('unsubscribe stops further notifications', async () => {
+  it('unsubscribe prevents the listener from firing on subsequent file changes', async () => {
     const file = path.join(tmpDir, 'bundle.json');
     await fs.writeFile(file, JSON.stringify(baseBundle), 'utf8');
 
-    const source = new StaticSource({ type: 'static', path: file, watch: false }, fakeLogger);
+    // Watch mode is required so we can trigger a real change event after the
+    // initial notification — without it the test can't prove the unsubscribe
+    // handle actually detached the listener (a no-op `unsub` would still
+    // satisfy "fn called once" because nothing else fires).
+    const source = new StaticSource({ type: 'static', path: file, watch: true }, fakeLogger);
     const fn = jest.fn();
     const unsub = source.onChange(fn);
     await source.start();
     expect(fn).toHaveBeenCalledTimes(1);
 
     unsub();
-    // Trigger a manual refresh path by calling stop then start again? simpler: ensure no further notifications occur
+    // Allow fs.watch to settle before mutating, then write a new bundle and
+    // wait past the source's 250ms debounce window.
+    await new Promise((r) => setTimeout(r, 50));
+    await fs.writeFile(file, JSON.stringify({ ...baseBundle, version: '2' }), 'utf8');
+    await new Promise((r) => setTimeout(r, 500));
     await source.stop();
     expect(fn).toHaveBeenCalledTimes(1);
   });

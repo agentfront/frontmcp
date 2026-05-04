@@ -84,7 +84,13 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
         provide: SkilledOpenApiCredentialResolver,
         useValue: new MemoryCredentialResolver(parsed.credentials ?? {}) as unknown as SkilledOpenApiCredentialResolver,
       },
-      { name: 'skilled-openapi:authority-guard', provide: AuthorityGuard, useValue: new AuthorityGuard() },
+      {
+        name: 'skilled-openapi:authority-guard',
+        provide: AuthorityGuard,
+        inject: () => [ScopeEntry],
+        useFactory: (scope: ScopeEntry) =>
+          new AuthorityGuard({ logger: scope.logger.child('skilled-openapi:authority') }),
+      },
       {
         name: 'skilled-openapi:bundle-sync',
         provide: BundleSyncService,
@@ -119,11 +125,21 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             logger.error(`failed to construct bundle source: ${(e as Error).message}`);
             return sync;
           }
-          source.onChange(async (bundle) => {
-            const result = await sync.apply(bundle);
-            if (!result.applied) {
-              logger.warn(`bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
-            }
+          // BundleSourceListener is invoked synchronously by the source, so any
+          // rejection from sync.apply() must be caught here — passing an async
+          // arrow directly would surface failures as unhandled promise
+          // rejections instead of structured warn/error log lines.
+          source.onChange((bundle) => {
+            void sync
+              .apply(bundle)
+              .then((result) => {
+                if (!result.applied) {
+                  logger.warn(`bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
+                }
+              })
+              .catch((e: unknown) => {
+                logger.error(`bundle ${bundle.bundleId}@${bundle.version} apply threw: ${(e as Error).message}`);
+              });
           });
           // Defer source.start() to a microtask so scope-init can finish
           // wiring scope.skills before the first bundle apply runs.

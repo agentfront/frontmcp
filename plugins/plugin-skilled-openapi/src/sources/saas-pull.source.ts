@@ -11,6 +11,7 @@ import type { SaasSourceOptions } from '../skilled-openapi.types';
 import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
 
 const DEFAULT_CACHE_DIR = '.frontmcp/skilled-openapi';
+const DEFAULT_PULL_TIMEOUT_MS = 30_000;
 
 /**
  * Pulls bundles from a configured SaaS endpoint via authenticated HTTPS.
@@ -113,9 +114,19 @@ export class SaasPullSource implements SkillBundleSource {
 
   // Indirected so tests can stub the network call.
   protected async httpGet(url: string, headers: Record<string, string>): Promise<{ status: number; body: string }> {
-    const res = await fetch(url, { method: 'GET', headers });
-    const body = await res.text();
-    return { status: res.status, body };
+    // Bound the request so a hung SaaS endpoint can't pin `inFlight=true`
+    // forever and silently disable polling. AbortError surfaces as a normal
+    // fetch failure to the caller, which the surrounding catch already
+    // treats as a pull failure with optional cache fallback.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DEFAULT_PULL_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+      const body = await res.text();
+      return { status: res.status, body };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async fetchOnce(): Promise<ResolvedBundle> {

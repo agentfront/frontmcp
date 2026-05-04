@@ -23,6 +23,7 @@ const baseOutbound = (overrides: Partial<OutboundOptions> = {}): OutboundOptions
 
 const buildEntry = (overrides: Partial<HiddenOpEntry['op']> = {}): HiddenOpEntry => ({
   skillId: 'billing',
+  bundleId: 'test:bundle',
   bundleVersion: 'v1',
   service: { id: 'svc', baseUrl: 'http://localhost:9999' },
   authBinding: { kind: 'bearer', vaultRef: 'stripe' },

@@ -25,6 +25,7 @@ const opEqual = (a: OperationDescriptor, b: OperationDescriptor): boolean =>
   a.httpMethod === b.httpMethod &&
   a.pathTemplate === b.pathTemplate &&
   a.authBindingRef === b.authBindingRef &&
+  JSON.stringify(a.mapper ?? null) === JSON.stringify(b.mapper ?? null) &&
   JSON.stringify(a.inputSchema) === JSON.stringify(b.inputSchema) &&
   JSON.stringify(a.outputSchema) === JSON.stringify(b.outputSchema) &&
   JSON.stringify(a.requiredAuthorities ?? null) === JSON.stringify(b.requiredAuthorities ?? null) &&

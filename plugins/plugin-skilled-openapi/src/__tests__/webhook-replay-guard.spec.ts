@@ -78,10 +78,33 @@ describe('WebhookReplayGuard', () => {
     expect(guard.size).toBe(2);
   });
 
-  it('different (ts, nonce) tuples do not collide', () => {
-    const guard = new WebhookReplayGuard();
+  it('rejects nonce reuse even with a different in-window timestamp', () => {
+    // Class contract: "the same nonce can't be replayed within the window".
+    // Keying on (ts|nonce) would let an attacker reuse the nonce by varying
+    // the timestamp — fix is to dedupe by nonce alone.
+    const guard = new WebhookReplayGuard({ windowMs: 60_000 });
     guard.setNowProvider(() => 1_000);
     expect(guard.check({ timestampMs: 1_000, nonce: 'aaaa1111' }).ok).toBe(true);
-    expect(guard.check({ timestampMs: 1_001, nonce: 'aaaa1111' }).ok).toBe(true);
+    expect(guard.check({ timestampMs: 1_001, nonce: 'aaaa1111' }).ok).toBe(false);
+  });
+
+  it('eviction drops the entry with the smallest expiresAt, not the oldest insertion', () => {
+    // Mix in a stale-but-in-window timestamp so insertion order != expiry order.
+    const guard = new WebhookReplayGuard({ capacity: 2, windowMs: 10_000 });
+    guard.setNowProvider(() => 5_000);
+    // Insert an entry with the EARLIEST expiry (timestampMs much older but
+    // still within window — expiresAt = 1_000 + 10_000 = 11_000).
+    guard.check({ timestampMs: 1_000, nonce: 'olderexp' });
+    // Insert a fresher entry (expiresAt = 5_000 + 10_000 = 15_000).
+    guard.check({ timestampMs: 5_000, nonce: 'newerexp' });
+    // Hit capacity — should evict the entry with the smallest expiresAt,
+    // i.e. 'olderexp', leaving 'newerexp' alive.
+    guard.check({ timestampMs: 5_000, nonce: 'thirdval' });
+    // Verify the survivor first: 'newerexp' is still tracked, so re-use is
+    // rejected. (Doing this before re-checking 'olderexp' avoids re-triggering
+    // capacity eviction, which would then drop one of the two survivors.)
+    expect(guard.check({ timestampMs: 5_500, nonce: 'newerexp' }).ok).toBe(false);
+    // 'olderexp' was evicted, so re-using it now should succeed.
+    expect(guard.check({ timestampMs: 1_500, nonce: 'olderexp' }).ok).toBe(true);
   });
 });

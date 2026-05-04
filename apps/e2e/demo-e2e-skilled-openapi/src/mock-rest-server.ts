@@ -54,11 +54,27 @@ export async function startMockBillingServer(port = 9876): Promise<http.Server> 
         const id = getMatch[1]!;
         const inv = invoices.get(id);
         if (!inv) return reply(res, 404, { error: 'not found' });
-        return reply(res, 200, inv);
+        // Return ONLY the fields declared in the bundle's outputSchema for
+        // getInvoice ({ id, status, amount }). Extras like `customerId` would
+        // be rejected by the new `additionalProperties: false` constraint.
+        return reply(res, 200, { id: inv.id, status: inv.status, amount: inv.amount });
       }
 
       const refundMatch = url.pathname.match(/^\/v1\/invoices\/([^/]+)\/refunds$/);
       if (req.method === 'POST' && refundMatch) {
+        // Validate the refund body so a regression in execute_action's body
+        // mapper (e.g. dropping the `amount` parameter) actually fails the
+        // e2e suite rather than silently passing.
+        const raw = await readBody(req);
+        let body: { amount?: unknown };
+        try {
+          body = raw.length > 0 ? (JSON.parse(raw) as { amount?: unknown }) : {};
+        } catch {
+          return reply(res, 400, { error: 'invalid json body' });
+        }
+        if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount <= 0) {
+          return reply(res, 400, { error: 'invalid amount' });
+        }
         const id = refundMatch[1]!;
         const inv = invoices.get(id);
         if (!inv) return reply(res, 404, { error: 'not found' });

@@ -60,9 +60,15 @@ export class SkilledOpenApiDemoApp {}
 
 if (require.main === module) {
   // Start mock REST first so the plugin's first pull / first execute_action
-  // sees a live upstream.
-  startMockBillingServer(Number(process.env['MOCK_BILLING_PORT'] ?? 9876));
-  // The decorator wires the FrontMCP server; importing this module starts it.
-
-  console.log('[skilled-openapi-demo] mock REST + FrontMCP wired. Connect MCP client to http://localhost:3010');
+  // sees a live upstream. Awaited via .then so an EADDRINUSE surfaces as a
+  // logged failure instead of a swallowed promise rejection.
+  void startMockBillingServer(Number(process.env['MOCK_BILLING_PORT'] ?? 9876))
+    .then(() => {
+      // The decorator wires the FrontMCP server; importing this module starts it.
+      console.log('[skilled-openapi-demo] mock REST + FrontMCP wired. Connect MCP client to http://localhost:3010');
+    })
+    .catch((e: unknown) => {
+      console.error('[skilled-openapi-demo] failed to start mock REST:', (e as Error).message);
+      process.exit(1);
+    });
 }

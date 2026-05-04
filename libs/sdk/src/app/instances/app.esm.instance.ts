@@ -20,6 +20,7 @@ import {
   type RemoteAppMetadata,
   type SkillEntry,
 } from '../../common';
+import { InternalMcpError } from '../../errors';
 import { EsmCacheManager, EsmModuleLoader } from '../../esm-loader';
 import { type EsmRegistryAuth } from '../../esm-loader/esm-auth.types';
 import { type FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
@@ -122,7 +123,7 @@ class EmptySkillRegistry implements SkillRegistryInterface {
     return false;
   }
   async registerSkillContent(): Promise<{ id: string; unregister: () => Promise<void> }> {
-    throw new Error('EmptySkillRegistry: registerSkillContent is not supported on ESM apps');
+    throw new InternalMcpError('registerSkillContent is not supported on ESM apps', 'UNSUPPORTED_OPERATION');
   }
   async unregisterSkill(): Promise<boolean> {
     return false;

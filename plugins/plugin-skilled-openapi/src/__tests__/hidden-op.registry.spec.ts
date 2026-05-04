@@ -2,6 +2,7 @@ import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.regi
 
 const buildEntry = (skillId: string, opId: string): HiddenOpEntry => ({
   skillId,
+  bundleId: 'test:bundle',
   bundleVersion: 'v1',
   service: { id: 'svc', baseUrl: 'https://example.com' },
   authBinding: { kind: 'none' },

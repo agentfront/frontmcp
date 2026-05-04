@@ -63,18 +63,35 @@ export class WebhookReplayGuard {
       return { ok: false, reason: `timestamp outside ${this.windowMs}ms window` };
     }
 
-    // Cheap canonical key — sha256 the (ts, nonce) tuple to bound key size.
-    const key = sha256Hex(`${timestampMs}|${nonce}`);
+    // Dedupe by nonce, NOT by (timestamp, nonce). The class contract is "the
+    // same nonce can't be replayed within the window"; keying on the tuple
+    // would let an attacker reuse a nonce by varying the in-window timestamp
+    // header (relevant when timestamps aren't independently bound by the
+    // outer JWT signature).
+    const key = sha256Hex(nonce);
     const expiresAt = this.seen.get(key);
     if (expiresAt !== undefined && expiresAt > now) {
       return { ok: false, reason: 'nonce replay detected within freshness window' };
     }
 
-    // LRU eviction: when capacity is hit, drop the oldest entry by Map insertion
-    // order (Maps preserve insertion order). Re-adding moves to end implicitly.
+    // Capacity eviction: drop expired entries first; if still at capacity,
+    // evict the entry with the SMALLEST `expiresAt` — Map insertion order
+    // does not reliably correlate with expiry because the supplied
+    // `timestampMs` can be older or newer than `now`, so insertion-order
+    // eviction can drop a still-fresh nonce while leaving expired ones live.
     if (this.seen.size >= this.capacity) {
-      const oldest = this.seen.keys().next().value;
-      if (oldest) this.seen.delete(oldest);
+      this.prune();
+    }
+    if (this.seen.size >= this.capacity) {
+      let victimKey: string | undefined;
+      let victimExpiry = Number.POSITIVE_INFINITY;
+      for (const [candidateKey, candidateExpiry] of this.seen) {
+        if (candidateExpiry < victimExpiry) {
+          victimKey = candidateKey;
+          victimExpiry = candidateExpiry;
+        }
+      }
+      if (victimKey !== undefined) this.seen.delete(victimKey);
     }
     this.seen.set(key, timestampMs + this.windowMs);
     return { ok: true };

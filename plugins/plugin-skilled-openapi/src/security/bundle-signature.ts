@@ -11,7 +11,13 @@
 // On failure the plugin REJECTS the bundle and keeps the previous one — never
 // half-apply (per OPA's lesson). All failure paths surface a structured reason.
 
-import { createHash, createPublicKey, verify as nodeVerify } from 'node:crypto';
+// Per CLAUDE.md: hashing routes through `@frontmcp/utils` for cross-platform
+// behavior parity. createPublicKey / verify stay on node:crypto because the
+// utils package does not currently expose asymmetric-signature verification
+// helpers; if/when it does, swap those over too.
+import { createPublicKey, verify as nodeVerify } from 'node:crypto';
+
+import { sha256Hex } from '@frontmcp/utils';
 
 import type { BundleIntegrity, ResolvedBundle } from '../bundle/bundle.types';
 import type { SignatureKey } from '../skilled-openapi.types';
@@ -40,8 +46,7 @@ export function canonicalize(value: unknown): string {
 export function bundleDigest(bundle: ResolvedBundle): string {
   const { integrity: _drop, ...rest } = bundle;
   void _drop;
-  const canonical = canonicalize(rest);
-  return createHash('sha256').update(canonical, 'utf8').digest('hex');
+  return sha256Hex(canonicalize(rest));
 }
 
 function base64urlToBuffer(b64url: string): Buffer {

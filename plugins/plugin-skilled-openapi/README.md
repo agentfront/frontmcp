@@ -6,7 +6,7 @@ This plugin lets a FrontMCP server consume **signed skill bundles** produced by 
 
 ## How it works
 
-```
+```text
 OpenAPI spec  --(SaaS analyzer, signs)-->  spec.yaml + overlay.yaml   (signed bundle)
                                                   │
                                                   ▼

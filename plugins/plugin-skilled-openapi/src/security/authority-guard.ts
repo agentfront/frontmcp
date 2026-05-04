@@ -14,6 +14,7 @@ import {
   type AuthoritiesMetadata,
   type AuthoritiesResult,
 } from '@frontmcp/auth';
+import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { AuthoritiesPolicy } from '../bundle/bundle.types';
 
@@ -37,17 +38,20 @@ export interface AuthorityCheckArgs {
 export class AuthorityGuard {
   private readonly engine: AuthoritiesEngine;
   private readonly contextBuilder: AuthoritiesContextBuilder;
+  private readonly logger: FrontMcpLogger | undefined;
 
   constructor(
     opts: {
       profiles?: AuthoritiesProfileRegistry;
       evaluators?: AuthoritiesEvaluatorRegistry;
+      logger?: FrontMcpLogger;
     } = {},
   ) {
     const profiles = opts.profiles ?? new AuthoritiesProfileRegistry();
     const evaluators = opts.evaluators ?? new AuthoritiesEvaluatorRegistry();
     this.engine = new AuthoritiesEngine(profiles, evaluators);
     this.contextBuilder = new AuthoritiesContextBuilder();
+    this.logger = opts.logger;
   }
 
   async check(args: AuthorityCheckArgs): Promise<AuthoritiesResult> {
@@ -56,7 +60,23 @@ export class AuthorityGuard {
       // No policy → grant (skill-level signed-bundle origin trust is the upstream gate).
       return { granted: true, evaluatedPolicies: [] };
     }
-    const ctx: AuthoritiesEvaluationContext = this.contextBuilder.build(authInfo, input, env);
-    return this.engine.evaluate(policy as AuthoritiesMetadata, ctx);
+    // execute_action documents a non-throwing contract — every authority
+    // failure must surface as { granted: false, deniedBy: ... }. A malformed
+    // policy or an unsupported authInfo shape can throw inside libs/auth's
+    // contextBuilder.build / engine.evaluate, so wrap both in try/catch and
+    // translate to the structured envelope.
+    try {
+      const ctx: AuthoritiesEvaluationContext = this.contextBuilder.build(authInfo, input, env);
+      return await this.engine.evaluate(policy as AuthoritiesMetadata, ctx);
+    } catch (e) {
+      const message = (e as Error).message ?? 'authority evaluation threw';
+      this.logger?.error(`[skilled-openapi:authority] evaluation failed: ${message}`);
+      return {
+        granted: false,
+        deniedBy: 'authority_evaluation_failed',
+        message,
+        evaluatedPolicies: [],
+      };
+    }
   }
 }

@@ -166,10 +166,24 @@ const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {
   allowHttp: false,
 };
 
-export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObjectSchema.transform((opts) => ({
-  ...opts,
-  outbound: opts.outbound ?? DEFAULT_OUTBOUND_OPTIONS,
-}));
+export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObjectSchema.transform((opts) => {
+  // Merge user-provided outbound overrides on top of the SSRF/timeouts default.
+  // `dev: true` widens this further by allowing http:// upstreams (the docstring
+  // for `dev` advertises this behavior; without applying it here, callers
+  // reading the parsed config still see allowHttp=false and lose the relaxation).
+  const outbound: OutboundOptions = {
+    ...DEFAULT_OUTBOUND_OPTIONS,
+    ...(opts.outbound ?? {}),
+  };
+  if (opts.dev) {
+    outbound.allowHttp = true;
+  }
+  return {
+    ...opts,
+    outbound,
+    bundleCacheDir: opts.bundleCacheDir ?? '.frontmcp/skilled-openapi/',
+  };
+});
 
 /** Parsed options with defaults applied — internal plugin use. */
 export type SkilledOpenApiPluginOptions = z.infer<typeof skilledOpenApiPluginOptionsSchema>;

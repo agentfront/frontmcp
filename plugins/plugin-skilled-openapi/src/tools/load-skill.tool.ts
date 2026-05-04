@@ -1,6 +1,6 @@
 // file: plugins/plugin-skilled-openapi/src/tools/load-skill.tool.ts
 
-import { ScopeEntry, Tool, ToolContext } from '@frontmcp/sdk';
+import { InternalMcpError, PublicMcpError, ScopeEntry, Tool, ToolContext } from '@frontmcp/sdk';
 
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
@@ -27,11 +27,16 @@ export default class LoadSkillTool extends ToolContext {
     const scope = this.get(ScopeEntry);
     const skillRegistry = scope.skills;
     if (!skillRegistry) {
-      throw new Error('SkillRegistry is not available on the active scope');
+      // Misconfigured scope — should be impossible at runtime; surface as
+      // an internal error so the JSON-RPC envelope carries a 500 / opaque
+      // message instead of leaking implementation details.
+      throw new InternalMcpError('SkillRegistry is not available on the active scope', 'SKILL_REGISTRY_UNAVAILABLE');
     }
     const result = await skillRegistry.loadSkill(input.skillId);
     if (!result) {
-      throw new Error(`Skill "${input.skillId}" not found`);
+      // Caller-visible: skill id was not registered. Map to a 404 with a
+      // stable code so MCP clients can branch on it.
+      throw new PublicMcpError(`Skill "${input.skillId}" not found`, 'SKILL_NOT_FOUND', 404);
     }
     const skill = result.skill;
     return {

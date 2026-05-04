@@ -2,7 +2,6 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { bundleDigest, canonicalize, verifyBundleSignature } from '../security/bundle-signature';
-import type { SignatureKey } from '../skilled-openapi.types';
 
 function bytesToBase64Url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

@@ -25,7 +25,10 @@ describe('bundleSkillToActions', () => {
     expect(actions.map((a) => a.actionId)).toEqual(['a', 'b']);
   });
 
-  it('drops operationIds that are not present in the operations map (filter branch)', () => {
+  it('throws on operationIds that are not present in the operations map', () => {
+    // Silently dropping unknown ids would advertise a skill whose actions[]
+    // disagree with what execute_action can resolve; bundle apply must reject
+    // the bundle entirely instead.
     const skill: BundledSkill = {
       id: 's',
       name: 'S',
@@ -34,8 +37,7 @@ describe('bundleSkillToActions', () => {
       operationIds: ['present', 'missing'],
     };
     const ops = { present: op('present') };
-    const actions = bundleSkillToActions(skill, ops);
-    expect(actions.map((a) => a.actionId)).toEqual(['present']);
+    expect(() => bundleSkillToActions(skill, ops)).toThrow(/unknown operationId "missing"/);
   });
 
   it('passes through optional fields (description, requiredAuthorities)', () => {

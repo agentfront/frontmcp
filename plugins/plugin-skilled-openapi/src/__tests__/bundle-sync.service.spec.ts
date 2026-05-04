@@ -152,6 +152,94 @@ describe('BundleSyncService', () => {
     expect(store.current()).toBeUndefined();
   });
 
+  it('rollback restores the previous bundle when a registration fails on an upgrade', async () => {
+    // Atomicity contract: removed/replaced skills must remain visible after a
+    // failed bundle apply. Previously the service unregistered removed skills
+    // and dropped replaced handles BEFORE all new registrations completed, so
+    // a registration failure mid-apply left the registry with neither the new
+    // bundle's skills nor the prior bundle's. This test pins that down.
+    const hiddenOps = new HiddenOpRegistry();
+    const store = new BundleStore();
+    let nextRegistrationFails = false;
+
+    const registry: Pick<SkillRegistryInterface, 'registerSkillContent' | 'unregisterSkill'> = {
+      async registerSkillContent(content) {
+        if (nextRegistrationFails) {
+          nextRegistrationFails = false;
+          throw new Error('synthetic registration failure on upgrade');
+        }
+        return {
+          id: content.id,
+          unregister: async () => {
+            // no-op for this test — the assertion is on the registry state
+            // we observe via apply(), not on the test fake.
+          },
+        };
+      },
+      async unregisterSkill() {
+        return false;
+      },
+    };
+
+    const sync = new BundleSyncService(
+      registry as SkillRegistryInterface,
+      hiddenOps,
+      store,
+      { requireSignature: false, trustedKeys: [] },
+      fakeLogger,
+    );
+
+    // First apply: succeeds, becomes the active bundle.
+    const v1 = buildBundle({
+      skills: [
+        {
+          id: 'invoices',
+          name: 'Invoices',
+          description: 'd',
+          instructions: '# v1',
+          operationIds: ['createInvoice'],
+        },
+        {
+          id: 'reports',
+          name: 'Reports',
+          description: 'd',
+          instructions: '# v1',
+          operationIds: ['createInvoice'],
+        },
+      ],
+    });
+    const firstResult = await sync.apply(v1);
+    expect(firstResult.applied).toBe(true);
+    expect(store.current()).toBe(v1);
+
+    // Second apply: removes `reports`, changes `invoices`, but registration
+    // throws on the very first call so we never reach the unregister step.
+    nextRegistrationFails = true;
+    const v2 = buildBundle({
+      version: '2',
+      skills: [
+        {
+          id: 'invoices',
+          name: 'Invoices v2',
+          description: 'd',
+          instructions: '# v2',
+          operationIds: ['createInvoice'],
+        },
+      ],
+    });
+    const secondResult = await sync.apply(v2);
+    expect(secondResult.applied).toBe(false);
+    expect(secondResult.reason).toMatch(/synthetic registration failure/);
+
+    // BundleStore was not swapped — listeners observe the prior bundle.
+    expect(store.current()).toBe(v1);
+    // HiddenOpRegistry was restored from the snapshot — both skills' entries
+    // come back at the prior bundle's version.
+    expect(hiddenOps.size).toBe(2);
+    expect(hiddenOps.get('invoices', 'createInvoice')?.bundleVersion).toBe('1');
+    expect(hiddenOps.get('reports', 'createInvoice')?.bundleVersion).toBe('1');
+  });
+
   it('changing a skill replaces the action set in hidden-op registry', async () => {
     const fakeReg = new FakeRegistry();
     const hiddenOps = new HiddenOpRegistry();

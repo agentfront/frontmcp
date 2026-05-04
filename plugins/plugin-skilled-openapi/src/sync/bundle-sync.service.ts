@@ -77,66 +77,125 @@ export class BundleSyncService {
     const previous = this.bundleStore.current();
     const diff = diffBundles(previous, bundle);
 
-    // Apply atomically: if any single skill registration fails, roll back the
-    // hidden-op registry to the prior state.
+    // Snapshot every piece of state we mutate so a failure mid-apply can be
+    // fully reversed:
+    //   - hiddenOps entries (the registry is rebuilt from scratch below).
+    //   - skillUnregisterByBundleId (so we can restore the prior unregister
+    //     handles if rollback re-registers replaced/removed skills).
+    //   - priorContents: SkillContent that was registered for skills in the
+    //     PREVIOUS bundle, keyed by id. When a skill is replaced or removed,
+    //     we use these snapshots to re-register the prior version on rollback.
     const snapshotEntries = [...this.hiddenOps.values()];
-    const registeredHandles: { id: string; unregister: () => Promise<void> }[] = [];
+    const priorHandles = new Map(this.skillUnregisterByBundleId);
+    const priorContents: Map<string, SkillContent> = previous
+      ? new Map(previous.skills.map((s) => [s.id, this.toSkillContent(s, previous)] as const))
+      : new Map();
+
+    // Track everything we mutate during the staged apply so the catch block
+    // can unwind it. `newHandles` is populated as each register call succeeds;
+    // `successfullyRemovedIds` is populated as each removed-skill unregister
+    // succeeds. These let rollback know exactly what to undo.
+    const newHandles: { id: string; unregister: () => Promise<void> }[] = [];
+    const successfullyRemovedIds: string[] = [];
 
     try {
-      // 1) Sync hidden-op registry.
+      // 1) Sync hidden-op registry. This throws if the bundle references an
+      //    unknown service / authBinding / operation, which trips the rollback
+      //    path below and keeps the previous bundle active.
       this.rebuildHiddenOps(bundle);
 
-      // 2) Sync skills in SkillRegistry.
-      // Strategy: unregister anything previously registered by THIS service
-      // that is no longer present, then (re)register everything in the new bundle.
-      //
-      // A) Unregister removed skills.
-      for (const removedId of diff.removedSkillIds) {
-        const handle = this.skillUnregisterByBundleId.get(removedId);
-        if (handle) {
-          await handle();
-          this.skillUnregisterByBundleId.delete(removedId);
-        }
-      }
-      // B) Register added + changed skills (changed re-registers replaces).
+      // 2) Stage all skill registrations BEFORE removing anything. Calling
+      //    registerSkillContent with an existing id replaces in-place inside
+      //    the SkillRegistry, so prior versions are not visible to consumers
+      //    once their replacement has been registered. If any registration
+      //    throws, the rollback path re-registers prior versions from
+      //    `priorContents`.
       for (const skill of bundle.skills) {
         const content = this.toSkillContent(skill, bundle);
         const handle = await this.skillRegistry.registerSkillContent(content, {
           source: `skilled-openapi:${bundle.bundleId}`,
         });
-        registeredHandles.push(handle);
-        // Replace any prior unregister fn for this id (replace, not orphan).
-        const prior = this.skillUnregisterByBundleId.get(skill.id);
-        if (prior) {
-          // Old handle's unregister would now remove our newly-registered version
-          // (since registry replaces by id) — discard it without invoking.
-          this.skillUnregisterByBundleId.delete(skill.id);
-        }
-        this.skillUnregisterByBundleId.set(skill.id, handle.unregister);
+        newHandles.push(handle);
       }
 
-      // 3) Swap the active bundle pointer (this fires BundleStore listeners).
+      // 3) Now that every new/changed skill is in place, unregister anything
+      //    the new bundle drops. If a removal fails, rollback re-registers
+      //    those skills via `priorContents`.
+      for (const removedId of diff.removedSkillIds) {
+        const handle = priorHandles.get(removedId);
+        if (handle) {
+          await handle();
+          successfullyRemovedIds.push(removedId);
+        }
+      }
+
+      // 4) Commit the tracking map. The new bundle's skills are the only
+      //    handles we care about going forward — anything not in `newHandles`
+      //    was either removed in step 3 or never registered by us.
+      this.skillUnregisterByBundleId.clear();
+      for (const h of newHandles) {
+        this.skillUnregisterByBundleId.set(h.id, h.unregister);
+      }
+
+      // 5) Swap the active bundle pointer (this fires BundleStore listeners).
       this.bundleStore.swap(bundle);
 
       this.logger.info(`[bundle-sync] applied ${bundle.bundleId}@${bundle.version} (${formatDiffSummary(diff)})`);
       return { applied: true, bundleId: bundle.bundleId, bundleVersion: bundle.version, diff };
     } catch (e) {
-      // Rollback: restore previous hidden-ops snapshot and unregister anything
-      // newly registered.
       this.logger.error(
         `[bundle-sync] apply failed for ${bundle.bundleId}@${bundle.version}: ${(e as Error).message}; rolling back`,
       );
+
+      // Rollback step A: restore the hidden-op registry to its pre-apply state.
       this.hiddenOps.clear();
       for (const entry of snapshotEntries) {
         this.hiddenOps.set(entry);
       }
-      for (const h of registeredHandles) {
+
+      // Rollback step B: tear down anything the staged apply registered. Each
+      // unregister is best-effort; one failure must not stop the rest of the
+      // rollback from running.
+      for (const h of newHandles) {
         try {
           await h.unregister();
         } catch {
           // best effort
         }
       }
+
+      // Rollback step C: re-register prior content for every skill we either
+      // replaced (id present in both prior and new bundle) or successfully
+      // removed in step 3. This restores the previous bundle's contract from
+      // the registry's perspective; the bundleStore pointer was never swapped,
+      // so callers reading via bundleStore.current() also see the prior bundle.
+      const toRestore = new Map<string, SkillContent>();
+      for (const h of newHandles) {
+        const prev = priorContents.get(h.id);
+        if (prev) toRestore.set(h.id, prev);
+      }
+      for (const id of successfullyRemovedIds) {
+        const prev = priorContents.get(id);
+        if (prev) toRestore.set(id, prev);
+      }
+
+      // Start from the snapshot of prior unregister handles, then overwrite
+      // any restored ids with the freshly-issued handle.
+      this.skillUnregisterByBundleId = new Map(priorHandles);
+      for (const [id, content] of toRestore) {
+        try {
+          const handle = await this.skillRegistry.registerSkillContent(content, {
+            source: `skilled-openapi:${bundle.bundleId}:rollback`,
+          });
+          this.skillUnregisterByBundleId.set(id, handle.unregister);
+        } catch (restoreErr) {
+          this.logger.error(
+            `[bundle-sync] failed to restore prior skill ${id} during rollback: ${(restoreErr as Error).message}`,
+          );
+          this.skillUnregisterByBundleId.delete(id);
+        }
+      }
+
       return {
         applied: false,
         reason: `rollback: ${(e as Error).message}`,
@@ -170,16 +229,29 @@ export class BundleSyncService {
     for (const skill of bundle.skills) {
       for (const opId of skill.operationIds) {
         const op: OperationDescriptor | undefined = bundle.operations[opId];
-        if (!op) continue;
+        if (!op) {
+          throw new Error(
+            `[bundle-sync] malformed bundle ${bundle.bundleId}@${bundle.version}: skill "${skill.id}" references unknown operationId "${opId}"`,
+          );
+        }
         const service = servicesById.get(op.serviceId);
-        if (!service) continue;
+        if (!service) {
+          throw new Error(
+            `[bundle-sync] malformed bundle ${bundle.bundleId}@${bundle.version}: operation "${opId}" references unknown serviceId "${op.serviceId}"`,
+          );
+        }
         const authBinding: AuthBinding | undefined = bundle.authBindings[op.authBindingRef];
-        if (!authBinding) continue;
+        if (!authBinding) {
+          throw new Error(
+            `[bundle-sync] malformed bundle ${bundle.bundleId}@${bundle.version}: operation "${opId}" references unknown authBindingRef "${op.authBindingRef}"`,
+          );
+        }
         const entry: HiddenOpEntry = {
           skillId: skill.id,
           op,
           service,
           authBinding,
+          bundleId: bundle.bundleId,
           bundleVersion: bundle.version,
         };
         this.hiddenOps.set(entry);

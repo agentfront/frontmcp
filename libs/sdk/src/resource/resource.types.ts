@@ -3,7 +3,6 @@
 import type { NameCase } from '@frontmcp/utils';
 
 import { type EntryLineage, type FuncType, type ResourceEntry, type Token, type Type } from '../common';
-import { ResourceInstance } from './resource.instance';
 import type ResourceRegistry from './resource.registry';
 
 // ============================================================================

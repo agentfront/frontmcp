@@ -49,11 +49,13 @@ export default class ExecuteActionTool extends ToolContext {
     }
 
     // Pin a snapshot of the entry so a hot bundle-swap mid-call doesn't change
-    // the descriptor we execute against (E1 from the plan).
+    // the descriptor we execute against (E1 from the plan). `bundleId` comes
+    // from the pinned entry rather than from a fresh `bundleStore.current()`
+    // read so the credential-scope resolution cannot drift to a newly swapped
+    // bundle while the op continues to use the prior descriptor.
     const pinned = entry;
-
+    const bundleId = pinned.bundleId;
     const bundle = bundleStore.current();
-    const bundleId = bundle?.bundleId ?? 'unknown';
 
     // 2) Authority check (skill-level + op-level merged at call site).
     const policy = pinned.op.requiredAuthorities;

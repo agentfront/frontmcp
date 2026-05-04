@@ -185,4 +185,54 @@ describe('SkillRegistry — dynamic registration', () => {
     const list = await registry.listSkills();
     expect(list.total).toBe(2);
   });
+
+  it('loadSkill by display name returns the preserved SkillContent (with actions[]/bundleVersion)', async () => {
+    // Reproducer for the bug where name-lookup fell through to
+    // SkillInstance.load(), which rebuilds content from metadata and drops
+    // the actions[] / bundleVersion fields plugin-skilled-openapi depends on.
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+
+    await registry.registerSkillContent(
+      buildSkillContent({
+        id: 'billing-id',
+        name: 'Billing display name',
+        actions: [buildAction({ actionId: 'createRefund' })],
+        bundleVersion: 'v42',
+      }),
+    );
+
+    const loadedById = await registry.loadSkill('billing-id');
+    const loadedByName = await registry.loadSkill('Billing display name');
+
+    expect(loadedById?.skill.actions).toHaveLength(1);
+    expect(loadedById?.skill.bundleVersion).toBe('v42');
+    expect(loadedByName?.skill.actions).toHaveLength(1);
+    expect(loadedByName?.skill.bundleVersion).toBe('v42');
+    expect(loadedByName?.skill.actions?.[0]?.actionId).toBe('createRefund');
+  });
+
+  it('a stale unregister handle does not remove a re-registered skill', async () => {
+    // Generation guard: when the same id is registered twice, only the
+    // most-recent handle's unregister should affect the registry. Earlier
+    // handles must become no-ops.
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+
+    const first = await registry.registerSkillContent(buildSkillContent({ description: 'first' }));
+    const replacement = await registry.registerSkillContent(buildSkillContent({ description: 'second' }));
+
+    expect((await registry.loadSkill('billing'))?.skill.description).toBe('second');
+
+    // Stale handle from the first registration must be a no-op now.
+    await first.unregister();
+    expect(registry.findByName('billing')).toBeDefined();
+    expect((await registry.loadSkill('billing'))?.skill.description).toBe('second');
+
+    // The replacement's handle still works.
+    await replacement.unregister();
+    expect(registry.findByName('billing')).toBeUndefined();
+  });
 });

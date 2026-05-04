@@ -1,9 +1,12 @@
 // file: plugins/plugin-skilled-openapi/src/sources/static.source.ts
 
-import { promises as fs, watch as fsWatch, type FSWatcher } from 'node:fs';
+// File reads route through `@frontmcp/utils` per project convention; the watch
+// API stays on `node:fs` because utils does not currently expose a watcher.
+import { watch as fsWatch, type FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 
 import type { FrontMcpLogger } from '@frontmcp/sdk';
+import { readFile } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay, type OverlayInput } from '../bundle/overlay-parser';
@@ -64,7 +67,7 @@ export class StaticSource implements SkillBundleSource {
 
   private async fetchOnce(): Promise<ResolvedBundle> {
     const absPath = path.resolve(this.options.path);
-    const raw = await fs.readFile(absPath, 'utf8');
+    const raw = await readFile(absPath, 'utf8');
     const ext = path.extname(absPath).toLowerCase();
 
     let input: OverlayInput;

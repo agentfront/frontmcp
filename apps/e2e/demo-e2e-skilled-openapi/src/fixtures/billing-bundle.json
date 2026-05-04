@@ -51,7 +51,9 @@
         "properties": {
           "id": { "type": "string" },
           "status": { "type": "string" }
-        }
+        },
+        "required": ["id", "status"],
+        "additionalProperties": false
       },
       "mapper": [
         { "inputKey": "customerId", "type": "body", "key": "customerId", "required": true },
@@ -76,7 +78,9 @@
           "id": { "type": "string" },
           "status": { "type": "string" },
           "amount": { "type": "number" }
-        }
+        },
+        "required": ["id", "status", "amount"],
+        "additionalProperties": false
       },
       "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
       "authBindingRef": "default"
@@ -100,7 +104,9 @@
         "properties": {
           "refundId": { "type": "string" },
           "invoiceId": { "type": "string" }
-        }
+        },
+        "required": ["refundId", "invoiceId"],
+        "additionalProperties": false
       },
       "mapper": [
         { "inputKey": "id", "type": "path", "key": "id", "required": true },
@@ -115,7 +121,12 @@
       "pathTemplate": "/v1/admin/ping",
       "summary": "Admin-only ping (used to test ABAC denial)",
       "inputSchema": { "type": "object", "properties": {} },
-      "outputSchema": { "type": "object", "properties": { "ok": { "type": "boolean" } } },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "ok": { "type": "boolean" } },
+        "required": ["ok"],
+        "additionalProperties": false
+      },
       "mapper": [],
       "authBindingRef": "default",
       "requiredAuthorities": { "roles": { "all": ["admin"] } }

@@ -16,4 +16,4 @@ export {
   SignatureKey,
   OutboundOptions,
 } from './skilled-openapi.types';
-export { SkilledOpenApiConfig } from './skilled-openapi.symbols';
+export { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from './skilled-openapi.symbols';

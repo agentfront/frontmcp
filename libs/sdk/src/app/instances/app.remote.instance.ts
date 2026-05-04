@@ -22,6 +22,7 @@ import {
   type RemoteAuthConfig,
   type SkillEntry,
 } from '../../common';
+import { InternalMcpError } from '../../errors';
 import PromptRegistry from '../../prompt/prompt.registry';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { McpClientService } from '../../remote-mcp';
@@ -124,7 +125,7 @@ class EmptySkillRegistry implements SkillRegistryInterface {
     return false;
   }
   async registerSkillContent(): Promise<{ id: string; unregister: () => Promise<void> }> {
-    throw new Error('EmptySkillRegistry: registerSkillContent is not supported on remote apps');
+    throw new InternalMcpError('registerSkillContent is not supported on remote apps', 'UNSUPPORTED_OPERATION');
   }
   async unregisterSkill(): Promise<boolean> {
     return false;

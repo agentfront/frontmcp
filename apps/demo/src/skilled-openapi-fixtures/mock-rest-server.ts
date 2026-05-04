@@ -32,7 +32,7 @@ function reply(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-export function startMockBillingServer(port = 9876): http.Server {
+export async function startMockBillingServer(port = 9876): Promise<http.Server> {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://localhost:${port}`);
@@ -80,12 +80,28 @@ export function startMockBillingServer(port = 9876): http.Server {
     }
   });
 
-  server.listen(port, () => {
-    console.log(`[mock-billing] listening on http://localhost:${port}`);
+  // Wait for the socket to actually bind so callers can't race the first
+  // request, and so EADDRINUSE surfaces as a rejected promise instead of an
+  // uncaught error event.
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      server.off('error', onError);
+      reject(error);
+    };
+    server.once('error', onError);
+    server.listen(port, () => {
+      server.off('error', onError);
+      console.log(`[mock-billing] listening on http://localhost:${port}`);
+      resolve();
+    });
   });
+
   return server;
 }
 
 if (require.main === module) {
-  startMockBillingServer(Number(process.env['MOCK_BILLING_PORT'] ?? 9876));
+  void startMockBillingServer(Number(process.env['MOCK_BILLING_PORT'] ?? 9876)).catch((e: unknown) => {
+    console.error('[mock-billing] failed to start:', (e as Error).message);
+    process.exit(1);
+  });
 }

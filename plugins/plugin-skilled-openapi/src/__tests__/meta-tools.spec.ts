@@ -7,7 +7,7 @@
 
 import 'reflect-metadata';
 
-import type { SkillContent } from '@frontmcp/sdk';
+import { ScopeEntry, type SkillContent } from '@frontmcp/sdk';
 
 import { BundleStore } from '../bundle/bundle.store';
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
@@ -45,6 +45,7 @@ const buildEntry = (
   overrides: Partial<HiddenOpEntry['op']> = {},
 ): HiddenOpEntry => ({
   skillId,
+  bundleId: 'test:bundle',
   bundleVersion: 'v1',
   service: { id: 'svc', baseUrl: 'http://localhost:9999' },
   authBinding: { kind: 'bearer', vaultRef: 'tok' },
@@ -108,11 +109,9 @@ function makeToolThis(args: {
     SkilledOpenApiCredentialResolver,
     args.resolver ?? (new MemoryCredentialResolver({ tok: 'sk_x' }) as unknown as SkilledOpenApiCredentialResolver),
   );
-  // Resolve ScopeEntry by class name match — the tools' `this.get(ScopeEntry)`
-  // call passes the class as the token; we register the scope under the same
+  // Resolve ScopeEntry by class identity — the tools' `this.get(ScopeEntry)`
+  // call passes the class as the token; register the scope under the same
   // identity here. The scope object is duck-typed (only `skills` is used).
-
-  const { ScopeEntry } = require('@frontmcp/sdk') as any;
   map.set(ScopeEntry, scope);
 
   return {
