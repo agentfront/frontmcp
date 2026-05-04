@@ -186,6 +186,15 @@ describe('OperationToolFactory', () => {
   });
 
   describe('unregisterAll', () => {
+    beforeEach(() => {
+      noopLogger.warn.mockClear();
+      noopLogger.info.mockClear();
+      noopLogger.error.mockClear();
+      noopLogger.debug.mockClear();
+      noopLogger.verbose.mockClear();
+      noopLogger.child.mockClear();
+    });
+
     it('unregisters every tool the factory registered', () => {
       const { factory, toolRegistry } = makeFactory();
       factory.register(buildEntry({ op: { ...buildEntry().op, operationId: 'a' } }));
@@ -227,6 +236,14 @@ describe('OperationToolFactory', () => {
   describe('executor', () => {
     beforeEach(() => {
       mockExecuteOperation.mockClear();
+      // noopLogger is shared across the suite. Without a per-test reset,
+      // assertions like "warn was called" can be polluted by prior tests.
+      noopLogger.warn.mockClear();
+      noopLogger.info.mockClear();
+      noopLogger.error.mockClear();
+      noopLogger.debug.mockClear();
+      noopLogger.verbose.mockClear();
+      noopLogger.child.mockClear();
     });
 
     function lastExecutor(toolRegistry: FakeToolRegistry) {

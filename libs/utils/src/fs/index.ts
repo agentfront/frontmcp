@@ -14,6 +14,7 @@ export {
   realpath,
   rm,
   mkdtemp,
+  symlink,
   access,
   // Higher-level operations
   fileExists,

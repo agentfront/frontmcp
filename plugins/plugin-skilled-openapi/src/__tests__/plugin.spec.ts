@@ -215,10 +215,37 @@ describe('SkilledOpenApiPlugin', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it('builds an OperationToolFactory when scope.tools is available', async () => {
+    it('builds an OperationToolFactory and registers per-op internal tools when scope.tools is available', async () => {
+      // Use a bundle with an operation so the sync flow drives the factory's
+      // registerToolInstance call — verifying not just construction but the
+      // full wiring: factory → toolRegistry → registerToolInstance.
+      const bundleWithOp = {
+        ...validBundle,
+        skills: [
+          {
+            id: 'invoices',
+            name: 'Invoices',
+            description: 'Manage invoices.',
+            instructions: '# Invoices',
+            operationIds: ['createInvoice'],
+          },
+        ],
+        operations: {
+          createInvoice: {
+            operationId: 'createInvoice',
+            serviceId: 'svc',
+            httpMethod: 'POST',
+            pathTemplate: '/v1/invoices',
+            inputSchema: {},
+            outputSchema: {},
+            mapper: [],
+            authBindingRef: 'def',
+          },
+        },
+      };
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'plugin-test-'));
       const bundlePath = path.join(tmpDir, 'bundle.json');
-      await fs.writeFile(bundlePath, JSON.stringify(validBundle), 'utf8');
+      await fs.writeFile(bundlePath, JSON.stringify(bundleWithOp), 'utf8');
 
       const providers = SkilledOpenApiPlugin.dynamicProviders({
         source: { type: 'static', path: bundlePath },
@@ -241,11 +268,13 @@ describe('SkilledOpenApiPlugin', () => {
       const fakeTools = {
         registerToolInstance: jest.fn(),
         unregisterToolInstance: jest.fn(() => true),
+        getToolsForListing: jest.fn(() => []),
+        getTools: jest.fn(() => []),
       };
       const fakeScope = {
         logger: fakeLogger,
         skills: {
-          registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
+          registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
           unregisterSkill: jest.fn(async () => false),
         },
         tools: fakeTools,
@@ -253,6 +282,14 @@ describe('SkilledOpenApiPlugin', () => {
       };
       const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
       expect(sync).toBeInstanceOf(BundleSyncService);
+
+      // Wait up to 1s for the deferred source.start() → bundle apply → tool
+      // factory registration chain to complete.
+      const deadline = Date.now() + 1000;
+      while (Date.now() < deadline && fakeTools.registerToolInstance.mock.calls.length === 0) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(fakeTools.registerToolInstance).toHaveBeenCalled();
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 

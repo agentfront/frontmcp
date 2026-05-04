@@ -249,6 +249,22 @@ export async function stat(p: string): Promise<import('fs').Stats> {
 }
 
 /**
+ * Create a symbolic link at `linkPath` pointing to `target`.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * @param target - Path the symlink should point to
+ * @param linkPath - Where to create the symlink
+ *
+ * @example
+ * await symlink('/etc/hosts', '/tmp/hosts-link');
+ */
+export async function symlink(target: string, linkPath: string): Promise<void> {
+  const fsp = getFsp();
+  await fsp.symlink(target, linkPath);
+}
+
+/**
  * Resolve a path, following symbolic links to their final target.
  *
  * **Node.js only** - throws an error if called in browser.

@@ -49,6 +49,7 @@ export {
   realpath,
   rm,
   mkdtemp,
+  symlink,
   access,
   fileExists,
   readJSON,

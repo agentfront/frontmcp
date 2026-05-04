@@ -491,12 +491,21 @@ export default class SkillsApiFlow extends FlowBase<typeof name> {
       if (typeof providers.get === 'function') {
         try {
           return providers.get(SkillSemanticSearchToken);
-        } catch {
+        } catch (e) {
+          // Fall back to text-search but leave a breadcrumb at debug level so
+          // a misconfigured provider (e.g. constructor throws) is diagnosable
+          // rather than silently masquerading as "no provider registered".
+          this.logger.debug?.(
+            `tryGetSemanticProvider: providers.get(SkillSemanticSearchToken) threw: ${(e as Error).message}`,
+          );
           return undefined;
         }
       }
       return undefined;
-    } catch {
+    } catch (e) {
+      this.logger.debug?.(
+        `tryGetSemanticProvider: failed to resolve SkillSemanticSearchToken: ${(e as Error).message}`,
+      );
       return undefined;
     }
   }

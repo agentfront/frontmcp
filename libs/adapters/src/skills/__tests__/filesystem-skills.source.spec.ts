@@ -1,6 +1,6 @@
-import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
-import * as path from 'node:path';
+
+import { mkdir, mkdtemp, pathJoin, rm, symlink, writeFile } from '@frontmcp/utils';
 
 import {
   FilesystemSkillsSource,
@@ -16,8 +16,15 @@ const noopLogger: FilesystemSkillsLogger = {
   error: jest.fn(),
 };
 
+// `os.tmpdir()` is the only `node:os` call; @frontmcp/utils intentionally does
+// not wrap it because it's an OS-info accessor, not a filesystem op.
 async function mkTempDir(): Promise<string> {
-  return await fs.mkdtemp(path.join(os.tmpdir(), 'fs-skills-'));
+  return mkdtemp(pathJoin(os.tmpdir(), 'fs-skills-'));
+}
+
+type UpsertEvent = Extract<FilesystemSkillsEvent, { op: 'upsert' }>;
+function isUpsert(event: FilesystemSkillsEvent): event is UpsertEvent {
+  return event.op === 'upsert';
 }
 
 async function writeSkill(
@@ -26,14 +33,14 @@ async function writeSkill(
   frontmatter: Record<string, string>,
   body: string,
 ): Promise<string> {
-  const dir = path.join(rootDir, name);
-  await fs.mkdir(dir, { recursive: true });
+  const dir = pathJoin(rootDir, name);
+  await mkdir(dir, { recursive: true });
   const fmLines = ['---'];
   for (const [k, v] of Object.entries(frontmatter)) fmLines.push(`${k}: ${v}`);
   fmLines.push('---');
   fmLines.push('');
   fmLines.push(body);
-  await fs.writeFile(path.join(dir, 'SKILL.md'), fmLines.join('\n'));
+  await writeFile(pathJoin(dir, 'SKILL.md'), fmLines.join('\n'));
   return dir;
 }
 
@@ -84,7 +91,7 @@ describe('loadFilesystemSkill', () => {
       });
       expect(content.instructions).toMatch(/^# Order pizza/);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -94,7 +101,7 @@ describe('loadFilesystemSkill', () => {
       const dir = await writeSkill(root, 's1', { name: 's1' }, '# Body');
       await expect(loadFilesystemSkill(dir)).rejects.toThrow(/description/);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -103,15 +110,15 @@ describe('loadFilesystemSkill', () => {
     try {
       const dir = await writeSkill(root, 's1', { name: 's1', description: 'd' }, '# Body');
       for (const sub of ['scripts', 'references', 'examples', 'assets']) {
-        await fs.mkdir(path.join(dir, sub), { recursive: true });
+        await mkdir(pathJoin(dir, sub), { recursive: true });
       }
       const content = await loadFilesystemSkill(dir);
-      expect(content.resources?.scripts).toBe(path.join(dir, 'scripts'));
-      expect(content.resources?.references).toBe(path.join(dir, 'references'));
-      expect(content.resources?.examples).toBe(path.join(dir, 'examples'));
-      expect(content.resources?.assets).toBe(path.join(dir, 'assets'));
+      expect(content.resources?.scripts).toBe(pathJoin(dir, 'scripts'));
+      expect(content.resources?.references).toBe(pathJoin(dir, 'references'));
+      expect(content.resources?.examples).toBe(pathJoin(dir, 'examples'));
+      expect(content.resources?.assets).toBe(pathJoin(dir, 'assets'));
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 });
@@ -128,10 +135,10 @@ describe('FilesystemSkillsSource', () => {
       await source.start();
       await source.stop();
 
-      const ids = events.filter((e) => e.op === 'upsert').map((e) => (e as { skill: { id: string } }).skill.id);
+      const ids = events.filter(isUpsert).map((e) => e.skill.id);
       expect(ids.sort()).toEqual(['a', 'b']);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -146,10 +153,10 @@ describe('FilesystemSkillsSource', () => {
       await source.start();
       await source.stop();
 
-      const upsertIds = events.filter((e) => e.op === 'upsert').map((e) => (e as { skill: { id: string } }).skill.id);
+      const upsertIds = events.filter(isUpsert).map((e) => e.skill.id);
       expect(upsertIds).toEqual(['good']);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -163,10 +170,10 @@ describe('FilesystemSkillsSource', () => {
       source.onChange((e) => events.push(e));
       await source.start();
       await source.stop();
-      const ids = events.filter((e) => e.op === 'upsert').map((e) => (e as { skill: { id: string } }).skill.id);
+      const ids = events.filter(isUpsert).map((e) => e.skill.id);
       expect(ids).toEqual(['visible']);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -187,7 +194,7 @@ describe('FilesystemSkillsSource', () => {
       const upserts = events.filter((e) => e.op === 'upsert');
       expect(upserts).toHaveLength(1);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -201,7 +208,7 @@ describe('FilesystemSkillsSource', () => {
       await source.start();
 
       // Delete the dir, then re-poll.
-      await fs.rm(aDir, { recursive: true, force: true });
+      await rm(aDir, { recursive: true, force: true });
       await (source as unknown as { pollOnce: () => Promise<void> }).pollOnce();
       await source.stop();
 
@@ -209,7 +216,7 @@ describe('FilesystemSkillsSource', () => {
       expect(ops).toContain('upsert');
       expect(ops).toContain('delete');
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -223,19 +230,16 @@ describe('FilesystemSkillsSource', () => {
       await source.start();
 
       // Modify content, then poll.
-      await fs.writeFile(path.join(dir, 'SKILL.md'), '---\nname: a\ndescription: D2\n---\n# Body 2\nNew body');
+      await writeFile(pathJoin(dir, 'SKILL.md'), '---\nname: a\ndescription: D2\n---\n# Body 2\nNew body');
       await (source as unknown as { pollOnce: () => Promise<void> }).pollOnce();
       await source.stop();
 
-      const upserts = events.filter((e) => e.op === 'upsert') as Array<{
-        op: 'upsert';
-        skill: { description: string; instructions: string };
-      }>;
+      const upserts = events.filter(isUpsert);
       expect(upserts).toHaveLength(2);
       expect(upserts[1].skill.description).toBe('D2');
       expect(upserts[1].skill.instructions).toMatch(/Body 2/);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -261,11 +265,11 @@ describe('FilesystemSkillsSource', () => {
       // Inside `outside`, prepare a fully-formed skill that we'll point a
       // symlink to. Without the realpath check, the source would happily
       // load it as if it lived inside skillsDir.
-      const realSkillDir = path.join(outside, 'evil-skill');
-      await fs.mkdir(realSkillDir, { recursive: true });
-      await fs.writeFile(path.join(realSkillDir, 'SKILL.md'), '---\nname: evil\ndescription: D\n---\n# Body\n');
+      const realSkillDir = pathJoin(outside, 'evil-skill');
+      await mkdir(realSkillDir, { recursive: true });
+      await writeFile(pathJoin(realSkillDir, 'SKILL.md'), '---\nname: evil\ndescription: D\n---\n# Body\n');
       // Symlink inside skillsDir → outside dir
-      await fs.symlink(realSkillDir, path.join(root, 'evil-skill'));
+      await symlink(realSkillDir, pathJoin(root, 'evil-skill'));
       // Plus a normal sibling skill so we know the source still works.
       await writeSkill(root, 'good', { name: 'good', description: 'D' }, '# Body');
 
@@ -275,12 +279,12 @@ describe('FilesystemSkillsSource', () => {
       await source.start();
       await source.stop();
 
-      const ids = events.filter((e) => e.op === 'upsert').map((e) => (e as { skill: { id: string } }).skill.id);
+      const ids = events.filter(isUpsert).map((e) => e.skill.id);
       expect(ids).toEqual(['good']);
       expect(warn).toHaveBeenCalledWith(expect.stringMatching(/realpath escapes skillsDir/));
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
-      await fs.rm(outside, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
     }
   });
 
@@ -288,16 +292,16 @@ describe('FilesystemSkillsSource', () => {
     const root = await mkTempDir();
     try {
       await writeSkill(root, 'good', { name: 'good', description: 'D' }, '# Body');
-      await fs.symlink(path.join(root, 'does-not-exist'), path.join(root, 'broken'));
+      await symlink(pathJoin(root, 'does-not-exist'), pathJoin(root, 'broken'));
       const events: FilesystemSkillsEvent[] = [];
       const source = new FilesystemSkillsSource({ skillsDir: root, watch: false }, noopLogger);
       source.onChange((e) => events.push(e));
       await source.start();
       await source.stop();
-      const ids = events.filter((e) => e.op === 'upsert').map((e) => (e as { skill: { id: string } }).skill.id);
+      const ids = events.filter(isUpsert).map((e) => e.skill.id);
       expect(ids).toEqual(['good']);
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -321,7 +325,7 @@ describe('FilesystemSkillsSource', () => {
       // Calling the unsubscribe function after stop() must be safe.
       unsubscribe();
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -340,15 +344,15 @@ describe('FilesystemSkillsSource', () => {
       await new Promise((r) => setTimeout(r, 50));
       // Mutate the file — fs.watch may or may not deliver a change on every
       // platform/CI runner, so we also force a poll to keep the test stable.
-      await fs.writeFile(path.join(dir, 'SKILL.md'), '---\nname: a\ndescription: D2\n---\n# Body 2\n');
+      await writeFile(pathJoin(dir, 'SKILL.md'), '---\nname: a\ndescription: D2\n---\n# Body 2\n');
       await new Promise((r) => setTimeout(r, 80));
       await (source as unknown as { pollOnce: () => Promise<void> }).pollOnce();
       await source.stop();
-      const upserts = events.filter((e) => e.op === 'upsert') as Array<{ skill: { description: string } }>;
+      const upserts = events.filter(isUpsert);
       const descriptions = upserts.map((u) => u.skill.description);
       expect(descriptions).toContain('D2');
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -363,11 +367,11 @@ describe('FilesystemSkillsSource', () => {
       await source.start();
       // Schedule a few refreshes that will not have fired by the time we stop.
       const internal = source as unknown as { scheduleRefresh: (p: string) => void; scheduleRescan: () => void };
-      internal.scheduleRefresh(path.join(root, 'a'));
+      internal.scheduleRefresh(pathJoin(root, 'a'));
       internal.scheduleRescan();
       await source.stop();
     } finally {
-      await fs.rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
     }
   });
 

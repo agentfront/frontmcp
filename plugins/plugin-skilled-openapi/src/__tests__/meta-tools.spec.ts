@@ -348,7 +348,11 @@ describe('execute_action — additional branch coverage', () => {
       input: { wrong: 'shape' },
     });
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/<root>|input validation failed/);
+    expect(result.error).toMatch(/input validation failed/);
+    // The whole-input validation issue has an empty `path`; the formatter must
+    // render that as the literal `<root>` token so the LLM can tell which
+    // field broke. A looser regex would silently let a regression slip in.
+    expect(result.error).toMatch(/<root>/);
   });
 });
 
