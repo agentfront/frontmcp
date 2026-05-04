@@ -157,15 +157,12 @@ const result = await this.elicit(
 
 ### URL Mode
 
-Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.):
+Redirects the user to an external URL for out-of-band interaction (OAuth, payments, etc.). URL mode requires an `elicitationId` — an opaque identifier you generate to correlate the out-of-band callback with the pending elicitation:
 
 ```ts
-import { generateElicitationToken } from '@frontmcp/sdk';
+import { randomUUID } from '@frontmcp/utils';
 
-// Generate a secure token (never expose raw sessionId!)
-const token = await generateElicitationToken(this.getAuthInfo().sessionId, {
-  ttl: 300000, // 5 minutes (matches elicitation timeout)
-});
+const elicitationId = randomUUID();
 
 const result = await this.elicit(
   'Please authorize access to your GitHub account',
@@ -175,20 +172,14 @@ const result = await this.elicit(
   }),
   {
     mode: 'url',
-    elicitationId: token, // Secure opaque token
+    elicitationId, // Required for URL mode tracking
   }
 );
 ```
 
 <Warning>
-**Security:** Never expose raw session IDs in elicitation URLs. Use `generateElicitationToken()` to create a secure, time-limited token that encrypts the session ID. When the callback returns, the token is validated and decrypted server-side.
+**Security:** Never put a raw session ID into the elicitation URL. Generate an opaque `elicitationId` (e.g. via `randomUUID()`) and store the mapping to the session server-side, or use a signed/encrypted payload that you can validate on callback.
 </Warning>
-
-The token includes:
-
-- Encrypted session ID (AES-256-GCM)
-- Expiration timestamp (defaults to elicitation TTL)
-- HMAC signature for tamper detection
 
 ---
 
@@ -575,7 +566,7 @@ import { supportsElicitation } from '@frontmcp/sdk';
 class ConditionalElicitTool extends ToolContext {
   async execute({ action }) {
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.getAuthInfo().sessionId
+      this.requestContext.authInfo.sessionId
     );
 
     if (supportsElicitation(capabilities, 'form')) {
@@ -1139,7 +1130,7 @@ class ConnectGitHubTool extends ToolContext {
   async execute() {
     // Generate secure token - sessionId is encrypted inside
     const elicitationToken = await generateElicitationToken(
-      this.getAuthInfo().sessionId,
+      this.requestContext.authInfo.sessionId,
       { ttl: 300000 } // 5 minute timeout
     );
 
@@ -1169,7 +1160,7 @@ class ConnectGitHubTool extends ToolContext {
 
     // Store the token and return success
     await this.get(TokenStore).save(
-      this.getAuthInfo().sessionId,
+      this.requestContext.authInfo.sessionId,
       'github',
       result.content!.accessToken
     );
@@ -1203,7 +1194,7 @@ class DeleteFileTool extends ToolContext {
     // Check if we should/can request confirmation
     const shouldConfirm = !skipConfirmation;
     const capabilities = this.scope.notifications.getClientCapabilities(
-      this.getAuthInfo().sessionId
+      this.requestContext.authInfo.sessionId
     );
     const canElicit = supportsElicitation(capabilities, 'form');
 

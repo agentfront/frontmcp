@@ -211,7 +211,7 @@ The built-in consent UI lets users choose which apps to authorize:
   auth: {
     mode: 'transparent',
     provider: 'https://slack.com/oauth',
-    scopes: ['chat:write', 'channels:read'],
+    requiredScopes: ['chat:write', 'channels:read'],
   },
 })
 export class SlackApp {
@@ -226,7 +226,7 @@ export class SlackApp {
   auth: {
     mode: 'transparent',
     provider: 'https://github.com/login/oauth',
-    scopes: ['repo', 'user'],
+    requiredScopes: ['repo', 'user'],
   },
 })
 export class GitHubApp {

@@ -10,8 +10,8 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
 
 | Platform           | Status       | Module Format | Config File              |
 | ------------------ | ------------ | ------------- | ------------------------ |
-| Vercel             | Stable       | ESM           | `vercel.json`            |
-| AWS Lambda         | Stable       | ESM           | `ci/template.yaml` (SAM) |
+| Vercel             | Stable       | CommonJS      | `vercel.json`            |
+| AWS Lambda         | Stable       | CommonJS      | `ci/template.yaml` (SAM) |
 | Cloudflare Workers | Experimental | CommonJS      | `wrangler.toml`          |
 
 ## Quick Start
@@ -217,16 +217,10 @@ functions:
           method: ANY
 ```
 
-### ESM Requirements
+### Module Format
 
 <Note>
-AWS Lambda with ESM requires one of:
-- `"type": "module"` in your `package.json`
-- Using `.mjs` extension for handler files
-- Configuring your deployment tool for ESM
-
-The generated `dist/index.js` uses ESM syntax (`import`/`export`).
-
+Lambda, Vercel, and Cloudflare Workers builds emit **CommonJS** (`dist/index.js`), so the bundle works without `"type": "module"` in `package.json`. If your handler must be ESM, you can use the `import()` form to load the bundle from an `.mjs` wrapper.
 </Note>
 
 ### Cold Start Optimization
@@ -461,10 +455,10 @@ Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfi
 # Build for Node.js (default, CommonJS)
 frontmcp build
 
-# Build for Vercel (ESM)
+# Build for Vercel (CommonJS)
 frontmcp build --target vercel
 
-# Build for AWS Lambda (ESM)
+# Build for AWS Lambda (CommonJS)
 frontmcp build --target lambda
 
 # Build for Cloudflare Workers (CommonJS)

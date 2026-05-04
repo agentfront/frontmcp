@@ -259,7 +259,6 @@ interface SkillChangeEvent {
   changeScope: 'global' | 'session';
   version: number;
   snapshot: ReadonlyArray<SkillEntry>;
-  entry?: SkillEntry;
   sessionId?: string;
   relatedRequestId?: string;
 }

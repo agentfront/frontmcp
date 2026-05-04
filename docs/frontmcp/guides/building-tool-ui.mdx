@@ -112,7 +112,7 @@ const outputSchema = z.object({
     },
   },
 })
-export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetWeatherTool extends ToolContext {
   async execute(input: { location: string; units?: 'celsius' | 'fahrenheit' }) {
     // In production, call a real weather API
     return {
@@ -357,8 +357,8 @@ if (needsInlineScripts(platform)) {
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="UI Library Reference" icon="book" href="/frontmcp/guides/ui-library">
-    Complete UI component documentation
+  <Card title="React SDK Components" icon="react" href="/frontmcp/react/components">
+    Pre-built React components
   </Card>
 
   <Card title="Tool Reference" icon="wrench" href="/frontmcp/servers/tools">

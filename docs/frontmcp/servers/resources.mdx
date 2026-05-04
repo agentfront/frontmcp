@@ -42,7 +42,7 @@ Static resources have a **fixed URI** and return content at that specific addres
 ### Class Style
 
 ```ts
-import { Resource } from '@frontmcp/sdk';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'app-config',
@@ -50,7 +50,7 @@ import { Resource } from '@frontmcp/sdk';
   mimeType: 'application/json',
   description: 'Application configuration and settings',
 })
-class AppConfig {
+class AppConfig extends ResourceContext {
   execute(uri: string, params: Record<string, string>) {
     return {
       version: '2.1.0',
@@ -90,7 +90,7 @@ Resource templates use **dynamic URIs** with parameters following [RFC 6570](htt
 ### Class Style
 
 ```ts
-import { ResourceTemplate } from '@frontmcp/sdk';
+import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
 
 @ResourceTemplate({
   name: 'user-profile',
@@ -98,7 +98,7 @@ import { ResourceTemplate } from '@frontmcp/sdk';
   mimeType: 'application/json',
   description: 'Fetch user profile by ID',
 })
-class UserProfile {
+class UserProfile extends ResourceContext {
   execute(uri: string, params: Record<string, string>) {
     const { userId } = params;
     // Fetch user from database, API, etc.
@@ -283,7 +283,7 @@ Class-based resources have access to a rich execution context via `this`:
 
 ```ts
 @Resource({ name: 'data', uri: 'app://data' })
-class DataResource {
+class DataResource extends ResourceContext {
   execute(uri: string, params: Record<string, string>) {
     // Request information
     this.uri;              // The actual URI being read
@@ -291,7 +291,7 @@ class DataResource {
     this.metadata;         // Resource metadata (name, uri, description, etc.)
 
     // Authentication
-    this.getAuthInfo();    // Auth context from MCP session
+    this.requestContext.authInfo;    // Auth context from MCP session
 
     // Dependency injection
     this.get(DbService);   // Resolve a provider
@@ -318,7 +318,7 @@ Inject services via the `get()` method:
   name: 'users-list',
   uri: 'data://users',
 })
-class UsersList {
+class UsersList extends ResourceContext {
   async execute() {
     const db = this.get(DatabaseProvider);
     const users = await db.query('SELECT * FROM users LIMIT 100');
@@ -340,7 +340,7 @@ class UsersList {
   mimeType: 'application/json',
   description: 'Current feature flag configuration',
 })
-class FeatureFlags {
+class FeatureFlags extends ResourceContext {
   execute() {
     return {
       newDashboard: process.env.FEATURE_NEW_DASHBOARD === 'true',
@@ -360,7 +360,7 @@ class FeatureFlags {
   mimeType: 'application/json',
   description: 'Retrieve order details by order ID',
 })
-class OrderDetails {
+class OrderDetails extends ResourceContext {
   async execute(uri: string, params: Record<string, string>) {
     const db = this.get(DatabaseProvider);
     const order = await db.orders.findById(params.orderId);
@@ -388,7 +388,7 @@ class OrderDetails {
   uriTemplate: 'docs://{path}',
   description: 'Read documentation files',
 })
-class DocumentResource {
+class DocumentResource extends ResourceContext {
   async execute(uri: string, params: Record<string, string>) {
     const fs = await import('fs/promises');
     const path = await import('path');
@@ -417,7 +417,7 @@ class DocumentResource {
   mimeType: 'application/json',
   description: 'Fetch GitHub repository information',
 })
-class GitHubRepo {
+class GitHubRepo extends ResourceContext {
   async execute(uri: string, params: Record<string, string>) {
     const { owner, repo } = params;
     const response = await this.fetch(

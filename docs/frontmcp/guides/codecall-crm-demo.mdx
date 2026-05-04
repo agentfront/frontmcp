@@ -107,7 +107,7 @@ import { crmStore } from '../data/crm.store';
   inputSchema,
   outputSchema,
 })
-export default class ActivitiesLogTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class ActivitiesLogTool extends ToolContext {
   async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
     const activity = crmStore.logActivity(input);
     return { activity };
@@ -138,7 +138,7 @@ export default class ActivitiesLogTool extends ToolContext<typeof inputSchema, t
 </Steps>
 
 <Tip>
-Pair this demo with the [platform-aware UI guide](/frontmcp/guides/ui-library) to style consent and troubleshooting screens, and mirror the automated coverage in `apps/e2e/demo-e2e-codecall/e2e/codecall.e2e.test.ts`.
+Pair this demo with the [Building Tool UI guide](/frontmcp/guides/building-tool-ui) to style consent and troubleshooting screens, and mirror the automated coverage in `apps/e2e/demo-e2e-codecall/e2e/codecall.e2e.spec.ts`.
 </Tip>
 
 ---
@@ -150,7 +150,7 @@ Pair this demo with the [platform-aware UI guide](/frontmcp/guides/ui-library) t
     Full CodeCall plugin documentation
   </Card>
 
-  <Card title="UI Library" icon="palette" href="/frontmcp/guides/ui-library">
+  <Card title="Building Tool UI" icon="palette" href="/frontmcp/guides/building-tool-ui">
     Build consent and status screens
   </Card>
 

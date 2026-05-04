@@ -274,7 +274,6 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
   "tool": "codecall:execute",
   "input": {
     "script": "string (required) - JavaScript code to execute",
-    "context": { /* (optional) - Read-only context available as codecallContext */ },
     "allowedTools": ["string (optional) - Whitelist of allowed tool names"]
   }
 }
@@ -514,7 +513,7 @@ for (const user of users) {
 
 <AccordionGroup>
   <Accordion title="Maximum iteration limit exceeded">
-    **Cause:** Loop ran more than `maxIterations` times
+    **Cause:** Loop ran more than `maxSteps` times
     **Fix:** Use pagination or filter data before looping
 
     ```ts
@@ -675,7 +674,7 @@ describe('Security', () => {
       let i = 0;
       for (const x of Array(100000)) { i++; }
       return i;
-    `, { config: { maxIterations: 1000 } });
+    `, { config: { maxSteps: 1000 } });
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('iteration limit');

@@ -68,7 +68,7 @@ const outputSchema = z.object({
     visibleInListTools: true,  // Make visible to agents
   },
 })
-export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+export default class GetWeatherTool extends ToolContext {
   async execute(input: { location: string; units?: 'celsius' | 'fahrenheit' }) {
     // In production, call a real weather API
     return {

@@ -227,7 +227,6 @@ interface PromptChangeEvent {
   changeScope: 'global' | 'session';
   version: number;
   snapshot: ReadonlyArray<PromptEntry>;
-  entry?: PromptEntry;
   sessionId?: string;
   relatedRequestId?: string;
 }

@@ -173,26 +173,16 @@ const result = await mcp.prompts.get('multi-turn', { context: 'test' });
 expect(result).toHaveMessages(3);
 ```
 
-### toHaveRole
+### Inspecting message role / content
 
-Check the role of a message:
+For role and text-content checks on prompt messages, read the message directly. The `toHaveTextContent` matcher works for tool results; for prompt messages use plain Jest assertions:
 
 ```ts
 const result = await mcp.prompts.get('assistant-prompt', {});
 
-expect(result.messages[0]).toHaveRole('user');
-expect(result.messages[1]).toHaveRole('assistant');
-```
-
-### toContainText
-
-Check if a message contains specific text:
-
-```ts
-const result = await mcp.prompts.get('summarize', { topic: 'TypeScript' });
-
-expect(result.messages[0]).toContainText('TypeScript');
-expect(result.messages[0]).toContainText('summarize');
+expect(result.messages[0].role).toBe('user');
+expect(result.messages[1].role).toBe('assistant');
+expect(result.messages[0].content.text).toContain('TypeScript');
 ```
 
 ---

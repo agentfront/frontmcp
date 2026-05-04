@@ -43,18 +43,19 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
 
   </Step>
 
-  <Step title="Configure Token Lifetimes">
-    Set appropriate token expiration based on security requirements.
+  <Step title="Enable Refresh Token Flow">
+    For orchestrated modes, opt into automatic upstream token refresh.
 
     ```typescript
     auth: {
       refresh: {
-        accessTokenTtl: 900,      // 15 minutes
-        refreshTokenTtl: 604800,  // 7 days
-        rotateRefreshToken: true,
+        enabled: true,
+        skewSeconds: 60, // refresh tokens this many seconds before expiry
       },
     }
     ```
+
+    Token TTLs are controlled by the upstream identity provider; FrontMCP does not mint its own access/refresh tokens.
 
   </Step>
 
@@ -201,12 +202,14 @@ graph LR
 
 ### Configuration for Key Rotation
 
+The `local` block accepts a single `signKey` (and optional `jwks` containing previous keys for validation during rollover). Rotation is performed by deploying a new server build with an updated `signKey` while keeping the old key in `jwks` until in-flight tokens expire.
+
 ```typescript
 auth: {
   local: {
     signKey: currentKey,
-    keyRotationDays: 30,
-    maxKeys: 3, // Keep old keys for validation during rotation
+    jwks: { keys: [currentKey, previousKey] }, // accept old tokens during rollover
+    issuer: 'https://your-server.example.com',
   },
 }
 ```
@@ -416,7 +419,7 @@ location /oauth/token {
     All instances must share the same Redis and signing keys.
 
     <Info>
-      **Machine ID**: Set the `MACHINE_ID` environment variable to the same value on all instances. Without it, sessions encrypted on one instance cannot be decrypted on another. See [Auth Architecture - Machine ID](/frontmcp/authentication/architecture#14-machine-id).
+      **Machine ID**: Set the `MACHINE_ID` environment variable to the same value on all instances. Without it, sessions encrypted on one instance cannot be decrypted on another. See [Machine ID](/frontmcp/deployment/machine-id).
     </Info>
 
   </Tab>

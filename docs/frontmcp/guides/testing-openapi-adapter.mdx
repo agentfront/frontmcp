@@ -39,7 +39,7 @@ OpenAPI-generated tools make HTTP requests to external APIs. Without mocking:
 
 First, configure your test file:
 
-```typescript title="openapi-app.e2e.ts"
+```typescript title="openapi-app.e2e.spec.ts"
 import { test, expect, httpMock, httpResponse } from '@frontmcp/testing';
 
 test.use({
@@ -533,7 +533,7 @@ test.describe('Query Parameters', () => {
 
 Here's a complete, runnable test file:
 
-```typescript title="expense-api.e2e.ts"
+```typescript title="expense-api.e2e.spec.ts"
 import { test, expect, httpMock, httpResponse } from '@frontmcp/testing';
 
 test.use({

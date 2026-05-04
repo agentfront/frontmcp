@@ -10,7 +10,7 @@ FrontMCP applies security headers to every HTTP response, including Content Secu
 Add security headers to `frontmcp.config.ts`:
 
 ```typescript
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -91,31 +91,7 @@ node dist/main.js
 
 ## Programmatic Access
 
-For custom middleware or adapters, use the security header functions directly:
-
-```typescript
-import {
-  readCspFromEnv,
-  buildCspHeaderValue,
-  getCspHeaderName,
-  readSecurityHeadersFromEnv,
-  applySecurityHeaders,
-} from '@frontmcp/sdk';
-
-// Read configuration from environment
-const csp = readCspFromEnv();
-const headers = readSecurityHeadersFromEnv();
-
-// Apply to a response
-applySecurityHeaders(res, headers, csp);
-
-// Or build the CSP header value manually
-if (csp?.enabled) {
-  const headerName = getCspHeaderName(csp.reportOnly); // 'Content-Security-Policy' or '...-Report-Only'
-  const headerValue = buildCspHeaderValue(csp);
-  res.setHeader(headerName, headerValue);
-}
-```
+Security headers are applied automatically by FrontMCP's HTTP middleware based on the env-driven configuration above. The header builder utilities (`readCspFromEnv`, `buildCspHeaderValue`, `getCspHeaderName`, `readSecurityHeadersFromEnv`, `applySecurityHeaders`) live in `libs/sdk/src/server/middleware/csp.middleware.ts` and are not currently re-exported from the public `@frontmcp/sdk` barrel. If you need to apply them inside a custom transport adapter, import via the source path or open a request to re-export.
 
 ## Report-Only Mode
 

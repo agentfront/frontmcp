@@ -9,8 +9,8 @@ Build and run your first MCP server with FrontMCP. This quickstart gets you from
 
 ## Prerequisites
 
-- **Node.js**: Version 24+ (Active LTS)
-  - _FrontMCP is developed and tested on Node.js 24_
+- **Node.js**: Version 22+ (LTS)
+  - _The CLI's `doctor` command enforces Node 22 or newer; FrontMCP is developed and tested on Node 24._
 - **npm ≥ 10** (or pnpm/yarn)
 
 ---
@@ -115,9 +115,9 @@ After creating your project, you'll have:
     │   └── deploy.yml
     ├── src/
     │   ├── main.ts
-    │   ├── hello.app.ts
+    │   ├── calc.app.ts
     │   └── tools/
-    │       └── greet.tool.ts
+    │       └── add.tool.ts
     ├── package.json
     └── tsconfig.json
     ```
@@ -128,9 +128,9 @@ After creating your project, you'll have:
     ├── vercel.json
     ├── src/
     │   ├── main.ts
-    │   ├── hello.app.ts
+    │   ├── calc.app.ts
     │   └── tools/
-    │       └── greet.tool.ts
+    │       └── add.tool.ts
     ├── package.json
     └── tsconfig.json
     ```
@@ -142,9 +142,9 @@ After creating your project, you'll have:
     │   └── template.yaml    # AWS SAM template
     ├── src/
     │   ├── main.ts
-    │   ├── hello.app.ts
+    │   ├── calc.app.ts
     │   └── tools/
-    │       └── greet.tool.ts
+    │       └── add.tool.ts
     ├── package.json
     └── tsconfig.json
     ```
@@ -155,9 +155,9 @@ After creating your project, you'll have:
     ├── wrangler.toml
     ├── src/
     │   ├── main.ts
-    │   ├── hello.app.ts
+    │   ├── calc.app.ts
     │   └── tools/
-    │       └── greet.tool.ts
+    │       └── add.tool.ts
     ├── package.json
     └── tsconfig.json
     ```
@@ -183,8 +183,8 @@ npm run build
 ```
 
 ```bash Production
-npm run start
-# Runs the compiled server
+node dist/index.js
+# Runs the compiled server (bundle produced by `npm run build`)
 ```
 
 ```bash Inspector
@@ -365,7 +365,7 @@ export default class Server {}
 
 ### App Definition
 
-```ts src/hello.app.ts
+```ts src/calc.app.ts
 import { App } from '@frontmcp/sdk';
 import GreetTool from './tools/greet.tool';
 
@@ -385,7 +385,7 @@ export default class HelloApp {}
 
 <Tabs>
   <Tab title="Class-based (Recommended)">
-    ```ts src/tools/greet.tool.ts
+    ```ts src/tools/add.tool.ts
     import { Tool, ToolContext } from '@frontmcp/sdk';
     import { z } from '@frontmcp/sdk';
 
@@ -404,7 +404,7 @@ export default class HelloApp {}
   </Tab>
 
   <Tab title="Function-based">
-    ```ts src/tools/greet.tool.ts
+    ```ts src/tools/add.tool.ts
     import { tool } from '@frontmcp/sdk';
     import { z } from '@frontmcp/sdk';
 
@@ -619,8 +619,8 @@ export default class GreetTool extends ToolContext {
     // Access context-aware logger
     this.contextLogger.info('Greeting user', { name: input.name });
 
-    // Access auth info (via context)
-    const userId = this.context.authInfo?.user?.id;
+    // Access auth info (via request context)
+    const userId = this.requestContext.authInfo?.user?.id;
 
     // Build greeting based on formality
     let greeting = '';

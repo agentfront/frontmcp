@@ -47,7 +47,7 @@ getScoped<T>(token: Token<T>, views: ProviderViews): T
 **Example:**
 
 ```typescript
-const views = registry.buildViews(sessionKey, contextProviders);
+const views = await registry.buildViews(sessionKey, contextProviders);
 const session = registry.getScoped(SessionToken, views);
 ```
 
@@ -67,10 +67,10 @@ const service = registry.resolve(MyService);
 
 ### resolveBootstrapDep()
 
-Resolve a dependency usable during bootstrap phase.
+Resolve a dependency usable during bootstrap phase. Async because it may walk the parent registry hierarchy and instantiate global providers.
 
 ```typescript
-resolveBootstrapDep<T>(token: Token<T>): T
+resolveBootstrapDep<T>(token: Token<T>): Promise<T>
 ```
 
 ### getProviders()
@@ -83,19 +83,19 @@ getProviders(): ReadonlyArray<ProviderEntry>
 
 ### buildViews()
 
-Build provider views for different scopes.
+Build provider views for different scopes. Async — instantiates context-scoped providers per request.
 
 ```typescript
 buildViews(
   sessionKey: string,
   contextProviders?: Map<Token, unknown>
-): ProviderViews
+): Promise<ProviderViews>
 ```
 
 **Example:**
 
 ```typescript
-const views = registry.buildViews('session-123', new Map([
+const views = await registry.buildViews('session-123', new Map([
   [RequestToken, currentRequest],
 ]));
 ```
@@ -167,10 +167,10 @@ registry.injectProvider({
 
 ### addDynamicProviders()
 
-Add providers dynamically at runtime.
+Add providers dynamically at runtime. Async — instantiates global-scoped providers immediately.
 
 ```typescript
-addDynamicProviders(dynamicProviders: DynamicProvider[]): void
+addDynamicProviders(dynamicProviders: ProviderType[]): Promise<unknown[]>
 ```
 
 ## Session Management

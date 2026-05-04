@@ -228,9 +228,9 @@ test('expense report prompt generates messages', async ({ mcp }) => {
   });
 
   expect(result.messages).toHaveLength(1);
-  expect(result.messages[0]).toHaveRole('user');
-  expect(result.messages[0]).toContainText('2024-01-01');
-  expect(result.messages[0]).toContainText('Travel');
+  expect(result.messages[0].role).toBe('user');
+  expect(result.messages[0].content.text).toContain('2024-01-01');
+  expect(result.messages[0].content.text).toContain('Travel');
 });
 ```
 

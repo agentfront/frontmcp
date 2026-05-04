@@ -213,7 +213,7 @@ import { z } from '@frontmcp/sdk';
   description: 'Search documents',
   inputSchema: { query: z.string() },
 })
-class SearchTool extends ToolContext<typeof SearchTool> {
+class SearchTool extends ToolContext {
   async execute({ query }: { query: string }) {
     // Add events to the current tool execution span
     this.telemetry.addEvent('query-parsed', { terms: query.split(' ').length });

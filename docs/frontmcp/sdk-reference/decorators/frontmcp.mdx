@@ -90,13 +90,20 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Shared Components
 
-| Property    | Type             | Description                  |
-| ----------- | ---------------- | ---------------------------- |
-| `providers` | `ProviderType[]` | Gateway-level providers      |
-| `tools`     | `ToolType[]`     | Shared tools across all apps |
-| `resources` | `ResourceType[]` | Shared resources             |
-| `skills`    | `SkillType[]`    | Shared skills                |
-| `plugins`   | `PluginType[]`   | Server-level plugins         |
+| Property      | Type              | Description                            |
+| ------------- | ----------------- | -------------------------------------- |
+| `providers`   | `ProviderType[]`  | Gateway-level providers                |
+| `tools`       | `ToolType[]`      | Shared tools across all apps           |
+| `resources`   | `ResourceType[]`  | Shared resources                       |
+| `prompts`     | `PromptType[]`    | Shared prompts                         |
+| `agents`      | `AgentType[]`     | Shared agents                          |
+| `skills`      | `SkillType[]`     | Shared skills                          |
+| `jobs`        | `JobType[]`       | Shared background jobs                 |
+| `workflows`   | `WorkflowType[]`  | Shared multi-step workflows            |
+| `channels`    | `ChannelType[]`   | Shared notification channels           |
+| `adapters`    | `AdapterType[]`   | Shared dynamic adapters                |
+| `plugins`     | `PluginType[]`    | Server-level plugins                   |
+| `splitByApp`  | `boolean`         | Run each app as an isolated sub-server |
 
 ```typescript
 @FrontMcp({
@@ -110,13 +117,24 @@ function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator
 
 ### Feature Configuration
 
-| Property       | Type                       | Description                   |
-| -------------- | -------------------------- | ----------------------------- |
-| `logging`      | `LoggingOptionsInput`      | Logging configuration         |
-| `pagination`   | `PaginationOptions`        | List operation pagination     |
-| `elicitation`  | `ElicitationOptionsInput`  | Interactive user input        |
-| `skillsConfig` | `SkillsConfigOptionsInput` | Skills HTTP endpoints         |
-| `extApps`      | `ExtAppsOptionsInput`      | MCP Apps widget configuration |
+| Property        | Type                        | Description                                      |
+| --------------- | --------------------------- | ------------------------------------------------ |
+| `auth`          | `AuthOptionsInput`          | Authentication mode + provider configuration     |
+| `authorities`   | `AuthoritiesOptionsInput`   | RBAC/ABAC/ReBAC profiles & enforcement           |
+| `logging`       | `LoggingOptionsInput`       | Logging configuration                            |
+| `observability` | `ObservabilityOptionsInput` | OpenTelemetry tracing + metrics                  |
+| `health`        | `HealthOptionsInput`        | Health check endpoints                           |
+| `pagination`    | `PaginationOptions`         | List operation pagination                        |
+| `elicitation`   | `ElicitationOptionsInput`   | Interactive user input                           |
+| `skillsConfig`  | `SkillsConfigOptionsInput`  | Skills HTTP endpoints                            |
+| `tasks`         | `TasksOptionsInput`         | Background task store + scheduler                |
+| `jobs`          | `JobsOptionsInput`          | Job runtime configuration                        |
+| `throttle`      | `ThrottleOptionsInput`      | Per-tool rate limiting / concurrency / timeouts  |
+| `extApps`       | `ExtAppsOptionsInput`       | External MCP Apps widget configuration           |
+| `loader`        | `LoaderOptionsInput`        | ESM dynamic loader configuration                 |
+| `output`        | `OutputOptionsInput`        | Build output configuration                       |
+| `sqlite`        | `SqliteOptionsInput`        | SQLite session/store configuration               |
+| `ui`            | `UiOptionsInput`            | UI library configuration                         |
 
 ```typescript
 @FrontMcp({

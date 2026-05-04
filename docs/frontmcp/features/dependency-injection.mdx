@@ -9,34 +9,43 @@ FrontMCP includes a built-in dependency injection system. Define services with `
 
 ## Defining Providers
 
-Create a provider with a token and scope:
+Create a provider with a name and (optional) scope:
 
 ```ts
 import { Provider } from '@frontmcp/sdk';
 
-export const CONFIG_TOKEN = Symbol('Config');
-
 @Provider({
-  token: CONFIG_TOKEN,
-  scope: 'singleton',
+  name: 'ConfigProvider',
+  scope: 'global',
 })
 export class ConfigProvider {
   readonly apiKey = process.env.API_KEY!;
   readonly baseUrl = process.env.BASE_URL!;
-
-  static factory() {
-    return new ConfigProvider();
-  }
 }
+```
+
+To inject by interface, register with a `Token`:
+
+```ts
+import { Token } from '@frontmcp/sdk';
+
+export const CONFIG_TOKEN = new Token<ConfigProvider>('Config');
+
+@App({
+  name: 'app',
+  providers: [{ provide: CONFIG_TOKEN, useClass: ConfigProvider }],
+})
+class MyApp {}
 ```
 
 ## Provider Scopes
 
-| Scope       | Lifetime                           | Use Case                            |
-| ----------- | ---------------------------------- | ----------------------------------- |
-| `singleton` | One instance per server            | Configuration, database connections |
-| `request`   | One instance per MCP request       | Request-scoped caches, loggers      |
-| `context`   | One instance per execution context | Per-tool state                      |
+| Scope       | Lifetime                                   | Use Case                            |
+| ----------- | ------------------------------------------ | ----------------------------------- |
+| `global`    | One instance per server (default)          | Configuration, database connections |
+| `context`   | One instance per execution context         | Per-request state, logging, caches  |
+
+`'session'` and `'request'` are kept as deprecated aliases of `'context'`.
 
 ## Injecting Providers
 

@@ -246,7 +246,7 @@ FrontMCP automatically adds `Mcp-Session-Id` (alongside `WWW-Authenticate`) to t
 ## Transport
 
 <Info>
-**New in v0.6**: Transport configuration has moved from `auth.transport` and `session` to a dedicated top-level `transport` property. This separates transport/session lifecycle concerns from authentication. See [Migration](#migration-from-authttransport) below.
+Transport configuration is a dedicated top-level `transport` property, separate from `auth`. It controls session lifecycle, protocol presets, and persistence.
 </Info>
 
 The `transport` config controls session lifecycle, protocol presets, and session persistence. Configure it at the server level or per-app when using `splitByApp: true`.
@@ -382,7 +382,7 @@ You can apply different transport policies per app when `splitByApp: true`. Sens
 ## Redis
 
 <Info>
-**New in v0.6**: Redis configuration has moved to a dedicated top-level `redis` property, shared by both `transport.persistence` and `auth.tokenStorage`.
+Redis configuration is a dedicated top-level `redis` property, shared by both `transport.persistence` and `auth.tokenStorage`.
 </Info>
 
 Configure Redis once at the server level for use across features:
@@ -436,62 +436,6 @@ The `redis` config is automatically used by:
 
 ---
 
-## Migration from `auth.transport`
-
-<Warning>
-**Deprecated**: The `auth.transport` and `session` properties are deprecated and will be removed in v1.0.0. Migrate to the top-level `transport` config.
-</Warning>
-
-FrontMCP automatically migrates old configs at runtime with a deprecation warning. Update your config manually to remove the warning:
-
-<CodeGroup>
-```ts Before (deprecated)
-@FrontMcp({
-  auth: {
-    mode: 'local',
-    transport: {
-      enableStreamableHttp: true,
-      enableStatefulHttp: true,
-      recreation: {
-        enabled: true,
-        redis: { host: 'localhost' },
-      },
-    },
-  },
-})
-```
-
-```ts After (v0.6+)
-@FrontMcp({
-  redis: {
-    host: 'localhost',
-  },
-  transport: {
-    protocol: 'full',  // Or use custom: { streamable: true, json: true, ... }
-    // persistence auto-enabled when redis is configured
-  },
-  auth: {
-    mode: 'local',
-  },
-})
-```
-
-</CodeGroup>
-
-### Migration Mapping
-
-| Old Path                                     | New Path                           |
-| -------------------------------------------- | ---------------------------------- |
-| `session.platformDetection`                  | `transport.platformDetection`      |
-| `auth.transport.enableLegacySSE`             | `transport.protocol.legacy`        |
-| `auth.transport.enableSseListener`           | `transport.protocol.sse`           |
-| `auth.transport.enableStreamableHttp`        | `transport.protocol.streamable`    |
-| `auth.transport.enableStatelessHttp`         | `transport.protocol.stateless`     |
-| `auth.transport.enableStatefulHttp`          | `transport.protocol.json`          |
-| `auth.transport.requireSessionForStreamable` | `transport.protocol.strictSession` |
-| `auth.transport.recreation`                  | `transport.persistence`            |
-| `auth.transport.recreation.redis`            | `redis` (top-level)                |
-
 <Tip>
 Instead of individual flags, use a **protocol preset**: `'legacy'` (default), `'modern'`, `'stateless-api'`, or `'full'`.
 </Tip>
@@ -528,7 +472,7 @@ providers: [
 ];
 ```
 
-Define DI-style singletons available to all apps (and their tools/plugins). Scopes are supported at the provider level (`GLOBAL`, `SESSION`, `REQUEST`).
+Define DI-style singletons available to all apps (and their tools/plugins). Provider lifetime scopes: `'global'` (default, shared across all requests) or `'context'` (one instance per execution context).
 
 ---
 

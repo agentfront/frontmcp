@@ -119,14 +119,6 @@ class OrchestratedServer { }
 
 ## Properties
 
-### primary
-
-The primary auth provider instance (`FrontMcpAuth`).
-
-### parsedOptions
-
-The parsed authentication configuration.
-
 ### requiresOrchestration
 
 Whether the current configuration requires orchestration.
@@ -247,7 +239,7 @@ class MultiAuthServer { }
 
 // The registry detects mixed auth modes
 const detection = scope.authProviders.detection;
-// detection.modes = ['public', 'orchestrated']
+// detection.modes = ['public', 'remote']
 ```
 
 ## FrontMcpAuthContext

@@ -100,37 +100,57 @@ You can create custom adapters to integrate any API or service with FrontMCP. Ad
 
 ### Basic Adapter Structure
 
+Extend `DynamicAdapter` and decorate the class with `@Adapter`. The class implements a `fetch()` method that returns tools, resources, prompts, and agents discovered at runtime.
+
 ```ts
-import { BaseAdapter } from '@frontmcp/sdk';
+import { Adapter, DynamicAdapter, FrontMcpAdapterResponse } from '@frontmcp/sdk';
 
-export class MyCustomAdapter extends BaseAdapter {
-  async fetch(ctx: ToolContext) {
-    // Initialize your adapter
-    // Generate tools from your API/service
-    // Return array of MCP tools
-
-    return [
-      {
-        name: 'myTool',
-        description: 'Description of the tool',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            param1: { type: 'string' },
-          },
-        },
-        execute: async (input) => {
-          // Execute the tool
-          return { result: 'success' };
-        },
-      },
-    ];
-  }
-
-  static init(options: MyAdapterOptions) {
-    return new MyCustomAdapter(options);
-  }
+interface MyApiOptions {
+  name: string;        // required by DynamicAdapter
+  baseUrl: string;
+  apiKey?: string;
 }
+
+@Adapter({ name: 'my-api', description: 'Imports tools from an HTTP API' })
+export class MyCustomAdapter extends DynamicAdapter<MyApiOptions> {
+  public options: MyApiOptions;
+
+  constructor(options: MyApiOptions) {
+    super();
+    this.options = options;
+  }
+
+  async fetch(): Promise<FrontMcpAdapterResponse> {
+    const resp = await fetch(`${this.options.baseUrl}/tools`);
+    const data = await resp.json();
+
+    // Convert the API response into FrontMCP tool / resource / prompt classes
+    return {
+      tools: [
+        /* ... */
+      ],
+    };
+  }
+
+  // `init()` is provided by DynamicAdapter — it takes the runtime options
+  // and produces a unique provider token so multiple instances can coexist.
+}
+```
+
+Register one or more configured instances on a server or app:
+
+```ts
+@FrontMcp({
+  info: { name: 'my-app', version: '1.0.0' },
+  adapters: [
+    MyCustomAdapter.init({
+      name: 'production-api',
+      baseUrl: 'https://api.example.com',
+      apiKey: process.env.API_KEY,
+    }),
+  ],
+})
+class Server {}
 ```
 
 ### Adapter Best Practices

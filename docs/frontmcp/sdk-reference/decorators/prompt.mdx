@@ -210,7 +210,7 @@ async execute(args: Record<string, string>) {
   this.logger.info('Building prompt', { args });
 
   // Authentication
-  const auth = this.getAuthInfo();
+  const auth = this.requestContext.authInfo;
 
   // Error handling
   if (!args.topic) {

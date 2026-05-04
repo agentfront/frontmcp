@@ -119,13 +119,13 @@ class BadTool extends ToolContext {
   name: 'sensitive_operation',
   inputSchema: { data: z.string() },
   authProviders: [
-    { ref: 'github', scopes: ['repo', 'user'] },
+    { name: 'github', scopes: ['repo', 'user'] },
   ],
 })
 class SensitiveTool extends ToolContext {
   async execute(input) {
     // Access is validated before execute() is called
-    const token = this.getAuthInfo().accessToken;
+    const token = this.requestContext.authInfo?.accessToken;
     return await callApi(token, input.data);
   }
 }
@@ -252,7 +252,7 @@ async execute(input) {
 
 ```typescript
 async execute(input) {
-  const auth = this.getAuthInfo();
+  const auth = this.requestContext.authInfo;
   const token = auth.accessToken;
   const user = auth.user;
 }
@@ -332,7 +332,7 @@ const outputSchema = z.object({
     { input: { operation: 'add', a: 2, b: 3 }, output: { result: 5, operation: 'add' } },
   ],
 })
-class CalculateTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+class CalculateTool extends ToolContext {
   async execute(input) {
     await this.notify(`Calculating ${input.operation}(${input.a}, ${input.b})`, 'debug');
 

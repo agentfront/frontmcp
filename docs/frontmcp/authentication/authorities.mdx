@@ -3,8 +3,7 @@ title: 'Authorities'
 description: 'Built-in RBAC, ABAC, and ReBAC authorization for FrontMCP entries'
 ---
 
-> For the full auth architecture — including auth providers, credential vault, scope challenges,
-> and how all three layers compose — see [Auth Architecture](/frontmcp/authentication/architecture).
+> For auth providers, credential vault, and scope challenges, see the [Authentication overview](/frontmcp/authentication/overview).
 
 ## Overview
 
@@ -57,7 +56,7 @@ export class MyServer {}
   description: 'Delete a user account',
   authorities: 'admin', // Only users with the 'admin' profile
 })
-class DeleteUserTool extends ToolContext<typeof DeleteUserTool> {
+class DeleteUserTool extends ToolContext {
   static inputSchema = z.object({ userId: z.string() });
 
   async execute(input: z.infer<typeof DeleteUserTool.inputSchema>) {
@@ -443,7 +442,7 @@ authorities: {
     },
   },
 })
-class EditDocumentTool extends ToolContext<typeof EditDocumentTool> {
+class EditDocumentTool extends ToolContext {
   static inputSchema = z.object({ documentId: z.string(), content: z.string() });
 
   async execute(input: z.infer<typeof EditDocumentTool.inputSchema>) {

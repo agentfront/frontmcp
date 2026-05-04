@@ -115,7 +115,7 @@ docker compose -f ci/docker-compose.yml up --build app
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["**/*.test.ts", "**/__tests__/**"]
+  "exclude": ["**/*.spec.ts", "**/__tests__/**"]
 }
 ```
 
@@ -129,7 +129,7 @@ docker compose -f ci/docker-compose.yml up --build app
 
 ```ts
 import 'reflect-metadata';
-import { FrontMcp, Log Level } from '@frontmcp/sdk';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import HelloApp from './hello.app';
 
 @FrontMcp({
@@ -154,15 +154,18 @@ export default class HelloApp {}
 **src/tools/greet.tool.ts**
 
 ```ts
-import { tool } from '@frontmcp/sdk';
-import { z } from '@frontmcp/sdk';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
-export default tool({
+@Tool({
   name: 'greet',
   description: 'Greets a user by name',
-  // New style: pass Zod fields directly (no z.object wrapper)
   inputSchema: { name: z.string() },
-})(({ name }) => `Hello, ${name}!`);
+})
+export default class Greet extends ToolContext {
+  async execute({ name }: { name: string }) {
+    return `Hello, ${name}!`;
+  }
+}
 ```
 
 ---

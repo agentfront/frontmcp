@@ -211,7 +211,6 @@ interface AgentChangeEvent {
   changeScope: 'global' | 'session';
   version: number;
   snapshot: ReadonlyArray<AgentEntry>;
-  entry?: AgentEntry;
   sessionId?: string;
   relatedRequestId?: string;
 }

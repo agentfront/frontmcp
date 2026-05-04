@@ -56,7 +56,7 @@ this.logger.error('Error message');
 ### Authentication
 
 ```typescript
-const auth = this.getAuthInfo();
+const auth = this.requestContext.authInfo;
 const user = auth.user;
 const token = auth.accessToken;
 ```

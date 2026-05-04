@@ -10,7 +10,7 @@ FrontMCP uses a typed configuration file to define project settings, deployment 
 Create `frontmcp.config.ts` in your project root:
 
 ```typescript
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -185,7 +185,7 @@ export default defineConfig({
 Deploy the same server to Node.js, distributed, and Vercel:
 
 ```typescript
-import { defineConfig } from '@frontmcp/cli';
+import { defineConfig } from 'frontmcp';
 
 export default defineConfig({
   name: 'my-server',
@@ -224,7 +224,7 @@ frontmcp build --target vercel
 ## Helper Functions
 
 ```typescript
-import { defineConfig, loadFrontMcpConfig, findDeployment, getDeploymentTargets } from '@frontmcp/cli';
+import { defineConfig, loadFrontMcpConfig, findDeployment, getDeploymentTargets } from 'frontmcp';
 
 // Load config from a directory
 const config = await loadFrontMcpConfig(process.cwd());

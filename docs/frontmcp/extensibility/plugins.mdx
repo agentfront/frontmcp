@@ -259,7 +259,7 @@ const deployInputSchema = z.object({
   description: 'Deploy application to specified environment',
   inputSchema: deployInputSchema,
 })
-class DeployTool extends ToolContext<typeof deployInputSchema> {
+class DeployTool extends ToolContext {
   async execute(input) {
     return { success: true, environment: input.environment };
   }

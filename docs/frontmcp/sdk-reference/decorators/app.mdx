@@ -90,19 +90,23 @@ class CrmApp {}
 class CrmApp {}
 ```
 
-### Configuration
+### Configuration via Providers
 
-| Property | Type                      | Description                |
-| -------- | ------------------------- | -------------------------- |
-| `config` | `Record<string, unknown>` | App-specific configuration |
+`@App` does not accept a free-form `config` field. Use a value provider to inject app configuration:
 
 ```typescript
+import { App, Token } from '@frontmcp/sdk';
+
+export const CRM_CONFIG = new Token<{ apiBaseUrl: string; maxRetries: number }>('CrmConfig');
+
 @App({
   name: 'crm',
-  config: {
-    apiBaseUrl: 'https://api.salesforce.com',
-    maxRetries: 3,
-  },
+  providers: [
+    {
+      provide: CRM_CONFIG,
+      useValue: { apiBaseUrl: 'https://api.salesforce.com', maxRetries: 3 },
+    },
+  ],
 })
 class CrmApp {}
 ```

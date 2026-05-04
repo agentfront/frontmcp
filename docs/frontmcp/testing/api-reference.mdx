@@ -1323,9 +1323,9 @@ expect(templates).toContainResourceTemplate(uriTemplate: string): void
 ```ts
 expect(prompts).toContainPrompt(name: string): void
 expect(result).toHaveMessages(count: number): void
-expect(message).toHaveRole(role: 'user' | 'assistant'): void
-expect(message).toContainText(text: string): void
 ```
+
+For role and text checks on individual messages, use plain Jest assertions on `message.role` / `message.content.text`.
 
 ### JSON-RPC Matchers
 
@@ -1334,6 +1334,23 @@ expect(response).toBeValidJsonRpc(): void
 expect(response).toHaveResult(): void
 expect(response).toHaveError(): void
 expect(response).toHaveErrorCode(code: number): void
+```
+
+### UI Matchers (for testing tool UI responses)
+
+```ts
+expect(result).toHaveRenderedHtml(): void
+expect(result).toContainHtmlElement(selector: string): void
+expect(result).toBeXssSafe(): void
+expect(result).toContainBoundValue(value: unknown): void
+expect(result).toHaveWidgetMetadata(): void
+expect(result).toHaveCssClass(className: string): void
+expect(result).toHaveProperHtmlStructure(): void
+expect(result).toHavePlatformMeta(platform: TestPlatformType): void
+expect(result).toHaveMetaKey(key: string): void
+expect(result).toHaveMetaValue(key: string, value: unknown): void
+expect(result).toHavePlatformMimeType(platform: TestPlatformType): void
+expect(result).toHavePlatformHtml(platform: TestPlatformType): void
 ```
 
 ---

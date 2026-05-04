@@ -246,17 +246,7 @@ Access tokens are JWTs with standard claims:
 
 ### Custom Claims
 
-Add custom claims to tokens:
-
-```typescript
-auth: {
-  mode: 'local',
-  tokenClaims: async (user) => ({
-    roles: user.roles,
-    tenant_id: user.tenantId,
-  }),
-}
-```
+Custom claims are sourced from the upstream identity provider (or the in-tree IdP for `local` mode) — FrontMCP does not mint extra claims. Configure your IdP to include the claims you need (roles, tenant ID, etc.) and then read them via `this.requestContext.authInfo` inside tools, resources, prompts, and agents.
 
 ---
 
@@ -335,14 +325,15 @@ auth: {
 
 ### Key Rotation
 
-For production, implement key rotation:
+For production, perform key rotation by deploying a new build with an updated `signKey` while keeping the previous keys in `jwks` until in-flight tokens have expired:
 
 ```typescript
 auth: {
   mode: 'local',
   local: {
-    keyRotationDays: 30, // Rotate every 30 days
-    maxKeys: 3, // Keep 3 keys for validation
+    signKey: currentKey,
+    jwks: { keys: [currentKey, previousKey] }, // accept old tokens during rollover
+    issuer: 'https://your-server.example.com',
   },
 }
 ```
@@ -386,7 +377,6 @@ auth: {
   provider: 'https://auth.example.com',
   expectedAudience: 'https://api.myservice.com',
   requiredScopes: ['openid', 'profile'],
-  clockTolerance: 30, // seconds of clock skew allowed
 }
 ```
 

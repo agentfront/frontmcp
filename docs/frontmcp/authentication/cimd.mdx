@@ -178,10 +178,10 @@ class MyApp {}
   </Tab>
   <Tab title="Functional Pattern">
 ```typescript
-import { createFrontMcpServer } from '@frontmcp/sdk';
+import { connect } from '@frontmcp/sdk';
 
-const server = createFrontMcpServer({
-  name: 'my-mcp-server',
+const client = await connect({
+  info: { name: 'my-mcp-server', version: '1.0.0' },
   auth: {
     mode: 'local',
     cimd: {

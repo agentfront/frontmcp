@@ -172,12 +172,9 @@ auth: {
   mode: 'remote',
   provider: 'https://legacy-idp.example.com',
   clientId: 'my-client',
-  providerConfig: {
-    refreshUpstream: true, // Auto-refresh upstream tokens
-  },
   refresh: {
-    accessTokenTtl: 3600,
-    refreshTokenTtl: 604800,
+    enabled: true,
+    skewSeconds: 60, // refresh upstream tokens this many seconds before expiry
   },
 }
 ```
@@ -186,21 +183,7 @@ auth: {
 
 ## Custom Claims
 
-Add claims from upstream user info to FrontMCP tokens:
-
-```typescript
-auth: {
-  mode: 'remote',
-  provider: 'https://legacy-idp.example.com',
-  clientId: 'my-client',
-  tokenClaims: async (upstreamUser) => ({
-    // Map upstream claims to FrontMCP token
-    department: upstreamUser.department,
-    employee_id: upstreamUser.employee_number,
-    roles: upstreamUser.groups?.map(g => g.name) ?? [],
-  }),
-}
-```
+Custom claims are sourced from the upstream identity provider. Configure your IdP to include the claims you need on the upstream JWT (department, employee_id, roles, etc.); FrontMCP forwards them through `this.requestContext.authInfo`.
 
 ---
 

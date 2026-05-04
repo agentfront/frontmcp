@@ -42,7 +42,7 @@ Prompts are ideal for:
 Use class decorators for prompts that need dependency injection, lifecycle hooks, or complex logic:
 
 ```ts
-import { Prompt } from '@frontmcp/sdk';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'summarize',
@@ -53,7 +53,7 @@ import { Prompt } from '@frontmcp/sdk';
     { name: 'style', description: 'Summary style (brief, detailed, bullets)', required: false },
   ],
 })
-class SummarizePrompt {
+class SummarizePrompt extends PromptContext {
   async execute(args: Record<string, string>) {
     const style = args['style'] || 'brief';
 
@@ -239,14 +239,14 @@ Class-based prompts have access to a rich execution context via `this`:
   name: 'context-example',
   arguments: [{ name: 'topic', required: true }],
 })
-class ContextExamplePrompt {
+class ContextExamplePrompt extends PromptContext {
   async execute(args: Record<string, string>) {
     // Arguments passed to the prompt
     this.args;              // { topic: 'value', ... }
     this.metadata;          // Prompt metadata (name, description, etc.)
 
     // Authentication
-    this.getAuthInfo();     // Auth context from MCP session
+    this.requestContext.authInfo;     // Auth context from MCP session
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider
@@ -274,7 +274,7 @@ Inject services via the `get()` method:
   name: 'personalized-greeting',
   arguments: [{ name: 'userId', required: true }],
 })
-class PersonalizedGreeting {
+class PersonalizedGreeting extends PromptContext {
   async execute(args: Record<string, string>) {
     const db = this.get(DatabaseProvider);
     const user = await db.users.findById(args['userId']);
@@ -311,7 +311,7 @@ class PersonalizedGreeting {
     { name: 'focus', description: 'Review focus (security, performance, style)', required: false },
   ],
 })
-class CodeReviewPrompt {
+class CodeReviewPrompt extends PromptContext {
   execute(args: Record<string, string>) {
     const language = args['language'] || 'the detected language';
     const focus = args['focus'] || 'overall quality';
@@ -355,7 +355,7 @@ Provide:
     { name: 'to', description: 'Target language', required: true },
   ],
 })
-class TranslatePrompt {
+class TranslatePrompt extends PromptContext {
   execute(args: Record<string, string>) {
     const fromLang = args['from'] ? `from ${args['from']} ` : '';
 
@@ -386,7 +386,7 @@ class TranslatePrompt {
     { name: 'company', description: 'Target company (optional)', required: false },
   ],
 })
-class InterviewPrepPrompt {
+class InterviewPrepPrompt extends PromptContext {
   execute(args: Record<string, string>) {
     const company = args['company'] ? ` at ${args['company']}` : '';
 
@@ -424,7 +424,7 @@ class InterviewPrepPrompt {
     { name: 'projectId', description: 'Project identifier', required: true },
   ],
 })
-class ProjectSummaryPrompt {
+class ProjectSummaryPrompt extends PromptContext {
   async execute(args: Record<string, string>) {
     const db = this.get(DatabaseProvider);
     const project = await db.projects.findById(args['projectId']);

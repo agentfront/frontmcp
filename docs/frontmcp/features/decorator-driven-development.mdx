@@ -138,7 +138,11 @@ class SummarizePrompt extends PromptContext {
 @Agent({
   name: 'researcher',
   description: 'Research agent that gathers information',
-  llm: { model: 'claude-sonnet-4-5-20250514' },
+  llm: {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-5-20250514',
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+  },
   tools: ['web_search', 'summarize'],
   systemInstructions: 'You are a thorough research assistant.',
 })

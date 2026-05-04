@@ -148,39 +148,41 @@ You don't need to create a full custom flow to customize behavior. Use **hooks**
 
 ### Applying Hooks
 
-Use the `@Hooks` decorator on tools, resources, or prompts:
+Hooks are method decorators returned from a flow-specific factory. Use the pre-built hook factories (e.g. `ToolHook`, `ResourceHook`) or build your own with `FlowHooksOf(flowName)`.
 
 ```ts
-import { Tool, ToolContext, Hooks } from '@frontmcp/sdk';
+import { Tool, ToolContext, ToolHook } from '@frontmcp/sdk';
 import { z } from '@frontmcp/sdk';
+
+const { Will, Did } = ToolHook;
 
 @Tool({
   name: 'my-tool',
   inputSchema: { query: z.string() },
 })
-@Hooks([
-  {
-    flow: 'tools:call-tool',
-    stage: 'pre',
-    type: 'will',
-    handler: async (ctx) => {
-      console.log('About to execute tool:', ctx.input);
-    },
-  },
-  {
-    flow: 'tools:call-tool',
-    stage: 'execute',
-    type: 'did',
-    handler: async (ctx) => {
-      console.log('Tool execution complete:', ctx.output);
-    },
-  },
-])
 class MyTool extends ToolContext {
+  @Will('execute')
+  async beforeExecute() {
+    console.log('About to execute tool');
+  }
+
+  @Did('execute')
+  async afterExecute() {
+    console.log('Tool execution complete');
+  }
+
   async execute({ query }: { query: string }) {
     return `Result for: ${query}`;
   }
 }
+```
+
+For other flows, build hook decorators with `FlowHooksOf(flowName)`:
+
+```ts
+import { FlowHooksOf } from '@frontmcp/sdk';
+
+const { Will, Did, Around, Stage } = FlowHooksOf('http:request');
 ```
 
 ### Around Hooks
@@ -188,19 +190,20 @@ class MyTool extends ToolContext {
 Around hooks wrap a stage completely, giving you control over whether the stage executes:
 
 ```ts
-{
-  flow: 'tools:call-tool',
-  stage: 'execute',
-  type: 'around',
-  handler: async (ctx, next) => {
+import { ToolHook } from '@frontmcp/sdk';
+
+const { Around } = ToolHook;
+
+class TimingHook {
+  @Around('execute')
+  async timeExecution(next: () => Promise<void>) {
     const start = Date.now();
     try {
-      await next();  // Execute the stage
+      await next();
     } finally {
-      const elapsed = Date.now() - start;
-      console.log(`Execution took ${elapsed}ms`);
+      console.log(`Execution took ${Date.now() - start}ms`);
     }
-  },
+  }
 }
 ```
 
