@@ -67,9 +67,9 @@ export async function exportSkills(options: ExportSkillsOptions): Promise<void> 
       // Windsurf rules live in a single file — append rather than overwrite.
       let existing = '';
       if (fs.existsSync(absPath)) existing = await readFile(absPath, 'utf8');
-      await writeFile(absPath, mergeWindsurf(existing, skill.name, out.contents), 'utf8');
+      await writeFile(absPath, mergeWindsurf(existing, skill.name, out.contents));
     } else {
-      await writeFile(absPath, out.contents, 'utf8');
+      await writeFile(absPath, out.contents);
     }
     console.log(c('green', `wrote ${out.relativePath}`));
     written++;

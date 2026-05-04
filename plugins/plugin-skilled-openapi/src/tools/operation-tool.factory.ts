@@ -29,9 +29,11 @@ import { type HiddenOpEntry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 
+const OPERATION_TOOL_OWNER_TOKEN = Symbol.for('skilled-openapi:operation-tool-owner');
 const OPERATION_TOOL_OWNER: EntryOwnerRef = {
   kind: 'plugin',
   id: 'skilled-openapi',
+  ref: OPERATION_TOOL_OWNER_TOKEN,
 };
 
 /**
